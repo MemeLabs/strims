@@ -850,6 +850,69 @@ class Static(unittest.TestCase):
         self.assertIn("tables", call("GET", "/console/schema").body)
 
 
+class Files(unittest.TestCase):
+    """The build's files over kept-alive connections, as a browser loads
+    a page's chunks, from a server of their own."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dist = Path(tempfile.mkdtemp(dir=DIR, prefix="files-"))
+        (cls.dist / "devtools.html").write_text("<!doctype html>")
+        (cls.dist / "small.js").write_text("console.log(1)")
+        cls.console = server.Console(POOL, regenerations=REGS, dist=cls.dist, suite=SUITE)
+        cls.httpd = cls.console.listen(0, "127.0.0.1")
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+
+    def connect(self):
+        c = http.client.HTTPConnection("127.0.0.1", self.httpd.server_address[1], timeout=10)
+        self.addCleanup(c.close)
+        return c
+
+    def test_small_files_one_after_another_wait_for_no_ack(self):
+        c = self.connect()
+        took = []
+        for _ in range(30):
+            t = time.monotonic()
+            c.request("GET", "/small.js")
+            self.assertEqual(c.getresponse().read(), b"console.log(1)")
+            took.append(time.monotonic() - t)
+        # With Nagle's algorithm each body waits for its headers' delayed ACK (40 ms).
+        self.assertLess(sorted(took)[len(took) // 2], 0.02)
+
+    def test_a_file_truncated_while_it_is_sent_ends_its_connection(self):
+        big = self.dist / "truncated.js"
+        big.write_bytes(b"a" * (64 << 20))
+        c = self.connect()
+        c.request("GET", "/truncated.js")
+        r = c.getresponse()
+        self.assertEqual(r.headers["Content-Length"], str(64 << 20))
+        r.read(1 << 20)
+        with big.open("r+b") as f:
+            f.truncate(2 << 20)
+        # The rest stops short and the connection closes: the client isn't left waiting.
+        with self.assertRaises(http.client.IncompleteRead):
+            r.read()
+
+    def test_a_file_grown_while_it_is_sent_keeps_to_its_length(self):
+        big = self.dist / "grown.js"
+        big.write_bytes(b"a" * (16 << 20))
+        c = self.connect()
+        c.request("GET", "/grown.js")
+        r = c.getresponse()
+        first = r.read(1 << 20)
+        with big.open("ab") as f:
+            f.write(b"b" * (1 << 20))
+        self.assertEqual(first + r.read(), b"a" * (16 << 20))
+        # The next response on the connection is whole.
+        c.request("GET", "/small.js")
+        self.assertEqual(c.getresponse().read(), b"console.log(1)")
+
+
 class HostAndOrigin(unittest.TestCase):
     def test_only_this_machines_names_and_origins_are_answered(self):
         for host, status in [(f"127.0.0.1:{PORT}", 200), (f"localhost:{PORT}", 200), ("LOCALHOST", 200),

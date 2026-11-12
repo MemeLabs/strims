@@ -84,9 +84,13 @@ no text caret and no smooth scrolling (CAPTURE_SCRIPT); the time zone is
 UTC, the locale en-US and the page always focused; requests off the
 build's server (https://, a third-party embed's iframe among them) get
 stubs, a grey page for a document. The clock moves only while the
-network (workers' requests included) has been quiet for NET_QUIET_S and
-no worker is new or has just exchanged a message, after the page has
-laid out what changed: to the next timer until the root leaves
+network (workers' requests included) has been quiet for NET_QUIET_S, the
+document has nothing pending (a script or stylesheet it inserted with no
+load or error event yet, a fetch unsettled, an XHR not ended: the page
+can ask for more between the checker's look at the network and the
+step, and a chunk's loader times out on the clock), and no worker is new
+or has just exchanged a message, after the page has laid out what
+changed: to the next timer until the root leaves
 "loading", then on to `--settle` ms of clock time after it (and while
 the root is empty, on in 100 ms steps up to `--timeout` s). A story frame
 on the clock renders once i18next has its strings. Then finite
@@ -107,12 +111,17 @@ target/storybook/compare/<time>-<head>-vs-<base>) is one directory:
 index.html, report.json and PNGs of the stories not unchanged: changed
 ones, the most changed first, with base, head and a diff (changed pixels
 magenta over a greyed head), then failing (on either side), added,
-removed and skipped ones. It prints a table per mode, the changed
-stories, the two builds' commits and the report's path. A story the
-checker itself fails on (a browser that stalls or goes) gets a fresh
-browser and one more try. Exits 0, 1 with `--fail-on-diff` when a story
-changed, failed, or is added or removed, and 2 on a checker error (a
-refused head or base among them).
+removed and skipped ones; and the servers' logs, head-server.log (with
+--port) and base-server.log, written there as they run. It prints a
+table per mode, the changed stories, the two builds' commits and the
+report's path. A story the checker itself fails on gets a fresh browser
+and one more try, the failure said as it happens and, when the second
+try passes, kept in the story's `retried`: a browser that stalls or
+goes, or a capture still waiting at `--timeout` s on a request (no
+answer, or a body unfinished) or on what its document has pending, which
+names its URL. Exits 0, 1 with `--fail-on-diff` when a story changed,
+failed, or is added or removed, and 2 on a checker error (a refused head
+or base among them).
 """
 
 import argparse
@@ -304,7 +313,9 @@ class Page:
     def __init__(self, ws):
         self.ws = ws
         self.next_id = 0
-        self.inflight = set()
+        # The requests sent and not yet finished or failed: requestId ->
+        # {url, at (monotonic), answered (its response's headers came)}.
+        self.inflight = {}
         self.exceptions = []
         # When the network last moved (a request sent, finished or failed).
         self.net_at = time.monotonic()
@@ -356,14 +367,17 @@ class Page:
         method, p = m.get("method"), m.get("params", {})
         if method == "Network.requestWillBeSent":
             self.net_at = time.monotonic()
-            if (not p.get("request", {}).get("url", "").startswith(("data:", "blob:"))
-                    and p["requestId"] not in self.stubbed):
-                self.inflight.add(p["requestId"])
+            url = p.get("request", {}).get("url", "")
+            if not url.startswith(("data:", "blob:")) and p["requestId"] not in self.stubbed:
+                self.inflight[p["requestId"]] = {"url": url, "at": self.net_at, "answered": False}
                 if m.get("sessionId") in self.sessions:
                     self.sessions[m["sessionId"]].add(p["requestId"])
+        elif method == "Network.responseReceived":
+            if p.get("requestId") in self.inflight:
+                self.inflight[p["requestId"]]["answered"] = True
         elif method in ("Network.loadingFinished", "Network.loadingFailed"):
             self.net_at = time.monotonic()
-            self.inflight.discard(p.get("requestId"))
+            self.inflight.pop(p.get("requestId"), None)
         elif method == "Fetch.requestPaused":
             self.stub(p)
         elif method == "Target.attachedToTarget":
@@ -374,7 +388,8 @@ class Page:
             self.send("Network.enable", session=sid)
             self.send("Runtime.runIfWaitingForDebugger", session=sid)
         elif method == "Target.detachedFromTarget":
-            self.inflight -= self.sessions.pop(p.get("sessionId"), set())
+            for rid in self.sessions.pop(p.get("sessionId"), ()):
+                self.inflight.pop(rid, None)
         elif method == "Runtime.exceptionThrown":
             d = p.get("exceptionDetails", {})
             self.exceptions.append(d.get("exception", {}).get("description") or d.get("text", "exception"))
@@ -399,7 +414,7 @@ class Page:
         self.net_at = time.monotonic()
         if p.get("networkId"):
             self.stubbed.add(p["networkId"])
-            self.inflight.discard(p["networkId"])
+            self.inflight.pop(p["networkId"], None)
         if p.get("resourceType") == "Document":
             self.send("Fetch.fulfillRequest", {
                 "requestId": p["requestId"], "responseCode": 200, "body": STUB_DOCUMENT,
@@ -723,7 +738,8 @@ def print_table(results, verbose):
 # caret, and no smooth scrolling (CSS's or a script's). DOM changes,
 # scrolls, focus and animations' moves are counted, so a step lets the
 # page lay out and its observers and events run (real frames) before the
-# clock moves.
+# clock moves; and what the document has pending (scripts and stylesheets
+# inserted and not yet loaded or failed, fetches and XHRs) holds it.
 CAPTURE_SCRIPT = r"""(() => {
   if (window.__storybookCapture) return;
   const T0 = __T0__;
@@ -794,7 +810,95 @@ CAPTURE_SCRIPT = r"""(() => {
   // Changes a real frame must follow before the clock moves: the DOM's,
   // and scrolls and focus, whose events and observers come with a frame.
   let mutations = 0;
-  new MutationObserver(() => mutations++).observe(document, {
+  // Scripts (a chunk's among them) and stylesheets the document has asked
+  // for and not had, from their insertion to their load or error event: the
+  // clock holds while one is pending, as a chunk's loader times out on it,
+  // and its request can be unsent yet or done while its script hasn't run.
+  const pending = new Map();
+  const watched = new WeakSet();
+  const SCRIPT = /^((text|application)\/(x-)?(java|ecma)script|text\/jscript|module)?$/;
+  const watch = (el) => {
+    if (watched.has(el)) return;
+    let url;
+    if (el instanceof HTMLScriptElement) {
+      if (!el.src || el.noModule || !SCRIPT.test(el.type.trim().toLowerCase())) return;
+      url = el.src;
+    } else if (el instanceof HTMLLinkElement) {
+      if (!el.href || el.disabled || !el.relList.contains("stylesheet") || el.relList.contains("alternate")) {
+        return;
+      }
+      url = el.href;
+    } else {
+      return;
+    }
+    watched.add(el);
+    pending.set(el, { url, at: realNow() });
+    const end = () => {
+      pending.delete(el);
+      mutations++;
+    };
+    el.addEventListener("load", end);
+    el.addEventListener("error", end);
+  };
+  // So are its fetches, until their promise settles, and its XHRs, until
+  // their loadend: the checker's word that the network is quiet comes
+  // before the step, and the page may ask for more in between.
+  const ask = (url) => {
+    const key = {};
+    try {
+      url = new URL(url, document.baseURI).href;
+    } catch {}
+    pending.set(key, { url: String(url), at: realNow() });
+    return () => {
+      pending.delete(key);
+      mutations++;
+    };
+  };
+  if (window.fetch) {
+    const realFetch = window.fetch;
+    window.fetch = function fetch(input, init) {
+      const done = ask(input instanceof Request ? input.url : input);
+      try {
+        const p = realFetch.call(window, input, init);
+        p.then(done, done);
+        return p;
+      } catch (e) {
+        done();
+        throw e;
+      }
+    };
+  }
+  const xhrOpen = XMLHttpRequest.prototype.open;
+  const xhrSend = XMLHttpRequest.prototype.send;
+  const xhrUrl = new WeakMap();
+  XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+    xhrUrl.set(this, url);
+    return xhrOpen.call(this, method, url, ...rest);
+  };
+  XMLHttpRequest.prototype.send = function (...args) {
+    const done = ask(xhrUrl.get(this));
+    this.addEventListener("loadend", done, { once: true });
+    try {
+      return xhrSend.apply(this, args);
+    } catch (e) {
+      done();
+      throw e;
+    }
+  };
+  new MutationObserver((records) => {
+    mutations++;
+    let removed = false;
+    for (const r of records) {
+      removed ||= r.removedNodes.length > 0;
+      for (const n of r.addedNodes) {
+        if (n.nodeType !== Node.ELEMENT_NODE) continue;
+        watch(n);
+        if (n.firstElementChild) for (const e of n.querySelectorAll("script[src], link[href]")) watch(e);
+      }
+    }
+    // One taken out of the document may never load (a stylesheet doesn't).
+    if (removed) for (const el of pending.keys()) if (el instanceof Node && !el.isConnected) pending.delete(el);
+  }).observe(document, {
     subtree: true, childList: true, attributes: true, characterData: true });
   const instant = (o) =>
     o && typeof o === "object" && o.behavior === "smooth" ? { ...o, behavior: "instant" } : o;
@@ -961,8 +1065,9 @@ CAPTURE_SCRIPT = r"""(() => {
   // Lets the page settle (a task's turn, and real frames while the DOM
   // changes: its layout, observers and scroll events), then fires the
   // timers due first, each in a task of its own, if they're due now or,
-  // with `advance` (the network quiet) and no worker busy for `quietMs`, by
-  // `limit` (null: whenever); else, so, moves the clock to `limit`.
+  // with `advance` (the network quiet), nothing pending and no worker busy
+  // for `quietMs`, by `limit` (null: whenever); else, so, moves the clock
+  // to `limit`. `pending` lists what is still pending.
   let seen = 0;
   const step = async (limit, advance, quietMs) => {
     await turn();
@@ -972,7 +1077,7 @@ CAPTURE_SCRIPT = r"""(() => {
       await turn();
       await turn();
     }
-    const waiting = advance && workersBusy(quietMs);
+    const waiting = advance && (pending.size > 0 || workersBusy(quietMs));
     advance = advance && !waiting;
     animate();
     const due = next();
@@ -1004,8 +1109,10 @@ CAPTURE_SCRIPT = r"""(() => {
     }
     const root = document.querySelector("[data-story-root]");
     const after = next();
+    const t = realNow();
     return { now, fired, waiting, next: Number.isFinite(after) ? after : null,
-             state: root ? root.dataset.storyState ?? null : null };
+             state: root ? root.dataset.storyState ?? null : null,
+             pending: [...pending.values()].map((p) => ({ url: p.url, ms: Math.round(t - p.at) })) };
   };
   // Stops the clock's hold on animations, for FINISH_SCRIPT's.
   const hold = () => {
@@ -1276,15 +1383,20 @@ def drop_worktree(src):
         shutil.rmtree(src, ignore_errors=True)
 
 
+def resolve(ref):
+    """REF's commit, or the exit saying why there's none."""
+    try:
+        return git("rev-parse", "--verify", f"{ref}^{{commit}}")
+    except RuntimeError as e:
+        sys.exit(f"check: --compare {ref}: {e}")
+
+
 def build_base(ref, rebuild):
     """REF's build: (sha, dist, protocol), built once per commit in a
     detached worktree under target/storybook/base/<sha>/src (node_modules
     the main checkout's), its target/console/dist kept as
     target/storybook/base/<sha>/dist and the worktree removed."""
-    try:
-        sha = git("rev-parse", "--verify", f"{ref}^{{commit}}")
-    except RuntimeError as e:
-        sys.exit(f"check: --compare {ref}: {e}")
+    sha = resolve(ref)
     home = BASES / sha
     record = home / "build.json"
     home.mkdir(parents=True, exist_ok=True)
@@ -1345,14 +1457,48 @@ def clock_step(page, limit, advance):
         return None
 
 
+class Stalled(TimeoutError):
+    """A capture that still waited on a request (or on what its document
+    has pending) at its --timeout: the checker's failure (its server's, or
+    the browser's), not the story's."""
+
+
+# The checker's own failures in a capture (the browser stalled or went, or
+# a request was never answered): its story gets a fresh browser and one
+# more try.
+CHECKER_ERRORS = (CDPError, TimeoutError, ConnectionError, OSError, json.JSONDecodeError)
+
+
+def waiting_on(page, pending):
+    """What a capture waits on, the longest waited first: each request in
+    flight, then each of the document's pending (`pending`, the step's:
+    scripts, stylesheets, fetches, XHRs) with no request in flight, as text
+    naming its URL."""
+    t = time.monotonic()
+    out, urls = [], set()
+    for r in sorted(page.inflight.values(), key=lambda r: r["at"]):
+        urls.add(r["url"])
+        if r["answered"]:
+            out.append(f"{r['url']}: its body unfinished after {t - r['at']:.0f} s")
+        else:
+            out.append(f"no answer for {r['url']} in {t - r['at']:.0f} s")
+    for p in sorted(pending, key=lambda p: -p["ms"]):
+        if p["url"] not in urls:
+            out.append(f"{p['url']}: still pending in the page after {p['ms'] / 1000:.0f} s, no request in flight")
+    return out
+
+
 def capture(browser, build, route, theme, device, masks, args):
     """One story's screenshot in `build`, on the capture clock: the clock
-    moves only while the network is quiet, to the next timer until the
-    story's root leaves "loading", then on to --settle ms after that, then
-    (an empty root) by EMPTY_STEP_MS until it shows something or --timeout
-    s of clock time pass. Then FINISH_SCRIPT holds what still moves, masks
-    are painted, and the root is shot. {status, error, errors, png, time,
-    rounds (FINISH_SCRIPT's), clock_ms, unstable (no two shots matched)}."""
+    moves only while the network is quiet and the document has nothing
+    pending, to the next timer until the story's root leaves "loading",
+    then on to --settle ms after that, then (an empty root) by
+    EMPTY_STEP_MS until it shows something or --timeout s of clock time
+    pass. Then FINISH_SCRIPT holds what still moves, masks are painted, and
+    the root is shot. {status, error, errors, png, time, rounds
+    (FINISH_SCRIPT's), clock_ms, unstable (no two shots matched)}. Raises
+    Stalled when --timeout s pass with a request in flight or anything
+    pending."""
     page = browser.page
     start = time.monotonic()
     deadline = start + args.timeout
@@ -1366,9 +1512,14 @@ def capture(browser, build, route, theme, device, masks, args):
     browser.set_viewport(build.viewport(device))
     page.call("Storage.clearDataForOrigin", {"origin": build.url, "storageTypes": "all"})
     page.navigate(build.story_url(route, theme, device))
-    phase, limit, mounted, now = "load", None, None, 0
+    phase, limit, mounted, now, pending = "load", None, None, 0, []
     while True:
         if time.monotonic() > deadline:
+            waits = waiting_on(page, pending)
+            if waits:
+                more = f"; and {len(waits) - 1} more: " + "; ".join(waits[1:4]) if len(waits) > 1 else ""
+                raise Stalled(f"{waits[0]} ({build.name} build, still waiting at --timeout {args.timeout:g} s; "
+                              f"{phase}, clock at {now:.0f} ms){more}")
             return fail(f"timeout after {args.timeout} s ({phase}, clock at {now:.0f} ms)",
                         [f"timeout after {args.timeout} s ({phase})", *page.exceptions])
         page.drain()
@@ -1377,6 +1528,7 @@ def capture(browser, build, route, theme, device, masks, args):
         if r is None:
             page.pump(0.05)
             continue
+        pending = r["pending"]
         quiet = quiet and not r["waiting"]
         now = r["now"]
         if phase == "load" and r["state"] in ("ok", "error"):
@@ -1475,7 +1627,11 @@ def compare_story(browser, builds, mode, route, args):
     shots = {}
     for b in builds:
         if entries[b.name]:
-            shots[b.name] = capture(browser, b, route, theme, device, masks, args)
+            try:
+                shots[b.name] = capture(browser, b, route, theme, device, masks, args)
+            except CHECKER_ERRORS as e:
+                e.side = b.name
+                raise
             res["time"] += shots[b.name]["time"]
     res["shots"] = shots
     if "base" not in shots:
@@ -1569,6 +1725,12 @@ def write_report(path, results, builds, modes, args, elapsed):
                      f"{''.join(notes)}<div class='figs'>{figs}</div></section>")
     title = f"storybook: {head.commit[:12]} vs {base.commit[:12]}"
     built = lambda b: f", built {esc(b.built())}" if b.built() else ""  # noqa: E731
+    logs = "".join(f" · <a href='{n}'>{n}</a>" for n in ("head-server.log", "base-server.log") if (path / n).exists())
+    again = [r for r in results if r.get("retried")]
+    retried = (f"<p class='note'>{len(again)} passed on a second try in a fresh browser, after the checker's own "
+               "failure: " + "; ".join(f"{r['mode']} {esc(r['route'].removeprefix('/storybook/'))} "
+                                      f"({esc(first_line(r['retried'][0], 200))})" for r in again) + "</p>"
+               if again else "")
     doc = f"""<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title>
@@ -1602,7 +1764,8 @@ pre {{ white-space: pre-wrap; font-size: 12px; margin: 4px 0; }}
 </style></head><body>
 <h1>{esc(title)}</h1>
 <p class="meta">base {esc(base.commit)} ({esc(args.compare)}){built(base)} · head {esc(head.commit)}{built(head)}
- · tolerance {args.tolerance} per channel · settle {args.settle} ms · {elapsed:.0f} s</p>
+ · tolerance {args.tolerance} per channel · settle {args.settle} ms · {elapsed:.0f} s{logs}</p>
+{retried}
 <table><tr><th>mode</th><th>changed</th><th>unchanged</th><th>added</th><th>removed</th><th>failing</th>
 <th>skipped</th></tr>{summary}</table>
 {''.join(cards) or '<p>No story changed.</p>'}
@@ -1622,7 +1785,7 @@ pre {{ white-space: pre-wrap; font-size: 12px; margin: 4px 0; }}
 
 
 def print_compare(results, builds, modes, report, elapsed, times, ref):
-    kinds = ("changed", "added", "removed", "failing", "skipped", "unchanged")
+    kinds =("changed", "added", "removed", "failing", "skipped", "unchanged")
     print(f"{'mode':10}  {'stories':>7}  " + "  ".join(f"{k:>9}" for k in kinds) + "  done at")
     for m in modes:
         rs = [r for r in results if r["mode"] == m]
@@ -1651,6 +1814,11 @@ def print_compare(results, builds, modes, report, elapsed, times, ref):
                 print(f"  {r['mode']:10}  {r['route'].removeprefix('/storybook/')}  {detail}")
             if len(rs) > 40:
                 print(f"  ... and {len(rs) - 40} more")
+    again = [r for r in results if r.get("retried")]
+    if again:
+        print("\npassed on a second try, after the checker's own failure:")
+        for r in again:
+            print(f"  {r['mode']:10}  {r['route'].removeprefix('/storybook/')}  {first_line(r['retried'][0], 200)}")
     unstable = [(r, s) for r in results for s, v in r.get("shots", {}).items() if v.get("unstable")]
     if unstable:
         print("\nno two shots in a row matched:")
@@ -1671,10 +1839,15 @@ def compare_main(args, exe, work):
     base_port = args.base_port or (args.port + 1 if args.port else None)
     if not base_port:
         sys.exit("check: --compare with --url needs --base-port")
-    servers, browsers = [], []
+    # The report's directory from the start: the servers log into it.
+    report_dir = (Path(args.report) if args.report else REPORTS / (
+        f"{time.strftime('%Y%m%dT%H%M%S')}-{git('rev-parse', 'HEAD')[:8]}-vs-{resolve(args.compare)[:8]}")).resolve()
+    made = not report_dir.exists()
+    report_dir.mkdir(parents=True, exist_ok=True)
+    servers, browsers, ran = [], [], False
     try:
         if args.port:
-            servers.append(start_server(args.port, work))
+            servers.append(start_server(args.port, report_dir, log_name="head-server.log"))
             head_url = servers[-1][2]
         else:
             head_url = args.url.rstrip("/").removesuffix("/devtools.html")
@@ -1692,7 +1865,7 @@ def compare_main(args, exe, work):
             print(f"check: {why}: {cure}", file=sys.stderr)
             return 2
         sha, dist, base_protocol = build_base(args.compare, args.rebuild_base)
-        servers.append(start_server(base_port, work, dist=dist, log_name="base-server.log"))
+        servers.append(start_server(base_port, report_dir, dist=dist, log_name="base-server.log"))
         base = Build("base", servers[-1][2], sha, base_protocol)
         base.index = load_index(browsers[0], base.url, base.index_route())
         said = (base.index.get("build") or {}).get("commit")
@@ -1701,9 +1874,9 @@ def compare_main(args, exe, work):
                   "--rebuild-base builds it again", file=sys.stderr)
             return 2
         builds = (head, base)
-        print(f"check: head {head.commit[:12]} (built {head.built()}) vs base {sha[:12]} ({args.compare})",
-              file=sys.stderr)
-        started = time.monotonic()
+        print(f"check: head {head.commit[:12]} (built {head.built()}) vs base {sha[:12]} ({args.compare}); "
+              f"the report and the servers' logs in {report_dir}", file=sys.stderr)
+        started, ran = time.monotonic(), True
 
         prefixes = [o if o.startswith("/") else f"/storybook/{o}" for o in args.only]
         for b in builds:
@@ -1731,16 +1904,26 @@ def compare_main(args, exe, work):
                     mode, route = todo.get_nowait()
                 except queue.Empty:
                     return
-                # The checker's own failure (the browser stalled or went) gets
-                # a fresh browser and one more try.
+                # The checker's own failure (the browser stalled or went, a
+                # request never answered) gets a fresh browser and one more
+                # try; each is said as it happens, and a story that passes
+                # on its second try keeps its first's in `retried`.
+                retried = []
                 for attempt in range(2):
                     try:
                         r = compare_story(browsers[slot], builds, mode, route, args)
+                        if retried:
+                            r["retried"] = retried
                         break
-                    except (CDPError, TimeoutError, ConnectionError, OSError, json.JSONDecodeError) as e:
+                    except CHECKER_ERRORS as e:
+                        error = f"checker: {e}"
+                        side = getattr(e, "side", "head")
                         r = {"mode": mode, "route": route, "kind": "failing", "time": 0.0, "checker": str(e),
-                             "shots": {"head": {"status": "FAIL", "error": f"checker: {first_line(str(e))}",
-                                                "errors": [f"checker: {e}"], "png": None}}}
+                             "shots": {side: {"status": "FAIL", "error": error.splitlines()[0],
+                                              "errors": [error], "png": None}}}
+                        retried.append(f"{side}: {error}")
+                        print(f"check: {mode} {route}: {side}: {error}"
+                              + ("; trying again in a fresh browser" if not attempt else ""), file=sys.stderr)
                         browsers[slot].close()
                         try:
                             browsers[slot] = new_browser(slot)
@@ -1761,9 +1944,7 @@ def compare_main(args, exe, work):
             t.join()
         elapsed = time.monotonic() - started
         results.sort(key=lambda r: (modes.index(r["mode"]), r["route"]))
-        report_dir = Path(args.report) if args.report else (
-            REPORTS / f"{time.strftime('%Y%m%dT%H%M%S')}-{head.commit[:8]}-vs-{sha[:8]}")
-        report = write_report(report_dir.resolve(), results, builds, modes, args, elapsed)
+        report = write_report(report_dir, results, builds, modes, args, elapsed)
         print_compare(results, builds, modes, report, elapsed, mode_done, args.compare)
         if any(r.get("checker") for r in results):
             return 2
@@ -1780,6 +1961,9 @@ def compare_main(args, exe, work):
             except subprocess.TimeoutExpired:
                 proc.kill()
             log.close()
+        # A run refused before any story ran leaves no report.
+        if made and not ran:
+            shutil.rmtree(report_dir, ignore_errors=True)
 
 
 def main(argv=None):

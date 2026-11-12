@@ -17,7 +17,11 @@ to the console's page, the devtools app's Console
 target/console/dist: until there is a build the page answers 503,
 `--build` builds it first, and one older than its sources gets a warning;
 `--dist DIR` serves another build of the page in its place (another
-commit's, as hack/storybook/check.py --compare builds it). The dev
+commit's, as hack/storybook/check.py --compare builds it). A file's body
+is the file as opened, at its size then (a rebuild meanwhile ends the
+connection rather than the body overrunning or falling short of its
+Content-Length); a client gone mid-file and a file slower than SLOW_S
+are said in the log. The dev
 server proxies /console to it too (webpack.config.js). The catalog is
 simlab.lake_root() (simdb.py's cache root: `SIM_DB_ROOT`, else the main
 checkout's target/sim-db), read through a pool of simlab.engine's guarded
@@ -110,7 +114,6 @@ import multiprocessing
 import os
 import queue
 import re
-import shutil
 import signal
 import socket
 import struct
@@ -152,6 +155,8 @@ BUILD = ["npm", "run", "console:build"]
 SOURCES = [ROOT / "src" / "devtools", ROOT / "package-lock.json", ROOT / "webpack.config.js"]
 TYPES = {".js": "text/javascript", ".map": "application/json", ".wasm": "application/wasm"}
 NDJSON = "application/x-ndjson"
+# A file served slower than this is said in the log.
+SLOW_S = 1.0
 # An ask stream's keepalive, and its question's longest text.
 PING_S = 15
 MAX_QUESTION = 20_000
@@ -959,21 +964,53 @@ class Console:
             p = None
         if p is None or not p.is_relative_to(dist) or not p.is_file():
             raise HttpError(404, f"no {route}")
-        size = p.stat().st_size
-        h.send_response(200)
-        h.send_header("Content-Type", TYPES.get(p.suffix) or mimetypes.guess_type(p.name)[0]
-                      or "application/octet-stream")
-        h.send_header("Content-Length", str(size))
-        h.send_header("Cache-Control", "no-cache")
-        h.send_header("X-Content-Type-Options", "nosniff")
-        h.end_headers()
-        if h.command != "HEAD":
-            with p.open("rb") as f:
-                shutil.copyfileobj(f, h.wfile)
+        try:
+            f = p.open("rb")
+        except OSError:
+            raise HttpError(404, f"no {route}") from None
+        with f:
+            # The body is the file opened, its size then: a build that
+            # replaces, grows or truncates it meanwhile can't make the body
+            # longer than its Content-Length (the next response's start) or
+            # leave it short with the connection open (the client waiting).
+            size = os.fstat(f.fileno()).st_size
+            t0 = time.monotonic()
+            h.send_response(200)
+            h.send_header("Content-Type", TYPES.get(p.suffix) or mimetypes.guess_type(p.name)[0]
+                          or "application/octet-stream")
+            h.send_header("Content-Length", str(size))
+            h.send_header("Cache-Control", "no-cache")
+            h.send_header("X-Content-Type-Options", "nosniff")
+            h.end_headers()
+            if h.command == "HEAD":
+                return
+            left = size
+            try:
+                while left:
+                    chunk = f.read(min(left, 1 << 16))
+                    if not chunk:
+                        h.close_connection = True
+                        log(f"{route}: the file was {size:,} bytes when opened and ended at {size - left:,}: "
+                            "closed the connection")
+                        return
+                    h.wfile.write(chunk)
+                    left -= len(chunk)
+            except ConnectionError as e:
+                # The client went (a page navigated away mid-response).
+                h.close_connection = True
+                log(f"{route}: the client went after {size - left:,} of {size:,} bytes ({type(e).__name__})")
+                return
+            took = time.monotonic() - t0
+            if took > SLOW_S:
+                log(f"{route}: {size:,} bytes took {took:.1f} s")
 
 
 def no_constant(name):
     raise ValueError(f"{name} isn't JSON")
+
+
+def log(line):
+    sys.stderr.write(f"console: {line}\n")
 
 
 def host_name(value):
@@ -1053,6 +1090,10 @@ class Server(ThreadingHTTPServer):
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "sim-console"
+    # A response's headers and body are two writes: with Nagle's algorithm
+    # the body waits for the headers' ACK, which a client delays (40 ms on
+    # Linux) on a kept-alive connection.
+    disable_nagle_algorithm = True
 
     def __init__(self, *args, **kwargs):
         self.headers_sent = self.body_read = False
@@ -1072,7 +1113,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def log_error(self, format, *args):
-        sys.stderr.write(f"console: {format % args}\n")
+        log(format % args)
 
 
 def stale(dist=DIST, sources=SOURCES):
