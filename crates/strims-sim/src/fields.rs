@@ -2080,21 +2080,16 @@ pub(crate) mod cols {
         /// None is written as -1.
         Parents,
         /// the seed's relay busy-time reading, `PushStats::upload_capacity`, at
-        /// the stats tick that opens the second: one tick before the one the
-        /// second's counters come from
+        /// the second's end: its last reading of the second, at the stats tick
+        /// (the sample) the second's counters come from
         ///
         /// None is written as -1.
         Capacity,
-        /// the same tick's, in thousandths
+        /// the seed's busy share at the same reading, in thousandths
         ///
         /// None is written as -1.
         Busy,
-        /// The seed's meter at its last reading in the second, the stats tick
-        /// that opens it (one tick before the one the second's counters come
-        /// from): `capacity` the relay busy-time reading admission and shedding
-        /// take (`PushStats::upload_capacity`, the seed's too), `busy` in
-        /// thousandths; and the uplink it had at the second's middle
-        /// (`capacity`, `busy`, `avail`, in that order).
+        /// the uplink the seed had at the second's middle
         ///
         /// None is written as -1.
         Avail,
@@ -2128,8 +2123,10 @@ pub(crate) mod cols {
         /// None is written as -1.
         ViewerOvh,
         /// the capacity reading the seed's budget was measured from,
-        /// `PushStats::seed_budget_capacity`, at `capacity`'s tick: empty until
-        /// measured, -1 without a reading
+        /// `PushStats::seed_budget_capacity`, at `capacity`'s reading, the
+        /// second's end
+        ///
+        /// strims-sim: 0 until measured, -1 without a reading
         ///
         /// None is written as -1.
         BudgetCapacity,

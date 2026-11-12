@@ -2360,7 +2360,7 @@ impl Report {
     /// | `present` | the honest viewers' transfer samples in the second: the honest viewers there while the stats tick once a second, more with a finer [`Scenario::stats_every`] (each viewer once per tick) |
     /// | `hits`, `misses`, `pruned` | over the viewers, pushes before their deadline, deadlines released to pull, and parents pruned |
     /// | `parents` | the viewers' median count of streams with an open parent |
-    /// | `capacity`, `busy`, `avail` | the seed's meter at its last reading in the second, the stats tick that opens it (one tick before the one the second's counters come from): `capacity` the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, the seed's too), `busy` in thousandths; and the uplink it had at the second's middle |
+    /// | `capacity`, `busy`, `avail` | the seed's meter at its last reading of the second, the stats tick that closes it (the one the second's counters come from): `capacity` the relay busy-time reading admission and shedding take (`PushStats::upload_capacity`, the seed's too), `busy` in thousandths; and the uplink it had at the second's middle |
     /// | `copies` | the adaptive seed's copies at the second's middle (as of the tick that opens it) |
     /// | `sent`, `pushed` | chunks the seed sent, and of them pushes |
     /// | `seed_ovh`, `viewer_ovh` | bytes the seed and the honest viewers (summed) wrote to their links that weren't chunk data ([`crate::TransferSample::overhead`]; the row's `up_transport` and `up_acks` have the transports') |
@@ -2496,7 +2496,7 @@ impl Report {
         let mut budget_capacity = vec![-1; n];
         if let Some(h) = self.hosts.get(seed) {
             for m in &h.runner.meter {
-                if let Some(k) = second(m.t)
+                if let Some(k) = sample_second(m.t)
                     && let (Some(c), Some(b), Some(g)) = (
                         capacity.get_mut(k),
                         busy.get_mut(k),
