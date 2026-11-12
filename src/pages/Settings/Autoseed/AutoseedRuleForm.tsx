@@ -80,6 +80,11 @@ const AutoseedRuleForm: React.FC<AutoseedRuleFormProps> = ({
             value: true,
             message: "Swarm ID is required",
           },
+          // What the pages' base32Decode (RFC 4648) reads.
+          pattern: {
+            value: /^[A-Z2-7]+=*$/,
+            message: "Swarm ID must be base32 (A-Z and 2-7)",
+          },
         }}
         label="Swarm ID"
         placeholder="Swarm ID"
