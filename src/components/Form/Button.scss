@@ -46,7 +46,11 @@
     box-shadow: none;
   }
 
+  // Light text on green in either theme.
   &--primary {
+    --color-text-input: var(--color-grey-11);
+    --color-text-input-focus: var(--color-grey-12);
+    --color-text-input-active: var(--color-grey-13);
     --color-background-input: var(--color-green-3);
     --color-background-input-focus: var(--color-green-2);
     --color-background-input-active: var(--color-green-1);

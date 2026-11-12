@@ -235,6 +235,20 @@
     --color--border-notification: #{$slate-500};
     --color--background-notification: #{$slate-200};
 
+    --color-background-landing-page: #{$slate-500};
+    --color-background-landing-header: #{$slate-200};
+    --color-background-landing-form: #{$slate-300};
+    --color-text-landing-title: #{$gray-500};
+    --color-text-landing-tagline: #{$gray-300};
+    --color-background-landing-profile: #{$slate-400};
+    --color-background-landing-profile-hover: #{$slate-500};
+    --color-border-landing-profile: #{$slate-500};
+    --color-text-landing-profile: #{$gray-400};
+    --color-text-landing-profile-detail: #{$gray-100};
+
+    --color-text-link: var(--color-blue-8);
+    --color-text-link-active: var(--color-blue-6);
+
     --color-background-layout-chat: #{$slate-400};
     --color-background-layout-chat-menu: var(--color-slate-9);
     --color-background-layout-body: #{$slate-300};
@@ -354,6 +368,20 @@
 
     --color--border-notification: #{$gray-500};
     --color--background-notification: #{$gray-200};
+
+    --color-background-landing-page: #{$gray-500};
+    --color-background-landing-header: #{$gray-200};
+    --color-background-landing-form: #{$gray-300};
+    --color-text-landing-title: #{$slate-500};
+    --color-text-landing-tagline: #{$slate-300};
+    --color-background-landing-profile: #{$gray-400};
+    --color-background-landing-profile-hover: #{$gray-500};
+    --color-border-landing-profile: #{$gray-500};
+    --color-text-landing-profile: #{$slate-400};
+    --color-text-landing-profile-detail: #{$slate-100};
+
+    --color-text-link: var(--color-blue-4);
+    --color-text-link-active: var(--color-blue-3);
 
     --color-background-layout-chat: #{$gray-400};
     --color-background-layout-body: #{$gray-300};

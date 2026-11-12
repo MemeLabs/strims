@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 .internal_link {
-  color: var(--color-blue-8);
+  color: var(--color-text-link);
 
   &:hover,
   &:focus {
@@ -10,6 +10,6 @@
   }
 
   &:active {
-    color: var(--color-blue-6);
+    color: var(--color-text-link-active);
   }
 }
