@@ -67,8 +67,9 @@ const BroadcastPage: React.FC = () => {
     // a user gesture.
     const audioContext = new AudioContext({ sampleRate: 48000 });
     void (async () => {
+      let mediaStream: MediaStream | null = null;
       try {
-        const mediaStream = await openMedia(source);
+        mediaStream = await openMedia(source);
         const { networks } = await client.network.list();
         const { id } = await client.videoCapture.open({
           networkKeys: networks.map((n) => certificateRoot(n.certificate).key),
@@ -78,6 +79,7 @@ const BroadcastPage: React.FC = () => {
         });
         setBroadcastState({ id, mediaStream, audioContext });
       } catch (e) {
+        mediaStream?.getTracks().forEach((t) => t.stop());
         void audioContext.close();
         setError(String(e));
       }
