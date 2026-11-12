@@ -34,7 +34,7 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
   // }
 
   // TODO: load from... config? webpack?
-  const themeColor = colorScheme === "dark" ? "#222933" : "#d5d5d5";
+  const themeColor = colorScheme === "dark" ? "#222933" : "#efeff1";
 
   const value = useMemo(
     () => ({

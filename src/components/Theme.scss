@@ -217,12 +217,19 @@
   --network-nav-collapsed-width: 60px;
   --network-nav-expanded-width: 200px;
 
+  // The themes set the same tokens in the same order. The dark theme's
+  // surfaces are slates, lighter as they rise (the navs, the body, the chat,
+  // the header), with light grey text; the light theme's are the hinted greys
+  // and white in the same order, with slate text. Where the dark theme
+  // lightens a control on hover or selection, the light theme darkens it, and
+  // its accents are the scales' deeper steps (links blue-4 for blue-8).
   &--dark {
     --shadow-elevation-1: 0 1px 2px var(--color-opac-b-11), 0 0px 2px var(--color-opac-b-11);
     --shadow-elevation-2: 0 4px 8px var(--color-opac-b-4), 0 0px 4px var(--color-opac-b-4);
     --shadow-elevation-3: 0 6px 16px var(--color-opac-b-5), 0 0px 4px var(--color-opac-b-4);
     --shadow-elevation-4: 0 12px 32px var(--color-opac-b-5), 0 0px 8px var(--color-opac-b-4);
     --shadow-elevation-5: 0 32px 64px var(--color-opac-b-6), 0 0px 16px var(--color-opac-b-4);
+    --shadow-inset: 0 1px 2px var(--color-opac-b-14) inset;
 
     --color-background-layout-header: #{$slate-500};
     --color-background-layout-footer: #{$slate-500};
@@ -231,8 +238,11 @@
     --color-background-network-nav-tooltip: var(--color-opac-b-12);
     --color-background-network-nav-link-hover: #{$slate-400};
     --color-text-network-nav-link: #{$gray-100};
+    --color-accent-nav-indicator: var(--color-strims-orange-14);
+    --color-accent-nav-indicator-idle: var(--color-strims-orange-2);
+    --color-border-settings-close: var(--color-grey-8);
 
-    --color--border-notification: #{$slate-500};
+    --color--border-notification: #000;
     --color--background-notification: #{$slate-200};
 
     --color-background-landing-page: #{$slate-500};
@@ -240,6 +250,8 @@
     --color-background-landing-form: #{$slate-300};
     --color-text-landing-title: #{$gray-500};
     --color-text-landing-tagline: #{$gray-300};
+    --color-text-landing-revision: var(--color-slate-15);
+    --color-text-landing-revision-small: var(--color-grey-2);
     --color-background-landing-profile: #{$slate-400};
     --color-background-landing-profile-hover: #{$slate-500};
     --color-border-landing-profile: #{$slate-500};
@@ -248,12 +260,22 @@
 
     --color-text-link: var(--color-blue-8);
     --color-text-link-active: var(--color-blue-6);
+    --color-text-link-visited: var(--color-purple-11);
 
     --color-background-layout-chat: #{$slate-400};
     --color-background-layout-chat-menu: var(--color-slate-9);
+    --color-border-layout-chat-header: var(--color-opac-w-2);
     --color-background-layout-body: #{$slate-300};
+    --color-background-layout-player: var(--color-slate-2);
 
     --color-text-base: #{$gray-500};
+
+    --color-background-modal: var(--color-slate-4);
+    --color-text-modal-detail: var(--color-grey-3);
+    --color-text-modal-description: var(--color-grey-4);
+    --color-text-modal-close: var(--color-grey-3);
+    --color-text-modal-close-hover: var(--color-grey-7);
+    --color-background-icon-button-hover: var(--color-opac-w-2);
 
     --color-text-shadow-chat-combo: #000;
     --color-background-chat-scroll-handle: var(--color-opac-w-8);
@@ -270,17 +292,47 @@
     --color-background-chat-tab-hover: var(--color-slate-11);
     --color-text-chat-tab-active: var(--color-grey-12);
     --color-background-chat-tab-active: var(--color-slate-12);
+    --color-text-chat-menu: var(--color-grey-10);
+    --color-text-chat-menu-hover: var(--color-grey-14);
+    --color-text-chat-menu-heading: var(--color-grey-8);
+    --color-text-chat-menu-muted: var(--color-grey-6);
+    --color-text-chat-menu-rooms: var(--color-grey-12);
+    --color-chat-menu-status: var(--color-slate-12);
+    --color-chat-menu-status-online: var(--color-grey-10);
+    --color-background-chat-popout-header: var(--color-opac-w-1);
+    --color-background-chat-popout-control-hover: var(--color-opac-w-1);
     --opacity-chat-unselected: 0.3;
-    --color-background-chat-highlight: #{$slate-500};
+    --color-background-chat-author: #{$slate-300};
     --color-text-chat-author-hover: var(--color-grey-15);
     --color-text-chat-greentext: #6ca528;
     --color-text-chat-code: gray;
+    --color-text-chat-spoiler: gray;
+    --color-background-chat-spoiler: #000;
+    --color-background-chat-tag: var(--color-slate-11);
+    --color-border-chat-tag: var(--color-slate-9);
+    --color-text-chat-external-link: var(--color-grey-4);
+    --color-text-chat-external-link-hover: var(--color-grey-7);
+    --color-text-chat-hidden-emote: var(--color-grey-4);
     --color-background-chat-highlight: #002547;
     --color-border-chat-highlight: #082c4d;
     --color-background-chat-sent: var(--color-slate-12);
     --color-background-chat-tagged: var(--color-slate-12);
+    --color-background-chat-failed: var(--color-red-5);
+    --color-border-chat-failed: var(--color-red-9);
     --color-chat-user-presence-indicator-default: var(--color-slate-15);
     --color-text-chat-time: var(--color-grey-6);
+
+    --color-background-emote-menu: var(--color-slate-7);
+    --color-background-emote-menu-nav: var(--color-slate-5);
+    --color-background-emote-menu-footer: var(--color-slate-6);
+    --color-background-emote-menu-control: var(--color-slate-10);
+    --color-text-emote-menu-nav: var(--color-grey-6);
+    --color-text-emote-menu-nav-hover: var(--color-grey-12);
+    --color-text-emote-menu-nav-focus: var(--color-grey-15);
+    --color-text-emote-menu-preview-label: var(--color-grey-5);
+    --color-text-emote-menu-preview-name: var(--color-grey-7);
+    --color-background-emote-details: var(--color-slate-5);
+    --color-text-emote-details-code: var(--color-grey-3);
 
     --color-icon: var(--color-opac-w-8);
     --color-icon-hover: var(--color-opac-w-12);
@@ -289,14 +341,15 @@
     --color-border-error: var(--color-red-6);
 
     --color-icon-input: #{$gray-500};
-    --color-text-input: #{$gray-500};
     --color-background-input-toggle: #{$green-200};
+    --color-background-input-toggle-off: var(--color-slate-8);
 
     --color-background-input: var(--color-slate-8);
     --color-background-input-focus: var(--color-slate-9);
     --color-background-input-active: var(--color-slate-10);
     --color-background-input-disabled: var(--color-slate-7);
     --color-background-select-item: var(--color-slate-11);
+    --color-border-control: var(--color-opac-w-3);
     --color-text-input: var(--color-grey-11);
     --color-text-input-focus: var(--color-grey-12);
     --color-text-input-active: var(--color-grey-13);
@@ -314,7 +367,28 @@
 
     --color-background-table: var(--color-slate-10);
     --color-background-table-header: var(--color-slate-11);
+    --color-border-table: var(--color-opac-w-2);
+    --color-border-table-menu-divider: var(--color-slate-12);
     --color-background-label: var(--color-slate-7);
+
+    --color-background-pairing-token-modal: var(--color-slate-8);
+    --color-background-pairing-token-input: var(--color-slate-14);
+    --color-text-pairing-token-input: var(--color-grey-10);
+    --color-text-pairing-token-placeholder: var(--color-grey-8);
+
+    --color-border-video-meta: var(--color-slate-4);
+    --color-text-video-meta-viewers: var(--color-strims-orange-5);
+    --color-text-video-meta-toggle: var(--color-grey-6);
+    --color-text-video-meta-toggle-hover: var(--color-grey-10);
+
+    --color-background-debugger: #{$slate-400};
+    --color-background-debugger-header: var(--color-slate-13);
+    --color-background-debugger-tabs: var(--color-slate-6);
+    --color-background-debugger-tab: var(--color-slate-9);
+    --color-background-debugger-tab-hover: var(--color-slate-11);
+    --color-border-debugger: var(--color-slate-12);
+    --color-border-debugger-graph: var(--color-slate-9);
+    --color-text-debugger-muted: var(--color-grey-6);
     // ---
 
     --body-background: #{$slate-300};
@@ -349,110 +423,214 @@
     --color-text-context-menu-item: var(--color-grey-9);
     --color-text-context-menu-item-hover: var(--color-grey-12);
     --color-text-context-menu-item-disabled: var(--color-opac-w-7);
+    --color-text-context-menu-icon: var(--color-grey-8);
+    --color-text-context-menu-icon-hover: var(--color-grey-15);
+    --color-outline-context-menu-swatch-hover: var(--color-opac-w-10);
   }
 
   &--light {
-    --shadow-elevation-1: 0 1px 2px var(--color-opac-b-14), 0 0px 2px var(--color-opac-b-14);
-    --shadow-elevation-2: 0 4px 8px var(--color-opac-b-7), 0 0px 4px var(--color-opac-b-7);
-    --shadow-elevation-3: 0 6px 16px var(--color-opac-b-8), 0 0px 4px var(--color-opac-b-7);
-    --shadow-elevation-4: 0 12px 32px var(--color-opac-b-8), 0 0px 8px var(--color-opac-b-7);
-    --shadow-elevation-5: 0 32px 64px var(--color-opac-b-9), 0 0px 16px var(--color-opac-b-7);
+    --shadow-elevation-1: 0 1px 2px var(--color-opac-b-4), 0 0px 2px var(--color-opac-b-3);
+    --shadow-elevation-2: 0 4px 8px var(--color-opac-b-2), 0 0px 4px var(--color-opac-b-2);
+    --shadow-elevation-3: 0 6px 16px var(--color-opac-b-3), 0 0px 4px var(--color-opac-b-2);
+    --shadow-elevation-4: 0 12px 32px var(--color-opac-b-3), 0 0px 8px var(--color-opac-b-2);
+    --shadow-elevation-5: 0 32px 64px var(--color-opac-b-4), 0 0px 16px var(--color-opac-b-2);
+    --shadow-inset: 0 1px 2px var(--color-opac-b-3) inset;
 
-    --color-background-input: #{$gray-400};
-    --color-background-layout-header: #{$gray-500};
-    --color-background-layout-footer: #{$gray-500};
-    --color-background-settings-nav: #{$gray-200};
-    --color-background-network-nav: #{$gray-200};
-    --color-background-network-nav-tooltip: var(--color-opac-w-12);
-    --color-background-network-nav-link-hover: #{$gray-400};
-    --color-text-network-nav-link: #{$slate-100};
+    --color-background-layout-header: #fff;
+    --color-background-layout-footer: #fff;
+    --color-background-settings-nav: var(--color-hinted-grey-13);
+    --color-background-network-nav: var(--color-hinted-grey-13);
+    --color-background-network-nav-tooltip: #fff;
+    --color-background-network-nav-link-hover: var(--color-hinted-grey-12);
+    --color-text-network-nav-link: var(--color-grey-1);
+    --color-accent-nav-indicator: var(--color-strims-orange-8);
+    --color-accent-nav-indicator-idle: var(--color-strims-orange-14);
+    --color-border-settings-close: var(--color-slate-15);
 
-    --color--border-notification: #{$gray-500};
-    --color--background-notification: #{$gray-200};
+    --color--border-notification: var(--color-hinted-grey-11);
+    --color--background-notification: #fff;
 
-    --color-background-landing-page: #{$gray-500};
-    --color-background-landing-header: #{$gray-200};
-    --color-background-landing-form: #{$gray-300};
-    --color-text-landing-title: #{$slate-500};
-    --color-text-landing-tagline: #{$slate-300};
-    --color-background-landing-profile: #{$gray-400};
-    --color-background-landing-profile-hover: #{$gray-500};
-    --color-border-landing-profile: #{$gray-500};
-    --color-text-landing-profile: #{$slate-400};
-    --color-text-landing-profile-detail: #{$slate-100};
+    --color-background-landing-page: var(--color-hinted-grey-14);
+    --color-background-landing-header: var(--color-hinted-grey-13);
+    --color-background-landing-form: #fff;
+    --color-text-landing-title: var(--color-slate-8);
+    --color-text-landing-tagline: var(--color-slate-15);
+    --color-text-landing-revision: var(--color-grey-2);
+    --color-text-landing-revision-small: var(--color-grey-2);
+    --color-background-landing-profile: var(--color-hinted-grey-15);
+    --color-background-landing-profile-hover: var(--color-hinted-grey-13);
+    --color-border-landing-profile: var(--color-hinted-grey-12);
+    --color-text-landing-profile: var(--color-slate-12);
+    --color-text-landing-profile-detail: var(--color-grey-2);
 
     --color-text-link: var(--color-blue-4);
     --color-text-link-active: var(--color-blue-3);
+    --color-text-link-visited: var(--color-purple-8);
 
-    --color-background-label: #{$gray-500};
+    --color-background-layout-chat: var(--color-hinted-grey-15);
+    --color-background-layout-chat-menu: var(--color-hinted-grey-14);
+    --color-border-layout-chat-header: var(--color-opac-b-2);
+    --color-background-layout-body: var(--color-hinted-grey-14);
+    --color-background-layout-player: var(--color-hinted-grey-15);
 
-    --color-background-layout-chat: #{$gray-400};
-    --color-background-layout-body: #{$gray-300};
+    --color-text-base: var(--color-slate-8);
 
-    --color-text-base: #{$slate-500};
+    --color-background-modal: #fff;
+    --color-text-modal-detail: var(--color-grey-2);
+    --color-text-modal-description: var(--color-grey-2);
+    --color-text-modal-close: var(--color-grey-2);
+    --color-text-modal-close-hover: var(--color-slate-8);
+    --color-background-icon-button-hover: var(--color-opac-b-2);
 
-    --color-text-shadow-chat-combo: #000;
-    --color-chat-scroller-handle: var(--color-opac-w-8);
-    --color-chat-settings-legend: #{$slate-200};
+    --color-text-shadow-chat-combo: #fff;
+    --color-background-chat-scroll-handle: var(--color-opac-b-6);
+    --color-background-chat-scroll-resume: var(--color-hinted-grey-12);
+    --color-background-chat-scroll-resume-disabled: var(--color-hinted-grey-13);
+    --color-text-chat-scroll-resume: var(--color-slate-8);
+    --color-text-chat-scroll-resume-disabled: var(--color-grey-2);
+    --color-text-chat-settings-legend: var(--color-grey-1);
+    --color-background-chat-toggle-hover: var(--color-hinted-grey-13);
+    --color-border-chat-tab: var(--color-opac-b-3);
+    --color-border-chat-tab-hover: var(--color-opac-b-2);
+    --color-text-chat-tab: var(--color-grey-2);
+    --color-text-chat-tab-hover: var(--color-slate-15);
+    --color-background-chat-tab-hover: var(--color-hinted-grey-13);
+    --color-text-chat-tab-active: var(--color-slate-8);
+    --color-background-chat-tab-active: var(--color-hinted-grey-12);
+    --color-text-chat-menu: var(--color-slate-12);
+    --color-text-chat-menu-hover: var(--color-slate-1);
+    --color-text-chat-menu-heading: var(--color-slate-15);
+    --color-text-chat-menu-muted: var(--color-grey-2);
+    --color-text-chat-menu-rooms: var(--color-slate-8);
+    --color-chat-menu-status: var(--color-hinted-grey-10);
+    --color-chat-menu-status-online: var(--color-slate-15);
+    --color-background-chat-popout-header: var(--color-opac-b-2);
+    --color-background-chat-popout-control-hover: var(--color-opac-b-2);
+    --opacity-chat-unselected: 0.3;
+    --color-background-chat-author: var(--color-hinted-grey-12);
+    --color-text-chat-author-hover: var(--color-slate-1);
+    --color-text-chat-greentext: var(--color-green-3);
+    --color-text-chat-code: var(--color-grey-1);
+    --color-text-chat-spoiler: var(--color-grey-2);
+    --color-background-chat-spoiler: var(--color-hinted-grey-11);
+    --color-background-chat-tag: var(--color-hinted-grey-13);
+    --color-border-chat-tag: var(--color-hinted-grey-11);
+    --color-text-chat-external-link: var(--color-grey-3);
+    --color-text-chat-external-link-hover: var(--color-slate-15);
+    --color-text-chat-hidden-emote: var(--color-grey-3);
+    --color-background-chat-highlight: var(--color-blue-14);
+    --color-border-chat-highlight: var(--color-blue-13);
+    --color-background-chat-sent: var(--color-hinted-grey-13);
+    --color-background-chat-tagged: var(--color-hinted-grey-13);
+    --color-background-chat-failed: var(--color-red-15);
+    --color-border-chat-failed: var(--color-red-9);
+    --color-chat-user-presence-indicator-default: var(--color-hinted-grey-10);
+    --color-text-chat-time: var(--color-grey-1);
 
-    --color-icon: var(--color-opac-w-8);
-    --color-icon-hover: var(--color-opac-w-12);
+    --color-background-emote-menu: #fff;
+    --color-background-emote-menu-nav: var(--color-hinted-grey-14);
+    --color-background-emote-menu-footer: var(--color-hinted-grey-15);
+    --color-background-emote-menu-control: var(--color-hinted-grey-13);
+    --color-text-emote-menu-nav: var(--color-grey-2);
+    --color-text-emote-menu-nav-hover: var(--color-slate-8);
+    --color-text-emote-menu-nav-focus: var(--color-slate-1);
+    --color-text-emote-menu-preview-label: var(--color-grey-2);
+    --color-text-emote-menu-preview-name: var(--color-slate-15);
+    --color-background-emote-details: #fff;
+    --color-text-emote-details-code: var(--color-grey-2);
 
-    --color-background-error: #{lighten($red-base, 30%)};
-    --color-border-error: #{lighten($red-base, 40%)};
+    --color-icon: var(--color-opac-b-8);
+    --color-icon-hover: var(--color-opac-b-12);
 
-    --color-icon-input: #{$slate-500};
-    --color-text-input: #{$slate-500};
+    --color-background-error: var(--color-red-8);
+    --color-border-error: var(--color-red-6);
+
+    --color-icon-input: var(--color-slate-8);
     --color-background-input-toggle: #{$green-200};
-    --color-background-input-focus: #{$gray-500};
-    --color-background-input-active: #{$gray-600};
-    --color-background-input-disabled: #{$gray-300};
-    --color-background-select-item: #{$gray-200};
+    --color-background-input-toggle-off: var(--color-hinted-grey-11);
+
+    --color-background-input: var(--color-hinted-grey-13);
+    --color-background-input-focus: var(--color-hinted-grey-12);
+    --color-background-input-active: var(--color-hinted-grey-11);
+    --color-background-input-disabled: var(--color-hinted-grey-14);
+    --color-background-select-item: var(--color-hinted-grey-12);
+    --color-border-control: var(--color-opac-b-3);
+    --color-text-input: #{$slate-500};
     --color-text-input-focus: #{$slate-400};
     --color-text-input-active: #{$slate-300};
     --color-text-input-disabled: var(--color-grey-3);
     --color-text-input-placeholder: var(--color-grey-2);
-    --color-foreground-toggle: #{$gray-700};
-    --color-foreground-toggle-focus: #{$gray-900};
-    --color-foreground-toggle-disabled: #{$gray-500};
+    --color-foreground-toggle: #fff;
+    --color-foreground-toggle-focus: var(--color-hinted-grey-15);
+    --color-foreground-toggle-disabled: var(--color-hinted-grey-15);
 
-    --color-text-form-label: #{$slate-500};
+    --color-text-form-label: var(--color-slate-8);
     --color-border-form-label: var(--color-opac-b-2);
-    --color-background-form-label: #{$gray-500};
-    --color-background-form-label-button-hover: #{$gray-600};
-    --color-background-form-buttonset: #{$gray-600};
+    --color-background-form-label: #fff;
+    --color-background-form-label-button-hover: var(--color-hinted-grey-15);
+    --color-background-form-buttonset: var(--color-hinted-grey-15);
 
-    --color-background-table: #{$gray-500};
-    --color-background-table-header: #{$gray-600};
+    --color-background-table: #fff;
+    --color-background-table-header: var(--color-hinted-grey-15);
+    --color-border-table: var(--color-opac-b-2);
+    --color-border-table-menu-divider: var(--color-hinted-grey-12);
+    --color-background-label: var(--color-hinted-grey-12);
 
+    --color-background-pairing-token-modal: #fff;
+    --color-background-pairing-token-input: var(--color-hinted-grey-13);
+    --color-text-pairing-token-input: var(--color-slate-8);
+    --color-text-pairing-token-placeholder: var(--color-grey-2);
+
+    --color-border-video-meta: var(--color-hinted-grey-12);
+    --color-text-video-meta-viewers: var(--color-strims-orange-4);
+    --color-text-video-meta-toggle: var(--color-grey-2);
+    --color-text-video-meta-toggle-hover: var(--color-slate-12);
+
+    --color-background-debugger: #fff;
+    --color-background-debugger-header: var(--color-hinted-grey-12);
+    --color-background-debugger-tabs: var(--color-hinted-grey-13);
+    --color-background-debugger-tab: var(--color-hinted-grey-12);
+    --color-background-debugger-tab-hover: var(--color-hinted-grey-14);
+    --color-border-debugger: var(--color-hinted-grey-11);
+    --color-border-debugger-graph: var(--color-hinted-grey-14);
+    --color-text-debugger-muted: var(--color-grey-2);
     // ---
 
-    --body-background: #{$gray-300};
-    --body-foreground: #{$gray-400};
-    --body-border-color: #{$gray-400};
-    --body-color: #{$slate-500};
+    --body-background: var(--color-hinted-grey-14);
+    --body-foreground: var(--color-hinted-grey-15);
+    --body-border-color: var(--color-hinted-grey-12);
+    --body-color: var(--color-slate-8);
 
-    --card-bg: #{$gray-300};
-    --card-border: #{$gray-400};
-    --card-3d-border-top: #{$gray-500};
-    --card-3d-border-right: #{$gray-200};
-    --card-3d-border-bottom: #{$gray-200};
-    --card-3d-border-left: #{$gray-500};
+    --card-bg: var(--color-hinted-grey-14);
+    --card-border: var(--color-hinted-grey-12);
+    --card-3d-border-top: #fff;
+    --card-3d-border-right: var(--color-hinted-grey-12);
+    --card-3d-border-bottom: var(--color-hinted-grey-12);
+    --card-3d-border-left: #fff;
 
-    --input-bg: #{$gray-400};
-    --input-fg: #{$gray-500};
-    --input-border-color: #{$gray-500};
-    --input-color: #{$slate-400};
-    --input-focus-bg: #{$gray-500};
-    --input-focus-color: #{$slate-500};
-    --input-disabled-bg: #{$gray-300};
-    --input-disabled-color: #{$slate-100};
-    --input-placeholder-color: #{$slate-100};
-    --input-button-hover-bg: #{$gray-500};
-    --input-button-hover-color: #{$slate-500};
+    --input-bg: #fff;
+    --input-fg: var(--color-hinted-grey-13);
+    --input-border-color: var(--color-hinted-grey-11);
+    --input-color: var(--color-slate-8);
+    --input-focus-bg: #fff;
+    --input-focus-color: var(--color-slate-8);
+    --input-disabled-bg: var(--color-hinted-grey-14);
+    --input-disabled-color: var(--color-grey-3);
+    --input-placeholder-color: var(--color-grey-2);
+    --input-button-hover-bg: var(--color-hinted-grey-13);
+    --input-button-hover-color: var(--color-slate-8);
 
-    --link-active-bg: #{$gray-300};
-    --link-hover-bg: #{$gray-400};
+    --link-active-bg: var(--color-hinted-grey-14);
+    --link-hover-bg: var(--color-hinted-grey-12);
+
+    --color-background-context-menu: #fff;
+    --color-background-context-menu-item-hover: var(--color-hinted-grey-13);
+    --color-text-context-menu-item: var(--color-slate-12);
+    --color-text-context-menu-item-hover: var(--color-slate-1);
+    --color-text-context-menu-item-disabled: var(--color-opac-b-7);
+    --color-text-context-menu-icon: var(--color-slate-15);
+    --color-text-context-menu-icon-hover: var(--color-slate-1);
+    --color-outline-context-menu-swatch-hover: var(--color-opac-b-7);
   }
 
   color: var(--color-text-base);
