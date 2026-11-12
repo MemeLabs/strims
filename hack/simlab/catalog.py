@@ -175,8 +175,11 @@ viewer) with start <= sec < stop, its phase; the request and HAVE logs
 (asks, haves, spec_requests, parks) to the holds in arrivals, as
 table_catalog's joins say; the seed log (seed_decisions, seed_sends) to
 viewers and arrivals on its peer (viewers.node = peer; a written push's
-hold, arrivals.node = peer, seq, incarnation = peer_incarnation), and to
-each other ON (k, src, node, peer, seq).
+hold, arrivals.node = peer, seq, incarnation = peer_incarnation), to
+parents as a history (the child's first change at or after a decision's
+t_ms), and to each other ON (k, src, node, peer, peer_incarnation, seq)
+with seed_sends.how = 'push': a cancel's push or none, a check's with
+seed_sends.t_ms = due_ms; a send meets every CANCEL of its chunk.
 
   SELECT e.cell, e.arm_label, count(*) AS runs, sum(v.collapsed::INT) AS collapsed
   FROM experiment_jobs e JOIN verdicts v USING (k, src)
@@ -734,7 +737,7 @@ def guards():
 
 
 UNITS = ((r"_ms(_|$)", "ms"), (r"_us$", "us"), (r"(_s|_secs)(_|$)", "s"), (r"_per_min$|/min$", "per minute"),
-         (r"bytes|_bps$|_wire$|^up_|^down_", "bytes"), (r"share|_rate$|^delivery", "fraction"),
+         (r"_bps$", "bytes/s"), (r"bytes|_wire$|^up_|^down_", "bytes"), (r"share|_rate$|^delivery", "fraction"),
          (r"_mb$", "MB"), (r"_gib$", "GiB"), (r"/useful$", "per useful byte"), (r"_mbit", "Mbit/s"))
 
 
@@ -1656,7 +1659,7 @@ def view_sql(t, cols, name, viewers, arrivals=None):
     if t == "parents":
         sel = ["x.k", "x.src"] + [nullify(c) if c == "parent" else plain(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
-    if t == "seed_decisions":
+    if t in ("seed_decisions", "seed_sends"):
         sel = ["x.k", "x.src"] + [nullify(c) if c == "peer" else plain(c) for c in rest]
         return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "asks":
@@ -2004,7 +2007,8 @@ NORMALIZED = {
              "a backlog the channel's first HAVEs announce).",
     "seed_decisions": "The seed's own decisions (its seed log, both sims, SPEC): a row per decision, n its "
                       "place in the seed's log (k, node, n key it), its kind saying which columns hold it, the "
-                      "rest NULL; peer NULL for a decision about the allocation (window, answer_rate). A request "
+                      "rest NULL; peer NULL for a decision about the allocation (window, answer_rate; an older run's -1 "
+                      "reads NULL too). A request "
                       "row's subscribers are the stream's before the answer, its holders, copies, held and "
                       "per_holder NULL where no admission read them; a released or closed row's subscribers "
                       "those left; a window's capacity_bps NULL until measured, its signals (pushed, behind, "
@@ -2014,7 +2018,8 @@ NORMALIZED = {
                       "reached the push), its HAVEs on main (those three NULL; silent counts the checks its HAVEs "
                       "didn't announce it).",
     "seed_sends": "Every chunk the seed pushed or answered, once its send ended (its seed log, both sims, SPEC): "
-                  "n is its place in the seed's log (k, node, n key it), t_ms the end (written to the frame, or "
+                  "n is its place in the seed's log (k, node, n key it), peer the neighbour (an older run's -1, a "
+                  "neighbour gone before the log's take, reads NULL), t_ms the end (written to the frame, or "
                   "dropped), queued_ms the push's queueing or the answered request's arrival; bytes NULL unless "
                   "written; cancel_ms NULL without the peer's CANCEL of the chunk by the end. fate 'suppressed' "
                   "is main's alone (the peer's HAVEs announced the chunk). declared reads what the peer said of "
@@ -2062,14 +2067,24 @@ STANDARD_JOINS = {"seconds": "jobs USING (k, src); verdict_seconds USING (k, src
                   "haves": "viewers USING (k, src, node); arrivals ON (k, src) and arrivals.node = haves.peer, seq, "
                            "arrivals.incarnation = haves.peer_incarnation (the peer's holds, the view's truth); "
                            "asks ON (k, src, node, peer, seq) for a request's knowledge",
-                  "seed_decisions": "viewers ON (k, src) and viewers.node = seed_decisions.peer (the neighbour); "
-                                    "parents ON (k, src) and parents.node = seed_decisions.peer, stream (the "
-                                    "child's side of a grant or a close); seed_sends ON (k, src, node, peer, seq) "
-                                    "for a cancel's or a check's push",
+                  "seed_decisions": "viewers ON (k, src) and viewers.node = seed_decisions.peer (the neighbour; "
+                                    "none for one that isn't a viewer); parents ON (k, src) and parents.node = "
+                                    "seed_decisions.peer, stream and parents.t_ms >= seed_decisions.t_ms, the "
+                                    "first such row (the child's side of a grant or a close: parents is a "
+                                    "history, every change of the child's without the time condition); "
+                                    "seed_sends ON (k, src, node, peer, peer_incarnation, seq) and seed_sends.how "
+                                    "= 'push' for a cancel's push (at most one), with seed_sends.t_ms = "
+                                    "seed_decisions.due_ms for a check's (exactly one): without how, "
+                                    "peer_incarnation and due_ms a decision meets an answer of its chunk "
+                                    "too, or a push of it written before",
                   "seed_sends": "viewers ON (k, src) and viewers.node = seed_sends.peer (the neighbour); arrivals "
                                 "ON (k, src) and arrivals.node = seed_sends.peer, seq, arrivals.incarnation = "
-                                "seed_sends.peer_incarnation (the holder's hold: the push's delivery); "
-                                "seed_decisions ON (k, src, node, peer, seq) for a CANCEL"}
+                                "seed_sends.peer_incarnation (the holder's hold: the push's delivery, at "
+                                "most one); seed_decisions ON (k, src, node, peer, peer_incarnation, seq) and "
+                                "seed_decisions.kind = 'cancel' for the CANCELs of its chunk, not one to one (a "
+                                "peer cancels a chunk more than once, and a CANCEL of several chunks is logged "
+                                "at its first): the one at seed_decisions.t_ms = seed_sends.cancel_ms is the "
+                                "first that named the chunk alone, none for a range's"}
 VERDICT_DOCS = {
     "onset": "the first second a trigger held (trees, delivery or latency), NULL if none",
     "trees": "the first second of TREES_SECS with the smoothed hit share under TREES_SHARE",

@@ -483,8 +483,8 @@ class Haves(unittest.TestCase):
 
 class SeedLog(unittest.TestCase):
     """The seed log's tables: kept as tables, not samples (a few thousand
-    rows a run), with their notes, keys, joins and knob; the decisions' view
-    reads a decision about the allocation's peer (-1) as NULL."""
+    rows a run), with their notes, keys, joins and knob; both views read an
+    older run's peer -1 (none) as NULL, as the sims now write it."""
 
     def test_the_tables_are_kept_with_their_notes(self):
         for t in ("seed_decisions", "seed_sends"):
@@ -500,13 +500,14 @@ class SeedLog(unittest.TestCase):
         with self.assertRaisesRegex(query.Refused, r"seed_sends \(run with SIM_SPEC=1"):
             query.need({"arrivals"}, "seed_sends")
 
-    def test_the_decisions_view_reads_no_peer_as_null(self):
+    def test_the_views_read_no_peer_as_null(self):
         cols = {"k": "VARCHAR", "src": "VARCHAR", "t_ms": "BIGINT", "peer": "BIGINT", "kind": "VARCHAR"}
         sql = catalog.view_sql("seed_decisions", cols, "seed_decisions", {})
         self.assertIn('nullif(x."peer", -1) AS "peer"', sql)
         self.assertIn('x."kind"', sql)
         sends = catalog.view_sql("seed_sends", {**cols, "fate": "VARCHAR"}, "seed_sends", {})
-        self.assertIn("x.*", sends)
+        self.assertIn('nullif(x."peer", -1) AS "peer"', sends)
+        self.assertIn('x."fate"', sends)
 
 
 if __name__ == "__main__":
