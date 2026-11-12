@@ -4982,3 +4982,139 @@ fn the_seed_log_ends_a_push_the_peer_announced_as_suppressed() {
     assert_eq!((s.fate, s.declared), (SendFate::Suppressed, true));
     assert_eq!(f.sched.push_stats().suppressed, 1);
 }
+
+/// The first wave's ramp in the seed log: the requests its copies don't
+/// cover are deferred, each answered later (a request row), and the
+/// window rows follow the first wave and each step that grew it.
+#[test]
+fn the_seed_log_records_the_ramps_deferred_requests_and_windows() {
+    use seed_log::{SeedDecisionKind, WindowPhase};
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    seed_log_on(&mut f);
+    let step = push::seed::RAMP_STEP;
+    publish(&mut f, now() - Duration::SECOND, now());
+    ramp_upload(&mut f, 0.0, 0);
+    for &p in &peers {
+        ask(&mut f, &mut q, p, 0, now());
+    }
+    let t = now() + step;
+    f.sched.run_push(t, &mut q);
+    let log = f.sched.take_seed_log(false, now());
+    let deferred: Vec<Option<PeerKey>> = log
+        .decisions
+        .iter()
+        .filter(|d| matches!(d.kind, SeedDecisionKind::Deferred { stream: 0 }))
+        .map(|d| d.peer)
+        .collect();
+    assert_eq!(
+        deferred,
+        peers[2..].iter().map(|&p| Some(p)).collect::<Vec<_>>()
+    );
+    // The step to four copies answers the next two: granted, after their
+    // deferral.
+    let granted: Vec<(Option<PeerKey>, Time)> = log
+        .decisions
+        .iter()
+        .filter_map(|d| match d.kind {
+            SeedDecisionKind::Request(r) if r.granted => Some((d.peer, d.at)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        granted,
+        [
+            (Some(peers[0]), now()),
+            (Some(peers[1]), now()),
+            (Some(peers[2]), t),
+            (Some(peers[3]), t)
+        ]
+    );
+    let windows: Vec<(WindowPhase, usize)> = log
+        .decisions
+        .iter()
+        .filter_map(|d| match d.kind {
+            SeedDecisionKind::Window(w) => Some((w.phase, w.copies)),
+            _ => None,
+        })
+        .collect();
+    // The step's run_push checks the allocation too: a window row a check.
+    assert_eq!(
+        windows,
+        [
+            (WindowPhase::FirstWave, 2),
+            (WindowPhase::Ramp, 4),
+            (WindowPhase::Check, 4)
+        ]
+    );
+}
+
+/// A holder's STREAM_CANCEL of a stream of its copy is a release the seed
+/// keeps for a near satellite; the same cancel of a non-holder's
+/// subscription isn't kept.
+#[test]
+fn the_seed_log_records_a_holders_release() {
+    use seed_log::SeedDecisionKind;
+    let (mut f, mut q, peers) = adaptive_seed_with_rtts();
+    seed_log_on(&mut f);
+    let ms = Duration::from_millis;
+    for s in 0..4 {
+        assert!(ask(&mut f, &mut q, peers[1], s, now()));
+    }
+    let t = alloc_check(&mut f, &mut q, now(), &[peers[1]], ms(5), (600_000, 1.0));
+    f.sched.take_seed_log(false, now());
+    f.sched.handle_stream_cancel(peers[1], 3, t).unwrap();
+    // A STREAM_CANCEL of no subscription is no release.
+    f.sched.handle_stream_cancel(peers[2], 0, t).unwrap();
+    let log = f.sched.take_seed_log(false, now());
+    let released: Vec<(Option<PeerKey>, SeedDecisionKind)> =
+        log.decisions.iter().map(|d| (d.peer, d.kind)).collect();
+    assert_eq!(
+        released,
+        [(
+            Some(peers[1]),
+            SeedDecisionKind::Released {
+                stream: 3,
+                subscribers: 0,
+                kept: true
+            }
+        )]
+    );
+}
+
+/// The answer gate's pace is logged as it changes, not at every tick.
+#[test]
+fn the_seed_log_records_the_answer_rate_as_it_changes() {
+    use seed_log::SeedDecisionKind;
+    let mut f = fixture(seed_hybrid(1));
+    seed_log_on(&mut f);
+    let ms = Duration::from_millis;
+    let t = now();
+    f.sched.seed_answer_rate(1000, None, false, t);
+    f.sched.seed_answer_rate(1000, None, false, t + ms(10));
+    f.sched
+        .seed_answer_rate(1000, Some(ms(60)), true, t + ms(20));
+    let log = f.sched.take_seed_log(false, now());
+    let rates: Vec<(Time, SeedDecisionKind)> =
+        log.decisions.iter().map(|d| (d.at, d.kind)).collect();
+    assert_eq!(
+        rates,
+        [
+            (
+                t,
+                SeedDecisionKind::AnswerRate {
+                    rate: 1000,
+                    reading: None,
+                    engaged: false
+                }
+            ),
+            (
+                t + ms(20),
+                SeedDecisionKind::AnswerRate {
+                    rate: 1000,
+                    reading: Some(ms(60)),
+                    engaged: true
+                }
+            )
+        ]
+    );
+}
