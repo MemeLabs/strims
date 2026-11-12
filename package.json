@@ -18,7 +18,7 @@
     "@memelabs/protobuf": "^0.3.5",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.6.3",
     "@react-hook/resize-observer": "^1.2.6",
-    "@swc/core": "^1.16.18",
+    "@swc/core": "^1.16.22",
     "@types/assert": "^1.5.6",
     "@types/css-tree": "^2.0.0",
     "@types/d3-format": "^3.0.1",
