@@ -343,6 +343,26 @@ const stories: Story[] = [
       />
     ),
   },
+  {
+    // A combo that failed to send is marked as a failed message is; the
+    // delivered one after it isn't.
+    name: "Combo failed",
+    component: () => (
+      <MessageStory
+        messages={[
+          combo(5, "PeepoRun"),
+          chatMessage("tahley", "between combos"),
+          combo(20, "NODDERS"),
+        ]}
+        states={[
+          MessageState.MESSAGE_STATE_FAILED,
+          MessageState.MESSAGE_STATE_DELIVERED,
+          MessageState.MESSAGE_STATE_DELIVERED,
+        ]}
+        live
+      />
+    ),
+  },
   { name: "Long text", component: () => <MessageStory messages={longText} /> },
   { name: "Viewed listings", component: () => <MessageStory messages={viewed} /> },
 ];

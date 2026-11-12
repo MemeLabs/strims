@@ -387,6 +387,8 @@ const ComboMessage: React.FC<MessageImplProps> = ({
     [`chat__combo_message--scale_${scale}`]: scale > 0,
     "chat__combo_message--complete": !isMostRecent,
     "chat__combo_message--clickable": isMostRecent,
+    "chat__message--enqueued": messageState === MessageState.MESSAGE_STATE_ENQUEUED,
+    "chat__message--failed": messageState === MessageState.MESSAGE_STATE_FAILED,
   });
 
   const ref = useRef<HTMLElement>();
@@ -409,6 +411,9 @@ const ComboMessage: React.FC<MessageImplProps> = ({
 
   return (
     <div {...props} className={className} ref={useRefs(ref, fwRef)}>
+      {messageState === MessageState.MESSAGE_STATE_FAILED && (
+        <MessageStateIcon messageState={messageState} />
+      )}
       {uiConfig.showTime && (
         <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
       )}
