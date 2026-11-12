@@ -24,15 +24,16 @@ const getEmbedUrl = (
   queryParams: Map<string, string> = new Map()
 ): string | undefined => {
   const queryString = qs.stringify(Object.fromEntries(queryParams.entries()));
+  const moreParams = queryString && `&${queryString}`;
   switch (service) {
     case "angelthump":
       return `https://player.angelthump.com/?channel=${id}`;
     case "twitch-vod":
-      return `https://player.twitch.tv/?video=v${id}&parent=${location.hostname}${queryString}`;
+      return `https://player.twitch.tv/?video=v${id}&parent=${location.hostname}${moreParams}`;
     case "twitch":
       return `https://player.twitch.tv/?channel=${id}&parent=${location.hostname}`;
     case "youtube":
-      return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1${queryString}`;
+      return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1${moreParams}`;
   }
 };
 
