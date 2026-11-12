@@ -5,7 +5,7 @@ import "./ImageInput.scss";
 
 import { Base64 } from "js-base64";
 import React, { ReactElement } from "react";
-import Dropzone from "react-dropzone";
+import Dropzone, { ErrorCode, FileRejection } from "react-dropzone";
 import { FieldValues, useController } from "react-hook-form";
 import { MdAddAPhoto } from "react-icons/md";
 
@@ -41,6 +41,16 @@ export const ImageInputPreview: React.FC<ImageInputPreviewProps> = ({ src, class
   <img src={src} className={`${classNameBase}__preview`} />
 );
 
+const formatSize = (n: number) =>
+  n < 1024 * 1024
+    ? `${(n / 1024).toFixed(1).replace(/\.0$/, "")} KiB`
+    : `${(n / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MiB`;
+
+const rejectionMessage = ({ errors: [error] }: FileRejection, maxSize: number) =>
+  error?.code === ErrorCode.FileTooLarge
+    ? `Image is larger than ${formatSize(maxSize)}`
+    : error?.message ?? "Invalid file";
+
 export interface ImageInput {
   maxSize?: number;
   classNameBase?: string;
@@ -56,6 +66,7 @@ const ImageInput = <T extends FieldValues>({
   ...controllerProps
 }: ImageInput & CompatibleUseControllerProps<T, ImageValue>): ReactElement => {
   const [previewUrl, setPreviewUrl] = React.useState<string>();
+  const [rejection, setRejection] = React.useState<string>();
   React.useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
 
   const {
@@ -74,11 +85,14 @@ const ImageInput = <T extends FieldValues>({
     }
   }, []);
 
-  const handleDrop = async ([file]: File[]) => {
+  // A rejected file (too large, not an image) leaves the value and its
+  // preview as they were.
+  const handleDrop = async ([file]: File[], [rejected]: FileRejection[]) => {
     if (!file) {
-      onChange(null);
+      setRejection(rejected ? rejectionMessage(rejected, maxSize) : undefined);
       return;
     }
+    setRejection(undefined);
 
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
@@ -103,7 +117,7 @@ const ImageInput = <T extends FieldValues>({
 
   return (
     <>
-      <InputError error={error} />
+      <InputError error={error ?? rejection} />
       <Dropzone maxSize={maxSize} multiple={false} accept={{ "image/*": [] }} onDrop={handleDrop}>
         {({ getRootProps, getInputProps }) => (
           <div {...getRootProps()} className={classNameBase}>
