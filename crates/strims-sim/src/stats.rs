@@ -373,7 +373,8 @@ impl PathOverhead {
 /// ([`strims_base::path::latest_excess`], `path_latest_ms`). And over its
 /// hybrid swarms, its channels (`PushStats::pace_channels`) and those whose
 /// peer it asks for lazy HAVEs and whose peer asked them of it
-/// (`have_lazy_out`, `have_lazy_in`).
+/// (`have_lazy_out`, `have_lazy_in`). And the bytes the node handed to
+/// vnic since the incarnation started (`DriverMetrics::bytes_written`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MeterSample {
     /// Simulated time since the start of the run.
@@ -392,6 +393,7 @@ pub struct MeterSample {
     pub pace_channels: u32,
     pub lazy_out: u32,
     pub lazy_in: u32,
+    pub bytes_written: u64,
 }
 
 /// An adaptive seed's `PushStats` seed fields.
@@ -617,6 +619,7 @@ impl HostStats {
                 // One meter per node: every hybrid swarm reads the same.
                 let ms = meter.get_or_insert_with(|| MeterSample {
                     t,
+                    bytes_written: m.driver.bytes_written,
                     rate: push.upload_rate,
                     busy_permille: push.upload_busy_permille,
                     capacity: push.upload_capacity,

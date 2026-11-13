@@ -380,6 +380,22 @@ pub(crate) enum RowInt {
     CrossP99Ms,
     /// In a media run, the honest messages that named a data-less chunk.
     DatalessMsgs,
+    /// The STREAM_REQUESTs the first swarm's honest viewers (the seed aside)
+    /// declined as parents, each counted at the viewer's first sample after it,
+    /// from its previous sample of the same incarnation (an incarnation's first
+    /// sample counts none): `declined_idle`'s denominator.
+    ///
+    /// ppspp: At its samples once a second from the end of the warm-up
+    /// (`Sim::sample_shape`, `Shape::declines`).
+    Declined,
+    /// Of `declined`, the STREAM_REQUESTs declined idle: at a sample at which
+    /// the bytes the viewer sent since its previous one, per second, were under
+    /// half the upload it could make then (its uplink's steps and competing
+    /// uploads in).
+    ///
+    /// ppspp: Its wire bytes up in the second against its uplink at the sample
+    /// (`Shape::declines_idle`).
+    DeclinedIdle,
     /// with departures, the stayers' recovery (`Report::departure_recovery`):
     /// `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`,
     /// `depart_excess_lag_area_ms_s`, `depart_recover_ms` and
@@ -1144,6 +1160,8 @@ impl RowInt {
             RowInt::CrossP50Ms => "cross_p50_ms",
             RowInt::CrossP99Ms => "cross_p99_ms",
             RowInt::DatalessMsgs => "dataless_msgs",
+            RowInt::Declined => "declined",
+            RowInt::DeclinedIdle => "declined_idle",
             RowInt::DepartExcessLagAreaMsS => "depart_excess_lag_area_ms_s",
             RowInt::DepartLagPeakMs => "depart_lag_peak_ms",
             RowInt::DepartRecoverCensored => "depart_recover_censored",
@@ -1459,14 +1477,6 @@ pub(crate) enum RowNum {
     ClockClassDelivery(u16),
     /// The cross-traffic swarm's delivery (CrossReport); 0 without one.
     CrossDelivery,
-    /// Of the STREAM_REQUESTs the honest viewers declined over the samples, the
-    /// share declined in a second in which the viewer used under half its
-    /// uplink (Shape::declines_idle over Shape::declines); left out without
-    /// declines.
-    ///
-    /// ppspp: A share of declines; strims-sim's `declined` and
-    /// `declined_wrongly` are counts, by its meter's rate.
-    DeclinesIdle,
     /// The share of what the viewers were owed that they read: delivered over
     /// written frames of the first swarm, summed over its viewers, each owed
     /// every frame the seed wrote while it was there (Report::owed), those
@@ -1825,7 +1835,6 @@ impl RowNum {
             RowNum::AnnounceShare => "announce_share",
             RowNum::ClockClassDelivery(i) => at(&ROWNUM_CLOCK_CLASS_DELIVERY, i),
             RowNum::CrossDelivery => "cross_delivery",
-            RowNum::DeclinesIdle => "declines_idle",
             RowNum::Delivery => "delivery",
             RowNum::DepthHops(i) => at(&ROWNUM_DEPTH_HOPS, i),
             RowNum::DepthCycle => "depth_cycle",

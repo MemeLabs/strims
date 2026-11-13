@@ -1806,9 +1806,12 @@ struct Shape {
     seed_budget: Vec<f64>,
     /// Per sample of each honest relay: its push subscribers, all streams.
     fanout: Vec<u64>,
-    /// STREAM_REQUESTs honest viewers declined over the samples, and those
-    /// declined in a second in which the viewer used under half its
-    /// uplink.
+    /// STREAM_REQUESTs honest viewers declined over the samples, each
+    /// counted at the first sample after it from the viewer's previous one
+    /// of the same incarnation (an incarnation's first counts none), and
+    /// those declined idle, in a second in which the viewer's wire bytes up
+    /// were under half its uplink then: the row's `declined` and
+    /// `declined_idle`.
     declines: u64,
     declines_idle: u64,
     /// Per node at the last sample: its declines so far and its wire
@@ -11184,12 +11187,8 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             row.int(RowInt::fanout_p_p(p), f);
         }
     }
-    if sh.declines > 0 {
-        row.num(
-            RowNum::DeclinesIdle,
-            sh.declines_idle as f64 / sh.declines as f64,
-        );
-    }
+    row.int(RowInt::Declined, sh.declines)
+        .int(RowInt::DeclinedIdle, sh.declines_idle);
     // Parent changes (prunes and switches) per honest viewer-minute after
     // the warm-up: with arrivals or departures, per minute each viewer was
     // there after its own.

@@ -349,22 +349,18 @@ type = "int"
 description = "In a media run, the honest messages that named a data-less chunk."
 
 [rows.declined]
-sims = ["strims-sim"]
+sims = ["strims-sim", "ppspp"]
 type = "int"
-description = "STREAM_REQUESTs declined, over every host (Report::declined)."
-notes.strims-sim = "STREAM_REQUESTs declined, every host's; the ppspp sim's `declines_idle` is a share of its declines, another reading."
+description = "The STREAM_REQUESTs the first swarm's honest viewers (the seed aside) declined as parents, each counted at the viewer's first sample after it, from its previous sample of the same incarnation (an incarnation's first sample counts none): `declined_idle`'s denominator."
+notes.strims-sim = "At its meter samples, each stats tick (Report::declined). Older runs hold this name over every host's samples, the seeds' and hostile ones' in, an incarnation's first sample counting its declines since it started."
+notes.ppspp = "At its samples once a second from the end of the warm-up (`Sim::sample_shape`, `Shape::declines`)."
 
-[rows.declined_wrongly]
-sims = ["strims-sim"]
+[rows.declined_idle]
+sims = ["strims-sim", "ppspp"]
 type = "int"
-description = "STREAM_REQUESTs declined in samples where the node's upload rate was under half of what it could upload then, over every host (Report::declined)."
-notes.strims-sim = "Declines in samples whose upload rate was under half of what the node could upload then, by the meter's rate, every host's; the ppspp sim's `declines_idle` is the share of its declines with the uplink idle."
-
-[rows.declines_idle]
-sims = ["ppspp"]
-type = "num"
-description = "Of the STREAM_REQUESTs the honest viewers declined over the samples, the share declined in a second in which the viewer used under half its uplink (Shape::declines_idle over Shape::declines); left out without declines."
-notes.ppspp = "A share of declines; strims-sim's `declined` and `declined_wrongly` are counts, by its meter's rate."
+description = "Of `declined`, the STREAM_REQUESTs declined idle: at a sample at which the bytes the viewer sent since its previous one, per second, were under half the upload it could make then (its uplink's steps and competing uploads in)."
+notes.strims-sim = "The bytes it handed to vnic (`MeterSample::bytes_written`) against `Report::upload_cap_at` at the sample."
+notes.ppspp = "Its wire bytes up in the second against its uplink at the sample (`Shape::declines_idle`)."
 
 [rows.delivery]
 sims = ["strims-sim", "ppspp"]
@@ -2019,6 +2015,18 @@ sims = []
 retired = ["strims-sim"]
 type = "num"
 description = "The share of the forwarders' uplink queue samples (the hosts but the seeds that answered a STREAM_REQUEST, hostile ones and every swarm's in, `Report::roles`) while a swarm streamed that waited longer than STANDING_QUEUE; 0 outside WAN mode."
+
+[rows.declined_wrongly]
+sims = []
+retired = ["strims-sim"]
+type = "int"
+description = "STREAM_REQUESTs declined at a meter sample whose meter rate (`MeterSample::rate`) was under half of what the node could upload then, over every host, the seeds' and hostile ones' in."
+
+[rows.declines_idle]
+sims = []
+retired = ["ppspp"]
+type = "num"
+description = "Of the STREAM_REQUESTs the honest viewers declined over the samples, the share declined in a second in which the viewer used under half its uplink; left out without declines."
 
 [rows.meter_others]
 sims = []

@@ -344,19 +344,24 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms. None is written as an empty field.
     ClockMaxMs,
-    /// STREAM_REQUESTs declined, over every host (Report::declined).
+    /// The STREAM_REQUESTs the first swarm's honest viewers (the seed aside)
+    /// declined as parents, each counted at the viewer's first sample after it,
+    /// from its previous sample of the same incarnation (an incarnation's first
+    /// sample counts none): `declined_idle`'s denominator.
     ///
-    /// strims-sim: STREAM_REQUESTs declined, every host's; the ppspp sim's
-    /// `declines_idle` is a share of its declines, another reading.
+    /// strims-sim: At its meter samples, each stats tick (Report::declined).
+    /// Older runs hold this name over every host's samples, the seeds' and
+    /// hostile ones' in, an incarnation's first sample counting its declines
+    /// since it started.
     Declined,
-    /// STREAM_REQUESTs declined in samples where the node's upload rate was
-    /// under half of what it could upload then, over every host
-    /// (Report::declined).
+    /// Of `declined`, the STREAM_REQUESTs declined idle: at a sample at which
+    /// the bytes the viewer sent since its previous one, per second, were under
+    /// half the upload it could make then (its uplink's steps and competing
+    /// uploads in).
     ///
-    /// strims-sim: Declines in samples whose upload rate was under half of what
-    /// the node could upload then, by the meter's rate, every host's; the ppspp
-    /// sim's `declines_idle` is the share of its declines with the uplink idle.
-    DeclinedWrongly,
+    /// strims-sim: The bytes it handed to vnic (`MeterSample::bytes_written`)
+    /// against `Report::upload_cap_at` at the sample.
+    DeclinedIdle,
     /// with departures, the stayers' recovery (`Report::departure_recovery`):
     /// `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`,
     /// `depart_excess_lag_area_ms_s`, `depart_recover_ms` and
@@ -825,7 +830,7 @@ impl RowInt {
             RowInt::ClockClass(i) => at(&ROWINT_CLOCK_CLASS, i),
             RowInt::ClockMaxMs => "clock_max_ms",
             RowInt::Declined => "declined",
-            RowInt::DeclinedWrongly => "declined_wrongly",
+            RowInt::DeclinedIdle => "declined_idle",
             RowInt::DepartExcessLagAreaMsS => "depart_excess_lag_area_ms_s",
             RowInt::DepartLagPeakMs => "depart_lag_peak_ms",
             RowInt::DepartRecoverCensored => "depart_recover_censored",

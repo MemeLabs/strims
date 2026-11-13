@@ -34,9 +34,9 @@
 //! - **standing queue** ([`Report::standing_queue`]): the share of a set of
 //!   hosts' uplink queue samples, while a swarm streams, that wait longer
 //!   than [`STANDING_QUEUE`] (WAN mode).
-//! - **wrongly declined** ([`Report::declined`]): STREAM_REQUESTs declined
-//!   in samples where the node's upload rate was under half of what it
-//!   could upload then.
+//! - **declines** ([`Report::declined`]): the STREAM_REQUESTs the first
+//!   swarm's honest viewers declined, and those declined idle, in a sample
+//!   in which the viewer wrote under half of what it could upload then.
 //! - **tracking** ([`Report::tracking`]): after each change of a host's
 //!   available upload while a swarm streams (a step of its uplink's rate,
 //!   or a competing upload's start or stop), the share of
@@ -984,27 +984,41 @@ impl Report {
         (accepted, rejected, sheds)
     }
 
-    /// STREAM_REQUESTs declined while the node's upload rate was under half
-    /// of what it could upload, and all declined, over every host.
-    pub fn declined(&self) -> (u64, u64) {
-        let (mut wrong, mut all) = (0, 0);
-        for (h, host) in self.hosts.iter().enumerate() {
-            let mut last = 0;
-            for m in &host.runner.meter {
-                let d = if m.rejected >= last {
-                    m.rejected - last
-                } else {
-                    m.rejected
+    /// The STREAM_REQUESTs swarm `swarm`'s honest viewers (the seed aside)
+    /// declined, each counted at the first meter sample after it, from the
+    /// viewer's previous sample of the same incarnation (an incarnation's
+    /// first sample counts none); and those declined idle, where the bytes
+    /// the viewer wrote since that sample, per second, were under half of
+    /// what it could upload at the sample ([`Report::upload_cap_at`]: its
+    /// uplink's steps and competing uploads in). `(idle, all)`.
+    ///
+    /// An incarnation's counters start from zero, so a sample whose
+    /// declines or bytes written are under the one before is a new
+    /// incarnation's first.
+    pub fn declined(&self, swarm: usize) -> (u64, u64) {
+        let pops = self.populations(swarm);
+        let (mut idle, mut all) = (0, 0);
+        for &h in pops.accepting.iter().chain(&pops.others) {
+            let Some(host) = self.hosts.get(h) else {
+                continue;
+            };
+            for w in host.runner.meter.windows(2) {
+                let [a, m] = w else {
+                    continue;
                 };
-                last = m.rejected;
-                all += u64::from(d);
+                if m.rejected < a.rejected || m.bytes_written < a.bytes_written || m.t <= a.t {
+                    continue;
+                }
+                let d = u64::from(m.rejected - a.rejected);
+                all += d;
+                let rate = (m.bytes_written - a.bytes_written) as f64 / (m.t - a.t).as_secs_f64();
                 let cap = self.upload_cap_at(h, m.t).unwrap_or(0) as f64;
-                if cap > 0.0 && (m.rate as f64) < cap / 2.0 {
-                    wrong += u64::from(d);
+                if cap > 0.0 && rate < cap / 2.0 {
+                    idle += d;
                 }
             }
         }
-        (wrong, all)
+        (idle, all)
     }
 
     /// The changes of host `h`'s available upload while a swarm streams:
@@ -1369,9 +1383,9 @@ impl Report {
                 }
             }
         }
-        let (wrong, declined) = self.declined();
-        j.int(RowInt::DeclinedWrongly, wrong)
-            .int(RowInt::Declined, declined);
+        let (idle, declined) = self.declined(swarm);
+        j.int(RowInt::Declined, declined)
+            .int(RowInt::DeclinedIdle, idle);
         let (accepted, rejected, sheds) = self.honest_relay_counters(swarm);
         j.int(RowInt::RelayAccepted, accepted)
             .int(RowInt::RelayRejected, rejected)

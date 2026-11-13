@@ -212,17 +212,12 @@ score = { kind = "diff", tie = 0.03 }
 description = "The share of STREAM_REQUESTs the honest relays rejected: `relay_rejected` over `relay_rejected` and `relay_accepted`."
 
 [[scored]]
-name = "declines_idle"
-sql = "r.declines_idle"
+name = "declined_idle"
+share = { num = "r.declined_idle", den = "CASE WHEN r.declined_idle IS NOT NULL THEN r.declined END" }
 better = "lower"
 score = { kind = "diff", tie = 0.05 }
-
-[[scored]]
-name = "declined_wrongly"
-share = { num = "r.declined_wrongly", den = "coalesce(r.declined, 0)" }
-better = "lower"
-score = { kind = "diff", tie = 0.05 }
-description = "The share of declined STREAM_REQUESTs declined wrongly: `declined_wrongly` over `declined`."
+description = "The share of the honest viewers' declined STREAM_REQUESTs they declined idle: `declined_idle` over `declined`."
+note = "None for a row without `declined_idle`: older strims-sim rows' `declined` counts every host's declines."
 
 [[scored]]
 name = "meter_accepting_p50"
