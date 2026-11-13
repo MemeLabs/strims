@@ -20,4 +20,15 @@
   .os-scrollbar-handle {
     cursor: pointer;
   }
+
+  // Shown as OverlayScrollbars shows them, but hidden with their view: its
+  // shown states say visibility: visible, which drew the track of a hidden
+  // view's scrollbar (the closed emote menu's) over what's behind it.
+  &.os-scrollbar-visible {
+    visibility: inherit;
+
+    &.os-scrollbar-auto-hide.os-scrollbar-auto-hide-hidden:not(.os-scrollbar-interaction) {
+      visibility: hidden;
+    }
+  }
 }
