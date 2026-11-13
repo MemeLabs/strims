@@ -15,6 +15,8 @@ import {
   MdRefresh,
   MdSmartphone,
   MdStayCurrentLandscape,
+  MdTabletAndroid,
+  MdTabletMac,
 } from "react-icons/md";
 import { Navigate, useLocation, useSearchParams } from "react-router";
 
@@ -29,8 +31,8 @@ import { frameRoute } from "../storybook/host/protocol";
 import type { SessionSnapshot } from "../storybook/host/recorder";
 
 // The toolbar's state lives in the route's query, so links (and
-// hack/storybook/check.py) set it: theme=dark|light, device=pc|portrait|landscape,
-// fullscreen=1.
+// hack/storybook/check.py) set it: theme=dark|light, device=pc|portrait|landscape|
+// ipad_portrait|ipad_landscape|tablet_portrait|tablet_landscape, fullscreen=1.
 const useToolbarParams = () => {
   const [params, setParams] = useSearchParams();
   const theme = params.get("theme") === "light" ? "light" : "dark";
@@ -73,10 +75,17 @@ const ToolButton: React.FC<ToolButtonProps> = ({ title, active, onClick, childre
   </button>
 );
 
+// A landscape tablet's icon: its portrait one on its side.
+const turned = (icon: ReactNode) => <span className="storybook__toolbar_turned">{icon}</span>;
+
 const DEVICE_ICONS: Record<Device, ReactNode> = {
   pc: <MdComputer />,
   portrait: <MdSmartphone />,
   landscape: <MdStayCurrentLandscape />,
+  ipad_portrait: <MdTabletMac />,
+  ipad_landscape: turned(<MdTabletMac />),
+  tablet_portrait: <MdTabletAndroid />,
+  tablet_landscape: turned(<MdTabletAndroid />),
 };
 
 const Storybook: React.FC = () => {
@@ -185,7 +194,10 @@ const Storybook: React.FC = () => {
             </ToolButton>
           </div>
           <div
-            className={clsx("storybook__stage", `storybook__stage--${src ? device : "catalog"}`)}
+            className={clsx(
+              "storybook__stage",
+              `storybook__stage--${src ? (DEVICES[device] ? "framed" : device) : "catalog"}`
+            )}
           >
             {stage}
           </div>

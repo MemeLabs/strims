@@ -70,7 +70,7 @@ export const StoryIframe: React.FC<StoryIframeProps> = ({
       ref={ref}
       src={documentUrl(src)}
       title="story"
-      className={clsx("storybook__iframe", `storybook__iframe--${device}`)}
+      className={clsx("storybook__iframe", `storybook__iframe--${shape ? "framed" : device}`)}
       style={shape ? { width: `${shape.width}px`, height: `${shape.height}px` } : undefined}
       data-story-state={state}
     />

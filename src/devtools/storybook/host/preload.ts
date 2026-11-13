@@ -4,10 +4,11 @@
 // The devtools entry's first import: in a storybook frame document it
 // makes this realm the device's before any app module evaluates. The app
 // reads the device type from the user agent once, at load (lib/userAgent:
-// SwipablePanel, ChatBar, Footer or Header, ...), so a phone frame reports
-// a phone's user agent, and window.orientation as a phone has it.
+// SwipablePanel, ChatBar, Footer or Header, ...), so a device frame reports
+// its device's user agent, window.orientation and screen.orientation as the
+// device has them, and a tablet's touch screen as its browser does.
 
-import { DEVICES, Device, PHONE_USER_AGENT, isDevice } from "./devices";
+import { DEVICES, Device, DeviceTouch, isDevice } from "./devices";
 import { FRAME_ROOT, INDEX_ROUTE, ROOT, Theme } from "./protocol";
 
 export type FrameDocument =
@@ -44,21 +45,62 @@ const parse = (): FrameDocument | null => {
 export const frameDocument = parse();
 
 const shape = frameDocument?.kind === "story" ? DEVICES[frameDocument.device] : null;
+
+// The navigator's touch screen, and the touch events' handler properties a
+// touch screen's browser has (feature checks read `"ontouchstart" in window`).
+const fakeTouch = ({ maxTouchPoints, platform, standalone }: DeviceTouch) => {
+  const props: Record<string, unknown> = { maxTouchPoints, platform };
+  if (standalone !== undefined) {
+    props.standalone = standalone;
+  }
+  for (const [name, value] of Object.entries(props)) {
+    Object.defineProperty(navigator, name, { get: () => value, configurable: true });
+  }
+  for (const target of [window, document]) {
+    for (const name of ["ontouchstart", "ontouchmove", "ontouchend", "ontouchcancel"]) {
+      if (!(name in target)) {
+        Object.defineProperty(target, name, { value: null, writable: true, configurable: true });
+      }
+    }
+  }
+};
+
+// screen.orientation's type for a screen of `width` by `height` turned
+// `angle` degrees from its natural orientation, as Chromium names it: the
+// natural one is primary, a phone's portrait or an Android tablet's
+// landscape.
+const orientationType = (width: number, height: number, angle: number): OrientationType => {
+  const tall = angle % 180 ? width > height : height > width;
+  const types: OrientationType[] = tall
+    ? ["portrait-primary", "landscape-primary", "portrait-secondary", "landscape-secondary"]
+    : ["landscape-primary", "portrait-secondary", "landscape-secondary", "portrait-primary"];
+  return types[angle / 90];
+};
+
 let orientation = shape?.orientation;
 if (shape) {
+  const angle = () => (orientation + 360) % 360;
   Object.defineProperty(navigator, "userAgent", {
-    get: () => PHONE_USER_AGENT,
+    get: () => shape.userAgent,
     configurable: true,
   });
   Object.defineProperty(window, "orientation", {
     get: () => orientation,
     configurable: true,
   });
+  Object.defineProperty(screen.orientation, "angle", { get: angle, configurable: true });
+  Object.defineProperty(screen.orientation, "type", {
+    get: () => orientationType(shape.width, shape.height, angle()),
+    configurable: true,
+  });
+  if (shape.touch) {
+    fakeTouch(shape.touch);
+  }
 }
 
-// A phone frame's window.orientation from now on: StoryView turns a
-// landscape frame the other way round (Story.landscape) before its story
-// renders.
+// A device frame's window.orientation (and screen.orientation's) from now
+// on: StoryView turns the landscape phone frame the other way round
+// (Story.landscape) before its story renders.
 export const setFrameOrientation = (value: number): void => {
   orientation = value;
 };

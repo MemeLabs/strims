@@ -50,8 +50,8 @@ interface FrameProps {
 // The story's root, filling the frame document's viewport, and the Layout
 // context's portal root. It carries the theme and the classes and
 // variables the app's Layout derives for its viewport; the device type
-// (layout--pc or --portable) is the realm's user agent's, a phone's in a
-// phone frame (preload.ts).
+// (layout--pc or --portable) is the realm's user agent's, its device's in
+// a device frame (preload.ts).
 const FrameBase: React.FC<FrameProps & WithRootRefProps & WithThemeProps> = ({
   rootRef,
   className,

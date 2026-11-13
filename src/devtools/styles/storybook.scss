@@ -89,14 +89,18 @@ $chrome-border: #ccc;
     }
   }
 
+  .storybook__toolbar_turned {
+    display: flex;
+    transform: rotate(-90deg);
+  }
+
   .storybook__stage {
     flex: 1 1 auto;
     min-height: 0;
     position: relative;
     overflow: auto;
 
-    &--portrait,
-    &--landscape {
+    &--framed {
       display: flex;
       padding: 16px;
       background: repeating-conic-gradient(#0000 0 25%, #8881 0 50%) 0 0 / 24px 24px;
@@ -116,8 +120,7 @@ $chrome-border: #ccc;
       height: 100%;
     }
 
-    &--portrait,
-    &--landscape {
+    &--framed {
       flex: none;
       margin: auto;
       outline: 8px solid #333;

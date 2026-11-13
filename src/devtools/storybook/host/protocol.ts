@@ -27,8 +27,8 @@ export interface FrameParams {
   device: Device;
 }
 
-// The query the page and its frames share (theme=light, device=portrait|
-// landscape), defaults left out.
+// The query the page and its frames share (theme=light, device=<a device
+// frame>), defaults left out.
 export const frameQuery = ({ theme, device }: FrameParams): string => {
   const q = new URLSearchParams();
   if (theme !== "dark") {
