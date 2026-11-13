@@ -849,7 +849,8 @@ class Selections(unittest.TestCase):
 
 # golden_cli's runs end with the verdict's 40 seconds; the sims' run on:
 # their viewers' last 5 seconds again past them, f-a-2001's stalls at 18 s
-# again at 41 s, and the rows' playback summary.
+# again at 41 s, the rows' playback summary (f-a's runs' honest viewers'
+# startup too), and f-a-2001's first viewer with a stall hostile.
 PAST = """
 CREATE TABLE main.vs_written AS SELECT * FROM main.viewer_seconds;
 CREATE OR REPLACE VIEW main.viewer_seconds AS
@@ -860,8 +861,15 @@ SELECT * FROM main.stalls_written UNION ALL
 SELECT * REPLACE (t_ms + 23000 AS t_ms) FROM main.stalls_written WHERE k = 'f-a-2001' AND t_ms = 18000;
 CREATE TABLE main.rows_written AS SELECT * FROM main.rows;
 CREATE OR REPLACE VIEW main.rows AS
-SELECT *, 1.0 AS stalls_per_min_1250, 1.0 AS stalls_per_min_4250, 900 AS startup_ms_1250, 950 AS startup_ms_4250
+SELECT *, 1.0 AS stalls_per_min_1250, 1.0 AS stalls_per_min_4250, 900 AS startup_ms_1250, 950 AS startup_ms_4250,
+       CASE WHEN starts_with(k, 'f-a-') THEN 800 END AS startup_ms_1250_honest,
+       CASE WHEN starts_with(k, 'f-a-') THEN 850 END AS startup_ms_4250_honest
 FROM main.rows_written;
+CREATE TABLE main.viewers_written AS SELECT * FROM main.viewers;
+CREATE OR REPLACE VIEW main.viewers AS
+SELECT * REPLACE (k = 'f-a-2001' AND viewer = (SELECT min(viewer) FROM main.stalls_written WHERE k = 'f-a-2001')
+                  AS hostile)
+FROM main.viewers_written;
 """
 
 
@@ -1038,18 +1046,35 @@ class Phases(unittest.TestCase):
         self.assertIn("tail", vocab.phases())
 
     def test_playback_counts_stalls_and_seconds_in_one_phase(self):
+        """The honest viewers' (stall_rate_of): the hostile one's seconds
+        and stalls are left out."""
         rate = {(r["cell"], r["arm"], r["phase"]): r for r in views.run(self.pool, "playback", {"exp": "sf0001"})
                 .records() if r["part"] == "rate" and r["metric"] == "stalls per viewer-minute"}
         jobs = "SELECT cell, arm_label AS arm, k, src FROM experiment_jobs WHERE exp_id = 'sf0001'"
-        secs = self.counts(f"SELECT j.*, v.viewer, v.sec FROM ({jobs}) j JOIN viewer_seconds v USING (k, src) "
-                           "WHERE v.lag_ms >= 0")
-        stalls = self.counts(f"SELECT j.*, s.viewer, s.t_ms // 1000 AS sec FROM ({jobs}) j "
-                             "JOIN stalls s USING (k, src) WHERE s.delay_ms = 1250")
-        self.assertEqual({k: r["viewer_s"] for k, r in rate.items()}, secs)
-        self.assertEqual({k: r["stalls"] for k, r in rate.items() if r["stalls"]}, stalls)
-        self.assertEqual(stalls[("star-5", "a", "tail")], 5)
-        self.assertEqual(sum(n for (_, _, p), n in stalls.items() if p != "tail"), 10)
-        self.assertEqual({p for _, _, p in secs}, set(vocab.phases()))
+        honest = "JOIN viewers w USING (k, src, viewer) WHERE NOT w.hostile"
+        secs, stalls = ({h: self.counts(sql + (honest if h else "WHERE true") + cond) for h in (True, False)}
+                        for sql, cond in ((f"SELECT j.*, v.viewer, v.sec FROM ({jobs}) j JOIN viewer_seconds v "
+                                           "USING (k, src) ", " AND v.lag_ms >= 0"),
+                                          (f"SELECT j.*, s.viewer, s.t_ms // 1000 AS sec FROM ({jobs}) j "
+                                           "JOIN stalls s USING (k, src) ", " AND s.delay_ms = 1250")))
+        self.assertEqual({k: r["viewer_s"] for k, r in rate.items()}, secs[True])
+        self.assertEqual({k: r["stalls"] for k, r in rate.items() if r["stalls"]}, stalls[True])
+        self.assertLess(sum(secs[True].values()), sum(secs[False].values()))
+        self.assertLess(sum(stalls[True].values()), sum(stalls[False].values()))
+        self.assertEqual(stalls[False][("star-5", "a", "tail")], 5)
+        self.assertEqual(sum(n for (_, _, p), n in stalls[False].items() if p != "tail"), 10)
+        self.assertEqual({p for _, _, p in secs[True]}, set(vocab.phases()))
+
+    def test_playback_startup_reads_the_honest_viewers(self):
+        got = {(r["cell"], r["arm"], r["metric"]): r["value"] for r in
+               views.run(self.pool, "playback", {"exp": "sf0001"}).records() if r["part"] == "startup"}
+        ks = {(r["cell"], r["arm"]): {k[:4] for k in r["ks"]} for r in self.sql(
+            "SELECT cell, arm_label AS arm, list(k) AS ks FROM experiment_jobs WHERE exp_id = 'sf0001' GROUP BY ALL")}
+        self.assertEqual({len(v) for v in ks.values()}, {1})
+        self.assertIn({"f-a-"}, ks.values())
+        for (cell, arm, metric), v in got.items():
+            with self.subTest(cell=cell, arm=arm, metric=metric):
+                self.assertEqual(v, 800 if ks[(cell, arm)] == {"f-a-"} else 900)
 
     def test_p99_sources_reads_the_tail_apart(self):
         got = {(r["arm"], r["phase"]): r["viewer_s"] for r in

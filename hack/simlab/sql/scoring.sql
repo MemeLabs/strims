@@ -355,6 +355,42 @@ CREATE OR REPLACE MACRO playback_of(runs, delay_ms) AS TABLE
     SELECT k, src, viewer, delay_ms::BIGINT AS delay_ms, due + before_ms AS t_ms, offset_ms - before_ms AS stall_ms
     FROM steps_ WHERE offset_ms > before_ms;
 
+-- The honest viewers' playout stalls at a playout delay of `delay_ms` in
+-- the runs `runs`, a list of structs with a run's `k` and `src` (other
+-- fields left alone), by the phase of the viewer's second they fall in
+-- (viewer_phases_of): the seconds the viewers were there and reading
+-- (viewer_seconds with a lag, viewer_s), the stalls of the sims' `stalls`
+-- tables that began in them (stalls) and how long each lasted (durations,
+-- ms; stalled_ms their sum): k, src, phase, viewer_s, stalls, stalled_ms,
+-- durations. A phase with stalls and none of the run's seconds holds
+-- viewer_s 0. Dishonest viewers (viewers.hostile) are left out: the
+-- experience metrics count honest viewers. Stalls per viewer-minute are
+-- stalls over viewer_s / 60, the stalled share stalled_ms over
+-- viewer_s * 1000.
+-- needs: stalls viewer_seconds viewers viewer_phases verdict_seconds
+CREATE OR REPLACE MACRO stall_rate_of(runs, delay_ms) AS TABLE
+    WITH j_ AS (SELECT DISTINCT k, src FROM (SELECT unnest(runs, recursive := true))),
+    at_ AS (SELECT delay_ms::BIGINT AS d),
+    honest_ AS (SELECT w.k, w.src, w.viewer FROM viewers w SEMI JOIN j_ USING (k, src) WHERE NOT w.hostile),
+    spans_ AS (SELECT p.k, p.src, p.viewer, p.phase, p.start, p.stop FROM viewer_phases_of(runs) p
+               SEMI JOIN honest_ USING (k, src, viewer)),
+    watched_ AS (
+        SELECT p.k, p.src, p.phase, count(*) AS viewer_s
+        FROM viewer_seconds v JOIN spans_ p ON p.k = v.k AND p.src = v.src AND p.viewer = v.viewer
+                                           AND v.sec >= p.start AND v.sec < p.stop
+        WHERE v.lag_ms >= 0
+        GROUP BY ALL),
+    stalled_ AS (
+        SELECT p.k, p.src, p.phase, count(*) AS stalls, sum(s.stall_ms) AS stalled_ms,
+               list(s.stall_ms ORDER BY s.stall_ms) AS durations
+        FROM stalls s JOIN spans_ p ON p.k = s.k AND p.src = s.src AND p.viewer = s.viewer
+                                    AND s.t_ms // 1000 >= p.start AND s.t_ms // 1000 < p.stop
+        WHERE s.delay_ms = (SELECT d FROM at_)
+        GROUP BY ALL)
+    SELECT k, src, phase, coalesce(w.viewer_s, 0) AS viewer_s, coalesce(st.stalls, 0) AS stalls,
+           coalesce(st.stalled_ms, 0) AS stalled_ms, coalesce(st.durations, []) AS durations
+    FROM watched_ w FULL JOIN stalled_ st USING (k, src, phase);
+
 -- The honest viewers' lag each second of the runs `jobs`, a list of
 -- structs with a job's `k` (its tables its own source's, jobs.src; other
 -- fields left alone, so a side serves): k, src, viewer, sec, lag_ms,

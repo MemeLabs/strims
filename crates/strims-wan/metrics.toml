@@ -671,6 +671,10 @@ macro = "playback_of"
 unit = "ms"
 description = "The viewers' playout stalls of the runs at a playout delay, played over their reads as the sims' stalls tables are."
 
+[lake.stall_rate]
+macro = "stall_rate_of"
+description = "The honest viewers' playout stalls of the runs at a playout delay, by the viewer's phase: the seconds they were there and reading, the stalls that began in them and how long each lasted; the dishonest viewers left out."
+
 [lake.dynamics_phases]
 macro = "dynamics_phases"
 unit = "ms"
