@@ -359,6 +359,14 @@ pub(crate) enum RowInt {
     /// stream's, whichever came later, the bound `CAUGHT_UP_MS`. Older runs
     /// hold these names over every join, the later ones in.
     CaughtUpNever,
+    /// The transport chunks the first swarm's honest viewers read, summed over
+    /// them: those watching at the run's end and those that left for good.
+    ///
+    /// strims-sim: Each viewer's reads through its swarm reader
+    /// (`ViewerStats::read`, every incarnation): a chunk counts when its last
+    /// byte is read, once a stream an incarnation reads, so a chunk read again
+    /// after a rewind counts once; a frame stream's chunk holds whole frames.
+    ChunksRead,
     /// With clock skew, the hosts (nodes) whose clock offset is of class
     /// `class`: under 100 ms, 2 s or 15 s, or up to 10 min (SkewClass).
     ///
@@ -871,6 +879,11 @@ pub(crate) enum RowInt {
     ///
     /// Unit: bytes.
     UsefulBytes,
+    /// Transport chunks the first swarm's honest viewers received that they
+    /// already had (SwarmSchedulerStats::wasted_chunks), summed over them.
+    ///
+    /// strims-sim: Every incarnation's (`Report::chunk_reads`).
+    Wasted,
 }
 
 impl RowInt {
@@ -903,6 +916,7 @@ impl RowInt {
             RowInt::ArrivedHonest => "arrived_honest",
             RowInt::ArrivedDishonest => "arrived_dishonest",
             RowInt::CaughtUpNever => "caught_up_never",
+            RowInt::ChunksRead => "chunks_read",
             RowInt::ClockClass(i) => at(&ROWINT_CLOCK_CLASS, i),
             RowInt::ClockMaxMs => "clock_max_ms",
             RowInt::Declined => "declined",
@@ -997,6 +1011,7 @@ impl RowInt {
             RowInt::UpVnic => "up_vnic",
             RowInt::UpWire => "up_wire",
             RowInt::UsefulBytes => "useful_bytes",
+            RowInt::Wasted => "wasted",
         }
     }
 

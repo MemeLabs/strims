@@ -347,10 +347,11 @@ pub(crate) enum RowInt {
     CaughtUpNever,
     /// The stream's chunk size, in bytes.
     Chunk,
-    /// The chunks the honest viewers read, summed: those watching at the run's
-    /// end and those that left for good.
+    /// The transport chunks the first swarm's honest viewers read, summed over
+    /// them: those watching at the run's end and those that left for good.
     ///
-    /// ppspp: strims-sim's row writes no counterpart.
+    /// ppspp: The chunks each honest viewer's reader read (`Sim::chunks_read`,
+    /// its `read_chunks`).
     ChunksRead,
     /// With churn (SIM_CHURN), the churn's leaves done by the run's end.
     ChurnLeaves,
@@ -1189,8 +1190,11 @@ pub(crate) enum RowInt {
     /// The warm-up, in s, before which the steady measures don't count
     /// (Config::warm_secs).
     Warm,
-    /// Chunks the honest viewers received that they already had
-    /// (SwarmSchedulerStats::wasted_chunks), summed.
+    /// Transport chunks the first swarm's honest viewers received that they
+    /// already had (SwarmSchedulerStats::wasted_chunks), summed over them.
+    ///
+    /// ppspp: Each honest viewer's current incarnation's (its runner's
+    /// `SwarmSchedulerStats`).
     Wasted,
     /// In WAN mode, the worst region's lag p99 in ms: per region, its honest
     /// viewers' lag p99 after their warm-ups (Sim::region_p99); 0 outside WAN

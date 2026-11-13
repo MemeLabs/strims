@@ -1560,6 +1560,7 @@ impl Report {
         // Requests timed out ([`Report::timeouts`]): the honest viewers',
         // the seed's, and with hostile hosts theirs (`_dishonest`) below.
         let (timeouts, seed_timeouts, hostile_timeouts) = self.timeouts(swarm);
+        let (chunks_read, wasted) = self.chunk_reads(swarm);
         j.num(RowNum::SeedChunkShare, self.data_share(swarm))
             .num(RowNum::SeedUploadShare, self.uploads(swarm).seed_share)
             .num(RowNum::Duplicates, self.duplicates(swarm))
@@ -1569,6 +1570,8 @@ impl Report {
             .int(RowInt::Shed, c.shed)
             .int(RowInt::Switched, c.switched)
             .int(RowInt::TimeoutsHonest, timeouts)
+            .int(RowInt::ChunksRead, chunks_read)
+            .int(RowInt::Wasted, wasted)
             .int(RowInt::SeedTimeouts, seed_timeouts)
             .num(RowNum::SimSecs, self.sim_secs)
             .num(RowNum::WallSecs, self.wall_secs);
@@ -2006,6 +2009,25 @@ impl Report {
             .hosts
             .get(h)
             .map_or(HostClass::Infra, |s| s.class)
+    }
+
+    /// Swarm `swarm`'s honest viewers' transport chunks: those they read
+    /// ([`ViewerStats::read`]), and those they received but already had
+    /// (`SwarmCounters::wasted_chunks`, every incarnation).
+    ///
+    /// [`ViewerStats::read`]: crate::stream::ViewerStats::read
+    pub fn chunk_reads(&self, swarm: usize) -> (u64, u64) {
+        let honest = || {
+            self.viewers
+                .iter()
+                .filter(move |v| v.swarm == swarm && self.class(v.host) == HostClass::Honest)
+        };
+        let read = honest().map(|v| v.stats.chunks_read).sum();
+        let wasted = honest()
+            .filter_map(|v| self.hosts.get(v.host))
+            .map(|r| r.runner.swarm(swarm).wasted_chunks)
+            .sum();
+        (read, wasted)
     }
 
     /// The requests of swarm `swarm` that timed out unanswered

@@ -954,8 +954,11 @@ async fn reader_task(w: Rc<World>, h: HostIx, s: usize, node: Node, swarm: Swarm
         while w.reading_paused(h) {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        match reader.read(&mut buf).await {
-            Ok(n) => w.viewer_data(s, h, &mut parser, buf.get(..n).unwrap_or_default()),
+        match reader.read_at(&mut buf).await {
+            Ok((offset, n)) => {
+                w.viewer_read(s, h, offset, n);
+                w.viewer_data(s, h, &mut parser, buf.get(..n).unwrap_or_default());
+            }
             Err(ReadError::Underrun { skipped }) => {
                 parser.resync();
                 w.viewer_underrun(s, h, skipped);
@@ -989,6 +992,7 @@ async fn media_reader(w: &World, h: HostIx, s: usize, reader: &mut SwarmReader, 
         }
         match reader.read_at(buf).await {
             Ok((offset, n)) => {
+                w.viewer_read(s, h, offset, n);
                 w.viewer_media(s, h, &mut parser, offset, buf.get(..n).unwrap_or_default());
                 if let Some(deadline) = rewind.take() {
                     join_rewind(w, h, s, reader, offset, deadline).await;

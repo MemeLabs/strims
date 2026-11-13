@@ -938,6 +938,22 @@ impl World {
         }
     }
 
+    /// The viewer read `n` bytes at stream offset `offset`
+    /// ([`ViewerStats::read`]).
+    pub fn viewer_read(&self, swarm: usize, h: HostIx, offset: u64, n: usize) {
+        let chunk = self
+            .spec
+            .swarms
+            .get(swarm)
+            .map_or(1, |s| s.options.chunk_size);
+        self.record(|st| {
+            st.viewers
+                .entry((swarm, h))
+                .or_default()
+                .read(offset, n, chunk)
+        });
+    }
+
     pub fn viewer_start(&self, swarm: usize, h: HostIx) {
         self.record(|st| {
             st.viewers
@@ -993,6 +1009,7 @@ impl World {
         self.record(|st| {
             if let Some(v) = st.viewers.get_mut(&(swarm, h)) {
                 v.resets += 1;
+                v.reset();
             }
         });
         self.log(self.name(h), format!("swarm {swarm} reset"));

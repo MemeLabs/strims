@@ -384,7 +384,14 @@ pub struct ViewerStats {
     pub resets: u32,
     /// One entry per incarnation of the viewer's host.
     pub joins: Vec<Join>,
+    /// The swarm's chunks read ([`ViewerStats::read`]): each counts when
+    /// its last byte is read, once a stream an incarnation reads (a chunk
+    /// read again after a rewind counts once).
+    pub chunks_read: u64,
     last_seq: Option<u64>,
+    /// The chunks before this one are counted in `chunks_read`, of the
+    /// stream the incarnation reads.
+    chunk_mark: u64,
 }
 
 /// One incarnation of a viewer: when it started reading, when the first
@@ -424,6 +431,24 @@ impl ViewerStats {
             ..Join::default()
         });
         self.last_seq = None;
+        self.chunk_mark = 0;
+    }
+
+    /// The incarnation read `n` bytes at stream offset `offset` of chunks
+    /// of `chunk` bytes: the chunks whose last byte it read, those counted
+    /// before aside, join `chunks_read`.
+    pub fn read(&mut self, offset: u64, n: usize, chunk: usize) {
+        let chunk = chunk.max(1) as u64;
+        let end = (offset + n as u64) / chunk;
+        let from = (offset / chunk).max(self.chunk_mark);
+        self.chunks_read += end.saturating_sub(from);
+        self.chunk_mark = self.chunk_mark.max(end);
+    }
+
+    /// The incarnation's stream started over (its reader's `Reset`): its
+    /// chunks count from offset 0 again.
+    pub fn reset(&mut self) {
+        self.chunk_mark = 0;
     }
 
     /// The incarnation's join rewind went as `r`: the frames read from

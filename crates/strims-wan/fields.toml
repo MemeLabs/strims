@@ -266,10 +266,11 @@ type = "int"
 description = "The stream's chunk size, in bytes."
 
 [rows.chunks_read]
-sims = ["ppspp"]
+sims = ["strims-sim", "ppspp"]
 type = "int"
-description = "The chunks the honest viewers read, summed: those watching at the run's end and those that left for good."
-notes.ppspp = "strims-sim's row writes no counterpart."
+description = "The transport chunks the first swarm's honest viewers read, summed over them: those watching at the run's end and those that left for good."
+notes.strims-sim = "Each viewer's reads through its swarm reader (`ViewerStats::read`, every incarnation): a chunk counts when its last byte is read, once a stream an incarnation reads, so a chunk read again after a rewind counts once; a frame stream's chunk holds whole frames."
+notes.ppspp = "The chunks each honest viewer's reader read (`Sim::chunks_read`, its `read_chunks`)."
 
 [rows.churn_leaves]
 sims = ["ppspp"]
@@ -1922,9 +1923,11 @@ type = "int"
 description = "The warm-up, in s, before which the steady measures don't count (Config::warm_secs)."
 
 [rows.wasted]
-sims = ["ppspp"]
+sims = ["strims-sim", "ppspp"]
 type = "int"
-description = "Chunks the honest viewers received that they already had (SwarmSchedulerStats::wasted_chunks), summed."
+description = "Transport chunks the first swarm's honest viewers received that they already had (SwarmSchedulerStats::wasted_chunks), summed over them."
+notes.strims-sim = "Every incarnation's (`Report::chunk_reads`)."
+notes.ppspp = "Each honest viewer's current incarnation's (its runner's `SwarmSchedulerStats`)."
 
 [rows.wire_per_media]
 sims = ["strims-sim", "ppspp"]
