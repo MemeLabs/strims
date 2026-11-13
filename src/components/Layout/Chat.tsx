@@ -14,6 +14,7 @@ import { RoomButtons } from "../../components/Chat/RoomMenu";
 import { ThreadProvider, ThreadProviderProps, useChat } from "../../contexts/Chat";
 import { useLayout } from "../../contexts/Layout";
 import useClickAway from "../../hooks/useClickAway";
+import { globalHotkeyOptions } from "../../lib/hotkeys";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
 import RoomCarousel from "../Chat/RoomCarousel";
 import ChatShell from "../Chat/Shell";
@@ -48,10 +49,7 @@ const Chat: React.FC = () => {
   const ref = useRef<HTMLDivElement>(null);
   useClickAway(ref, () => toggleMenuOpen(menuLocked));
 
-  useHotkeys("alt+r", () => toggleShowChat(), {
-    enableOnContentEditable: true,
-    enableOnFormTags: ["INPUT"],
-  });
+  useHotkeys("alt+r", () => toggleShowChat(), globalHotkeyOptions);
 
   const handleToggleClick = useCallback(() => {
     if (DEVICE_TYPE === DeviceType.Portable) {

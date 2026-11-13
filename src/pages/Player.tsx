@@ -9,6 +9,7 @@ import VideoTitle from "../components/VideoTitle";
 import { useLayout } from "../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../contexts/Player";
 import useQuery from "../hooks/useQuery";
+import { globalHotkeyOptions } from "../lib/hotkeys";
 
 interface PlayerQueryParams {
   swarmUri: string;
@@ -21,10 +22,7 @@ const Player: React.FC = () => {
   const query = useQuery<PlayerQueryParams>(location.search);
   const { toggleShowVideo, toggleOverlayOpen, toggleTheaterMode } = useLayout();
 
-  useHotkeys("alt+t", () => toggleTheaterMode(), {
-    enableOnContentEditable: true,
-    enableOnFormTags: ["INPUT"],
-  });
+  useHotkeys("alt+t", () => toggleTheaterMode(), globalHotkeyOptions);
 
   const { setMode, setSource, setPath } = useContext(PlayerContext);
   useEffect(() => {

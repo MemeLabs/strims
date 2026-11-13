@@ -10,6 +10,7 @@ import { useLayout } from "../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../contexts/Player";
 import useQuery from "../hooks/useQuery";
 import { ServiceSlug } from "../lib/directory";
+import { globalHotkeyOptions } from "../lib/hotkeys";
 
 interface EmbedQueryParams {
   k: string;
@@ -23,10 +24,7 @@ const Embed: React.FC = () => {
   const { k: networkKey, ...queryParams } = useQuery<EmbedQueryParams>(location.search);
   const { toggleShowVideo, toggleOverlayOpen, toggleTheaterMode } = useLayout();
 
-  useHotkeys("alt+t", () => toggleTheaterMode(), {
-    enableOnContentEditable: true,
-    enableOnFormTags: ["INPUT"],
-  });
+  useHotkeys("alt+t", () => toggleTheaterMode(), globalHotkeyOptions);
 
   const { setMode, setSource, setPath } = useContext(PlayerContext);
   useEffect(() => {

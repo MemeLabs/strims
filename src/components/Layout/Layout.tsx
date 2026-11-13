@@ -9,6 +9,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 import { useLocation } from "react-router";
 
 import { useLayout, withLayoutContext } from "../../contexts/Layout";
+import { globalHotkeyOptions } from "../../lib/hotkeys";
 import { DEVICE_TYPE, DeviceType, IS_IOS, IS_PWA } from "../../lib/userAgent";
 import NotificationToast from "../Notification/Toast";
 import { withTheme } from "../Theme";
@@ -165,15 +166,9 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
 
   const layout = useLayout();
 
-  useHotkeys("alt+y", () => layout.toggleSwapMainPanels(), {
-    enableOnContentEditable: true,
-    enableOnFormTags: ["INPUT"],
-  });
+  useHotkeys("alt+y", () => layout.toggleSwapMainPanels(), globalHotkeyOptions);
 
-  useHotkeys("alt+c", () => layout.toggleFullScreenChat(), {
-    enableOnContentEditable: true,
-    enableOnFormTags: ["INPUT"],
-  });
+  useHotkeys("alt+c", () => layout.toggleFullScreenChat(), globalHotkeyOptions);
 
   const location = useLocation();
   useEffect(() => layout.toggleFullScreenChat(false), [location]);
