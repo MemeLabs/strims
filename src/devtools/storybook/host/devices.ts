@@ -38,11 +38,18 @@ export interface DeviceShape {
   touch?: DeviceTouch;
 }
 
-// window.orientation of a phone on its side, either way round, named as
-// the layout's classes name them (layout--landscape_ccw, layout--landscape_cw).
-// The landscape phone frame is turned ccw unless its story says cw
-// (Story.landscape); the tablets' are never turned.
-export const LANDSCAPE_ORIENTATIONS = { ccw: 90, cw: -90 } as const;
+export type Turn = "ccw" | "cw";
+
+// window.orientation of each landscape frame, either way round, named as
+// the layout's classes name them (layout--landscape_ccw, layout--landscape_cw):
+// a phone or an iPad on its side, turned from its natural portrait, and the
+// Android tablet in its natural landscape or upside down. A landscape frame
+// is turned ccw unless its story says cw (Story.landscape).
+export const LANDSCAPE_ORIENTATIONS: Partial<Record<Device, Record<Turn, number>>> = {
+  landscape: { ccw: 90, cw: -90 },
+  ipad_landscape: { ccw: 90, cw: -90 },
+  tablet_landscape: { ccw: 0, cw: 180 },
+};
 
 // An iPhone's Safari, so lib/userAgent (and the libraries that sniff it)
 // see a phone.
@@ -73,7 +80,7 @@ export const DEVICES: Record<Device, DeviceShape | null> = {
   landscape: {
     width: 844,
     height: 390,
-    orientation: LANDSCAPE_ORIENTATIONS.ccw,
+    orientation: 90,
     userAgent: PHONE_USER_AGENT,
   },
   ipad_portrait: {

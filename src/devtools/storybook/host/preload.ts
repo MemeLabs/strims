@@ -99,7 +99,7 @@ if (shape) {
 }
 
 // A device frame's window.orientation (and screen.orientation's) from now
-// on: StoryView turns the landscape phone frame the other way round
+// on: StoryView turns a landscape frame the other way round
 // (Story.landscape) before its story renders.
 export const setFrameOrientation = (value: number): void => {
   orientation = value;

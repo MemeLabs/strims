@@ -153,8 +153,9 @@ export const StoryView: React.FC<StoryViewProps> = ({ moduleKey, name, device, s
   const [View] = useState(() =>
     moduleView(moduleKey, (stories) => {
       const landscape = findStory(stories, name)?.landscape;
-      if (device === "landscape" && landscape) {
-        setFrameOrientation(LANDSCAPE_ORIENTATIONS[landscape]);
+      const turns = LANDSCAPE_ORIENTATIONS[device];
+      if (turns && landscape) {
+        setFrameOrientation(turns[landscape]);
         setOrientation(screenOrientation());
       }
     })

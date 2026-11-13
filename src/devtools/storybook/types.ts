@@ -3,6 +3,8 @@
 
 import type React from "react";
 
+import type { Turn } from "./host/devices";
+
 /** One story: a component the storybook mounts at /storybook/<module>/<name>. */
 export interface Story {
   /** The route's last segment; keep it URL-safe. */
@@ -21,12 +23,14 @@ export interface Story {
    */
   visual?: StoryVisual;
   /**
-   * Which way round the landscape phone frame is turned for this story, as
-   * the layout's classes name it: "ccw" (layout--landscape_ccw,
-   * window.orientation 90), the frame's own, or "cw" (layout--landscape_cw,
-   * -90). Other frames ignore it.
+   * Which way round a landscape frame (the phone's, the iPad's or the
+   * Android tablet's) is turned for this story, as the layout's classes
+   * name it: "ccw" (layout--landscape_ccw), the frame's own, or "cw"
+   * (layout--landscape_cw), window.orientation 90 or -90 on the phone and
+   * the iPad, 0 or 180 on the Android tablet (host/devices.ts). Other
+   * frames ignore it.
    */
-  landscape?: "ccw" | "cw";
+  landscape?: Turn;
 }
 
 export interface StoryVisual {

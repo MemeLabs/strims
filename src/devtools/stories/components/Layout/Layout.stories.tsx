@@ -51,6 +51,25 @@ const CloseVideo: React.FC = () => {
   return null;
 };
 
+// Opens the composer's emote menu as its button does, once the chat has
+// its composer.
+const OpenEmoteMenu: React.FC = () => {
+  useEffect(() => {
+    let frame = 0;
+    const open = () => {
+      const button = document.querySelector<HTMLElement>(".layout__chat .chat_composer__button");
+      if (button) {
+        button.click();
+      } else {
+        frame = requestAnimationFrame(open);
+      }
+    };
+    frame = requestAnimationFrame(open);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  return null;
+};
+
 interface ShellStoryProps {
   room?: boolean;
   showChat?: boolean;
@@ -68,6 +87,8 @@ interface ShellStoryProps {
   fullScreenChat?: boolean;
   /** The player closed once the drawer has opened on it (CloseVideo). */
   closeVideo?: boolean;
+  /** The composer's emote menu open (OpenEmoteMenu). */
+  emoteMenu?: boolean;
 }
 
 // The whole shell as the app mounts it (MainProvider's providers, the
@@ -87,6 +108,7 @@ const ShellStory: React.FC<ShellStoryProps> = ({
   theater,
   fullScreenChat,
   closeVideo,
+  emoteMenu,
 }) => {
   const frame = useLayout();
   return (
@@ -107,6 +129,7 @@ const ShellStory: React.FC<ShellStoryProps> = ({
               />
               <FollowLayout frame={frame} />
               {closeVideo && <CloseVideo />}
+              {emoteMenu && <OpenEmoteMenu />}
               <LayoutBody />
             </Layout>
           }
@@ -118,11 +141,12 @@ const ShellStory: React.FC<ShellStoryProps> = ({
   );
 };
 
-// On phones the player and chat are a drawer over the content: closed, a
-// sliver of it on the right; open (a swipe, or the chat's arrow), the
-// player at its size and the chat beside it, or the chat alone. "Swapped"
-// puts the chat on the player's other side, and "landscape cw" turns the
-// landscape frame the other way round (the frame's own is ccw).
+// On phones and Android tablets the player and chat are a drawer over the
+// content: closed, a sliver of it on the right; open (a swipe, or the
+// chat's arrow), the player at its size and the chat beside or below it, or
+// the chat alone. "Swapped" puts the chat on the player's other side, and
+// "landscape cw" turns a landscape frame the other way round (the frame's
+// own is ccw).
 const stories: Story[] = [
   {
     name: "Home",
@@ -162,6 +186,10 @@ const stories: Story[] = [
     name: "Chat open, swapped, landscape cw",
     landscape: "cw",
     component: () => <ShellStory room open swap />,
+  },
+  {
+    name: "Chat open, emote menu",
+    component: () => <ShellStory room open emoteMenu />,
   },
   {
     name: "Chat closed",
@@ -204,6 +232,10 @@ const stories: Story[] = [
     name: "Playing large, landscape cw",
     landscape: "cw",
     component: () => <ShellStory room source={EMBED} mode={PlayerMode.LARGE} open />,
+  },
+  {
+    name: "Playing large, emote menu",
+    component: () => <ShellStory room source={EMBED} mode={PlayerMode.LARGE} open emoteMenu />,
   },
   {
     name: "Playing large, chat closed",
