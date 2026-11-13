@@ -14,8 +14,8 @@ nothing; then reports the catalog's coverage.
 `--port N` starts hack/console/server.py on 127.0.0.1:N (no indexing) to
 serve this checkout's target/console/dist and stops it afterwards; `--url`
 uses a server already running (http://HOST:PORT, the page is
-/devtools.html). `--build` runs `npm run console:build` first (npm from
-PATH, else nvm's newest).
+/devtools.html). `--build` runs `pnpm run console:build` first (pnpm from
+PATH, else the newest nvm node's).
 
 The storybook's index document (#/storybook-index, the page's catalog
 builds its index there) embeds the index as JSON in
@@ -58,17 +58,16 @@ one after the other, and the two diffed. REF builds once per commit, in a
 detached worktree at target/storybook/base/<sha>/src, kept as
 target/storybook/base/<sha>/dist (the worktree removed; `--rebuild-base`
 builds it again), and is served by hack/console/server.py --dist on
-`--base-port` (default `--port` + 1). Its node_modules is what REF's own
-package-lock.json installs: the main checkout's, else this checkout's,
-when that is what it holds (installed_from: npm's hidden lockfile there,
-node_modules/.package-lock.json, has the lock's packages as the lock has
-them, but optional ones left out, and each is on disk at its version),
-else an `npm ci` of REF's package.json and lockfile in
-target/storybook/node_modules/<the lockfile's sha256>, made once and kept
-for every later base with that lockfile. A cached base build that
-doesn't say it was built so is built again. The head's own node_modules
-must be what its package-lock.json installs, or the run is refused
-(exit 2, before --build: `npm ci` is the cure).
+`--base-port` (default `--port` + 1). The worktree installs its own
+node_modules, as its lockfile calls for: `pnpm install --frozen-lockfile`
+for a pnpm-lock.yaml (hard links into pnpm's store, so it's cheap), `npm
+ci` for a package-lock.json (a commit from before pnpm), and builds with
+the same tool. A cached base build that doesn't say it was built so is
+built again. The head's own node_modules must be what its pnpm-lock.yaml
+installs (pnpm's own check, verify-deps-before-run, and the lockfile
+pnpm's install left in node_modules/.pnpm the same), or the run is
+refused (exit 2, before --build: `pnpm install --frozen-lockfile` is the
+cure).
 Each build's index says what it was made from (its commit and the time
 its build began: GIT_HASH and BUILD_TIME). The head is refused (exit 2,
 before any story runs) unless it is the tree's: HEAD's commit, and no
@@ -205,11 +204,12 @@ STABLE_SHOTS = 5
 STUB_DOCUMENT = base64.b64encode(b'<!doctype html><html style="background:#808080"></html>').decode()
 BASES = ROOT / "target" / "storybook" / "base"
 REPORTS = ROOT / "target" / "storybook" / "compare"
-# Base builds' node_modules, one `npm ci` per lockfile, by its sha256.
-INSTALLS = ROOT / "target" / "storybook" / "node_modules"
-# What `npm run console:build` reads of the checkout (webpack.config.js's
+# A tree's lockfile and the package manager it calls for (package-lock.json:
+# a commit from before pnpm).
+LOCKFILES = {"pnpm-lock.yaml": "pnpm", "package-lock.json": "npm"}
+# What `pnpm run console:build` reads of the checkout (webpack.config.js's
 # inputs): a build that began before a change to any of them doesn't hold it.
-HEAD_INPUTS = ("src", "assets", "webpack", "vendor_modules", "package.json", "package-lock.json",
+HEAD_INPUTS = ("src", "assets", "webpack", "vendor_modules", "package.json", "pnpm-lock.yaml",
                "webpack.config.js", "tsconfig.json")
 
 
@@ -643,27 +643,37 @@ def check_story(browser, base, story, args):
 # --- the server and the build ---
 
 
-def npm_command():
-    npm = shutil.which("npm")
-    if npm:
-        return npm, os.environ.copy()
-    found = sorted(glob.glob(os.path.expanduser("~/.nvm/versions/node/*/bin/npm")),
+def node_tool(name):
+    """`name` (pnpm or npm) and the environment to run it in: from PATH,
+    else the newest nvm node's, that node's bin first on PATH."""
+    found = shutil.which(name)
+    if found:
+        return found, os.environ.copy()
+    found = sorted(glob.glob(os.path.expanduser(f"~/.nvm/versions/node/*/bin/{name}")),
                    key=lambda p: [int(x) for x in Path(p).parts[-3].lstrip("v").split(".") if x.isdigit()])
     if not found:
-        sys.exit("check: no npm on PATH or under ~/.nvm")
+        sys.exit(f"check: no {name} on PATH or under ~/.nvm")
     env = os.environ.copy()
     env["PATH"] = str(Path(found[-1]).parent) + os.pathsep + env.get("PATH", "")
     return found[-1], env
 
 
+def package_manager(root):
+    """The package manager `root`'s lockfile calls for (LOCKFILES), and the lockfile."""
+    for name, tool in LOCKFILES.items():
+        if (root / name).is_file():
+            return tool, root / name
+    sys.exit(f"check: {root} has none of {', '.join(LOCKFILES)}")
+
+
 def build():
-    npm, env = npm_command()
+    pnpm, env = node_tool("pnpm")
     start = time.monotonic()
-    res = subprocess.run([npm, "run", "console:build"], cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
+    res = subprocess.run([pnpm, "run", "console:build"], cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if res.returncode:
         print(res.stdout[-6000:], file=sys.stderr)
-        sys.exit("check: npm run console:build failed")
+        sys.exit("check: pnpm run console:build failed")
     print(f"check: built in {time.monotonic() - start:.1f} s", file=sys.stderr)
 
 
@@ -1334,11 +1344,6 @@ def git(*args, cwd=ROOT):
     return res.stdout.strip()
 
 
-def main_checkout():
-    """The repository's main checkout (where node_modules lives)."""
-    return Path(git("rev-parse", "--path-format=absolute", "--git-common-dir")).parent
-
-
 def changed_since(ms, root=ROOT):
     """HEAD_INPUTS under `root` changed after `ms` (ms since the epoch):
     files written since, and directories an entry was added to, removed
@@ -1396,88 +1401,45 @@ def drop_worktree(src):
         shutil.rmtree(src, ignore_errors=True)
 
 
-def installed_from(modules, lock):
-    """Whether the node_modules at `modules` holds what the lockfile
-    `lock` (its bytes) installs: npm's hidden lockfile there
-    (.package-lock.json, which npm ci and npm install write) has every
-    package as the lockfile has it, but those the lockfile marks optional
-    and npm left out (another platform's), and nothing more; and each of
-    them is on disk at its version."""
-    try:
-        hidden = json.loads((modules / ".package-lock.json").read_bytes())
-        want = {k: v for k, v in json.loads(lock)["packages"].items() if k}
-    except (OSError, ValueError, KeyError, TypeError):
-        return False
-    have = hidden.get("packages") or {}
-    if any(want.get(k) != v for k, v in have.items()):
-        return False
-    if any(k not in have and not v.get("optional") for k, v in want.items()):
-        return False
-    for k, v in have.items():
-        if v.get("link") or not k.startswith("node_modules/"):
-            continue
-        try:
-            on_disk = json.loads((modules / k.removeprefix("node_modules/") / "package.json").read_bytes())
-        except (OSError, ValueError):
-            return False
-        if on_disk.get("version") != v.get("version"):
-            return False
-    return True
-
-
 def head_modules():
-    """Why this checkout's node_modules isn't what its package-lock.json
-    installs, or None when it is."""
-    if installed_from(ROOT / "node_modules", (ROOT / "package-lock.json").read_bytes()):
+    """Why this checkout's node_modules isn't what its pnpm-lock.yaml
+    installs, or None when it is: pnpm's own check (verify-deps-before-run,
+    over the state its install left in node_modules), and the lockfile that
+    install left (node_modules/.pnpm/lock.yaml) the same as pnpm-lock.yaml.
+    pnpm's check reads the lockfile only while a package.json is newer than
+    its last install or check, so it alone passes a lockfile that changed
+    by itself."""
+    lock = ROOT / "pnpm-lock.yaml"
+    if not lock.is_file():
+        return f"{ROOT} has no pnpm-lock.yaml"
+    pnpm, env = node_tool("pnpm")
+    res = subprocess.run([pnpm, "--config.verify-deps-before-run=error", "exec", "node", "-e", "0"], cwd=ROOT,
+                         env=env, stdin=subprocess.DEVNULL, capture_output=True)
+    try:
+        installed = (ROOT / "node_modules" / ".pnpm" / "lock.yaml").read_bytes()
+    except OSError:
+        installed = None
+    if res.returncode == 0 and installed == lock.read_bytes():
         return None
-    return (f"{ROOT / 'node_modules'} isn't what {ROOT / 'package-lock.json'} installs, so the head wouldn't "
-            "build as the tree says: npm ci installs it")
+    return (f"{ROOT / 'node_modules'} isn't what {ROOT / 'pnpm-lock.yaml'} installs, so the head wouldn't "
+            "build as the tree says: pnpm install --frozen-lockfile installs it")
 
 
-def base_modules(sha):
-    """The node_modules REF (`sha`) builds with, what its package-lock.json
-    installs: the main checkout's or this checkout's when it holds that,
-    else INSTALLS/<the lockfile's sha256>/node_modules, an npm ci of REF's
-    package.json and lockfile made the first time (under a lock, so two
-    runs don't make one at once) and kept. (path, the lockfile's sha256)."""
-    res = subprocess.run(["git", "show", f"{sha}:package-lock.json"], cwd=ROOT, stdin=subprocess.DEVNULL,
-                         capture_output=True)
-    if res.returncode:
-        sys.exit(f"check: the base {sha[:12]} has no package-lock.json to install its node_modules from")
-    lock = res.stdout
-    key = hashlib.sha256(lock).hexdigest()
-    for modules in dict.fromkeys([main_checkout() / "node_modules", ROOT / "node_modules"]):
-        if installed_from(modules, lock):
-            return modules.resolve(), key
-    home = INSTALLS / key
-    INSTALLS.mkdir(parents=True, exist_ok=True)
-    with open(INSTALLS / f"{key}.lock", "a") as held:
-        fcntl.flock(held, fcntl.LOCK_EX)
-        modules = home / "node_modules"
-        if (home / "installed.json").is_file() and installed_from(modules, lock):
-            print(f"check: base {sha[:12]}: node_modules from its lockfile's install, {home}", file=sys.stderr)
-            return modules, key
-        shutil.rmtree(home, ignore_errors=True)
-        home.mkdir()
-        (home / "package-lock.json").write_bytes(lock)
-        (home / "package.json").write_bytes(subprocess.run(
-            ["git", "show", f"{sha}:package.json"], cwd=ROOT, stdin=subprocess.DEVNULL, capture_output=True,
-            check=True).stdout)
-        npm, env = npm_command()
-        start = time.monotonic()
-        print(f"check: base {sha[:12]}: its package-lock.json isn't what the checkouts' node_modules hold; "
-              f"npm ci into {home}", file=sys.stderr)
-        with open(home / "npm-ci.log", "wb") as log:
-            code = subprocess.run([npm, "ci", "--no-audit", "--no-fund"], cwd=home, env=env,
-                                  stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT).returncode
-        if code or not installed_from(modules, lock):
-            sys.exit(f"check: npm ci of the base's lockfile in {home} "
-                     + (f"failed (its log: {home / 'npm-ci.log'})" if code else "didn't install what it says"))
-        took = time.monotonic() - start
-        (home / "installed.json").write_text(json.dumps({"lock_sha256": key, "from": sha, "npm_ci_s": round(took, 1)})
-                                             + "\n")
-        print(f"check: base {sha[:12]}: installed in {took:.0f} s", file=sys.stderr)
-    return modules, key
+def install(src, log):
+    """Installs the base worktree `src`'s node_modules as its lockfile
+    calls for (package_manager): (the tool's name, its executable and
+    env, the lockfile's sha256)."""
+    tool, lock = package_manager(src)
+    exe, env = node_tool(tool)
+    cmd = [exe, "install", "--frozen-lockfile"] if tool == "pnpm" else [exe, "ci", "--no-audit", "--no-fund"]
+    start = time.monotonic()
+    with open(log, "wb") as out:
+        code = subprocess.run(cmd, cwd=src, env=env, stdin=subprocess.DEVNULL, stdout=out,
+                              stderr=subprocess.STDOUT).returncode
+    if code:
+        sys.exit(f"check: the base's {tool} {cmd[1]} failed (its log: {log})")
+    print(f"check: base: {tool} installed its {lock.name} in {time.monotonic() - start:.1f} s", file=sys.stderr)
+    return tool, exe, env, hashlib.sha256(lock.read_bytes()).hexdigest()
 
 
 def resolve(ref):
@@ -1490,11 +1452,11 @@ def resolve(ref):
 
 def build_base(ref, rebuild):
     """REF's build: (sha, dist, protocol), built once per commit in a
-    detached worktree under target/storybook/base/<sha>/src (node_modules
-    base_modules'), its target/console/dist kept as
+    detached worktree under target/storybook/base/<sha>/src (its own
+    node_modules, install's), its target/console/dist kept as
     target/storybook/base/<sha>/dist and the worktree removed. A cached
-    build whose record has no lock_sha256 (from before base_modules) is
-    built again."""
+    build whose record has no lock_sha256 (from before the base's lockfile
+    was recorded) is built again."""
     sha = resolve(ref)
     home = BASES / sha
     record = home / "build.json"
@@ -1509,25 +1471,22 @@ def build_base(ref, rebuild):
         record.unlink(missing_ok=True)
         drop_worktree(src)
         shutil.rmtree(dist, ignore_errors=True)
-        modules, key = base_modules(sha)
         git("worktree", "add", "--force", "--detach", str(src), sha)
         try:
-            (src / "node_modules").symlink_to(modules)
-            protocol = protocol_of(src)
-            npm, env = npm_command()
             start = time.monotonic()
-            print(f"check: building base {sha[:12]} ({ref}) in {src.relative_to(ROOT)}, node_modules {modules}",
-                  file=sys.stderr)
-            res = subprocess.run([npm, "run", "console:build"], cwd=src, env=env, stdin=subprocess.DEVNULL,
+            tool, exe, env, key = install(src, home / "install.log")
+            protocol = protocol_of(src)
+            print(f"check: building base {sha[:12]} ({ref}) in {src.relative_to(ROOT)}", file=sys.stderr)
+            res = subprocess.run([exe, "run", "console:build"], cwd=src, env=env, stdin=subprocess.DEVNULL,
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             if res.returncode:
                 (home / "build.log").write_text(res.stdout)
                 print(res.stdout[-6000:], file=sys.stderr)
-                sys.exit(f"check: the base's npm run console:build failed (its log: {home / 'build.log'})")
+                sys.exit(f"check: the base's {tool} run console:build failed (its log: {home / 'build.log'})")
             shutil.move(src / "target" / "console" / "dist", dist)
             took = time.monotonic() - start
             record.write_text(json.dumps({"commit": sha, "ref": ref, "protocol": protocol, "build_s": round(took, 1),
-                                          "lock_sha256": key, "node_modules": str(modules)}) + "\n")
+                                          "lock_sha256": key, "installer": tool}) + "\n")
             print(f"check: built base {sha[:12]} in {took:.1f} s ({protocol} protocol)", file=sys.stderr)
         finally:
             drop_worktree(src)
@@ -2069,7 +2028,7 @@ def main(argv=None):
     where = p.add_mutually_exclusive_group(required=True)
     where.add_argument("--port", type=int, help="start hack/console/server.py on this port")
     where.add_argument("--url", help="a running server's base URL")
-    p.add_argument("--build", action="store_true", help="npm run console:build first")
+    p.add_argument("--build", action="store_true", help="pnpm run console:build first")
     p.add_argument("-j", "--jobs", type=int, default=4, help="browsers at once (default 4)")
     p.add_argument("--only", action="append", default=[], metavar="PREFIX", help="stories whose route starts so")
     p.add_argument("--theme", choices=["dark", "light"], default="dark")
