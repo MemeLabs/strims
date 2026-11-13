@@ -44,13 +44,21 @@ const parse = (): FrameDocument | null => {
 export const frameDocument = parse();
 
 const shape = frameDocument?.kind === "story" ? DEVICES[frameDocument.device] : null;
+let orientation = shape?.orientation;
 if (shape) {
   Object.defineProperty(navigator, "userAgent", {
     get: () => PHONE_USER_AGENT,
     configurable: true,
   });
   Object.defineProperty(window, "orientation", {
-    get: () => shape.orientation,
+    get: () => orientation,
     configurable: true,
   });
 }
+
+// A phone frame's window.orientation from now on: StoryView turns a
+// landscape frame the other way round (Story.landscape) before its story
+// renders.
+export const setFrameOrientation = (value: number): void => {
+  orientation = value;
+};

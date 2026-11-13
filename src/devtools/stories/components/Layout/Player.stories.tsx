@@ -3,18 +3,10 @@
 
 import "./Layout.stories.scss";
 
-import { PassThrough } from "stream";
-
 import { Base64 } from "js-base64";
 import React from "react";
 import { Route } from "react-router";
 
-import { UnimplementedEgressService } from "../../../../apis/strims/video/v1/egress_rpc";
-import {
-  HLSEgressGetConfigResponse,
-  HLSEgressIsSupportedResponse,
-} from "../../../../apis/strims/video/v1/hls_egress";
-import { UnimplementedHLSEgressService } from "../../../../apis/strims/video/v1/hls_egress_rpc";
 import Player from "../../../../components/Layout/Player";
 import VideoMeta from "../../../../components/VideoMeta";
 import { PlayerMode, PlayerSource } from "../../../../contexts/Player";
@@ -26,33 +18,7 @@ import {
   StoryRouter,
   fixtures,
 } from "../../../storybook";
-import { LayoutState, ListingDirectoryService } from "./shell";
-
-// The node serves no HLS: the swarm player offers no Cast or AirPlay.
-class HLSEgressService extends UnimplementedHLSEgressService {
-  isSupported() {
-    return new HLSEgressIsSupportedResponse({ supported: false });
-  }
-
-  getConfig() {
-    return new HLSEgressGetConfigResponse({ config: { enabled: false } });
-  }
-}
-
-// A swarm whose stream opens and sends nothing yet.
-class EgressService extends UnimplementedEgressService {
-  private streams: PassThrough[] = [];
-
-  openStream() {
-    const ch = new PassThrough({ objectMode: true });
-    this.streams.push(ch);
-    return ch;
-  }
-
-  destroy() {
-    this.streams.forEach((ch) => ch.destroy());
-  }
-}
+import { EgressService, HLSEgressService, LayoutState, ListingDirectoryService } from "./shell";
 
 const NETWORK_KEY = Base64.fromUint8Array(fixtures.testNetworkKey, true);
 

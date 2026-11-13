@@ -13,12 +13,17 @@ export interface DeviceShape {
   orientation: number;
 }
 
+// window.orientation of a phone on its side, either way round, named as
+// the layout's classes name them (layout--landscape_ccw, layout--landscape_cw).
+// The landscape frame is turned ccw unless its story says cw (Story.landscape).
+export const LANDSCAPE_ORIENTATIONS = { ccw: 90, cw: -90 } as const;
+
 // The story frame's viewport: pc's (null) fills the storybook page's
 // content area (hack/storybook/check.py's VIEWPORTS has a size for it).
 export const DEVICES: Record<Device, DeviceShape | null> = {
   pc: null,
   portrait: { width: 390, height: 844, orientation: 0 },
-  landscape: { width: 844, height: 390, orientation: 90 },
+  landscape: { width: 844, height: 390, orientation: LANDSCAPE_ORIENTATIONS.ccw },
 };
 
 export const isDevice = (v: string | null): v is Device =>

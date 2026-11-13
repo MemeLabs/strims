@@ -3,15 +3,17 @@
 
 import "./Layout.stories.scss";
 
-import React from "react";
+import { Base64 } from "js-base64";
+import React, { useContext, useEffect } from "react";
 import { Route } from "react-router";
 
 import DirectoryGrid from "../../../../components/Directory/Grid";
 import Layout from "../../../../components/Layout";
 import LayoutBody from "../../../../components/Layout/Body";
-import { PlayerMode, PlayerSource } from "../../../../contexts/Player";
+import { useLayout } from "../../../../contexts/Layout";
+import { PlayerContext, PlayerMode, PlayerSource } from "../../../../contexts/Player";
 import { Story, StoryRouter, fixtures } from "../../../storybook";
-import { LayoutState, ShellProviders } from "./shell";
+import { FollowLayout, LayoutState, ShellProviders } from "./shell";
 
 const EMBED: PlayerSource = {
   type: "embed",
@@ -20,22 +22,60 @@ const EMBED: PlayerSource = {
   networkKey: "cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE",
 };
 
+const SWARM: PlayerSource = {
+  type: "swarm",
+  networkKey: Base64.fromUint8Array(fixtures.testNetworkKey, true),
+  swarmUri: "magnet:?xt=urn:ppspp:Ef8K5Wl5wl6nkCLc7KiUOgcmT0UdJIttU4NVg7iRTgw",
+  mimeType: "video/x.strims-units",
+};
+
+// How long the drawer stays open on the player before CloseVideo closes it.
+const CLOSE_VIDEO_MS = 500;
+
+// Closes the player as its close button does (Player's handleClose) once
+// the drawer has opened and the chat beside the player has laid out.
+const CloseVideo: React.FC = () => {
+  const { overlayState, toggleShowVideo } = useLayout();
+  const { setMode, setSource } = useContext(PlayerContext);
+  const opened = overlayState.open && !overlayState.transitioning;
+  useEffect(() => {
+    if (opened) {
+      const tid = setTimeout(() => {
+        setMode(PlayerMode.CLOSED);
+        setSource(null);
+        toggleShowVideo(false);
+      }, CLOSE_VIDEO_MS);
+      return () => clearTimeout(tid);
+    }
+  }, [opened]);
+  return null;
+};
+
 interface ShellStoryProps {
   room?: boolean;
   showChat?: boolean;
   source?: PlayerSource;
   mode?: PlayerMode;
   expandNav?: boolean;
-  /** The player opened over the content, as opening a listing does. */
+  /**
+   * The drawer open: on phones the panel of the player and chat pulled over
+   * the content, else the player page's overlay, as opening a listing does.
+   */
   open?: boolean;
+  /** The player and chat on each other's side (alt+y). */
+  swap?: boolean;
+  theater?: boolean;
+  fullScreenChat?: boolean;
+  /** The player closed once the drawer has opened on it (CloseVideo). */
+  closeVideo?: boolean;
 }
 
 // The whole shell as the app mounts it (MainProvider's providers, the
 // layout around MainRouter's body route) at /, the directory grid in the
-// body's outlet. Links navigate in the story. The layout keeps a layout
-// context of its own, and the frame around it carries its context's
-// layout--* classes, which the layout's rules match too: the flags are
-// set in both.
+// body's outlet. Links navigate in the story. The flags are set in the
+// layout's own context, and the frame around it, whose root carries its
+// context's layout--* classes (which the layout's rules match too),
+// follows them, through the story's steps and a swipe or a tap alike.
 const ShellStory: React.FC<ShellStoryProps> = ({
   room,
   showChat,
@@ -43,24 +83,30 @@ const ShellStory: React.FC<ShellStoryProps> = ({
   mode,
   expandNav,
   open,
+  swap,
+  theater,
+  fullScreenChat,
+  closeVideo,
 }) => {
-  const flags = (
-    <LayoutState
-      showChat={showChat}
-      showVideo={!!source}
-      expandNav={expandNav}
-      overlayOpen={open}
-    />
-  );
+  const frame = useLayout();
   return (
     <ShellProviders room={room} source={source} mode={mode}>
-      {flags}
       <StoryRouter>
         <Route
           path="/"
           element={
             <Layout>
-              {flags}
+              <LayoutState
+                showChat={showChat}
+                showVideo={!!source}
+                expandNav={expandNav}
+                overlayOpen={open}
+                swapMainPanels={swap}
+                theaterMode={theater}
+                fullScreenChat={fullScreenChat}
+              />
+              <FollowLayout frame={frame} />
+              {closeVideo && <CloseVideo />}
               <LayoutBody />
             </Layout>
           }
@@ -72,26 +118,112 @@ const ShellStory: React.FC<ShellStoryProps> = ({
   );
 };
 
+// On phones the player and chat are a drawer over the content: closed, a
+// sliver of it on the right; open (a swipe, or the chat's arrow), the
+// player at its size and the chat beside it, or the chat alone. "Swapped"
+// puts the chat on the player's other side, and "landscape cw" turns the
+// landscape frame the other way round (the frame's own is ccw).
 const stories: Story[] = [
   {
     name: "Home",
     component: () => <ShellStory />,
   },
   {
+    name: "Home, chat open",
+    component: () => <ShellStory open />,
+  },
+  {
     name: "Chat room",
     component: () => <ShellStory room />,
+  },
+  {
+    name: "Chat room, swapped",
+    component: () => <ShellStory room swap />,
+  },
+  {
+    name: "Chat room, landscape cw",
+    landscape: "cw",
+    component: () => <ShellStory room />,
+  },
+  {
+    name: "Chat open",
+    component: () => <ShellStory room open />,
+  },
+  {
+    name: "Chat open, swapped",
+    component: () => <ShellStory room open swap />,
+  },
+  {
+    name: "Chat open, landscape cw",
+    landscape: "cw",
+    component: () => <ShellStory room open />,
+  },
+  {
+    name: "Chat open, swapped, landscape cw",
+    landscape: "cw",
+    component: () => <ShellStory room open swap />,
   },
   {
     name: "Chat closed",
     component: () => <ShellStory room showChat={false} expandNav />,
   },
   {
+    name: "Expanded nav",
+    component: () => <ShellStory room expandNav />,
+  },
+  {
+    name: "Full screen chat",
+    component: () => <ShellStory room fullScreenChat />,
+  },
+  // The mini player: something plays while the directory shows.
+  {
     name: "Playing",
     component: () => <ShellStory room source={EMBED} />,
   },
   {
+    name: "Playing, swapped",
+    component: () => <ShellStory room source={EMBED} swap />,
+  },
+  {
+    name: "Playing, chat closed",
+    component: () => <ShellStory room source={EMBED} showChat={false} />,
+  },
+  {
     name: "Playing large",
     component: () => <ShellStory room source={EMBED} mode={PlayerMode.LARGE} open />,
+  },
+  {
+    name: "Playing large, swarm",
+    component: () => <ShellStory room source={SWARM} mode={PlayerMode.LARGE} open />,
+  },
+  {
+    name: "Playing large, swapped",
+    component: () => <ShellStory room source={EMBED} mode={PlayerMode.LARGE} open swap />,
+  },
+  {
+    name: "Playing large, landscape cw",
+    landscape: "cw",
+    component: () => <ShellStory room source={EMBED} mode={PlayerMode.LARGE} open />,
+  },
+  {
+    name: "Playing large, chat closed",
+    component: () => (
+      <ShellStory room source={EMBED} mode={PlayerMode.LARGE} open showChat={false} />
+    ),
+  },
+  {
+    name: "Theater mode",
+    component: () => <ShellStory room source={SWARM} mode={PlayerMode.LARGE} open theater />,
+  },
+  {
+    name: "Video closed",
+    component: () => <ShellStory room source={SWARM} mode={PlayerMode.LARGE} open closeVideo />,
+  },
+  {
+    name: "Video closed, swapped",
+    component: () => (
+      <ShellStory room source={SWARM} mode={PlayerMode.LARGE} open swap closeVideo />
+    ),
   },
 ];
 

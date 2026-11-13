@@ -20,6 +20,13 @@ export interface Story {
    * sparingly, and say why.
    */
   visual?: StoryVisual;
+  /**
+   * Which way round the landscape phone frame is turned for this story, as
+   * the layout's classes name it: "ccw" (layout--landscape_ccw,
+   * window.orientation 90), the frame's own, or "cw" (layout--landscape_cw,
+   * -90). Other frames ignore it.
+   */
+  landscape?: "ccw" | "cw";
 }
 
 export interface StoryVisual {

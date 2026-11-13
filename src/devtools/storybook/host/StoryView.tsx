@@ -19,7 +19,8 @@ import { DEVICE_TYPE } from "../../../lib/userAgent";
 import type { Story } from "../types";
 import StoryErrorBoundary from "./ErrorBoundary";
 import { loadModule } from "./catalog";
-import { DEVICES, Device } from "./devices";
+import { DEVICES, Device, LANDSCAPE_ORIENTATIONS } from "./devices";
+import { setFrameOrientation } from "./preload";
 import { Session } from "./recorder";
 
 // The frame document's viewport: the device's size on the storybook page
@@ -40,6 +41,8 @@ const useViewportSize = () => {
 
 interface FrameProps {
   device: Device;
+  /** As window.orientation reads it in the frame. */
+  orientation: number;
   session: Session;
   children: ReactNode;
 }
@@ -53,11 +56,11 @@ const FrameBase: React.FC<FrameProps & WithRootRefProps & WithThemeProps> = ({
   rootRef,
   className,
   device,
+  orientation,
   session,
   children,
 }) => {
   const { width, height } = useViewportSize();
-  const orientation = DEVICES[device]?.orientation ?? 0;
   const layout = useLayout();
   const { state } = useSyncExternalStore(session.subscribe, session.getSnapshot);
 
@@ -94,13 +97,21 @@ interface ModuleViewProps {
   session: Session;
 }
 
-// The module's story (its first when the route names none).
-const moduleView = (key: string): React.ComponentType<ModuleViewProps> =>
+const findStory = (stories: Story[], name?: string): Story | undefined =>
+  name === undefined ? stories[0] : stories.find((s) => s.name === name);
+
+// The module's story (its first when the route names none); `onLoad` gets
+// the module's stories before it renders.
+const moduleView = (
+  key: string,
+  onLoad: (stories: Story[]) => void
+): React.ComponentType<ModuleViewProps> =>
   lazy(async () => {
     const mod = await loadModule(key);
     const stories: Story[] = Array.isArray(mod.default) ? mod.default : [];
+    onLoad(stories);
     const View: React.FC<ModuleViewProps> = ({ name, session }) => {
-      const story = name === undefined ? stories[0] : stories.find((s) => s.name === name);
+      const story = findStory(stories, name);
       session.setStoryAllow(story?.allowErrors);
       if (!story) {
         return (
@@ -130,11 +141,22 @@ export interface StoryViewProps {
   session: Session;
 }
 
-// A story in its frame, its errors caught and recorded into `session`.
+// A story in its frame, its errors caught and recorded into `session`. A
+// landscape frame is turned the way its story says (Story.landscape) before
+// the story renders.
 export const StoryView: React.FC<StoryViewProps> = ({ moduleKey, name, device, session }) => {
-  const [View] = useState(() => moduleView(moduleKey));
+  const [orientation, setOrientation] = useState(DEVICES[device]?.orientation ?? 0);
+  const [View] = useState(() =>
+    moduleView(moduleKey, (stories) => {
+      const landscape = findStory(stories, name)?.landscape;
+      if (device === "landscape" && landscape) {
+        setFrameOrientation(LANDSCAPE_ORIENTATIONS[landscape]);
+        setOrientation(LANDSCAPE_ORIENTATIONS[landscape]);
+      }
+    })
+  );
   return (
-    <Frame device={device} session={session}>
+    <Frame device={device} orientation={orientation} session={session}>
       <StoryErrorBoundary onError={(text) => session.crash(text)}>
         <Suspense fallback={<LoadingMessage />}>
           <View name={name} session={session} />
