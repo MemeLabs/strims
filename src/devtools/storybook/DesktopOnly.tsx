@@ -12,7 +12,7 @@ export interface DesktopOnlyProps {
 }
 
 // The story of a component the app renders off portable devices alone: in a
-// portable device's frame (a phone's or an Android tablet's, host/devices.ts)
+// portable device's frame (a phone's or a tablet's, host/devices.ts)
 // the note in its place.
 export const DesktopOnly: React.FC<DesktopOnlyProps> = ({ note, children }) =>
   DEVICE_TYPE === DeviceType.Portable ? (

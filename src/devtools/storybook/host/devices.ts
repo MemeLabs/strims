@@ -57,8 +57,7 @@ export const PHONE_USER_AGENT =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
 
 // iPadOS Safari asks for desktop sites by default: a Mac's user agent, the
-// iPad told apart only by its touch screen (lib/userAgent's parse takes it
-// for a pc).
+// iPad told apart only by its touch screen (as lib/userAgent tells it).
 export const IPAD_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15";
 const IPAD_TOUCH: DeviceTouch = { maxTouchPoints: 5, platform: "MacIntel", standalone: false };
@@ -71,7 +70,7 @@ const ANDROID_TABLET_TOUCH: DeviceTouch = { maxTouchPoints: 5, platform: "Linux 
 
 // The story frame's viewport: pc's (null) fills the storybook page's
 // content area (hack/storybook/check.py's VIEWPORTS has a size for it).
-// The tablets are an iPad Air's (iPadOS Safari, a pc to the app) and a
+// The tablets are an iPad Air's (iPadOS Safari) and a
 // 16:10 Android tablet's, a Pixel Tablet's or a Galaxy Tab S9's (natural
 // landscape, so window.orientation is 0 in landscape).
 export const DEVICES: Record<Device, DeviceShape | null> = {

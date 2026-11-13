@@ -87,12 +87,6 @@ const storage = (): Storage | null => {
   }
 };
 
-// Whether the device is portable: iPadOS's Safari names itself a Mac,
-// which has no touch screen.
-const portable = (): boolean =>
-  DEVICE_TYPE === DeviceType.Portable ||
-  (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
-
 // The player's picture area in device pixels: the video's box, or the
 // screen's while it has none.
 const measure = (video: HTMLVideoElement | undefined) => {
@@ -241,7 +235,7 @@ export const useRendition = ({
   const fresh = (s: Watched): Watched => (s.main === swarmUri ? s : unwatched(swarmUri));
   const watched = fresh(watchedState);
 
-  const isPortable = useMemo(portable, []);
+  const isPortable = DEVICE_TYPE === DeviceType.Portable;
   // The renditions the browser says it plays that haven't failed, the
   // listing's own among them until it fails, and alone (failed or not) for a
   // stream of one; null while the choice waits.
