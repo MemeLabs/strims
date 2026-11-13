@@ -2065,11 +2065,12 @@ struct Report {
     /// samples after the warm-up.
     seed_objective: Duration,
     /// The seed's capacity estimate ([`AllocSample::capacity`]), the relay
-    /// busy-time reading, median over the samples after the warm-up while
-    /// it writes: the row's `meter_seed_bps_p50` ...
-    seed_capacity: u64,
+    /// busy-time reading, median over its samples with one in the seed
+    /// meter's window ([`Sim::seed_meter_window`], [`Shape::seed_meter`]'s):
+    /// the row's `meter_seed_bps_p50` (`None`, null, without one) ...
+    seed_capacity: Option<u64>,
     /// ... and the reading its budget was measured from
-    /// ([`AllocSample::budget_capacity`]), median over the same samples
+    /// ([`AllocSample::budget_capacity`]), median over the window's samples
     /// once measured: the row's `meter_budget_seed_bps_p50` (`None`, null,
     /// if never).
     budget_capacity: Option<u64>,
@@ -6067,24 +6068,22 @@ impl Sim {
                 after.iter().sum::<f64>() / after.len().max(1) as f64
             },
             seed_capacity: {
-                let end =
-                    t0() + Duration::SECOND + Duration::from_secs(self.cfg.stream_secs as i64);
+                let (from, to) = self.seed_meter_window();
                 let mut v: Vec<u64> = self
                     .alloc
                     .iter()
-                    .filter(|a| a.at > warm && a.at <= end)
+                    .filter(|a| a.at >= from && a.at <= to && a.capacity > 0)
                     .map(|a| a.capacity)
                     .collect();
                 v.sort_unstable();
-                v.get(v.len() / 2).copied().unwrap_or(0)
+                v.get(v.len() / 2).copied()
             },
             budget_capacity: {
-                let end =
-                    t0() + Duration::SECOND + Duration::from_secs(self.cfg.stream_secs as i64);
+                let (from, to) = self.seed_meter_window();
                 let mut v: Vec<u64> = self
                     .alloc
                     .iter()
-                    .filter(|a| a.at > warm && a.at <= end && a.budget_capacity > 0)
+                    .filter(|a| a.at >= from && a.at <= to && a.budget_capacity > 0)
                     .map(|a| a.budget_capacity)
                     .collect();
                 v.sort_unstable();
@@ -7655,8 +7654,10 @@ fn sim_tables_change_no_trace_of(cfg: Config) {
         assert_eq!(!seconds.is_empty(), adaptive);
         assert_eq!(!bins.is_empty(), adaptive);
         assert!(seconds.iter().chain(&bins).all(|&c| c > 0));
-        // The row's medians take the samples after the warm-up alone.
-        assert!(!adaptive || r.seed_capacity == 0 || r.budget_capacity.is_some());
+        // The row's medians take the seed meter's window alone, after the
+        // startup phase: a stream no longer than its startup has none.
+        assert!(cfg.stream_secs <= vocab::STARTUP_SECS);
+        assert_eq!((r.seed_capacity, r.budget_capacity), (None, None));
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -11009,9 +11010,6 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         .num(RowNum::SeedSlots, r.seed_slots)
         .int(RowInt::SeedUpBw, seed.up_bw)
         .int(RowInt::MeterSeedBpsP50, r.seed_capacity)
-        // The capacity reading the seed's budget was measured from, its
-        // median over the samples after the warm-up once measured; null if
-        // it never was.
         .int(RowInt::MeterBudgetSeedBpsP50, r.budget_capacity)
         .int(RowInt::SeedFirstWave, seed_push.seed_first_wave as u64)
         .int(

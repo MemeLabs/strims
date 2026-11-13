@@ -631,25 +631,32 @@ pub(crate) enum RowInt {
     /// The first swarm's honest viewers in each population
     /// (`meter_{pop}_p{p}`'s): `n_accepting`, `n_delivering`.
     NPop(u16),
-    /// The capacity reading the seed's budget was measured from
+    /// The capacity reading the first swarm's seed's budget was measured from
     /// (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`), in
-    /// bytes per second: its median over the samples after the warm-up while it
-    /// writes, once measured; null if never.
+    /// bytes per second: its median over `meter_seed_bps_p50`'s samples once
+    /// measured; null without one (a seed that isn't adaptive, or never
+    /// measured there).
     ///
     /// ppspp: In bytes per second; `meter_budget_seed_p*` are its quantiles
-    /// over the seed's uplink, from the end of the startup phase.
+    /// over the seed's uplink. Older runs hold this name over another window:
+    /// the samples after the warm-up (t0 + `warm_secs`) to the stream's last
+    /// write.
     ///
     /// Unit: bytes/s. None is written as null.
     MeterBudgetSeedBpsP50,
-    /// The seed's capacity estimate (`AllocSample::capacity`,
+    /// The first swarm's seed's capacity estimate (`AllocSample::capacity`,
     /// `PushStats::upload_capacity`), the relay busy-time reading (not its
     /// budget's, `meter_budget_seed_bps_p50`), in bytes per second: its median
-    /// over the samples after the warm-up while it writes (0 without one).
+    /// over its samples with a capacity in `meter_seed_p*`'s window, from the
+    /// end of the startup phase to the stream's last write; null without one (a
+    /// stream no longer than its startup).
     ///
-    /// ppspp: In bytes per second; `meter_seed_p*` are its quantiles over the
-    /// seed's uplink, from the end of the startup phase.
+    /// ppspp: In bytes per second, a sample a second (`Sim::sample_alloc`);
+    /// `meter_seed_p*` are its quantiles over the seed's uplink. Older runs
+    /// hold this name over another window, the samples after the warm-up (t0 +
+    /// `warm_secs`) to the stream's last write, and wrote 0 without one.
     ///
-    /// Unit: bytes/s.
+    /// Unit: bytes/s. None is written as null.
     MeterSeedBpsP50,
     /// Bytes the honest viewers read that weren't the stream's (a media run's:
     /// the padded media's), summed.
@@ -1599,6 +1606,9 @@ pub(crate) enum RowNum {
     /// a sample there (a stream no longer than its startup).
     ///
     /// ppspp: A sample a second (`Sim::sample_shape`), each with a capacity.
+    /// Older runs hold these names over another window: the seed's samples from
+    /// the end of the warm-up (t0 + `warm_secs`) to the run's end, up to 20 s
+    /// past the stream's last write.
     MeterSeedPP(u16),
     /// The first swarm's seed's budget reading: the capacity its latest
     /// allocation check measured its budget from

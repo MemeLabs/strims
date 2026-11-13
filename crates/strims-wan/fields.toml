@@ -833,7 +833,7 @@ consts.strims-sim = ["p"]
 consts.ppspp = ["p"]
 description = "The first swarm's seed's upload meter: its capacity (the relay busy-time reading admission and shedding take, `PushStats::upload_capacity`) over what the seed could upload, at each of its samples from the end of the startup phase (`STARTUP_SECS`, vocab.toml's `start` horizon, after the stream's first write) to the stream's last write: their p10, p50 and p90 (`meter_seed_p10`, `meter_seed_p50`, `meter_seed_p90`); left out without a sample there (a stream no longer than its startup)."
 notes.strims-sim = "Each sample one with a capacity (`Report::seed_meter`)."
-notes.ppspp = "A sample a second (`Sim::sample_shape`), each with a capacity."
+notes.ppspp = "A sample a second (`Sim::sample_shape`), each with a capacity. Older runs hold these names over another window: the seed's samples from the end of the warm-up (t0 + `warm_secs`) to the run's end, up to 20 s past the stream's last write."
 
 [rows."meter_budget_seed_p{p}"]
 sims = ["strims-sim", "ppspp"]
@@ -853,15 +853,16 @@ sims = ["ppspp"]
 type = "int"
 unit = "bytes/s"
 none = "null"
-description = "The capacity reading the seed's budget was measured from (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`), in bytes per second: its median over the samples after the warm-up while it writes, once measured; null if never."
-notes.ppspp = "In bytes per second; `meter_budget_seed_p*` are its quantiles over the seed's uplink, from the end of the startup phase."
+description = "The capacity reading the first swarm's seed's budget was measured from (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`), in bytes per second: its median over `meter_seed_bps_p50`'s samples once measured; null without one (a seed that isn't adaptive, or never measured there)."
+notes.ppspp = "In bytes per second; `meter_budget_seed_p*` are its quantiles over the seed's uplink. Older runs hold this name over another window: the samples after the warm-up (t0 + `warm_secs`) to the stream's last write."
 
 [rows.meter_seed_bps_p50]
 sims = ["ppspp"]
 type = "int"
 unit = "bytes/s"
-description = "The seed's capacity estimate (`AllocSample::capacity`, `PushStats::upload_capacity`), the relay busy-time reading (not its budget's, `meter_budget_seed_bps_p50`), in bytes per second: its median over the samples after the warm-up while it writes (0 without one)."
-notes.ppspp = "In bytes per second; `meter_seed_p*` are its quantiles over the seed's uplink, from the end of the startup phase."
+none = "null"
+description = "The first swarm's seed's capacity estimate (`AllocSample::capacity`, `PushStats::upload_capacity`), the relay busy-time reading (not its budget's, `meter_budget_seed_bps_p50`), in bytes per second: its median over its samples with a capacity in `meter_seed_p*`'s window, from the end of the startup phase to the stream's last write; null without one (a stream no longer than its startup)."
+notes.ppspp = "In bytes per second, a sample a second (`Sim::sample_alloc`); `meter_seed_p*` are its quantiles over the seed's uplink. Older runs hold this name over another window, the samples after the warm-up (t0 + `warm_secs`) to the stream's last write, and wrote 0 without one."
 
 [rows.mismatches]
 sims = ["ppspp"]
