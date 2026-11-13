@@ -3,7 +3,7 @@ src/apis/strims/** linguist-generated
 pkg/apis/** linguist-generated
 vendor linguist-vendored
 go.sum linguist-generated
-package-lock.json linguist-generated
+pnpm-lock.yaml linguist-generated
 infra/internal/models/** linguist-generated
 ios/App/App/ProtoBuf/** linguist-generated
 ios/App/App.xcodeproj/** linguist-generated

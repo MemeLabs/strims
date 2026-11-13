@@ -1,0 +1,14 @@
+# One package, the web app; this file holds pnpm's settings.
+
+# Dependencies' install scripts: the build needs none of them. @swc/core's
+# and esbuild's check or relink the native binary their optional
+# dependencies already install, @parcel/watcher's (sass's) builds from
+# source only where no prebuilt one fits, and core-js-pure's prints a
+# banner. A new dependency with a script fails the install until it's
+# listed here.
+allowBuilds:
+  '@parcel/watcher': false
+  '@swc/core': false
+  core-js-pure: false
+  esbuild: false
+strictDepBuilds: true

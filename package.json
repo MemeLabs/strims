@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "web:webpack": "webpack serve --mode development",
-    "dev:web": "npm run web:webpack",
+    "dev:web": "pnpm run web:webpack",
     "test:js": "mocha",
     "dev:build": "webpack --mode development",
     "console:build": "webpack --mode development --env TARGET=console",
@@ -114,5 +114,6 @@
   },
   "browserslist": [
     "defaults"
-  ]
+  ],
+  "packageManager": "pnpm@10.34.9"
 }
