@@ -9,6 +9,8 @@ ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
 ARG NODE_VERSION=26.11.1
+# package.json's packageManager
+ARG PNPM_VERSION=10.34.9
 ARG GO_VERSION=1.19
 ARG PROTOC_VERSION=3.20.1
 ARG MEMELABS_PB_VERSION=0.3.5
@@ -61,6 +63,7 @@ RUN \
   # Install node.js
   && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
     | tar -xz -C /usr/local --strip-components=1 \
+  && npm install -g "pnpm@${PNPM_VERSION}" \
   # Install protoc
   && curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip" \
   && unzip "protoc-${PROTOC_VERSION}-linux-x86_64.zip" -d /usr/local \

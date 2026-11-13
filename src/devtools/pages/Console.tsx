@@ -214,7 +214,7 @@ const IndexStatus: React.FC<IndexStatusProps> = ({ state, unreachable, onIndexed
   const [busy, setBusy] = useState(false);
   const at = state?.catalog_info.find((r) => r.key === "indexed_at")?.value;
   const text = unreachable
-    ? "console server unreachable (npm run console:build once, then python3 hack/console/server.py)"
+    ? "console server unreachable (pnpm run console:build once, then python3 hack/console/server.py)"
     : state === null
       ? ""
       : state.running

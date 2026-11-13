@@ -45,7 +45,7 @@ point, bar, area, rect, tick), x=, y=, color= and logy.
 the server nor the catalog. `rows` and `--check` read the catalog
 (simdb.py's, through the reader `simdb.py view` uses); `--tab` and `tabs`
 ask the console servers running (python3 hack/console/server.py, after
-npm run console:build).
+pnpm run console:build).
 """
 
 import argparse

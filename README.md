@@ -35,10 +35,12 @@ deployment tooling, which is written in Go.
    $ cargo install wasm-bindgen-cli --version 0.2.129 --locked
    ```
 
-1. Install node.js and the ui's dependencies:
+1. Install node.js, pnpm at package.json's `packageManager` version, and
+   the ui's dependencies:
 
    ```sh
-   $ npm ci
+   $ npm install -g pnpm@10.34.9
+   $ pnpm install --frozen-lockfile
    ```
 
 1. Generate a self signed root certificate using the instructions in
@@ -50,7 +52,7 @@ deployment tooling, which is written in Go.
    with cargo and wasm-bindgen.
 
    ```sh
-   $ npm run dev:web
+   $ pnpm run dev:web
    ```
 
    > _on Windows depending on the directory permissions this may throw an error, if
@@ -227,7 +229,7 @@ Outside the dev server, give the HLS listener a certificate (`--tls-cert`,
 front of `--ws-listen` for the `--bootstrap-ws-url`. The page (`watch.html`
 in `dist/web`, served for `/watch` and every path under it) asks the API on
 its own origin; one served from another origin is built with
-`WATCH_API_URL=https://<the HLS listener's host:port> npx webpack --mode
+`WATCH_API_URL=https://<the HLS listener's host:port> pnpm exec webpack --mode
 production`. Every invitation the API
 vends is the owner's, and the owner's invitations admit any number of
 newcomers until they expire.

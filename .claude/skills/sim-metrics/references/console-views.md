@@ -43,13 +43,13 @@ vocabulary), 8959d6c8 (selections on the graphs, kept in the address).
      `test_views.py`: the panels file the TS tests read
      (`hack/simlab/tests/testdata/panels.json`) is views.py's walk of
      every view;
-   - `npm run test:js`: `sel.test.ts` (each panel's selections),
+   - `pnpm run test:js`: `sel.test.ts` (each panel's selections),
      `hover.test.ts` (every saved spec compiles) and `vocab.test.ts`
      (`checks.md` on mocha under load);
    - `simdb.py view NAME --param exp=...` over the real catalog;
    - `python3 hack/console/ui.py describe NAME`, and
      `ui.py link NAME --param exp=... --check`;
-   - `npm run console:build`, then the user's eye in the browser. The
+   - `pnpm run console:build`, then the user's eye in the browser. The
      server reads the views at each request, so it needs no change.
 6. **Commit** the view's three files and `panels.json`, and any TS file,
    each by name.

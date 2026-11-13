@@ -13,7 +13,7 @@ It listens on every interface, IPv6's and IPv4's where the machine has
 both (`--host 127.0.0.1` for this machine alone), and says its loopback
 URL and one for each of the machine's other IPv4 addresses. `/` redirects
 to the console's page, the devtools app's Console
-(src/devtools/pages/Console.tsx) as `npm run console:build` builds it into
+(src/devtools/pages/Console.tsx) as `pnpm run console:build` builds it into
 target/console/dist: until there is a build the page answers 503,
 `--build` builds it first, and one older than its sources gets a warning;
 `--dist DIR` serves another build of the page in its place (another
@@ -150,9 +150,9 @@ LOCAL = ("localhost", "127.0.0.1", "[::1]")
 SIOCGIFADDR = 0x8915
 DIST = ROOT / "target" / "console" / "dist"
 PAGE = "/devtools.html#/console"
-BUILD = ["npm", "run", "console:build"]
+BUILD = ["pnpm", "run", "console:build"]
 # What the build is made from: a build older than any of them is stale.
-SOURCES = [ROOT / "src" / "devtools", ROOT / "package-lock.json", ROOT / "webpack.config.js"]
+SOURCES = [ROOT / "src" / "devtools", ROOT / "pnpm-lock.yaml", ROOT / "webpack.config.js"]
 TYPES = {".js": "text/javascript", ".map": "application/json", ".wasm": "application/wasm"}
 NDJSON = "application/x-ndjson"
 # A file served slower than this is said in the log.

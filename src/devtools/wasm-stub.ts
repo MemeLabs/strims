@@ -3,7 +3,7 @@
 
 /**
  * The wasm crates' glue (crates/strims-wasm's and crates/strims-player's) in a build without
- * them: webpack's `console` target (`npm run console:build`) puts this module in place of each
+ * them: webpack's `console` target (`pnpm run console:build`) puts this module in place of each
  * crate's Cargo.toml, so the devtools app builds without Rust. The console's page never calls
  * it; whatever does fails, saying why.
  */

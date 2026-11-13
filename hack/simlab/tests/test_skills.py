@@ -24,7 +24,7 @@ and code blocks:
               placeholder, some word matches it
   Commands    `X.py SUB` and its `--flag`s are string literals of the
               scripts named X.py that run as __main__, or of the files
-              beside them; `npm run S` is a package.json script; `cargo`'s
+              beside them; `pnpm run S` is a package.json script; `cargo`'s
               `-p CRATE` a workspace crate and `--test T` a crate's
               tests/T.rs
   Commits     every commit cited (7 to 40 hex digits, a digit among them)
@@ -333,7 +333,7 @@ def command_problems(text):
             if re.fullmatch(r"--[a-z][a-z0-9-]*", flag) and flag != "--help" and not literal(flag, src):
                 out.append(f"{script} has no flag {flag}")
     scripts = json.loads(text_of("package.json") or "{}").get("scripts", {})
-    for m in re.finditer(r"\bnpm run ([\w:.-]+)", text):
+    for m in re.finditer(r"\bp?npm run ([\w:.-]+)", text):
         if m.group(1) not in scripts:
             out.append(f"package.json has no script {m.group(1)}")
     if re.search(r"\bcargo\b", text):
@@ -462,10 +462,10 @@ class Checks(unittest.TestCase):
 
     def test_commands(self):
         for good in ("python3 hack/sim-db/simdb.py describe NAME --json", "vocab.py write", "golden.py check --skip x",
-                     "python3 hack/simlab/tests/test_views.py --write-panels", "npm run test:js",
+                     "python3 hack/simlab/tests/test_views.py --write-panels", "pnpm run test:js",
                      "cargo test -p strims-wan --test vocab", "suite.py neutral --base REF --expect t.c"):
             self.assertEqual(command_problems(good), [], good)
-        for bad in ("simdb.py nope", "simdb.py lake --nope", "npm run nope", "cargo test -p strims-nope",
+        for bad in ("simdb.py nope", "simdb.py lake --nope", "pnpm run nope", "cargo test -p strims-nope",
                     "cargo test --test nope"):
             self.assertNotEqual(command_problems(bad), [], bad)
 

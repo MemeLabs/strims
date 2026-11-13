@@ -101,7 +101,10 @@ fn missing_tool() -> Option<String> {
         }
     }
     if !repo_root().join("node_modules").is_dir() {
-        return Some("node_modules is missing (run `npm ci` at the repo root)".to_owned());
+        return Some(
+            "node_modules is missing (run `pnpm install --frozen-lockfile` at the repo root)"
+                .to_owned(),
+        );
     }
     if output_of("firefox", &["--version"]).is_none() {
         return Some("`firefox` is not on PATH".to_owned());

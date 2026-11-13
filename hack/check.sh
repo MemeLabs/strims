@@ -79,7 +79,7 @@ need wasm-bindgen-test-runner "it comes with wasm-bindgen-cli"
 if [ $full = 1 ]; then
   need node
   need npx
-  [ -d node_modules ] || missing+=("node_modules (npm ci)")
+  [ -d node_modules ] || missing+=("node_modules (pnpm install --frozen-lockfile)")
   pin=$(sed -n 's/^wasm-bindgen = "=\(.*\)"$/\1/p' crates/strims-wasm/Cargo.toml)
   [ "$(wasm-bindgen --version 2>/dev/null)" = "wasm-bindgen $pin" ] ||
     missing+=("wasm-bindgen $pin (cargo install wasm-bindgen-cli --version $pin --locked)")

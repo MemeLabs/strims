@@ -1,6 +1,8 @@
 FROM ubuntu:focal AS toolchain
 
 ARG NODE_VERSION=26.11.1
+# package.json's packageManager
+ARG PNPM_VERSION=10.34.9
 
 # install packages at the start so changing source files doesn't taint the layer cache
 RUN \
@@ -9,7 +11,8 @@ RUN \
   && apt-get install -y build-essential git-core curl brotli \
   # Install node.js
   && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
-    | tar -xz -C /usr/local --strip-components=1
+    | tar -xz -C /usr/local --strip-components=1 \
+  && npm install -g "pnpm@${PNPM_VERSION}"
 
 # At least the workspace's rust-version. RUSTUP_TOOLCHAIN overrides
 # rust-toolchain.toml's floating stable channel, so every cargo call uses this
@@ -59,16 +62,17 @@ COPY src ./src
 COPY webpack ./webpack
 COPY vendor_modules ./vendor_modules
 COPY \
-  package-lock.json \
   package.json \
+  pnpm-lock.yaml \
+  pnpm-workspace.yaml \
   tsconfig.json \
   webpack.config.js \
   ./
 
 RUN \
   # Build ui; the strims-wasm loader runs cargo and wasm-bindgen
-  npm ci \
-  && npm run build \
+  pnpm install --frozen-lockfile \
+  && pnpm run build \
   && find dist/web -type f | xargs gzip -k9 \
   && find dist/web -not -name "*.gz" -type f | xargs brotli
 

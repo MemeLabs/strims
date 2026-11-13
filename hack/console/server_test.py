@@ -829,7 +829,7 @@ class Static(unittest.TestCase):
     def test_the_build_is_served_beside_the_api(self):
         dist = DIR / "dist"
         self.assertEqual(call("GET", "/").status, 503)
-        self.assertRegex(call("GET", "/").body["error"], "npm run console:build")
+        self.assertRegex(call("GET", "/").body["error"], "pnpm run console:build")
         self.assertEqual(call("GET", "/devtools.html").status, 503)
         (dist / "console").mkdir(parents=True)
         (dist / "devtools.html").write_text("<!doctype html><title>devtools</title>")

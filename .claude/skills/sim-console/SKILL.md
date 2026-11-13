@@ -54,5 +54,5 @@ chart.
 
 `--tab` and `tabs` need the console server. When it isn't running, tell
 the user to start it rather than starting it yourself:
-`python3 hack/console/server.py`, after `npm run console:build`, then
+`python3 hack/console/server.py`, after `pnpm run console:build`, then
 http://127.0.0.1:8086/. The page's Ask panel answers questions there.

@@ -67,7 +67,7 @@ scorecards set takes minutes).
   writes it (an index), the set can fail with "database is locked".
   That says nothing of the change; run `golden.py check --only
   scorecards` again once the writer is done.
-- `npm run test:js` under load needs mocha's `--timeout 20000`, and a
+- `pnpm run test:js` under load needs mocha's `--timeout 20000`, and a
   `--spec` of one file still runs the whole suite (the config's spec
   glob adds to it).
 - A new tier, or a tier's new cells, gets its line in

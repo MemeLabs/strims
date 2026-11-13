@@ -47,7 +47,7 @@ from simlab import views  # noqa: E402
 
 UI = HACK / "console" / "ui.py"
 SERVER = HACK / "console" / "server.py"
-START = "start one with python3 hack/console/server.py (after npm run console:build)"
+START = "start one with python3 hack/console/server.py (after pnpm run console:build)"
 RUN = ["--param", "exp=sf0001", "--param", "cell=star-5", "--param", "arm=a", "--param", "seed=2001"]
 STALL_SEL = {"panel": "2", "at": {"t_s": [20, 21], "viewer": 3}}
 

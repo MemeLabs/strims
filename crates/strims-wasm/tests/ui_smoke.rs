@@ -5,7 +5,7 @@
 //! reaches the signed-in layout, whose activity monitor charts the
 //! worker's metrics.
 //!
-//! The test builds dist/web as `npm run build` does, less its typecheck
+//! The test builds dist/web as `pnpm run build` does, less its typecheck
 //! (`npx webpack --mode production`, so strims-wasm in the release-wasm
 //! profile), serves it on 127.0.0.1, and drives Firefox through
 //! geckodriver's WebDriver API: it opens `/signup`, fills the sign-up

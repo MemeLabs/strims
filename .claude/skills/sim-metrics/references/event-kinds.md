@@ -35,7 +35,7 @@ f23ab376 (one name in both sims, and four ids retired).
 6. **Tests:**
    - `cargo test -p strims-wan --test vocab`;
    - `test_vocab.py`, test_catalog's `Kinds`, `test_describe.py`;
-   - `npm run test:js` (`vocab.test.ts` among them);
+   - `pnpm run test:js` (`vocab.test.ts` among them);
    - a sim test that the kind is written, as strims-sim's
      `a_runs_events_are_its_scenarios_and_losses` is for the scenario
      kinds.
