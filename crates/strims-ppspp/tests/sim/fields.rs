@@ -283,15 +283,18 @@ pub(crate) enum RowInt {
     /// incarnation's): the ms from the join to its first frame read
     /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
     /// nothing) and to its first read within the caught-up bound
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); a viewer's
-    /// later joins are `rejoin_*`'s.
+    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`), a join's
+    /// clock starting at the join or the stream's start, whichever came later;
+    /// a viewer's later joins are `rejoin_*`'s.
     ///
     /// ppspp: With arrivals, departures or churn (`Sim::join_times`), from the
-    /// join (the viewer's arrival, the start for one there from it) to its
-    /// first chunk read, the bound `CAUGHT_UP`. Older runs hold these names
-    /// over each viewer's latest incarnation with arrivals or departures, and
-    /// with churn alone `join_p50_ms`, `join_p90_ms` and `join_unread` over the
-    /// places taken again.
+    /// viewer's arrival or the stream's first write (`stream_start`), whichever
+    /// came later, to its first chunk read, the bound `CAUGHT_UP`. Older runs
+    /// hold these names from the arrival (the start, a second before the
+    /// stream's first write, for a viewer there from it), over each viewer's
+    /// latest incarnation with arrivals or departures, and with churn alone
+    /// `join_p50_ms`, `join_p90_ms` and `join_unread` over the places taken
+    /// again.
     ///
     /// Unit: ms.
     EventPPMs(u16),
@@ -325,15 +328,18 @@ pub(crate) enum RowInt {
     /// incarnation's): the ms from the join to its first frame read
     /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
     /// nothing) and to its first read within the caught-up bound
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); a viewer's
-    /// later joins are `rejoin_*`'s.
+    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`), a join's
+    /// clock starting at the join or the stream's start, whichever came later;
+    /// a viewer's later joins are `rejoin_*`'s.
     ///
     /// ppspp: With arrivals, departures or churn (`Sim::join_times`), from the
-    /// join (the viewer's arrival, the start for one there from it) to its
-    /// first chunk read, the bound `CAUGHT_UP`. Older runs hold these names
-    /// over each viewer's latest incarnation with arrivals or departures, and
-    /// with churn alone `join_p50_ms`, `join_p90_ms` and `join_unread` over the
-    /// places taken again.
+    /// viewer's arrival or the stream's first write (`stream_start`), whichever
+    /// came later, to its first chunk read, the bound `CAUGHT_UP`. Older runs
+    /// hold these names from the arrival (the start, a second before the
+    /// stream's first write, for a viewer there from it), over each viewer's
+    /// latest incarnation with arrivals or departures, and with churn alone
+    /// `join_p50_ms`, `join_p90_ms` and `join_unread` over the places taken
+    /// again.
     CaughtUpNever,
     /// The stream's chunk size, in bytes.
     Chunk,
@@ -575,15 +581,18 @@ pub(crate) enum RowInt {
     /// incarnation's): the ms from the join to its first frame read
     /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
     /// nothing) and to its first read within the caught-up bound
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); a viewer's
-    /// later joins are `rejoin_*`'s.
+    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`), a join's
+    /// clock starting at the join or the stream's start, whichever came later;
+    /// a viewer's later joins are `rejoin_*`'s.
     ///
     /// ppspp: With arrivals, departures or churn (`Sim::join_times`), from the
-    /// join (the viewer's arrival, the start for one there from it) to its
-    /// first chunk read, the bound `CAUGHT_UP`. Older runs hold these names
-    /// over each viewer's latest incarnation with arrivals or departures, and
-    /// with churn alone `join_p50_ms`, `join_p90_ms` and `join_unread` over the
-    /// places taken again.
+    /// viewer's arrival or the stream's first write (`stream_start`), whichever
+    /// came later, to its first chunk read, the bound `CAUGHT_UP`. Older runs
+    /// hold these names from the arrival (the start, a second before the
+    /// stream's first write, for a viewer there from it), over each viewer's
+    /// latest incarnation with arrivals or departures, and with churn alone
+    /// `join_p50_ms`, `join_p90_ms` and `join_unread` over the places taken
+    /// again.
     JoinUnread,
     /// The worst lag in ms of a chunk the honest viewers read after their
     /// warm-ups (Sim::steady).
@@ -729,11 +738,12 @@ pub(crate) enum RowInt {
     /// first frame read (`rejoin_first_p50_ms`, `rejoin_first_p90_ms`;
     /// `rejoin_unread`, those that read nothing) and to its first read within
     /// the caught-up bound (`rejoin_caught_up_p50_ms`,
-    /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`); left out without
-    /// one.
+    /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`), timed as
+    /// `join_p50_ms` is; left out without one.
     ///
-    /// ppspp: With churn, each place taken again, from its taking to the new
-    /// viewer's first chunk read (`Sim::join_times`).
+    /// ppspp: With churn, each place taken again, from its taking (or the
+    /// stream's first write, if later) to the new viewer's first chunk read
+    /// (`Sim::join_times`).
     ///
     /// Unit: ms.
     RejoinEventPPMs(u16),
@@ -742,22 +752,24 @@ pub(crate) enum RowInt {
     /// first frame read (`rejoin_first_p50_ms`, `rejoin_first_p90_ms`;
     /// `rejoin_unread`, those that read nothing) and to its first read within
     /// the caught-up bound (`rejoin_caught_up_p50_ms`,
-    /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`); left out without
-    /// one.
+    /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`), timed as
+    /// `join_p50_ms` is; left out without one.
     ///
-    /// ppspp: With churn, each place taken again, from its taking to the new
-    /// viewer's first chunk read (`Sim::join_times`).
+    /// ppspp: With churn, each place taken again, from its taking (or the
+    /// stream's first write, if later) to the new viewer's first chunk read
+    /// (`Sim::join_times`).
     RejoinCaughtUpNever,
     /// Over the first swarm's honest viewers' later joins (strims-sim's
     /// restarts, the ppspp sim's places taken again): the ms from each to its
     /// first frame read (`rejoin_first_p50_ms`, `rejoin_first_p90_ms`;
     /// `rejoin_unread`, those that read nothing) and to its first read within
     /// the caught-up bound (`rejoin_caught_up_p50_ms`,
-    /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`); left out without
-    /// one.
+    /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`), timed as
+    /// `join_p50_ms` is; left out without one.
     ///
-    /// ppspp: With churn, each place taken again, from its taking to the new
-    /// viewer's first chunk read (`Sim::join_times`).
+    /// ppspp: With churn, each place taken again, from its taking (or the
+    /// stream's first write, if later) to the new viewer's first chunk read
+    /// (`Sim::join_times`).
     RejoinUnread,
     /// Subscriptions the honest viewers accepted as parents: PushStats'
     /// accepted, summed over the honest viewers at the run's end.

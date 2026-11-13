@@ -6346,7 +6346,9 @@ impl Sim {
     /// places taken again ([`Sim::incarnation_joins`]): from each join to
     /// its first read (sorted) and the joins that never read; to its first
     /// read within [`CAUGHT_UP`] (sorted) and the joins that never caught
-    /// up.
+    /// up. A join's clock starts at the join or the stream's start
+    /// ([`stream_start`]), whichever came later, as strims-sim's
+    /// `Report::joins` starts one at its reader's start or the stream's.
     fn join_times(&self, rejoins: bool) -> (Vec<Duration>, usize, Vec<Duration>, usize) {
         let joins: Vec<PastJoin> = self
             .incarnation_joins()
@@ -6357,7 +6359,7 @@ impl Sim {
         let since = |at: &dyn Fn(&PastJoin) -> Option<Time>| {
             let mut v: Vec<Duration> = joins
                 .iter()
-                .filter_map(|j| Some(at(j)? - j.joined))
+                .filter_map(|j| Some(at(j)? - j.joined.max(stream_start())))
                 .collect();
             v.sort();
             let none = joins.len() - v.len();
