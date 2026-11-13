@@ -59,8 +59,12 @@
     right: 0;
     --swipable-peek-size: 0px;
 
+    // With no room to go back to the menu is the chat's content: it fills
+    // the chat however wide, over the header and its toggle, so its own
+    // toggle is the one close control.
     &--locked {
-      width: calc(100%);
+      width: 100%;
+      max-width: none;
     }
   }
 }
