@@ -127,7 +127,7 @@
     width: calc(var(--layout-width) - 50px);
   }
 
-  @at-root .layout--portable.layout--portrait.layout--min_aspect_ratio_0_6 & {
+  @at-root .layout--portable.layout--portrait.layout--min_aspect_ratio_0_6.layout--max_width_sm & {
     height: calc(var(--layout-height) - 20px);
     margin-bottom: -50px;
   }
