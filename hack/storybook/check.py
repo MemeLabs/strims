@@ -7,7 +7,7 @@ nothing; then reports the catalog's coverage.
 
   python3 hack/storybook/check.py (--port N | --url URL) [--build] [-j N]
                                   [--only PREFIX]... [--theme dark|light]
-                                  [--device pc|portrait|landscape]
+                                  [--device pc|portrait|landscape|TABLET]
                                   [--screenshots DIR] [--strict] [--list]
                                   [--settle MS] [--timeout S] [-v]
 
@@ -25,7 +25,9 @@ and catalog entries naming files that don't exist. Each story then loads
 as its frame document, the one the storybook page shows in an iframe, at
 #/storybook-frame/<route below /storybook/>?theme=..&device=.., in a fresh
 page whose viewport is the device's (pc 1372x1017, about the page's
-frame; portrait 390x844, landscape 844x390), and waits for its root
+frame; portrait 390x844, landscape 844x390; the tablets ipad_portrait
+820x1180, ipad_landscape 1180x820, tablet_portrait 800x1280 and
+tablet_landscape 1280x800), and waits for its root
 ([data-story-root]) to leave data-story-state="loading", then for
 `--settle` ms (default 1000) and the network to go quiet (up to 3 s more).
 The page records the story's uncaught errors, unhandled rejections,
@@ -48,7 +50,7 @@ first. Exits 1 when a story (or, with --strict, the catalog) fails.
 
   python3 hack/storybook/check.py (--port N | --url URL --base-port M)
                                   --compare REF [--build] [-j N] [--only PREFIX]...
-                                  [--theme dark|light] [--device pc|portrait|landscape]
+                                  [--theme dark|light] [--device pc|portrait|landscape|TABLET]
                                   [--all-modes] [--tolerance N] [--report DIR]
                                   [--fail-on-diff] [--rebuild-base] [--settle MS] [--timeout S]
 
@@ -78,10 +80,10 @@ commit, with +dirty when those inputs have changes git sees (the build
 holds them). A base whose index names another commit than REF's is
 refused too (`--rebuild-base`). A
 mode is a theme and a device: dark (pc), light (pc), portrait and
-landscape (dark); `--all-modes` runs all four, else `--theme` and
-`--device` name one. A build from before the per-story frames loads its
-stories in the storybook page at 1600x1100, as it did then, shot by its
-story root.
+landscape (dark), and each tablet (dark); `--all-modes` runs the first
+four, else `--theme` and `--device` name one. A build from before the
+per-story frames loads its stories in the storybook page at 1600x1100,
+as it did then, shot by its story root.
 
 A capture holds everything that moves still, so a build compared with
 itself diffs to nothing: before its own scripts each document gets a
@@ -159,7 +161,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 # Each device's viewport, as src/devtools/storybook/host/devices.ts sizes its
 # frames (pc: about the storybook page's content area at 1600x1100).
-VIEWPORTS = {"pc": (1372, 1017), "portrait": (390, 844), "landscape": (844, 390)}
+VIEWPORTS = {"pc": (1372, 1017), "portrait": (390, 844), "landscape": (844, 390),
+             "ipad_portrait": (820, 1180), "ipad_landscape": (1180, 820),
+             "tablet_portrait": (800, 1280), "tablet_landscape": (1280, 800)}
+TABLETS = ["ipad_portrait", "ipad_landscape", "tablet_portrait", "tablet_landscape"]
 CHROMIUMS = ["/snap/bin/chromium", "chromium", "chromium-browser", "google-chrome"]
 CHROMIUM_FLAGS = [
     "--headless",
@@ -186,9 +191,11 @@ EXTRA_SETTLE_S = 3.0
 # raster's edges blend a few levels apart: a badge's corners over an
 # image), and colours are sRGB's.
 COMPARE_FLAGS = ["--disable-threaded-animation", "--disable-partial-raster", "--force-color-profile=srgb"]
-# Compare mode. A mode is a theme and a device; --all-modes runs these.
-MODES = {"dark": ("dark", "pc"), "light": ("light", "pc"),
-         "portrait": ("dark", "portrait"), "landscape": ("dark", "landscape")}
+# Compare mode. A mode is a theme and a device; --all-modes runs ALL_MODES.
+# The tablets' modes are --device's alone: each costs as much as another.
+ALL_MODES = {"dark": ("dark", "pc"), "light": ("light", "pc"),
+             "portrait": ("dark", "portrait"), "landscape": ("dark", "landscape")}
+MODES = {**ALL_MODES, **{d: ("dark", d) for d in TABLETS}}
 # The storybook page's own size, which a build from before the per-story
 # frames (no src/devtools/storybook/host/protocol.ts) renders its stories in.
 PAGE_VIEWPORT = (1600, 1100)
@@ -1891,7 +1898,7 @@ def print_compare(results, builds, modes, report, elapsed, times, ref):
 def compare_main(args, exe, work):
     """--compare: every story of either build in each mode, captured in both
     and diffed; the report; the exit code."""
-    modes = list(MODES) if args.all_modes else [
+    modes = list(ALL_MODES) if args.all_modes else [
         next(m for m, td in MODES.items() if td == (args.theme, args.device))]
     base_port = args.base_port or (args.port + 1 if args.port else None)
     if not base_port:
@@ -2032,7 +2039,7 @@ def main(argv=None):
     p.add_argument("-j", "--jobs", type=int, default=4, help="browsers at once (default 4)")
     p.add_argument("--only", action="append", default=[], metavar="PREFIX", help="stories whose route starts so")
     p.add_argument("--theme", choices=["dark", "light"], default="dark")
-    p.add_argument("--device", choices=["pc", "portrait", "landscape"], default="pc")
+    p.add_argument("--device", choices=list(VIEWPORTS), default="pc")
     p.add_argument("--screenshots", metavar="DIR", help="a PNG of each story's frame here")
     p.add_argument("--strict", action="store_true", help="fail on uncovered or stale catalog files too")
     p.add_argument("--list", action="store_true", help="print the stories and coverage only")
