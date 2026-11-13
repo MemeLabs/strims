@@ -375,11 +375,11 @@ impl Report {
         t >= arrive + warm && self.scenario.departure(h).is_none_or(|(at, _)| t < at)
     }
 
-    /// Every join of `swarm`'s honest viewers, the first included: the ms
-    /// from the join to its first frame and to its first under
-    /// [`CAUGHT_UP_MS`], a join's clock starting when it opened its reader
-    /// or the stream started, whichever came last.
-    pub fn joins(&self, swarm: usize) -> Joins {
+    /// `swarm`'s honest viewers' first joins, or with `rejoins` their later
+    /// ones (each a restart's): the ms from the join to its first frame and
+    /// to its first under [`CAUGHT_UP_MS`], a join's clock starting when it
+    /// opened its reader or the stream started, whichever came last.
+    pub fn joins(&self, swarm: usize, rejoins: bool) -> Joins {
         let start = self
             .scenario
             .swarms
@@ -390,7 +390,15 @@ impl Report {
             .viewers
             .iter()
             .filter(|v| v.swarm == swarm && self.class(v.host) == HostClass::Honest)
-            .flat_map(|v| v.stats.joins.iter())
+            .flat_map(|v| match rejoins {
+                false => v
+                    .stats
+                    .joins
+                    .first()
+                    .map(std::slice::from_ref)
+                    .unwrap_or_default(),
+                true => v.stats.joins.get(1..).unwrap_or_default(),
+            })
         {
             out.n += 1;
             let from = jn.start_ms.max(start);
@@ -470,10 +478,10 @@ impl Report {
     ///   run's start ([`HostSpec::arrive_at`](crate::HostSpec::arrive_at)),
     ///   and of them the honest; `departed`, `departed_honest`, those that
     ///   left for good;
-    /// - over every join ([`Report::joins`]), the ms to its first frame
-    ///   (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
-    ///   nothing) and to catching up (`caught_up_p50_ms`,
-    ///   `caught_up_p90_ms`; `caught_up_never`);
+    /// - over the honest viewers' first joins ([`Report::joins`]), the ms
+    ///   to its first frame (`join_p50_ms`, `join_p90_ms`; `join_unread`,
+    ///   the joins that read nothing) and to catching up
+    ///   (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`);
     /// - the honest viewers' push parents that departed
     ///   ([`Report::parent_losses`], counted per departure: `parent_lost`)
     ///   and the streams they parented (`parent_lost_streams`), and how
@@ -516,7 +524,7 @@ impl Report {
                 RowInt::DepartedHonest,
                 departed.iter().filter(honest).count() as u64,
             );
-        let s = self.joins(swarm);
+        let s = self.joins(swarm, false);
         for (name, v) in [("join", &s.first), ("caught_up", &s.caught_up)] {
             for p in RowInt::P_OF_EVENT_P_P_MS.map(u32::from) {
                 if let Some(x) = Joins::at(v, p) {
@@ -565,7 +573,7 @@ impl Report {
         if !self.scenario.profiled() {
             return None;
         }
-        let s = self.joins(0);
+        let s = self.joins(0, false);
         let q = |v: &[u64]| {
             let at = |p| Joins::at(v, p).map_or("-".to_owned(), |x| x.to_string());
             format!("{}/{}", at(50), at(90))
@@ -1617,15 +1625,17 @@ impl Report {
         if let Some(&p90) = resolved.get(((resolved.len() as f64 - 1.0) * 0.9).round() as usize) {
             j.int(RowInt::SourceResolvedP90Ms, p90);
         }
-        let mut rejoins: Vec<u64> = self
-            .viewers
-            .iter()
-            .flat_map(|v| v.stats.joins.iter().skip(1))
-            .filter_map(|j| Some(j.caught_up_ms?.saturating_sub(j.start_ms)))
-            .collect();
-        rejoins.sort_unstable();
-        if let Some(&p90) = rejoins.get(((rejoins.len() as f64 - 1.0) * 0.9).round() as usize) {
-            j.int(RowInt::RejoinP90Ms, p90);
+        let r = self.joins(swarm, true);
+        if r.n > 0 {
+            for (name, v) in [("first", &r.first), ("caught_up", &r.caught_up)] {
+                for p in RowInt::P_OF_REJOIN_EVENT_P_P_MS.map(u32::from) {
+                    if let Some(x) = Joins::at(v, p) {
+                        j.int(RowInt::rejoin_event_p_p_ms(name, p), x);
+                    }
+                }
+            }
+            j.int(RowInt::RejoinUnread, r.n - r.first.len() as u64)
+                .int(RowInt::RejoinCaughtUpNever, r.n - r.caught_up.len() as u64);
         }
         if self.scenario.profiled() {
             self.audience_cols(swarm, &mut j);

@@ -1004,6 +1004,8 @@ struct Node {
     /// When its incarnation joined: its arrival, or its taking a place
     /// again.
     joined: Time,
+    /// Its past incarnations' joins, in order ([`Sim::incarnation_joins`]).
+    past_joins: Vec<PastJoin>,
     /// When it left for good ([`Depart`]).
     left: Option<Time>,
     /// When its incarnation read its first chunk ([`Sim::write_tables`]'
@@ -2125,6 +2127,17 @@ struct Report {
     report_counts: (ReportCounters, ReportCounters),
 }
 
+/// A node's past incarnation's join ([`Node::past_joins`]): when it joined,
+/// read its first chunk and first read one within [`CAUGHT_UP`] of its
+/// publishing, and whether it was an honest viewer's.
+#[derive(Clone, Copy, Debug)]
+struct PastJoin {
+    joined: Time,
+    first_read: Option<Time>,
+    caught_up: Option<Time>,
+    honest: bool,
+}
+
 /// The run's arrivals and departures ([`Arrivals`], [`Depart`]), measured
 /// over its honest viewers, those that left included.
 #[derive(Debug, Default)]
@@ -2133,12 +2146,10 @@ struct AudienceReport {
     /// them, and the honest ones.
     arrived: (usize, usize),
     departed: (usize, usize),
-    /// From each honest viewer's join to its first read (sorted), and the
-    /// viewers that never read; to its first read within [`CAUGHT_UP`],
-    /// and the viewers that never caught up.
-    joins: Vec<Duration>,
+    /// Of the honest viewers' first joins ([`Sim::join_times`]), those
+    /// that never read a chunk, and that never read one within
+    /// [`CAUGHT_UP`] of its publishing.
     unread: usize,
-    caught_up: Vec<Duration>,
     behind: usize,
     /// Honest viewers whose open parent left ([`Sim::parent_lost`]).
     parent_lost: (u64, u64),
@@ -2456,6 +2467,7 @@ impl Sim {
                 rejoined: None,
                 arrival: t0(),
                 joined: t0(),
+                past_joins: Vec::new(),
                 left: None,
                 clock: clocks[i],
             });
@@ -3092,6 +3104,12 @@ impl Sim {
         let reader = swarm.reader();
         let key = runner.add_swarm(swarm);
         let n = &mut self.nodes[i];
+        n.past_joins.push(PastJoin {
+            joined: n.joined,
+            first_read: n.first_read,
+            caught_up: n.caught_up,
+            honest: n.kind == Role::Peer,
+        });
         if !n.hostile {
             n.past.merge(&n.runner.channel_totals());
             n.past_timeouts += n
@@ -6288,25 +6306,11 @@ impl Sim {
                 viewers().filter(|n| f(n) && n.watched()).count(),
             )
         };
-        // From each honest viewer's join to `at`, sorted, and the viewers
-        // without one.
-        let since = |at: &dyn Fn(&Node) -> Option<Time>| {
-            let mut v: Vec<Duration> = viewers()
-                .filter(|n| n.watched())
-                .filter_map(|n| Some(at(n)? - n.joined))
-                .collect();
-            v.sort();
-            let none = viewers().filter(|n| n.watched()).count() - v.len();
-            (v, none)
-        };
-        let (joins, unread) = since(&|n| n.first_read);
-        let (caught_up, behind) = since(&|n| n.caught_up);
+        let (_, unread, _, behind) = self.join_times(false);
         AudienceReport {
             arrived: both(&|n| n.arrival > t0()),
             departed: both(&|n| n.left.is_some()),
-            joins,
             unread,
-            caught_up,
             behind,
             parent_lost: self.parent_lost,
             recovery: self
@@ -6314,6 +6318,54 @@ impl Sim {
                 .depart
                 .map(|d| self.recovery(stream_start() + d.at)),
         }
+    }
+
+    /// Every node's incarnations' joins, an honest viewer's alone, in node
+    /// order: its past ones ([`Node::past_joins`]) and its current one
+    /// (its `joined`, `first_read` and `caught_up`), each with whether it
+    /// was the node's first.
+    fn incarnation_joins(&self) -> Vec<(bool, PastJoin)> {
+        let mut out = Vec::new();
+        for n in self.nodes.iter().skip(1) {
+            let current = PastJoin {
+                joined: n.joined,
+                first_read: n.first_read,
+                caught_up: n.caught_up,
+                honest: n.watched(),
+            };
+            for (k, j) in n.past_joins.iter().chain([&current]).enumerate() {
+                if j.honest {
+                    out.push((k == 0, *j));
+                }
+            }
+        }
+        out
+    }
+
+    /// Over the honest viewers' first joins, or with `rejoins` their
+    /// places taken again ([`Sim::incarnation_joins`]): from each join to
+    /// its first read (sorted) and the joins that never read; to its first
+    /// read within [`CAUGHT_UP`] (sorted) and the joins that never caught
+    /// up.
+    fn join_times(&self, rejoins: bool) -> (Vec<Duration>, usize, Vec<Duration>, usize) {
+        let joins: Vec<PastJoin> = self
+            .incarnation_joins()
+            .into_iter()
+            .filter(|&(first, _)| first != rejoins)
+            .map(|(_, j)| j)
+            .collect();
+        let since = |at: &dyn Fn(&PastJoin) -> Option<Time>| {
+            let mut v: Vec<Duration> = joins
+                .iter()
+                .filter_map(|j| Some(at(j)? - j.joined))
+                .collect();
+            v.sort();
+            let none = joins.len() - v.len();
+            (v, none)
+        };
+        let (read, unread) = since(&|j| j.first_read);
+        let (caught_up, behind) = since(&|j| j.caught_up);
+        (read, unread, caught_up, behind)
     }
 
     /// The recovery from the departures that start at `from`, over the
@@ -11312,23 +11364,13 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             }
         }
     }
-    // The churn's leaves, and from each place taken again to its first
-    // chunk read (`join_unread`: places taken that never read one).
+    // The churn's leaves.
     if sim.cfg.churn.is_some() {
         let leaves = sim.churn[..sim.churn_done].iter().filter(|c| c.2).count();
-        let unread = sim.nodes.iter().filter(|n| n.rejoined.is_some()).count();
-        let mut joins = sim.joins.clone();
-        joins.sort_unstable();
-        row.int(RowInt::ChurnLeaves, leaves as u64)
-            .int(RowInt::JoinUnread, unread as u64);
-        for p in RowInt::P_OF_EVENT_P_P_MS.map(usize::from) {
-            if !joins.is_empty() {
-                row.int(
-                    RowInt::event_p_p_ms("join", p),
-                    ms(percentile(&joins, p)) as u64,
-                );
-            }
-        }
+        row.int(RowInt::ChurnLeaves, leaves as u64);
+    }
+    if sim.audience() || sim.cfg.churn.is_some() {
+        join_cols(&mut row, sim);
     }
     if sim.audience() {
         audience_cols(&mut row, sim);
@@ -11402,16 +11444,7 @@ fn audience_cols(row: &mut JsonRow, sim: &Sim) {
         .int(RowInt::ArrivedHonest, a.arrived.1 as u64)
         .int(RowInt::Departed, a.departed.0 as u64)
         .int(RowInt::DepartedHonest, a.departed.1 as u64);
-    for (name, v) in [("join", &a.joins), ("caught_up", &a.caught_up)] {
-        for p in RowInt::P_OF_EVENT_P_P_MS.map(usize::from) {
-            if !v.is_empty() {
-                row.int(RowInt::event_p_p_ms(name, p), ms(percentile(v, p)) as u64);
-            }
-        }
-    }
-    row.int(RowInt::JoinUnread, a.unread as u64)
-        .int(RowInt::CaughtUpNever, a.behind as u64)
-        .int(RowInt::ParentLost, a.parent_lost.0)
+    row.int(RowInt::ParentLost, a.parent_lost.0)
         .int(RowInt::ParentLostStreams, a.parent_lost.1);
     if let Some(r) = &a.recovery {
         row.int(RowInt::DepartStayed, r.stayed as u64)
@@ -11422,6 +11455,42 @@ fn audience_cols(row: &mut JsonRow, sim: &Sim) {
             .int(RowInt::DepartRecoverCensored, u64::from(r.censored))
             .int(RowInt::Relinks, sim.relinks);
     }
+}
+
+/// The joins of a run with arrivals, departures or churn
+/// ([`Sim::join_times`]): over the honest viewers' first joins, from each
+/// to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those
+/// that never read) and to its first read within [`CAUGHT_UP`]
+/// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); and with
+/// churn, over the places taken again, the same as `rejoin_first_p50_ms`,
+/// ..., `rejoin_unread` and `rejoin_caught_up_never`.
+fn join_cols(row: &mut JsonRow, sim: &Sim) {
+    let (read, unread, caught_up, behind) = sim.join_times(false);
+    for (name, v) in [("join", &read), ("caught_up", &caught_up)] {
+        for p in RowInt::P_OF_EVENT_P_P_MS.map(usize::from) {
+            if !v.is_empty() {
+                row.int(RowInt::event_p_p_ms(name, p), ms(percentile(v, p)) as u64);
+            }
+        }
+    }
+    row.int(RowInt::JoinUnread, unread as u64)
+        .int(RowInt::CaughtUpNever, behind as u64);
+    if sim.cfg.churn.is_none() {
+        return;
+    }
+    let (read, unread, caught_up, behind) = sim.join_times(true);
+    for (name, v) in [("first", &read), ("caught_up", &caught_up)] {
+        for p in RowInt::P_OF_REJOIN_EVENT_P_P_MS.map(usize::from) {
+            if !v.is_empty() {
+                row.int(
+                    RowInt::rejoin_event_p_p_ms(name, p),
+                    ms(percentile(v, p)) as u64,
+                );
+            }
+        }
+    }
+    row.int(RowInt::RejoinUnread, unread as u64)
+        .int(RowInt::RejoinCaughtUpNever, behind as u64);
 }
 
 /// The clocks of a run with skew ([`ClockSkew`]): the knob, every node's

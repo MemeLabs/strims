@@ -34,7 +34,7 @@
 #   values (a list, vocab:<section> for the vocabulary's names, fields:<param>
 #   for fields.toml's params) and the column or macro that gives it.
 
-guardrails = ["delivery", "lag_p99_ms", "lag_p99_ms_weak", "join_p90_ms", "caught_up_p90_ms", "defector_gain"]
+guardrails = ["delivery", "lag_p99_ms", "lag_p99_ms_weak", "join_p90_ms", "caught_up_p90_ms", "rejoin_first_p90_ms", "defector_gain"]
 
 [[scored]]
 name = "lag_p50_ms"
@@ -266,6 +266,20 @@ name = "caught_up_p90_ms"
 sql = "r.caught_up_p90_ms"
 better = "lower"
 score = { kind = "ratio", tie = 0.1, guard = "lo" }
+unit = "ms"
+
+[[scored]]
+name = "rejoin_first_p90_ms"
+sql = "r.rejoin_first_p90_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.1, guard = "lo" }
+unit = "ms"
+
+[[scored]]
+name = "rejoin_caught_up_p90_ms"
+sql = "r.rejoin_caught_up_p90_ms"
+better = "lower"
+score = { kind = "ratio", tie = 0.1 }
 unit = "ms"
 
 [[scored]]
@@ -540,13 +554,6 @@ unit = "per minute"
 name = "pool_trial_wins"
 sql = "r.pool_trial_wins"
 score = { kind = "diff", tie = 0.05 }
-
-[[scored]]
-name = "rejoin_p90_ms"
-sql = "r.rejoin_p90_ms"
-better = "lower"
-score = { kind = "ratio", tie = 0.1 }
-unit = "ms"
 
 [[scored]]
 name = "defector_gain"

@@ -17,6 +17,7 @@
 // The variants are the vocabulary's names, whatever they share.
 #![allow(clippy::enum_variant_names)]
 
+use std::collections::BTreeSet;
 use std::fmt::{Arguments, Display, Write};
 
 /// A recorded name: a row field, a `series_meta.json` key or a column.
@@ -156,19 +157,23 @@ impl JsonKey for MetaJson {}
 
 /// A JSON object written key by key: a run's row, or its
 /// `series_meta.json`. Its keys are this module's names, each written as
-/// its type.
+/// its type, and once: a key written twice panics.
 #[derive(Default)]
-pub(crate) struct JsonRow(String);
+pub(crate) struct JsonRow {
+    text: String,
+    keys: BTreeSet<&'static str>,
+}
 
 impl JsonRow {
     /// Starts field `key`: the text its value follows.
-    fn key(&mut self, key: &str) -> &mut String {
-        self.0.push(if self.0.is_empty() { '{' } else { ',' });
-        let _ = write!(self.0, "\"{key}\":");
-        &mut self.0
+    fn key(&mut self, key: &'static str) -> &mut String {
+        assert!(self.keys.insert(key), "row key {key} written twice");
+        self.text.push(if self.text.is_empty() { '{' } else { ',' });
+        let _ = write!(self.text, "\"{key}\":");
+        &mut self.text
     }
 
-    fn field(&mut self, key: &str, value: Arguments) -> &mut Self {
+    fn field(&mut self, key: &'static str, value: Arguments) -> &mut Self {
         let _ = self.key(key).write_fmt(value);
         self
     }
@@ -223,11 +228,12 @@ impl JsonRow {
 
     /// The object's text.
     pub(crate) fn finish(&mut self) -> String {
-        if self.0.is_empty() {
-            self.0.push('{');
+        if self.text.is_empty() {
+            self.text.push('{');
         }
-        self.0.push('}');
-        std::mem::take(&mut self.0)
+        self.text.push('}');
+        self.keys.clear();
+        std::mem::take(&mut self.text)
     }
 }
 
@@ -273,25 +279,19 @@ pub(crate) const ZSTD: [&str; 7] = [
 /// The row's fields that hold an integer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RowInt {
-    /// over every join (`Report::joins`), the ms to its first frame
+    /// Over the first swarm's honest viewers' first joins (each one's first
+    /// incarnation's): the ms from the join to its first frame read
     /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
-    /// nothing) and to catching up (`caught_up_p50_ms`, `caught_up_p90_ms`;
-    /// `caught_up_never`);
+    /// nothing) and to its first read within the caught-up bound
+    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); a viewer's
+    /// later joins are `rejoin_*`'s.
     ///
-    /// ppspp: The columns of a run with arrivals or departures
-    /// (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived
-    /// after the start and that left for good (`_honest` of them); over every
-    /// honest viewer, from its join (its arrival, the start for one there from
-    /// it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`,
-    /// those that never read) and to its first read within `CAUGHT_UP`
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest
-    /// viewers whose open parent left (`parent_lost`, counted per departure)
-    /// and their streams it was the parent of; and with departures the recovery
-    /// from them (`Recovery`): the viewers measured (`depart_stayed`) and those
-    /// left without a neighbour at the end (`depart_stranded`), their worst lag
-    /// (`depart_lag_peak_ms`), and by their per-second lag p90 its excess
-    /// summed (`depart_excess_lag_area_ms_s`) and the time back under
-    /// `CAUGHT_U...
+    /// ppspp: With arrivals, departures or churn (`Sim::join_times`), from the
+    /// join (the viewer's arrival, the start for one there from it) to its
+    /// first chunk read, the bound `CAUGHT_UP`. Older runs hold these names
+    /// over each viewer's latest incarnation with arrivals or departures, and
+    /// with churn alone `join_p50_ms`, `join_p90_ms` and `join_unread` over the
+    /// places taken again.
     ///
     /// Unit: ms.
     EventPPMs(u16),
@@ -321,25 +321,19 @@ pub(crate) enum RowInt {
     ///
     /// Unit: bytes.
     Bytes,
-    /// over every join (`Report::joins`), the ms to its first frame
+    /// Over the first swarm's honest viewers' first joins (each one's first
+    /// incarnation's): the ms from the join to its first frame read
     /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
-    /// nothing) and to catching up (`caught_up_p50_ms`, `caught_up_p90_ms`;
-    /// `caught_up_never`);
+    /// nothing) and to its first read within the caught-up bound
+    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); a viewer's
+    /// later joins are `rejoin_*`'s.
     ///
-    /// ppspp: The columns of a run with arrivals or departures
-    /// (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived
-    /// after the start and that left for good (`_honest` of them); over every
-    /// honest viewer, from its join (its arrival, the start for one there from
-    /// it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`,
-    /// those that never read) and to its first read within `CAUGHT_UP`
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest
-    /// viewers whose open parent left (`parent_lost`, counted per departure)
-    /// and their streams it was the parent of; and with departures the recovery
-    /// from them (`Recovery`): the viewers measured (`depart_stayed`) and those
-    /// left without a neighbour at the end (`depart_stranded`), their worst lag
-    /// (`depart_lag_peak_ms`), and by their per-second lag p90 its excess
-    /// summed (`depart_excess_lag_area_ms_s`) and the time back under
-    /// `CAUGHT_U...
+    /// ppspp: With arrivals, departures or churn (`Sim::join_times`), from the
+    /// join (the viewer's arrival, the start for one there from it) to its
+    /// first chunk read, the bound `CAUGHT_UP`. Older runs hold these names
+    /// over each viewer's latest incarnation with arrivals or departures, and
+    /// with churn alone `join_p50_ms`, `join_p90_ms` and `join_unread` over the
+    /// places taken again.
     CaughtUpNever,
     /// The stream's chunk size, in bytes.
     Chunk,
@@ -577,25 +571,19 @@ pub(crate) enum RowInt {
     GreedyHeldS,
     /// The samples after the warm-up at which the seed's holders changed.
     HolderChanges,
-    /// over every join (`Report::joins`), the ms to its first frame
+    /// Over the first swarm's honest viewers' first joins (each one's first
+    /// incarnation's): the ms from the join to its first frame read
     /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
-    /// nothing) and to catching up (`caught_up_p50_ms`, `caught_up_p90_ms`;
-    /// `caught_up_never`);
+    /// nothing) and to its first read within the caught-up bound
+    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); a viewer's
+    /// later joins are `rejoin_*`'s.
     ///
-    /// ppspp: The columns of a run with arrivals or departures
-    /// (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived
-    /// after the start and that left for good (`_honest` of them); over every
-    /// honest viewer, from its join (its arrival, the start for one there from
-    /// it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`,
-    /// those that never read) and to its first read within `CAUGHT_UP`
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest
-    /// viewers whose open parent left (`parent_lost`, counted per departure)
-    /// and their streams it was the parent of; and with departures the recovery
-    /// from them (`Recovery`): the viewers measured (`depart_stayed`) and those
-    /// left without a neighbour at the end (`depart_stranded`), their worst lag
-    /// (`depart_lag_peak_ms`), and by their per-second lag p90 its excess
-    /// summed (`depart_excess_lag_area_ms_s`) and the time back under
-    /// `CAUGHT_U...
+    /// ppspp: With arrivals, departures or churn (`Sim::join_times`), from the
+    /// join (the viewer's arrival, the start for one there from it) to its
+    /// first chunk read, the bound `CAUGHT_UP`. Older runs hold these names
+    /// over each viewer's latest incarnation with arrivals or departures, and
+    /// with churn alone `join_p50_ms`, `join_p90_ms` and `join_unread` over the
+    /// places taken again.
     JoinUnread,
     /// The worst lag in ms of a chunk the honest viewers read after their
     /// warm-ups (Sim::steady).
@@ -736,6 +724,41 @@ pub(crate) enum RowInt {
     /// Pushes that came from a peer that isn't the parent: PushStats'
     /// unsolicited, a child's, summed over the honest viewers.
     PushUnsolicited,
+    /// Over the first swarm's honest viewers' later joins (strims-sim's
+    /// restarts, the ppspp sim's places taken again): the ms from each to its
+    /// first frame read (`rejoin_first_p50_ms`, `rejoin_first_p90_ms`;
+    /// `rejoin_unread`, those that read nothing) and to its first read within
+    /// the caught-up bound (`rejoin_caught_up_p50_ms`,
+    /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`); left out without
+    /// one.
+    ///
+    /// ppspp: With churn, each place taken again, from its taking to the new
+    /// viewer's first chunk read (`Sim::join_times`).
+    ///
+    /// Unit: ms.
+    RejoinEventPPMs(u16),
+    /// Over the first swarm's honest viewers' later joins (strims-sim's
+    /// restarts, the ppspp sim's places taken again): the ms from each to its
+    /// first frame read (`rejoin_first_p50_ms`, `rejoin_first_p90_ms`;
+    /// `rejoin_unread`, those that read nothing) and to its first read within
+    /// the caught-up bound (`rejoin_caught_up_p50_ms`,
+    /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`); left out without
+    /// one.
+    ///
+    /// ppspp: With churn, each place taken again, from its taking to the new
+    /// viewer's first chunk read (`Sim::join_times`).
+    RejoinCaughtUpNever,
+    /// Over the first swarm's honest viewers' later joins (strims-sim's
+    /// restarts, the ppspp sim's places taken again): the ms from each to its
+    /// first frame read (`rejoin_first_p50_ms`, `rejoin_first_p90_ms`;
+    /// `rejoin_unread`, those that read nothing) and to its first read within
+    /// the caught-up bound (`rejoin_caught_up_p50_ms`,
+    /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`); left out without
+    /// one.
+    ///
+    /// ppspp: With churn, each place taken again, from its taking to the new
+    /// viewer's first chunk read (`Sim::join_times`).
+    RejoinUnread,
     /// Subscriptions the honest viewers accepted as parents: PushStats'
     /// accepted, summed over the honest viewers at the run's end.
     RelayAccepted,
@@ -1132,6 +1155,10 @@ impl RowInt {
     /// loops over.
     pub(crate) const P_OF_LOOP_LIFE_P_P_MS: [u8; 2] = [50, 90];
 
+    /// `rejoin_{event}_p{p}_ms`'s `p` values for ppspp, which its code
+    /// loops over.
+    pub(crate) const P_OF_REJOIN_EVENT_P_P_MS: [u8; 2] = [50, 90];
+
     /// `seed_{queue}_wait_p{p}_ms`'s `p` values for ppspp, which its code
     /// loops over.
     pub(crate) const P_OF_SEED_QUEUE_WAIT_P_P_MS: [u8; 2] = [50, 99];
@@ -1208,6 +1235,9 @@ impl RowInt {
             RowInt::PushLate => "push_late",
             RowInt::PushMisses => "push_misses",
             RowInt::PushUnsolicited => "push_unsolicited",
+            RowInt::RejoinEventPPMs(i) => at(&ROWINT_REJOIN_EVENT_P_P_MS, i),
+            RowInt::RejoinCaughtUpNever => "rejoin_caught_up_never",
+            RowInt::RejoinUnread => "rejoin_unread",
             RowInt::RelayAccepted => "relay_accepted",
             RowInt::RelayRejected => "relay_rejected",
             RowInt::Relinks => "relinks",
@@ -1351,6 +1381,15 @@ impl RowInt {
         RowInt::NPop(of(&ROWINT_N_POP, format_args!("n_{pop}")))
     }
 
+    /// `rejoin_{event}_p{p}_ms`'s name of `event`, `p`: a panic for values
+    /// `fields.toml` doesn't give ppspp.
+    pub(crate) fn rejoin_event_p_p_ms(event: impl Display, p: impl Display) -> RowInt {
+        RowInt::RejoinEventPPMs(of(
+            &ROWINT_REJOIN_EVENT_P_P_MS,
+            format_args!("rejoin_{event}_p{p}_ms"),
+        ))
+    }
+
     /// `seed_{queue}_wait_p{p}_ms`'s name of `queue`, `p`: a panic for values
     /// `fields.toml` doesn't give ppspp.
     pub(crate) fn seed_queue_wait_p_p_ms(queue: impl Display, p: impl Display) -> RowInt {
@@ -1435,6 +1474,14 @@ const ROWINT_LOOPS_BY_HOW: [&str; 7] = [
 
 /// `n_{pop}`'s names for ppspp.
 const ROWINT_N_POP: [&str; 3] = ["n_accepting", "n_delivering", "n_others"];
+
+/// `rejoin_{event}_p{p}_ms`'s names for ppspp.
+const ROWINT_REJOIN_EVENT_P_P_MS: [&str; 4] = [
+    "rejoin_first_p50_ms",
+    "rejoin_first_p90_ms",
+    "rejoin_caught_up_p50_ms",
+    "rejoin_caught_up_p90_ms",
+];
 
 /// `seed_{queue}_wait_p{p}_ms`'s names for ppspp.
 const ROWINT_SEED_QUEUE_WAIT_P_P_MS: [&str; 4] = [

@@ -79,6 +79,7 @@ const {{ v.names_const }}: [&str; {{ v.names | length }}] = [{% for n in v.names
 // The variants are the vocabulary's names, whatever they share.
 #![allow(clippy::enum_variant_names)]
 
+use std::collections::BTreeSet;
 use std::fmt::{Arguments, Display, Write};
 
 /// A recorded name: a row field, a `series_meta.json` key or a column.
@@ -129,19 +130,23 @@ impl {{ kt.name }} for {{ en }} {}
 
 /// A JSON object written key by key: a run's row, or its
 /// `series_meta.json`. Its keys are this module's names, each written as
-/// its type.
+/// its type, and once: a key written twice panics.
 #[derive(Default)]
-pub(crate) struct JsonRow(String);
+pub(crate) struct JsonRow {
+    text: String,
+    keys: BTreeSet<&'static str>,
+}
 
 impl JsonRow {
     /// Starts field `key`: the text its value follows.
-    fn key(&mut self, key: &str) -> &mut String {
-        self.0.push(if self.0.is_empty() { '{' } else { ',' });
-        let _ = write!(self.0, "\"{key}\":");
-        &mut self.0
+    fn key(&mut self, key: &'static str) -> &mut String {
+        assert!(self.keys.insert(key), "row key {key} written twice");
+        self.text.push(if self.text.is_empty() { '{' } else { ',' });
+        let _ = write!(self.text, "\"{key}\":");
+        &mut self.text
     }
 
-    fn field(&mut self, key: &str, value: Arguments) -> &mut Self {
+    fn field(&mut self, key: &'static str, value: Arguments) -> &mut Self {
         let _ = self.key(key).write_fmt(value);
         self
     }
@@ -229,11 +234,12 @@ impl JsonRow {
 
     /// The object's text.
     pub(crate) fn finish(&mut self) -> String {
-        if self.0.is_empty() {
-            self.0.push('{');
+        if self.text.is_empty() {
+            self.text.push('{');
         }
-        self.0.push('}');
-        std::mem::take(&mut self.0)
+        self.text.push('}');
+        self.keys.clear();
+        std::mem::take(&mut self.text)
     }
 }
 
