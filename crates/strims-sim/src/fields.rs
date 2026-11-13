@@ -473,17 +473,21 @@ pub(crate) enum RowInt {
     /// NET_WARM after their arrival on, while they were there
     /// (Report::link_counts).
     LinksP90,
-    /// The first swarm's honest viewers in each population
-    /// (`meter_{pop}_p{p}`'s): `n_accepting`, `n_delivering`.
+    /// The first swarm's honest viewers (the seed aside) in each population
+    /// (`meter_{pop}_p{p}`'s): `n_accepting`, `n_delivering`, `n_others`.
+    ///
+    /// strims-sim: Older runs hold `n_others` over other hosts: every host but
+    /// the seeds that never answered a STREAM_REQUEST, hostile ones and every
+    /// swarm's in.
     NPop(u16),
-    /// The hosts of each role (Report::roles): the swarms' seeds (`seeds`); and
-    /// the hosts but them that never answered a STREAM_REQUEST, accepted or
-    /// declined (`others`).
+    /// The swarms' seeds (`n_seeds`, `Report::seeds`); the populations' viewers
+    /// are `n_{pop}`.
     NRole(u16),
-    /// The changes of a seed's or forwarder's available upload that tracking
-    /// measured, drops (`drop`) and rises (`rise`) (Report::tracking); with
-    /// tracking only.
-    OffChangeN(u16),
+    /// The changes of the available upload that `off_{change}_{role}` measured
+    /// at the hosts of role `role`, drops (`off_drop_n_seeds`, ...) and rises
+    /// (`off_rise_n_seeds`, ...) (Report::tracking); left out where they had
+    /// none.
+    OffChangeNRole(u16),
     /// The row's `packets_ack` and `up_acks` count both kinds, over the whole
     /// run and every host.
     PacketsAck,
@@ -850,7 +854,7 @@ impl RowInt {
             RowInt::LinksP90 => "links_p90",
             RowInt::NPop(i) => at(&ROWINT_N_POP, i),
             RowInt::NRole(i) => at(&ROWINT_N_ROLE, i),
-            RowInt::OffChangeN(i) => at(&ROWINT_OFF_CHANGE_N, i),
+            RowInt::OffChangeNRole(i) => at(&ROWINT_OFF_CHANGE_N_ROLE, i),
             RowInt::PacketsAck => "packets_ack",
             RowInt::PacketsUp => "packets_up",
             RowInt::ParentLost => "parent_lost",
@@ -970,10 +974,13 @@ impl RowInt {
         RowInt::NRole(of(&ROWINT_N_ROLE, format_args!("n_{role}")))
     }
 
-    /// `off_{change}_n`'s name of `change`: a panic for values
+    /// `off_{change}_n_{role}`'s name of `change`, `role`: a panic for values
     /// `fields.toml` doesn't give strims-sim.
-    pub(crate) fn off_change_n(change: impl Display) -> RowInt {
-        RowInt::OffChangeN(of(&ROWINT_OFF_CHANGE_N, format_args!("off_{change}_n")))
+    pub(crate) fn off_change_n_role(change: impl Display, role: impl Display) -> RowInt {
+        RowInt::OffChangeNRole(of(
+            &ROWINT_OFF_CHANGE_N_ROLE,
+            format_args!("off_{change}_n_{role}"),
+        ))
     }
 
     /// `parent_lost_noticed_p{p}_ms`'s name of `p`: a panic for values
@@ -1055,13 +1062,20 @@ const ROWINT_LAG_P50_MS_WHO: [&str; 2] = ["lag_p50_ms_honest", "lag_p50_ms_hosti
 const ROWINT_LAG_P99_MS_WHO: [&str; 2] = ["lag_p99_ms_honest", "lag_p99_ms_hostile"];
 
 /// `n_{pop}`'s names for strims-sim.
-const ROWINT_N_POP: [&str; 2] = ["n_accepting", "n_delivering"];
+const ROWINT_N_POP: [&str; 3] = ["n_accepting", "n_delivering", "n_others"];
 
 /// `n_{role}`'s names for strims-sim.
-const ROWINT_N_ROLE: [&str; 2] = ["n_seeds", "n_others"];
+const ROWINT_N_ROLE: [&str; 1] = ["n_seeds"];
 
-/// `off_{change}_n`'s names for strims-sim.
-const ROWINT_OFF_CHANGE_N: [&str; 2] = ["off_drop_n", "off_rise_n"];
+/// `off_{change}_n_{role}`'s names for strims-sim.
+const ROWINT_OFF_CHANGE_N_ROLE: [&str; 6] = [
+    "off_drop_n_seeds",
+    "off_drop_n_accepting",
+    "off_drop_n_delivering",
+    "off_rise_n_seeds",
+    "off_rise_n_accepting",
+    "off_rise_n_delivering",
+];
 
 /// `parent_lost_noticed_p{p}_ms`'s names for strims-sim.
 const ROWINT_PARENT_LOST_NOTICED_P_P_MS: [&str; 2] =
@@ -1231,16 +1245,17 @@ pub(crate) enum RowNum {
     /// A media swarm's media rate: media bytes over the stream's seconds, in
     /// kbit/s; left out without media.
     MediaKbit,
-    /// The upload meter of the first swarm's honest viewers of each population,
-    /// each classed over the run: `accepting`, those that accepted a
-    /// subscription as a parent at least once (`PushStats::accepted`), and
-    /// `delivering`, those that pushed a chunk to a subscriber at least once
-    /// (`pushed_chunks`), a viewer's every sample counting; at each sample from
-    /// the end of the startup phase to the stream's last write
+    /// The upload meter of the first swarm's honest viewers (the seed aside) of
+    /// each population, each classed over the run: `accepting`, those that
+    /// accepted a subscription as a parent at least once
+    /// (`PushStats::accepted`), `delivering`, those that pushed a chunk to a
+    /// subscriber at least once (`pushed_chunks`), and `others`, those that
+    /// never accepted one, a viewer's every sample counting; at each sample
+    /// from the end of the startup phase to the stream's last write
     /// (`meter_seed_p*`'s window), the meter's capacity (the relay busy-time
     /// reading, `PushStats::upload_capacity`) over what the viewer could
     /// upload: their p10, p50 and p90 (`meter_accepting_p10`, ...,
-    /// `meter_delivering_p90`); left out without a sample.
+    /// `meter_others_p90`); left out without a sample.
     ///
     /// strims-sim: Each viewer's samples with a capacity
     /// (`Report::populations`, `Report::window_readings`), over its
@@ -1266,16 +1281,14 @@ pub(crate) enum RowNum {
     /// Messages per channel payload, over the honest hosts' outbound ppspp
     /// (ChannelMetrics messages over payloads).
     MsgsPerPayload,
-    /// The median over the honest hosts of no role (Report::roles: neither seed
-    /// nor forwarder) of their overhead per second over their uplinks.
-    OvhLeafP50,
-    /// The p90 over the honest hosts of no role (Report::roles) of their
-    /// overhead per second over their uplinks.
-    OvhLeafP90,
-    /// The median over the honest forwarders (Report::roles) of their overhead
-    /// per second over their uplinks: wire bytes less ppspp chunk data, over
-    /// the uplink times the run's seconds.
-    OvhRelayP50,
+    /// The first swarm's honest viewers (the seed aside) of each population
+    /// (`meter_{pop}_p{p}`'s: `accepting`, `delivering`, `others`), each one's
+    /// overhead per second over its uplink: its wire bytes up less the chunk
+    /// data it sent, over its uplink times the seconds; their median and p90
+    /// (`ovh_accepting_p50`, ..., `ovh_others_p90`); left out without a viewer.
+    ///
+    /// strims-sim: Over the run's seconds (`Report::populations`).
+    OvhPopPP(u16),
     /// The seed's overhead per second over its uplink: wire bytes less ppspp
     /// chunk data, over the uplink times the run's seconds.
     OvhSeed,
@@ -1298,10 +1311,10 @@ pub(crate) enum RowNum {
     /// The honest viewers' pool probes whose trials ended, per minute of run
     /// they were there for (pool-probe); left out without trials.
     PoolTrialsPerHostMin,
-    /// In WAN mode, the median over the honest forwarders and others of their
+    /// In WAN mode, the median over the honest hosts but the seeds of their
     /// packets per second through their uplinks.
     PpsP50,
-    /// In WAN mode, the p90 over the honest forwarders and others of their
+    /// In WAN mode, the p90 over the honest hosts but the seeds of their
     /// packets per second through their uplinks.
     PpsP90,
     /// The share of the seeds' meter samples while a swarm streams that had a
@@ -1398,10 +1411,11 @@ pub(crate) enum RowNum {
     /// it) to its playback's start (`startup_ms_D`); with hostile hosts, the
     /// honest viewers' too, with `_honest`.
     StallsPerMinDelayPop(u16),
-    /// The share of the forwarders' uplink queue samples while a swarm streams
-    /// that waited longer than STANDING_QUEUE (Report::standing_queue); 0
-    /// outside WAN mode.
-    StandingForwarders,
+    /// The share of the uplink queue samples of the first swarm's honest
+    /// viewers of each population (`meter_{pop}_p{p}`'s) while a swarm streams
+    /// that waited longer than STANDING_QUEUE (Report::standing_queue):
+    /// `standing_accepting`, `standing_delivering`; 0 outside WAN mode.
+    StandingPop(u16),
     /// The share of the seeds' uplink queue samples while a swarm streams that
     /// waited longer than STANDING_QUEUE (Report::standing_queue); 0 outside
     /// WAN mode.
@@ -1462,6 +1476,10 @@ impl RowNum {
     /// loops over.
     pub(crate) const P_OF_METER_BUDGET_SEED_P_P: [u8; 3] = [10, 50, 90];
 
+    /// `ovh_{pop}_p{p}`'s `p` values for strims-sim, which its code
+    /// loops over.
+    pub(crate) const P_OF_OVH_POP_P_P: [u8; 2] = [50, 90];
+
     /// `upq_ms_p{p}`'s `p` values for strims-sim, which its code
     /// loops over.
     pub(crate) const P_OF_UPQ_MS_P_P: [u8; 2] = [50, 90];
@@ -1506,9 +1524,7 @@ impl RowNum {
             RowNum::MeterSeedPP(i) => at(&ROWNUM_METER_SEED_P_P, i),
             RowNum::MeterBudgetSeedPP(i) => at(&ROWNUM_METER_BUDGET_SEED_P_P, i),
             RowNum::MsgsPerPayload => "msgs_per_payload",
-            RowNum::OvhLeafP50 => "ovh_leaf_p50",
-            RowNum::OvhLeafP90 => "ovh_leaf_p90",
-            RowNum::OvhRelayP50 => "ovh_relay_p50",
+            RowNum::OvhPopPP(i) => at(&ROWNUM_OVH_POP_P_P, i),
             RowNum::OvhSeed => "ovh_seed",
             RowNum::ParentChangesPerMin => "parent_changes_per_min",
             RowNum::PeakCommitted => "peak_committed",
@@ -1532,7 +1548,7 @@ impl RowNum {
             RowNum::SmallPacketShare => "small_packet_share",
             RowNum::StalledShareDelayPop(i) => at(&ROWNUM_STALLED_SHARE_DELAY_POP, i),
             RowNum::StallsPerMinDelayPop(i) => at(&ROWNUM_STALLS_PER_MIN_DELAY_POP, i),
-            RowNum::StandingForwarders => "standing_forwarders",
+            RowNum::StandingPop(i) => at(&ROWNUM_STANDING_POP, i),
             RowNum::StandingSeeds => "standing_seeds",
             RowNum::StreamPerMedia => "stream_per_media",
             RowNum::TopSeedLinkS => "top_seed_link_s",
@@ -1621,6 +1637,12 @@ impl RowNum {
         ))
     }
 
+    /// `ovh_{pop}_p{p}`'s name of `pop`, `p`: a panic for values
+    /// `fields.toml` doesn't give strims-sim.
+    pub(crate) fn ovh_pop_p_p(pop: impl Display, p: impl Display) -> RowNum {
+        RowNum::OvhPopPP(of(&ROWNUM_OVH_POP_P_P, format_args!("ovh_{pop}_p{p}")))
+    }
+
     /// `stalled_share_{delay}{pop}`'s name of `delay`, `pop`: a panic for values
     /// `fields.toml` doesn't give strims-sim.
     pub(crate) fn stalled_share_delay_pop(delay: impl Display, pop: impl Display) -> RowNum {
@@ -1637,6 +1659,12 @@ impl RowNum {
             &ROWNUM_STALLS_PER_MIN_DELAY_POP,
             format_args!("stalls_per_min_{delay}{pop}"),
         ))
+    }
+
+    /// `standing_{pop}`'s name of `pop`: a panic for values
+    /// `fields.toml` doesn't give strims-sim.
+    pub(crate) fn standing_pop(pop: impl Display) -> RowNum {
+        RowNum::StandingPop(of(&ROWNUM_STANDING_POP, format_args!("standing_{pop}")))
     }
 
     /// `upq_ms_p{p}`'s name of `p`: a panic for values
@@ -1751,13 +1779,16 @@ const ROWNUM_DEPTH_HOPS: [&str; 6] = [
 ];
 
 /// `meter_{pop}_p{p}`'s names for strims-sim.
-const ROWNUM_METER_POP_P_P: [&str; 6] = [
+const ROWNUM_METER_POP_P_P: [&str; 9] = [
     "meter_accepting_p10",
     "meter_accepting_p50",
     "meter_accepting_p90",
     "meter_delivering_p10",
     "meter_delivering_p50",
     "meter_delivering_p90",
+    "meter_others_p10",
+    "meter_others_p50",
+    "meter_others_p90",
 ];
 
 /// `meter_seed_p{p}`'s names for strims-sim.
@@ -1768,6 +1799,16 @@ const ROWNUM_METER_BUDGET_SEED_P_P: [&str; 3] = [
     "meter_budget_seed_p10",
     "meter_budget_seed_p50",
     "meter_budget_seed_p90",
+];
+
+/// `ovh_{pop}_p{p}`'s names for strims-sim.
+const ROWNUM_OVH_POP_P_P: [&str; 6] = [
+    "ovh_accepting_p50",
+    "ovh_accepting_p90",
+    "ovh_delivering_p50",
+    "ovh_delivering_p90",
+    "ovh_others_p50",
+    "ovh_others_p90",
 ];
 
 /// `stalled_share_{delay}{pop}`'s names for strims-sim.
@@ -1785,6 +1826,9 @@ const ROWNUM_STALLS_PER_MIN_DELAY_POP: [&str; 4] = [
     "stalls_per_min_4250",
     "stalls_per_min_4250_honest",
 ];
+
+/// `standing_{pop}`'s names for strims-sim.
+const ROWNUM_STANDING_POP: [&str; 2] = ["standing_accepting", "standing_delivering"];
 
 /// `upq_ms_p{p}`'s names for strims-sim.
 const ROWNUM_UPQ_MS_P_P: [&str; 2] = ["upq_ms_p50", "upq_ms_p90"];
@@ -1902,20 +1946,6 @@ impl Key for RowInts {
 /// The row's fields that hold a list of numbers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RowNums {
-    /// **meter readings**: the upload meter's capacity, the relay busy-time
-    /// reading admission and shedding take (`PushStats::upload_capacity`,
-    /// `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each
-    /// sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90
-    /// over the others' samples (`meter_others`; the seed's are
-    /// `meter_seed_p*`, the populations' `meter_accepting_p*` and
-    /// `meter_delivering_p*`), its median per bucket (`meter_bucket_seeds`,
-    /// `meter_bucket_accepting`, `meter_bucket_delivering`), and how it tracked
-    /// changes (`off_drop`, `off_rise`, below).
-    ///
-    /// strims-sim: `others`: the hosts but the seeds that never answered a
-    /// STREAM_REQUEST (`Report::roles`), not the ppspp sim's `meter_others_p*`,
-    /// the samples of honest viewers without a child at the sample.
-    MeterRole(u16),
     /// Per BUCKET (30 s) of the first swarm's stream from its start, the median
     /// of the upload meter's capacity ÷ the uplink over the samples of each
     /// population's viewers (`meter_{pop}_p{p}`'s), as `meter_bucket_seeds` is
@@ -1923,24 +1953,24 @@ pub(crate) enum RowNums {
     MeterBucketPop(u16),
     /// **meter readings**: the upload meter's capacity, the relay busy-time
     /// reading admission and shedding take (`PushStats::upload_capacity`,
-    /// `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each
-    /// sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90
-    /// over the others' samples (`meter_others`; the seed's are
-    /// `meter_seed_p*`, the populations' `meter_accepting_p*` and
-    /// `meter_delivering_p*`), its median per bucket (`meter_bucket_seeds`,
-    /// `meter_bucket_accepting`, `meter_bucket_delivering`), and how it tracked
-    /// changes (`off_drop`, `off_rise`, below).
+    /// `MeterSample::capacity`), ÷ the host's uplink: the seed's quantiles
+    /// `meter_seed_p*`, the populations' `meter_accepting_p*`,
+    /// `meter_delivering_p*` and `meter_others_p*`, its median per bucket over
+    /// the seeds' samples (`meter_bucket_seeds`) and the populations'
+    /// (`meter_bucket_accepting`, `meter_bucket_delivering`,
+    /// `meter_bucket_others`), and how it tracked changes
+    /// (`off_{change}_{role}`).
     MeterBucketSeeds,
-    /// **meter readings**: the upload meter's capacity, the relay busy-time
-    /// reading admission and shedding take (`PushStats::upload_capacity`,
-    /// `MeterSample::capacity`), a seed's too, ÷ the host's uplink at each
-    /// sample while a swarm streams (`Report::meter_readings`): its p10/p50/p90
-    /// over the others' samples (`meter_others`; the seed's are
-    /// `meter_seed_p*`, the populations' `meter_accepting_p*` and
-    /// `meter_delivering_p*`), its median per bucket (`meter_bucket_seeds`,
-    /// `meter_bucket_accepting`, `meter_bucket_delivering`), and how it tracked
-    /// changes (`off_drop`, `off_rise`, below).
-    OffChange(u16),
+    /// How the upload meter tracked each change of the host's available upload
+    /// (a step of its uplink's rate, a competing upload's start or stop) while
+    /// a swarm streamed, over the hosts of role `role` (`seeds`, the swarms'
+    /// seeds; `accepting` and `delivering`, the first swarm's honest viewers of
+    /// each population, `meter_{pop}_p{p}`'s): the share of the meter's samples
+    /// from the change to the next that read more than TRACK_BAND off the
+    /// uplink, its median and its largest over the drops (`off_drop_seeds`,
+    /// ...) and over the rises (`off_rise_seeds`, ...) (Report::tracking); left
+    /// out where the role's hosts had no change.
+    OffChangeRole(u16),
     /// The p10, p50 and p90 in ms of the seeds' meters' queueing delay while a
     /// swarm streams, over the samples that had one
     /// (Report::queue_delay_deciles).
@@ -1953,18 +1983,11 @@ impl RowNums {
     /// The name, as strims-sim writes it.
     pub(crate) fn name(self) -> &'static str {
         match self {
-            RowNums::MeterRole(i) => at(&ROWNUMS_METER_ROLE, i),
             RowNums::MeterBucketPop(i) => at(&ROWNUMS_METER_BUCKET_POP, i),
             RowNums::MeterBucketSeeds => "meter_bucket_seeds",
-            RowNums::OffChange(i) => at(&ROWNUMS_OFF_CHANGE, i),
+            RowNums::OffChangeRole(i) => at(&ROWNUMS_OFF_CHANGE_ROLE, i),
             RowNums::QueueDelaySeedsMs => "queue_delay_seeds_ms",
         }
-    }
-
-    /// `meter_{role}`'s name of `role`: a panic for values
-    /// `fields.toml` doesn't give strims-sim.
-    pub(crate) fn meter_role(role: impl Display) -> RowNums {
-        RowNums::MeterRole(of(&ROWNUMS_METER_ROLE, format_args!("meter_{role}")))
     }
 
     /// `meter_bucket_{pop}`'s name of `pop`: a panic for values
@@ -1976,10 +1999,13 @@ impl RowNums {
         ))
     }
 
-    /// `off_{change}`'s name of `change`: a panic for values
+    /// `off_{change}_{role}`'s name of `change`, `role`: a panic for values
     /// `fields.toml` doesn't give strims-sim.
-    pub(crate) fn off_change(change: impl Display) -> RowNums {
-        RowNums::OffChange(of(&ROWNUMS_OFF_CHANGE, format_args!("off_{change}")))
+    pub(crate) fn off_change_role(change: impl Display, role: impl Display) -> RowNums {
+        RowNums::OffChangeRole(of(
+            &ROWNUMS_OFF_CHANGE_ROLE,
+            format_args!("off_{change}_{role}"),
+        ))
     }
 }
 
@@ -1991,14 +2017,22 @@ impl Key for RowNums {
     }
 }
 
-/// `meter_{role}`'s names for strims-sim.
-const ROWNUMS_METER_ROLE: [&str; 1] = ["meter_others"];
-
 /// `meter_bucket_{pop}`'s names for strims-sim.
-const ROWNUMS_METER_BUCKET_POP: [&str; 2] = ["meter_bucket_accepting", "meter_bucket_delivering"];
+const ROWNUMS_METER_BUCKET_POP: [&str; 3] = [
+    "meter_bucket_accepting",
+    "meter_bucket_delivering",
+    "meter_bucket_others",
+];
 
-/// `off_{change}`'s names for strims-sim.
-const ROWNUMS_OFF_CHANGE: [&str; 2] = ["off_drop", "off_rise"];
+/// `off_{change}_{role}`'s names for strims-sim.
+const ROWNUMS_OFF_CHANGE_ROLE: [&str; 6] = [
+    "off_drop_seeds",
+    "off_drop_accepting",
+    "off_drop_delivering",
+    "off_rise_seeds",
+    "off_rise_accepting",
+    "off_rise_delivering",
+];
 
 /// The keys of `series_meta.json` that hold an integer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

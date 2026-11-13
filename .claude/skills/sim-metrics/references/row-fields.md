@@ -94,8 +94,8 @@ don't).
 - `golden.py check`. The scorecards set compares the lake's macros with
   the Python scoring at hack/sim-suite/golden.py's `REFERENCE`, over the
   metrics both have (`ref_metrics`): a new metric is left out of it, and
-  a change to an existing metric's SQL fails it on purpose (the user's
-  decision).
+  a change to how an existing metric reads a row (the user's decision)
+  fails it until `golden.RESTATED` gives the reference that reading.
 - The cli set moves (metric_defs, metric_catalog, `scoring_version`):
   re-capture it and say why.
 - The commit says that existing experiments score the same with the new

@@ -82,7 +82,7 @@ scorecards set takes minutes).
 | `cli` outputs that read verdicts | `VERDICT_VERSION` or a derived table moved (`references/derived.md`) | re-capture after `golden.py real` |
 | `engine` | a fixture lacks what the change added (test_store's FoldExport without a new table) | fix the fixture, never the assertion |
 | `matrices` | `suite.TIERS` or `suite.MEASURE_LOGS` | re-capture, and say why |
-| `scorecards` | an existing metric's SQL or a scoring macro changed | the user's decision |
+| `scorecards` | an existing metric's SQL or a scoring macro changed | the user's decision; a metric's new reading of a row then goes in `golden.RESTATED` |
 | a failure the parent has too | it was there before | report it; don't absorb it |
 
 `python3 hack/simlab/tests/golden.py capture --only cli` re-captures the

@@ -628,8 +628,8 @@ pub(crate) enum RowInt {
     LoopsByHow(u16),
     /// With SIM_LOOPS=1, the decision tap's events dropped between drains.
     LoopsTapLost,
-    /// The first swarm's honest viewers in each population
-    /// (`meter_{pop}_p{p}`'s): `n_accepting`, `n_delivering`.
+    /// The first swarm's honest viewers (the seed aside) in each population
+    /// (`meter_{pop}_p{p}`'s): `n_accepting`, `n_delivering`, `n_others`.
     NPop(u16),
     /// The capacity reading the first swarm's seed's budget was measured from
     /// (`AllocSample::budget_capacity`, `PushStats::seed_budget_capacity`), in
@@ -1416,7 +1416,7 @@ const ROWINT_LOOPS_BY_HOW: [&str; 7] = [
 ];
 
 /// `n_{pop}`'s names for ppspp.
-const ROWINT_N_POP: [&str; 2] = ["n_accepting", "n_delivering"];
+const ROWINT_N_POP: [&str; 3] = ["n_accepting", "n_delivering", "n_others"];
 
 /// `seed_{queue}_wait_p{p}_ms`'s names for ppspp.
 const ROWINT_SEED_QUEUE_WAIT_P_P_MS: [&str; 4] = [
@@ -1573,29 +1573,24 @@ pub(crate) enum RowNum {
     /// A media swarm's media rate: media bytes over the stream's seconds, in
     /// kbit/s; left out without media.
     MediaKbit,
-    /// Per sample of each honest viewer whose upload meter has a capacity and
-    /// that has no child at the sample: the capacity (the relay busy-time
-    /// reading, `PushStats::upload_capacity`) over the node's true uplink, from
-    /// t0 + warm_secs to the run's end: the row's `meter_others_p*` (the seed's
-    /// are `meter_seed_p*`, the populations' `meter_accepting_p*` and
-    /// `meter_delivering_p*`).
-    ///
-    /// ppspp: Not strims-sim's `meter_others`, the hosts that never answered a
-    /// STREAM_REQUEST.
-    MeterRolePP(u16),
-    /// The upload meter of the first swarm's honest viewers of each population,
-    /// each classed over the run: `accepting`, those that accepted a
-    /// subscription as a parent at least once (`PushStats::accepted`), and
-    /// `delivering`, those that pushed a chunk to a subscriber at least once
-    /// (`pushed_chunks`), a viewer's every sample counting; at each sample from
-    /// the end of the startup phase to the stream's last write
+    /// The upload meter of the first swarm's honest viewers (the seed aside) of
+    /// each population, each classed over the run: `accepting`, those that
+    /// accepted a subscription as a parent at least once
+    /// (`PushStats::accepted`), `delivering`, those that pushed a chunk to a
+    /// subscriber at least once (`pushed_chunks`), and `others`, those that
+    /// never accepted one, a viewer's every sample counting; at each sample
+    /// from the end of the startup phase to the stream's last write
     /// (`meter_seed_p*`'s window), the meter's capacity (the relay busy-time
     /// reading, `PushStats::upload_capacity`) over what the viewer could
     /// upload: their p10, p50 and p90 (`meter_accepting_p10`, ...,
-    /// `meter_delivering_p90`); left out without a sample.
+    /// `meter_others_p90`); left out without a sample.
     ///
     /// ppspp: A sample a second of each viewer with a capacity
-    /// (`Sim::sample_shape`), over its incarnations.
+    /// (`Sim::sample_shape`, `Sim::populations`), over its incarnations. Older
+    /// runs hold `meter_others_p10`, `meter_others_p50` and `meter_others_p90`
+    /// over other samples: every honest viewer's with a capacity and no child
+    /// at the sample, from the end of the warm-up (t0 + `warm_secs`) to the
+    /// run's end.
     MeterPopPP(u16),
     /// The first swarm's seed's upload meter: its capacity (the relay busy-time
     /// reading admission and shedding take, `PushStats::upload_capacity`) over
@@ -1620,25 +1615,14 @@ pub(crate) enum RowNum {
     /// Messages per channel payload, over the honest hosts' outbound ppspp
     /// (ChannelMetrics messages over payloads).
     MsgsPerPayload,
-    /// The median over the honest hosts of no role (Report::roles: neither seed
-    /// nor forwarder) of their overhead per second over their uplinks.
+    /// The first swarm's honest viewers (the seed aside) of each population
+    /// (`meter_{pop}_p{p}`'s: `accepting`, `delivering`, `others`), each one's
+    /// overhead per second over its uplink: its wire bytes up less the chunk
+    /// data it sent, over its uplink times the seconds; their median and p90
+    /// (`ovh_accepting_p50`, ..., `ovh_others_p90`); left out without a viewer.
     ///
-    /// ppspp: Over the honest viewers that accepted no subscription (leaves),
-    /// each over the time it was there.
-    OvhLeafP50,
-    /// The p90 over the honest hosts of no role (Report::roles) of their
-    /// overhead per second over their uplinks.
-    ///
-    /// ppspp: Over the honest viewers that accepted no subscription (leaves),
-    /// each over the time it was there.
-    OvhLeafP90,
-    /// The median over the honest forwarders (Report::roles) of their overhead
-    /// per second over their uplinks: wire bytes less ppspp chunk data, over
-    /// the uplink times the run's seconds.
-    ///
-    /// ppspp: Over the honest viewers that accepted a subscription (relays),
-    /// each over the time it was there.
-    OvhRelayP50,
+    /// ppspp: Each over the time it was there (`Sim::populations`).
+    OvhPopPP(u16),
     /// The seed's overhead per second over its uplink: wire bytes less ppspp
     /// chunk data, over the uplink times the run's seconds.
     OvhSeed,
@@ -1652,13 +1636,13 @@ pub(crate) enum RowNum {
     ///
     /// Unit: per minute.
     ParentChangesPerMin,
-    /// In WAN mode, the median over the honest forwarders and others of their
+    /// In WAN mode, the median over the honest hosts but the seeds of their
     /// packets per second through their uplinks.
     ///
     /// ppspp: The median over the honest viewers of their packets up per second
     /// they were there.
     PpsP50,
-    /// In WAN mode, the p90 over the honest forwarders and others of their
+    /// In WAN mode, the p90 over the honest hosts but the seeds of their
     /// packets per second through their uplinks.
     ///
     /// ppspp: The p90 over the honest viewers of their packets up per second
@@ -1813,10 +1797,6 @@ pub(crate) enum RowNum {
 }
 
 impl RowNum {
-    /// `meter_{role}_p{p}`'s `p` values for ppspp, which its code
-    /// loops over.
-    pub(crate) const P_OF_METER_ROLE_P_P: [u8; 3] = [10, 50, 90];
-
     /// `meter_{pop}_p{p}`'s `p` values for ppspp, which its code
     /// loops over.
     pub(crate) const P_OF_METER_POP_P_P: [u8; 3] = [10, 50, 90];
@@ -1828,6 +1808,10 @@ impl RowNum {
     /// `meter_budget_seed_p{p}`'s `p` values for ppspp, which its code
     /// loops over.
     pub(crate) const P_OF_METER_BUDGET_SEED_P_P: [u8; 3] = [10, 50, 90];
+
+    /// `ovh_{pop}_p{p}`'s `p` values for ppspp, which its code
+    /// loops over.
+    pub(crate) const P_OF_OVH_POP_P_P: [u8; 2] = [50, 90];
 
     /// `viewer_util_p{p}`'s `p` values for ppspp, which its code
     /// loops over.
@@ -1861,14 +1845,11 @@ impl RowNum {
             RowNum::LiarSlots => "liar_slots",
             RowNum::Mbit => "mbit",
             RowNum::MediaKbit => "media_kbit",
-            RowNum::MeterRolePP(i) => at(&ROWNUM_METER_ROLE_P_P, i),
             RowNum::MeterPopPP(i) => at(&ROWNUM_METER_POP_P_P, i),
             RowNum::MeterSeedPP(i) => at(&ROWNUM_METER_SEED_P_P, i),
             RowNum::MeterBudgetSeedPP(i) => at(&ROWNUM_METER_BUDGET_SEED_P_P, i),
             RowNum::MsgsPerPayload => "msgs_per_payload",
-            RowNum::OvhLeafP50 => "ovh_leaf_p50",
-            RowNum::OvhLeafP90 => "ovh_leaf_p90",
-            RowNum::OvhRelayP50 => "ovh_relay_p50",
+            RowNum::OvhPopPP(i) => at(&ROWNUM_OVH_POP_P_P, i),
             RowNum::OvhSeed => "ovh_seed",
             RowNum::ParentChangesPerMin => "parent_changes_per_min",
             RowNum::PpsP50 => "pps_p50",
@@ -1920,15 +1901,6 @@ impl RowNum {
         RowNum::DepthHops(of(&ROWNUM_DEPTH_HOPS, format_args!("depth_{hops}")))
     }
 
-    /// `meter_{role}_p{p}`'s name of `role`, `p`: a panic for values
-    /// `fields.toml` doesn't give ppspp.
-    pub(crate) fn meter_role_p_p(role: impl Display, p: impl Display) -> RowNum {
-        RowNum::MeterRolePP(of(
-            &ROWNUM_METER_ROLE_P_P,
-            format_args!("meter_{role}_p{p}"),
-        ))
-    }
-
     /// `meter_{pop}_p{p}`'s name of `pop`, `p`: a panic for values
     /// `fields.toml` doesn't give ppspp.
     pub(crate) fn meter_pop_p_p(pop: impl Display, p: impl Display) -> RowNum {
@@ -1948,6 +1920,12 @@ impl RowNum {
             &ROWNUM_METER_BUDGET_SEED_P_P,
             format_args!("meter_budget_seed_p{p}"),
         ))
+    }
+
+    /// `ovh_{pop}_p{p}`'s name of `pop`, `p`: a panic for values
+    /// `fields.toml` doesn't give ppspp.
+    pub(crate) fn ovh_pop_p_p(pop: impl Display, p: impl Display) -> RowNum {
+        RowNum::OvhPopPP(of(&ROWNUM_OVH_POP_P_P, format_args!("ovh_{pop}_p{p}")))
     }
 
     /// `stalled_share_{delay}{pop}`'s name of `delay`, `pop`: a panic for values
@@ -2018,18 +1996,17 @@ const ROWNUM_DEPTH_HOPS: [&str; 6] = [
     "depth_1", "depth_2", "depth_3", "depth_4", "depth_5", "depth_6",
 ];
 
-/// `meter_{role}_p{p}`'s names for ppspp.
-const ROWNUM_METER_ROLE_P_P: [&str; 3] =
-    ["meter_others_p10", "meter_others_p50", "meter_others_p90"];
-
 /// `meter_{pop}_p{p}`'s names for ppspp.
-const ROWNUM_METER_POP_P_P: [&str; 6] = [
+const ROWNUM_METER_POP_P_P: [&str; 9] = [
     "meter_accepting_p10",
     "meter_accepting_p50",
     "meter_accepting_p90",
     "meter_delivering_p10",
     "meter_delivering_p50",
     "meter_delivering_p90",
+    "meter_others_p10",
+    "meter_others_p50",
+    "meter_others_p90",
 ];
 
 /// `meter_seed_p{p}`'s names for ppspp.
@@ -2040,6 +2017,16 @@ const ROWNUM_METER_BUDGET_SEED_P_P: [&str; 3] = [
     "meter_budget_seed_p10",
     "meter_budget_seed_p50",
     "meter_budget_seed_p90",
+];
+
+/// `ovh_{pop}_p{p}`'s names for ppspp.
+const ROWNUM_OVH_POP_P_P: [&str; 6] = [
+    "ovh_accepting_p50",
+    "ovh_accepting_p90",
+    "ovh_delivering_p50",
+    "ovh_delivering_p90",
+    "ovh_others_p50",
+    "ovh_others_p90",
 ];
 
 /// `stalled_share_{delay}{pop}`'s names for ppspp.

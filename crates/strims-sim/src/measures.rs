@@ -6,24 +6,23 @@
 //!
 //! - **buckets** ([`Report::buckets`]): a swarm's stream in [`BUCKET`]s of
 //!   stream time from its start.
-//! - **roles** ([`Report::roles`]): the swarms' seeds; forwarders, the other
-//!   hosts that answered a STREAM_REQUEST (accepted or declined); and the
-//!   rest.
+//! - **seeds** ([`Report::seeds`]): the swarms' seeds.
 //! - **meter readings**: the upload meter's capacity, the relay busy-time
 //!   reading admission and shedding take (`PushStats::upload_capacity`,
 //!   [`MeterSample::capacity`]), a seed's too, ÷ the host's uplink at each
-//!   sample while a swarm streams ([`Report::meter_readings`]): its
-//!   p10/p50/p90 over the others' samples (`meter_others`), its median per
-//!   bucket (`meter_bucket_seeds`, `meter_bucket_accepting`,
-//!   `meter_bucket_delivering`), and how it tracked changes (`off_drop`,
-//!   `off_rise`, below).
+//!   sample while a swarm streams ([`Report::meter_readings`]): its median
+//!   per bucket over the seeds' samples and the populations'
+//!   (`meter_bucket_seeds`, `meter_bucket_accepting`, ...), and how it
+//!   tracked changes (`off_drop_seeds`, ..., below).
 //! - **populations** ([`Report::populations`]): the first swarm's honest
-//!   viewers that accepted a subscription (`accepting`) and that pushed a
-//!   chunk to a subscriber (`delivering`), each classed over the run: the
-//!   meter's p10/p50/p90 over their samples in the seed meter's window
-//!   ([`Report::window_readings`]; `meter_accepting_p10`, ...), their
-//!   counts (`n_accepting`, `n_delivering`), their bucket medians, and the
-//!   queue-delay readings' accuracy over their samples.
+//!   viewers that accepted a subscription (`accepting`), that pushed a
+//!   chunk to a subscriber (`delivering`) and that never accepted one
+//!   (`others`), each classed over the run: the meter's p10/p50/p90 over
+//!   their samples in the seed meter's window ([`Report::window_readings`];
+//!   `meter_accepting_p10`, ...), their counts (`n_accepting`, ...), their
+//!   bucket medians, their overhead (`ovh_accepting_p50`, ...), and over
+//!   the two the queue-delay readings' accuracy and their standing queue
+//!   (`standing_accepting`, `standing_delivering`).
 //! - **seed meter** ([`Report::seed_meter`]): the first swarm's seed's
 //!   meter readings from the end of the startup phase to the stream's end
 //!   ([`Report::seed_meter_window`]), their p10/p50/p90
@@ -38,9 +37,9 @@
 //! - **wrongly declined** ([`Report::declined`]): STREAM_REQUESTs declined
 //!   in samples where the node's upload rate was under half of what it
 //!   could upload then.
-//! - **tracking** ([`Report::tracking`]): after each change of a seed's or
-//!   forwarder's available upload while a swarm streams (a step of its
-//!   uplink's rate, or a competing upload's start or stop), the share of
+//! - **tracking** ([`Report::tracking`]): after each change of a host's
+//!   available upload while a swarm streams (a step of its uplink's rate,
+//!   or a competing upload's start or stop), the share of
 //!   the meter's samples until the host's next change, or the stream's
 //!   end, that read more than [`TRACK_BAND`] off what was available. A
 //!   meter that swings between true and far off reads off for as long as
@@ -208,23 +207,17 @@ pub struct Tracking {
     pub off: f64,
 }
 
-/// The hosts of a run by their part in its swarms.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Roles {
-    pub seeds: Vec<HostIx>,
-    pub forwarders: Vec<HostIx>,
-    pub others: Vec<HostIx>,
-}
-
 /// A swarm's honest viewers in its two populations
-/// ([`Report::populations`]), each classed over the run; a viewer may be
-/// in both.
+/// ([`Report::populations`]), each classed over the run, a viewer in
+/// both or in neither, and the others.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Populations {
     /// Those that accepted a subscription as a parent at least once.
     pub accepting: Vec<HostIx>,
     /// Those that pushed a chunk to a subscriber at least once.
     pub delivering: Vec<HostIx>,
+    /// Those that never accepted one.
+    pub others: Vec<HostIx>,
 }
 
 /// p10, p50 and p90 of `v` (0 when empty), which is sorted.
@@ -720,7 +713,7 @@ impl Report {
     /// its incarnations: `accepting`, those that accepted a subscription as
     /// a parent at least once ([`SwarmCounters::accepted`]); `delivering`,
     /// those that pushed a chunk to a subscriber at least once
-    /// (`pushed_chunks`).
+    /// (`pushed_chunks`); and the others, those that never accepted one.
     ///
     /// [`SwarmCounters::accepted`]: crate::stats::SwarmCounters::accepted
     pub fn populations(&self, swarm: usize) -> Populations {
@@ -738,6 +731,8 @@ impl Report {
             let c = host.runner.swarm(swarm);
             if c.accepted > 0 {
                 out.accepting.push(h);
+            } else {
+                out.others.push(h);
             }
             if c.pushed_chunks > 0 {
                 out.delivering.push(h);
@@ -746,34 +741,12 @@ impl Report {
         out
     }
 
-    pub fn roles(&self) -> Roles {
-        let mut r = Roles {
-            seeds: self.scenario.swarms.iter().map(|s| s.seed).collect(),
-            ..Roles::default()
-        };
-        r.seeds.sort_unstable();
-        r.seeds.dedup();
-        for (h, host) in self.hosts.iter().enumerate() {
-            if r.seeds.contains(&h) {
-                continue;
-            }
-            if host.runner.meter.iter().any(|m| m.requests_in > 0) {
-                r.forwarders.push(h);
-            } else {
-                r.others.push(h);
-            }
-        }
-        r
-    }
-
-    /// p10/p50/p90 of the meter's capacity ÷ cap over `hosts`' samples.
-    pub fn meter_deciles(&self, hosts: &[HostIx]) -> [f64; 3] {
-        let mut v: Vec<f64> = hosts
-            .iter()
-            .flat_map(|&h| self.meter_readings(h))
-            .map(|(c, _)| c)
-            .collect();
-        deciles(&mut v)
+    /// The swarms' seeds, in host order.
+    pub fn seeds(&self) -> Vec<HostIx> {
+        let mut seeds: Vec<HostIx> = self.scenario.swarms.iter().map(|s| s.seed).collect();
+        seeds.sort_unstable();
+        seeds.dedup();
+        seeds
     }
 
     /// The median capacity ÷ cap over `hosts`' samples in each of swarm
@@ -1071,10 +1044,9 @@ impl Report {
         changes
     }
 
-    /// How the meters of the seeds and forwarders followed each change of
-    /// their available upload, in host and time order.
-    pub fn tracking(&self) -> Vec<Tracking> {
-        let roles = self.roles();
+    /// How the meters of `hosts` followed each change of their available
+    /// upload, in host and time order.
+    pub fn tracking(&self, hosts: &[HostIx]) -> Vec<Tracking> {
         let end = self
             .scenario
             .swarms
@@ -1083,7 +1055,7 @@ impl Report {
             .max()
             .unwrap_or_default();
         let mut out = Vec::new();
-        for h in roles.seeds.iter().chain(&roles.forwarders).copied() {
+        for &h in hosts {
             let changes = self.upload_changes(h);
             let Some(host) = self.hosts.get(h) else {
                 continue;
@@ -1168,11 +1140,13 @@ impl Report {
         )
     }
 
-    /// With changes of available upload, how the seeds' and forwarders'
-    /// meters followed them ([`Report::tracking`]) and the lag after the
-    /// seed's changes.
+    /// With changes of available upload, how the seeds' and swarm 0's
+    /// accepting viewers' meters followed them ([`Report::tracking`]) and
+    /// the lag after the seed's changes.
     pub(crate) fn tracking_line(&self) -> Option<String> {
-        let tracking = self.tracking();
+        let mut hosts = self.seeds();
+        hosts.extend(self.populations(0).accepting);
+        let tracking = self.tracking(&hosts);
         if tracking.is_empty() {
             return None;
         }
@@ -1195,16 +1169,15 @@ impl Report {
     }
 
     /// For streams longer than [`LONG_STREAM`], swarm 0's p99 lag and the
-    /// seeds' and forwarders' median capacity ÷ cap per bucket.
+    /// seeds' and its accepting viewers' median capacity ÷ cap per bucket.
     pub(crate) fn bucket_line(&self) -> Option<String> {
         let s = self.scenario.swarms.first()?;
         if s.stop.saturating_sub(s.start) <= LONG_STREAM {
             return None;
         }
-        let roles = self.roles();
         let join = |v: Vec<String>| v.join(" ");
         Some(format!(
-            "\n  swarm 0 per {} s: p99 ms {}\n    meter seeds {}\n    meter forwarders {}",
+            "\n  swarm 0 per {} s: p99 ms {}\n    meter seeds {}\n    meter accepting {}",
             BUCKET.as_secs(),
             join(
                 self.lag_buckets(0)
@@ -1213,13 +1186,13 @@ impl Report {
                     .collect()
             ),
             join(
-                self.meter_buckets(0, &roles.seeds)
+                self.meter_buckets(0, &self.seeds())
                     .iter()
                     .map(|c| format!("{c:.2}"))
                     .collect()
             ),
             join(
-                self.meter_buckets(0, &roles.forwarders)
+                self.meter_buckets(0, &self.populations(0).accepting)
                     .iter()
                     .map(|c| format!("{c:.2}"))
                     .collect()
@@ -1331,19 +1304,14 @@ impl Report {
                 buckets.iter().map(|p| u64::from(p.p99)),
             );
         self.playback_cols(swarm, &mut j);
-        let roles = self.roles();
-        j.int(RowInt::n_role("seeds"), roles.seeds.len() as u64)
-            .nums(
-                RowNums::meter_role("others"),
-                self.meter_deciles(&roles.others),
-            )
-            .int(RowInt::n_role("others"), roles.others.len() as u64);
+        let seeds = self.seeds();
+        j.int(RowInt::n_role("seeds"), seeds.len() as u64);
         let pops = self.populations(swarm);
         let pop_list = [
             ("accepting", &pops.accepting),
             ("delivering", &pops.delivering),
         ];
-        for (name, hosts) in pop_list {
+        for (name, hosts) in pop_list.into_iter().chain([("others", &pops.others)]) {
             let mut v = self.window_readings(swarm, hosts);
             v.sort_by(f64::total_cmp);
             for p in RowNum::P_OF_METER_POP_P_P {
@@ -1369,20 +1337,16 @@ impl Report {
                 j.num(RowNum::meter_budget_seed_p_p(p), x);
             }
         }
-        j.nums(
-            RowNums::MeterBucketSeeds,
-            self.meter_buckets(swarm, &roles.seeds),
-        );
-        let (qd, had) = self.queue_delay_deciles(&roles.seeds);
+        j.nums(RowNums::MeterBucketSeeds, self.meter_buckets(swarm, &seeds));
+        let (qd, had) = self.queue_delay_deciles(&seeds);
         j.nums(RowNums::QueueDelaySeedsMs, qd)
             .num(RowNum::QueueDelaySeedsHad, had)
-            .num(RowNum::BusySeedsP50, self.busy_median(&roles.seeds))
-            .num(RowNum::StandingSeeds, self.standing_queue(&roles.seeds))
-            .num(
-                RowNum::StandingForwarders,
-                self.standing_queue(&roles.forwarders),
-            )
-            .num(RowNum::PeakCommitted, self.peak_committed());
+            .num(RowNum::BusySeedsP50, self.busy_median(&seeds))
+            .num(RowNum::StandingSeeds, self.standing_queue(&seeds));
+        for (name, hosts) in pop_list {
+            j.num(RowNum::standing_pop(name), self.standing_queue(hosts));
+        }
+        j.num(RowNum::PeakCommitted, self.peak_committed());
         let [lazy_out, lazy_in] = self.lazy_shares();
         j.num(RowNum::HaveLazyOutShare, lazy_out)
             .num(RowNum::HaveLazyInShare, lazy_in);
@@ -1395,7 +1359,7 @@ impl Report {
             ("qdl", QueueTruth::Instant, |m| m.path_latest_ms),
         ];
         for (reading, truth, read) in readings {
-            for (name, hosts) in [("seeds", &roles.seeds), pop_list[0], pop_list[1]] {
+            for (name, hosts) in [("seeds", &seeds), pop_list[0], pop_list[1]] {
                 if let Some([err, fp, fneg]) =
                     self.queue_delay_accuracy(hosts, QUEUE_DELAY_THRESHOLD_MS, truth, read)
                 {
@@ -1416,8 +1380,13 @@ impl Report {
             j.num(RowNum::ControlBpsLink, control)
                 .num(RowNum::PingBpsLink, pings);
         }
-        let tracking = self.tracking();
-        if !tracking.is_empty() {
+        let mut tracked = false;
+        for (role, hosts) in [("seeds", &seeds), pop_list[0], pop_list[1]] {
+            let tracking = self.tracking(hosts);
+            if tracking.is_empty() {
+                continue;
+            }
+            tracked = true;
             for (name, drop) in [("drop", true), ("rise", false)] {
                 let mut v: Vec<f64> = tracking
                     .iter()
@@ -1426,9 +1395,14 @@ impl Report {
                     .collect();
                 let n = v.len() as u64;
                 let max = v.iter().copied().fold(0.0, f64::max);
-                j.nums(RowNums::off_change(name), [deciles(&mut v)[1], max])
-                    .int(RowInt::off_change_n(name), n);
+                j.nums(
+                    RowNums::off_change_role(name, role),
+                    [deciles(&mut v)[1], max],
+                )
+                .int(RowInt::off_change_n_role(name, role), n);
             }
+        }
+        if tracked {
             let (drop, rise) = self.lag_after_changes(swarm);
             j.int(RowInt::SeedDropP99Ms, u64::from(drop.p99))
                 .int(RowInt::SeedRiseP99Ms, u64::from(rise.p99));
@@ -1665,7 +1639,7 @@ impl Report {
         if !wan.hosts.iter().any(|w| w.ack_whys.iter().any(|&n| n > 0)) {
             return;
         }
-        let seeds = self.roles().seeds;
+        let seeds = self.seeds();
         let (mut seed, mut viewer) = (
             ([0u64; crate::ACK_WHYS.len()], crate::AckWaits::default()),
             ([0u64; crate::ACK_WHYS.len()], crate::AckWaits::default()),
@@ -1705,9 +1679,9 @@ impl Report {
     /// `up_transport`, the transports' framing and resends, and `up_acks`,
     /// pure ACKs and SACKs alone. Then the waste in the honest viewers'
     /// inbound data, the wire bytes per byte of the stream they read, each
-    /// role's overhead per second over its uplink ([`Report::roles`]), the
-    /// seed's wire bytes over what it wrote, the
-    /// packets (WAN mode; acknowledgements count as small) and vnic's
+    /// population's overhead per second over its uplink
+    /// ([`Report::populations`]), the seed's wire bytes over what it wrote,
+    /// the packets (WAN mode; acknowledgements count as small) and vnic's
     /// frames.
     fn ledger_cols(&self, j: &mut JsonRow) {
         let secs = self.sim_secs.max(1e-9);
@@ -1721,7 +1695,7 @@ impl Report {
         let (mut ports, mut vnic, mut transport, mut acks, mut hostile_bytes) = (0, 0, 0, 0, 0);
         let (mut wire_down, mut packets, mut small, mut frames, mut frame_bytes) = (0, 0, 0, 0, 0);
         let mut ack_packets = 0;
-        let seeds = self.roles().seeds;
+        let seeds = self.seeds();
         // A host's bytes through its uplink, framing included, and its
         // packets.
         let wire = |h: &HostReport| {
@@ -1807,7 +1781,6 @@ impl Report {
             let over = wire(h).0.saturating_sub(h.ppspp.outbound.data_bytes);
             Some(over as f64 / (self.upload_cap(i)? as f64 * secs))
         };
-        let roles = self.roles();
         let shares = |hosts: &[HostIx]| {
             let mut v: Vec<f64> = hosts
                 .iter()
@@ -1818,7 +1791,6 @@ impl Report {
             v
         };
         let at = |v: &[f64], p: usize| v.get(v.len().saturating_sub(1) * p / 100).copied();
-        let (relays, leaves) = (shares(&roles.forwarders), shares(&roles.others));
         let seed = self.scenario.swarms.first().map(|s| s.seed);
         if let Some(x) = seed.and_then(share) {
             j.num(RowNum::OvhSeed, x);
@@ -1829,22 +1801,24 @@ impl Report {
                 wire(h).0 as f64 / h.uploaded.max(1) as f64,
             );
         }
-        for (name, v, p) in [
-            (RowNum::OvhRelayP50, &relays, 50),
-            (RowNum::OvhLeafP50, &leaves, 50),
-            (RowNum::OvhLeafP90, &leaves, 90),
+        let pops = self.populations(0);
+        for (name, hosts) in [
+            ("accepting", &pops.accepting),
+            ("delivering", &pops.delivering),
+            ("others", &pops.others),
         ] {
-            if let Some(x) = at(v, p) {
-                j.num(name, x);
+            let v = shares(hosts);
+            for p in RowNum::P_OF_OVH_POP_P_P.map(usize::from) {
+                if let Some(x) = at(&v, p) {
+                    j.num(RowNum::ovh_pop_p_p(name, p), x);
+                }
             }
         }
         if self.wan.is_some() {
-            let mut pps: Vec<f64> = roles
-                .forwarders
-                .iter()
-                .chain(&roles.others)
-                .filter(|&&h| self.class(h) == HostClass::Honest)
-                .filter_map(|&h| wire(self.hosts.get(h)?).1)
+            let mut pps: Vec<f64> = (0..self.hosts.len())
+                .filter(|h| !seeds.contains(h))
+                .filter(|&h| self.class(h) == HostClass::Honest)
+                .filter_map(|h| wire(self.hosts.get(h)?).1)
                 .map(|p| p as f64 / secs)
                 .collect();
             pps.sort_by(f64::total_cmp);
@@ -2934,7 +2908,7 @@ mod tests {
         });
         assert_eq!(r.upload_cap_at(0, Duration::from_secs(19)), Some(1000));
         assert_eq!(r.upload_cap_at(0, Duration::from_secs(20)), Some(500));
-        let t = r.tracking();
+        let t = r.tracking(&r.seeds());
         assert_eq!(t.len(), 2);
         // 20-29 of 20-59 read twice the half rate.
         assert!(t[0].drop);
@@ -2947,7 +2921,7 @@ mod tests {
     #[test]
     fn a_meter_that_never_follows_reads_off_throughout() {
         let r = seed_reading(|_| 1000);
-        let t = r.tracking();
+        let t = r.tracking(&r.seeds());
         assert!((t[0].off - 1.0).abs() < 1e-9);
         assert!(t[1].off.abs() < 1e-9);
     }

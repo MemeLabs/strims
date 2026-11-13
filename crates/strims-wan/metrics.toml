@@ -236,9 +236,8 @@ score = { kind = "ratio", tie = 0.1 }
 
 [[scored]]
 name = "meter_others_p50"
-sql = "CASE WHEN r.meter_others_p50 <> 0 THEN r.meter_others_p50 ELSE r.meter_others[2] END"
+sql = "r.meter_others_p50"
 score = { kind = "ratio", tie = 0.1 }
-description = "The other hosts' median upload meter: the row's `meter_others_p50` (the ppspp sim's), else the middle of strims-sim's `meter_others` (p10, p50, p90)."
 
 [[scored]]
 name = "holder_short"
@@ -371,8 +370,8 @@ better = "lower"
 score = { kind = "diff", tie = 0.005 }
 
 [[scored]]
-name = "ovh_leaf_p90"
-sql = "r.ovh_leaf_p90"
+name = "ovh_others_p90"
+sql = "r.ovh_others_p90"
 better = "lower"
 score = { kind = "diff", tie = 0.005 }
 

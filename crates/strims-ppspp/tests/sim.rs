@@ -1785,16 +1785,15 @@ struct Shape {
     /// and honest viewers.
     relays: u64,
     viewers: u64,
-    /// Per sample of each honest viewer whose upload meter has a capacity
-    /// and that has no child at the sample: the capacity (the relay
-    /// busy-time reading, `PushStats::upload_capacity`) over the node's
-    /// true uplink, the row's `meter_others_p*`.
-    meter_others: Vec<f64>,
-    /// By node, an honest viewer's same readings over the seed meter's
-    /// window ([`Sim::seed_meter_window`]), and whether it ever accepted a
-    /// subscription (`PushStats::accepted`) and ever pushed a chunk to a
-    /// subscriber (`pushed_chunks`): its populations, `accepting` and
-    /// `delivering`, the row's `meter_{pop}_p*` and `n_{pop}`.
+    /// By node, an honest viewer's samples over the seed meter's window
+    /// ([`Sim::seed_meter_window`]) at which its upload meter has a
+    /// capacity: the capacity (the relay busy-time reading,
+    /// `PushStats::upload_capacity`) over the node's true uplink; and
+    /// whether it ever accepted a subscription (`PushStats::accepted`) and
+    /// ever pushed a chunk to a subscriber (`pushed_chunks`): its
+    /// populations, `accepting` and `delivering` (the others never
+    /// accepted one), the row's `meter_{pop}_p*`, `n_{pop}` and
+    /// `ovh_{pop}_p*`.
     node_meter: Vec<Vec<f64>>,
     accepting: Vec<bool>,
     delivering: Vec<bool>,
@@ -4887,6 +4886,25 @@ impl Sim {
         )
     }
 
+    /// The honest viewers ([`Sim::honest`]) by population, each classed
+    /// over the run at [`Sim::shape`]'s samples: `accepting`, those that
+    /// accepted a subscription as a parent at least once; `delivering`,
+    /// those that pushed a chunk to a subscriber at least once; and
+    /// `others`, those that never accepted one. Node indices, in order.
+    fn populations(&self) -> [(&'static str, Vec<usize>); 3] {
+        let flag = |v: &[bool], i: usize| v.get(i).copied().unwrap_or(false);
+        let honest: Vec<usize> = (1..self.nodes.len())
+            .filter(|&i| self.nodes[i].watched())
+            .collect();
+        let of =
+            |keep: &dyn Fn(usize) -> bool| honest.iter().copied().filter(|&i| keep(i)).collect();
+        [
+            ("accepting", of(&|i| flag(&self.shape.accepting, i))),
+            ("delivering", of(&|i| flag(&self.shape.delivering, i))),
+            ("others", of(&|i| !flag(&self.shape.accepting, i))),
+        ]
+    }
+
     /// Samples [`Sim::shape`]: every honest viewer's chain of open parents
     /// per stream, and every honest node's meter against its uplink.
     fn sample_shape(&mut self) {
@@ -4919,10 +4937,7 @@ impl Sim {
                         }
                     }
                     (Role::Seed, _) => {}
-                    (_, children) => {
-                        if children == 0 {
-                            shape.meter_others.push(reading);
-                        }
+                    _ => {
                         if seed_window {
                             if shape.node_meter.len() <= i {
                                 shape.node_meter.resize(i + 1, Vec::new());
@@ -11237,14 +11252,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         v
     };
     let at = |v: &[f64], p: usize| v.get((v.len().saturating_sub(1)) * p / 100).copied();
-    let others = sorted(&sh.meter_others);
-    for p in RowNum::P_OF_METER_ROLE_P_P.map(usize::from) {
-        if let Some(x) = at(&others, p) {
-            row.num(RowNum::meter_role_p_p("others", p), x);
-        }
-    }
-    for (name, flags) in [("accepting", &sh.accepting), ("delivering", &sh.delivering)] {
-        let members: Vec<usize> = (0..flags.len()).filter(|&i| flags[i]).collect();
+    for (name, members) in sim.populations() {
         let v: Vec<f64> = members
             .iter()
             .flat_map(|&i| sh.node_meter.get(i).into_iter().flatten().copied())
@@ -11556,30 +11564,29 @@ fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
         false => span,
     };
     let share = |n: &Node| n.overhead() as f64 / (n.up_bw.max(1) as f64 * secs(n));
-    let (mut relays, mut leaves, mut pps) = (Vec::new(), Vec::new(), Vec::new());
-    for n in sim.nodes.iter().filter(|n| n.watched()) {
-        match n.totals().outbound.stream_open > 0 {
-            true => relays.push(share(n)),
-            false => leaves.push(share(n)),
-        }
-        pps.push(n.wire.up_packets as f64 / secs(n));
-    }
-    for v in [&mut relays, &mut leaves, &mut pps] {
-        v.sort_by(f64::total_cmp);
-    }
+    let mut pps: Vec<f64> = sim
+        .nodes
+        .iter()
+        .filter(|n| n.watched())
+        .map(|n| n.wire.up_packets as f64 / secs(n))
+        .collect();
+    pps.sort_by(f64::total_cmp);
     row.num(RowNum::OvhSeed, share(&sim.nodes[0])).num(
         RowNum::SeedWirePerWritten,
         sim.nodes[0].wire.up_bytes as f64
             / (sim.nodes[0].wire.up_bytes - sim.nodes[0].sent.transport_bytes).max(1) as f64,
     );
-    for (name, v, p) in [
-        (RowNum::OvhRelayP50, &relays, 50),
-        (RowNum::OvhLeafP50, &leaves, 50),
-        (RowNum::OvhLeafP90, &leaves, 90),
-        (RowNum::PpsP50, &pps, 50),
-        (RowNum::PpsP90, &pps, 90),
-    ] {
-        if let Some(&x) = v.get(v.len().saturating_sub(1) * p / 100) {
+    for (name, members) in sim.populations() {
+        let mut v: Vec<f64> = members.iter().map(|&i| share(&sim.nodes[i])).collect();
+        v.sort_by(f64::total_cmp);
+        for p in RowNum::P_OF_OVH_POP_P_P.map(usize::from) {
+            if let Some(&x) = v.get(v.len().saturating_sub(1) * p / 100) {
+                row.num(RowNum::ovh_pop_p_p(name, p), x);
+            }
+        }
+    }
+    for (name, p) in [(RowNum::PpsP50, 50), (RowNum::PpsP90, 90)] {
+        if let Some(&x) = pps.get(pps.len().saturating_sub(1) * p / 100) {
             row.num(name, x);
         }
     }

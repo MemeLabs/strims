@@ -22,8 +22,10 @@ lag and for overhead (with no budget, and with one of 1.05), and the
 scorecard, every metric and the default's. The reference's t table is the
 macros' (t975), and both score the METRICS both have (ref_metrics: those
 added since it, which it can't print, and those dropped since, which the
-macros can't, are left out), so the two differ by nothing but their code. The experiments are the latest N of each kind (--refs and --sets runs) with
-two arms or more; an experiment's base is its index's, else the arm the
+macros can't, are left out), the reference reading those METRICS read
+otherwise as METRICS reads them (RESTATED), so the two differ by nothing
+but their code. The experiments are the latest N of each kind (--refs and
+--sets runs) with two arms or more; an experiment's base is its index's, else the arm the
 farm reused from an earlier run (an A/B's baseline), else its first.
 
 `fixtures` writes suite_test.py's fixtures (testdata/golden/): for each
@@ -61,6 +63,13 @@ REFERENCE = "4eee6065"
 WORK = ROOT / "target" / "golden"
 FIXTURES = Path(__file__).with_name("testdata") / "golden"
 RANKS = {"lag": (None,), "overhead": (None, 1.05)}
+# The METRICS whose reading of a row is not the reference's, each with a
+# getter that reads it as METRICS does, which the reference scores it by.
+RESTATED = {
+    # The row's field alone: no fallback to the middle of strims-sim's
+    # meter_others, a name no sim writes.
+    "meter_others_p50": lambda r: r.get("meter_others_p50"),
+}
 # How many times an experiment is scored at one snapshot before a
 # snapshot gone from under it fails the check (compared_pinned).
 PIN_TRIES = 3
@@ -101,11 +110,12 @@ def reference(rev):
 def ref_metrics(ref):
     """The METRICS both sides have: simlab.suite's, which the macros score,
     without those the reference lacks, and the reference's without those
-    simlab.suite lacks. A metric added or dropped since the reference is
-    no part of the comparison."""
+    simlab.suite lacks, each RESTATED one by its getter there. A metric
+    added or dropped since the reference is no part of the comparison."""
     ours, theirs = {m[0] for m in lab.METRICS}, {m[0] for m in ref.METRICS}
+    restated = [(m[0], RESTATED.get(m[0], m[1]), *m[2:]) for m in ref.METRICS if m[0] in ours]
     with mock.patch.object(lab, "METRICS", [m for m in lab.METRICS if m[0] in theirs]), \
-            mock.patch.object(ref, "METRICS", [m for m in ref.METRICS if m[0] in ours]):
+            mock.patch.object(ref, "METRICS", restated):
         yield
 
 
