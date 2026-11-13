@@ -348,9 +348,11 @@ class Fields(unittest.TestCase):
     def test_a_familys_names_are_its_params_by_sim(self):
         key = "stalls_per_min_{delay}{pop}"
         e = vocab.fields()["rows"][key]
-        self.assertEqual(vocab.expand(key, e, "strims-sim"), ["stalls_per_min_1250", "stalls_per_min_1250_honest",
-                                                              "stalls_per_min_4250", "stalls_per_min_4250_honest"])
-        self.assertEqual(vocab.expand(key, e, "ppspp"), ["stalls_per_min_1250", "stalls_per_min_4250"])
+        self.assertEqual(vocab.expand(key, e, "strims-sim"), [
+            "stalls_per_min_1250", "stalls_per_min_1250_honest", "stalls_per_min_1250_dishonest",
+            "stalls_per_min_4250", "stalls_per_min_4250_honest", "stalls_per_min_4250_dishonest"])
+        self.assertEqual(vocab.expand(key, e, "ppspp"), ["stalls_per_min_1250", "stalls_per_min_1250_honest",
+                                                         "stalls_per_min_4250", "stalls_per_min_4250_honest"])
 
     def renamed_doc(self):
         """fields.toml with two renames: lag_old_ms, ppspp's older

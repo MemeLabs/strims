@@ -48,8 +48,19 @@
 #   code.<sim>    {param = [Rust expressions]}: the code's arrays a param's
 #                 values are, concatenated, which a generated test holds
 #                 equal
+#   aggregate     how its value is made of the peers', where it is split by
+#                 population: count or sum (its _honest and _dishonest
+#                 parts add up to it, and no all-peer value is written),
+#                 quantile, ratio, mean or distinct (they don't, and the
+#                 unsuffixed name is the all-peer value beside them)
 #   description   what it holds
 #   notes.<sim>   that sim's own doc of it, where it says more or other
+#
+# Populations: a quantity recorded for honest and dishonest peers is written
+# as name_honest (in every run) and name_dishonest (in runs with dishonest
+# peers), the population last; an unsuffixed all-peer name beside them only
+# where the parts can't make it (aggregate). The ppspp sim's greedy viewers
+# read nothing, so its lag, delivery and playback have no dishonest part.
 #
 # [tables.<name>]: a table either sim writes. sims and lines as above,
 # grain (a row per what), keys and joins (the catalog's), knobs (the
@@ -165,30 +176,34 @@ sims = ["strims-sim", "ppspp"]
 type = "text"
 description = "The run's arrivals profile, its knob's text (STRIMS_SIM_ARRIVALS, SIM_ARRIVALS); left out for one with every viewer from the start (strims-sim) or without arrivals or departures (the ppspp sim)."
 
-[rows.arrived]
-sims = ["strims-sim", "ppspp"]
-type = "int"
-description = "`arrived`, `arrived_honest`: the viewers that arrived after the run's start (`HostSpec::arrive_at`), and of them the honest; `departed`, `departed_honest`, those that left for good;"
-
 [rows.arrived_honest]
 sims = ["strims-sim", "ppspp"]
 type = "int"
-description = "`arrived`, `arrived_honest`: the viewers that arrived after the run's start (`HostSpec::arrive_at`), and of them the honest; `departed`, `departed_honest`, those that left for good;"
+aggregate = "count"
+description = "`arrived_honest`, `arrived_dishonest`: the honest and the dishonest viewers that arrived after the run's start (`HostSpec::arrive_at`), the dishonest with any; `departed_honest`, `departed_dishonest`, those that left for good;"
+
+[rows.arrived_dishonest]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+aggregate = "count"
+description = "`arrived_honest`, `arrived_dishonest`: the honest and the dishonest viewers that arrived after the run's start (`HostSpec::arrive_at`), the dishonest with any; `departed_honest`, `departed_dishonest`, those that left for good;"
 
 [rows.asks]
 sims = ["ppspp"]
 type = "int"
 description = "The ANNOUNCE messages the seed sent, over all its channels in the swarm, at the end (the channels' outbound announce counters). Not the asks table's requests."
 
-[rows.barred]
-sims = ["ppspp"]
-type = "int"
-description = "The neighbours an adaptive seed barred from holding a copy."
-
 [rows.barred_honest]
 sims = ["ppspp"]
 type = "int"
-description = "Of the neighbours an adaptive seed barred, the honest ones."
+aggregate = "count"
+description = "Of the neighbours an adaptive seed barred from holding a copy, the honest ones."
+
+[rows.barred_dishonest]
+sims = ["ppspp"]
+type = "int"
+aggregate = "count"
+description = "Of the neighbours an adaptive seed barred from holding a copy, the dishonest ones (greedy viewers and adversaries); left out without any."
 
 [rows.bucket_p50_ms]
 sims = ["strims-sim"]
@@ -368,15 +383,19 @@ notes.ppspp = "Its wire bytes up in the second against its uplink at the sample 
 sims = ["strims-sim", "ppspp"]
 type = "num"
 unit = "fraction"
-description = "The share of what the viewers were owed that they read: delivered over written frames of the first swarm, summed over its viewers, each owed every frame the seed wrote while it was there (Report::owed), those written while it was down included; a media swarm's viewer is owed the frames from its first on."
-notes.ppspp = "The chunks read over the chunks due, summed over the honest viewers whose places were never taken again (Sim::delivered: an arrival is due the chunks from its reader's start, a departure those published CAUGHT_UP before it left)."
+aggregate = "ratio"
+description = "The share of what the viewers were owed that they read: delivered over written frames of the first swarm, summed over its viewers, dishonest ones' in, each owed every frame the seed wrote while it was there (Report::owed), those written while it was down included; a media swarm's viewer is owed the frames from its first on. `delivery_honest` and `delivery_dishonest` are its populations'."
+notes.ppspp = "The chunks read over the chunks due, summed over the honest viewers whose places were never taken again (Sim::delivered: an arrival is due the chunks from its reader's start, a departure those published CAUGHT_UP before it left). Its greedy viewers read nothing, so it is the honest viewers' (`delivery_honest`), in older runs too."
 
 [rows."delivery_{who}"]
-sims = ["strims-sim"]
+sims = ["strims-sim", "ppspp"]
 type = "num"
 unit = "fraction"
-params = { who = ["honest", "hostile"] }
-description = "With hostile hosts, Report::delivery over the honest viewers (`honest`) and over the hostile hosts (`hostile`)."
+params = { who = { strims-sim = ["honest", "dishonest"], ppspp = ["honest"] } }
+aggregate = "ratio"
+description = "`delivery`'s populations: the share of what they were owed that the first swarm's honest viewers read (`delivery_honest`, in every run) and its dishonest hosts (`delivery_dishonest`, with any)."
+notes.strims-sim = "Report::delivery_of, each viewer owed every frame written while it was there; its hostile hosts the dishonest."
+notes.ppspp = "`delivery`'s honest viewers (Sim::delivered); its greedy viewers read nothing, so it writes no `_dishonest`."
 
 [rows.depart]
 sims = ["strims-sim", "ppspp"]
@@ -388,49 +407,51 @@ sims = ["strims-sim", "ppspp"]
 type = "int"
 unit = "ms x s"
 description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
-notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest`, and with greedy viewers or adversaries `_dishonest`); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
 
 [rows.depart_lag_peak_ms]
 sims = ["strims-sim", "ppspp"]
 type = "int"
 unit = "ms"
 description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
-notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest`, and with greedy viewers or adversaries `_dishonest`); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
 
 [rows.depart_recover_censored]
 sims = ["strims-sim", "ppspp"]
 type = "int"
 description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
-notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest`, and with greedy viewers or adversaries `_dishonest`); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
 
 [rows.depart_recover_ms]
 sims = ["strims-sim", "ppspp"]
 type = "int"
 unit = "ms"
 description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
-notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest`, and with greedy viewers or adversaries `_dishonest`); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
 
 [rows.depart_stayed]
 sims = ["strims-sim", "ppspp"]
 type = "int"
 description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
-notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest`, and with greedy viewers or adversaries `_dishonest`); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
 
 [rows.depart_stranded]
 sims = ["strims-sim", "ppspp"]
 type = "int"
 description = "with departures, the stayers' recovery (`Report::departure_recovery`): `depart_stayed`, `depart_stranded`, `depart_lag_peak_ms`, `depart_excess_lag_area_ms_s`, `depart_recover_ms` and `depart_recover_censored`."
-notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
-
-[rows.departed]
-sims = ["strims-sim", "ppspp"]
-type = "int"
-description = "`arrived`, `arrived_honest`: the viewers that arrived after the run's start (`HostSpec::arrive_at`), and of them the honest; `departed`, `departed_honest`, those that left for good;"
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest`, and with greedy viewers or adversaries `_dishonest`); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
 
 [rows.departed_honest]
 sims = ["strims-sim", "ppspp"]
 type = "int"
-description = "`arrived`, `arrived_honest`: the viewers that arrived after the run's start (`HostSpec::arrive_at`), and of them the honest; `departed`, `departed_honest`, those that left for good;"
+aggregate = "count"
+description = "`arrived_honest`, `arrived_dishonest`: the honest and the dishonest viewers that arrived after the run's start (`HostSpec::arrive_at`), the dishonest with any; `departed_honest`, `departed_dishonest`, those that left for good;"
+
+[rows.departed_dishonest]
+sims = ["strims-sim", "ppspp"]
+type = "int"
+aggregate = "count"
+description = "`arrived_honest`, `arrived_dishonest`: the honest and the dishonest viewers that arrived after the run's start (`HostSpec::arrive_at`), the dishonest with any; `departed_honest`, `departed_dishonest`, those that left for good;"
 
 [rows.depth1_up_p50]
 sims = ["strims-sim"]
@@ -654,29 +675,37 @@ description = "The worst lag in ms of a chunk the honest viewers read after thei
 sims = ["strims-sim", "ppspp"]
 type = "int"
 unit = "ms"
-description = "The median lag in ms of every frame the first swarm's viewers read: read time less the write time the frame carries (Report::lag)."
-notes.ppspp = "The median lag in ms of the chunks the honest viewers read after their warm-ups (Sim::steady: from each one's arrival plus warm_secs to its departure)."
+aggregate = "quantile"
+description = "The median lag in ms of every frame the first swarm's viewers read, dishonest ones' in: read time less the write time the frame carries (Report::lag); `lag_p50_ms_honest` and `lag_p50_ms_dishonest` are its populations'."
+notes.ppspp = "The median lag in ms of the chunks the viewers read after their warm-ups (Sim::steady: from each one's arrival plus warm_secs to its departure). Its greedy viewers read nothing, so it is the honest viewers' (`lag_p50_ms_honest`), in older runs too."
 
 [rows."lag_p50_ms_{who}"]
-sims = ["strims-sim"]
+sims = ["strims-sim", "ppspp"]
 type = "int"
 unit = "ms"
-params = { who = ["honest", "hostile"] }
-description = "With hostile hosts, the median lag in ms of the frames written between the first swarm's start and stop, over the honest viewers (`honest`) and over the hostile hosts (`hostile`)."
+params = { who = { strims-sim = ["honest", "dishonest"], ppspp = ["honest"] } }
+aggregate = "quantile"
+description = "`lag_p50_ms`'s populations: the median lag in ms over the first swarm's honest viewers (`lag_p50_ms_honest`, in every run) and over its dishonest hosts (`lag_p50_ms_dishonest`, with any)."
+notes.strims-sim = "Of the frames written between the first swarm's start and stop (Report::lag_of_between), its hostile hosts the dishonest."
+notes.ppspp = "The honest viewers' after their warm-ups, as `lag_p50_ms` reads them (Sim::steady); its greedy viewers read nothing, so it writes no `_dishonest`."
 
 [rows.lag_p99_ms]
 sims = ["strims-sim", "ppspp"]
 type = "int"
 unit = "ms"
-description = "The p99 lag in ms of every frame the first swarm's viewers read: read time less the write time the frame carries (Report::lag)."
-notes.ppspp = "The p99 lag in ms of the chunks the honest viewers read after their warm-ups (Sim::steady)."
+aggregate = "quantile"
+description = "The p99 lag in ms of every frame the first swarm's viewers read, dishonest ones' in: read time less the write time the frame carries (Report::lag); `lag_p99_ms_honest` and `lag_p99_ms_dishonest` are its populations'."
+notes.ppspp = "The p99 lag in ms of the chunks the viewers read after their warm-ups (Sim::steady: from each one's arrival plus warm_secs to its departure). Its greedy viewers read nothing, so it is the honest viewers' (`lag_p99_ms_honest`), in older runs too."
 
 [rows."lag_p99_ms_{who}"]
-sims = ["strims-sim"]
+sims = ["strims-sim", "ppspp"]
 type = "int"
 unit = "ms"
-params = { who = ["honest", "hostile"] }
-description = "With hostile hosts, the p99 lag in ms of the frames written between the first swarm's start and stop, over the honest viewers (`honest`) and over the hostile hosts (`hostile`)."
+params = { who = { strims-sim = ["honest", "dishonest"], ppspp = ["honest"] } }
+aggregate = "quantile"
+description = "`lag_p99_ms`'s populations: the p99 lag in ms over the first swarm's honest viewers (`lag_p99_ms_honest`, in every run) and over its dishonest hosts (`lag_p99_ms_dishonest`, with any)."
+notes.strims-sim = "Of the frames written between the first swarm's start and stop (Report::lag_of_between), its hostile hosts the dishonest."
+notes.ppspp = "The honest viewers' after their warm-ups, as `lag_p99_ms` reads them (Sim::steady); its greedy viewers read nothing, so it writes no `_dishonest`."
 
 [rows.lag_p99_ms_weak]
 sims = ["strims-sim"]
@@ -914,7 +943,7 @@ notes.ppspp = "Prunes and switches (PushStats) per honest viewer-minute after th
 sims = ["strims-sim", "ppspp"]
 type = "int"
 description = "the honest viewers' push parents that departed (`Report::parent_losses`, counted per departure: `parent_lost`) and the streams they parented (`parent_lost_streams`), and how long the viewers took to notice (`parent_lost_noticed_p50_ms`, `parent_lost_noticed_p90_ms`; `parent_lost_unnoticed`, never);"
-notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+notes.ppspp = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest`, and with greedy viewers or adversaries `_dishonest`); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
 
 [rows."parent_lost_noticed_p{p}_ms"]
 sims = ["strims-sim"]
@@ -1111,7 +1140,7 @@ description = "Over the samples, the honest viewers with at least one push subsc
 [rows.relinks]
 sims = ["ppspp"]
 type = "int"
-description = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest` of them); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
+description = "The columns of a run with arrivals or departures (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived after the start and that left for good (`_honest`, and with greedy viewers or adversaries `_dishonest`); over every honest viewer, from its join (its arrival, the start for one there from it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and to its first read within `CAUGHT_UP` (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open parent left (`parent_lost`, counted per departure) and their streams it was the parent of; and with departures the recovery from them (`Recovery`): the viewers measured (`depart_stayed`) and those left without a neighbour at the end (`depart_stranded`), their worst lag (`depart_lag_peak_ms`), and by their per-second lag p90 its excess summed (`depart_excess_lag_area_ms_s`) and the time back under `CAUGHT_U..."
 
 [rows.reports_invalid]
 sims = ["ppspp"]
@@ -1168,7 +1197,7 @@ description = "Most samples of a push channel have nothing out, so the flight an
 sims = []
 lines = ["decl", "p4tf"]
 type = "int"
-description = "Of the honest viewers' timeouts (`timeouts`), the requests that timed out (the others: speculative ones that expired or were answered NOT_YET)."
+description = "Of the honest viewers' timeouts (`timeouts_honest`), the requests that timed out (the others: speculative ones that expired or were answered NOT_YET)."
 
 [rows.requests_not_yet]
 sims = []
@@ -1337,17 +1366,20 @@ type = "int"
 unit = "ms"
 description = "The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after each rise of its available upload (Report::lag_after_changes); with tracking only."
 
-[rows.seed_rtt_greedy_ms]
+[rows.seed_rtt_ms]
 sims = ["ppspp"]
 type = "int"
 unit = "ms"
-description = "The median of the seed's latest round trips to the greedy viewers, in ms, over its links to them with a reading; left out without any."
+aggregate = "quantile"
+description = "The median of the seed's latest round trips to the viewers, honest and greedy, in ms, over its links to them with a reading; left out without any. `seed_rtt_ms_honest` and `seed_rtt_ms_dishonest` are its populations'."
 
-[rows.seed_rtt_honest_ms]
+[rows."seed_rtt_ms_{who}"]
 sims = ["ppspp"]
 type = "int"
 unit = "ms"
-description = "The median of the seed's latest round trips to the honest viewers, in ms, over its links to them with a reading; left out without any."
+params = { who = ["honest", "dishonest"] }
+aggregate = "quantile"
+description = "`seed_rtt_ms`'s populations: the median of the seed's latest round trips, in ms, over its links with a reading to the honest viewers (`seed_rtt_ms_honest`) and to the greedy ones (`seed_rtt_ms_dishonest`); each left out without any."
 
 [rows.seed_upload_share]
 sims = ["strims-sim", "ppspp"]
@@ -1368,15 +1400,12 @@ sims = ["strims-sim", "ppspp"]
 type = "int"
 description = "The seed's requests that timed out unanswered (Report::timeouts)."
 
-[rows.seed_unmeasured_greedy]
+[rows."seed_unmeasured_{who}"]
 sims = ["ppspp"]
 type = "int"
-description = "The seed's links to greedy viewers without a round-trip reading at the run's end."
-
-[rows.seed_unmeasured_honest]
-sims = ["ppspp"]
-type = "int"
-description = "The seed's links to honest viewers without a round-trip reading at the run's end."
+params = { who = ["honest", "dishonest"] }
+aggregate = "count"
+description = "The seed's links without a round-trip reading at the run's end to the honest viewers (`seed_unmeasured_honest`) and, with greedy viewers, to them (`seed_unmeasured_dishonest`)."
 
 [rows.seed_chunk_share]
 sims = ["strims-sim", "ppspp"]
@@ -1528,20 +1557,22 @@ notes.ppspp = "Over the honest viewers' runners but the seed's and the grabbers'
 sims = ["strims-sim", "ppspp"]
 type = "num"
 unit = "fraction"
-params = { delay = ["1250", "4250"], pop = { strims-sim = ["", "_honest"], ppspp = [""] } }
+params = { delay = ["1250", "4250"], pop = { strims-sim = ["", "_honest", "_dishonest"], ppspp = ["", "_honest"] } }
+aggregate = "ratio"
 code.strims-sim = { delay = ["strims_wan::playout::DELAYS_MS"] }
 code.ppspp = { delay = ["strims_wan::playout::DELAYS_MS"] }
-description = "The row's playback columns, as the ppspp sim's rows have them: per delay `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last frame's play, or its departure if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its reader's start, or the stream's if later, as `Report::joins` times it) to its playback's start (`startup_ms_D`); with hostile hosts, the honest viewers' too, with `_honest`."
-notes.ppspp = "The playback columns, as strims-sim's rows have them: per delay `D` of `DELAYS_MS`, the honest viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last chunk's play, or its leaving for good if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its arrival, or the stream's start if later) to its playback's start (`startup_ms_D`)."
+description = "The row's playback columns, as the ppspp sim's rows have them: per delay `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last frame's play, or its departure if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its reader's start, or the stream's if later, as `Report::joins` times it) to its playback's start (`startup_ms_D`); every viewer's, dishonest ones' in, then the honest viewers' (`_honest`, in every run) and the dishonest hosts' (`_dishonest`, with any)."
+notes.ppspp = "The playback columns, as strims-sim's rows have them: per delay `D` of `DELAYS_MS`, the honest viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last chunk's play, or its leaving for good if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its arrival, or the stream's start if later) to its playback's start (`startup_ms_D`). Its greedy viewers read nothing, so every viewer's are the honest viewers' (`_honest`), in older runs too, and it writes no `_dishonest`."
 
 [rows."stalls_per_min_{delay}{pop}"]
 sims = ["strims-sim", "ppspp"]
 type = "num"
-params = { delay = ["1250", "4250"], pop = { strims-sim = ["", "_honest"], ppspp = [""] } }
+params = { delay = ["1250", "4250"], pop = { strims-sim = ["", "_honest", "_dishonest"], ppspp = ["", "_honest"] } }
+aggregate = "ratio"
 code.strims-sim = { delay = ["strims_wan::playout::DELAYS_MS"] }
 code.ppspp = { delay = ["strims_wan::playout::DELAYS_MS"] }
-description = "The row's playback columns, as the ppspp sim's rows have them: per delay `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last frame's play, or its departure if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its reader's start, or the stream's if later, as `Report::joins` times it) to its playback's start (`startup_ms_D`); with hostile hosts, the honest viewers' too, with `_honest`."
-notes.ppspp = "The playback columns, as strims-sim's rows have them: per delay `D` of `DELAYS_MS`, the honest viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last chunk's play, or its leaving for good if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its arrival, or the stream's start if later) to its playback's start (`startup_ms_D`)."
+description = "The row's playback columns, as the ppspp sim's rows have them: per delay `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last frame's play, or its departure if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its reader's start, or the stream's if later, as `Report::joins` times it) to its playback's start (`startup_ms_D`); every viewer's, dishonest ones' in, then the honest viewers' (`_honest`, in every run) and the dishonest hosts' (`_dishonest`, with any)."
+notes.ppspp = "The playback columns, as strims-sim's rows have them: per delay `D` of `DELAYS_MS`, the honest viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last chunk's play, or its leaving for good if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its arrival, or the stream's start if later) to its playback's start (`startup_ms_D`). Its greedy viewers read nothing, so every viewer's are the honest viewers' (`_honest`), in older runs too, and it writes no `_dishonest`."
 
 [rows."standing_{pop}"]
 sims = ["strims-sim"]
@@ -1558,11 +1589,12 @@ description = "The share of the seeds' uplink queue samples while a swarm stream
 sims = ["strims-sim", "ppspp"]
 type = "int"
 unit = "ms"
-params = { delay = ["1250", "4250"], pop = { strims-sim = ["", "_honest"], ppspp = [""] } }
+params = { delay = ["1250", "4250"], pop = { strims-sim = ["", "_honest", "_dishonest"], ppspp = ["", "_honest"] } }
+aggregate = "mean"
 code.strims-sim = { delay = ["strims_wan::playout::DELAYS_MS"] }
 code.ppspp = { delay = ["strims_wan::playout::DELAYS_MS"] }
-description = "The row's playback columns, as the ppspp sim's rows have them: per delay `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last frame's play, or its departure if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its reader's start, or the stream's if later, as `Report::joins` times it) to its playback's start (`startup_ms_D`); with hostile hosts, the honest viewers' too, with `_honest`."
-notes.ppspp = "The playback columns, as strims-sim's rows have them: per delay `D` of `DELAYS_MS`, the honest viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last chunk's play, or its leaving for good if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its arrival, or the stream's start if later) to its playback's start (`startup_ms_D`)."
+description = "The row's playback columns, as the ppspp sim's rows have them: per delay `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last frame's play, or its departure if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its reader's start, or the stream's if later, as `Report::joins` times it) to its playback's start (`startup_ms_D`); every viewer's, dishonest ones' in, then the honest viewers' (`_honest`, in every run) and the dishonest hosts' (`_dishonest`, with any)."
+notes.ppspp = "The playback columns, as strims-sim's rows have them: per delay `D` of `DELAYS_MS`, the honest viewers' playouts of what they read (`playout::play`, the tables' `stalls`), each viewer from its playback's start to its last chunk's play, or its leaving for good if that came first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and the mean ms from each one's join (its arrival, or the stream's start if later) to its playback's start (`startup_ms_D`). Its greedy viewers read nothing, so every viewer's are the honest viewers' (`_honest`), in older runs too, and it writes no `_dishonest`."
 
 [rows.stream_end_s]
 sims = ["ppspp"]
@@ -1624,15 +1656,17 @@ sims = ["strims-sim"]
 type = "text"
 description = "The sweep test the job ran (strims-sim's tests/scenarios.rs name)."
 
-[rows.timeouts]
+[rows.timeouts_honest]
 sims = ["strims-sim", "ppspp"]
 type = "int"
-description = "The honest viewers' requests that timed out unanswered, over every incarnation (SwarmCounters::timeouts): every host but the seed and the hostile ones."
+aggregate = "count"
+description = "The honest viewers' requests that timed out unanswered, over every incarnation (SwarmCounters::timeouts): every host but the seed and the dishonest ones."
 
-[rows.timeouts_hostile]
+[rows.timeouts_dishonest]
 sims = ["strims-sim", "ppspp"]
 type = "int"
-description = "With hostile hosts, their requests that timed out unanswered (strims-sim's hostile hosts; the ppspp sim's greedy viewers and adversaries); left out without any."
+aggregate = "count"
+description = "With dishonest peers, their requests that timed out unanswered (strims-sim's hostile hosts; the ppspp sim's greedy viewers and adversaries); left out without any."
 
 [rows.timeouts_spec_expired]
 sims = []
@@ -1819,6 +1853,7 @@ description = "Honest holders barred that had a real child at the sample before.
 [rows.v_honest]
 sims = ["ppspp"]
 type = "int"
+aggregate = "count"
 description = "The reports' verdicts against the real subtrees: honest holder samples."
 
 [rows.v_judged]
@@ -2111,6 +2146,93 @@ rename = true
 type = "num"
 unit = "fraction"
 description = "The seed's share of the upload, each sim's reading: strims-sim's of every byte the swarm's hosts wrote to their links (UploadDistribution::seed_share), the ppspp sim's of the DATA bytes sent (Sim::uploaded over every node)."
+
+[rows.lag_p50_ms_hostile]
+sims = []
+retired = ["strims-sim"]
+replaced_by = "lag_p50_ms_dishonest"
+rename = true
+type = "int"
+unit = "ms"
+description = "With hostile hosts, the median lag in ms of the frames written between the first swarm's start and stop over the hostile hosts."
+
+[rows.lag_p99_ms_hostile]
+sims = []
+retired = ["strims-sim"]
+replaced_by = "lag_p99_ms_dishonest"
+rename = true
+type = "int"
+unit = "ms"
+description = "With hostile hosts, the p99 lag in ms of the frames written between the first swarm's start and stop over the hostile hosts."
+
+[rows.delivery_hostile]
+sims = []
+retired = ["strims-sim"]
+replaced_by = "delivery_dishonest"
+rename = true
+type = "num"
+unit = "fraction"
+description = "With hostile hosts, Report::delivery over the hostile hosts."
+
+[rows.timeouts]
+sims = []
+retired = ["strims-sim", "ppspp"]
+replaced_by = "timeouts_honest"
+rename = true
+type = "int"
+description = "The honest viewers' requests that timed out unanswered, over every incarnation (SwarmCounters::timeouts): every host but the seed and the hostile ones."
+
+[rows.timeouts_hostile]
+sims = []
+retired = ["strims-sim", "ppspp"]
+replaced_by = "timeouts_dishonest"
+rename = true
+type = "int"
+description = "With hostile hosts, their requests that timed out unanswered (strims-sim's hostile hosts; the ppspp sim's greedy viewers and adversaries); left out without any."
+
+[rows.arrived]
+sims = []
+retired = ["strims-sim", "ppspp"]
+type = "int"
+description = "The viewers that arrived after the run's start (`HostSpec::arrive_at`), honest and dishonest: `arrived_honest` and `arrived_dishonest` add up to it."
+
+[rows.departed]
+sims = []
+retired = ["strims-sim", "ppspp"]
+type = "int"
+description = "The viewers that left for good, honest and dishonest: `departed_honest` and `departed_dishonest` add up to it."
+
+[rows.barred]
+sims = []
+retired = ["ppspp"]
+type = "int"
+description = "The neighbours an adaptive seed barred from holding a copy, honest and dishonest: `barred_honest` and `barred_dishonest` add up to it."
+
+[rows.seed_rtt_honest_ms]
+sims = []
+retired = ["ppspp"]
+replaced_by = "seed_rtt_ms_honest"
+rename = true
+type = "int"
+unit = "ms"
+description = "The median of the seed's latest round trips to the honest viewers, in ms, over its links to them with a reading; left out without any."
+
+[rows.seed_rtt_greedy_ms]
+sims = []
+retired = ["ppspp"]
+replaced_by = "seed_rtt_ms_dishonest"
+rename = true
+type = "int"
+unit = "ms"
+description = "The median of the seed's latest round trips to the greedy viewers, in ms, over its links to them with a reading; left out without any."
+
+[rows.seed_unmeasured_greedy]
+sims = []
+retired = ["ppspp"]
+replaced_by = "seed_unmeasured_dishonest"
+rename = true
+type = "int"
+description = "The seed's links to greedy viewers without a round-trip reading at the run's end (0 without any)."
 
 [meta.sim]
 sims = ["strims-sim", "ppspp"]

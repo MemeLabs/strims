@@ -116,7 +116,7 @@ note = "A row with hostile viewers scores its honest ones'."
 
 [[scored]]
 name = "timeouts"
-sql = "r.timeouts"
+sql = "r.timeouts_honest"
 better = "lower"
 score = { kind = "ratio", tie = 0.1 }
 
@@ -466,13 +466,13 @@ unit = "ms"
 
 [[scored]]
 name = "hostile_lag_p99_ms"
-sql = "r.lag_p99_ms_hostile"
+sql = "r.lag_p99_ms_dishonest"
 score = { kind = "ratio", tie = 0.05 }
 unit = "ms"
 
 [[scored]]
 name = "hostile_delivery"
-sql = "r.delivery_hostile"
+sql = "r.delivery_dishonest"
 score = { kind = "diff", tie = 0.002 }
 
 [[scored]]
@@ -557,10 +557,10 @@ score = { kind = "diff", tie = 0.05 }
 
 [[scored]]
 name = "defector_gain"
-sql = "CASE WHEN r.lag_p99_ms_hostile <> 0 AND r.lag_p99_ms_honest <> 0 THEN r.lag_p99_ms_hostile / r.lag_p99_ms_honest END"
+sql = "CASE WHEN r.lag_p99_ms_dishonest <> 0 AND r.lag_p99_ms_honest <> 0 THEN r.lag_p99_ms_dishonest / r.lag_p99_ms_honest END"
 better = "higher"
 score = { kind = "ratio", tie = 0.05, guard = "hi" }
-description = "The hostile hosts' lag p99 over the honest viewers' (`lag_p99_ms_hostile` over `lag_p99_ms_honest`): under 1, defecting pays."
+description = "The dishonest hosts' lag p99 over the honest viewers' (`lag_p99_ms_dishonest` over `lag_p99_ms_honest`): under 1, defecting pays."
 
 [[scored]]
 name = "exch_rejected"

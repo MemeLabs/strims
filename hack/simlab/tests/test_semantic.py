@@ -20,6 +20,13 @@ crates/strims-wan/fields.toml.
                entry or table no sim writes names its lines, its writers
                or the sims whose older runs hold it, and a writer's names
                (only) start with _
+  Populations  the population rule over the rows each sim writes: a
+               quantity split into _honest and _dishonest declares its
+               aggregate, a count or sum is written as its parts alone and
+               any other kind beside its unsuffixed all-peer value (of the
+               same kind), a _dishonest part beside its _honest one, which
+               every sim that writes the quantity writes, the population
+               last; an aggregate only on a split quantity
   Retired      the spec's rules of retired, replaced_by and rename: each
                kind of break is found
   FarmNames    the row fields the farm reads are declared rows: worker.py's
@@ -187,6 +194,60 @@ class Naming(unittest.TestCase):
             # A writer's name is apart from a sim's.
             with self.subTest(where, underscore=True):
                 self.assertEqual(key.startswith("_"), bool(e.get("writers")))
+
+
+class Populations(unittest.TestCase):
+    POP = re.compile(r"_(honest|dishonest)$")
+
+    def written(self):
+        """{sim: {name: its entry's aggregate}} of the rows each sim writes."""
+        from simlab import spec
+        out = {s: {} for s in spec.SIMS}
+        for key, e in vocab.fields()["rows"].items():
+            for s in e["sims"]:
+                for n in vocab.expand(key, e, s):
+                    out[s][n] = e.get("aggregate")
+        return out
+
+    def test_a_split_quantity_is_its_parts_or_beside_its_whole(self):
+        from simlab import spec
+        for s, names in self.written().items():
+            for n, agg in names.items():
+                m = self.POP.search(n)
+                if not m:
+                    continue
+                whole = n[:m.start()]
+                with self.subTest(sim=s, name=n):
+                    self.assertIn(agg, spec.AGGREGATES, "a split quantity declares its aggregate")
+                    if agg in spec.ADDITIVE:
+                        self.assertNotIn(whole, names, "a count or sum is written as its parts alone")
+                    else:
+                        self.assertIn(whole, names, "the all-peer value its parts can't make is written")
+                        self.assertEqual(names[whole], agg)
+                    if m.group(1) == "dishonest":
+                        self.assertIn(f"{whole}_honest", names)
+
+    def test_every_sim_that_writes_a_split_quantity_writes_its_honest_part(self):
+        w = self.written()
+        split = {n[:-len("_honest")] for names in w.values() for n in names if n.endswith("_honest")}
+        for s, names in w.items():
+            for whole in sorted(split):
+                if whole in names or f"{whole}_dishonest" in names:
+                    with self.subTest(sim=s, name=whole):
+                        self.assertIn(f"{whole}_honest", names)
+
+    def test_the_population_comes_last(self):
+        for s, names in self.written().items():
+            for n in names:
+                with self.subTest(sim=s, name=n):
+                    self.assertNotRegex(n, r"_(?:honest|dishonest)_")
+
+    def test_an_aggregate_is_a_split_quantitys(self):
+        for s, names in self.written().items():
+            for n, agg in names.items():
+                if agg is not None:
+                    with self.subTest(sim=s, name=n):
+                        self.assertTrue(self.POP.search(n) or f"{n}_honest" in names, "no population split")
 
 
 class Retired(unittest.TestCase):

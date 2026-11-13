@@ -336,14 +336,16 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     EventPPMs(u16),
-    /// `arrived`, `arrived_honest`: the viewers that arrived after the run's
-    /// start (`HostSpec::arrive_at`), and of them the honest; `departed`,
-    /// `departed_honest`, those that left for good;
-    Arrived,
-    /// `arrived`, `arrived_honest`: the viewers that arrived after the run's
-    /// start (`HostSpec::arrive_at`), and of them the honest; `departed`,
-    /// `departed_honest`, those that left for good;
+    /// `arrived_honest`, `arrived_dishonest`: the honest and the dishonest
+    /// viewers that arrived after the run's start (`HostSpec::arrive_at`), the
+    /// dishonest with any; `departed_honest`, `departed_dishonest`, those that
+    /// left for good;
     ArrivedHonest,
+    /// `arrived_honest`, `arrived_dishonest`: the honest and the dishonest
+    /// viewers that arrived after the run's start (`HostSpec::arrive_at`), the
+    /// dishonest with any; `departed_honest`, `departed_dishonest`, those that
+    /// left for good;
+    ArrivedDishonest,
     /// Over the first swarm's honest viewers' first joins (each one's first
     /// incarnation's): the ms from the join to its first frame read
     /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
@@ -420,14 +422,16 @@ pub(crate) enum RowInt {
     /// `depart_excess_lag_area_ms_s`, `depart_recover_ms` and
     /// `depart_recover_censored`.
     DepartStranded,
-    /// `arrived`, `arrived_honest`: the viewers that arrived after the run's
-    /// start (`HostSpec::arrive_at`), and of them the honest; `departed`,
-    /// `departed_honest`, those that left for good;
-    Departed,
-    /// `arrived`, `arrived_honest`: the viewers that arrived after the run's
-    /// start (`HostSpec::arrive_at`), and of them the honest; `departed`,
-    /// `departed_honest`, those that left for good;
+    /// `arrived_honest`, `arrived_dishonest`: the honest and the dishonest
+    /// viewers that arrived after the run's start (`HostSpec::arrive_at`), the
+    /// dishonest with any; `departed_honest`, `departed_dishonest`, those that
+    /// left for good;
     DepartedHonest,
+    /// `arrived_honest`, `arrived_dishonest`: the honest and the dishonest
+    /// viewers that arrived after the run's start (`HostSpec::arrive_at`), the
+    /// dishonest with any; `departed_honest`, `departed_dishonest`, those that
+    /// left for good;
+    DepartedDishonest,
     /// The bytes every host received through its downlink (WAN mode's down
     /// bytes; outside it what it downloaded).
     ///
@@ -478,25 +482,35 @@ pub(crate) enum RowInt {
     /// 1 when any host was told its upload capacity (HostSpec::upload_capacity,
     /// STRIMS_SIM_KNOWN_UPLINK), else 0.
     KnownUplink,
-    /// The median lag in ms of every frame the first swarm's viewers read: read
-    /// time less the write time the frame carries (Report::lag).
+    /// The median lag in ms of every frame the first swarm's viewers read,
+    /// dishonest ones' in: read time less the write time the frame carries
+    /// (Report::lag); `lag_p50_ms_honest` and `lag_p50_ms_dishonest` are its
+    /// populations'.
     ///
     /// Unit: ms.
     LagP50Ms,
-    /// With hostile hosts, the median lag in ms of the frames written between
-    /// the first swarm's start and stop, over the honest viewers (`honest`) and
-    /// over the hostile hosts (`hostile`).
+    /// `lag_p50_ms`'s populations: the median lag in ms over the first swarm's
+    /// honest viewers (`lag_p50_ms_honest`, in every run) and over its
+    /// dishonest hosts (`lag_p50_ms_dishonest`, with any).
+    ///
+    /// strims-sim: Of the frames written between the first swarm's start and
+    /// stop (Report::lag_of_between), its hostile hosts the dishonest.
     ///
     /// Unit: ms.
     LagP50MsWho(u16),
-    /// The p99 lag in ms of every frame the first swarm's viewers read: read
-    /// time less the write time the frame carries (Report::lag).
+    /// The p99 lag in ms of every frame the first swarm's viewers read,
+    /// dishonest ones' in: read time less the write time the frame carries
+    /// (Report::lag); `lag_p99_ms_honest` and `lag_p99_ms_dishonest` are its
+    /// populations'.
     ///
     /// Unit: ms.
     LagP99Ms,
-    /// With hostile hosts, the p99 lag in ms of the frames written between the
-    /// first swarm's start and stop, over the honest viewers (`honest`) and
-    /// over the hostile hosts (`hostile`).
+    /// `lag_p99_ms`'s populations: the p99 lag in ms over the first swarm's
+    /// honest viewers (`lag_p99_ms_honest`, in every run) and over its
+    /// dishonest hosts (`lag_p99_ms_dishonest`, with any).
+    ///
+    /// strims-sim: Of the frames written between the first swarm's start and
+    /// stop (Report::lag_of_between), its hostile hosts the dishonest.
     ///
     /// Unit: ms.
     LagP99MsWho(u16),
@@ -712,8 +726,9 @@ pub(crate) enum RowInt {
     /// (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share
     /// of it stalled (`stalled_share_D`), and the mean ms from each one's join
     /// (its reader's start, or the stream's if later, as `Report::joins` times
-    /// it) to its playback's start (`startup_ms_D`); with hostile hosts, the
-    /// honest viewers' too, with `_honest`.
+    /// it) to its playback's start (`startup_ms_D`); every viewer's, dishonest
+    /// ones' in, then the honest viewers' (`_honest`, in every run) and the
+    /// dishonest hosts' (`_dishonest`, with any).
     ///
     /// Unit: ms.
     StartupMsDelayPop(u16),
@@ -727,12 +742,12 @@ pub(crate) enum RowInt {
     Switched,
     /// The honest viewers' requests that timed out unanswered, over every
     /// incarnation (SwarmCounters::timeouts): every host but the seed and the
-    /// hostile ones.
-    Timeouts,
-    /// With hostile hosts, their requests that timed out unanswered
+    /// dishonest ones.
+    TimeoutsHonest,
+    /// With dishonest peers, their requests that timed out unanswered
     /// (strims-sim's hostile hosts; the ppspp sim's greedy viewers and
     /// adversaries); left out without any.
-    TimeoutsHostile,
+    TimeoutsDishonest,
     /// A media swarm's chunks per unit; left out without media.
     Unit,
     /// The honest hosts' outbound ppspp ACK message bytes
@@ -885,8 +900,8 @@ impl RowInt {
             RowInt::RoleAckWhy(i) => at(&ROWINT_ROLE_ACK_WHY, i),
             RowInt::RoleDelackP90Ms(i) => at(&ROWINT_ROLE_DELACK_P90_MS, i),
             RowInt::EventPPMs(i) => at(&ROWINT_EVENT_P_P_MS, i),
-            RowInt::Arrived => "arrived",
             RowInt::ArrivedHonest => "arrived_honest",
+            RowInt::ArrivedDishonest => "arrived_dishonest",
             RowInt::CaughtUpNever => "caught_up_never",
             RowInt::ClockClass(i) => at(&ROWINT_CLOCK_CLASS, i),
             RowInt::ClockMaxMs => "clock_max_ms",
@@ -898,8 +913,8 @@ impl RowInt {
             RowInt::DepartRecoverMs => "depart_recover_ms",
             RowInt::DepartStayed => "depart_stayed",
             RowInt::DepartStranded => "depart_stranded",
-            RowInt::Departed => "departed",
             RowInt::DepartedHonest => "departed_honest",
+            RowInt::DepartedDishonest => "departed_dishonest",
             RowInt::DownWire => "down_wire",
             RowInt::DupBytes => "dup_bytes",
             RowInt::ExchAnswered => "exch_answered",
@@ -960,8 +975,8 @@ impl RowInt {
             RowInt::StartupMsDelayPop(i) => at(&ROWINT_STARTUP_MS_DELAY_POP, i),
             RowInt::Streams => "streams",
             RowInt::Switched => "switched",
-            RowInt::Timeouts => "timeouts",
-            RowInt::TimeoutsHostile => "timeouts_hostile",
+            RowInt::TimeoutsHonest => "timeouts_honest",
+            RowInt::TimeoutsDishonest => "timeouts_dishonest",
             RowInt::Unit => "unit",
             RowInt::UpAck => "up_ack",
             RowInt::UpAcks => "up_acks",
@@ -1133,10 +1148,10 @@ const ROWINT_CLOCK_CLASS: [&str; 4] = [
 const ROWINT_FANOUT_P_P: [&str; 2] = ["fanout_p50", "fanout_p90"];
 
 /// `lag_p50_ms_{who}`'s names for strims-sim.
-const ROWINT_LAG_P50_MS_WHO: [&str; 2] = ["lag_p50_ms_honest", "lag_p50_ms_hostile"];
+const ROWINT_LAG_P50_MS_WHO: [&str; 2] = ["lag_p50_ms_honest", "lag_p50_ms_dishonest"];
 
 /// `lag_p99_ms_{who}`'s names for strims-sim.
-const ROWINT_LAG_P99_MS_WHO: [&str; 2] = ["lag_p99_ms_honest", "lag_p99_ms_hostile"];
+const ROWINT_LAG_P99_MS_WHO: [&str; 2] = ["lag_p99_ms_honest", "lag_p99_ms_dishonest"];
 
 /// `n_{pop}`'s names for strims-sim.
 const ROWINT_N_POP: [&str; 3] = ["n_accepting", "n_delivering", "n_others"];
@@ -1175,11 +1190,13 @@ const ROWINT_SEED_QUEUE_WAIT_P_P_MS: [&str; 4] = [
 ];
 
 /// `startup_ms_{delay}{pop}`'s names for strims-sim.
-const ROWINT_STARTUP_MS_DELAY_POP: [&str; 4] = [
+const ROWINT_STARTUP_MS_DELAY_POP: [&str; 6] = [
     "startup_ms_1250",
     "startup_ms_1250_honest",
+    "startup_ms_1250_dishonest",
     "startup_ms_4250",
     "startup_ms_4250_honest",
+    "startup_ms_4250_dishonest",
 ];
 
 /// The row's fields that hold a number (null where not finite).
@@ -1253,15 +1270,20 @@ pub(crate) enum RowNum {
     /// Unit: fraction.
     CutFromSeedShare,
     /// The share of what the viewers were owed that they read: delivered over
-    /// written frames of the first swarm, summed over its viewers, each owed
-    /// every frame the seed wrote while it was there (Report::owed), those
-    /// written while it was down included; a media swarm's viewer is owed the
-    /// frames from its first on.
+    /// written frames of the first swarm, summed over its viewers, dishonest
+    /// ones' in, each owed every frame the seed wrote while it was there
+    /// (Report::owed), those written while it was down included; a media
+    /// swarm's viewer is owed the frames from its first on. `delivery_honest`
+    /// and `delivery_dishonest` are its populations'.
     ///
     /// Unit: fraction.
     Delivery,
-    /// With hostile hosts, Report::delivery over the honest viewers (`honest`)
-    /// and over the hostile hosts (`hostile`).
+    /// `delivery`'s populations: the share of what they were owed that the
+    /// first swarm's honest viewers read (`delivery_honest`, in every run) and
+    /// its dishonest hosts (`delivery_dishonest`, with any).
+    ///
+    /// strims-sim: Report::delivery_of, each viewer owed every frame written
+    /// while it was there; its hostile hosts the dishonest.
     ///
     /// Unit: fraction.
     DeliveryWho(u16),
@@ -1481,8 +1503,9 @@ pub(crate) enum RowNum {
     /// (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share
     /// of it stalled (`stalled_share_D`), and the mean ms from each one's join
     /// (its reader's start, or the stream's if later, as `Report::joins` times
-    /// it) to its playback's start (`startup_ms_D`); with hostile hosts, the
-    /// honest viewers' too, with `_honest`.
+    /// it) to its playback's start (`startup_ms_D`); every viewer's, dishonest
+    /// ones' in, then the honest viewers' (`_honest`, in every run) and the
+    /// dishonest hosts' (`_dishonest`, with any).
     ///
     /// Unit: fraction.
     StalledShareDelayPop(u16),
@@ -1493,8 +1516,9 @@ pub(crate) enum RowNum {
     /// (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share
     /// of it stalled (`stalled_share_D`), and the mean ms from each one's join
     /// (its reader's start, or the stream's if later, as `Report::joins` times
-    /// it) to its playback's start (`startup_ms_D`); with hostile hosts, the
-    /// honest viewers' too, with `_honest`.
+    /// it) to its playback's start (`startup_ms_D`); every viewer's, dishonest
+    /// ones' in, then the honest viewers' (`_honest`, in every run) and the
+    /// dishonest hosts' (`_dishonest`, with any).
     StallsPerMinDelayPop(u16),
     /// The share of the uplink queue samples of the first swarm's honest
     /// viewers of each population (`meter_{pop}_p{p}`'s) while a swarm streams
@@ -1856,7 +1880,7 @@ const ROWNUM_WINDOW_P_P: [&str; 15] = [
 ];
 
 /// `delivery_{who}`'s names for strims-sim.
-const ROWNUM_DELIVERY_WHO: [&str; 2] = ["delivery_honest", "delivery_hostile"];
+const ROWNUM_DELIVERY_WHO: [&str; 2] = ["delivery_honest", "delivery_dishonest"];
 
 /// `depth_{hops}`'s names for strims-sim.
 const ROWNUM_DEPTH_HOPS: [&str; 6] = [
@@ -1897,19 +1921,23 @@ const ROWNUM_OVH_POP_P_P: [&str; 6] = [
 ];
 
 /// `stalled_share_{delay}{pop}`'s names for strims-sim.
-const ROWNUM_STALLED_SHARE_DELAY_POP: [&str; 4] = [
+const ROWNUM_STALLED_SHARE_DELAY_POP: [&str; 6] = [
     "stalled_share_1250",
     "stalled_share_1250_honest",
+    "stalled_share_1250_dishonest",
     "stalled_share_4250",
     "stalled_share_4250_honest",
+    "stalled_share_4250_dishonest",
 ];
 
 /// `stalls_per_min_{delay}{pop}`'s names for strims-sim.
-const ROWNUM_STALLS_PER_MIN_DELAY_POP: [&str; 4] = [
+const ROWNUM_STALLS_PER_MIN_DELAY_POP: [&str; 6] = [
     "stalls_per_min_1250",
     "stalls_per_min_1250_honest",
+    "stalls_per_min_1250_dishonest",
     "stalls_per_min_4250",
     "stalls_per_min_4250_honest",
+    "stalls_per_min_4250_dishonest",
 ];
 
 /// `standing_{pop}`'s names for strims-sim.

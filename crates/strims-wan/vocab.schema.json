@@ -143,6 +143,27 @@
           "description": "How older runs wrote none, which the catalog's view reads as none too.",
           "title": "Older None"
         },
+        "aggregate": {
+          "anyOf": [
+            {
+              "enum": [
+                "count",
+                "sum",
+                "quantile",
+                "ratio",
+                "mean",
+                "distinct"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How its value is made of the peers', where it is split by population: count or sum (its _honest and _dishonest parts add up to it, and no all-peer value is written), quantile, ratio, mean or distinct (they don't, and the unsuffixed name is the all-peer value).",
+          "title": "Aggregate"
+        },
         "params": {
           "anyOf": [
             {

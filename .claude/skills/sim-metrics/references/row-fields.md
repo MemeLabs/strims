@@ -34,9 +34,15 @@ don't).
    two names (`meter_budget_seeds` in strims-sim, `budget_capacity` in
    the ppspp sim), so every metric over it has to read both. The same
    goes for its aggregation and shape: a list of deciles in one sim and
-   a median in the other are two readings, whatever their names. Where
-   hostile hosts split a value, add the `_honest` variant beside it, as
-   `lag_p99_ms_honest` is.
+   a median in the other are two readings, whatever their names. A value
+   recorded for honest and dishonest peers is written as `_honest` (in
+   every run, both sims) and `_dishonest` (in runs with dishonest peers),
+   the population last, as `lag_p99_ms_honest` is, and the unsuffixed
+   all-peer value beside them only where the parts can't make it: the
+   entry declares its `aggregate` (a count or sum is its parts alone; a
+   quantile, ratio, mean or distinct count keeps its whole), and
+   test_semantic's Populations holds the rule. Goals and guardrails read
+   the `_honest` value.
 4. **A row field named like a table column** is a name of its own
    in fields.toml (the rows' and each table's names are apart): give it
    a description of its own, and a name of its own where the meanings

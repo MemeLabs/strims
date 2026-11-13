@@ -69,6 +69,13 @@ RESTATED = {
     # The row's field alone: no fallback to the middle of strims-sim's
     # meter_others, a name no sim writes.
     "meter_others_p50": lambda r: r.get("meter_others_p50"),
+    # Renamed fields (fields.toml's `rename`): the current name, else the
+    # one older rows hold, as the catalog's rows view reads them.
+    "timeouts": lambda r: r.get("timeouts_honest", r.get("timeouts")),
+    "hostile_lag_p99_ms": lambda r: r.get("lag_p99_ms_dishonest", r.get("lag_p99_ms_hostile")),
+    "hostile_delivery": lambda r: r.get("delivery_dishonest", r.get("delivery_hostile")),
+    "defector_gain": lambda r: (lambda d, h: d / h if d and h else None)(
+        r.get("lag_p99_ms_dishonest", r.get("lag_p99_ms_hostile")), r.get("lag_p99_ms_honest")),
 }
 # How many times an experiment is scored at one snapshot before a
 # snapshot gone from under it fails the check (compared_pinned).
@@ -327,9 +334,9 @@ def synthetic():
                 "_collapsed": collapsed, "_wall_s": wall, "_rss_mb": f.pop("rss", 100.0), **f}
     cells = [
         ("one-seed", "one seed: an interval of nothing", [(1, row(100), row(200))]),
-        ("zeros", "ratios over zeros, a share falling", [(s, row(0 if s % 2 else 50, timeouts=0, wasted=1,
+        ("zeros", "ratios over zeros, a share falling", [(s, row(0 if s % 2 else 50, timeouts_honest=0, wasted=1,
                                                               chunks_read=10),
-                                                       row(60, timeouts=s, wasted=2, chunks_read=10))
+                                                       row(60, timeouts_honest=s, wasted=2, chunks_read=10))
                                                       for s in range(1, 9)]),
         ("eighteen", "18 seeds: the t table between 16 and 20",
          [(s, row(100 + s, unhealthy=0.01 * s), row(130 + 2 * s, unhealthy=0.02 * s, wall=1.5)) for s in range(1, 19)]),
@@ -339,9 +346,9 @@ def synthetic():
          [(s, row(800 + s, delivery=0.99), row(5000 + 10 * s, unhealthy=0.5, collapsed=s <= 6, delivery=0.9 - 0.01 * s))
           for s in range(1, 9)]),
         ("ceiling", "lag p99 past the overhead ceiling",
-         [(s, row(1000 + 10 * s, wire_per_useful=1.3, lag_p99_ms_weak=900 + s, lag_p99_ms_hostile=700 + s,
+         [(s, row(1000 + 10 * s, wire_per_useful=1.3, lag_p99_ms_weak=900 + s, lag_p99_ms_dishonest=700 + s,
                   lag_p99_ms_honest=1000 + 10 * s),
-           row(1600 + 30 * s, wire_per_useful=1.1, lag_p99_ms_weak=1500 + 3 * s, lag_p99_ms_hostile=1000 + s,
+           row(1600 + 30 * s, wire_per_useful=1.1, lag_p99_ms_weak=1500 + 3 * s, lag_p99_ms_dishonest=1000 + s,
                lag_p99_ms_honest=1600 + 30 * s)) for s in range(1, 9)]),
     ]
     return cells

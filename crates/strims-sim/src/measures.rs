@@ -420,8 +420,8 @@ impl Report {
     /// (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`),
     /// and the mean ms from each one's join (its reader's start, or the
     /// stream's if later, as [`Report::joins`] times it) to its playback's
-    /// start (`startup_ms_D`); with hostile hosts, the honest viewers'
-    /// too, with `_honest`.
+    /// start (`startup_ms_D`): every viewer's, then the honest viewers'
+    /// (`_honest`) and with hostile hosts theirs (`_dishonest`).
     fn playback_cols(&self, swarm: usize, j: &mut JsonRow) {
         let Some(spec) = self.scenario.swarms.get(swarm) else {
             return;
@@ -430,7 +430,7 @@ impl Report {
         let viewers: Vec<&ViewerReport> =
             self.viewers.iter().filter(|v| v.swarm == swarm).collect();
         let hostile = (0..self.hosts.len()).any(|h| matches!(self.class(h), HostClass::Hostile(_)));
-        let mut totals = [[Totals::default(); DELAYS_MS.len()]; 2];
+        let mut totals = [[Totals::default(); DELAYS_MS.len()]; 3];
         for v in viewers {
             let reads = self.read_rows(v);
             let join = v
@@ -444,18 +444,25 @@ impl Report {
                 .departure(v.host)
                 .map(|(at, _)| ms_since(at, start));
             let plays = DELAYS_MS.map(|d| playout::play(&reads, d));
-            // Every viewer's, then the honest viewers'.
-            let honest = self.class(v.host) == HostClass::Honest;
-            for t in totals.iter_mut().take(1 + usize::from(honest)) {
-                for (t, p) in t.iter_mut().zip(&plays) {
-                    t.add(p, join, left);
+            // Every viewer's, then its population's.
+            let pop = match self.class(v.host) {
+                HostClass::Honest => Some(1),
+                HostClass::Hostile(_) => Some(2),
+                HostClass::Infra => None,
+            };
+            for (k, t) in totals.iter_mut().enumerate() {
+                if k == 0 || Some(k) == pop {
+                    for (t, p) in t.iter_mut().zip(&plays) {
+                        t.add(p, join, left);
+                    }
                 }
             }
         }
         for (who, t) in totals.iter().enumerate() {
             let suffix = match who {
                 0 => "",
-                _ if hostile => "_honest",
+                1 => "_honest",
+                _ if hostile => "_dishonest",
                 _ => continue,
             };
             for (t, d) in t.iter().zip(DELAYS_MS) {
@@ -474,10 +481,10 @@ impl Report {
 
     /// The row's columns of a run with arrivals or departures, named as the
     /// ppspp sim's rows name them:
-    /// - `arrived`, `arrived_honest`: the viewers that arrived after the
-    ///   run's start ([`HostSpec::arrive_at`](crate::HostSpec::arrive_at)),
-    ///   and of them the honest; `departed`, `departed_honest`, those that
-    ///   left for good;
+    /// - `arrived_honest`, `arrived_dishonest`: the honest and, with hostile
+    ///   hosts, the hostile viewers that arrived after the run's start
+    ///   ([`HostSpec::arrive_at`](crate::HostSpec::arrive_at));
+    ///   `departed_honest`, `departed_dishonest`, those that left for good;
     /// - over the honest viewers' first joins ([`Report::joins`]), the ms
     ///   to its first frame (`join_p50_ms`, `join_p90_ms`; `join_unread`,
     ///   the joins that read nothing) and to catching up
@@ -514,16 +521,25 @@ impl Report {
             .copied()
             .filter(|&h| self.scenario.departure(h).is_some())
             .collect();
-        j.int(RowInt::Arrived, arrived.len() as u64)
-            .int(
-                RowInt::ArrivedHonest,
-                arrived.iter().filter(honest).count() as u64,
+        j.int(
+            RowInt::ArrivedHonest,
+            arrived.iter().filter(honest).count() as u64,
+        )
+        .int(
+            RowInt::DepartedHonest,
+            departed.iter().filter(honest).count() as u64,
+        );
+        if (0..self.hosts.len()).any(|h| matches!(self.class(h), HostClass::Hostile(_))) {
+            let hostile = |h: &&HostIx| matches!(self.class(**h), HostClass::Hostile(_));
+            j.int(
+                RowInt::ArrivedDishonest,
+                arrived.iter().filter(hostile).count() as u64,
             )
-            .int(RowInt::Departed, departed.len() as u64)
             .int(
-                RowInt::DepartedHonest,
-                departed.iter().filter(honest).count() as u64,
+                RowInt::DepartedDishonest,
+                departed.iter().filter(hostile).count() as u64,
             );
+        }
         let s = self.joins(swarm, false);
         for (name, v) in [("join", &s.first), ("caught_up", &s.caught_up)] {
             for p in RowInt::P_OF_EVENT_P_P_MS.map(u32::from) {
@@ -1542,7 +1558,7 @@ impl Report {
         }
         let c = self.swarm_counters(swarm);
         // Requests timed out ([`Report::timeouts`]): the honest viewers',
-        // the seed's, and with hostile hosts theirs below.
+        // the seed's, and with hostile hosts theirs (`_dishonest`) below.
         let (timeouts, seed_timeouts, hostile_timeouts) = self.timeouts(swarm);
         j.num(RowNum::SeedChunkShare, self.data_share(swarm))
             .num(RowNum::SeedUploadShare, self.uploads(swarm).seed_share)
@@ -1552,7 +1568,7 @@ impl Report {
             .int(RowInt::Pruned, c.pruned)
             .int(RowInt::Shed, c.shed)
             .int(RowInt::Switched, c.switched)
-            .int(RowInt::Timeouts, timeouts)
+            .int(RowInt::TimeoutsHonest, timeouts)
             .int(RowInt::SeedTimeouts, seed_timeouts)
             .num(RowNum::SimSecs, self.sim_secs)
             .num(RowNum::WallSecs, self.wall_secs);
@@ -1563,25 +1579,28 @@ impl Report {
         let hostile: Vec<HostIx> = (0..self.hosts.len())
             .filter(|&h| matches!(self.class(h), HostClass::Hostile(_)))
             .collect();
+        // The honest viewers' lag and delivery, and with hostile hosts
+        // theirs (`_dishonest`).
+        let honest = self.honest_viewers();
+        let s = self
+            .scenario
+            .swarms
+            .first()
+            .map_or(Duration::ZERO, |s| s.start);
+        let e = self
+            .scenario
+            .swarms
+            .first()
+            .map_or(Duration::ZERO, |s| s.stop);
+        let pops = [("honest", &honest), ("dishonest", &hostile)];
+        for (name, hosts) in pops.iter().take(1 + usize::from(!hostile.is_empty())) {
+            let lag = self.lag_of_between(swarm, hosts, s, e);
+            j.int(RowInt::lag_p99_ms_who(name), u64::from(lag.p99))
+                .int(RowInt::lag_p50_ms_who(name), u64::from(lag.p50))
+                .num(RowNum::delivery_who(name), self.delivery_of(swarm, hosts));
+        }
         if !hostile.is_empty() {
-            let honest = self.honest_viewers();
-            let s = self
-                .scenario
-                .swarms
-                .first()
-                .map_or(Duration::ZERO, |s| s.start);
-            let e = self
-                .scenario
-                .swarms
-                .first()
-                .map_or(Duration::ZERO, |s| s.stop);
-            for (name, hosts) in [("honest", &honest), ("hostile", &hostile)] {
-                let lag = self.lag_of_between(swarm, hosts, s, e);
-                j.int(RowInt::lag_p99_ms_who(name), u64::from(lag.p99))
-                    .int(RowInt::lag_p50_ms_who(name), u64::from(lag.p50))
-                    .num(RowNum::delivery_who(name), self.delivery_of(swarm, hosts));
-            }
-            j.int(RowInt::TimeoutsHostile, hostile_timeouts);
+            j.int(RowInt::TimeoutsDishonest, hostile_timeouts);
         }
         j.int(RowInt::LinksP50, links_p50)
             .int(RowInt::LinksP90, links_p90)

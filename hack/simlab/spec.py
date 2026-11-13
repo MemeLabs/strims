@@ -34,6 +34,11 @@ Writer = Literal["suite"]
 TYPES = ("int", "num", "text", "bool", "ints", "nums", "json")
 Type = Literal["int", "num", "text", "bool", "ints", "nums", "json"]
 NONES = ("empty", "-1", "0", "negative")
+# How a population-split value is made of its peers': count and sum add up
+# over the populations (ADDITIVE), the others don't.
+AGGREGATES = ("count", "sum", "quantile", "ratio", "mean", "distinct")
+ADDITIVE = ("count", "sum")
+Aggregate = Literal["count", "sum", "quantile", "ratio", "mean", "distinct"]
 NAME = re.compile(r"[a-z][a-z0-9_]*\Z")
 FAMILY = re.compile(r"(?:[a-z0-9_]|\{[a-z][a-z0-9_]*\})+\Z")
 PARAM = re.compile(r"\{([a-z][a-z0-9_]*)\}")
@@ -70,6 +75,10 @@ class Entry(BaseModel):
                           "JSON's null.")
     older_none: Literal["-1"] | None = Field(
         None, description="How older runs wrote none, which the catalog's view reads as none too.")
+    aggregate: Aggregate | None = Field(
+        None, description="How its value is made of the peers', where it is split by population: count or sum (its "
+                          "_honest and _dishonest parts add up to it, and no all-peer value is written), quantile, "
+                          "ratio, mean or distinct (they don't, and the unsuffixed name is the all-peer value).")
     params: Product | list[Product] | None = Field(
         None, description="A family's params: {param = values}, each a list, or a table of lists by sim (and "
                           "line); a list of such tables is their union.")

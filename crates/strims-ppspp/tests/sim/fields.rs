@@ -304,22 +304,26 @@ pub(crate) enum RowInt {
     AnnounceBytes,
     /// ANNOUNCEs with entries that reached the seed.
     Announces,
-    /// `arrived`, `arrived_honest`: the viewers that arrived after the run's
-    /// start (`HostSpec::arrive_at`), and of them the honest; `departed`,
-    /// `departed_honest`, those that left for good;
-    Arrived,
-    /// `arrived`, `arrived_honest`: the viewers that arrived after the run's
-    /// start (`HostSpec::arrive_at`), and of them the honest; `departed`,
-    /// `departed_honest`, those that left for good;
+    /// `arrived_honest`, `arrived_dishonest`: the honest and the dishonest
+    /// viewers that arrived after the run's start (`HostSpec::arrive_at`), the
+    /// dishonest with any; `departed_honest`, `departed_dishonest`, those that
+    /// left for good;
     ArrivedHonest,
+    /// `arrived_honest`, `arrived_dishonest`: the honest and the dishonest
+    /// viewers that arrived after the run's start (`HostSpec::arrive_at`), the
+    /// dishonest with any; `departed_honest`, `departed_dishonest`, those that
+    /// left for good;
+    ArrivedDishonest,
     /// The ANNOUNCE messages the seed sent, over all its channels in the swarm,
     /// at the end (the channels' outbound announce counters). Not the asks
     /// table's requests.
     Asks,
-    /// The neighbours an adaptive seed barred from holding a copy.
-    Barred,
-    /// Of the neighbours an adaptive seed barred, the honest ones.
+    /// Of the neighbours an adaptive seed barred from holding a copy, the
+    /// honest ones.
     BarredHonest,
+    /// Of the neighbours an adaptive seed barred from holding a copy, the
+    /// dishonest ones (greedy viewers and adversaries); left out without any.
+    BarredDishonest,
     /// The bytes of the frames with ppspp data every node sent over the run.
     ///
     /// Unit: bytes.
@@ -403,15 +407,16 @@ pub(crate) enum RowInt {
     ///
     /// ppspp: The columns of a run with arrivals or departures
     /// (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived
-    /// after the start and that left for good (`_honest` of them); over every
-    /// honest viewer, from its join (its arrival, the start for one there from
-    /// it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`,
-    /// those that never read) and to its first read within `CAUGHT_UP`
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest
-    /// viewers whose open parent left (`parent_lost`, counted per departure)
-    /// and their streams it was the parent of; and with departures the recovery
-    /// from them (`Recovery`): the viewers measured (`depart_stayed`) and those
-    /// left without a neighbour at the end (`depart_stranded`), their worst lag
+    /// after the start and that left for good (`_honest`, and with greedy
+    /// viewers or adversaries `_dishonest`); over every honest viewer, from its
+    /// join (its arrival, the start for one there from it) to its first read
+    /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and
+    /// to its first read within `CAUGHT_UP` (`caught_up_p50_ms`,
+    /// `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open
+    /// parent left (`parent_lost`, counted per departure) and their streams it
+    /// was the parent of; and with departures the recovery from them
+    /// (`Recovery`): the viewers measured (`depart_stayed`) and those left
+    /// without a neighbour at the end (`depart_stranded`), their worst lag
     /// (`depart_lag_peak_ms`), and by their per-second lag p90 its excess
     /// summed (`depart_excess_lag_area_ms_s`) and the time back under
     /// `CAUGHT_U...
@@ -425,15 +430,16 @@ pub(crate) enum RowInt {
     ///
     /// ppspp: The columns of a run with arrivals or departures
     /// (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived
-    /// after the start and that left for good (`_honest` of them); over every
-    /// honest viewer, from its join (its arrival, the start for one there from
-    /// it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`,
-    /// those that never read) and to its first read within `CAUGHT_UP`
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest
-    /// viewers whose open parent left (`parent_lost`, counted per departure)
-    /// and their streams it was the parent of; and with departures the recovery
-    /// from them (`Recovery`): the viewers measured (`depart_stayed`) and those
-    /// left without a neighbour at the end (`depart_stranded`), their worst lag
+    /// after the start and that left for good (`_honest`, and with greedy
+    /// viewers or adversaries `_dishonest`); over every honest viewer, from its
+    /// join (its arrival, the start for one there from it) to its first read
+    /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and
+    /// to its first read within `CAUGHT_UP` (`caught_up_p50_ms`,
+    /// `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open
+    /// parent left (`parent_lost`, counted per departure) and their streams it
+    /// was the parent of; and with departures the recovery from them
+    /// (`Recovery`): the viewers measured (`depart_stayed`) and those left
+    /// without a neighbour at the end (`depart_stranded`), their worst lag
     /// (`depart_lag_peak_ms`), and by their per-second lag p90 its excess
     /// summed (`depart_excess_lag_area_ms_s`) and the time back under
     /// `CAUGHT_U...
@@ -447,15 +453,16 @@ pub(crate) enum RowInt {
     ///
     /// ppspp: The columns of a run with arrivals or departures
     /// (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived
-    /// after the start and that left for good (`_honest` of them); over every
-    /// honest viewer, from its join (its arrival, the start for one there from
-    /// it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`,
-    /// those that never read) and to its first read within `CAUGHT_UP`
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest
-    /// viewers whose open parent left (`parent_lost`, counted per departure)
-    /// and their streams it was the parent of; and with departures the recovery
-    /// from them (`Recovery`): the viewers measured (`depart_stayed`) and those
-    /// left without a neighbour at the end (`depart_stranded`), their worst lag
+    /// after the start and that left for good (`_honest`, and with greedy
+    /// viewers or adversaries `_dishonest`); over every honest viewer, from its
+    /// join (its arrival, the start for one there from it) to its first read
+    /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and
+    /// to its first read within `CAUGHT_UP` (`caught_up_p50_ms`,
+    /// `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open
+    /// parent left (`parent_lost`, counted per departure) and their streams it
+    /// was the parent of; and with departures the recovery from them
+    /// (`Recovery`): the viewers measured (`depart_stayed`) and those left
+    /// without a neighbour at the end (`depart_stranded`), their worst lag
     /// (`depart_lag_peak_ms`), and by their per-second lag p90 its excess
     /// summed (`depart_excess_lag_area_ms_s`) and the time back under
     /// `CAUGHT_U...
@@ -467,15 +474,16 @@ pub(crate) enum RowInt {
     ///
     /// ppspp: The columns of a run with arrivals or departures
     /// (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived
-    /// after the start and that left for good (`_honest` of them); over every
-    /// honest viewer, from its join (its arrival, the start for one there from
-    /// it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`,
-    /// those that never read) and to its first read within `CAUGHT_UP`
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest
-    /// viewers whose open parent left (`parent_lost`, counted per departure)
-    /// and their streams it was the parent of; and with departures the recovery
-    /// from them (`Recovery`): the viewers measured (`depart_stayed`) and those
-    /// left without a neighbour at the end (`depart_stranded`), their worst lag
+    /// after the start and that left for good (`_honest`, and with greedy
+    /// viewers or adversaries `_dishonest`); over every honest viewer, from its
+    /// join (its arrival, the start for one there from it) to its first read
+    /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and
+    /// to its first read within `CAUGHT_UP` (`caught_up_p50_ms`,
+    /// `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open
+    /// parent left (`parent_lost`, counted per departure) and their streams it
+    /// was the parent of; and with departures the recovery from them
+    /// (`Recovery`): the viewers measured (`depart_stayed`) and those left
+    /// without a neighbour at the end (`depart_stranded`), their worst lag
     /// (`depart_lag_peak_ms`), and by their per-second lag p90 its excess
     /// summed (`depart_excess_lag_area_ms_s`) and the time back under
     /// `CAUGHT_U...
@@ -489,15 +497,16 @@ pub(crate) enum RowInt {
     ///
     /// ppspp: The columns of a run with arrivals or departures
     /// (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived
-    /// after the start and that left for good (`_honest` of them); over every
-    /// honest viewer, from its join (its arrival, the start for one there from
-    /// it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`,
-    /// those that never read) and to its first read within `CAUGHT_UP`
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest
-    /// viewers whose open parent left (`parent_lost`, counted per departure)
-    /// and their streams it was the parent of; and with departures the recovery
-    /// from them (`Recovery`): the viewers measured (`depart_stayed`) and those
-    /// left without a neighbour at the end (`depart_stranded`), their worst lag
+    /// after the start and that left for good (`_honest`, and with greedy
+    /// viewers or adversaries `_dishonest`); over every honest viewer, from its
+    /// join (its arrival, the start for one there from it) to its first read
+    /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and
+    /// to its first read within `CAUGHT_UP` (`caught_up_p50_ms`,
+    /// `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open
+    /// parent left (`parent_lost`, counted per departure) and their streams it
+    /// was the parent of; and with departures the recovery from them
+    /// (`Recovery`): the viewers measured (`depart_stayed`) and those left
+    /// without a neighbour at the end (`depart_stranded`), their worst lag
     /// (`depart_lag_peak_ms`), and by their per-second lag p90 its excess
     /// summed (`depart_excess_lag_area_ms_s`) and the time back under
     /// `CAUGHT_U...
@@ -509,27 +518,30 @@ pub(crate) enum RowInt {
     ///
     /// ppspp: The columns of a run with arrivals or departures
     /// (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived
-    /// after the start and that left for good (`_honest` of them); over every
-    /// honest viewer, from its join (its arrival, the start for one there from
-    /// it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`,
-    /// those that never read) and to its first read within `CAUGHT_UP`
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest
-    /// viewers whose open parent left (`parent_lost`, counted per departure)
-    /// and their streams it was the parent of; and with departures the recovery
-    /// from them (`Recovery`): the viewers measured (`depart_stayed`) and those
-    /// left without a neighbour at the end (`depart_stranded`), their worst lag
+    /// after the start and that left for good (`_honest`, and with greedy
+    /// viewers or adversaries `_dishonest`); over every honest viewer, from its
+    /// join (its arrival, the start for one there from it) to its first read
+    /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and
+    /// to its first read within `CAUGHT_UP` (`caught_up_p50_ms`,
+    /// `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open
+    /// parent left (`parent_lost`, counted per departure) and their streams it
+    /// was the parent of; and with departures the recovery from them
+    /// (`Recovery`): the viewers measured (`depart_stayed`) and those left
+    /// without a neighbour at the end (`depart_stranded`), their worst lag
     /// (`depart_lag_peak_ms`), and by their per-second lag p90 its excess
     /// summed (`depart_excess_lag_area_ms_s`) and the time back under
     /// `CAUGHT_U...
     DepartStranded,
-    /// `arrived`, `arrived_honest`: the viewers that arrived after the run's
-    /// start (`HostSpec::arrive_at`), and of them the honest; `departed`,
-    /// `departed_honest`, those that left for good;
-    Departed,
-    /// `arrived`, `arrived_honest`: the viewers that arrived after the run's
-    /// start (`HostSpec::arrive_at`), and of them the honest; `departed`,
-    /// `departed_honest`, those that left for good;
+    /// `arrived_honest`, `arrived_dishonest`: the honest and the dishonest
+    /// viewers that arrived after the run's start (`HostSpec::arrive_at`), the
+    /// dishonest with any; `departed_honest`, `departed_dishonest`, those that
+    /// left for good;
     DepartedHonest,
+    /// `arrived_honest`, `arrived_dishonest`: the honest and the dishonest
+    /// viewers that arrived after the run's start (`HostSpec::arrive_at`), the
+    /// dishonest with any; `departed_honest`, `departed_dishonest`, those that
+    /// left for good;
+    DepartedDishonest,
     /// The bytes every host received through its downlink (WAN mode's down
     /// bytes; outside it what it downloaded).
     ///
@@ -599,23 +611,50 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     LagMaxMs,
-    /// The median lag in ms of every frame the first swarm's viewers read: read
-    /// time less the write time the frame carries (Report::lag).
+    /// The median lag in ms of every frame the first swarm's viewers read,
+    /// dishonest ones' in: read time less the write time the frame carries
+    /// (Report::lag); `lag_p50_ms_honest` and `lag_p50_ms_dishonest` are its
+    /// populations'.
     ///
-    /// ppspp: The median lag in ms of the chunks the honest viewers read after
-    /// their warm-ups (Sim::steady: from each one's arrival plus warm_secs to
-    /// its departure).
+    /// ppspp: The median lag in ms of the chunks the viewers read after their
+    /// warm-ups (Sim::steady: from each one's arrival plus warm_secs to its
+    /// departure). Its greedy viewers read nothing, so it is the honest
+    /// viewers' (`lag_p50_ms_honest`), in older runs too.
     ///
     /// Unit: ms.
     LagP50Ms,
-    /// The p99 lag in ms of every frame the first swarm's viewers read: read
-    /// time less the write time the frame carries (Report::lag).
+    /// `lag_p50_ms`'s populations: the median lag in ms over the first swarm's
+    /// honest viewers (`lag_p50_ms_honest`, in every run) and over its
+    /// dishonest hosts (`lag_p50_ms_dishonest`, with any).
     ///
-    /// ppspp: The p99 lag in ms of the chunks the honest viewers read after
-    /// their warm-ups (Sim::steady).
+    /// ppspp: The honest viewers' after their warm-ups, as `lag_p50_ms` reads
+    /// them (Sim::steady); its greedy viewers read nothing, so it writes no
+    /// `_dishonest`.
+    ///
+    /// Unit: ms.
+    LagP50MsWho(u16),
+    /// The p99 lag in ms of every frame the first swarm's viewers read,
+    /// dishonest ones' in: read time less the write time the frame carries
+    /// (Report::lag); `lag_p99_ms_honest` and `lag_p99_ms_dishonest` are its
+    /// populations'.
+    ///
+    /// ppspp: The p99 lag in ms of the chunks the viewers read after their
+    /// warm-ups (Sim::steady: from each one's arrival plus warm_secs to its
+    /// departure). Its greedy viewers read nothing, so it is the honest
+    /// viewers' (`lag_p99_ms_honest`), in older runs too.
     ///
     /// Unit: ms.
     LagP99Ms,
+    /// `lag_p99_ms`'s populations: the p99 lag in ms over the first swarm's
+    /// honest viewers (`lag_p99_ms_honest`, in every run) and over its
+    /// dishonest hosts (`lag_p99_ms_dishonest`, with any).
+    ///
+    /// ppspp: The honest viewers' after their warm-ups, as `lag_p99_ms` reads
+    /// them (Sim::steady); its greedy viewers read nothing, so it writes no
+    /// `_dishonest`.
+    ///
+    /// Unit: ms.
+    LagP99MsWho(u16),
     /// How long an honest viewer's stream's liar parent lasted on average, in
     /// ms.
     ///
@@ -691,15 +730,16 @@ pub(crate) enum RowInt {
     ///
     /// ppspp: The columns of a run with arrivals or departures
     /// (`Sim::audience`, `AudienceReport`): the knobs; the viewers that arrived
-    /// after the start and that left for good (`_honest` of them); over every
-    /// honest viewer, from its join (its arrival, the start for one there from
-    /// it) to its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`,
-    /// those that never read) and to its first read within `CAUGHT_UP`
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest
-    /// viewers whose open parent left (`parent_lost`, counted per departure)
-    /// and their streams it was the parent of; and with departures the recovery
-    /// from them (`Recovery`): the viewers measured (`depart_stayed`) and those
-    /// left without a neighbour at the end (`depart_stranded`), their worst lag
+    /// after the start and that left for good (`_honest`, and with greedy
+    /// viewers or adversaries `_dishonest`); over every honest viewer, from its
+    /// join (its arrival, the start for one there from it) to its first read
+    /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and
+    /// to its first read within `CAUGHT_UP` (`caught_up_p50_ms`,
+    /// `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open
+    /// parent left (`parent_lost`, counted per departure) and their streams it
+    /// was the parent of; and with departures the recovery from them
+    /// (`Recovery`): the viewers measured (`depart_stayed`) and those left
+    /// without a neighbour at the end (`depart_stranded`), their worst lag
     /// (`depart_lag_peak_ms`), and by their per-second lag p90 its excess
     /// summed (`depart_excess_lag_area_ms_s`) and the time back under
     /// `CAUGHT_U...
@@ -779,15 +819,16 @@ pub(crate) enum RowInt {
     RelayRejected,
     /// The columns of a run with arrivals or departures (`Sim::audience`,
     /// `AudienceReport`): the knobs; the viewers that arrived after the start
-    /// and that left for good (`_honest` of them); over every honest viewer,
-    /// from its join (its arrival, the start for one there from it) to its
-    /// first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that
-    /// never read) and to its first read within `CAUGHT_UP`
-    /// (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`); the honest
-    /// viewers whose open parent left (`parent_lost`, counted per departure)
-    /// and their streams it was the parent of; and with departures the recovery
-    /// from them (`Recovery`): the viewers measured (`depart_stayed`) and those
-    /// left without a neighbour at the end (`depart_stranded`), their worst lag
+    /// and that left for good (`_honest`, and with greedy viewers or
+    /// adversaries `_dishonest`); over every honest viewer, from its join (its
+    /// arrival, the start for one there from it) to its first read
+    /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that never read) and
+    /// to its first read within `CAUGHT_UP` (`caught_up_p50_ms`,
+    /// `caught_up_p90_ms`; `caught_up_never`); the honest viewers whose open
+    /// parent left (`parent_lost`, counted per departure) and their streams it
+    /// was the parent of; and with departures the recovery from them
+    /// (`Recovery`): the viewers measured (`depart_stayed`) and those left
+    /// without a neighbour at the end (`depart_stranded`), their worst lag
     /// (`depart_lag_peak_ms`), and by their per-second lag p90 its excess
     /// summed (`depart_excess_lag_area_ms_s`) and the time back under
     /// `CAUGHT_U...
@@ -872,24 +913,26 @@ pub(crate) enum RowInt {
     SeedObjectiveMs,
     /// Chunks the seed pushed (its swarm stats' pushed_chunks).
     SeedPushed,
-    /// The median of the seed's latest round trips to the greedy viewers, in
-    /// ms, over its links to them with a reading; left out without any.
+    /// The median of the seed's latest round trips to the viewers, honest and
+    /// greedy, in ms, over its links to them with a reading; left out without
+    /// any. `seed_rtt_ms_honest` and `seed_rtt_ms_dishonest` are its
+    /// populations'.
     ///
     /// Unit: ms.
-    SeedRttGreedyMs,
-    /// The median of the seed's latest round trips to the honest viewers, in
-    /// ms, over its links to them with a reading; left out without any.
+    SeedRttMs,
+    /// `seed_rtt_ms`'s populations: the median of the seed's latest round
+    /// trips, in ms, over its links with a reading to the honest viewers
+    /// (`seed_rtt_ms_honest`) and to the greedy ones (`seed_rtt_ms_dishonest`);
+    /// each left out without any.
     ///
     /// Unit: ms.
-    SeedRttHonestMs,
+    SeedRttMsWho(u16),
     /// The seed's requests that timed out unanswered (Report::timeouts).
     SeedTimeouts,
-    /// The seed's links to greedy viewers without a round-trip reading at the
-    /// run's end.
-    SeedUnmeasuredGreedy,
-    /// The seed's links to honest viewers without a round-trip reading at the
-    /// run's end.
-    SeedUnmeasuredHonest,
+    /// The seed's links without a round-trip reading at the run's end to the
+    /// honest viewers (`seed_unmeasured_honest`) and, with greedy viewers, to
+    /// them (`seed_unmeasured_dishonest`).
+    SeedUnmeasuredWho(u16),
     /// The seed's uplink, in bytes per second.
     SeedUpBw,
     /// Subscribers the honest viewers closed because their uplink saturated:
@@ -932,8 +975,9 @@ pub(crate) enum RowInt {
     /// (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share
     /// of it stalled (`stalled_share_D`), and the mean ms from each one's join
     /// (its reader's start, or the stream's if later, as `Report::joins` times
-    /// it) to its playback's start (`startup_ms_D`); with hostile hosts, the
-    /// honest viewers' too, with `_honest`.
+    /// it) to its playback's start (`startup_ms_D`); every viewer's, dishonest
+    /// ones' in, then the honest viewers' (`_honest`, in every run) and the
+    /// dishonest hosts' (`_dishonest`, with any).
     ///
     /// ppspp: The playback columns, as strims-sim's rows have them: per delay
     /// `D` of `DELAYS_MS`, the honest viewers' playouts of what they read
@@ -942,7 +986,9 @@ pub(crate) enum RowInt {
     /// first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the
     /// share of it stalled (`stalled_share_D`), and the mean ms from each one's
     /// join (its arrival, or the stream's start if later) to its playback's
-    /// start (`startup_ms_D`).
+    /// start (`startup_ms_D`). Its greedy viewers read nothing, so every
+    /// viewer's are the honest viewers' (`_honest`), in older runs too, and it
+    /// writes no `_dishonest`.
     ///
     /// Unit: ms.
     StartupMsDelayPop(u16),
@@ -975,12 +1021,12 @@ pub(crate) enum RowInt {
     SwitchesDown,
     /// The honest viewers' requests that timed out unanswered, over every
     /// incarnation (SwarmCounters::timeouts): every host but the seed and the
-    /// hostile ones.
-    Timeouts,
-    /// With hostile hosts, their requests that timed out unanswered
+    /// dishonest ones.
+    TimeoutsHonest,
+    /// With dishonest peers, their requests that timed out unanswered
     /// (strims-sim's hostile hosts; the ppspp sim's greedy viewers and
     /// adversaries); left out without any.
-    TimeoutsHostile,
+    TimeoutsDishonest,
     /// Reads the honest viewers made that hit a buffer underrun
     /// (store::Error::BufferUnderrun), summed.
     Underruns,
@@ -1181,11 +1227,11 @@ impl RowInt {
             RowInt::EventPPMs(i) => at(&ROWINT_EVENT_P_P_MS, i),
             RowInt::AnnounceBytes => "announce_bytes",
             RowInt::Announces => "announces",
-            RowInt::Arrived => "arrived",
             RowInt::ArrivedHonest => "arrived_honest",
+            RowInt::ArrivedDishonest => "arrived_dishonest",
             RowInt::Asks => "asks",
-            RowInt::Barred => "barred",
             RowInt::BarredHonest => "barred_honest",
+            RowInt::BarredDishonest => "barred_dishonest",
             RowInt::Bytes => "bytes",
             RowInt::CaughtUpNever => "caught_up_never",
             RowInt::Chunk => "chunk",
@@ -1207,8 +1253,8 @@ impl RowInt {
             RowInt::DepartRecoverMs => "depart_recover_ms",
             RowInt::DepartStayed => "depart_stayed",
             RowInt::DepartStranded => "depart_stranded",
-            RowInt::Departed => "departed",
             RowInt::DepartedHonest => "departed_honest",
+            RowInt::DepartedDishonest => "departed_dishonest",
             RowInt::DownWire => "down_wire",
             RowInt::DupBytes => "dup_bytes",
             RowInt::EchoForged => "echo_forged",
@@ -1224,7 +1270,9 @@ impl RowInt {
             RowInt::JoinUnread => "join_unread",
             RowInt::LagMaxMs => "lag_max_ms",
             RowInt::LagP50Ms => "lag_p50_ms",
+            RowInt::LagP50MsWho(i) => at(&ROWINT_LAG_P50_MS_WHO, i),
             RowInt::LagP99Ms => "lag_p99_ms",
+            RowInt::LagP99MsWho(i) => at(&ROWINT_LAG_P99_MS_WHO, i),
             RowInt::LiarGraftSpanMs => "liar_graft_span_ms",
             RowInt::Liars => "liars",
             RowInt::LoopLenP50 => "loop_len_p50",
@@ -1276,11 +1324,10 @@ impl RowInt {
             RowInt::SeedFirstWaveCapacity => "seed_first_wave_capacity",
             RowInt::SeedObjectiveMs => "seed_objective_ms",
             RowInt::SeedPushed => "seed_pushed",
-            RowInt::SeedRttGreedyMs => "seed_rtt_greedy_ms",
-            RowInt::SeedRttHonestMs => "seed_rtt_honest_ms",
+            RowInt::SeedRttMs => "seed_rtt_ms",
+            RowInt::SeedRttMsWho(i) => at(&ROWINT_SEED_RTT_MS_WHO, i),
             RowInt::SeedTimeouts => "seed_timeouts",
-            RowInt::SeedUnmeasuredGreedy => "seed_unmeasured_greedy",
-            RowInt::SeedUnmeasuredHonest => "seed_unmeasured_honest",
+            RowInt::SeedUnmeasuredWho(i) => at(&ROWINT_SEED_UNMEASURED_WHO, i),
             RowInt::SeedUpBw => "seed_up_bw",
             RowInt::ShedsSent => "sheds_sent",
             RowInt::SignWaitP50Ms => "sign_wait_p50_ms",
@@ -1296,8 +1343,8 @@ impl RowInt {
             RowInt::SuperPeerDeclined => "super_peer_declined",
             RowInt::Switches => "switches",
             RowInt::SwitchesDown => "switches_down",
-            RowInt::Timeouts => "timeouts",
-            RowInt::TimeoutsHostile => "timeouts_hostile",
+            RowInt::TimeoutsHonest => "timeouts_honest",
+            RowInt::TimeoutsDishonest => "timeouts_dishonest",
             RowInt::Underruns => "underruns",
             RowInt::Unit => "unit",
             RowInt::UpAck => "up_ack",
@@ -1372,6 +1419,18 @@ impl RowInt {
         RowInt::FanoutPP(of(&ROWINT_FANOUT_P_P, format_args!("fanout_p{p}")))
     }
 
+    /// `lag_p50_ms_{who}`'s name of `who`: a panic for values
+    /// `fields.toml` doesn't give ppspp.
+    pub(crate) fn lag_p50_ms_who(who: impl Display) -> RowInt {
+        RowInt::LagP50MsWho(of(&ROWINT_LAG_P50_MS_WHO, format_args!("lag_p50_ms_{who}")))
+    }
+
+    /// `lag_p99_ms_{who}`'s name of `who`: a panic for values
+    /// `fields.toml` doesn't give ppspp.
+    pub(crate) fn lag_p99_ms_who(who: impl Display) -> RowInt {
+        RowInt::LagP99MsWho(of(&ROWINT_LAG_P99_MS_WHO, format_args!("lag_p99_ms_{who}")))
+    }
+
     /// `loop_life_p{p}_ms`'s name of `p`: a panic for values
     /// `fields.toml` doesn't give ppspp.
     pub(crate) fn loop_life_p_p_ms(p: impl Display) -> RowInt {
@@ -1415,6 +1474,24 @@ impl RowInt {
     /// `fields.toml` doesn't give ppspp.
     pub(crate) fn seed_asks_held(held: impl Display) -> RowInt {
         RowInt::SeedAsksHeld(of(&ROWINT_SEED_ASKS_HELD, format_args!("seed_asks_{held}")))
+    }
+
+    /// `seed_rtt_ms_{who}`'s name of `who`: a panic for values
+    /// `fields.toml` doesn't give ppspp.
+    pub(crate) fn seed_rtt_ms_who(who: impl Display) -> RowInt {
+        RowInt::SeedRttMsWho(of(
+            &ROWINT_SEED_RTT_MS_WHO,
+            format_args!("seed_rtt_ms_{who}"),
+        ))
+    }
+
+    /// `seed_unmeasured_{who}`'s name of `who`: a panic for values
+    /// `fields.toml` doesn't give ppspp.
+    pub(crate) fn seed_unmeasured_who(who: impl Display) -> RowInt {
+        RowInt::SeedUnmeasuredWho(of(
+            &ROWINT_SEED_UNMEASURED_WHO,
+            format_args!("seed_unmeasured_{who}"),
+        ))
     }
 
     /// `startup_ms_{delay}{pop}`'s name of `delay`, `pop`: a panic for values
@@ -1470,6 +1547,12 @@ const ROWINT_CLOCK_CLASS_VIEWERS: [&str; 4] = [
 /// `fanout_p{p}`'s names for ppspp.
 const ROWINT_FANOUT_P_P: [&str; 2] = ["fanout_p50", "fanout_p90"];
 
+/// `lag_p50_ms_{who}`'s names for ppspp.
+const ROWINT_LAG_P50_MS_WHO: [&str; 1] = ["lag_p50_ms_honest"];
+
+/// `lag_p99_ms_{who}`'s names for ppspp.
+const ROWINT_LAG_P99_MS_WHO: [&str; 1] = ["lag_p99_ms_honest"];
+
 /// `loop_life_p{p}_ms`'s names for ppspp.
 const ROWINT_LOOP_LIFE_P_P_MS: [&str; 2] = ["loop_life_p50_ms", "loop_life_p90_ms"];
 
@@ -1510,8 +1593,20 @@ const ROWINT_SEED_ASKS_HELD: [&str; 3] = [
     "seed_asks_held_by_3_plus",
 ];
 
+/// `seed_rtt_ms_{who}`'s names for ppspp.
+const ROWINT_SEED_RTT_MS_WHO: [&str; 2] = ["seed_rtt_ms_honest", "seed_rtt_ms_dishonest"];
+
+/// `seed_unmeasured_{who}`'s names for ppspp.
+const ROWINT_SEED_UNMEASURED_WHO: [&str; 2] =
+    ["seed_unmeasured_honest", "seed_unmeasured_dishonest"];
+
 /// `startup_ms_{delay}{pop}`'s names for ppspp.
-const ROWINT_STARTUP_MS_DELAY_POP: [&str; 2] = ["startup_ms_1250", "startup_ms_4250"];
+const ROWINT_STARTUP_MS_DELAY_POP: [&str; 4] = [
+    "startup_ms_1250",
+    "startup_ms_1250_honest",
+    "startup_ms_4250",
+    "startup_ms_4250_honest",
+];
 
 /// The row's fields that hold a number (null where not finite).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1537,18 +1632,29 @@ pub(crate) enum RowNum {
     /// The cross-traffic swarm's delivery (CrossReport); 0 without one.
     CrossDelivery,
     /// The share of what the viewers were owed that they read: delivered over
-    /// written frames of the first swarm, summed over its viewers, each owed
-    /// every frame the seed wrote while it was there (Report::owed), those
-    /// written while it was down included; a media swarm's viewer is owed the
-    /// frames from its first on.
+    /// written frames of the first swarm, summed over its viewers, dishonest
+    /// ones' in, each owed every frame the seed wrote while it was there
+    /// (Report::owed), those written while it was down included; a media
+    /// swarm's viewer is owed the frames from its first on. `delivery_honest`
+    /// and `delivery_dishonest` are its populations'.
     ///
     /// ppspp: The chunks read over the chunks due, summed over the honest
     /// viewers whose places were never taken again (Sim::delivered: an arrival
     /// is due the chunks from its reader's start, a departure those published
-    /// CAUGHT_UP before it left).
+    /// CAUGHT_UP before it left). Its greedy viewers read nothing, so it is the
+    /// honest viewers' (`delivery_honest`), in older runs too.
     ///
     /// Unit: fraction.
     Delivery,
+    /// `delivery`'s populations: the share of what they were owed that the
+    /// first swarm's honest viewers read (`delivery_honest`, in every run) and
+    /// its dishonest hosts (`delivery_dishonest`, with any).
+    ///
+    /// ppspp: `delivery`'s honest viewers (Sim::delivered); its greedy viewers
+    /// read nothing, so it writes no `_dishonest`.
+    ///
+    /// Unit: fraction.
+    DeliveryWho(u16),
     /// Of the viewers' (viewer, stream) samples once a second from DEPTH_WARM
     /// after the stream's start, the share that reach the seed through a chain
     /// of open parents `hops` hops long, 1 to 6 (Report::depths).
@@ -1804,8 +1910,9 @@ pub(crate) enum RowNum {
     /// (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share
     /// of it stalled (`stalled_share_D`), and the mean ms from each one's join
     /// (its reader's start, or the stream's if later, as `Report::joins` times
-    /// it) to its playback's start (`startup_ms_D`); with hostile hosts, the
-    /// honest viewers' too, with `_honest`.
+    /// it) to its playback's start (`startup_ms_D`); every viewer's, dishonest
+    /// ones' in, then the honest viewers' (`_honest`, in every run) and the
+    /// dishonest hosts' (`_dishonest`, with any).
     ///
     /// ppspp: The playback columns, as strims-sim's rows have them: per delay
     /// `D` of `DELAYS_MS`, the honest viewers' playouts of what they read
@@ -1814,7 +1921,9 @@ pub(crate) enum RowNum {
     /// first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the
     /// share of it stalled (`stalled_share_D`), and the mean ms from each one's
     /// join (its arrival, or the stream's start if later) to its playback's
-    /// start (`startup_ms_D`).
+    /// start (`startup_ms_D`). Its greedy viewers read nothing, so every
+    /// viewer's are the honest viewers' (`_honest`), in older runs too, and it
+    /// writes no `_dishonest`.
     ///
     /// Unit: fraction.
     StalledShareDelayPop(u16),
@@ -1825,8 +1934,9 @@ pub(crate) enum RowNum {
     /// (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share
     /// of it stalled (`stalled_share_D`), and the mean ms from each one's join
     /// (its reader's start, or the stream's if later, as `Report::joins` times
-    /// it) to its playback's start (`startup_ms_D`); with hostile hosts, the
-    /// honest viewers' too, with `_honest`.
+    /// it) to its playback's start (`startup_ms_D`); every viewer's, dishonest
+    /// ones' in, then the honest viewers' (`_honest`, in every run) and the
+    /// dishonest hosts' (`_dishonest`, with any).
     ///
     /// ppspp: The playback columns, as strims-sim's rows have them: per delay
     /// `D` of `DELAYS_MS`, the honest viewers' playouts of what they read
@@ -1835,7 +1945,9 @@ pub(crate) enum RowNum {
     /// first (`Totals`): the stalls per minute played (`stalls_per_min_D`), the
     /// share of it stalled (`stalled_share_D`), and the mean ms from each one's
     /// join (its arrival, or the stream's start if later) to its playback's
-    /// start (`startup_ms_D`).
+    /// start (`startup_ms_D`). Its greedy viewers read nothing, so every
+    /// viewer's are the honest viewers' (`_honest`), in older runs too, and it
+    /// writes no `_dishonest`.
     StallsPerMinDelayPop(u16),
     /// When the stream ended, in s from t0: the stream's length (stream_secs)
     /// after its start at 1 s.
@@ -1895,6 +2007,7 @@ impl RowNum {
             RowNum::ClockClassDelivery(i) => at(&ROWNUM_CLOCK_CLASS_DELIVERY, i),
             RowNum::CrossDelivery => "cross_delivery",
             RowNum::Delivery => "delivery",
+            RowNum::DeliveryWho(i) => at(&ROWNUM_DELIVERY_WHO, i),
             RowNum::DepthHops(i) => at(&ROWNUM_DEPTH_HOPS, i),
             RowNum::DepthCycle => "depth_cycle",
             RowNum::DepthDeeper => "depth_deeper",
@@ -1961,6 +2074,12 @@ impl RowNum {
             &ROWNUM_CLOCK_CLASS_DELIVERY,
             format_args!("clock_{class}_delivery"),
         ))
+    }
+
+    /// `delivery_{who}`'s name of `who`: a panic for values
+    /// `fields.toml` doesn't give ppspp.
+    pub(crate) fn delivery_who(who: impl Display) -> RowNum {
+        RowNum::DeliveryWho(of(&ROWNUM_DELIVERY_WHO, format_args!("delivery_{who}")))
     }
 
     /// `depth_{hops}`'s name of `hops`: a panic for values
@@ -2059,6 +2178,9 @@ const ROWNUM_CLOCK_CLASS_DELIVERY: [&str; 4] = [
     "clock_le_10min_delivery",
 ];
 
+/// `delivery_{who}`'s names for ppspp.
+const ROWNUM_DELIVERY_WHO: [&str; 1] = ["delivery_honest"];
+
 /// `depth_{hops}`'s names for ppspp.
 const ROWNUM_DEPTH_HOPS: [&str; 6] = [
     "depth_1", "depth_2", "depth_3", "depth_4", "depth_5", "depth_6",
@@ -2098,10 +2220,20 @@ const ROWNUM_OVH_POP_P_P: [&str; 6] = [
 ];
 
 /// `stalled_share_{delay}{pop}`'s names for ppspp.
-const ROWNUM_STALLED_SHARE_DELAY_POP: [&str; 2] = ["stalled_share_1250", "stalled_share_4250"];
+const ROWNUM_STALLED_SHARE_DELAY_POP: [&str; 4] = [
+    "stalled_share_1250",
+    "stalled_share_1250_honest",
+    "stalled_share_4250",
+    "stalled_share_4250_honest",
+];
 
 /// `stalls_per_min_{delay}{pop}`'s names for ppspp.
-const ROWNUM_STALLS_PER_MIN_DELAY_POP: [&str; 2] = ["stalls_per_min_1250", "stalls_per_min_4250"];
+const ROWNUM_STALLS_PER_MIN_DELAY_POP: [&str; 4] = [
+    "stalls_per_min_1250",
+    "stalls_per_min_1250_honest",
+    "stalls_per_min_4250",
+    "stalls_per_min_4250_honest",
+];
 
 /// `viewer_util_p{p}`'s names for ppspp.
 const ROWNUM_VIEWER_UTIL_P_P: [&str; 3] = ["viewer_util_p50", "viewer_util_p90", "viewer_util_p95"];

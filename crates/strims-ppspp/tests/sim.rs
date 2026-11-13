@@ -526,6 +526,12 @@ impl Role {
     fn off(self) -> bool {
         matches!(self, Role::Dead | Role::Absent | Role::Gone)
     }
+
+    /// Whether it is a dishonest peer's: a greedy viewer's or an
+    /// adversary's.
+    fn dishonest(self) -> bool {
+        matches!(self, Role::Greedy(_) | Role::Adversary(_))
+    }
 }
 
 /// A change to the seed's network at a given time.
@@ -2142,8 +2148,9 @@ struct PastJoin {
 /// over its honest viewers, those that left included.
 #[derive(Debug, Default)]
 struct AudienceReport {
-    /// Viewers that arrived after the start, and that left for good: all of
-    /// them, and the honest ones.
+    /// Viewers that arrived after the start, and that left for good: the
+    /// honest ones ([`Node::watched`]), and the greedy viewers and
+    /// adversaries.
     arrived: (usize, usize),
     departed: (usize, usize),
     /// Of the honest viewers' first joins ([`Sim::join_times`]), those
@@ -6297,13 +6304,19 @@ impl Sim {
         self.cfg.arrivals != Arrivals::T0 || self.cfg.depart.is_some()
     }
 
+    /// Whether the run has dishonest peers at its end ([`Role::dishonest`]):
+    /// the rows' `_dishonest` fields come with them.
+    fn dishonest(&self) -> bool {
+        self.nodes.iter().any(|n| n.kind.dishonest())
+    }
+
     /// The run's arrivals and departures, measured ([`AudienceReport`]).
     fn audience_report(&self) -> AudienceReport {
         let viewers = || self.nodes.iter().skip(1);
         let both = |f: &dyn Fn(&Node) -> bool| {
             (
-                viewers().filter(|n| f(n)).count(),
                 viewers().filter(|n| f(n) && n.watched()).count(),
+                viewers().filter(|n| f(n) && n.kind.dishonest()).count(),
             )
         };
         let (_, unread, _, behind) = self.join_times(false);
@@ -9212,7 +9225,7 @@ fn sim_trickle_arrivals_catch_up() {
         );
         let r = run_checking_links(&mut sim);
         let a = check_arrivals(&sim, &r);
-        assert_eq!(a.arrived, (12, 12 - greedy.len()), "{mode:?}");
+        assert_eq!(a.arrived, (12 - greedy.len(), greedy.len()), "{mode:?}");
         // The seed took its 4, and nobody is left without links.
         assert_eq!(sim.nodes[0].links.len(), 4, "{mode:?}");
         for (i, n) in sim.nodes.iter().enumerate().skip(1) {
@@ -9300,7 +9313,7 @@ fn sim_departures_leave_the_rest_watching() {
         let r = sim.run();
         traces.push(r.trace);
         let a = check_arrivals(&sim, &r);
-        assert_eq!(a.departed, (8, 8), "abrupt {abrupt}");
+        assert_eq!(a.departed, (8, 0), "abrupt {abrupt}");
         let gone: BTreeSet<usize> = (1..sim.nodes.len())
             .filter(|&i| sim.nodes[i].role == Role::Gone)
             .collect();
@@ -11041,6 +11054,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             sim.chunks_read() * cfg.chunk_size as u64,
         )
         .num(RowNum::Delivery, r.delivery)
+        .num(RowNum::delivery_who("honest"), r.delivery)
         .num(
             RowNum::CrossDelivery,
             r.cross.as_ref().map_or(0.0, |c| c.delivery),
@@ -11055,6 +11069,8 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         )
         .int(RowInt::LagP50Ms, ms(r.lag_p50) as u64)
         .int(RowInt::LagP99Ms, ms(r.lag_p99) as u64)
+        .int(RowInt::lag_p50_ms_who("honest"), ms(r.lag_p50) as u64)
+        .int(RowInt::lag_p99_ms_who("honest"), ms(r.lag_p99) as u64)
         .int(RowInt::LagMaxMs, ms(r.lag_max) as u64)
         .int(RowInt::StripeP90Ms, ms(r.stripe_p90) as u64)
         .int(RowInt::StripeP99Ms, ms(r.stripe_p99) as u64)
@@ -11104,7 +11120,6 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         .int(RowInt::GreedyHeldS, r.greedy_held.as_secs() as u64)
         .num(RowNum::LiarGrafts, r.liar_grafts)
         .int(RowInt::LiarGraftSpanMs, ms(r.liar_graft_span) as u64)
-        .int(RowInt::Barred, r.barred.0)
         .int(RowInt::BarredHonest, r.barred.1)
         .int(RowInt::VHonest, v.honest)
         .int(RowInt::VWithChildren, v.with_children)
@@ -11135,18 +11150,18 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         )
         .num(RowNum::AnnounceShare, r.announce.2)
         .int(RowInt::Asks, r.asks);
+    if sim.dishonest() {
+        row.int(RowInt::BarredDishonest, r.barred.0 - r.barred.1);
+    }
     playback_cols(&mut row, sim);
     // Requests timed out ([`Sim::timeouts`]): the honest viewers' over
     // every incarnation, the seed's, and with greedy viewers or adversaries
-    // theirs; and the path measure against greedy viewers: honest nodes'
-    // echoes of probes never sent, and the seed's latest round trips to
-    // honest and to greedy viewers (median ms), with the links it has no
-    // reading for.
+    // theirs (`_dishonest`); and the path measure against greedy viewers:
+    // honest nodes' echoes of probes never sent, and the seed's latest
+    // round trips to the viewers, honest and greedy, and to each (median
+    // ms), with the links it has no reading for.
     let (timeouts, seed_timeouts, hostile_timeouts) = sim.timeouts();
-    let hostile = sim
-        .nodes
-        .iter()
-        .any(|n| matches!(n.kind, Role::Greedy(_) | Role::Adversary(_)));
+    let hostile = sim.dishonest();
     let honest = |i: usize| sim.nodes[i].role == Role::Seed || sim.nodes[i].watched();
     let forged: u64 = sim
         .links
@@ -11164,11 +11179,13 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
                 }
         })
     };
-    let median_rtt = |greedy: bool| {
-        let mut v: Vec<i64> = seed_links(greedy)
+    let rtts = |greedy: bool| -> Vec<i64> {
+        seed_links(greedy)
             .filter_map(|l| l.path.reading(sim.now))
             .map(|r| r.rtt.as_millis())
-            .collect();
+            .collect()
+    };
+    let median = |mut v: Vec<i64>| {
         v.sort_unstable();
         v.get(v.len() / 2).copied()
     };
@@ -11177,21 +11194,32 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             .filter(|l| l.path.reading(sim.now).is_none())
             .count()
     };
-    row.int(RowInt::Timeouts, timeouts)
+    row.int(RowInt::TimeoutsHonest, timeouts)
         .int(RowInt::SeedTimeouts, seed_timeouts);
     if hostile {
-        row.int(RowInt::TimeoutsHostile, hostile_timeouts);
+        row.int(RowInt::TimeoutsDishonest, hostile_timeouts);
     }
     row.int(RowInt::EchoForged, forged);
     sim.windows.cols(&mut row);
-    if let Some(ms) = median_rtt(false) {
-        row.int(RowInt::SeedRttHonestMs, ms as u64);
+    let (honest_rtts, greedy_rtts) = (rtts(false), rtts(true));
+    if let Some(ms) = median([&honest_rtts[..], &greedy_rtts[..]].concat()) {
+        row.int(RowInt::SeedRttMs, ms as u64);
     }
-    if let Some(ms) = median_rtt(true) {
-        row.int(RowInt::SeedRttGreedyMs, ms as u64);
+    for (name, v) in [("honest", honest_rtts), ("dishonest", greedy_rtts)] {
+        if let Some(ms) = median(v) {
+            row.int(RowInt::seed_rtt_ms_who(name), ms as u64);
+        }
     }
-    row.int(RowInt::SeedUnmeasuredHonest, unmeasured(false) as u64)
-        .int(RowInt::SeedUnmeasuredGreedy, unmeasured(true) as u64);
+    row.int(
+        RowInt::seed_unmeasured_who("honest"),
+        unmeasured(false) as u64,
+    );
+    if hostile {
+        row.int(
+            RowInt::seed_unmeasured_who("dishonest"),
+            unmeasured(true) as u64,
+        );
+    }
     // The seed's chunks pushed and answered, the requests it queued and
     // refused and the answers it dropped, and how long pushes and answers
     // waited in its queues.
@@ -11394,7 +11422,8 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
 /// that came first ([`Totals`]): the stalls per minute played
 /// (`stalls_per_min_D`), the share of it stalled (`stalled_share_D`), and
 /// the mean ms from each one's join (its arrival, or the stream's start if
-/// later) to its playback's start (`startup_ms_D`).
+/// later) to its playback's start (`startup_ms_D`). Its greedy viewers read
+/// nothing, so every viewer's are the honest viewers' (`_honest`).
 fn playback_cols(row: &mut JsonRow, sim: &Sim) {
     let start = stream_start();
     let mut totals = [Totals::default(); DELAYS_MS.len()];
@@ -11406,22 +11435,25 @@ fn playback_cols(row: &mut JsonRow, sim: &Sim) {
             t.add(&playout::play(&reads, d), join, left);
         }
     }
-    for (t, d) in totals.iter().zip(DELAYS_MS) {
-        if let Some(x) = t.stalls_per_min() {
-            row.num(RowNum::stalls_per_min_delay_pop(d, ""), x);
-        }
-        if let Some(x) = t.stalled_share() {
-            row.num(RowNum::stalled_share_delay_pop(d, ""), x);
-        }
-        if let Some(x) = t.startup_ms() {
-            row.int(RowInt::startup_ms_delay_pop(d, ""), x.max(0) as u64);
+    for pop in ["", "_honest"] {
+        for (t, d) in totals.iter().zip(DELAYS_MS) {
+            if let Some(x) = t.stalls_per_min() {
+                row.num(RowNum::stalls_per_min_delay_pop(d, pop), x);
+            }
+            if let Some(x) = t.stalled_share() {
+                row.num(RowNum::stalled_share_delay_pop(d, pop), x);
+            }
+            if let Some(x) = t.startup_ms() {
+                row.int(RowInt::startup_ms_delay_pop(d, pop), x.max(0) as u64);
+            }
         }
     }
 }
 
 /// The columns of a run with arrivals or departures ([`Sim::audience`],
 /// [`AudienceReport`]): the knobs; the viewers that arrived after the
-/// start and that left for good (`_honest` of them); over every honest
+/// start and that left for good (`_honest`, and with greedy viewers or
+/// adversaries `_dishonest`); over every honest
 /// viewer, from its join (its arrival, the start for one there from it) to
 /// its first read (`join_p50_ms`, `join_p90_ms`; `join_unread`, those that
 /// never read) and to its first read within [`CAUGHT_UP`]
@@ -11442,10 +11474,12 @@ fn audience_cols(row: &mut JsonRow, sim: &Sim) {
     if let Some(d) = sim.cfg.depart {
         row.str(RowText::Depart, &d.to_string());
     }
-    row.int(RowInt::Arrived, a.arrived.0 as u64)
-        .int(RowInt::ArrivedHonest, a.arrived.1 as u64)
-        .int(RowInt::Departed, a.departed.0 as u64)
-        .int(RowInt::DepartedHonest, a.departed.1 as u64);
+    row.int(RowInt::ArrivedHonest, a.arrived.0 as u64)
+        .int(RowInt::DepartedHonest, a.departed.0 as u64);
+    if sim.dishonest() {
+        row.int(RowInt::ArrivedDishonest, a.arrived.1 as u64)
+            .int(RowInt::DepartedDishonest, a.departed.1 as u64);
+    }
     row.int(RowInt::ParentLost, a.parent_lost.0)
         .int(RowInt::ParentLostStreams, a.parent_lost.1);
     if let Some(r) = &a.recovery {
