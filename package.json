@@ -59,7 +59,7 @@
     "i18next-browser-languagedetector": "^8.3.0",
     "i18next-http-backend": "^4.0.10",
     "i18next-icu": "^2.7.0",
-    "idb": "^7.1.1",
+    "idb": "^8.0.4",
     "intl-messageformat": "^12.1.5",
     "js-base64": "^3.9.6",
     "json5": "^2.2.2",
