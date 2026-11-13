@@ -1325,15 +1325,6 @@ pub(crate) enum RowNum {
     ///
     /// Unit: per minute.
     SeedCopiesChangesPerMin,
-    /// The seed's share of the ppspp data bytes sent on the first swarm's
-    /// channels, from the runner stats: chunk data alone, with no vpn,
-    /// handshake or protocol overhead (Report::data_share).
-    ///
-    /// strims-sim: Pair: the ppspp sim's `seed_share` (the seed's share of DATA
-    /// bytes).
-    ///
-    /// Unit: fraction.
-    SeedDataShare,
     /// `seed_nbr_up_p50` and `depth1_up_p50`: the median uplink of the seed's
     /// neighbours, and of the viewers it pushes to, each second's median over
     /// the run;
@@ -1346,16 +1337,24 @@ pub(crate) enum RowNum {
     /// The seed's packets through its uplink per second of the run (WAN mode in
     /// strims-sim, left out outside it).
     SeedPps,
-    /// The seed's share of the upload: its bytes over the seed's, viewers' and
-    /// relays' together (UploadDistribution::seed_share, everything they wrote
-    /// to their links).
+    /// The seed's share of every byte the swarm's hosts wrote to their links:
+    /// its over the seed's, the viewers' and the relays' together
+    /// (`seed_chunk_share` is its share of the chunk data alone).
     ///
-    /// strims-sim: The seed's share of every byte the swarm wrote to its links.
-    /// The ppspp sim's `seed_share` is another reading: the seed's share of
-    /// DATA bytes, this sim's `seed_data_share`.
+    /// strims-sim: Each host's `uploaded`, the first swarm's seed, viewers and
+    /// relays (UploadDistribution::seed_share).
     ///
     /// Unit: fraction.
-    SeedShare,
+    SeedUploadShare,
+    /// The seed's share of the chunk data sent: its DATA bytes over every
+    /// node's, with no vpn, handshake or protocol overhead (`seed_upload_share`
+    /// is its share of every byte).
+    ///
+    /// strims-sim: The ppspp data bytes sent on the first swarm's channels,
+    /// from the runner stats (Report::data_share).
+    ///
+    /// Unit: fraction.
+    SeedChunkShare,
     /// The seed's wire bytes through its uplink, its transports' framing
     /// included, over the bytes it wrote to its sockets.
     SeedWirePerWritten,
@@ -1522,11 +1521,11 @@ impl RowNum {
             RowNum::ReqsOutShare => "reqs_out_share",
             RowNum::SeedBudgetChangesPerMin => "seed_budget_changes_per_min",
             RowNum::SeedCopiesChangesPerMin => "seed_copies_changes_per_min",
-            RowNum::SeedDataShare => "seed_data_share",
             RowNum::SeedNbrUpP50 => "seed_nbr_up_p50",
             RowNum::SeedOffersPerMin => "seed_offers_per_min",
             RowNum::SeedPps => "seed_pps",
-            RowNum::SeedShare => "seed_share",
+            RowNum::SeedUploadShare => "seed_upload_share",
+            RowNum::SeedChunkShare => "seed_chunk_share",
             RowNum::SeedWirePerWritten => "seed_wire_per_written",
             RowNum::SentKbit => "sent_kbit",
             RowNum::SimSecs => "sim_secs",

@@ -10917,6 +10917,8 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     let seed = &sim.nodes[0];
     let span = (r.finish - t0()).as_secs_f64();
     let up = seed.wire.up_bytes;
+    // Every byte the nodes wrote to their links, the seed's among them.
+    let wire: u64 = sim.nodes.iter().map(|n| n.wire.up_bytes).sum();
     let p = &r.push;
     let v = &r.verdicts;
     let c = &r.report_counts.0;
@@ -11000,7 +11002,8 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         .int(RowInt::PushUnsolicited, p.unsolicited)
         .num(RowNum::SeedMbUp, up as f64 / 1e6)
         .num(RowNum::SeedUplink, up as f64 / (seed.up_bw as f64 * span))
-        .num(RowNum::SeedShare, r.seed_share)
+        .num(RowNum::SeedChunkShare, r.seed_share)
+        .num(RowNum::SeedUploadShare, up as f64 / wire.max(1) as f64)
         .num(RowNum::SeedPullShare, r.seed_pull_share)
         .num(RowNum::SeedDistinct, r.seed_distinct)
         .num(RowNum::SeedSlots, r.seed_slots)

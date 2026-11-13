@@ -1271,13 +1271,6 @@ type = "num"
 unit = "per minute"
 description = "An adaptive seed's copies changes per minute of stream: consecutive seed samples of the first swarm, from its start to its stop, whose copies differ."
 
-[rows.seed_data_share]
-sims = ["strims-sim"]
-type = "num"
-unit = "fraction"
-description = "The seed's share of the ppspp data bytes sent on the first swarm's channels, from the runner stats: chunk data alone, with no vpn, handshake or protocol overhead (Report::data_share)."
-notes.strims-sim = "Pair: the ppspp sim's `seed_share` (the seed's share of DATA bytes)."
-
 [rows.seed_distinct]
 sims = ["ppspp"]
 type = "num"
@@ -1360,13 +1353,13 @@ type = "int"
 unit = "ms"
 description = "The median of the seed's latest round trips to the honest viewers, in ms, over its links to them with a reading; left out without any."
 
-[rows.seed_share]
+[rows.seed_upload_share]
 sims = ["strims-sim", "ppspp"]
 type = "num"
 unit = "fraction"
-description = "The seed's share of the upload: its bytes over the seed's, viewers' and relays' together (UploadDistribution::seed_share, everything they wrote to their links)."
-notes.strims-sim = "The seed's share of every byte the swarm wrote to its links. The ppspp sim's `seed_share` is another reading: the seed's share of DATA bytes, this sim's `seed_data_share`."
-notes.ppspp = "The seed's share of all data bytes sent (Sim::uploaded over every node, none from a greedy viewer)."
+description = "The seed's share of every byte the swarm's hosts wrote to their links: its over the seed's, the viewers' and the relays' together (`seed_chunk_share` is its share of the chunk data alone)."
+notes.strims-sim = "Each host's `uploaded`, the first swarm's seed, viewers and relays (UploadDistribution::seed_share)."
+notes.ppspp = "Each node's wire bytes up (`EndStats::up_bytes`), the seed's over every node's."
 
 [rows.seed_slots]
 sims = ["ppspp"]
@@ -1388,6 +1381,14 @@ description = "The seed's links to greedy viewers without a round-trip reading a
 sims = ["ppspp"]
 type = "int"
 description = "The seed's links to honest viewers without a round-trip reading at the run's end."
+
+[rows.seed_chunk_share]
+sims = ["strims-sim", "ppspp"]
+type = "num"
+unit = "fraction"
+description = "The seed's share of the chunk data sent: its DATA bytes over every node's, with no vpn, handshake or protocol overhead (`seed_upload_share` is its share of every byte)."
+notes.strims-sim = "The ppspp data bytes sent on the first swarm's channels, from the runner stats (Report::data_share)."
+notes.ppspp = "Sim::uploaded over every node, none from a greedy viewer."
 
 [rows.seed_up_bw]
 sims = ["ppspp"]
@@ -2032,6 +2033,24 @@ sims = []
 retired = ["strims-sim"]
 type = "int"
 description = "The forwarders: the hosts but the seeds that answered a STREAM_REQUEST, accepted or declined, every one (`Report::roles`)."
+
+[rows.seed_data_share]
+sims = []
+retired = ["strims-sim"]
+replaced_by = "seed_chunk_share"
+rename = true
+type = "num"
+unit = "fraction"
+description = "The seed's share of the ppspp data bytes sent on the first swarm's channels, from the runner stats: chunk data alone, with no vpn, handshake or protocol overhead (Report::data_share)."
+
+[rows.seed_share]
+sims = []
+retired = ["strims-sim", "ppspp"]
+replaced_by = { strims-sim = "seed_upload_share", ppspp = "seed_chunk_share" }
+rename = true
+type = "num"
+unit = "fraction"
+description = "The seed's share of the upload, each sim's reading: strims-sim's of every byte the swarm's hosts wrote to their links (UploadDistribution::seed_share), the ppspp sim's of the DATA bytes sent (Sim::uploaded over every node)."
 
 [meta.sim]
 sims = ["strims-sim", "ppspp"]

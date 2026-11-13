@@ -359,7 +359,7 @@ class Fields(unittest.TestCase):
         doc["rows"]["lag_old_ms"] = {"sims": [], "retired": ["ppspp"], "replaced_by": "lag_p99_ms", "rename": True,
                                      "type": "int", "unit": "ms", "description": "x"}
         doc["rows"]["share_old"] = {"sims": [], "retired": ["strims-sim", "ppspp"],
-                                    "replaced_by": {"strims-sim": "seed_data_share", "ppspp": "seed_share"},
+                                    "replaced_by": {"strims-sim": "seed_upload_share", "ppspp": "seed_chunk_share"},
                                     "rename": True, "type": "num", "description": "y"}
         return doc
 
@@ -384,8 +384,8 @@ class Fields(unittest.TestCase):
         doc = self.renamed_doc()
         self.assertEqual(vocab.resolve("lag_old_ms", "ppspp", doc=doc), "lag_p99_ms")
         self.assertEqual(vocab.resolve("lag_old_ms", doc=doc), "lag_p99_ms")
-        self.assertEqual(vocab.resolve("share_old", "strims-sim", doc=doc), "seed_data_share")
-        self.assertEqual(vocab.resolve("share_old", "ppspp", doc=doc), "seed_share")
+        self.assertEqual(vocab.resolve("share_old", "strims-sim", doc=doc), "seed_upload_share")
+        self.assertEqual(vocab.resolve("share_old", "ppspp", doc=doc), "seed_chunk_share")
         # By sim, each another name: none for every sim.
         self.assertEqual(vocab.resolve("share_old", doc=doc), "share_old")
         # A current name, one retired with no replacement, one no entry holds.
@@ -395,12 +395,12 @@ class Fields(unittest.TestCase):
     def test_renames_and_aliases(self):
         doc = self.renamed_doc()
         self.assertEqual([r for r in vocab.renames(doc=doc) if r[0] in ("lag_old_ms", "share_old")],
-                         [("lag_old_ms", "lag_p99_ms", ["ppspp"]), ("share_old", "seed_data_share", ["strims-sim"]),
-                          ("share_old", "seed_share", ["ppspp"])])
+                         [("lag_old_ms", "lag_p99_ms", ["ppspp"]), ("share_old", "seed_upload_share", ["strims-sim"]),
+                          ("share_old", "seed_chunk_share", ["ppspp"])])
         self.assertEqual(vocab.renames(doc=doc)[:-3], vocab.renames())
         self.assertEqual(vocab.aliases("lag_p99_ms", doc=doc), ["lag_p99_ms", "lag_old_ms"])
         self.assertEqual(vocab.aliases("lag_old_ms", doc=doc), ["lag_p99_ms", "lag_old_ms"])
-        self.assertEqual(vocab.aliases("seed_share", doc=doc), ["seed_share", "share_old"])
+        self.assertEqual(vocab.aliases("seed_chunk_share", doc=doc), [*vocab.aliases("seed_chunk_share"), "share_old"])
         self.assertEqual(vocab.aliases("delivery", doc=doc), ["delivery"])
         # A retired name with a replacement but no rename (a column's) is no alias.
         self.assertEqual(vocab.renames("columns.seed_decisions"), [])
@@ -409,10 +409,10 @@ class Fields(unittest.TestCase):
         doc = self.renamed_doc()
         row = {"lag_old_ms": 5, "share_old": 0.25, "delivery": 1.0}
         self.assertEqual(vocab.canonical_row(row, "ppspp", doc=doc),
-                         {"delivery": 1.0, "lag_p99_ms": 5, "seed_share": 0.25})
+                         {"delivery": 1.0, "lag_p99_ms": 5, "seed_chunk_share": 0.25})
         # strims-sim's lag_old_ms is no rename: it stays as written.
         self.assertEqual(vocab.canonical_row(row, "strims-sim", doc=doc),
-                         {"lag_old_ms": 5, "delivery": 1.0, "seed_data_share": 0.25})
+                         {"lag_old_ms": 5, "delivery": 1.0, "seed_upload_share": 0.25})
         # A row holding both keeps the current name's value.
         self.assertEqual(vocab.canonical_row({"lag_old_ms": 5, "lag_p99_ms": 7}, "ppspp", doc=doc),
                          {"lag_p99_ms": 7})

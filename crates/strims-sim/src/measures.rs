@@ -1548,8 +1548,8 @@ impl Report {
         // Requests timed out ([`Report::timeouts`]): the honest viewers',
         // the seed's, and with hostile hosts theirs below.
         let (timeouts, seed_timeouts, hostile_timeouts) = self.timeouts(swarm);
-        j.num(RowNum::SeedDataShare, self.data_share(swarm))
-            .num(RowNum::SeedShare, self.uploads(swarm).seed_share)
+        j.num(RowNum::SeedChunkShare, self.data_share(swarm))
+            .num(RowNum::SeedUploadShare, self.uploads(swarm).seed_share)
             .num(RowNum::Duplicates, self.duplicates(swarm))
             .int(RowInt::PushHits, c.hits)
             .int(RowInt::PushMisses, c.misses)

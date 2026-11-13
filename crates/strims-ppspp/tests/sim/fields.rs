@@ -1688,20 +1688,28 @@ pub(crate) enum RowNum {
     ///
     /// Unit: fraction.
     SeedPullShare,
-    /// The seed's share of the upload: its bytes over the seed's, viewers' and
-    /// relays' together (UploadDistribution::seed_share, everything they wrote
-    /// to their links).
+    /// The seed's share of every byte the swarm's hosts wrote to their links:
+    /// its over the seed's, the viewers' and the relays' together
+    /// (`seed_chunk_share` is its share of the chunk data alone).
     ///
-    /// ppspp: The seed's share of all data bytes sent (Sim::uploaded over every
-    /// node, none from a greedy viewer).
+    /// ppspp: Each node's wire bytes up (`EndStats::up_bytes`), the seed's over
+    /// every node's.
     ///
     /// Unit: fraction.
-    SeedShare,
+    SeedUploadShare,
     /// The seed's push subscriptions (stream slots), mean over the samples
     /// after the warm-up.
     ///
     /// ppspp: Distinct from strims-sim's `seed_budget` and `seed_copies`.
     SeedSlots,
+    /// The seed's share of the chunk data sent: its DATA bytes over every
+    /// node's, with no vpn, handshake or protocol overhead (`seed_upload_share`
+    /// is its share of every byte).
+    ///
+    /// ppspp: Sim::uploaded over every node, none from a greedy viewer.
+    ///
+    /// Unit: fraction.
+    SeedChunkShare,
     /// The seed's use of its uplink: its wire bytes up over its uplink times
     /// the run's span (reads_end_s).
     SeedUplink,
@@ -1862,8 +1870,9 @@ impl RowNum {
             RowNum::SeedMbUp => "seed_mb_up",
             RowNum::SeedPps => "seed_pps",
             RowNum::SeedPullShare => "seed_pull_share",
-            RowNum::SeedShare => "seed_share",
+            RowNum::SeedUploadShare => "seed_upload_share",
             RowNum::SeedSlots => "seed_slots",
+            RowNum::SeedChunkShare => "seed_chunk_share",
             RowNum::SeedUplink => "seed_uplink",
             RowNum::SeedWirePerWritten => "seed_wire_per_written",
             RowNum::SentKbit => "sent_kbit",
