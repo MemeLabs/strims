@@ -15,7 +15,7 @@ import NotificationToast from "../Notification/Toast";
 import { withTheme } from "../Theme";
 import Footer from "./Footer";
 import Header from "./Header";
-import { layoutShapeClassNames, layoutStateClassNames } from "./shape";
+import { layoutShapeClassNames, layoutStateClassNames, screenOrientation } from "./shape";
 
 export type Breakpoint = "sm" | "md" | "lg" | "xl";
 
@@ -32,7 +32,7 @@ interface ViewportShape {
 const getViewportShape = (prev?: ViewportShape): ViewportShape => {
   let height = window.visualViewport?.height ?? window.innerHeight;
   let width = window.visualViewport?.width ?? window.innerWidth;
-  const orientation = window.orientation ?? 0;
+  const orientation = screenOrientation();
 
   // in ios if the on screen keyboard was opened and closed with the app in pwa
   // fullscreen mode with landscape orientation the VisualViewport api returns

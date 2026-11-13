@@ -12,14 +12,18 @@ import React, {
   useSyncExternalStore,
 } from "react";
 
-import { layoutShapeClassNames, layoutStateClassNames } from "../../../components/Layout/shape";
+import {
+  layoutShapeClassNames,
+  layoutStateClassNames,
+  screenOrientation,
+} from "../../../components/Layout/shape";
 import { WithThemeProps, withTheme } from "../../../components/Theme";
 import { WithRootRefProps, useLayout, withLayoutContext } from "../../../contexts/Layout";
 import { DEVICE_TYPE } from "../../../lib/userAgent";
 import type { Story } from "../types";
 import StoryErrorBoundary from "./ErrorBoundary";
 import { loadModule } from "./catalog";
-import { DEVICES, Device, LANDSCAPE_ORIENTATIONS } from "./devices";
+import { Device, LANDSCAPE_ORIENTATIONS } from "./devices";
 import { setFrameOrientation } from "./preload";
 import { Session } from "./recorder";
 
@@ -41,7 +45,7 @@ const useViewportSize = () => {
 
 interface FrameProps {
   device: Device;
-  /** As window.orientation reads it in the frame. */
+  /** As the layout reads it in the frame (screenOrientation). */
   orientation: number;
   session: Session;
   children: ReactNode;
@@ -145,13 +149,13 @@ export interface StoryViewProps {
 // landscape frame is turned the way its story says (Story.landscape) before
 // the story renders.
 export const StoryView: React.FC<StoryViewProps> = ({ moduleKey, name, device, session }) => {
-  const [orientation, setOrientation] = useState(DEVICES[device]?.orientation ?? 0);
+  const [orientation, setOrientation] = useState(screenOrientation);
   const [View] = useState(() =>
     moduleView(moduleKey, (stories) => {
       const landscape = findStory(stories, name)?.landscape;
       if (device === "landscape" && landscape) {
         setFrameOrientation(LANDSCAPE_ORIENTATIONS[landscape]);
-        setOrientation(LANDSCAPE_ORIENTATIONS[landscape]);
+        setOrientation(screenOrientation());
       }
     })
   );

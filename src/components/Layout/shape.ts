@@ -3,9 +3,29 @@
 
 import type { LayoutContextProps } from "../../contexts/Layout";
 
+// The screen's orientation as the layout's classes name it: 0 in portrait,
+// and in landscape 90 turned counterclockwise (layout--landscape_ccw) or -90
+// clockwise (layout--landscape_cw), as window.orientation reads it on a
+// device whose natural orientation is portrait. Most Android tablets' is
+// landscape, where window.orientation reads 0 in landscape and 90 or -90 in
+// portrait, so screen.orientation's type says which of the two the screen
+// is, and such a tablet's natural landscape counts as turned
+// counterclockwise. Browsers with no window.orientation (desktops) are 0.
+export const screenOrientation = (): number => {
+  const turn = window.orientation;
+  const type = screen.orientation?.type;
+  if (turn === undefined || !type) {
+    return turn ?? 0;
+  }
+  if (type.startsWith("portrait")) {
+    return 0;
+  }
+  return turn === 90 || turn === -90 ? turn : turn === 0 ? 90 : -90;
+};
+
 // The layout's classes that follow the viewport's size and orientation
-// (`orientation` as window.orientation reads it: 0, 90 or -90), apart so the
-// devtools storybook's device frames carry the same ones.
+// (`orientation` as screenOrientation reads it), apart so the devtools
+// storybook's device frames carry the same ones.
 export const layoutShapeClassNames = (
   width: number,
   height: number,
