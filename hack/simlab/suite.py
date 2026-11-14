@@ -1029,7 +1029,7 @@ def run_cells(cells, runs, slots, mem_gib):
             if j.get("failed"):
                 continue
             rec = {"id": j["k"], "cell": c["name"], "seed": s, "src": inv.src,
-                   **{f: row[f] for f in ("trace", "frames", "bytes") if f in row},
+                   **({"trace": row["trace"]} if "trace" in row else {}),
                    "_wall_s": row.get("_wall_s"), "_rss_mb": row.get("_rss_mb")}
             have[label][rec["id"]] = rec
             files[label].write(json.dumps(rec) + "\n")

@@ -1888,7 +1888,7 @@ def knob(env, name):
 JOBS_SQL = """
 CREATE OR REPLACE TABLE main.jobs AS
 WITH cand AS (
-    SELECT r.k, r.src, r.sim, r.test, r.cell, r.arm, r.seed, r.env, r.trace, r.frames, r.bytes, r.wall_s, r.rss_mb,
+    SELECT r.k, r.src, r.sim, r.test, r.cell, r.arm, r.seed, r.env, r.trace, r.wall_s, r.rss_mb,
            r."at", r.bin_ms, json_extract_string(r.row_json, '$.reads_hash') AS reads_hash, r.commit,
            r.binary_sha256, r.dirty,
            row_number() OVER (PARTITION BY r.k ORDER BY s.n_tables DESC, coalesce(s.manifest_at, '') DESC,
@@ -1900,7 +1900,7 @@ fi AS (SELECT k, arg_min(f, (f.reused_from IS NOT NULL AND f.reused_from <> f.ma
 held AS (SELECT src, list(tbl ORDER BY tbl) AS tables FROM raw.files GROUP BY src),
 j AS (
     SELECT k, c.src AS csrc, c.sim AS csim, c.test AS ctest, c.seed AS cseed, c.cell, c.arm, c.trace AS ctrace,
-           c.frames, c.bytes, c.wall_s AS cwall, c.rss_mb AS crss, c."at" AS cat, c.bin_ms, c.reads_hash AS creads,
+           c.wall_s AS cwall, c.rss_mb AS crss, c."at" AS cat, c.bin_ms, c.reads_hash AS creads,
            c.commit AS ccommit, c.binary_sha256 AS cbinary, c.dirty AS cdirty, fi.f,
            coalesce(fi.f.env, json_transform(c.env, '"MAP(VARCHAR, VARCHAR)"')) AS env
     FROM (SELECT k FROM canon UNION SELECT k FROM fi) keys LEFT JOIN canon c USING (k) LEFT JOIN fi USING (k)),
@@ -1925,8 +1925,7 @@ SELECT k, nsim AS sim, coalesce(ctest, f.test) AS test,
        coalesce(TRY_CAST(cat AS TIMESTAMPTZ), f.ran_at) AS ran_at,
        coalesce(csrc, f.src) AS src, split_part(coalesce(csrc, f.src), '/', 1) AS origin,
        split_part(coalesce(csrc, f.src), '/', 2) AS run, csrc IS NOT NULL AS cached,
-       coalesce(h.tables, []) AS tables, cell AS stored_cell, coalesce(arm, f.arm) AS stored_arm, bin_ms, frames,
-       bytes
+       coalesce(h.tables, []) AS tables, cell AS stored_cell, coalesce(arm, f.arm) AS stored_arm, bin_ms
 FROM s LEFT JOIN held h ON h.src = s.csrc
 WHERE nsim IS NULL OR nsim NOT IN ({skipped});
 """

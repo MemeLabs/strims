@@ -67,10 +67,12 @@ TABLES = ("seconds", "viewer_seconds", "reads", "stalls", "bins", "viewers", "ev
 SAMPLE_TABLES = ("reads", "forecast", "arrivals", "asks", "haves")
 RUN_COLS = {
     "k": "VARCHAR", "src": "VARCHAR", "sim": "VARCHAR", "test": "VARCHAR", "cell": "VARCHAR", "arm": "VARCHAR",
-    "seed": "BIGINT", "env": "VARCHAR", "trace": "VARCHAR", "frames": "BIGINT", "bytes": "BIGINT",
-    "wall_s": "DOUBLE", "rss_mb": "DOUBLE", "at": "VARCHAR", "bin_ms": "BIGINT", "wrote": "VARCHAR",
+    "seed": "BIGINT", "env": "VARCHAR", "trace": "VARCHAR", "wall_s": "DOUBLE", "rss_mb": "DOUBLE", "at": "VARCHAR", "bin_ms": "BIGINT", "wrote": "VARCHAR",
     "meta": "VARCHAR", "row_json": "VARCHAR", "commit": "VARCHAR", "binary_sha256": "VARCHAR", "dirty": "BOOLEAN",
 }
+# The runs columns older stores wrote and no sim fills: a cached runs file
+# may still hold them, and the views leave them out.
+RETIRED_RUN_COLS = ("frames", "bytes")
 SCALAR_COLS = {"k": "VARCHAR", "src": "VARCHAR", "name": "VARCHAR", "value": "DOUBLE"}
 # Schema files' type names, as DuckDB's.
 TYPES = {"int": "BIGINT", "integer": "BIGINT", "bigint": "BIGINT", "i64": "BIGINT", "u64": "BIGINT",
@@ -409,12 +411,10 @@ def fold(db, jobs, src, threads=2, memory="1GB"):
             for t in have:
                 for name, typ in schema(d / f"{t}.schema.json").items():
                     cols.setdefault(t, {}).setdefault(name, typ)
-            num = lambda x: x if isinstance(x, (int, float)) and not isinstance(x, bool) else None
             runs.append({
                 "k": j["k"], "src": src, "sim": j.get("sim"), "test": j.get("test"), "cell": j.get("cell"),
                 "arm": j.get("arm"), "seed": j.get("seed"), "env": json.dumps(j.get("env") or {}, sort_keys=True),
                 "trace": None if row.get("trace") is None else str(row.get("trace")),
-                "frames": num(row.get("frames")), "bytes": num(row.get("bytes")),
                 "wall_s": j.get("wall_s"), "rss_mb": j.get("rss_mb"),
                 "at": j.get("at") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "bin_ms": meta.get("bin_ms"), "wrote": ",".join(have), "meta": json.dumps(meta),

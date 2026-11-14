@@ -253,8 +253,8 @@ speed. A run logs the speeds before its best pools.
   ends, and after only if it ended as a spot termination
   (Server.SpotInstanceTermination; an AWS FIS interruption ends as the
   user's). Runs are deterministic, so a reissued job must print the same
-  row: a job whose row arrives twice is compared on (trace, frames,
-  bytes) and, where both rows carry it, reads_hash (a digest of the
+  row: a job whose row arrives twice is compared on its trace and,
+  where both rows carry it, reads_hash (a digest of the
   viewers' reads, which a change to readers alone moves without the
   trace), and --verify N (2) runs N jobs of each matrix (the first by
   id) twice on purpose, on different instances: one whose row came from
@@ -2681,10 +2681,9 @@ class Run:
         first = self.rows.setdefault(item.job.id, rec)
         self.release(item.job.id)
         if first is not rec:
-            key = lambda r: tuple(r["row"].get(k) for k in ("trace", "frames", "bytes"))
             reads = lambda r: r["row"].get("reads_hash")
             same_reads = not (reads(first) and reads(rec)) or reads(first) == reads(rec)
-            if key(first) == key(rec) and same_reads:
+            if first["row"].get("trace") == rec["row"].get("trace") and same_reads:
                 self.verified += 1
             else:
                 self.mismatches += 1

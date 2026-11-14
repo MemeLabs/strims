@@ -101,6 +101,24 @@ class Views(Fixture):
             self.assertEqual(v.run("SELECT 1 AS one;").names, ["one"])
         self.assertIsNone(v.conn)
 
+    def test_the_runs_leave_out_the_columns_older_stores_wrote(self):
+        # A runs file an older store wrote, with frames and bytes, beside
+        # one without them.
+        d = Path(tempfile.mkdtemp(dir=self.tmp.name))
+        old, new = d / "old.parquet", d / "new.parquet"
+        with mock.patch.object(store_host, "EXECUTOR", None):
+            store_host.duck(
+                f"COPY (SELECT 'k1' AS k, 'a' AS src, 't1' AS trace, 7::BIGINT AS frames, 9::BIGINT AS bytes) "
+                f"TO {store_host.q(str(old))};"
+                f"COPY (SELECT 'k2' AS k, 'b' AS src, 't2' AS trace) TO {store_host.q(str(new))};", out=None)
+            for paths in ([old, new], [new]):
+                with mock.patch.object(query, "files", lambda srcs, table, ps=paths: [str(p) for p in ps]):
+                    rel = query.runs_of(["a", "b"])
+                got = store_host.duck(f"SELECT * FROM {rel} ORDER BY k;")
+                self.assertEqual([r["k"] for r in got], ["k1", "k2"][-len(paths):])
+                for r in got:
+                    self.assertFalse(set(store_host.RETIRED_RUN_COLS) & set(r), r)
+
     def test_a_selection_of_nothing_is_refused(self):
         with self.assertRaises(query.Refused) as cm:
             query.views(query.Selection(src=["nowhere/*"]))

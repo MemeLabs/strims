@@ -53,7 +53,7 @@ golden._suite = suite
 TABLES = """
 CREATE SCHEMA IF NOT EXISTS raw;
 CREATE TABLE IF NOT EXISTS raw.runs (k VARCHAR, src VARCHAR, cell VARCHAR, arm VARCHAR, seed BIGINT, trace VARCHAR,
-    frames BIGINT, bytes BIGINT, wall_s DOUBLE, rss_mb DOUBLE, "at" VARCHAR);
+    wall_s DOUBLE, rss_mb DOUBLE, "at" VARCHAR);
 CREATE TABLE IF NOT EXISTS rows (k VARCHAR, src VARCHAR);
 CREATE TABLE IF NOT EXISTS verdicts (k VARCHAR, src VARCHAR, collapsed BOOLEAN);
 CREATE TABLE IF NOT EXISTS jobs (k VARCHAR, src VARCHAR, sim VARCHAR, trace VARCHAR, reads_hash VARCHAR);
@@ -181,7 +181,7 @@ class Arithmetic(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.db = Path(cls.tmp.name) / "empty.duckdb"
         database(cls.db, "CREATE SCHEMA raw; CREATE TABLE raw.runs (k VARCHAR, src VARCHAR, cell VARCHAR, arm VARCHAR, "
-                         "seed BIGINT, trace VARCHAR, frames BIGINT, bytes BIGINT, wall_s DOUBLE, rss_mb DOUBLE, "
+                         "seed BIGINT, trace VARCHAR, wall_s DOUBLE, rss_mb DOUBLE, "
                          "\"at\" VARCHAR); CREATE TABLE rows (k VARCHAR, src VARCHAR); "
                          "CREATE TABLE verdicts (k VARCHAR, src VARCHAR, collapsed BOOLEAN); "
                          "CREATE TABLE jobs (k VARCHAR, src VARCHAR, trace VARCHAR, reads_hash VARCHAR); "
@@ -338,7 +338,7 @@ class Dynamics(unittest.TestCase):
         sql = [
             "CREATE SCHEMA raw;",
             "CREATE TABLE raw.runs (k VARCHAR, src VARCHAR, cell VARCHAR, arm VARCHAR, seed BIGINT, trace VARCHAR, "
-            "frames BIGINT, bytes BIGINT, wall_s DOUBLE, rss_mb DOUBLE, \"at\" VARCHAR);",
+            "wall_s DOUBLE, rss_mb DOUBLE, \"at\" VARCHAR);",
             "CREATE TABLE jobs AS SELECT 'k' || i AS k, 's' AS src, NULL::VARCHAR AS trace, "
             "NULL::VARCHAR AS reads_hash FROM range(1, 5) r(i);",
             "CREATE TABLE experiment_jobs AS SELECT * FROM (VALUES ('dyn', 'c', 'x', 1, 'k1', 's', 's', 'dyn-00'), "

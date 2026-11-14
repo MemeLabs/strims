@@ -346,6 +346,15 @@ def source_ranks(srcs):
     return {s: n for n, s in enumerate(sorted(srcs, key=key))}
 
 
+
+def runs_of(srcs):
+    """The runs of the cache sources `srcs`, as one relation: their runs
+    files by name, less the columns older stores wrote and no sim fills
+    (store_host.RETIRED_RUN_COLS)."""
+    retired = ", ".join(q(c) for c in store_host.RETIRED_RUN_COLS)
+    return (f"(SELECT COLUMNS(lambda c: c NOT IN ({retired})) "
+            f"FROM read_parquet({plist(files(srcs, 'runs'))}, union_by_name=true))")
+
 def views(sel, derived=True, fetch=True, say=None):
     """The views over selection `sel`'s sources (a Views). A farm source's
     runs name the suite cells and arms its matrices ran (suite_cells), and
@@ -358,7 +367,7 @@ def views(sel, derived=True, fetch=True, say=None):
     srcs = sources(sel.src)
     if not srcs:
         raise Refused("no runs in the cache match --src")
-    stored = f"read_parquet({plist(files(srcs, 'runs'))}, union_by_name=true)"
+    stored = runs_of(srcs)
     moved, held = None, []
     if any(s.startswith("farm/") for s in srcs):
         moved, held = reused(srcs, [r["cell"] for r in records(
@@ -378,7 +387,7 @@ def views(sel, derived=True, fetch=True, say=None):
     if moved:
         read_runs = (f"(SELECT * FROM {read_runs} UNION ALL BY NAME "
                      f"SELECT r.* REPLACE (m.matrix AS cell, m.arm AS arm), m.matrix "
-                     f"FROM read_parquet({plist(files(srcs, 'runs'))}, union_by_name=true) r "
+                     f"FROM {runs_of(srcs)} r "
                      f"JOIN {moved} m USING (k, src))")
     cells = {}
     if any(s.startswith("farm/") for s in srcs):

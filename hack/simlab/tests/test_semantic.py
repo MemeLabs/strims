@@ -321,15 +321,13 @@ class FarmNames(unittest.TestCase):
 
     def test_the_hosts_names(self):
         worker = farm_module("worker")
-        # But `frames` and `bytes`, which older rows hold and no sim writes now.
-        self.assertEqual(sorted(set(worker.THIN) - self.rows), ["bytes", "frames"], "worker.THIN")
+        self.assertEqual(sorted(set(worker.THIN) - self.rows), [], "worker.THIN")
         store_host = (HACK / "simlab" / "store_host.py").read_text()
         read = set(re.findall(r'\brow\.get\("([a-z_][a-z0-9_]*)"\)', store_host))
-        self.assertTrue({"trace", "frames", "bytes"} <= read, read)
+        self.assertIn("trace", read)
         # But `series`, the JSON an older binary's row carried, which the
-        # fold refuses, and `frames` and `bytes`, which older rows hold: no
-        # sim writes them now.
-        self.assertEqual(sorted(read - self.rows), ["bytes", "frames", "series"], "store_host's row.get")
+        # fold refuses.
+        self.assertEqual(sorted(read - self.rows), ["series"], "store_host's row.get")
 
     def test_the_controllers_names(self):
         farm = farm_module("farm")

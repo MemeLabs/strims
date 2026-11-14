@@ -351,9 +351,7 @@ second (viewer_seconds' sec, a read's or a stall's t_ms // 1000) to
 scoring.sql's viewer_phases_of((SELECT list({'k': k, 'src': src}) FROM
 runs)) ON (k, src, viewer) with start <= sec < stop, its phase (the
 verdict's, then tail past its seconds).
-runs' frames and bytes are its row's: beside viewer_seconds' frames, name
-them runs.frames and runs.bytes. A quantile is the lab's and the sims' one
-method, scoring.sql's sketch_quantile(x, p) (p an integer percentile, the
+A quantile is the lab's and the sims' one method, scoring.sql's sketch_quantile(x, p) (p an integer percentile, the
 integer nearest rank, read through the log sketch) and sketch_quantiles(x,
 [p, ...]).
 

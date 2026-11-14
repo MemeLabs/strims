@@ -264,7 +264,7 @@ def job_dir(d, job):
     lags = sorted(x for lag in s["lag"] for x in lag if x >= 0)
     q = lambda p: lags[min(len(lags) - 1, int(p * len(lags)))]
     n_reads = len(reads)
-    row = {"passed": shape is None, "frames": n_reads, "bytes": n_reads * 4096, "trace": f"tr-{k}",
+    row = {"passed": shape is None, "trace": f"tr-{k}",
            "reads_hash": f"rh-{len(k)}-{n_reads}", "lag_p50_ms": q(0.5), "lag_p99_ms": q(0.99),
            "lag_p99_ms_honest": q(0.99), "join_p90_ms": 900 + 10 * seed, "caught_up_p90_ms": 1400 + 20 * seed,
            "useful_bytes": n_reads * 4096, "wire_bytes": n_reads * 4400 + 1000 * seed,
