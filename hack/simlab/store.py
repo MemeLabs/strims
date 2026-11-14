@@ -331,11 +331,13 @@ def pull(run, reads=False):
         p.check_returncode()
         for line in p.stdout.splitlines():
             if line.startswith("download: ") and " to " in line:
-                to = Path(line.rsplit(" to ", 1)[1])
+                # The CLI names the file relative to its working directory,
+                # this process's.
+                to = Path(os.path.abspath(line.rsplit(" to ", 1)[1]))
                 size = to.stat().st_size
                 gets += 1 if size < CLI_PART else math.ceil(size / CLI_PART)
                 got += size
-                pulled.add(to.parent.relative_to(cache).as_posix())
+                pulled.add(to.parent.relative_to(os.path.abspath(cache)).as_posix())
         keys = sum(1 for f in dest.glob("**/*")
                    if f.is_file() and (f.stem in store_host.SAMPLE_TABLES) == (prefix == "sim-samples"))
         lists += max(1, math.ceil(keys / 1000))

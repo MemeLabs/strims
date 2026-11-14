@@ -874,7 +874,8 @@ class SamplesPull(unittest.TestCase):
                 if f.is_file() and not to.exists():
                     to.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(f, to)
-                    out.append(f"download: s3://bkt/{f.relative_to(self.s3)} to {to}\n")
+                    # As the CLI does: relative to its working directory.
+                    out.append(f"download: s3://bkt/{f.relative_to(self.s3)} to {os.path.relpath(to)}\n")
             return subprocess.CompletedProcess(args, 0, "".join(out), "")
         if args[:2] == ["s3api", "get-object"]:
             f = self.s3 / args[args.index("--key") + 1]
