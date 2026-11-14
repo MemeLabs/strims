@@ -106,10 +106,18 @@ const CatalogPage: React.FC<CatalogPageProps> = ({ data, error, notFound }) => {
           {data.stale.map((s, i) => (
             <li key={i}>
               {s.module}:{" "}
-              {s.kind === "skips-covered"
-                ? "skips a covered file"
-                : `${s.kind} a file outside the catalog`}{" "}
-              <code>{s.path}</code>
+              {s.kind === "unreachable" ? (
+                <>
+                  a story its route doesn't lead to: <code>{s.route}</code>
+                </>
+              ) : (
+                <>
+                  {s.kind === "skips-covered"
+                    ? "skips a covered file"
+                    : `${s.kind} a file outside the catalog`}{" "}
+                  <code>{s.path}</code>
+                </>
+              )}
             </li>
           ))}
         </ul>

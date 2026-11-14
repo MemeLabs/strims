@@ -66,7 +66,8 @@ every error of a failing story, not just its first. Exits 1 when a story
                                   --compare REF [--build] [-j N] [--only PREFIX]...
                                   [--theme dark|light] [--device pc|portrait|landscape|TABLET]
                                   [--all-modes] [--tolerance N] [--report DIR] [--fresh]
-                                  [--fail-on-diff] [--rebuild-base] [--settle MS] [--timeout S]
+                                  [--fail-on-diff] [--rebuild-base] [--no-scope | --list]
+                                  [--settle MS] [--timeout S]
   python3 hack/storybook/check.py (--port N | --url URL) --leaks [...]
 
 `--compare REF` is visual regression: each story of either build, this
@@ -156,6 +157,31 @@ story switched to in place (head: "in place") against a fresh document
 (base: "fresh"), without rechecks: a story it finds changed takes
 something from the stories before it that a fresh document doesn't have.
 
+A story is captured only where the builds differ in what it loads. Each
+console build writes storybook-manifest.json
+(webpack/StorybookManifestPlugin.ts): hashes of the code webpack generated
+for each module, its build's directory and identity (commit, build time)
+left out, and of the output files no chunk owns (devtools.html, locales,
+emoji data), for what every frame loads and for what each stories module
+loads (its chunk group and the groups below it, workers' among them). A
+story both builds have, of the same module and name, whose inputs hash
+the same in both renders the same (its captures are deterministic), so it
+isn't captured: it is `identical`, counted so in the tables and the
+report, which also name the inputs that differ and how many stories each
+reaches. A story whose route an index finds leading elsewhere is always
+captured. A base whose build has no manifest (one from before there was)
+or one of another MANIFEST_VERSION has every story captured, said at the
+start and in the report. Every capture is held to its build's manifest:
+a file of the build's server it asks for that the manifest doesn't list
+for its story (or ALLOWED_REQUESTS gives a reason for) is a hole in the
+manifest (one in place has the story rechecked fresh; the fresh one's
+counts). `--no-scope` captures every story and checks the manifests'
+verdicts too: one they call identical that changed, or failed otherwise
+in the two builds, is a hole as well. Holes are printed and listed in the
+report, and exit 2. `--list` captures nothing: it prints the stories the
+compare would capture, by module (added and removed ones among them), and
+the inputs that differ with the stories each reaches.
+
 The diff runs in Chromium (canvas pixels): a pixel changes when a channel
 moves by more than `--tolerance` (default 2 of 255) or only one shot has
 it (a size change). The report (`--report DIR`, default
@@ -173,7 +199,7 @@ goes, or a capture still waiting at `--timeout` s on a request (no
 answer, or a body unfinished) or on what its document has pending, which
 names its URL. Exits 0, 1 with `--fail-on-diff` when a story changed,
 failed, or is added or removed, and 2 on a checker error (a refused head
-or base among them).
+or base, and a hole in a manifest, among them).
 """
 
 import argparse
@@ -195,6 +221,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -273,6 +300,17 @@ LOCKFILES = {"pnpm-lock.yaml": "pnpm", "package-lock.json": "npm"}
 # inputs): a build that began before a change to any of them doesn't hold it.
 HEAD_INPUTS = ("src", "assets", "webpack", "vendor_modules", "package.json", "pnpm-lock.yaml",
                "webpack.config.js", "tsconfig.json")
+# What each story's frame loads, as the console build's
+# StorybookManifestPlugin writes it, and the form of it this checker reads
+# (the plugin's MANIFEST_VERSION).
+MANIFEST = "storybook-manifest.json"
+MANIFEST_VERSION = 1
+# The files of a build's server a capture may ask for beyond its story's
+# manifest entry, each with why it can't change what the story shows.
+ALLOWED_REQUESTS = {
+    "favicon.ico": "the browser's own ask for a document's tab icon (the console build has none), "
+                   "which no shot shows",
+}
 
 
 # --- a minimal WebSocket client (RFC 6455, text messages) ---
@@ -404,6 +442,8 @@ class Page:
         # The mode (theme, device) of the story frame document it holds,
         # while the next story may switch into it in place; else None.
         self.doc = None
+        # Every URL asked for since the capture began (its targets' too).
+        self.requested = []
 
     def send(self, method, params=None, session=None):
         """A command whose result nobody waits for (to an attached target's
@@ -448,6 +488,7 @@ class Page:
         if method == "Network.requestWillBeSent":
             self.net_at = time.monotonic()
             url = p.get("request", {}).get("url", "")
+            self.requested.append(url)
             if not url.startswith(("data:", "blob:")) and p["requestId"] not in self.stubbed:
                 self.inflight[p["requestId"]] = {"url": url, "at": self.net_at, "answered": False}
                 if m.get("sessionId") in self.sessions:
@@ -507,6 +548,7 @@ class Page:
         self.inflight.clear()
         self.stubbed.clear()
         self.exceptions = []
+        self.requested = []
         self.call("Page.navigate", {"url": url})
 
 
@@ -896,6 +938,9 @@ def coverage_lines(index, files=()):
             lines.append(f"  {f['status']:8} {f['path']}" + ("" if f["status"] == "missing" else f"  ({note})"))
     for s in index.get("stale", []):
         if not in_scope(s["path"], files):
+            continue
+        if s["kind"] == "unreachable":
+            lines.append(f"  stale: {s['module']} has a story its route doesn't lead to: {s['route']}")
             continue
         what = "skips a covered file" if s["kind"] == "skips-covered" else f"{s['kind']} a file outside the catalog"
         lines.append(f"  stale: {s['module']} {what}: {s['path']}")
@@ -1534,6 +1579,10 @@ class Build:
         self.label = name
         self.index = None
         self.stories = {}
+        # Its MANIFEST (None: it has none), and the files that lists for
+        # each stories module, as the audit reads them.
+        self.manifest = None
+        self.allowed = {}
 
     def switches(self):
         """Its story frame documents switch stories in place, as its index says."""
@@ -1783,8 +1832,9 @@ def capture(browser, build, route, theme, device, masks, args, fresh):
     pass. Then FINISH_SCRIPT holds what still moves, masks are painted, and
     the root is shot. {status, error, errors, recorded (the errors the
     story recorded, allowed or not), png, time, rounds (FINISH_SCRIPT's),
-    clock_ms, unstable (no two shots matched), inplace}. Raises Stalled
-    when --timeout s pass with a request in flight or anything pending."""
+    clock_ms, unstable (no two shots matched), inplace, requests (the
+    build's files it asked for)}. Raises Stalled when --timeout s pass
+    with a request in flight or anything pending."""
     page = browser.tab(build.name)
     start = time.monotonic()
     deadline = start + args.timeout
@@ -1794,10 +1844,11 @@ def capture(browser, build, route, theme, device, masks, args, fresh):
 
     def fail(error, errors=None):
         out.update(status="FAIL", error=first_line(error), errors=errors or [error],
-                   time=time.monotonic() - start)
+                   time=time.monotonic() - start, requests=requested_files(page.requested, build.url))
         return out
 
     page.doc = None
+    page.requested = []
     if inplace:
         # The compositor's image decodes outlive the story that drew them,
         # and a later draw of the image at another scale is resampled from
@@ -1884,6 +1935,7 @@ def capture(browser, build, route, theme, device, masks, args, fresh):
             out["unstable"] = True
     if args.navigate and not build.fresh:
         page.doc = mode
+    out["requests"] = requested_files(page.requested, build.url)
     out["time"] = time.monotonic() - start
     return out
 
@@ -1935,6 +1987,9 @@ def compare_story(browser, builds, mode, route, args, fresh):
                 e.side = b.name
                 raise
             res["time"] += shots[b.name]["time"]
+            missed = unmanifested(b, entries[b.name]["module"], shots[b.name].get("requests", []))
+            if missed:
+                shots[b.name]["unmanifested"] = missed
     res["shots"] = shots
     if "base" not in shots:
         res["kind"] = "added"
@@ -1957,12 +2012,145 @@ def compare_story(browser, builds, mode, route, args, fresh):
     return res
 
 
+def load_manifest(build):
+    """The build's MANIFEST as its server serves it, or None (a build from
+    before there was one)."""
+    try:
+        with urllib.request.urlopen(f"{build.url}/{MANIFEST}", timeout=30) as res:
+            return json.load(res)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
+def manifest_problem(build):
+    """Why `build`'s manifest says nothing of its stories, or None."""
+    m = build.manifest
+    if m is None:
+        return f"the {build.name} build has no {MANIFEST} (a build from before there was one)"
+    if m.get("error"):
+        return f"the {build.name} build's {MANIFEST} says: {m['error']}"
+    if m.get("version") != MANIFEST_VERSION:
+        return (f"the {build.name} build's {MANIFEST} is version {m.get('version')}, "
+                f"where this checker reads {MANIFEST_VERSION}")
+    return None
+
+
+def story_inputs(manifest, module):
+    """{input key: hash} of what a frame of a story of `module` loads, or
+    None when the manifest has no such module."""
+    if module not in manifest["stories"]:
+        return None
+    inputs = manifest["inputs"]
+    return {inputs[i][0]: inputs[i][1] for i in (*manifest["shared"], *manifest["stories"][module])}
+
+
+def scope(builds):
+    """What the two builds' manifests say of the stories both have: {why
+    (None, else why they say nothing), identical (the routes whose
+    stories' inputs hash the same in both builds), changed ({input key:
+    the routes it reaches})}. A story whose module or name differs between
+    the builds, or whose route either index finds leading elsewhere
+    (`unreachable`), is never identical."""
+    why = next(filter(None, map(manifest_problem, builds)), None)
+    if why:
+        return {"why": why, "identical": set(), "changed": {}}
+    head, base = builds
+    unreachable = {s.get("route") for b in builds for s in b.index.get("stale", []) if s["kind"] == "unreachable"}
+    diffs, identical, changed = {}, set(), {}
+    for route in sorted(set(head.stories) & set(base.stories)):
+        h, b = head.stories[route], base.stories[route]
+        if (h["module"], h["name"]) != (b["module"], b["name"]) or route in unreachable:
+            continue
+        m = h["module"]
+        if m not in diffs:
+            ours, theirs = story_inputs(head.manifest, m), story_inputs(base.manifest, m)
+            diffs[m] = None if ours is None or theirs is None else sorted(
+                k for k in ours.keys() | theirs.keys() if ours.get(k) != theirs.get(k))
+        if diffs[m] == []:
+            identical.add(route)
+        for k in diffs[m] or ():
+            changed.setdefault(k, []).append(route)
+    return {"why": None, "identical": identical, "changed": changed}
+
+
+def print_scope_list(sc, builds, routes, modes):
+    """--compare --list: what a compare of `routes` in `modes` would
+    capture, and why, as the builds' manifests say (`sc`, scope's)."""
+    head, base = builds
+    if sc["why"]:
+        print(f"not scoped: {sc['why']}: all {len(routes)} stories would be captured in {len(modes)} mode(s)")
+        return
+    todo = [r for r in routes if r not in sc["identical"]]
+    print(f"{len(sc['identical'])} of {len(routes)} stories identical by the manifests; {len(todo)} to capture "
+          f"in {len(modes)} mode(s), {len(todo) * len(modes)} captures")
+    modules = {}
+    for r in todo:
+        e = head.stories.get(r) or base.stories[r]
+        side = "" if r in head.stories and r in base.stories else " (added)" if r in head.stories else " (removed)"
+        modules.setdefault(e["module"], []).append(e["name"] + side)
+    for m, names in sorted(modules.items()):
+        print(f"  {m} ({len(names)}): {', '.join(names[:8])}{', ...' if len(names) > 8 else ''}")
+    if sc["changed"]:
+        print("inputs that differ, by the stories each reaches:")
+        for k, v in sorted(sc["changed"].items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            print(f"  {len(v):4}  {input_name(k)}")
+
+
+def input_name(key):
+    """An input's key as the tables name it: a module's resource without the
+    loaders it went through (a style sheet's id names each)."""
+    return key.rsplit("!", 1)[-1]
+
+
+def requested_files(urls, base):
+    """The files below `base` (a build's server) that `urls` ask for, by
+    path, without query or fragment."""
+    return sorted({urllib.parse.unquote(u[len(base) + 1:].split("#")[0].split("?")[0])
+                   for u in urls if u.startswith(base + "/")})
+
+
+def unmanifested(build, module, requests):
+    """The files of `build`'s server a capture of a story of `module` asked
+    for that its manifest doesn't list for it (none when there's no
+    manifest to hold it to)."""
+    if manifest_problem(build):
+        return []
+    if module not in build.allowed:
+        files = build.manifest["files"]
+        build.allowed[module] = set(files["shared"]) | set(files["stories"].get(module, ()))
+    return [f for f in requests if f not in build.allowed[module] and f not in ALLOWED_REQUESTS]
+
+
+def manifest_holes(results, identical):
+    """What says a manifest leaves out an input: a story the manifests
+    call identical (`identical`, which --no-scope captures) that changed,
+    or failed otherwise in the two builds, and a fresh capture that asked
+    for a file its build's manifest doesn't list. [(mode, route, what)]."""
+    holes = []
+    for r in results:
+        shots = r.get("shots", {})
+        if r["route"] in identical and r["kind"] == "changed":
+            holes.append((r["mode"], r["route"], f"identical by the manifests, but {r['changed']:,} px changed"))
+        elif r["route"] in identical and r["kind"] == "failing" and len(
+                {(v["status"], v["error"]) for v in shots.values()}) > 1:
+            holes.append((r["mode"], r["route"], "identical by the manifests, but the builds failed otherwise"))
+        for side, v in shots.items():
+            if v.get("unmanifested") and not v.get("inplace"):
+                holes.append((r["mode"], r["route"], f"{side} asked for files its manifest doesn't list: "
+                                                     + ", ".join(v["unmanifested"][:5])))
+    return holes
+
+
 def needs_recheck(r, args):
     """A story whose captures, one in place at least, found it changed,
-    failing or unstable: its verdict is a fresh capture's (not --leaks')."""
+    failing or unstable, or asked for a file its manifest doesn't list:
+    its verdict is a fresh capture's (not --leaks')."""
     shots = r.get("shots", {}).values()
     return (not args.leaks and not r.get("checker") and any(s.get("inplace") for s in shots)
-            and (r["kind"] in ("changed", "failing") or any(s.get("unstable") for s in shots)))
+            and (r["kind"] in ("changed", "failing")
+                 or any(s.get("unstable") or s.get("unmanifested") for s in shots)))
 
 
 def recheck_of(nav, fresh):
@@ -1972,6 +2160,9 @@ def recheck_of(nav, fresh):
         detail = f"{nav['changed']:,} px changed"
     elif nav["kind"] == "failing":
         detail = "; ".join(f"{side}: {s['error']}" for side, s in nav["shots"].items() if s["status"] != "ok")
+    elif any(s.get("unmanifested") for s in nav["shots"].values()):
+        detail = "asked for files its manifest doesn't list: " + "; ".join(
+            f"{side}: {', '.join(s['unmanifested'][:3])}" for side, s in nav["shots"].items() if s.get("unmanifested"))
     else:
         detail = "no two shots in a row matched: " + ", ".join(
             side for side, s in nav["shots"].items() if s.get("unstable"))
@@ -2053,7 +2244,7 @@ def write_report(path, results, builds, modes, args, elapsed):
     esc = html.escape
     rows = []
     for r in results:
-        if r["kind"] == "unchanged":
+        if r["kind"] in ("unchanged", "identical"):
             continue
         shots = r.get("shots", {})
         imgs = {side: save(r, side, shots.get(side, {}).get("png")) for side in ("base", "head")}
@@ -2064,14 +2255,15 @@ def write_report(path, results, builds, modes, args, elapsed):
     label = {b.name: b.label for b in builds}
 
     def counts(mode):
-        c = {k: 0 for k in ("changed", "unchanged", "added", "removed", "failing", "skipped")}
+        c = {k: 0 for k in ("changed", "unchanged", "added", "removed", "failing", "skipped", "identical")}
         for r in results:
             if r["mode"] == mode:
                 c[r["kind"]] += 1
         return c
 
     summary = "".join(
-        f"<tr><td>{m}</td>" + "".join(f"<td class='n{' hot' if k != 'unchanged' and v else ''}'>{v}</td>"
+        f"<tr><td>{m}</td>" + "".join(f"<td class='n{' hot' if k not in ('unchanged', 'identical') and v else ''}'>"
+                                      f"{v}</td>"
                                       for k, v in counts(m).items())
         + "".join(f"<td class='n'>{v}</td>" for v in rechecks([r for r in results if r["mode"] == m])) + "</tr>"
         for m in modes)
@@ -2121,6 +2313,24 @@ def write_report(path, results, builds, modes, args, elapsed):
         retried += (f"<p class='note'>{len(overturned)} overturned by a fresh capture: " + "; ".join(
             f"{r['mode']} {esc(r['route'].removeprefix('/storybook/'))} (in place {r['recheck']['kind']}, "
             f"fresh {r['kind']})" for r in overturned) + "</p>")
+    sc, holes = getattr(args, "scope", None), getattr(args, "holes", [])
+    if sc is None:
+        scoped = ""
+    elif sc["why"]:
+        scoped = f"<p class='meta'>not scoped: {esc(sc['why'])}: every story captured</p>"
+    else:
+        stories = len({r["route"] for r in results})
+        top = sorted(sc["changed"].items(), key=lambda kv: (-len(kv[1]), kv[0]))
+        scoped = (f"<p class='meta'>{len(sc['identical'])} of {stories} stories identical by the builds' "
+                  f"manifests (their inputs hash the same in both)"
+                  + (": captured too and checked (--no-scope)" if args.no_scope else ", not captured") + "</p>")
+        if top:
+            scoped += ("<details><summary>inputs that differ, by the stories each reaches</summary><ul>"
+                       + "".join(f"<li>{len(v)} · <code>{esc(input_name(k))}</code></li>" for k, v in top[:200])
+                       + (f"<li>and {len(top) - 200} more</li>" if len(top) > 200 else "") + "</ul></details>")
+    if holes:
+        scoped += (f"<p class='note hole'>{len(holes)} holes in a manifest: " + "; ".join(
+            f"{m} {esc(r.removeprefix('/storybook/'))} ({esc(w)})" for m, r, w in holes[:50]) + "</p>")
     doc = f"""<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title>
@@ -2151,14 +2361,18 @@ figcaption {{ color: var(--muted); font-size: 12px; }}
 figure img {{ width: 100%; height: auto; border: 1px solid var(--line); display: block; }}
 pre {{ white-space: pre-wrap; font-size: 12px; margin: 4px 0; }}
 .note {{ color: var(--muted); margin: 4px 0; }}
+.hole {{ color: var(--hot); }}
+summary {{ color: var(--muted); cursor: pointer; }}
+details ul {{ margin: 4px 0 16px; }}
 </style></head><body>
 <h1>{esc(title)}</h1>
 <p class="meta">{builds_meta}
  · tolerance {args.tolerance} per channel · settle {args.settle} ms · {elapsed:.0f} s{logs}</p>
 <p class="meta">{esc(capture_note(args))}</p>
+{scoped}
 {retried}
 <table><tr><th>mode</th><th>changed</th><th>unchanged</th><th>added</th><th>removed</th><th>failing</th>
-<th>skipped</th><th>rechecked</th><th>overturned</th></tr>{summary}</table>
+<th>skipped</th><th>identical</th><th>rechecked</th><th>overturned</th></tr>{summary}</table>
 {''.join(cards) or '<p>No story changed.</p>'}
 </body></html>
 """
@@ -2170,19 +2384,26 @@ pre {{ white-space: pre-wrap; font-size: 12px; margin: 4px 0; }}
         "head": {"commit": head.commit, "built": head.built(), "label": head.label},
         "capture": capture_note(args), "navigate": bool(args.navigate), "rechecked": rechecked,
         "overturned": overturned,
+        "scope": None if sc is None else {
+            "why": sc["why"], "no_scope": bool(args.no_scope), "identical": len(sc["identical"]),
+            "changed": [[input_name(k), k, len(v)] for k, v in sorted(sc["changed"].items(),
+                                                                      key=lambda kv: (-len(kv[1]), kv[0]))]},
+        "holes": [{"mode": m, "route": r, "what": w} for m, r, w in holes],
         "tolerance": args.tolerance, "modes": modes, "elapsed_s": round(elapsed, 1),
         "stories": [{k: v for k, v in r.items() if k not in ("shots", "diff")}
                     | {"status": {s: v["status"] for s, v in r.get("shots", {}).items()},
                        "capture_s": {s: round(v.get("time", 0), 2) for s, v in r.get("shots", {}).items()},
                        "inplace": [s for s, v in r.get("shots", {}).items() if v.get("inplace")],
                        "errors": {s: v["errors"][:3] for s, v in r.get("shots", {}).items() if v["errors"]},
-                       "unstable": [s for s, v in r.get("shots", {}).items() if v.get("unstable")]}
+                       "unstable": [s for s, v in r.get("shots", {}).items() if v.get("unstable")],
+                       "unmanifested": {s: v["unmanifested"] for s, v in r.get("shots", {}).items()
+                                        if v.get("unmanifested")}}
                     for r in results]}, indent=1) + "\n")
     return path / "index.html"
 
 
 def print_compare(results, builds, modes, report, elapsed, times, args):
-    kinds = ("changed", "added", "removed", "failing", "skipped", "unchanged")
+    kinds = ("changed", "added", "removed", "failing", "skipped", "unchanged", "identical")
     print(f"{'mode':{MODE_WIDTH}}  {'stories':>7}  " + "  ".join(f"{k:>9}" for k in kinds)
           + f"  {'rechecked':>9}  {'overturned':>10}  done at")
     for m in modes:
@@ -2232,9 +2453,22 @@ def print_compare(results, builds, modes, report, elapsed, times, args):
         print("\nno two shots in a row matched:")
         for r, side in unstable:
             print(f"  {r['mode']:{MODE_WIDTH}}  {r['route'].removeprefix('/storybook/')}  ({labels[side]})")
+    sc, holes = getattr(args, "scope", None), getattr(args, "holes", [])
+    if holes:
+        print(f"\nholes in a manifest ({len(holes)}):")
+        for m, r, what in holes[:40]:
+            print(f"  {m:{MODE_WIDTH}}  {r.removeprefix('/storybook/')}  {what}")
+        if len(holes) > 40:
+            print(f"  ... and {len(holes) - 40} more")
     rechecked, overturned = rechecks(results)
+    scoped = ""
+    if sc and sc["why"]:
+        scoped = f"; not scoped: {sc['why']}"
+    elif sc:
+        scoped = (f"; {len(sc['identical'])} identical by the manifests"
+                  + (", captured and checked (--no-scope)" if args.no_scope else ", not captured"))
     print(f"\n{len({r['route'] for r in results})} stories in {len(modes)} mode(s) compared in {elapsed:.0f} s: "
-          f"{capture_note(args)}; {rechecked} rechecked fresh, {overturned} of them overturned")
+          f"{capture_note(args)}; {rechecked} rechecked fresh, {overturned} of them overturned{scoped}")
     head, base = builds
     built = lambda b: f" (built {b.built()})" if b.built() else ""  # noqa: E731
     if args.leaks:
@@ -2300,8 +2534,8 @@ def compare_main(args, exe, work):
                 print(f"check: the base build in {dist} says it is of {said[:12]}, not {sha[:12]} "
                       f"({args.compare}): --rebuild-base builds it again", file=sys.stderr)
                 return 2
-            print(f"check: head {head.commit[:12]} (built {head.built()}) vs base {sha[:12]} ({args.compare}); "
-                  f"the report and the servers' logs in {report_dir}", file=sys.stderr)
+            print(f"check: head {head.commit[:12]} (built {head.built()}) vs base {sha[:12]} ({args.compare})"
+                  + ("" if args.list else f"; the report and the servers' logs in {report_dir}"), file=sys.stderr)
         builds = (head, base)
         started, ran = time.monotonic(), True
 
@@ -2317,8 +2551,34 @@ def compare_main(args, exe, work):
         if not args.fresh and not args.navigate:
             args.why_fresh = "the base build's frames can't switch stories in place"
             print(f"check: {args.why_fresh}: every story is captured in a fresh document", file=sys.stderr)
-        total = len(modes) * len(routes)
-        tasks = [(m, b) for m in modes for b in batches(routes, args.jobs)]
+        # --leaks' two builds are one, every story captured: the manifest
+        # holds its captures to it alone.
+        head.manifest = load_manifest(head)
+        base.manifest = head.manifest if args.leaks else load_manifest(base)
+        sc = args.scope = None if args.leaks else scope(builds)
+        identical = set() if not sc or args.no_scope else sc["identical"]
+        if sc and sc["why"]:
+            print(f"check: not scoped: {sc['why']}: every story is captured", file=sys.stderr)
+        elif sc:
+            top = sorted(sc["changed"].items(), key=lambda kv: (-len(kv[1]), kv[0]))
+            because = "; ".join(f"{input_name(k)} ({len(v)})" for k, v in top[:6]) + (
+                f"; and {len(top) - 6} more" if len(top) > 6 else "")
+            n = len(sc["identical"])
+            if args.no_scope:
+                print(f"check: --no-scope: every story is captured; the manifests call {n} of {len(routes)} "
+                      "identical, each one checked", file=sys.stderr)
+            else:
+                print(f"check: scope: {n} of {len(routes)} stories identical in both builds (not captured), "
+                      f"{len(routes) - n} to capture", file=sys.stderr)
+            if top:
+                print(f"check: inputs that differ (stories each reaches): {because}", file=sys.stderr)
+        if args.list:
+            print_scope_list(sc, builds, routes, modes)
+            ran = False
+            return 0
+        captured = [r for r in routes if r not in identical]
+        total = len(modes) * len(captured)
+        tasks = [(m, b) for m in modes for b in batches(captured, args.jobs)]
         jobs = max(1, min(args.jobs, len(tasks)))
         start_browsers(new_browser, range(1, jobs), browsers)
         for b in browsers:
@@ -2389,12 +2649,14 @@ def compare_main(args, exe, work):
         for t in threads:
             t.join()
         elapsed = time.monotonic() - started
+        results += [{"mode": m, "route": r, "kind": "identical", "time": 0.0} for m in modes for r in sorted(identical)]
         results.sort(key=lambda r: (modes.index(r["mode"]), r["route"]))
+        args.holes = manifest_holes(results, sc["identical"] if sc else set())
         report = write_report(report_dir, results, builds, modes, args, elapsed)
         print_compare(results, builds, modes, report, elapsed, mode_done, args)
-        if any(r.get("checker") for r in results):
+        if any(r.get("checker") for r in results) or args.holes:
             return 2
-        if args.fail_on_diff and any(r["kind"] not in ("unchanged", "skipped") for r in results):
+        if args.fail_on_diff and any(r["kind"] not in ("unchanged", "skipped", "identical") for r in results):
             return 1
         return 0
     finally:
@@ -2423,7 +2685,8 @@ def main(argv=None):
     p.add_argument("--device", choices=list(VIEWPORTS), default="pc")
     p.add_argument("--screenshots", metavar="DIR", help="a PNG of each story's frame here")
     p.add_argument("--strict", action="store_true", help="fail on uncovered or stale catalog files too")
-    p.add_argument("--list", action="store_true", help="print the stories and coverage only")
+    p.add_argument("--list", action="store_true",
+                   help="print the stories and coverage only (with --compare: the stories it would capture, and why)")
     p.add_argument("--files", action="append", default=[], metavar="PREFIX",
                    help="list the catalog files under this src/ path (e.g. components/Chat/); "
                         "--strict then judges only these")
@@ -2446,14 +2709,22 @@ def main(argv=None):
     cmp.add_argument("--report", metavar="DIR", help="the report's directory (default under target/storybook/compare)")
     cmp.add_argument("--fail-on-diff", action="store_true", help="exit 1 when any story differs")
     cmp.add_argument("--rebuild-base", action="store_true", help="build REF again even if cached")
+    cmp.add_argument("--no-scope", action="store_true",
+                     help="capture the stories the builds' manifests call identical too, and exit 2 if one differs")
     args = p.parse_args(argv)
     comparing = args.compare or args.leaks
     if args.compare and args.leaks:
         p.error("--leaks compares this build with itself: no --compare")
-    if args.leaks and (args.fresh or args.base_port or args.rebuild_base):
-        p.error("--leaks takes none of --fresh, --base-port, --rebuild-base")
-    if comparing and (args.list or args.screenshots or args.strict or args.files):
-        p.error("--compare and --leaks take none of --list, --screenshots, --strict, --files")
+    if args.leaks and (args.fresh or args.base_port or args.rebuild_base or args.no_scope):
+        p.error("--leaks takes none of --fresh, --base-port, --rebuild-base, --no-scope")
+    if args.no_scope and not args.compare:
+        p.error("--no-scope is --compare's")
+    if comparing and (args.screenshots or args.strict or args.files):
+        p.error("--compare and --leaks take none of --screenshots, --strict, --files")
+    if args.leaks and args.list:
+        p.error("--leaks takes no --list")
+    if args.no_scope and args.list:
+        p.error("--no-scope captures every story, --list none")
     if comparing and args.all_modes and (args.theme, args.device) != ("dark", "pc"):
         p.error("--all-modes takes no --theme or --device")
     if comparing and (args.theme, args.device) not in MODES.values():

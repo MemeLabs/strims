@@ -9,6 +9,7 @@ const webpack = require("webpack");
 const JSON5 = require("json5");
 const { ChunkManifestPlugin } = require("./webpack/lib/ChunkManifestPlugin");
 const { PwaManifestPlugin } = require("./webpack/lib/PwaManifestPlugin");
+const { StorybookManifestPlugin } = require("./webpack/lib/StorybookManifestPlugin");
 
 module.exports = (env, argv) => {
   const isProduction = argv.mode === "production";
@@ -150,6 +151,10 @@ module.exports = (env, argv) => {
     },
   };
 
+  // The build's own identity, as the pages read it (GIT_HASH, BUILD_TIME).
+  const gitHash = require("child_process").execSync("git rev-parse HEAD").toString().trim();
+  const buildTime = Date.now();
+
   const providePlugin = () =>
     new webpack.ProvidePlugin({
       // With the extension: an ES module's requests are fully specified (vega's are).
@@ -160,10 +165,8 @@ module.exports = (env, argv) => {
   const definePlugin = () =>
     new webpack.DefinePlugin({
       IS_PRODUCTION: isProduction,
-      BUILD_TIME: Date.now(),
-      GIT_HASH: JSON.stringify(
-        require("child_process").execSync("git rev-parse HEAD").toString().trim()
-      ),
+      BUILD_TIME: buildTime,
+      GIT_HASH: JSON.stringify(gitHash),
       VERSION: JSON.stringify(require(path.resolve(__dirname, "package.json")).version),
       I18N_LANG: JSON.stringify(fs.readdirSync(path.resolve(__dirname, "assets", "locales"))),
       // The origin of the native node whose bootstrap API the watch page
@@ -437,6 +440,15 @@ module.exports = (env, argv) => {
             }),
             providePlugin(),
             definePlugin(),
+            // What each storybook frame loads, which hack/storybook/check.py
+            // --compare reads to leave out the stories two builds share.
+            new StorybookManifestPlugin({
+              entry: "devtools",
+              frame: path.join(__dirname, "src", "devtools", "storybook", "host", "Frame.tsx"),
+              catalog: path.join(__dirname, "src", "devtools", "storybook", "host", "catalog.ts"),
+              identity: { "<commit>": gitHash, "<build time>": String(buildTime) },
+              filename: "storybook-manifest.json",
+            }),
           ],
         },
       ];

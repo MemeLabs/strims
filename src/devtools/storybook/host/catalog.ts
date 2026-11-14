@@ -122,8 +122,17 @@ export interface IndexData {
   modules: { module: string; stories: number; error?: string }[];
   files: IndexFile[];
   counts: Record<FileStatus | "total", number>;
-  /** covers/skips naming files outside the catalog, and skips of covered files. */
-  stale: { module: string; path: string; kind: "covers" | "skips" | "skips-covered" }[];
+  /** covers/skips naming files outside the catalog, skips of covered files,
+   * and stories their route doesn't lead to (`route`; `path` is the file the
+   * module mirrors): another module's path is longer, or an earlier story of
+   * the module has its name. hack/storybook/check.py --compare captures such
+   * a story whatever its build's manifest says. */
+  stale: {
+    module: string;
+    path: string;
+    kind: "covers" | "skips" | "skips-covered" | "unreachable";
+    route?: string;
+  }[];
   hostAllowErrors: { pattern: string; reason: string }[];
   hostMask: HostMask[];
   /** What the build was made from: the commit (GIT_HASH) and the time its
@@ -168,6 +177,10 @@ export const buildIndex = async (): Promise<IndexData> => {
     data.modules.push({ module, stories: list.length });
     const routes = list.map((s) => storyRoute(key, s.name));
     for (const [j, s] of list.entries()) {
+      const to = matchRoute(routes[j]);
+      if (to?.key !== key || to.name !== s.name || routes.indexOf(routes[j]) !== j) {
+        data.stale.push({ module, path: mirroredFile(key), kind: "unreachable", route: routes[j] });
+      }
       data.stories.push({
         route: routes[j],
         module,
