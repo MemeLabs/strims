@@ -697,7 +697,7 @@ SHARED = {"seed_log": {"module": ROOT / "crates" / "strims-ppspp" / "src" / "see
                        "consts": {"seed_decisions": ("DECISION_COLUMNS", "decision_fields", "DecisionCol"),
                                   "seed_sends": ("SEND_COLUMNS", "send_fields", "SendCol")},
                        "head": "HeadCol"}}
-LINES = ("decl", "p4tf", "attackers", "extras")
+LINES = ("decl", "p4tf", "attackers")
 PARAM = re.compile(r"\{([a-z][a-z0-9_]*)\}")
 # The row's enums, by type: (enum, what its fields hold).
 ROW_ENUMS = {"int": ("RowInt", "an integer"), "num": ("RowNum", "a number (null where not finite)"),

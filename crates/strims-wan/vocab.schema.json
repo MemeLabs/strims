@@ -20,8 +20,7 @@
             "enum": [
               "decl",
               "p4tf",
-              "attackers",
-              "extras"
+              "attackers"
             ],
             "type": "string"
           },
@@ -293,8 +292,7 @@
             "enum": [
               "decl",
               "p4tf",
-              "attackers",
-              "extras"
+              "attackers"
             ],
             "type": "string"
           },

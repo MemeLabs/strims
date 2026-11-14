@@ -25,9 +25,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from . import vocab
 
 SIMS = ("strims-sim",)
-LINES = ("decl", "p4tf", "attackers", "extras")
+LINES = ("decl", "p4tf", "attackers")
 Sim = Literal["strims-sim"]
-Line = Literal["decl", "p4tf", "attackers", "extras"]
+Line = Literal["decl", "p4tf", "attackers"]
 # The lab's programs that add a field to a sim's row, its name an
 # underscore's: suite (hack/simlab/suite.py's local runs).
 Writer = Literal["suite"]
