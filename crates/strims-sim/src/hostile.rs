@@ -15,7 +15,9 @@
 //!   every [`REJOIN_EVERY`] ([`Scenario::hostile`](crate::Scenario::hostile)),
 //!   a newcomer again each time.
 //! - `hog`: a free rider whose pool links every host it finds and keeps
-//!   them, dialing again at once (`PoolConfig::greedy`).
+//!   them, dialing again at once (`PoolConfig::greedy`), whatever pool
+//!   the scenario's flags give honest hosts. Only organic hosts find
+//!   their links ([`Scenario::organic`]); elsewhere a hog is a free rider.
 //! - `grabber`: serves and announces like an honest viewer, but asks every
 //!   peer that announces a chunk for it as soon as the HAVE arrives
 //!   (REQUESTs added to its frames, in up to [`GRAB_ROOM`] past what its

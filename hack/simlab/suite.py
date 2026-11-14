@@ -384,13 +384,24 @@ def recip_tier():
     return cells
 
 
+# The honest pools of recip-hostile's hog cell (STRIMS_SIM_EXP): budgets by
+# role, with trials, the pool PLAN.md's network construction would port.
+HOG_POOL = "pool-role,pool-trial"
+
+
 def recip_hostile_tier():
     """The residential crowd of 31 with a fifth of its viewers each kind of
     defector, and with viewers leaving and rejoining (churn: every viewer
-    there from the start, as churn's cells keep them)."""
+    there from the start, as churn's cells keep them). Hogs link every
+    host they find, which crowds honest viewers out only where their
+    budgets are bounded: the hogs' cell gives honest pools `pool-role`
+    with trials (HOG_POOL)."""
     crowd = next(c for c in TIERS["recip"] if c["name"] == "org-crowd-31")
-    cells = [{**crowd, "name": f"org-crowd-31-{k}", "env": {**crowd["env"], "STRIMS_SIM_HOSTILE": f"{k}:0.2"},
-              "why": f"{crowd['why']}, a fifth {k}s"} for k in ("free-rider", "liar", "whitewasher", "hog")]
+    pools = {"hog": {"STRIMS_SIM_EXP": HOG_POOL}}
+    cells = [{**crowd, "name": f"org-crowd-31-{k}",
+              "env": {**crowd["env"], "STRIMS_SIM_HOSTILE": f"{k}:0.2", **pools.get(k, {})},
+              "why": f"{crowd['why']}, a fifth {k}s" + (f", honest pools on {HOG_POOL}" if k in pools else "")}
+             for k in ("free-rider", "liar", "whitewasher", "hog")]
     churn = audience(crowd, "t0", STRIMS_SIM_CHURN="0.5:5")
     cells.append({**churn, "name": "org-crowd-31-churn",
                   "why": f"{crowd['why']}, a viewer leaving for 5 s every 2 minutes"})

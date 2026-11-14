@@ -145,16 +145,18 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         .hosts
         .get(h)
         .is_some_and(|s| s.class == crate::HostClass::Hostile("hog"));
-    let pool = index
-        .zip(PoolConfig::from_flags(&w.spec.exp, cap))
-        .map(|(net, cfg)| {
-            let cfg = PoolConfig {
-                stream_rate: rate,
-                ..cfg
-            };
-            let cfg = if hog { cfg.greedy() } else { cfg };
-            Rc::new(Pool::new(node.clone(), net, cfg, w.clone(), h))
-        });
+    let cfg = if hog {
+        Some(PoolConfig::greedy(&w.spec.exp))
+    } else {
+        PoolConfig::from_flags(&w.spec.exp, cap)
+    };
+    let pool = index.zip(cfg).map(|(net, cfg)| {
+        let cfg = PoolConfig {
+            stream_rate: rate,
+            ..cfg
+        };
+        Rc::new(Pool::new(node.clone(), net, cfg, w.clone(), h))
+    });
     if let Some(p) = &pool {
         let p = p.clone();
         spawn_local(async move { p.run().await });

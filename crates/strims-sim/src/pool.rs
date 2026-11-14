@@ -9,9 +9,10 @@
 //! runner's data per peer, how its peer exchanges ended), and acts through
 //! it (`connect_peer`, `close_peer`, `set_max_peers`).
 //!
-//! Without a pool flag the node keeps transfer discovery's own policy:
-//! link every host a search finds, and leave a refused one for the
-//! search's backoff. With one:
+//! Without a pool flag an honest node keeps transfer discovery's own
+//! policy: link every host a search finds, and leave a refused one for
+//! the search's backoff. A hostile hog has its greedy pool whatever the
+//! flags ([`PoolConfig::greedy`]). With a flag:
 //!
 //! - `pool-retry`: the hosts searches find are candidates. While the node
 //!   has fewer swarm links than its budget (`capN`, else [`NO_CAP`]), and
@@ -267,22 +268,24 @@ impl PoolConfig {
         })
     }
 
-    /// A hog's pool (`hostile.rs`): it links every host it finds, keeps
-    /// every link, and dials a host again at once when it loses it or is
-    /// refused.
-    pub fn greedy(self) -> PoolConfig {
+    /// A hog's pool (`hostile.rs`), whatever pool the flags give honest
+    /// hosts: it links every host it finds, keeps every link, and dials a
+    /// host again at once when it loses it or is refused; with
+    /// `pool-find`, it dials the source first.
+    pub fn greedy(exp: &BTreeSet<&'static str>) -> PoolConfig {
         PoolConfig {
             budget: NO_CAP,
             evict: false,
             recip: false,
             unblock: false,
+            stream_rate: 0.0,
             control: Control::Fixed,
             greedy: true,
             trial: false,
             useful: false,
             probe: false,
             near: false,
-            ..self
+            find: exp.contains("pool-find"),
         }
     }
 }
