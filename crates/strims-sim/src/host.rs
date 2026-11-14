@@ -435,6 +435,13 @@ async fn event_task(
                     let _ = node.close_peer(p.host_id).await;
                     continue;
                 }
+                // A pin names peers: the seed pins its pinned viewers that
+                // are peers now, the new one among them.
+                if let Some((swarm, pin)) = w.seed_pin(h)
+                    && let Err(e) = node.pin_seed_allocation(swarm, Some(pin)).await
+                {
+                    w.log(&me, format!("pin failed: {e}"));
+                }
                 let Some(px) = peer else {
                     continue;
                 };

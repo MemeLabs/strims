@@ -620,6 +620,86 @@ fn hostile_kinds_interleave_and_are_counted_by_kind() {
     );
 }
 
+// --- 1e. the seed's allocation pinned --------------------------------------
+
+/// The live mesh's 8 viewers streaming in 4 streams from 3 s to 30 s behind
+/// a seed that can send 8 copies, its allocation pinned by `knob`
+/// (`STRIMS_SIM_SEED_PIN`'s forms), with transfer samples.
+fn pinned_mesh(seed: u64, knob: &str) -> Scenario {
+    let m = streaming(
+        &format!("pinned_mesh {knob}"),
+        seed,
+        8,
+        (8 * RATE, 4 * RATE),
+        PushMode::Hybrid,
+        (3, 30),
+    );
+    let mut s = striped(m.s, 4, SeedPolicy::ADMISSION);
+    s.transfer_samples = true;
+    let pin = strims_sim::seed_pin::SeedPin::parse(knob).unwrap().unwrap();
+    pin.check(&s).unwrap();
+    strims_sim::seed_pin::apply(&mut s, pin);
+    s
+}
+
+/// A pin holds the seed to its viewers under any schedule: the run pins
+/// each stream's three at viewers the seed links to, and a viewer whose
+/// open parent of a stream is the seed, at any stats sample, is one the
+/// pin names for it; the seed pushes to some.
+#[test]
+fn a_pinned_seed_pushes_each_stream_to_its_pinned_viewers() {
+    sweep(
+        "a_pinned_seed_pushes_each_stream_to_its_pinned_viewers",
+        |s| pinned_mesh(s, "random-qos:12"),
+        |r| {
+            sound(r)?;
+            let seed = r.scenario.swarms[0].seed;
+            let pin = r.scenario.seed_pin.as_ref().ok_or("no pin")?;
+            let linked = |v: HostIx| {
+                r.scenario
+                    .links
+                    .iter()
+                    .any(|l| (l.from, l.to) == (v, seed) || (l.from, l.to) == (seed, v))
+            };
+            let pool = r.scenario.swarms[0]
+                .viewers
+                .iter()
+                .filter(|&&v| linked(v))
+                .count();
+            if pin.hosts.len() != 4
+                || pin
+                    .hosts
+                    .iter()
+                    .any(|h| h.len() != pool.min(3) || !h.iter().all(|&v| linked(v)))
+            {
+                return Err(format!("pinned {:?}", pin.hosts));
+            }
+            let mut pushed = 0;
+            for &v in &r.scenario.swarms[0].viewers {
+                for (t, sw, x) in &r.hosts[v].transfers {
+                    for (i, p) in x.parent_peers.iter().enumerate() {
+                        if *sw != 0 || *p != Some(seed) {
+                            continue;
+                        }
+                        if !pin.hosts[i].contains(&v) {
+                            return Err(format!(
+                                "{} takes stream {i} from the seed at {t:?}, pinned {:?}",
+                                r.scenario.name_of(v),
+                                pin.hosts[i]
+                            ));
+                        }
+                        pushed += 1;
+                    }
+                }
+            }
+            if pushed == 0 {
+                return Err("the seed pushed to no pinned viewer".to_owned());
+            }
+            Ok(())
+        },
+    );
+}
+
 // --- 2. a seed capped at 3x the stream rate --------------------------------
 
 const SEED_CAP: u64 = 3 * RATE;

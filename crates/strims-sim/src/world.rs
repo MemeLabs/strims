@@ -327,6 +327,7 @@ impl World {
         let clock_offsets = crate::skew::offsets(spec.clock_skew, spec.hosts.len(), &mut rng);
         crate::arrivals::resolve(&mut spec, &mut rng);
         crate::hostile::draw_mix(&mut spec, &mut rng);
+        crate::seed_pin::resolve(&mut spec, &mut rng);
         let st = WorldState {
             trace: Vec::new(),
             hosts: (0..spec.hosts.len())
@@ -1353,6 +1354,24 @@ impl World {
     }
 
     /// The node's key for each scenario swarm.
+    /// Where `h` is the first swarm's seed and the scenario pins its
+    /// allocation ([`Scenario::seed_pin`]): the swarm's key, and per stream
+    /// the host ids of the pinned viewers' current incarnations, those
+    /// that have one.
+    pub fn seed_pin(&self, h: HostIx) -> Option<(SwarmKey, Vec<Vec<HostId>>)> {
+        let pin = self.spec.seed_pin.as_ref().filter(|p| p.case.is_some())?;
+        if self.spec.swarms.first()?.seed != h {
+            return None;
+        }
+        let key = self.swarm_keys(h).first().copied().flatten()?;
+        let ids = pin
+            .hosts
+            .iter()
+            .map(|vs| vs.iter().filter_map(|&v| self.host_id(v)).collect())
+            .collect();
+        Some((key, ids))
+    }
+
     pub fn swarm_keys(&self, h: HostIx) -> Vec<Option<SwarmKey>> {
         self.st
             .borrow()

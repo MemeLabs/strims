@@ -584,6 +584,12 @@ pub struct Scenario {
     /// The viewers the scenario singles out (the slow viewer, the
     /// super-peer), which the dishonest mix never draws.
     pub keep_honest: BTreeSet<HostIx>,
+    /// The first swarm's seed's allocation set from outside
+    /// (`STRIMS_SIM_SEED_PIN`, [`crate::seed_pin`]): its policy, and a pin
+    /// of the viewers it pushes each stream to, which the run picks after
+    /// the dishonest mix's draw, from the run's rng where it draws (see
+    /// [Determinism](crate#determinism)). `None`: the scenario's own.
+    pub seed_pin: Option<crate::seed_pin::SeedPin>,
 }
 
 /// The experiment flags a scenario takes ([`Scenario::exp`]):
@@ -805,6 +811,7 @@ impl Scenario {
             departures: None,
             mix: false,
             keep_honest: BTreeSet::new(),
+            seed_pin: None,
         }
     }
 
@@ -871,6 +878,26 @@ impl Scenario {
         (0..n)
             .map(|i| self.host(&format!("{prefix}{i}"), uplink))
             .collect()
+    }
+
+    /// Links the first swarm's seed to each of its viewers that has no
+    /// scenario link with it, the viewer dialing it over TCP: a seed every
+    /// viewer links to, as the seed allocation pins' bounds take one
+    /// (`STRIMS_SIM_SEED_LINKS=all`, [`crate::seed_pin`]).
+    pub fn link_seed_to_viewers(&mut self) {
+        let Some(sw) = self.swarms.first() else {
+            return;
+        };
+        let (seed, viewers) = (sw.seed, sw.viewers.clone());
+        for v in viewers {
+            let linked = self
+                .links
+                .iter()
+                .any(|l| (l.from, l.to) == (v, seed) || (l.from, l.to) == (seed, v));
+            if !linked {
+                self.link(v, seed, Transport::Tcp);
+            }
+        }
     }
 
     /// Every host as a browser links: each link over WebRTC

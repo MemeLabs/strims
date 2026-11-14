@@ -494,6 +494,39 @@ def recip_hostile_tier():
     return cells
 
 
+# The seed-alloc tier's cells, robust's names: the WAN cases of the ppspp
+# sim's seed allocation bounds (a residential seed's and a super-peer's,
+# capped and uncapped), whose seed every viewer links to, and of its
+# comparison (a worldwide audience, mobile viewers), whose seed links to a
+# few.
+SEED_ALLOC_LINKED = ["wan-residential-seed-adaptive", "wan-super-peer-adaptive", "wan-residential-seed",
+                     "wan-super-peer"]
+SEED_ALLOC = ["wan-global-audience", "wan-mobile-viewers"]
+
+
+def seed_alloc_tier():
+    """The first swarm's seed's allocation set from outside, for bounds
+    on its own and comparisons with it, every viewer there from the start
+    (robust_t0's cells) and the dishonest mix as the measuring tiers have
+    it: SEED_ALLOC_LINKED's cells with the seed linked to every viewer
+    (STRIMS_SIM_SEED_LINKS=all: a pin names viewers the seed links to, and
+    robust's seeds link to a few, whose copies their uplinks pay for
+    already), named `<cell>-linked`, and SEED_ALLOC's as they are, for
+    the policies alone (a pin there has little left to choose). Their
+    arms are STRIMS_SIM_SEED_PIN's (`farm --knob STRIMS_SIM_SEED_PIN --sets
+    "admission;admission-qos;oracle-qos"`, `off` the cells' own adaptive
+    seed): pins of random, whole, nearest, oracle or datacenter viewers,
+    each with or without the seed's uplink shares by allocation, or the
+    policy alone. The oracle pins honest viewers only, as an oracle would;
+    the other pins take any viewer the seed links to, as the seed can't
+    tell. dc-only needs a datacenter viewer: run it on the super-peer cells
+    (`--only`), whose super-peer stays honest."""
+    t0 = {c["name"]: c for c in robust_t0()}
+    linked = [{**t0[n], "name": f"{n}-linked", "env": {**t0[n]["env"], "STRIMS_SIM_SEED_LINKS": "all"},
+               "why": f"{t0[n]['why']}, the seed linked to every viewer"} for n in SEED_ALLOC_LINKED]
+    return [with_mix(c) for c in linked + [t0[n] for n in SEED_ALLOC]]
+
+
 TIERS["browsers"] = browsers_tier()
 TIERS["net"] = net_tier()
 TIERS["net-hostile"] = net_hostile_tier()
@@ -502,6 +535,7 @@ TIERS["recip-hostile"] = recip_hostile_tier()
 TIERS["sign"] = sign_tier()
 TIERS["sign-confirm"] = sign_confirm_tier()
 TIERS["sign-sens"] = sign_sens_tier()
+TIERS["seed-alloc"] = seed_alloc_tier()
 
 # The pushpull tier's cells, by tier and name: stars behind a 10 and a 5
 # Mbit/s seed, a halving, thin relays, a worldwide WAN audience and the

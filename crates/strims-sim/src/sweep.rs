@@ -85,6 +85,16 @@
 //!   percentage of them, among those there by `at`, leave for good within
 //!   `window` from `at` ([`Scenario::departures`]): gracefully, closing
 //!   their links, or with `abrupt` going silent; `off` none.
+//! - `STRIMS_SIM_SEED_PIN=<case>[-qos][:<slots>]` sets the first swarm's
+//!   seed's allocation ([`Scenario::seed_pin`], [`crate::seed_pin`]): a
+//!   pin of `random`, `whole`, `nearest`, `oracle` or `dc-only` viewers,
+//!   the slots the seed's upload pays for unless `<slots>` names them; or
+//!   with `admission` or `adaptive` the policy alone; `-qos` gives the
+//!   seed's uplink shares by allocation; `off` the scenario's own.
+//! - `STRIMS_SIM_SEED_LINKS=all` links the first swarm's seed to every
+//!   viewer it has no link with ([`Scenario::link_seed_to_viewers`]), the
+//!   topology a pin's bounds take: a pin names viewers the seed links to;
+//!   `off` keeps the scenario's links.
 //! - `STRIMS_SIM_EXP=<flag>,...` sets experiment flags
 //!   ([`Scenario::exp`]); `off` sets none.
 //! - `STRIMS_SIM_CLOCK_SKEW=<skew>` puts every host's clock off true time
@@ -405,6 +415,25 @@ fn clock_skew_knob() -> Option<ClockSkew> {
     )
 }
 
+/// `STRIMS_SIM_SEED_PIN` ([`crate::seed_pin::SeedPin::parse`]), if set
+/// and not `off`.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn seed_pin_knob() -> Option<crate::seed_pin::SeedPin> {
+    let v = env("STRIMS_SIM_SEED_PIN")?;
+    crate::seed_pin::SeedPin::parse(&v).unwrap_or_else(|e| panic!("STRIMS_SIM_SEED_PIN={v}: {e}"))
+}
+
+/// Whether `STRIMS_SIM_SEED_LINKS` is `all`; unset, blank or `off` is
+/// not.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn seed_links_knob() -> bool {
+    match env("STRIMS_SIM_SEED_LINKS").as_deref().map(str::trim) {
+        None | Some("" | "off") => false,
+        Some("all") => true,
+        Some(v) => panic!("STRIMS_SIM_SEED_LINKS={v}: all or off"),
+    }
+}
+
 /// `STRIMS_SIM_RTC`'s stacks; `off` is none.
 #[allow(clippy::panic)] // a mistyped setting fails its test
 fn rtc_knob() -> Option<Vec<Option<SctpProfile>>> {
@@ -521,6 +550,8 @@ fn sweep_seeds(
     let arrivals: Option<Arrivals> = knob("STRIMS_SIM_ARRIVALS");
     let departures = depart_knob();
     let clock_skew = clock_skew_knob();
+    let seed_pin = seed_pin_knob();
+    let seed_links = seed_links_knob();
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -600,6 +631,9 @@ fn sweep_seeds(
                 }
             }
         }
+        if seed_links {
+            spec.link_seed_to_viewers();
+        }
         if let Some(stacks) = &rtc {
             spec.over_webrtc(stacks);
         }
@@ -623,6 +657,12 @@ fn sweep_seeds(
         }
         if let Some(skew) = clock_skew {
             spec.clock_skew = skew;
+        }
+        if let Some(pin) = &seed_pin {
+            if let Err(e) = pin.check(&spec) {
+                fail(test, seed, &format!("STRIMS_SIM_SEED_PIN={pin}: {e}"), &[]);
+            }
+            crate::seed_pin::apply(&mut spec, pin.clone());
         }
         if let Some(dir) = &capture {
             let run = format!("seed-{seed}{replay}");

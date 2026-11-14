@@ -69,6 +69,7 @@
 //! | `wan` | WAN mode's link scheduler |
 //! | [`stream`] | the self-checking stream format and per-viewer accounting |
 //! | [`report`] | results and summaries |
+//! | [`seed_pin`] | the first swarm's seed's allocation set from outside |
 //! | [`stats`] | the runner, link and network stats folded over a run |
 //! | [`skew`] | per-node clock skew |
 //! | [`sweep`](mod@sweep) | seed sweeps, replay and the determinism check |
@@ -101,7 +102,10 @@
 //!   ([`arrivals::resolve`]); without them nothing is drawn;
 //! - with [`Scenario::mix`], the dishonest mix's share, first kind and
 //!   hosts come from the same rng after the departures, before the
-//!   controller's choices; without it nothing is drawn.
+//!   controller's choices; without it nothing is drawn;
+//! - with [`Scenario::seed_pin`], a `random` or `whole` pin's viewers come
+//!   from the same rng after the mix's, before the controller's choices
+//!   ([`seed_pin::resolve`]); no other pin, and no pin, draws anything.
 //!
 //! The schedule stays fixed because every host, the controller and every
 //! task run on the turmoil thread, shared state is `Rc<RefCell<…>>` over
@@ -136,6 +140,7 @@ mod net;
 mod pool;
 pub mod report;
 mod run;
+pub mod seed_pin;
 pub mod skew;
 pub mod spec;
 pub mod stats;

@@ -88,6 +88,14 @@ Tiers:
           are the same at any stream count), hybrid at 1, 4 and 16 streams
           (STRIMS_SIM_STREAMS, `<cell>-hybrid-x<n>`); a run's scorecard
           compares two arms at every point of the matrix.
+  seed-alloc
+          the seed's allocation set from outside (STRIMS_SIM_SEED_PIN, a
+          farm run's knob): residential and super-peer seeds, capped and
+          uncapped, every viewer linked to them (STRIMS_SIM_SEED_LINKS),
+          a worldwide audience and mobile viewers, every viewer there from
+          the start, with the dishonest mix; arms pin random,
+          whole, nearest, oracle or datacenter viewers, with or without
+          the seed's uplink shares by allocation, or set its policy alone.
 
 The audience: a cell's viewers trickle in (`STRIMS_SIM_ARRIVALS` =
 trickle: all of them within the stream's first third, at random) where
