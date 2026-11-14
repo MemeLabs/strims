@@ -20,6 +20,7 @@ import {
 } from "../../../components/Settings/Table";
 import { useCall, useClient } from "../../../contexts/FrontendApi";
 import { certificateBody, certificateRoot } from "../../../lib/certificate";
+import { formatError } from "../../../lib/rpcError";
 import PublishNetworkModal from "./PublishNetworkModal";
 
 interface NetworkTableProps {
@@ -46,7 +47,7 @@ const NetworkTable: React.FC<NetworkTableProps> = ({ networks, onDelete }) => {
         await client.network.delete({ id: network.id });
       } catch (e) {
         const name = certificateRoot(network.certificate).subject || "the network";
-        setError(`Error deleting ${name}: ${(e as Error).message || "unknown error"}`);
+        setError(`Error deleting ${name}: ${formatError(e) || "unknown error"}`);
         return;
       }
       onDelete();
@@ -120,7 +121,7 @@ const NetworkList: React.FC = () => {
       </TableTitleBar>
       {error ? (
         <div className="thing_form">
-          <InputError error={error.message || "Error loading networks"} />
+          <InputError error={formatError(error) || "Error loading networks"} />
         </div>
       ) : (
         <NetworkTable networks={value.networks} onDelete={() => getServers()} />

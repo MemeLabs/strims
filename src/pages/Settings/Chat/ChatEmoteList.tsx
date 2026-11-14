@@ -36,6 +36,7 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useClient, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 
 export interface ChatEmoteTableProps {
   serverId: bigint;
@@ -99,7 +100,7 @@ const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({
     <>
       {error && (
         <div className="thing_form">
-          <InputError error={error.message || "Error deleting the emote"} />
+          <InputError error={formatError(error) || "Error deleting the emote"} />
         </div>
       )}
       <Table ref={tableRef}>
@@ -152,7 +153,7 @@ const ChatEmoteList: React.FC = () => {
       });
     } catch (e) {
       const action = value ? "enabling" : "disabling";
-      setUpdateError(`Error ${action} the emotes: ${(e as Error).message || "unknown error"}`);
+      setUpdateError(`Error ${action} the emotes: ${formatError(e) || "unknown error"}`);
       return;
     }
     void getEmotes();

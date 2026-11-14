@@ -30,6 +30,7 @@ use std::rc::Rc;
 
 use prost::Message;
 use strims_proto::rpc::call::Kind;
+use strims_proto::rpc::errors::ErrorCode;
 use strims_proto::rpc::{Call, Close};
 use strims_proto::service::{CallError, Error as RpcError};
 use strims_proto::types::Certificate;
@@ -481,7 +482,10 @@ impl Endpoint {
             || remote_inbound >= self.config.max_inbound_calls_per_remote
         {
             self.metrics.requests_rejected += 1;
-            let e = RpcError::new(0, "too many concurrent calls");
+            let e = RpcError::new(
+                ErrorCode::TooManyConcurrentCalls,
+                "too many concurrent calls",
+            );
             self.queue_callback(from, call.id, Kind::CallKindError, &e);
             return;
         }
@@ -752,7 +756,10 @@ impl Endpoint {
             self.queue_callback(remote, parent_id, kind, arg);
         } else {
             self.metrics.oversized_replies += 1;
-            let e = RpcError::new(0, format!("response too large: {len} bytes"));
+            let e = RpcError::new(
+                ErrorCode::ResponseTooLarge,
+                format!("response too large: {len} bytes"),
+            );
             self.queue_callback(remote, parent_id, Kind::CallKindError, &e);
         }
         if last || !fits {

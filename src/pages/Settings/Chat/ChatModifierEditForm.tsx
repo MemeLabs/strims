@@ -13,6 +13,7 @@ import {
 } from "../../../components/Settings/ChatStyleSheet";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import ChatModifierForm, { ChatModifierFormData } from "./ChatModifierForm";
 
 const ChatModifierEditForm: React.FC = () => {
@@ -52,7 +53,7 @@ const ChatModifierEditForm: React.FC = () => {
           label="Edit Modifier"
           backLink={`/settings/chat-servers/${serverId}/modifiers`}
         />
-        <InputError error={getRes.error.message || "Error loading modifier"} />
+        <InputError error={formatError(getRes.error) || "Error loading modifier"} />
       </>
     );
   }

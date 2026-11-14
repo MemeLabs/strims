@@ -9,6 +9,7 @@ import { useTitle } from "react-use";
 import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import NetworkDirectoryForm, { NetworkDirectoryFormData } from "./NetworkDirectoryForm";
 
 const NetworkDirectoryEditForm: React.FC = () => {
@@ -33,7 +34,7 @@ const NetworkDirectoryEditForm: React.FC = () => {
       <>
         <TableTitleBar label="Edit Network" backLink={`/settings/networks/${networkId}`} />
         <div className="thing_form">
-          <InputError error={getRes.error?.message || "Error loading network"} />
+          <InputError error={formatError(getRes.error) || "Error loading network"} />
         </div>
       </>
     );

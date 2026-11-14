@@ -16,6 +16,7 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useClient } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 
 interface NetworkTableProps {
   aliasReservations: AliasReservation[];
@@ -43,7 +44,7 @@ const AliasReservationTable: React.FC<NetworkTableProps> = ({ aliasReservations,
     try {
       await client.network.resetAliasReservationCooldown({ id });
     } catch (e) {
-      setError(`Error resetting ${alias}'s cooldown: ${(e as Error).message || "unknown error"}`);
+      setError(`Error resetting ${alias}'s cooldown: ${formatError(e) || "unknown error"}`);
       return;
     }
     onChange();
@@ -121,7 +122,7 @@ const NetworkAliasReservationList: React.FC = () => {
       />
       {error ? (
         <div className="thing_form">
-          <InputError error={error.message || "Error loading alias reservations"} />
+          <InputError error={formatError(error) || "Error loading alias reservations"} />
         </div>
       ) : (
         <AliasReservationTable

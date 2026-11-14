@@ -13,6 +13,7 @@ import React, {
 
 import { Event, INotification, Notification } from "../apis/strims/notification/v1/notification";
 import { useStableCallback } from "../hooks/useStableCallback";
+import { formatError } from "../lib/rpcError";
 import { useClient } from "./FrontendApi";
 
 export interface State {
@@ -113,14 +114,15 @@ Provider.displayName = "Notification.Provider";
 export const useNotification = (): NotificationContextValue => useContext(NotificationContext);
 
 // A catch handler for a call the viewer started: an error toast titled
-// `title` with the call's message (none outside a notification provider).
+// `title` with the call's message and code (none outside a notification
+// provider).
 export const useErrorToast = (): ((title: string) => (error: Error) => void) => {
   const notification = useNotification();
   return useStableCallback((title: string) => (error: Error) => {
     notification?.pushTransientNotification({
       status: Notification.Status.STATUS_ERROR,
       title,
-      message: error?.message,
+      message: formatError(error),
     });
   });
 };

@@ -133,6 +133,14 @@ Messages between peers evolve add-only:
 - A field whose meaning a receiver can't safely ignore needs a version or
   capability both sides agreed on first.
 
+An RPC error carries a code (`strims_proto::ErrorCoded`): a value of its
+owner's `ErrorCode` enum, declared in a `<package>.errors` package within the
+owner's range. strims-proto's `build/errors.rs` lists the ranges, and the
+build fails on a code outside them. Ranges don't overlap, so a code names one
+error across the API, and a service relaying another's error keeps its code.
+Callers branch on codes, never on messages; `0` is no code. The UI names
+codes through the enums `src/lib/rpcError.ts` registers.
+
 A signed object travels as an envelope (`strims_crypto::signed`): an
 encoded body in `bytes body` and its signature in `bytes signature`. The
 signature covers those bytes, and whoever stores or forwards the object

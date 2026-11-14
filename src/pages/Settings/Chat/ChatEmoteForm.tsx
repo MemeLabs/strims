@@ -23,6 +23,7 @@ import {
   ChatStyleSheetInput,
 } from "../../../components/Settings/ChatStyleSheet";
 import { useCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import { ScaleOption, scaleOptions } from "./utils";
 
 export interface ChatEmoteFormData extends ChatStyleSheetFormData {
@@ -95,7 +96,7 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
   return (
     <FormProvider {...formMethods}>
       <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-        {error && <InputError error={error.message || "Error creating chat server"} />}
+        {error && <InputError error={formatError(error) || "Error creating chat server"} />}
         <TextInput
           control={control}
           rules={{

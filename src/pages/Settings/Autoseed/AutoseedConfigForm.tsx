@@ -10,6 +10,7 @@ import { Config } from "../../../apis/strims/autoseed/v1/autoseed";
 import { Button, ButtonSet, InputError, ToggleInput } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import ForwardLink from "../ForwardLink";
 
 interface AutoseedConfigFormData {
@@ -60,7 +61,7 @@ const AutoseedConfigForm = () => {
       <TableTitleBar label="Autoseed" />
       <form className="thing_form" onSubmit={onSubmit}>
         {setConfigRes.error && (
-          <InputError error={setConfigRes.error.message || "Error saving autoseed settings"} />
+          <InputError error={formatError(setConfigRes.error) || "Error saving autoseed settings"} />
         )}
         <ToggleInput control={control} label="Enable" name="enable" />
         <ButtonSet>

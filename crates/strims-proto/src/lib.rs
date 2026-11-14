@@ -34,8 +34,11 @@
 //! [`rpc::Call`] carrying an encoded argument. With the `services` feature,
 //! every package also has interfaces for its RPC services; see `service`.
 
+mod error;
 #[cfg(feature = "services")]
 pub mod service;
+
+pub use error::ErrorCoded;
 
 include!(concat!(env!("OUT_DIR"), "/tree.rs"));
 

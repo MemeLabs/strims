@@ -12,6 +12,7 @@ use std::rc::{Rc, Weak};
 use futures_util::StreamExt;
 use futures_util::future::LocalBoxFuture;
 use prost::Message;
+use strims_proto::rpc::errors::ErrorCode;
 use strims_proto::service::{Context, Error, Registry, ServerStream, StreamingMethod, UnaryMethod};
 
 use crate::shared::{Responder, yield_now};
@@ -94,7 +95,10 @@ impl WeakRouter {
 }
 
 fn decode_error(e: &prost::DecodeError) -> Error {
-    Error::new(0, format!("decoding the request: {e}"))
+    Error::new(
+        ErrorCode::RequestDecodeFailed,
+        format!("decoding the request: {e}"),
+    )
 }
 
 impl Registry for Router {

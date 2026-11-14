@@ -18,6 +18,7 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 
 export interface ChatTagTableProps {
   serverId: bigint;
@@ -58,7 +59,7 @@ const ChatTagTable: React.FC<ChatTagTableProps> = ({ serverId, tags, onDelete })
     <>
       {error && (
         <div className="thing_form">
-          <InputError error={error.message || "Error deleting the tag"} />
+          <InputError error={formatError(error) || "Error deleting the tag"} />
         </div>
       )}
       <Table>

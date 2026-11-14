@@ -10,6 +10,7 @@ import {
   ChatStyleSheetFormData,
   ChatStyleSheetInput,
 } from "../../../components/Settings/ChatStyleSheet";
+import { formatError } from "../../../lib/rpcError";
 
 export interface ChatModifierFormData extends ChatStyleSheetFormData {
   name: string;
@@ -45,7 +46,7 @@ const ChatModifierForm: React.FC<ChatModifierFormProps> = ({
   return (
     <FormProvider {...formMethods}>
       <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-        {error && <InputError error={error.message || "Error creating modifier"} />}
+        {error && <InputError error={formatError(error) || "Error creating modifier"} />}
         <TextInput
           control={control}
           rules={{

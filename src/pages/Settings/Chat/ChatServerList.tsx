@@ -18,6 +18,7 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 
 interface ChatServerTableProps {
   servers: Server[];
@@ -57,7 +58,7 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ servers, onDelete }) 
     <>
       {error && (
         <div className="thing_form">
-          <InputError error={error.message || "Error deleting the chat server"} />
+          <InputError error={formatError(error) || "Error deleting the chat server"} />
         </div>
       )}
       <Table>

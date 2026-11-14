@@ -11,6 +11,7 @@ import { Network } from "../../../apis/strims/network/v1/network";
 import { InputError, SelectInput } from "../../../components/Form";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { useLayout } from "../../../contexts/Layout";
+import { formatError } from "../../../lib/rpcError";
 
 const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: () => void }) => {
   const { t } = useTranslation();
@@ -53,7 +54,7 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
       <div className="thing_list__modal_mask"></div>
       <div className="thing_list__modal">
         <form className="thing_form" onSubmit={onSubmit}>
-          {error && <InputError error={error.message || "Error publishing the network"} />}
+          {error && <InputError error={formatError(error) || "Error publishing the network"} />}
           <SelectInput
             control={control}
             rules={{

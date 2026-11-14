@@ -6,6 +6,7 @@ import React from "react";
 import { useForm } from "react-hook-form";
 
 import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
+import { formatError } from "../../../lib/rpcError";
 
 export interface ChatTagFormData {
   name: string;
@@ -35,7 +36,7 @@ const ChatTagForm: React.FC<ChatTagFormProps> = ({
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-      {error && <InputError error={error.message || "Error creating tag"} />}
+      {error && <InputError error={formatError(error) || "Error creating tag"} />}
       <TextInput
         control={control}
         rules={{

@@ -13,6 +13,7 @@ import {
   InputError,
   InputLabel,
 } from "../../../components/Form";
+import { formatError } from "../../../lib/rpcError";
 
 export interface ChatServerIconFormData {
   image: ImageValue;
@@ -40,7 +41,7 @@ const ChatServerIconForm: React.FC<ChatServerIconFormProps> = ({
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-      {error && <InputError error={error.message || "Error saving icon"} />}
+      {error && <InputError error={formatError(error) || "Error saving icon"} />}
       <InputLabel required={true} text="Image" component="div">
         <ImageInput
           control={control}

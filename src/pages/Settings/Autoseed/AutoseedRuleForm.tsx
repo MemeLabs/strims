@@ -12,6 +12,7 @@ import {
   NetworkSelectInput,
   TextInput,
 } from "../../../components/Form";
+import { formatError } from "../../../lib/rpcError";
 
 export interface AutoseedRuleFormData {
   label: string;
@@ -48,7 +49,7 @@ const AutoseedRuleForm: React.FC<AutoseedRuleFormProps> = ({
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-      {error && <InputError error={error.message || "Error creating channel"} />}
+      {error && <InputError error={formatError(error) || "Error creating channel"} />}
       <TextInput
         control={control}
         rules={{

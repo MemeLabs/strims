@@ -22,6 +22,7 @@ import { suppressClickAway } from "../hooks/useClickAway";
 import { certificateChain } from "../lib/certificate";
 import { HTTPReadWriter } from "../lib/http";
 import { networkKey } from "../lib/network";
+import { formatError } from "../lib/rpcError";
 import { validNamePattern } from "../lib/validation";
 import { Button, InputError, InputLabel, TextInput, ToggleInput } from "./Form";
 import InternalLink from "./InternalLink";
@@ -156,7 +157,7 @@ const InviteAuthForm: React.FC<InviteAuthFormProps> = ({
       </span>
       <span className="invite_auth__network_name">{networkCert.subject}</span>
 
-      {error && <InputError error={error.message || t("inviteAuth.membershipError")} />}
+      {error && <InputError error={formatError(error) || t("inviteAuth.membershipError")} />}
       <TextInput
         control={control}
         rules={{

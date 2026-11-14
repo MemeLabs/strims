@@ -8,16 +8,11 @@ import { useTranslation } from "react-i18next";
 import { useTitle } from "react-use";
 
 import { VideoIngressConfig } from "../../../apis/strims/video/v1/ingress";
-import {
-  Button,
-  ButtonSet,
-  InputError,
-  TextInput,
-  ToggleInput,
-} from "../../../components/Form";
+import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { isAddrLength, isHostOptionalPort, isHostPort } from "../../../lib/address";
+import { formatError } from "../../../lib/rpcError";
 import ForwardLink from "../ForwardLink";
 
 interface VideoIngressConfigFormData {
@@ -80,7 +75,7 @@ const VideoIngressConfigForm = () => {
       <TableTitleBar label="Video Ingress" />
       <form className="thing_form" onSubmit={onSubmit}>
         {setConfigRes.error && (
-          <InputError error={setConfigRes.error.message || "Error saving ingress settings"} />
+          <InputError error={formatError(setConfigRes.error) || "Error saving ingress settings"} />
         )}
         <ToggleInput control={control} label="Enable" name="enabled" />
         <TextInput

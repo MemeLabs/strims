@@ -11,6 +11,7 @@ import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { isAddrLength, isHttpUrl } from "../../../lib/address";
+import { formatError } from "../../../lib/rpcError";
 
 interface HLSEgressConfigFormData {
   enabled: boolean;
@@ -68,7 +69,7 @@ const HLSEgressConfigForm = () => {
       <TableTitleBar label="Video Egress" />
       <form className="thing_form" onSubmit={onSubmit}>
         {setConfigRes.error && (
-          <InputError error={setConfigRes.error.message || "Error saving ingress settings"} />
+          <InputError error={formatError(setConfigRes.error) || "Error saving ingress settings"} />
         )}
         <ToggleInput control={control} label="Enable" name="enabled" />
         <TextInput

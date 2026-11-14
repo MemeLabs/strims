@@ -10,6 +10,7 @@ import { Config, SetConfigResponse } from "../../../apis/strims/network/v1/boots
 import { Button, ButtonSet, InputError, ToggleInput } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import ForwardLink from "../ForwardLink";
 
 interface BootstrapConfigFormProps {
@@ -44,7 +45,7 @@ const BootstrapConfigForm = ({ onCreate, config }: BootstrapConfigFormProps) => 
 
   return (
     <form className="thing_form" onSubmit={onSubmit}>
-      {error && <InputError error={error.message || "Error saving config"} />}
+      {error && <InputError error={formatError(error) || "Error saving config"} />}
       <ToggleInput control={control} label="Enable publishing" name="enablePublishing" />
       <ButtonSet>
         <Button disabled={loading}>Store Config</Button>
@@ -65,7 +66,7 @@ const BootstrapConfigPage: React.FC = () => {
       <TableTitleBar label="Edit Bootstrap Config" />
       {error && (
         <div className="thing_form">
-          <InputError error={error.message || "Error loading config"} />
+          <InputError error={formatError(error) || "Error loading config"} />
         </div>
       )}
       {value && <BootstrapConfigForm config={value.config} onCreate={() => getConfig()} />}

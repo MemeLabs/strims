@@ -16,6 +16,7 @@ import { Button, ButtonSet, InputError, SelectInput, SelectOption } from "../../
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useClient } from "../../../contexts/FrontendApi";
 import { useNotification } from "../../../contexts/Notification";
+import { formatError } from "../../../lib/rpcError";
 
 const NetworkInviteCreateForm: React.FC = () => {
   const { t } = useTranslation();
@@ -76,7 +77,7 @@ const NetworkInviteCreateForm: React.FC = () => {
     <>
       <TableTitleBar label="Create Invite" backLink={"/settings/networks"} />
       <form className="thing_form" onSubmit={onSubmit}>
-        {error && <InputError error={error.message || "Error creating invitation"} />}
+        {error && <InputError error={formatError(error) || "Error creating invitation"} />}
         <SelectInput
           control={control}
           name="bootstrapClient"

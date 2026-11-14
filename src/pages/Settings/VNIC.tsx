@@ -10,6 +10,7 @@ import { Config, SetConfigResponse } from "../../apis/strims/vnic/v1/vnic";
 import { Button, ButtonSet, InputError, TextInput } from "../../components/Form";
 import { TableTitleBar } from "../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../contexts/FrontendApi";
+import { formatError } from "../../lib/rpcError";
 
 const units: { [key: string]: bigint } = {
   "KiBps": BigInt(Math.pow(2, 10)),
@@ -119,7 +120,7 @@ const VNICForm = ({ onCreate, config }: VNICFormProps) => {
 
   return (
     <form className="thing_form" onSubmit={onSubmit} noValidate>
-      {error && <InputError error={error.message || "Error storing the config"} />}
+      {error && <InputError error={formatError(error) || "Error storing the config"} />}
       <TextInput
         control={control}
         rules={{
@@ -170,7 +171,7 @@ const VNICsPage: React.FC = () => {
       <TableTitleBar label="VNIC" />
       {error && (
         <div className="thing_form">
-          <InputError error={error.message || "Error loading config"} />
+          <InputError error={formatError(error) || "Error loading config"} />
         </div>
       )}
       {value && <VNICForm config={value.config} onCreate={() => getConfig()} />}

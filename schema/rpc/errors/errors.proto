@@ -1,0 +1,49 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+syntax = "proto3";
+
+package strims.rpc.errors;
+
+option go_package = "github.com/MemeLabs/strims/pkg/apis/rpc/errors;rpcerrors";
+option java_package = "gg.strims.rpc.errors";
+option swift_prefix = "SRPC";
+
+// The RPC layer's error codes, 1000-1999: the errors a server answers
+// before or instead of its handler, and the caller's own failures, which a
+// service relaying a call passes on. Each API codes its errors in a range of
+// its own (strims-proto's build/errors.rs), so a code names one error.
+enum ErrorCode {
+  // No code: the message alone says what failed.
+  UNDEFINED = 0;
+
+  // The service doesn't implement the method.
+  UNIMPLEMENTED = 1000;
+  // No service registered the method.
+  METHOD_NOT_FOUND = 1001;
+  // The request didn't decode as the method's request type.
+  REQUEST_DECODE_FAILED = 1002;
+  // The server serves as many calls of the caller's as it may.
+  TOO_MANY_CONCURRENT_CALLS = 1003;
+  // The response is larger than the connection sends.
+  RESPONSE_TOO_LARGE = 1004;
+
+  // The response didn't decode as the method's response type.
+  RESPONSE_DECODE_FAILED = 1005;
+  // The server ended a unary call without a value.
+  CLOSED = 1006;
+  // The server answered that the method returns nothing.
+  NO_VALUE = 1007;
+  // A response had a kind the caller doesn't know.
+  UNKNOWN_KIND = 1008;
+  // The connection ended before the call did.
+  DISCONNECTED = 1009;
+  // Responses arrived faster than the caller took them.
+  OVERFLOW = 1010;
+  // The request is larger than the connection sends.
+  REQUEST_TOO_LARGE = 1011;
+  // The caller's connection has its maximum number of calls open.
+  TOO_MANY_CALLS = 1012;
+  // The caller's deadline passed before an answer arrived.
+  TIMEOUT = 1013;
+}

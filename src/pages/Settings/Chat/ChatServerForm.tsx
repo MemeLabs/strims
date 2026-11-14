@@ -12,6 +12,7 @@ import {
   NetworkSelectInput,
   TextInput,
 } from "../../../components/Form";
+import { formatError } from "../../../lib/rpcError";
 import ForwardLink from "../ForwardLink";
 
 export interface ChatServerFormData {
@@ -43,7 +44,7 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-      {error && <InputError error={error.message || "Error creating chat server"} />}
+      {error && <InputError error={formatError(error) || "Error creating chat server"} />}
       <TextInput
         control={control}
         rules={{

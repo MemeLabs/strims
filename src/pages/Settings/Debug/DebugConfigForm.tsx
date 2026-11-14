@@ -17,6 +17,7 @@ import {
 } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import ForwardLink from "../ForwardLink";
 
 interface DebugConfigFormData {
@@ -70,7 +71,7 @@ const DebugConfigForm = () => {
       <TableTitleBar label="Debug" />
       <form className="thing_form" onSubmit={onSubmit}>
         {setConfigRes.error && (
-          <InputError error={setConfigRes.error.message || "Error saving debug settings"} />
+          <InputError error={formatError(setConfigRes.error) || "Error saving debug settings"} />
         )}
         <ToggleInput control={control} label="Enable mock streams" name="enableMockStreams" />
         <NetworkSelectInput

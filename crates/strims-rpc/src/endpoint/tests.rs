@@ -373,7 +373,7 @@ fn requests_over_the_inbound_limit_are_answered_with_an_error() {
     assert_eq!(
         responses(&mut client, calls[2]),
         [Response::Failed(CallError::Remote(RpcError::new(
-            0,
+            ErrorCode::TooManyConcurrentCalls,
             "too many concurrent calls"
         )))]
     );
@@ -664,7 +664,7 @@ fn oversized_replies_become_errors() {
 
     let too_large = |len| {
         Response::Failed(CallError::Remote(RpcError::new(
-            0,
+            ErrorCode::ResponseTooLarge,
             format!("response too large: {len} bytes"),
         )))
     };

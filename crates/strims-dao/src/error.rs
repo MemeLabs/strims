@@ -1,6 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use strims_proto::ErrorCoded;
+use strims_proto::dao::v1::errors::ErrorCode;
+
 use crate::ids::{Exhausted, InvalidRanges};
 use crate::key::Namespace;
 use crate::seal::{KeyError, SealError};
@@ -65,4 +68,29 @@ pub enum Error {
     /// A record or request is malformed.
     #[error("invalid {0}")]
     Invalid(&'static str),
+}
+
+impl ErrorCoded for Error {
+    fn code(&self) -> i32 {
+        let code = match self {
+            Error::Kv(_) => ErrorCode::Kv,
+            Error::Seal(_) => ErrorCode::Seal,
+            Error::Key(_) => ErrorCode::Key,
+            Error::Decode(_) => ErrorCode::RecordDecode,
+            Error::IdsExhausted(_) => ErrorCode::IdsExhausted,
+            Error::InvalidRanges(_) => ErrorCode::InvalidRanges,
+            Error::NotFound => ErrorCode::RecordNotFound,
+            Error::UniqueViolation(_) => ErrorCode::UniqueViolation,
+            Error::UnsupportedStoreVersion { .. } => ErrorCode::UnsupportedStoreVersion,
+            Error::StoreExists => ErrorCode::StoreExists,
+            Error::NoReplicaId => ErrorCode::NoReplicaId,
+            Error::Deleted => ErrorCode::Deleted,
+            Error::Superseded => ErrorCode::Superseded,
+            Error::Credentials => ErrorCode::InvalidCredentials,
+            Error::NameTaken => ErrorCode::NameTaken,
+            Error::LeaseBusy => ErrorCode::LeaseBusy,
+            Error::Invalid(_) => ErrorCode::Invalid,
+        };
+        code.into()
+    }
 }

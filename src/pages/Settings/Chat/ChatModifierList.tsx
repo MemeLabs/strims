@@ -18,6 +18,7 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 
 export interface ChatModifierTableProps {
   serverId: bigint;
@@ -60,7 +61,7 @@ const ChatModifierTable: React.FC<ChatModifierTableProps> = ({ serverId, modifie
     <>
       {error && (
         <div className="thing_form">
-          <InputError error={error.message || "Error deleting the modifier"} />
+          <InputError error={formatError(error) || "Error deleting the modifier"} />
         </div>
       )}
       <Table>

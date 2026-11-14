@@ -10,6 +10,7 @@ import { useTitle } from "react-use";
 import { Button, ButtonSet, InputError, TextInput } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import { validNamePattern, validNetworkNamePattern } from "../../../lib/validation";
 
 const CreateForm: React.FC = () => {
@@ -43,7 +44,7 @@ const CreateForm: React.FC = () => {
         backLink={!!value?.networks.length && "/settings/networks"}
       />
       <form className="thing_form" onSubmit={onSubmit}>
-        {error && <InputError error={error.message || "Error creating network"} />}
+        {error && <InputError error={formatError(error) || "Error creating network"} />}
         <TextInput
           control={control}
           rules={{

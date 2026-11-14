@@ -17,6 +17,7 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useClient } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 
 interface NetworkTableProps {
   peers: Peer[];
@@ -43,7 +44,7 @@ const PeerTable: React.FC<NetworkTableProps> = ({ peers, onChange }) => {
     try {
       await action();
     } catch (e) {
-      setError(`${failure}: ${(e as Error).message || "unknown error"}`);
+      setError(`${failure}: ${formatError(e) || "unknown error"}`);
       return;
     }
     onChange();
@@ -126,7 +127,7 @@ const NetworkPeerList: React.FC = () => {
       <TableTitleBar label="Network peers" backLink={`/settings/networks/${networkId}`} />
       {error ? (
         <div className="thing_form">
-          <InputError error={error.message || "Error loading peers"} />
+          <InputError error={formatError(error) || "Error loading peers"} />
         </div>
       ) : (
         <PeerTable peers={value.peers} onChange={listPeers} />

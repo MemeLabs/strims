@@ -13,6 +13,7 @@ import { InputError, InputLabel } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall } from "../../../contexts/FrontendApi";
 import { useNotification } from "../../../contexts/Notification";
+import { formatError } from "../../../lib/rpcError";
 
 const ProfilePairingToken = () => {
   const { t } = useTranslation();
@@ -51,7 +52,7 @@ const ProfilePairingToken = () => {
       <div className="thing_form">
         {createPairingTokenRes.error && (
           <InputError
-            error={createPairingTokenRes.error.message || "Error creating a pairing token"}
+            error={formatError(createPairingTokenRes.error) || "Error creating a pairing token"}
           />
         )}
         {code && (

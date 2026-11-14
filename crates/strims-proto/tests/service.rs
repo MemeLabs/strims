@@ -21,6 +21,8 @@ use std::task::{self, Poll, Waker};
 
 use futures_core::Stream;
 use prost::Message;
+use strims_proto::ErrorCoded;
+use strims_proto::rpc::errors::ErrorCode;
 use strims_proto::rpc::fixture::{
     EchoRequest, EchoResponse, FixtureClient, FixtureService, GetRequest, ReadRequest,
     WatchRequest, WatchResponse, fixture_methods, register_fixture_service,
@@ -316,6 +318,27 @@ fn errors_display_their_message() {
         CallError::Remote(Error::new(5, "boom")).to_string(),
         "remote error (code 5): boom"
     );
+}
+
+#[test]
+fn errors_carry_the_rpc_layer_codes() {
+    assert_eq!(Error::unimplemented().code, ErrorCode::Unimplemented as i32);
+    assert_eq!(
+        Error::method_not_found("a.B.C").code,
+        ErrorCode::MethodNotFound as i32
+    );
+    assert_eq!(CallError::Timeout.code(), ErrorCode::Timeout as i32);
+    assert_eq!(
+        CallError::TooLarge { len: 9, max: 8 }.to_rpc(),
+        Error::new(
+            ErrorCode::RequestTooLarge,
+            "request of 9 bytes exceeds the 8-byte limit"
+        )
+    );
+    // A remote error keeps the server's code, whoever relays it.
+    let remote = Error::new(4006, "listing not found");
+    assert_eq!(CallError::Remote(remote.clone()).code(), 4006);
+    assert_eq!(remote.to_rpc(), remote);
 }
 
 #[test]

@@ -13,6 +13,7 @@ import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { toFileType, toImageType } from "../../../lib/image";
+import { formatError } from "../../../lib/rpcError";
 import VideoChannelForm, { VideoChannelFormData, themeColorOptions } from "./VideoChannelForm";
 
 const VideoChannelEditForm: React.FC = () => {
@@ -65,7 +66,7 @@ const VideoChannelEditForm: React.FC = () => {
       <>
         <TableTitleBar label="Edit Channel" backLink="/settings/video/channels" />
         <div className="thing_form">
-          <InputError error={getRes.error.message || "Error loading channel"} />
+          <InputError error={formatError(getRes.error) || "Error loading channel"} />
         </div>
       </>
     );

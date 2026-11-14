@@ -1,0 +1,53 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+syntax = "proto3";
+
+package strims.dao.v1.errors;
+
+option go_package = "github.com/MemeLabs/strims/pkg/apis/dao/v1/errors;daov1errors";
+option java_package = "gg.strims.dao.v1.errors";
+option swift_prefix = "SDAE";
+
+// The store's error codes, 2000-2999, which a service answers with when a
+// store operation fails.
+enum ErrorCode {
+  // No code: the message alone says what failed.
+  UNDEFINED = 0;
+
+  // The storage backend failed.
+  KV = 2000;
+  // A stored value didn't open with the store key.
+  SEAL = 2001;
+  // A key couldn't be derived.
+  KEY = 2002;
+  // A stored or received record didn't decode.
+  RECORD_DECODE = 2003;
+  // The profile has no free record ids.
+  IDS_EXHAUSTED = 2004;
+  // Id ranges are malformed or exceed their bound.
+  INVALID_RANGES = 2005;
+  // The record doesn't exist.
+  RECORD_NOT_FOUND = 2006;
+  // Another record holds the same unique index key.
+  UNIQUE_VIOLATION = 2007;
+  // The store's format version isn't one the node reads.
+  UNSUPPORTED_STORE_VERSION = 2008;
+  // A store for the profile already exists.
+  STORE_EXISTS = 2009;
+  // The profile has no device id to replicate as.
+  NO_REPLICA_ID = 2010;
+  // The record was deleted, and replicated records aren't created again.
+  DELETED = 2011;
+  // An applied record lost a unique key conflict to a record with a lower
+  // id.
+  SUPERSEDED = 2012;
+  // The user name, password or session doesn't open a profile.
+  INVALID_CREDENTIALS = 2013;
+  // Another profile has the user name.
+  NAME_TAKEN = 2014;
+  // Another holder has the lease.
+  LEASE_BUSY = 2015;
+  // A record or request is malformed.
+  INVALID = 2016;
+}

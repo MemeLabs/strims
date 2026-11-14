@@ -10,6 +10,7 @@ import { useTitle } from "react-use";
 import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import ChatServerForm, { ChatServerFormData } from "./ChatServerForm";
 
 const ChatServerEditForm: React.FC = () => {
@@ -48,7 +49,7 @@ const ChatServerEditForm: React.FC = () => {
     return (
       <>
         <TableTitleBar label="Edit Server" backLink="/settings/chat-servers" />
-        <InputError error={getRes.error.message || "Error loading chat server"} />
+        <InputError error={formatError(getRes.error) || "Error loading chat server"} />
       </>
     );
   }

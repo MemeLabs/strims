@@ -10,6 +10,7 @@ import { ImageValue, InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { fromFormImageValue, toFormImageValue } from "../../../lib/image";
+import { formatError } from "../../../lib/rpcError";
 import ChatServerIconForm, { ChatServerIconFormData } from "./ChatServerIconForm";
 
 export interface ChatServerIconEditFormData {
@@ -48,7 +49,7 @@ const ChatServerIconEditForm: React.FC = () => {
     return (
       <>
         <TableTitleBar label="Edit Server Icon" backLink={`/settings/chat-servers/${serverId}`} />
-        <InputError error={getRes.error.message || "Error loading server icon"} />
+        <InputError error={formatError(getRes.error) || "Error loading server icon"} />
       </>
     );
   }

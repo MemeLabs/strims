@@ -30,7 +30,9 @@ use std::rc::Rc;
 
 use futures_core::Stream;
 
+use crate::ErrorCoded;
 pub use crate::rpc::Error;
+use crate::rpc::errors::ErrorCode;
 use crate::types::Certificate;
 
 /// An RPC method of a proto service.
@@ -61,12 +63,26 @@ impl Error {
 
     /// The answer of a service method that has no implementation.
     pub fn unimplemented() -> Error {
-        Error::new(0, "not implemented")
+        Error::new(ErrorCode::Unimplemented, "not implemented")
     }
 
     /// The answer to a call of a method that isn't registered.
     pub fn method_not_found(method: &str) -> Error {
-        Error::new(0, format!("method not found: {method}"))
+        Error::new(
+            ErrorCode::MethodNotFound,
+            format!("method not found: {method}"),
+        )
+    }
+}
+
+/// An error relayed as it arrived.
+impl ErrorCoded for Error {
+    fn code(&self) -> i32 {
+        self.code
+    }
+
+    fn to_rpc(&self) -> Error {
+        self.clone()
     }
 }
 
@@ -173,6 +189,26 @@ impl fmt::Display for CallError {
             CallError::TooManyCalls => f.write_str("too many open calls"),
             CallError::Timeout => f.write_str("call timed out"),
         }
+    }
+}
+
+/// A remote error keeps the server's code; the caller's own failures have
+/// the RPC layer's.
+impl ErrorCoded for CallError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            CallError::Remote(e) => return e.code,
+            CallError::Decode(_) => ErrorCode::ResponseDecodeFailed,
+            CallError::Closed => ErrorCode::Closed,
+            CallError::Undefined => ErrorCode::NoValue,
+            CallError::UnknownKind(_) => ErrorCode::UnknownKind,
+            CallError::Disconnected => ErrorCode::Disconnected,
+            CallError::Overflow => ErrorCode::Overflow,
+            CallError::TooLarge { .. } => ErrorCode::RequestTooLarge,
+            CallError::TooManyCalls => ErrorCode::TooManyCalls,
+            CallError::Timeout => ErrorCode::Timeout,
+        };
+        code.into()
     }
 }
 

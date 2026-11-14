@@ -20,6 +20,7 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 
 interface AutoseedRuleTableItemProps {
   rule: Rule;
@@ -93,7 +94,7 @@ const AutoseedRulesList = () => {
       </TableTitleBar>
       {deleteError && (
         <div className="thing_form">
-          <InputError error={deleteError.message || "Error deleting the rule"} />
+          <InputError error={formatError(deleteError) || "Error deleting the rule"} />
         </div>
       )}
       <Table>

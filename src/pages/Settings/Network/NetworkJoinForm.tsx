@@ -10,6 +10,7 @@ import { useTitle } from "react-use";
 import { Button, ButtonSet, InputError, TextInput } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import { validNamePattern } from "../../../lib/validation";
 
 const JoinForm: React.FC = () => {
@@ -46,7 +47,7 @@ const JoinForm: React.FC = () => {
         backLink={!!value?.networks.length && "/settings/networks"}
       />
       <form className="thing_form" onSubmit={onSubmit}>
-        {error && <InputError error={error.message || "Error creating membership"} />}
+        {error && <InputError error={formatError(error) || "Error creating membership"} />}
         <TextInput
           control={control}
           rules={{

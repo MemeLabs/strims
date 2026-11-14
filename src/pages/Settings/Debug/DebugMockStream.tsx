@@ -27,6 +27,7 @@ import {
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { NetworkContext } from "../../../contexts/Network";
 import { certificateRoot } from "../../../lib/certificate";
+import { formatError } from "../../../lib/rpcError";
 
 const timeoutMsOptions = [
   {
@@ -166,7 +167,9 @@ const DebugMockStream = () => {
       <TableTitleBar label="Mock stream" backLink="/settings/debug" />
       <form className="thing_form" onSubmit={onSubmit}>
         {startMockStreamRes.error && (
-          <InputError error={startMockStreamRes.error.message || "Error creating mock stream"} />
+          <InputError
+            error={formatError(startMockStreamRes.error) || "Error creating mock stream"}
+          />
         )}
         <TextInput
           control={control}

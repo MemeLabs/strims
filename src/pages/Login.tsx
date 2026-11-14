@@ -18,6 +18,7 @@ import LoadingPlaceholder from "../components/LoadingPlaceholder";
 import { useSession } from "../contexts/Session";
 import useNextQuery from "../hooks/useNextQuery";
 import useReady from "../hooks/useReady";
+import { formatError } from "../lib/rpcError";
 
 interface LinkedProfileListItemProps {
   profile: LinkedProfile;
@@ -133,7 +134,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ newLogin }) => {
     <LandingPageLayout>
       <ProfileForm
         onSubmit={handleSubmit}
-        error={session.error?.message}
+        error={formatError(session.error)}
         secondaryUri={`/signup${qs.stringify({ next }, { addQueryPrefix: true })}`}
         secondaryLabel="Create profile"
         submitLabel="Log in"

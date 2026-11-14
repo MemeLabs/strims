@@ -7,6 +7,8 @@ import React from "react";
 import { FieldError } from "react-hook-form";
 import { FiAlertTriangle } from "react-icons/fi";
 
+import { formatError } from "../../lib/rpcError";
+
 export interface InputErrorProps {
   error: FieldError | Error | string;
 }
@@ -16,12 +18,7 @@ const InputError: React.FC<InputErrorProps> = ({ error }) => {
     return null;
   }
 
-  let message = "Invalid value";
-  if (typeof error === "string") {
-    message = error;
-  } else if (error.message) {
-    message = error.message;
-  }
+  const message = (typeof error === "string" ? error : formatError(error)) || "Invalid value";
 
   return (
     <span className="input_error">

@@ -17,6 +17,7 @@ import {
   TableTitleBar,
 } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 
 interface DeviceTableItemProps {
   device: Device;
@@ -80,7 +81,7 @@ const DevicesList = () => {
       <>
         <TableTitleBar label="Profile" backLink="/settings/profile" />
         <div className="thing_form">
-          <InputError error={error.message || "Error loading devices"} />
+          <InputError error={formatError(error) || "Error loading devices"} />
         </div>
       </>
     );
@@ -104,7 +105,7 @@ const DevicesList = () => {
       <TableTitleBar label="Profile" backLink="/settings/profile" />
       {deleteError && (
         <div className="thing_form">
-          <InputError error={deleteError.message || "Error deleting the device"} />
+          <InputError error={formatError(deleteError) || "Error deleting the device"} />
         </div>
       )}
       <Table>

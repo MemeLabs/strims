@@ -6,6 +6,7 @@ import React from "react";
 import { useForm } from "react-hook-form";
 
 import { Button, ButtonSet, InputError, TextInput } from "../../../components/Form";
+import { formatError } from "../../../lib/rpcError";
 import { validNamePattern } from "../../../lib/validation";
 import ForwardLink from "../ForwardLink";
 
@@ -42,7 +43,7 @@ const NetworkForm: React.FC<NetworkFormProps> = ({
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-      {error && <InputError error={error.message || "Error creating membership"} />}
+      {error && <InputError error={formatError(error) || "Error creating membership"} />}
       <TextInput
         control={control}
         rules={{

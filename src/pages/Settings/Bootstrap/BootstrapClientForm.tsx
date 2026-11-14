@@ -7,6 +7,7 @@ import { SubmitHandler, useForm } from "react-hook-form";
 import createUrlRegExp from "url-regex-safe";
 
 import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
+import { formatError } from "../../../lib/rpcError";
 
 export interface BootstrapFormData {
   url: string;
@@ -38,7 +39,7 @@ const BootstrapForm: React.FC<BootstrapFormProps> = ({
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-      {error && <InputError error={error.message || "Error creating channel"} />}
+      {error && <InputError error={formatError(error) || "Error creating channel"} />}
       <TextInput
         control={control}
         rules={{

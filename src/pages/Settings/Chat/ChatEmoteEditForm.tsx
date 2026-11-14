@@ -12,6 +12,7 @@ import { InputError } from "../../../components/Form";
 import { toStyleSheetFormValue } from "../../../components/Settings/ChatStyleSheet";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import ChatEmoteForm, { ChatEmoteFormData } from "./ChatEmoteForm";
 import { fileTypeToMimeType, scaleToDOMScale, toEmoteProps } from "./utils";
 
@@ -46,7 +47,7 @@ const ChatEmoteEditFormPage: React.FC = () => {
     return (
       <>
         <TableTitleBar label="Edit Emote" backLink={`/settings/chat-servers/${serverId}/emotes`} />
-        <InputError error={getRes.error.message || "Error loading emote"} />
+        <InputError error={formatError(getRes.error) || "Error loading emote"} />
       </>
     );
   }

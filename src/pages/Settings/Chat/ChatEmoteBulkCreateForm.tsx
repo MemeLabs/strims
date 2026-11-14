@@ -24,6 +24,7 @@ import {
 import { ImageInputPlaceholder } from "../../../components/Form/ImageInput";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import { mimeTypeToFileType } from "./utils";
 
 type EmoteIndex = 0 | 1 | 2 | 3 | 4;
@@ -152,7 +153,7 @@ const ChatEmoteCreateFormPage: React.FC = () => {
     <>
       <TableTitleBar label="Create Emotes" backLink={backLink} />
       <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-        {error && <InputError error={error.message || "Error creating chat server"} />}
+        {error && <InputError error={formatError(error) || "Error creating chat server"} />}
         <CreatableSelectInput
           control={control}
           name="labels"

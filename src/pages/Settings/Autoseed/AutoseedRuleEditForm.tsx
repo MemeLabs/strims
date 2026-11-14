@@ -12,6 +12,7 @@ import { useTitle } from "react-use";
 import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import AutoseedRuleForm, { AutoseedRuleFormData } from "./AutoseedRuleForm";
 
 const AutoseedRuleEditForm: React.FC = () => {
@@ -52,7 +53,7 @@ const AutoseedRuleEditForm: React.FC = () => {
       <>
         <TableTitleBar label="Edit Rule" backLink="/settings/autoseed/rules" />
         <div className="thing_form">
-          <InputError error={getRes.error.message || "Error loading rule"} />
+          <InputError error={formatError(getRes.error) || "Error loading rule"} />
         </div>
       </>
     );

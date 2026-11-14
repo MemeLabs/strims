@@ -12,6 +12,7 @@ import LandingPageLayout from "../components/LandingPageLayout";
 import LoadingPlaceholder from "../components/LoadingPlaceholder";
 import { useSession } from "../contexts/Session";
 import useNextQuery from "../hooks/useNextQuery";
+import { formatError } from "../lib/rpcError";
 
 const SignUpPage: React.FC = () => {
   const { t } = useTranslation();
@@ -39,7 +40,7 @@ const SignUpPage: React.FC = () => {
     <LandingPageLayout>
       <ProfileForm
         onSubmit={handleSubmit}
-        error={session.error?.message}
+        error={formatError(session.error)}
         secondaryUri={`/login${qs.stringify({ next }, { addQueryPrefix: true })}`}
         secondaryLabel="Log in"
         submitLabel="Create Profile"

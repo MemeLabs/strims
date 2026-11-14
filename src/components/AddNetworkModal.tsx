@@ -12,6 +12,7 @@ import { Button, ImageInput, ImageValue, InputError, TextInput } from "../compon
 import { useLazyCall } from "../contexts/FrontendApi";
 import { useSession } from "../contexts/Session";
 import { fromFormImageValue } from "../lib/image";
+import { formatError } from "../lib/rpcError";
 
 interface AddNetworkModalProps {
   onCreate: (res: CreateServerResponse) => void;
@@ -55,7 +56,7 @@ const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) 
               Give your new network a personality with a name and an icon. You can always change it
               later.
             </div>
-            {error && <InputError error={error.message || "Error creating network"} />}
+            {error && <InputError error={formatError(error) || "Error creating network"} />}
             <div className="create_network__avatar">
               <ImageInput name="icon" classNameBase="input_avatar" control={control} />
             </div>

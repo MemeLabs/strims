@@ -10,6 +10,7 @@ import { BootstrapClient } from "../../../apis/strims/network/v1/bootstrap/boots
 import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
+import { formatError } from "../../../lib/rpcError";
 import BootstrapForm, { BootstrapFormData } from "./BootstrapClientForm";
 
 const BootstrapEditForm: React.FC = () => {
@@ -47,7 +48,7 @@ const BootstrapEditForm: React.FC = () => {
       <>
         <TableTitleBar label="Edit Bootstrap" backLink="/settings/bootstrap/clients" />
         <div className="thing_form">
-          <InputError error={getRes.error?.message || "Error loading bootstrap"} />
+          <InputError error={formatError(getRes.error) || "Error loading bootstrap"} />
         </div>
       </>
     );

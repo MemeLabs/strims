@@ -6,6 +6,7 @@ import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button, ButtonSet, InputError, TextInput, ToggleInput } from "../../../components/Form";
+import { formatError } from "../../../lib/rpcError";
 
 export interface NetworkDirectoryFormData {
   angelthumpEnable: boolean;
@@ -41,7 +42,7 @@ const NetworkDirectoryForm: React.FC<NetworkDirectoryFormProps> = ({
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
-      {error && <InputError error={error.message || "Error creating tag"} />}
+      {error && <InputError error={formatError(error) || "Error creating tag"} />}
       <ToggleInput control={control} name="angelthumpEnable" label="Allow AngelThump embed" />
       <ToggleInput control={control} name="twitchEnable" label="Allow Twitch embed" />
       <TextInput

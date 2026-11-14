@@ -10,6 +10,7 @@ import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { fromFormImageValue, toFormImageValue } from "../../../lib/image";
+import { formatError } from "../../../lib/rpcError";
 import NetworkIconForm, { NetworkIconFormData } from "./NetworkIconForm";
 
 const NetworkIconEditForm: React.FC = () => {
@@ -34,7 +35,7 @@ const NetworkIconEditForm: React.FC = () => {
       <>
         <TableTitleBar label="Edit Network" backLink={`/settings/networks/${networkId}`} />
         <div className="thing_form">
-          <InputError error={getRes.error?.message || "Error loading network"} />
+          <InputError error={formatError(getRes.error) || "Error loading network"} />
         </div>
       </>
     );

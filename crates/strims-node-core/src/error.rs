@@ -3,6 +3,9 @@
 
 //! Errors returned by the node API.
 
+use strims_proto::ErrorCoded;
+use strims_proto::node::errors::ErrorCode;
+
 /// Errors from [`crate::Node`] calls.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum NodeError {
@@ -82,4 +85,43 @@ pub enum ReadError {
     /// ([`crate::SwarmReader::rewind`]); reads never return it.
     #[error("rewind refused: {0}")]
     Refused(strims_ppspp::RewindError),
+}
+
+impl ErrorCoded for NodeError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            NodeError::Stopped => ErrorCode::Stopped,
+            NodeError::Io(_) => ErrorCode::Io,
+            NodeError::Dial(_) => ErrorCode::Dial,
+            NodeError::OwnHost => ErrorCode::OwnHost,
+            NodeError::InvalidUri(_) => ErrorCode::InvalidUri,
+            NodeError::UnknownPeer => ErrorCode::UnknownPeer,
+            NodeError::UnknownSwarm => ErrorCode::UnknownSwarm,
+            NodeError::Closed => ErrorCode::Closed,
+            NodeError::Unsupported(_) => ErrorCode::Unsupported,
+            NodeError::RpcTaken => ErrorCode::RpcTaken,
+            NodeError::RpcOverflow => ErrorCode::RpcOverflow,
+            NodeError::Config(_) => ErrorCode::Config,
+            NodeError::Vnic(_) => ErrorCode::Vnic,
+            NodeError::Vpn(_) => ErrorCode::Vpn,
+            NodeError::Certificate(_) => ErrorCode::Certificate,
+            NodeError::Runner(_) => ErrorCode::Runner,
+            NodeError::Swarm(_) => ErrorCode::Swarm,
+        };
+        code.into()
+    }
+}
+
+impl ErrorCoded for ReadError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            ReadError::Underrun { .. } => ErrorCode::Underrun,
+            ReadError::Reset => ErrorCode::Reset,
+            ReadError::Closed => ErrorCode::Closed,
+            ReadError::Stopped => ErrorCode::Stopped,
+            ReadError::Store(_) => ErrorCode::ReadStore,
+            ReadError::Refused(_) => ErrorCode::RewindRefused,
+        };
+        code.into()
+    }
 }
