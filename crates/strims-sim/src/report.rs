@@ -188,6 +188,12 @@ pub struct HostReport {
     /// (`NodeConfig::parent_log`, [`Report::parent_changes`]) the runner's
     /// caps left out, every incarnation.
     pub parents_lost: u64,
+    /// Its messages with each peer on each scenario swarm, every
+    /// incarnation, at its stats samples: (the peer's host, `None` for one
+    /// it can't name, the swarm, the counts).
+    pub messages: Vec<(Option<HostIx>, usize, crate::stats::PeerMessages)>,
+    /// Its answers to its peers' path probes, and its reads of theirs.
+    pub echoes: crate::stats::Echoes,
 }
 
 /// A decision of a seed's ([`HostReport::seed_decisions`]): when (true

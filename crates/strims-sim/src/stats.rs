@@ -517,6 +517,92 @@ pub(crate) struct HostStats {
     /// Link time so far, and the time of the last sample.
     link_ms: u64,
     last_t: Option<Duration>,
+    /// Message counters by peer and scenario swarm ([`PeerMessages`]),
+    /// and those of finished incarnations.
+    messages: BTreeMap<(HostId, usize), Tracked<MESSAGE_COUNTERS>>,
+    messages_done: BTreeMap<(HostId, usize), PeerMessages>,
+    /// vnic's echo counters (`HostMetrics`), over every incarnation: a
+    /// restart starts them again at zero.
+    echoes: Tracked<3>,
+}
+
+/// [`PeerMessages`]' counters, in its field order.
+const MESSAGE_COUNTERS: usize = 10;
+
+/// The messages of one channel, a peer's on a scenario swarm, over a
+/// host's samples (`ChannelStats::inbound`, `outbound`), as its runner
+/// read and wrote them: a hostile host's own outbound counts are what its
+/// runner wrote, not what its adversary sent, so read what a hostile peer
+/// sent from the honest receiver's inbound counts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PeerMessages {
+    /// What the peer sent: REQUESTs, CANCELs, STREAM_CANCELs, DATA
+    /// messages and the chunks they span, HAVEs, STREAM_OPENs and
+    /// ANNOUNCEs.
+    pub requests_in: u64,
+    pub cancels_in: u64,
+    pub stream_cancels_in: u64,
+    pub data_in: u64,
+    pub chunks_in: u64,
+    pub haves_in: u64,
+    pub stream_opens_in: u64,
+    pub announces_in: u64,
+    /// What the host sent the peer: REQUESTs and DATA.
+    pub requests_out: u64,
+    pub data_out: u64,
+}
+
+impl PeerMessages {
+    fn from_array(a: [u64; MESSAGE_COUNTERS]) -> PeerMessages {
+        let [
+            requests_in,
+            cancels_in,
+            stream_cancels_in,
+            data_in,
+            chunks_in,
+            haves_in,
+            stream_opens_in,
+            announces_in,
+            requests_out,
+            data_out,
+        ] = a;
+        PeerMessages {
+            requests_in,
+            cancels_in,
+            stream_cancels_in,
+            data_in,
+            chunks_in,
+            haves_in,
+            stream_opens_in,
+            announces_in,
+            requests_out,
+            data_out,
+        }
+    }
+
+    fn add(&mut self, o: &PeerMessages) {
+        self.requests_in += o.requests_in;
+        self.cancels_in += o.cancels_in;
+        self.stream_cancels_in += o.stream_cancels_in;
+        self.data_in += o.data_in;
+        self.chunks_in += o.chunks_in;
+        self.haves_in += o.haves_in;
+        self.stream_opens_in += o.stream_opens_in;
+        self.announces_in += o.announces_in;
+        self.requests_out += o.requests_out;
+        self.data_out += o.data_out;
+    }
+}
+
+/// A host's answers to its peers' path probes, and what it made of
+/// theirs (vnic's `HostMetrics`), over every incarnation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Echoes {
+    /// Echoes it wrote, and their summed hold since the probe's read.
+    pub written: u64,
+    pub hold_ms: u64,
+    /// Echoes it read of probes it never sent.
+    pub unknown: u64,
 }
 
 /// What one sample showed that the invariants check.
@@ -544,6 +630,9 @@ impl HostStats {
         clock: Time,
     ) -> SampleGauges {
         let index = |k: SwarmKey| swarms.iter().position(|s| *s == Some(k));
+        let v = &m.host;
+        self.echoes
+            .observe([v.echo_write_count, v.echo_hold_ms, v.echo_unknown_count]);
         let mut g = SampleGauges::default();
         let p = &mut self.peaks;
         for peer in &m.runner.peers {
@@ -594,6 +683,22 @@ impl HostStats {
                     if live.get(s).copied().unwrap_or(false) {
                         self.windows.entry(s).or_default().add(sc);
                     }
+                    let (i, o) = (&st.inbound, &st.outbound);
+                    self.messages
+                        .entry((peer.host_id, s))
+                        .or_default()
+                        .observe([
+                            i.request,
+                            i.cancel,
+                            i.stream_cancel,
+                            i.data,
+                            i.chunk,
+                            i.have,
+                            i.stream_open,
+                            i.announce,
+                            o.request,
+                            o.data,
+                        ]);
                     let invalid = st.inbound.invalid_data + st.inbound.invalid_chunk;
                     g.invalid += invalid;
                     g.rejected += st.inbound.rejected;
@@ -725,6 +830,13 @@ impl HostStats {
     pub fn retire(&mut self) {
         let r = self.current();
         self.totals.add(&r);
+        for (&k, t) in &self.messages {
+            self.messages_done
+                .entry(k)
+                .or_default()
+                .add(&PeerMessages::from_array(t.total()));
+        }
+        self.messages.clear();
         self.peaks = Peaks::default();
         self.channels.clear();
         self.peers.clear();
@@ -804,6 +916,27 @@ impl HostStats {
         let mut r = self.totals.clone();
         r.add(&self.current());
         r
+    }
+
+    /// Every incarnation's messages by peer and scenario swarm.
+    pub fn messages(&self) -> BTreeMap<(HostId, usize), PeerMessages> {
+        let mut m = self.messages_done.clone();
+        for (&k, t) in &self.messages {
+            m.entry(k)
+                .or_default()
+                .add(&PeerMessages::from_array(t.total()));
+        }
+        m
+    }
+
+    /// Every incarnation's echo counters.
+    pub fn echoes(&self) -> Echoes {
+        let [written, hold_ms, unknown] = self.echoes.total();
+        Echoes {
+            written,
+            hold_ms,
+            unknown,
+        }
     }
 }
 

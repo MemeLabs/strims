@@ -370,6 +370,13 @@ fn report(
             let mut r = s.report();
             r.name = w.name(h).to_owned();
             r.clock_offset = w.clock_offset(h);
+            r.messages = s
+                .stats
+                .messages()
+                .into_iter()
+                .map(|((id, swarm), m)| (st.ids.get(&id).copied(), swarm, m))
+                .collect();
+            r.echoes = s.stats.echoes();
             r
         })
         .collect();

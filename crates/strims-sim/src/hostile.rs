@@ -41,13 +41,18 @@ pub fn adversary(kind: &str, options: &SwarmOptions) -> Option<AdversaryFactory>
         "liar" => false,
         _ => return None,
     };
+    // The runner reads its swarms' options over the defaults
+    // (`Swarm::new`), and so do its frames.
+    let options = &options
+        .clone()
+        .assign_defaults(&SwarmOptions::default_options());
     let cfg = reader_config(options);
     Some(AdversaryFactory(Arc::new(move |_: DetRng, _: HostId| {
         Box::new(Withhold { cfg, drop_have })
     })))
 }
 
-/// The reader settings of swarms of `options`.
+/// The reader settings of swarms of `options`, defaults assigned.
 fn reader_config(options: &SwarmOptions) -> ReaderConfig {
     let o = &options.integrity;
     ReaderConfig {

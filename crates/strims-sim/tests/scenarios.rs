@@ -19,9 +19,9 @@ use strims_base::rng::{DetRng, det_rng};
 use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy, SendFate, SendHow};
 use strims_sim::topology::{random_graph, random_hub, random_mesh};
 use strims_sim::{
-    Arrivals, Binding, ClockSkew, Competing, Fault, HostIx, Invariants, NetworkSpec, ParentLoss,
-    Report, Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport, VpnProbes, knob,
-    stream_minutes, sweep, sweep_at, sweep_from, sweep_n,
+    Arrivals, Binding, ClockSkew, Competing, Fault, HostClass, HostIx, Invariants, NetworkSpec,
+    ParentLoss, PeerMessages, Report, Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport,
+    VpnProbes, knob, stream_minutes, sweep, sweep_at, sweep_from, sweep_n,
 };
 use strims_vpn::Routing;
 use strims_wan::live::{Encoder, Sign};
@@ -1798,6 +1798,100 @@ fn cross_traffic_hybrid() {
         |s| cross_traffic(s, PushMode::Hybrid),
         check_cross_traffic,
     );
+}
+
+// --- 8g. hostile kinds -------------------------------------------------------
+//
+// Each kind does what its docs say (`hostile.rs`), read from what the honest
+// hosts received of it, and every honest viewer still reads the whole
+// stream. A hostile host's own counts are what its runner wrote, not what
+// went out, so none is read here.
+
+/// A 16-viewer Hybrid mesh with `share` of its viewers hostile of `kind`.
+fn hostile_mesh(seed: u64, kind: &'static str, share: f64) -> Scenario {
+    let mut m = streaming(
+        &format!("hostile_mesh {kind}"),
+        seed,
+        16,
+        (2048 * KIB, 1024 * KIB),
+        PushMode::Hybrid,
+        (3, 33),
+    );
+    m.s.hostile(kind, share);
+    m.s
+}
+
+/// Whether host `h` is a hostile host of `kind`.
+fn of_kind(r: &Report, h: HostIx, kind: &'static str) -> bool {
+    r.scenario.hosts[h].class == HostClass::Hostile(kind)
+}
+
+fn honest(r: &Report, h: HostIx) -> bool {
+    r.scenario.hosts[h].class == HostClass::Honest
+}
+
+/// What the honest hosts had on swarm 0 from the peers `from` picks,
+/// summed over their links with them, and how many links that was.
+fn inbound_from(r: &Report, from: impl Fn(HostIx) -> bool) -> (PeerMessages, u64) {
+    let mut sum = PeerMessages::default();
+    let mut links = 0;
+    for (h, host) in r.hosts.iter().enumerate() {
+        if !honest(r, h) {
+            continue;
+        }
+        for &(peer, sw, m) in &host.messages {
+            if sw != 0 || !peer.is_some_and(&from) {
+                continue;
+            }
+            links += 1;
+            sum.requests_in += m.requests_in;
+            sum.cancels_in += m.cancels_in;
+            sum.stream_cancels_in += m.stream_cancels_in;
+            sum.data_in += m.data_in;
+            sum.chunks_in += m.chunks_in;
+            sum.haves_in += m.haves_in;
+            sum.stream_opens_in += m.stream_opens_in;
+            sum.announces_in += m.announces_in;
+        }
+    }
+    (sum, links)
+}
+
+/// Nothing broke, and every honest viewer read the whole stream.
+fn honest_whole_stream(r: &Report) -> Result<(), String> {
+    sound(r)?;
+    let spec = &r.scenario.swarms[0];
+    let viewers: Vec<HostIx> = spec
+        .viewers
+        .iter()
+        .copied()
+        .filter(|&v| honest(r, v))
+        .collect();
+    complete(r, &viewers, spec.start, spec.stop)
+}
+
+/// Free riders and liars send no chunk to anyone, though liars announce
+/// what they hold.
+#[test]
+fn free_riders_and_liars_serve_nothing() {
+    for kind in ["free-rider", "liar"] {
+        sweep(
+            &format!("free_riders_and_liars_serve_nothing {kind}"),
+            |s| hostile_mesh(s, kind, 0.25),
+            |r| {
+                honest_whole_stream(r)?;
+                let (k, links) = inbound_from(r, |h| of_kind(r, h, kind));
+                let announces = kind == "liar";
+                if links == 0 || k.chunks_in > 0 || (k.haves_in > 0) != announces {
+                    return Err(format!(
+                        "{kind}s sent {} chunks and {} HAVEs over {links} links",
+                        k.chunks_in, k.haves_in
+                    ));
+                }
+                Ok(())
+            },
+        );
+    }
 }
 
 // --- 9. ten minutes ---------------------------------------------------------

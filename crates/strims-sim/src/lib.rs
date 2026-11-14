@@ -154,7 +154,9 @@ pub use spec::{
     Invariants, LinkSpec, MediaSpec, NetworkSpec, Scenario, SendBuffer, SwarmSpec, Transport,
     VpnProbes,
 };
-pub use stats::{Peaks, PeerTransfer, RunnerReport, SwarmCounters, TransferSample};
+pub use stats::{
+    Echoes, Peaks, PeerMessages, PeerTransfer, RunnerReport, SwarmCounters, TransferSample,
+};
 pub use sweep::{knob, seeds, stream_minutes, sweep, sweep_at, sweep_from, sweep_n};
 pub use wan::SctpProfile;
 
