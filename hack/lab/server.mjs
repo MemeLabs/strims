@@ -21,7 +21,7 @@ import https from "node:https";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-const require = createRequire("/home/slugalisk/projects/strims/go-ppspp/package.json");
+const require = createRequire(new URL("../../package.json", import.meta.url));
 const WebSocket = require("ws");
 
 const HOST = process.argv[2];

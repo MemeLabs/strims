@@ -798,10 +798,10 @@ mod tests {
     #[test]
     fn certificates_name_their_dns_names_then_their_ips() {
         let dir = dir("names");
-        let (cert, key, _) = self_signed(&["10.0.0.134", "node.example", "*.example", "::1"]);
+        let (cert, key, _) = self_signed(&["10.0.0.9", "node.example", "*.example", "::1"]);
         let (c, k) = write(&dir, &cert, &key);
         let cert = Certificate::load(&c, &k).unwrap();
-        assert_eq!(cert.names(), ["node.example", "10.0.0.134", "::1"]);
+        assert_eq!(cert.names(), ["node.example", "10.0.0.9", "::1"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -813,19 +813,19 @@ mod tests {
             let (c, k) = write(&dir, &cert, &key);
             Certificate::load(&c, &k).unwrap()
         };
-        let lab = load(&["10.0.0.134"]);
+        let lab = load(&["10.0.0.9"]);
         let mut app = AppConfig::default();
 
         // On an unspecified address, the certificate's host.
-        assert_eq!(link_host("0.0.0.0:8082", &app, &lab).unwrap(), "10.0.0.134");
-        assert_eq!(link_host("[::]:8082", &app, &lab).unwrap(), "10.0.0.134");
+        assert_eq!(link_host("0.0.0.0:8082", &app, &lab).unwrap(), "10.0.0.9");
+        assert_eq!(link_host("[::]:8082", &app, &lab).unwrap(), "10.0.0.9");
         // The listener's address or the public IP the certificate names.
         let two = load(&["10.0.0.2", "10.0.0.1"]);
         assert_eq!(link_host("10.0.0.1:8082", &app, &two).unwrap(), "10.0.0.1");
         app.public_ip = Some("10.0.0.2".parse().unwrap());
         assert_eq!(link_host("10.0.0.1:8082", &app, &two).unwrap(), "10.0.0.2");
         // Else the certificate's host, over a public IP it doesn't name.
-        assert_eq!(link_host("0.0.0.0:8082", &app, &lab).unwrap(), "10.0.0.134");
+        assert_eq!(link_host("0.0.0.0:8082", &app, &lab).unwrap(), "10.0.0.9");
         // Else the first of them, which the certificate doesn't name.
         let wildcard = load(&["*.example"]);
         assert_eq!(

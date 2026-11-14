@@ -91,8 +91,9 @@ controller runs code on those pages. The usage is in
 `hack/lab/README.md`: the ports, the controller's /clients, /eval and
 /log, and a strims-svc the devices link to.
 
-- **Run it from the main checkout,** with the dev machine's LAN address
-  as the README gives it: `node hack/lab/server.mjs ADDR`. Its CA and
+- **Run it from the main checkout,** with the dev machine's LAN address,
+  the one address the lab CA's name constraint permits (no repo file
+  names it): `node hack/lab/server.mjs ADDR`. Its CA and
   server keys (hack/lab/tls/, gitignored, made per machine) exist only
   there. A worktree has none, and running `hack/lab/mkcert.sh` there
   would make a new CA that no device trusts.

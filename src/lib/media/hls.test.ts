@@ -47,7 +47,7 @@ describe("hls", () => {
 
   it("a URL is reachable from other devices unless it names a loopback host", () => {
     for (const url of [
-      "http://10.0.0.134:8082/hls/a/b/index.m3u8",
+      "http://10.0.0.9:8082/hls/a/b/index.m3u8",
       "https://cdn.strims.gg/hls/a/b/index.m3u8",
       "http://[2001:db8::1]:8082/x",
       "http://node.local:8082/x",
@@ -60,7 +60,7 @@ describe("hls", () => {
       "http://localhost:8082/x",
       "http://app.localhost/x",
       "http://[::1]:8082/x",
-      "ftp://10.0.0.134/x",
+      "ftp://10.0.0.9/x",
       "not a url",
     ]) {
       assert.ok(!reachable(url), url);

@@ -121,10 +121,10 @@ mod tests {
     fn server_names_are_the_urls_hosts() {
         let name = |u| server_name(u).unwrap().to_str().into_owned();
         assert_eq!(name("wss://a.b:8082/k"), "a.b");
-        assert_eq!(name("wss://10.0.0.134:8082/k"), "10.0.0.134");
+        assert_eq!(name("wss://10.0.0.9:8082/k"), "10.0.0.9");
         assert_eq!(name("wss://[::1]:8082/k"), "::1");
         assert!(matches!(
-            server_name("wss://10.0.0.134/k").unwrap(),
+            server_name("wss://10.0.0.9/k").unwrap(),
             ServerName::IpAddress(_)
         ));
         assert!(server_name("/k").is_err());

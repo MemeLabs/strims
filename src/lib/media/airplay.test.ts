@@ -130,8 +130,8 @@ describe("airplay", () => {
   it("takes no http alternative for an https page's video", () => {
     const page = "https://strims.gg/c/abc";
     assert.ok(alternativeUsable("https://node.example/x.m3u8", page));
-    assert.ok(!alternativeUsable("http://10.0.0.134:8082/x.m3u8", page));
-    assert.ok(alternativeUsable("http://10.0.0.134:8082/x.m3u8", "http://localhost:8080/"));
+    assert.ok(!alternativeUsable("http://10.0.0.9:8082/x.m3u8", page));
+    assert.ok(alternativeUsable("http://10.0.0.9:8082/x.m3u8", "http://localhost:8080/"));
     assert.ok(!alternativeUsable("not a url", page));
   });
 
