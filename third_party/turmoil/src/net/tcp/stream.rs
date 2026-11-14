@@ -503,7 +503,7 @@ impl FlowControl {
 
     fn try_acquire(&self) -> bool {
         self.credits
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| v.checked_sub(1))
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |v| v.checked_sub(1))
             .is_ok()
     }
 

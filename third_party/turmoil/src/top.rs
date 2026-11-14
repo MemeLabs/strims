@@ -6,7 +6,7 @@ use crate::{config, TRACING_TARGET};
 use indexmap::IndexMap;
 use rand::{Rng, RngCore};
 use rand_distr::{Distribution, Exp};
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::io::{Error, ErrorKind, Result};
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
@@ -18,6 +18,18 @@ pub(crate) struct Topology {
 
     /// Specific configuration overrides between specific hosts.
     links: IndexMap<Pair, Link>,
+
+    /// The positions in `links` of the links whose `sent` queue holds a
+    /// message: the links a tick visits.
+    busy: BTreeSet<usize>,
+
+    /// Per host, the positions in `links` of its links holding messages
+    /// ready for it: the links a delivery to it visits, in `links` order.
+    ready: IndexMap<IpAddr, BTreeSet<usize>>,
+
+    /// The network's time: `rt`'s as of the last [`Topology::tick_by`],
+    /// which every link shares.
+    now: Instant,
 
     /// We don't use a Rt for async. Right now, we just use it to tick time
     /// forward in the same way we do it elsewhere. We'd like to represent
@@ -46,7 +58,18 @@ impl Pair {
 /// An iterator for the network topology, providing access to all active links
 /// in the simulated network.
 pub struct LinksIter<'a> {
+    iter: std::iter::Enumerate<indexmap::map::IterMut<'a, Pair, Link>>,
+    now: Instant,
+}
+
+/// An iterator over the links whose in-flight queue holds a message, in the
+/// order [`LinksIter`] yields links.
+pub struct BusyLinksIter<'a> {
     iter: indexmap::map::IterMut<'a, Pair, Link>,
+    /// The position of `iter`'s next link.
+    next: usize,
+    busy: std::collections::btree_set::Iter<'a, usize>,
+    now: Instant,
 }
 
 /// An iterator for the link, providing access to sent messages that have not
@@ -54,6 +77,7 @@ pub struct LinksIter<'a> {
 pub struct LinkIter<'a> {
     a: IpAddr,
     b: IpAddr,
+    index: usize,
     now: Instant,
     iter: std::collections::vec_deque::IterMut<'a, Sent>,
 }
@@ -63,6 +87,12 @@ impl LinkIter<'_> {
     /// the link.
     pub fn pair(&self) -> (IpAddr, IpAddr) {
         (self.a, self.b)
+    }
+
+    /// The link's position in the order [`LinksIter`] yields links: the
+    /// order they were registered in, which never changes.
+    pub fn index(&self) -> usize {
+        self.index
     }
 
     /// Schedule all messages on the link for delivery the next time the
@@ -105,12 +135,32 @@ impl<'a> Iterator for LinksIter<'a> {
     type Item = LinkIter<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (pair, link) = self.iter.next()?;
+        let (index, (pair, link)) = self.iter.next()?;
 
         Some(LinkIter {
             a: pair.0,
             b: pair.1,
-            now: link.now,
+            index,
+            now: self.now,
+            iter: link.sent.iter_mut(),
+        })
+    }
+}
+
+impl<'a> Iterator for BusyLinksIter<'a> {
+    type Item = LinkIter<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let index = *self.busy.next()?;
+        // `busy` ascends, so the link is at or after `iter`'s next.
+        let (pair, link) = self.iter.nth(index.checked_sub(self.next)?)?;
+        self.next = index + 1;
+
+        Some(LinkIter {
+            a: pair.0,
+            b: pair.1,
+            index,
+            now: self.now,
             iter: link.sent.iter_mut(),
         })
     }
@@ -129,7 +179,13 @@ impl<'a> Iterator for LinkIter<'a> {
             sent,
         })
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
 }
+
+impl ExactSizeIterator for LinkIter<'_> {}
 
 /// A two-way link between two hosts on the network.
 struct Link {
@@ -151,9 +207,6 @@ struct Link {
 
     /// Messages that are ready to be delivered.
     deliverable: IndexMap<IpAddr, VecDeque<Envelope>>,
-
-    /// The current network time, moved forward with [`Link::tick`].
-    now: Instant,
 }
 
 /// States that a link between two nodes can be in.
@@ -174,17 +227,21 @@ enum State {
 
 impl Topology {
     pub(crate) fn new(config: config::Link) -> Topology {
+        let rt = Rt::no_software();
         Topology {
             config,
             links: IndexMap::new(),
-            rt: Rt::no_software(),
+            busy: BTreeSet::new(),
+            ready: IndexMap::new(),
+            now: rt.now(),
+            rt,
         }
     }
 
     /// Register a link between two hosts
     pub(crate) fn register(&mut self, a: IpAddr, b: IpAddr) {
         let pair = Pair::new(a, b);
-        assert!(self.links.insert(pair, Link::new(self.rt.now())).is_none());
+        assert!(self.links.insert(pair, Link::new()).is_none());
     }
 
     pub(crate) fn set_max_message_latency(&mut self, value: Duration) {
@@ -238,69 +295,135 @@ impl Topology {
         dst: SocketAddr,
         message: Protocol,
     ) -> Result<()> {
-        if let Some(link) = self.links.get_mut(&Pair::new(src.ip(), dst.ip())) {
-            link.enqueue_message(&self.config, rand, src, dst, message)
-        } else {
-            Err(Error::new(
+        let Some((index, pair, link)) = self.links.get_full_mut(&Pair::new(src.ip(), dst.ip()))
+        else {
+            return Err(Error::new(
                 ErrorKind::ConnectionRefused,
                 "Connection refused",
-            ))
-        }
+            ));
+        };
+        let result = link.enqueue_message(&self.config, rand, self.now, src, dst, message);
+        track(&mut self.busy, &mut self.ready, index, pair, link);
+        result
     }
 
-    // Move messages from any network links to the `dst` host.
+    // Move messages from any network links to the `dst` host: those of its
+    // links that hold messages ready for it, in `links` order. A message the
+    // host refuses goes back on its link, so it reaches the other end no
+    // sooner than the next step.
     pub(crate) fn deliver_messages(&mut self, rand: &mut dyn RngCore, dst: &mut Host) {
-        for (pair, link) in &mut self.links {
-            if pair.0 == dst.addr || pair.1 == dst.addr {
-                link.deliver_messages(&self.config, rand, dst);
-            }
+        let Some(ready) = self.ready.get_mut(&dst.addr) else {
+            return;
+        };
+        for index in std::mem::take(ready) {
+            let Some((pair, link)) = self.links.get_index_mut(index) else {
+                continue;
+            };
+            link.deliver_messages(&self.config, rand, self.now, dst);
+            track(&mut self.busy, &mut self.ready, index, pair, link);
         }
     }
 
     pub(crate) fn hold(&mut self, a: IpAddr, b: IpAddr) {
-        self.get_link_mut(&Pair::new(a, b)).hold();
+        self.with_link(&Pair::new(a, b), |link, _| link.hold());
     }
 
     pub(crate) fn release(&mut self, a: IpAddr, b: IpAddr) {
-        self.get_link_mut(&Pair::new(a, b)).release();
+        self.with_link(&Pair::new(a, b), |link, now| link.release(now));
     }
 
     pub(crate) fn partition(&mut self, a: IpAddr, b: IpAddr) {
-        self.get_link_mut(&Pair::new(a, b)).explicit_partition();
+        self.with_link(&Pair::new(a, b), |link, _| link.explicit_partition());
     }
 
     pub(crate) fn partition_oneway(&mut self, a: IpAddr, b: IpAddr) {
-        let link = &mut self.get_link_mut(&Pair::new(a, b));
-        link.partition_oneway(a, b);
+        self.with_link(&Pair::new(a, b), |link, _| link.partition_oneway(a, b));
     }
 
     pub(crate) fn repair(&mut self, a: IpAddr, b: IpAddr) {
-        self.get_link_mut(&Pair::new(a, b)).explicit_repair();
+        self.with_link(&Pair::new(a, b), |link, _| link.explicit_repair());
     }
 
     pub(crate) fn repair_oneway(&mut self, a: IpAddr, b: IpAddr) {
-        let link = &mut self.get_link_mut(&Pair::new(a, b));
-        link.repair_oneway(a, b);
+        self.with_link(&Pair::new(a, b), |link, _| link.repair_oneway(a, b));
     }
 
+    // Moves the network's time on, and on every link with messages in
+    // flight those whose time has come to the messages ready for their
+    // receivers. A link without messages in flight has none to move.
     pub(crate) fn tick_by(&mut self, duration: Duration) {
         let _ = self.rt.tick(duration);
-        for link in self.links.values_mut() {
-            link.tick(self.rt.now());
+        self.now = self.rt.now();
+        for &index in &self.busy {
+            let Some((pair, link)) = self.links.get_index_mut(index) else {
+                continue;
+            };
+            if link.process_deliverables(self.now) {
+                mark_ready(&mut self.ready, index, pair, link);
+            }
         }
+        let links = &self.links;
+        self.busy
+            .retain(|&index| links.get_index(index).is_some_and(|(_, l)| !l.sent.is_empty()));
     }
 
     pub(crate) fn iter_mut(&mut self) -> LinksIter<'_> {
         LinksIter {
-            iter: self.links.iter_mut(),
+            iter: self.links.iter_mut().enumerate(),
+            now: self.now,
         }
     }
 
-    #[inline]
-    fn get_link_mut(&mut self, pair: &Pair) -> &mut Link {
-        self.links
-            .get_mut(pair)
-            .unwrap_or_else(|| panic!("unable to find link between {pair:?}"))
+    pub(crate) fn busy_mut(&mut self) -> BusyLinksIter<'_> {
+        BusyLinksIter {
+            iter: self.links.iter_mut(),
+            next: 0,
+            busy: self.busy.iter(),
+            now: self.now,
+        }
+    }
+
+    /// Applies `f` to the link of `pair`, at the network's time, and
+    /// tracks what it leaves on the link.
+    fn with_link(&mut self, pair: &Pair, f: impl FnOnce(&mut Link, Instant)) {
+        let (index, pair, link) = self
+            .links
+            .get_full_mut(pair)
+            .unwrap_or_else(|| panic!("unable to find link between {pair:?}"));
+        f(link, self.now);
+        track(&mut self.busy, &mut self.ready, index, pair, link);
+    }
+}
+
+/// Keeps `busy` and `ready` in step with the link at `index`, after a change
+/// to its queues.
+fn track(
+    busy: &mut BTreeSet<usize>,
+    ready: &mut IndexMap<IpAddr, BTreeSet<usize>>,
+    index: usize,
+    pair: &Pair,
+    link: &Link,
+) {
+    if link.sent.is_empty() {
+        busy.remove(&index);
+    } else {
+        busy.insert(index);
+    }
+    mark_ready(ready, index, pair, link);
+}
+
+/// Adds the link at `index` to the ready links of each end it holds
+/// messages ready for.
+fn mark_ready(
+    ready: &mut IndexMap<IpAddr, BTreeSet<usize>>,
+    index: usize,
+    pair: &Pair,
+    link: &Link,
+) {
+    for host in [pair.0, pair.1] {
+        if link.deliverable.get(&host).is_some_and(|q| !q.is_empty()) {
+            ready.entry(host).or_default().insert(index);
+        }
     }
 }
 
@@ -324,14 +447,13 @@ enum DeliveryStatus {
 }
 
 impl Link {
-    fn new(now: Instant) -> Link {
+    fn new() -> Link {
         Link {
             state_a_b: State::Healthy,
             state_b_a: State::Healthy,
             config: config::Link::default(),
             sent: VecDeque::new(),
             deliverable: IndexMap::new(),
-            now,
         }
     }
 
@@ -339,15 +461,16 @@ impl Link {
         &mut self,
         global_config: &config::Link,
         rand: &mut dyn RngCore,
+        now: Instant,
         src: SocketAddr,
         dst: SocketAddr,
         message: Protocol,
     ) -> Result<()> {
         tracing::trace!(target: TRACING_TARGET, ?src, ?dst, protocol = %message, "Send");
 
-        self.rand_partition_or_repair(global_config, rand);
-        let result = self.enqueue(global_config, rand, src, dst, message);
-        self.process_deliverables();
+        self.rand_partition_or_repair(global_config, rand, now);
+        let result = self.enqueue(global_config, rand, now, src, dst, message);
+        self.process_deliverables(now);
         result
     }
 
@@ -375,6 +498,7 @@ impl Link {
         &mut self,
         global_config: &config::Link,
         rand: &mut dyn RngCore,
+        now: Instant,
         src: SocketAddr,
         dst: SocketAddr,
         message: Protocol,
@@ -383,7 +507,7 @@ impl Link {
         let status = match state {
             State::Healthy => {
                 let delay = self.delay(global_config.latency(), rand);
-                DeliveryStatus::DeliverAfter(self.now + delay)
+                DeliveryStatus::DeliverAfter(now + delay)
             }
             // Only A->B is blocked, so B can send, so we can send if src is B
             State::Hold => {
@@ -407,12 +531,9 @@ impl Link {
         Ok(())
     }
 
-    fn tick(&mut self, now: Instant) {
-        self.now = now;
-        self.process_deliverables();
-    }
-
-    fn process_deliverables(&mut self) {
+    // Moves the messages whose time has come by `now` to the messages ready
+    // for their receivers. Returns whether it moved any.
+    fn process_deliverables(&mut self, now: Instant) -> bool {
         // TODO: `drain_filter` is not yet stable, and so we have a low quality
         // implementation here that avoids clones.
         let mut deliverable = 0;
@@ -420,7 +541,7 @@ impl Link {
             let index = i - deliverable;
             let sent = &self.sent[index];
             if let DeliveryStatus::DeliverAfter(time) = sent.status {
-                if time <= self.now {
+                if time <= now {
                     let sent = self.sent.remove(index).unwrap();
                     let envelope = Envelope {
                         src: sent.src,
@@ -435,6 +556,7 @@ impl Link {
                 }
             }
         }
+        deliverable > 0
     }
 
     // FIXME: This implementation does not respect message delivery order. If
@@ -444,6 +566,7 @@ impl Link {
         &mut self,
         global_config: &config::Link,
         rand: &mut dyn RngCore,
+        now: Instant,
         host: &mut Host,
     ) {
         let deliverable = self
@@ -456,13 +579,18 @@ impl Link {
         for message in deliverable {
             let (src, dst) = (message.src, message.dst);
             if let Err(message) = host.receive_from_network(message) {
-                let _ = self.enqueue_message(global_config, rand, dst, src, message);
+                let _ = self.enqueue_message(global_config, rand, now, dst, src, message);
             }
         }
     }
 
     // Randomly break or repair this link.
-    fn rand_partition_or_repair(&mut self, global_config: &config::Link, rand: &mut dyn RngCore) {
+    fn rand_partition_or_repair(
+        &mut self,
+        global_config: &config::Link,
+        rand: &mut dyn RngCore,
+        now: Instant,
+    ) {
         let do_rand = self.rand_partition(global_config.message_loss(), rand);
         match (self.state_a_b, self.state_b_a) {
             (State::Healthy, _) | (_, State::Healthy) if do_rand => {
@@ -474,7 +602,7 @@ impl Link {
             (State::RandPartition, _) | (_, State::RandPartition)
                 if self.rand_repair(global_config.message_loss(), rand) =>
             {
-                self.release();
+                self.release(now);
             }
             _ => {}
         }
@@ -490,12 +618,12 @@ impl Link {
     }
 
     // This link becomes healthy, and any held messages are scheduled for delivery.
-    fn release(&mut self) {
+    fn release(&mut self, now: Instant) {
         self.state_a_b = State::Healthy;
         self.state_b_a = State::Healthy;
         for sent in &mut self.sent {
             if let DeliveryStatus::Hold = sent.status {
-                sent.deliver(self.now);
+                sent.deliver(now);
             }
         }
     }

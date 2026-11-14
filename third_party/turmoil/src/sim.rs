@@ -12,7 +12,8 @@ use tracing::Level;
 
 use crate::host::HostTimer;
 use crate::{
-    for_pairs, rt, Config, LinksIter, Result, Rt, ToIpAddr, ToIpAddrs, World, TRACING_TARGET,
+    for_pairs, rt, BusyLinksIter, Config, LinksIter, Result, Rt, ToIpAddr, ToIpAddrs, World,
+    TRACING_TARGET,
 };
 
 /// A handle for interacting with the simulation.
@@ -377,6 +378,14 @@ impl<'a> Sim<'a> {
         f(top.iter_mut())
     }
 
+    /// Access a [`BusyLinksIter`]: the links [`Sim::links`] yields whose
+    /// in-flight queue holds a message, in the same order.
+    pub fn busy_links(&self, f: impl FnOnce(BusyLinksIter)) {
+        let top = &mut self.world.borrow_mut().topology;
+
+        f(top.busy_mut())
+    }
+
     /// Run the simulation until all client hosts have completed.
     ///
     /// Executes a simple event loop that calls [step](#method.step) each
@@ -737,6 +746,57 @@ mod test {
         sim.release("server", "client");
 
         sim.run()?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn busy_links_are_the_links_with_messages_in_flight() -> Result {
+        let mut sim = Builder::new().build();
+
+        for name in ["a", "b", "c"] {
+            sim.host(name, || async {
+                let listener =
+                    TcpListener::bind((IpAddr::V4(Ipv4Addr::UNSPECIFIED), 1234)).await?;
+                while let Ok((mut s, _)) = listener.accept().await {
+                    s.write_u8(42).await?;
+                }
+                Ok(())
+            });
+        }
+        sim.client("client", async move {
+            let mut s = TcpStream::connect("c:1234").await?;
+            s.read_u8().await?;
+            Ok(())
+        });
+
+        let busy = |sim: &Sim| {
+            let mut out = Vec::new();
+            sim.busy_links(|iter| out.extend(iter.map(|l| (l.index(), l.pair(), l.count()))));
+            out.into_iter()
+                .map(|(i, pair, n)| (i, sim.reverse_lookup_pair(pair), n))
+                .collect::<Vec<_>>()
+        };
+        // Links in registration order: a-b, a-c, b-c, a-client, b-client,
+        // c-client.
+        let mut all = Vec::new();
+        sim.links(|iter| all.extend(iter.map(|l| l.index())));
+        assert_eq!(all, (0..6).collect::<Vec<_>>());
+        assert!(busy(&sim).is_empty());
+
+        sim.hold("c", "client");
+        sim.step()?;
+        assert_eq!(busy(&sim), vec![(5, ("c".into(), "client".into()), 1)]);
+
+        sim.release("c", "client");
+        sim.run()?;
+        // What the client sent as it finished is in flight on its link alone,
+        // and arrives within the latency's bound.
+        assert!(busy(&sim).iter().all(|&(i, ..)| i == 5));
+        for _ in 0..200 {
+            sim.step()?;
+        }
+        assert!(busy(&sim).is_empty());
 
         Ok(())
     }

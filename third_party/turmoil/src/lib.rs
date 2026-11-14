@@ -220,7 +220,7 @@ pub use sim::Sim;
 
 mod top;
 use top::Topology;
-pub use top::{LinkIter, LinksIter, SentRef};
+pub use top::{BusyLinksIter, LinkIter, LinksIter, SentRef};
 
 mod world;
 use world::World;
