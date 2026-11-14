@@ -45,8 +45,9 @@ PNG per story, of its frame, named by its route (chat/Chat/Chat ->
 chat__Chat__Chat.png). `--strict` also fails on catalog files neither
 covered nor skipped, and on stale catalog entries. `--list` prints the
 stories and the coverage without loading them. `-j N` runs N browsers
-(default 4). `-v` prints every error of a failing story, not just its
-first. Exits 1 when a story (or, with --strict, the catalog) fails.
+(default JOBS: three in four of the cores, at most 12). `-v` prints
+every error of a failing story, not just its first. Exits 1 when a story
+(or, with --strict, the catalog) fails.
 
   python3 hack/storybook/check.py (--port N | --url URL --base-port M)
                                   --compare REF [--build] [-j N] [--only PREFIX]...
@@ -180,6 +181,11 @@ CHROMIUM_FLAGS = [
     "--disable-backgrounding-occluded-windows",
     "--remote-debugging-port=0",
 ]
+# Browsers at once by default: three in four of the machine's cores, at most
+# 12. Each capture reloads its story's document, so the browsers are CPU-bound
+# (16 cores are 80% busy at 12), and past 12 a loaded machine slows them more
+# than they add.
+JOBS = max(1, min(12, (os.cpu_count() or 4) * 3 // 4))
 INDEX_TIMEOUT_S = 60
 QUIET_S = 0.25
 EXTRA_SETTLE_S = 3.0
@@ -2040,7 +2046,7 @@ def main(argv=None):
     where.add_argument("--port", type=int, help="start hack/console/server.py on this port")
     where.add_argument("--url", help="a running server's base URL")
     p.add_argument("--build", action="store_true", help="pnpm run console:build first")
-    p.add_argument("-j", "--jobs", type=int, default=4, help="browsers at once (default 4)")
+    p.add_argument("-j", "--jobs", type=int, default=JOBS, help=f"browsers at once (default {JOBS})")
     p.add_argument("--only", action="append", default=[], metavar="PREFIX", help="stories whose route starts so")
     p.add_argument("--theme", choices=["dark", "light"], default="dark")
     p.add_argument("--device", choices=list(VIEWPORTS), default="pc")
