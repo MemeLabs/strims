@@ -201,10 +201,10 @@ on it is in `CONVENTIONS.md`.
     seeds and reuse the rest only if their traces match.
 - Retire the vendored turmoil (`third_party/turmoil`). Check back on
   upstream (tokio-rs/turmoil) once its turmoil-net stack lands: the
-  harness API (#299) and the swap onto it (#296). Then either drive
-  turmoil-net directly from strims-sim's WAN scheduler, without turmoil's
-  topology, or move to a release whose topology doesn't walk every pair
-  of hosts each step. Raise that per-pair cost upstream before then.
+  harness API (#299) and the swap onto it (#296). Then drive turmoil-net
+  directly from strims-sim's WAN scheduler, without turmoil's topology,
+  or move to a release whose topology doesn't walk every pair of hosts
+  each step.
 
 ### Swarm
 Hybrid (`PushMode::Hybrid`) is the design: push trees carry the stream
