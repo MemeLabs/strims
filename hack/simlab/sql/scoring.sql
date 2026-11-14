@@ -34,6 +34,45 @@
 --   SELECT cell, metric, effect, lo, hi, mark FROM effects('s8ed1e', 'p4tf', 's8ed1e', 'vouch')
 --   WHERE mark <> ' ' ORDER BY cell_ord, ord;
 
+-- The binary exponent of a positive a: floor(log2(a)), one less or more
+-- where log2 rounds across a power of two (sketch_floor's).
+CREATE OR REPLACE MACRO sketch_exp(a) AS
+    floor(log2(a)) - (pow(2.0, floor(log2(a))) > a)::INT + (pow(2.0, floor(log2(a)) + 1) <= a)::INT;
+
+-- The lower bound of the bucket of a positive a at binary exponent e:
+-- 2^e (1 + m/@{sketch_sub}), m the top bits of a / 2^e - 1, every step
+-- exact for a double (sketch_floor's).
+CREATE OR REPLACE MACRO sketch_lo(a, e) AS
+    pow(2.0, e) * (1 + floor((a / pow(2.0, e) - 1) * @{sketch_sub}) / @{sketch_sub});
+
+-- x read through the lab's and the sims' log sketch (simlab.sketch,
+-- strims_base::stats::sketch): the greatest point of its grid not above x,
+-- @{sketch_sub} buckets a doubling. A positive x reads as its bucket's
+-- lower bound (never above it, at most 1/129 under, integers under 256
+-- exactly), 0 as itself, a negative x as its magnitude rounded up to the
+-- grid, negated; NaN and the infinities as they are. A DOUBLE, an integer
+-- x (to 2^53) as the integer it reads as.
+CREATE OR REPLACE MACRO sketch_floor(x) AS
+    CASE WHEN NOT isfinite(x) THEN x::DOUBLE
+         WHEN x > 0 THEN sketch_lo(x, sketch_exp(x))
+         WHEN x < 0 THEN CASE WHEN sketch_lo(-x, sketch_exp(-x)) = -x THEN x::DOUBLE
+                              ELSE -(sketch_lo(-x, sketch_exp(-x)) + pow(2.0, sketch_exp(-x)) / @{sketch_sub}) END
+         WHEN x = 0 THEN 0::DOUBLE END;
+
+-- The p-th percentile (an integer from 0 to 100, a constant) of the values
+-- x, read through the sketch (sketch_floor): the value of rank max(1,
+-- ceil(p n / 100)) of x's n, NULLs left out, as quantile_disc gives it
+-- for p / 100 as a DECIMAL, whose rank it computes in integers
+-- (test_sketch holds it to the rank for every n to 1000 and p 0 to 100).
+-- NULL for no values. FILTER is an aggregate's alone: over a subset,
+-- sketch_quantile(CASE WHEN ... THEN x END, p).
+CREATE OR REPLACE MACRO sketch_quantile(x, p) AS sketch_floor(quantile_disc(x, p * 0.01));
+
+-- sketch_quantile of each of the percentiles ps (a constant list of
+-- integers), as a list in their order.
+CREATE OR REPLACE MACRO sketch_quantiles(x, ps) AS
+    list_transform(quantile_disc(x, list_transform(ps, lambda sk_p: sk_p * 0.01)), lambda sk_v: sketch_floor(sk_v));
+
 -- Student's t at 97.5 % at df_ degrees of freedom: t975's (catalog.py's
 -- t975, df 1 to @{t975_df}), and past them the Cornish-Fisher expansion in
 -- 1/df (Abramowitz and Stegun 26.7.5) to 1/df^4, within 1e-10 there.

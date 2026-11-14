@@ -876,7 +876,10 @@ pub(crate) enum RowInt {
     /// The run's seed.
     Seed,
     /// How long the seed's pushes (`push`) and answers (`answer`) waited in its
-    /// runner's queues: their p50 and p99, in ms; left out without any.
+    /// runner's queues: their p50 and p99, in ms, of the node's WaitHistogram,
+    /// quarter-octave buckets (under 1 ms, then from 2^((i-1)/4) ms) read at
+    /// their lower bound, to the ms below: never above the wait, at most a
+    /// sixth under it below 46 s; left out without any.
     ///
     /// Unit: ms.
     SeedQueueWaitPPMs(u16),
@@ -2807,11 +2810,14 @@ pub(crate) mod cols {
         /// of HAVEs alone (from the node's `NODE_BIN_COUNTERS`), then stream
         /// messages that lost a packet and packets lost (the network's
         /// `UP_COUNTERS`). What a bin's waits give: pushes written and answers
-        /// sent in it, and the p50 and p99 of their waits (empty without any).
-        /// The window model's acknowledgements alone through a host's uplink,
-        /// as `UP_COUNTERS` names them: TCP's pure ACKs and the data channels'
-        /// SACKs, packets and wire bytes of each. The row's `packets_ack` and
-        /// `up_acks` count both kinds, over the whole run and every host.
+        /// sent in it, and the p50 and p99 of their waits, of the node's
+        /// WaitHistogram, quarter-octave buckets read at their lower bound
+        /// (never above the wait, at most a sixth under it below 46 s; empty
+        /// without any). The window model's acknowledgements alone through a
+        /// host's uplink, as `UP_COUNTERS` names them: TCP's pure ACKs and the
+        /// data channels' SACKs, packets and wire bytes of each. The row's
+        /// `packets_ack` and `up_acks` count both kinds, over the whole run and
+        /// every host.
         ///
         /// ppspp: `NodeCounts`' counters: requests timed out, chunks wasted,
         /// answers a full queue refused and answers dropped at write time
@@ -2822,7 +2828,9 @@ pub(crate) mod cols {
         /// HAVEs alone (`ChannelMetrics`), and its stream messages that lost a
         /// packet and datagrams lost (`Sim::wan_stats`). What a bin's waits
         /// give: pushes written and answers sent in it, and the p50 and p99 of
-        /// their waits (empty without any: `NONE`).
+        /// their waits, of the node's WaitHistogram, quarter-octave buckets
+        /// read at their lower bound (never above the wait, at most a sixth
+        /// under it below 46 s; empty without any: `NONE`).
         ///
         /// None is written as -1.
         WhoCounter(u16),
@@ -3296,11 +3304,14 @@ pub(crate) mod cols {
         /// of HAVEs alone (from the node's `NODE_BIN_COUNTERS`), then stream
         /// messages that lost a packet and packets lost (the network's
         /// `UP_COUNTERS`). What a bin's waits give: pushes written and answers
-        /// sent in it, and the p50 and p99 of their waits (empty without any).
-        /// The window model's acknowledgements alone through a host's uplink,
-        /// as `UP_COUNTERS` names them: TCP's pure ACKs and the data channels'
-        /// SACKs, packets and wire bytes of each. The row's `packets_ack` and
-        /// `up_acks` count both kinds, over the whole run and every host.
+        /// sent in it, and the p50 and p99 of their waits, of the node's
+        /// WaitHistogram, quarter-octave buckets read at their lower bound
+        /// (never above the wait, at most a sixth under it below 46 s; empty
+        /// without any). The window model's acknowledgements alone through a
+        /// host's uplink, as `UP_COUNTERS` names them: TCP's pure ACKs and the
+        /// data channels' SACKs, packets and wire bytes of each. The row's
+        /// `packets_ack` and `up_acks` count both kinds, over the whole run and
+        /// every host.
         ///
         /// ppspp: `NodeCounts`' counters: requests timed out, chunks wasted,
         /// answers a full queue refused and answers dropped at write time
@@ -3311,7 +3322,9 @@ pub(crate) mod cols {
         /// HAVEs alone (`ChannelMetrics`), and its stream messages that lost a
         /// packet and datagrams lost (`Sim::wan_stats`). What a bin's waits
         /// give: pushes written and answers sent in it, and the p50 and p99 of
-        /// their waits (empty without any: `NONE`).
+        /// their waits, of the node's WaitHistogram, quarter-octave buckets
+        /// read at their lower bound (never above the wait, at most a sixth
+        /// under it below 46 s; empty without any: `NONE`).
         ///
         /// None is written as an empty field.
         Counter(u16),

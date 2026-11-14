@@ -304,7 +304,7 @@ import time
 import tomllib
 from pathlib import Path
 
-from . import engine, query, semantic, store, store_host, verdict, vocab
+from . import engine, query, semantic, sketch, store, store_host, verdict, vocab
 from .engine import EXTENSIONS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -2768,6 +2768,8 @@ def scoring_consts(suite=None):
             "phases": "[" + ", ".join(q(p) for p in a.VOCAB["phases"]) + "]",
             "tail": q(query.TAIL),
             "reason_switch": q(vocab.named("reasons", "switch")), "reason_open": q(vocab.named("reasons", "open")),
+            # simlab.sketch's buckets a doubling (sketch_floor's).
+            "sketch_sub": sketch.SUB,
             **{f"t975_g{i}": double(c) for i, c in enumerate(g, 1)}}
 
 

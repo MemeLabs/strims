@@ -41,6 +41,7 @@ use std::fmt;
 use std::time::Duration;
 
 use strims_base::stats::WaitHistogram;
+use strims_base::stats::sketch;
 use strims_ppspp::scheduler_peer::push::PUSH_OVERHEAD;
 use strims_ppspp::scheduler_peer::push::seed::ALLOC_UTILIZATION;
 use strims_ppspp::{
@@ -52,9 +53,9 @@ use crate::spec::{HostIx, Scenario};
 use crate::stats::{Peaks, RunnerReport, SwarmCounters, TransferSample};
 use crate::stream::{SeqSet, ViewerStats};
 
-/// Percentiles of a sample (milliseconds, or any `u32` measure): the
-/// quantile `q` is the value at index `round((n - 1) * q)` of the sorted
-/// sample, 0 for an empty one.
+/// Percentiles of a sample (milliseconds, or any `u32` measure), read
+/// through the sketch ([`sketch::percentile`]: the integer nearest rank,
+/// the value's bucket's lower bound), 0 for an empty one; `max` exactly.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Percentiles {
     pub n: usize,
@@ -67,17 +68,11 @@ impl Percentiles {
     pub fn of(values: impl IntoIterator<Item = u32>) -> Percentiles {
         let mut v: Vec<u32> = values.into_iter().collect();
         v.sort_unstable();
-        let at = |q: f64| -> u32 {
-            if v.is_empty() {
-                return 0;
-            }
-            let i = ((v.len() - 1) as f64 * q).round() as usize;
-            v.get(i).copied().unwrap_or(0)
-        };
+        let at = |p: u32| sketch::percentile(&v, p).unwrap_or(0);
         Percentiles {
             n: v.len(),
-            p50: at(0.5),
-            p99: at(0.99),
+            p50: at(50),
+            p99: at(99),
             max: v.last().copied().unwrap_or(0),
         }
     }
@@ -497,21 +492,12 @@ impl AckWaits {
         (n > 0).then(|| self.sum_us as f64 / 1000.0 / n as f64)
     }
 
-    /// The `q` quantile of the waits, to the millisecond below.
-    pub fn quantile_ms(&self, q: f64) -> Option<u64> {
-        let n = self.count();
-        if n == 0 {
-            return None;
-        }
-        let rank = ((q * n as f64).ceil() as u64).clamp(1, n);
-        let mut seen = 0;
-        for (ms, &k) in self.bins.iter().enumerate() {
-            seen += k;
-            if seen >= rank {
-                return Some(ms as u64);
-            }
-        }
-        None
+    /// The `p`th percentile of the waits, to the millisecond below, read
+    /// through the sketch ([`sketch`]: the integer nearest rank, the whole
+    /// milliseconds' bucket's lower bound).
+    pub fn percentile_ms(&self, p: u32) -> Option<u64> {
+        let ms = sketch::ranked(self.bins.iter().copied().enumerate(), self.count(), p)?;
+        Some(sketch::floor_u64(ms as u64))
     }
 }
 
@@ -875,7 +861,7 @@ impl Report {
             seed,
             seed_share: ratio(seed, total),
             min: v.first().copied().unwrap_or(0),
-            median: v.get(v.len() / 2).copied().unwrap_or(0),
+            median: sketch::percentile(&v, 50).unwrap_or(0),
             max: v.last().copied().unwrap_or(0),
             uploaders: v.iter().filter(|&&b| b >= 64 * 1024).count(),
             gini: gini(&v),
@@ -1215,12 +1201,8 @@ impl Report {
         }
         let pct = |v: &mut Vec<f64>| {
             v.sort_by(f64::total_cmp);
-            let at = |q: f64| {
-                v.get(((v.len() as f64 - 1.0) * q).round() as usize)
-                    .copied()
-                    .unwrap_or(0.0)
-            };
-            format!("{:.2}/{:.2}/{:.2}", at(0.1), at(0.5), at(0.9))
+            let at = |p: u32| sketch::percentile(v, p).unwrap_or(0.0);
+            format!("{:.2}/{:.2}/{:.2}", at(10), at(50), at(90))
         };
         Some(format!(
             "\n  meter: capacity/cap p10/p50/p90 seeds {} viewers {}, peak committed/cap {:.2} at {}, over {ALLOC_UTILIZATION} for {over} samples",
@@ -1557,7 +1539,9 @@ mod tests {
     #[test]
     fn percentiles_and_gini() {
         let p = Percentiles::of(1..=100);
-        assert_eq!((p.p50, p.p99, p.max, p.n), (51, 99, 100, 100));
+        assert_eq!((p.p50, p.p99, p.max, p.n), (50, 99, 100, 100));
+        let p = Percentiles::of((1..=1000).rev());
+        assert_eq!((p.p50, p.p99, p.max, p.n), (500, 988, 1000, 1000));
         assert_eq!(Percentiles::of([]).max, 0);
         assert!(gini(&[5, 5, 5, 5]).abs() < 1e-9);
         assert!(gini(&[0, 0, 0, 100]) > 0.7);

@@ -52,7 +52,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use strims_base::stats::WaitHistogram;
+use strims_base::stats::{WaitHistogram, sketch};
 use strims_wan::playout::{self, DELAYS_MS};
 use strims_wan::vocab::Kind;
 
@@ -379,16 +379,17 @@ fn uc(name: &str) -> usize {
     UP_COUNTERS.iter().position(|&n| n == name).unwrap_or(0)
 }
 
-/// [`WAIT_COLS`]' values for the waits `w`.
+/// [`WAIT_COLS`]' values for the waits `w`: their percentiles as the lab
+/// reads a [`WaitHistogram`] ([`sketch::wait_percentile`]).
 fn wait_cols(w: &[WaitHistogram; 2]) -> [Option<i64>; WAIT_COLS.len()] {
-    let p = |h: &WaitHistogram, q: f64| h.percentile(q).map(|d| d.as_millis());
+    let p = |h: &WaitHistogram, p: u32| sketch::wait_percentile(h, p).map(|d| d.as_millis());
     [
         Some(w[0].count() as i64),
-        p(&w[0], 0.5),
-        p(&w[0], 0.99),
+        p(&w[0], 50),
+        p(&w[0], 99),
         Some(w[1].count() as i64),
-        p(&w[1], 0.5),
-        p(&w[1], 0.99),
+        p(&w[1], 50),
+        p(&w[1], 99),
     ]
 }
 
@@ -730,7 +731,7 @@ impl Report {
                 sum(nc("hits")),
                 sum(nc("misses")),
                 sum(nc("pruned")),
-                parents.get(parents.len() / 2).copied(),
+                sketch::percentile(&parents, 50),
                 sum(nc("ovh")),
                 wire_sum(honest, ku, uc("up_bytes")),
                 wire_sum(honest, ku, uc("up_packets")),

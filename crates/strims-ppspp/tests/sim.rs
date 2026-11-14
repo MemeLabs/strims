@@ -131,6 +131,7 @@ use fields::{
 use rand_core::Rng;
 use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter, PathReading, PathSample};
 use strims_base::rng::{DetRng, det_rng, fork};
+use strims_base::stats::sketch::{self, Sketched};
 use strims_base::stats::{ValueHistogram, WaitHistogram};
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
@@ -1531,14 +1532,14 @@ const NONE: i64 = i64::MIN;
 
 /// [`WAIT_COLS`]' values for the waits `w`.
 fn wait_cols(w: &[WaitHistogram; 2]) -> [i64; WAIT_COLS.len()] {
-    let p = |h: &WaitHistogram, q: f64| h.percentile(q).map_or(NONE, ms);
+    let p = |h: &WaitHistogram, p: u32| sketch::wait_percentile(h, p).map_or(NONE, ms);
     [
         w[0].count() as i64,
-        p(&w[0], 0.5),
-        p(&w[0], 0.99),
+        p(&w[0], 50),
+        p(&w[0], 99),
         w[1].count() as i64,
-        p(&w[1], 0.5),
-        p(&w[1], 0.99),
+        p(&w[1], 50),
+        p(&w[1], 99),
     ]
 }
 
@@ -1569,7 +1570,7 @@ fn bin_row(k: usize, width: Duration, a: &BinSample, b: &BinSample) -> Vec<i64> 
         sum(0),
         sum(1),
         sum(2),
-        parents.get(parents.len() / 2).map_or(NONE, |&x| x as i64),
+        sketch::percentile(&parents, 50).map_or(NONE, |x| x as i64),
         sum(4),
         sum(5),
         sum(6),
@@ -1883,7 +1884,7 @@ impl Windows {
             ("cto_ms", &self.cto, 1e3, &[50, 90]),
         ] {
             for &p in ps {
-                if let Some(x) = h.percentile(f64::from(p)) {
+                if let Some(x) = h.percentile(p) {
                     row.num(RowNum::window_p_p(name, p), x as f64 / unit);
                 }
             }
@@ -4090,8 +4091,7 @@ impl Sim {
                 by.iter_mut()
                     .map(|b| {
                         b.sort_unstable();
-                        let i = ((b.len().max(1) - 1) as f64 * 0.99).round() as usize;
-                        b.get(i).map_or(-1, |d| d.as_millis())
+                        sketch::nth(b, 99).map_or(-1, |&d| ms(d).sketched())
                     })
                     .collect::<Vec<i64>>(),
             );
@@ -4120,7 +4120,7 @@ impl Sim {
             .map(|w| {
                 let mut p: Vec<u64> = both(w).iter().map(|(a, _)| a[3]).collect();
                 p.sort_unstable();
-                p.get(p.len() / 2).map_or(-1, |&x| x as i64)
+                sketch::percentile(&p, 50).map_or(-1, |x| x as i64)
             })
             .collect();
         let seed = |f: usize| -> Vec<i64> { pairs().map(|w| w[1].seed[f] as i64).collect() };
@@ -5926,7 +5926,7 @@ impl Sim {
         let short =
             shares.iter().filter(|&&x| x < HOLDER_WHOLE).count() as f64 / shares.len() as f64;
         shares.sort_by(f64::total_cmp);
-        (short, shares[shares.len() / 2])
+        (short, sketch::percentile(&shares, 50).unwrap_or(0.0))
     }
 
     fn report(&self) -> Report {
@@ -5939,11 +5939,7 @@ impl Sim {
             .flat_map(|n| self.steady(n, &n.lags))
             .collect();
         lags.sort();
-        let pct = |p: usize| {
-            lags.get(lags.len().saturating_sub(1) * p / 100)
-                .copied()
-                .unwrap_or_default()
-        };
+        let pct = |p: usize| percentile(&lags, p);
         let mut sign_lags: Vec<Duration> = self
             .nodes
             .iter()
@@ -6007,10 +6003,7 @@ impl Sim {
                 .map(|&(_, l)| l)
                 .collect();
             after.sort();
-            let p99 = after
-                .get(after.len().saturating_sub(1) * 99 / 100)
-                .copied()
-                .unwrap_or_default();
+            let p99 = percentile(&after, 99);
             (victim, p99, after.last().copied().unwrap_or_default())
         });
         let cross = self.cfg.cross.map(|c| self.cross_report(c, warm));
@@ -6119,7 +6112,7 @@ impl Sim {
                     .map(|a| a.capacity)
                     .collect();
                 v.sort_unstable();
-                v.get(v.len() / 2).copied()
+                sketch::percentile(&v, 50)
             },
             budget_capacity: {
                 let (from, to) = self.seed_meter_window();
@@ -6130,7 +6123,7 @@ impl Sim {
                     .map(|a| a.budget_capacity)
                     .collect();
                 v.sort_unstable();
-                v.get(v.len() / 2).copied()
+                sketch::percentile(&v, 50)
             },
             seed_objective: {
                 let mut v: Vec<Duration> = self
@@ -6412,8 +6405,8 @@ impl Sim {
                 by.iter_mut()
                     .map(|b| {
                         b.sort_unstable();
-                        cur = match b.get(((b.len().max(1) - 1) as f64 * 0.99).round() as usize) {
-                            Some(&l) => Some(l),
+                        cur = match sketch::percentile(b, 99) {
+                            Some(l) => Some(l),
                             None => cur.map(|l| l + 1000),
                         };
                         cur
@@ -6427,7 +6420,7 @@ impl Sim {
         for k in k0..secs {
             let mut v: Vec<i64> = per.iter().filter_map(|p| p[k]).collect();
             v.sort_unstable();
-            let Some(&q) = v.get(((v.len().max(1) - 1) as f64 * 0.9).round() as usize) else {
+            let Some(q) = sketch::percentile(&v, 90) else {
                 continue;
             };
             excess += (q - target).max(0);
@@ -6498,11 +6491,7 @@ impl Sim {
             .flat_map(|(_, x)| x.lags.iter().filter(|(t, _)| *t > warm).map(|&(_, l)| l))
             .collect();
         lags.sort();
-        let pct = |p: usize| {
-            lags.get(lags.len().saturating_sub(1) * p / 100)
-                .copied()
-                .unwrap_or_default()
-        };
+        let pct = |p: usize| percentile(&lags, p);
         let sent = |n: &Node| -> u64 {
             let Some(x) = n.cross.as_ref() else { return 0 };
             n.links
@@ -7187,12 +7176,12 @@ fn shuffle<T>(v: &mut [T], rng: &mut DetRng) {
     }
 }
 
-/// The `p`th percentile of sorted durations (zero if empty).
+/// The `p`th percentile of sorted durations, read through the sketch
+/// ([`sketch::percentile`]) in whole milliseconds, the unit the rows write
+/// (zero if empty).
 fn percentile(sorted: &[Duration], p: usize) -> Duration {
-    sorted
-        .get(sorted.len().saturating_sub(1) * p / 100)
-        .copied()
-        .unwrap_or_default()
+    sketch::nth(sorted, p as u32)
+        .map_or(Duration::ZERO, |&d| Duration::from_millis(ms(d).sketched()))
 }
 
 fn tx_time(n: usize, bw: u64) -> Duration {
@@ -10091,7 +10080,7 @@ impl AbScenario {
 
 fn median(mut v: Vec<i64>) -> i64 {
     v.sort_unstable();
-    v.get(v.len() / 2).copied().unwrap_or(0)
+    sketch::percentile(&v, 50).unwrap_or(0)
 }
 
 /// Cross traffic's uplinks, in tenths of the stream rate.
@@ -11187,7 +11176,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     };
     let median = |mut v: Vec<i64>| {
         v.sort_unstable();
-        v.get(v.len() / 2).copied()
+        sketch::percentile(&v, 50)
     };
     let unmeasured = |greedy: bool| {
         seed_links(greedy)
@@ -11231,7 +11220,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
             .int(RowInt::SeedAnswersDropped, st.answers_dropped);
         for (name, h) in [("push", st.push_wait), ("answer", st.answer_wait)] {
             for p in RowInt::P_OF_SEED_QUEUE_WAIT_P_P_MS {
-                if let Some(d) = h.percentile(f64::from(p)) {
+                if let Some(d) = sketch::wait_percentile(&h, p.into()) {
                     row.int(RowInt::seed_queue_wait_p_p_ms(name, p), ms(d) as u64);
                 }
             }
@@ -11264,8 +11253,8 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
     }
     let mut fanout = sh.fanout.clone();
     fanout.sort_unstable();
-    for p in RowInt::P_OF_FANOUT_P_P.map(usize::from) {
-        if let Some(&f) = fanout.get(fanout.len().saturating_sub(1) * p / 100) {
+    for p in RowInt::P_OF_FANOUT_P_P {
+        if let Some(f) = sketch::percentile(&fanout, p.into()) {
             row.int(RowInt::fanout_p_p(p), f);
         }
     }
@@ -11311,8 +11300,8 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         })
         .collect();
     util.sort_by(f64::total_cmp);
-    for p in RowNum::P_OF_VIEWER_UTIL_P_P.map(usize::from) {
-        if let Some(&u) = util.get((util.len().saturating_sub(1)) * p / 100) {
+    for p in RowNum::P_OF_VIEWER_UTIL_P_P {
+        if let Some(u) = sketch::percentile(&util, p.into()) {
             row.num(RowNum::viewer_util_p_p(p), u);
         }
     }
@@ -11332,14 +11321,14 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         v.sort_by(f64::total_cmp);
         v
     };
-    let at = |v: &[f64], p: usize| v.get((v.len().saturating_sub(1)) * p / 100).copied();
+    let at = |v: &[f64], p: u8| sketch::percentile(v, p.into());
     for (name, members) in sim.populations() {
         let v: Vec<f64> = members
             .iter()
             .flat_map(|&i| sh.node_meter.get(i).into_iter().flatten().copied())
             .collect();
         let v = sorted(&v);
-        for p in RowNum::P_OF_METER_POP_P_P.map(usize::from) {
+        for p in RowNum::P_OF_METER_POP_P_P {
             if let Some(x) = at(&v, p) {
                 row.num(RowNum::meter_pop_p_p(name, p), x);
             }
@@ -11347,12 +11336,12 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         row.int(RowInt::n_pop(name), members.len() as u64);
     }
     let (capacity, budget) = (sorted(&sh.seed_meter), sorted(&sh.seed_budget));
-    for p in RowNum::P_OF_METER_SEED_P_P.map(usize::from) {
+    for p in RowNum::P_OF_METER_SEED_P_P {
         if let Some(x) = at(&capacity, p) {
             row.num(RowNum::meter_seed_p_p(p), x);
         }
     }
-    for p in RowNum::P_OF_METER_BUDGET_SEED_P_P.map(usize::from) {
+    for p in RowNum::P_OF_METER_BUDGET_SEED_P_P {
         if let Some(x) = at(&budget, p) {
             row.num(RowNum::meter_budget_seed_p_p(p), x);
         }
@@ -11382,7 +11371,7 @@ fn job_row(scenario: &str, case: &str, sim: &Sim, r: &Report) -> String {
         for (how, n) in &l.closed_by {
             row.int(RowInt::loops_by_how(how.replace(' ', "_")), *n);
         }
-        if let Some(&m) = lens.get(lens.len() / 2) {
+        if let Some(m) = sketch::percentile(&lens, 50) {
             row.int(RowInt::LoopLenP50, m);
         }
         for p in RowInt::P_OF_LOOP_LIFE_P_P_MS.map(usize::from) {
@@ -11683,14 +11672,14 @@ fn ledger_cols(row: &mut JsonRow, sim: &Sim, span: f64) {
     for (name, members) in sim.populations() {
         let mut v: Vec<f64> = members.iter().map(|&i| share(&sim.nodes[i])).collect();
         v.sort_by(f64::total_cmp);
-        for p in RowNum::P_OF_OVH_POP_P_P.map(usize::from) {
-            if let Some(&x) = v.get(v.len().saturating_sub(1) * p / 100) {
+        for p in RowNum::P_OF_OVH_POP_P_P {
+            if let Some(x) = sketch::percentile(&v, p.into()) {
                 row.num(RowNum::ovh_pop_p_p(name, p), x);
             }
         }
     }
     for (name, p) in [(RowNum::PpsP50, 50), (RowNum::PpsP90, 90)] {
-        if let Some(&x) = pps.get(pps.len().saturating_sub(1) * p / 100) {
+        if let Some(x) = sketch::percentile(&pps, p) {
             row.num(name, x);
         }
     }

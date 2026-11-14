@@ -1159,7 +1159,7 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
             whys.concat(),
             waits.mean_ms().map_or("null".to_owned(), |m| format!("{m:.2}")),
             waits
-                .quantile_ms(0.9)
+                .percentile_ms(90)
                 .map_or("null".to_owned(), |p| p.to_string()),
         ));
         for &(t, bytes) in &h.competing {

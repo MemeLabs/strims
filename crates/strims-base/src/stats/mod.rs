@@ -7,12 +7,15 @@
 //! - [`Ema`]: a bias-corrected exponential moving average.
 //! - [`Welford`]: online mean and variance, mergeable.
 //! - [`WaitHistogram`]: waits in quarter-octave buckets, for percentiles.
-//! - [`ValueHistogram`]: integers in buckets of a 32nd of their size, for
+//! - [`ValueHistogram`]: integers in the log sketch's buckets, for
 //!   percentiles of gauges.
+//! - [`sketch`]: the quantile method of the sims and the lab, the integer
+//!   nearest rank read through a log sketch of 128 buckets a doubling.
 //!
 //! Time-dependent methods take `now`; nothing here reads a clock.
 
 mod ema;
+pub mod sketch;
 mod sma;
 mod values;
 mod wait;

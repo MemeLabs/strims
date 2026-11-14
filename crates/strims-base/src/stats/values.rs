@@ -3,21 +3,19 @@
 
 use std::collections::BTreeMap;
 
-/// Values under `2^EXACT_BITS` count exactly.
-const EXACT_BITS: u64 = 6;
-const EXACT: u64 = 1 << EXACT_BITS;
-/// Above [`EXACT`], each doubling splits into `2^SUB_BITS` buckets.
-const SUB_BITS: u64 = 5;
-const SUB_BUCKETS: u64 = 1 << SUB_BITS;
+use super::sketch;
 
-/// Non-negative integers counted in buckets no wider than 1/32 of the
-/// values they hold (one value each under 64), for percentiles of gauges
-/// sampled over a run. A percentile reads its bucket's lower bound: never
-/// above the value, at most 1/32 under it. Sparse: it holds the buckets it
-/// counted in, at most 1920 over every `u64`.
+/// Non-negative integers counted in the log sketch's buckets
+/// ([`sketch`]: 128 a doubling, one value each under 256), for
+/// percentiles of gauges sampled over a run. A percentile takes the
+/// integer nearest rank and reads its bucket's lower bound, as
+/// [`sketch::percentile`] reads the values sorted: never above the value,
+/// at most 1/129 under it. Sparse: it holds the buckets it counted in, at
+/// most 7424 over every `u64`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ValueHistogram {
-    buckets: BTreeMap<u16, u64>,
+    /// Counts by bucket, each keyed by its lower bound.
+    buckets: BTreeMap<u64, u64>,
     count: u64,
     max: u64,
 }
@@ -25,7 +23,7 @@ pub struct ValueHistogram {
 impl ValueHistogram {
     /// Counts `v`.
     pub fn add(&mut self, v: u64) {
-        let c = self.buckets.entry(bucket(v)).or_default();
+        let c = self.buckets.entry(sketch::floor_u64(v)).or_default();
         *c = c.saturating_add(1);
         self.count = self.count.saturating_add(1);
         self.max = self.max.max(v);
@@ -63,44 +61,11 @@ impl ValueHistogram {
         h
     }
 
-    /// The lower bound of the bucket that holds the `p`th percentile
-    /// (0–100, nearest rank). `None` when empty.
-    pub fn percentile(&self, p: f64) -> Option<u64> {
-        let n = self.count;
-        if n == 0 {
-            return None;
-        }
-        let rank = ((p / 100.0) * n as f64).ceil().clamp(1.0, n as f64) as u64;
-        let mut seen = 0u64;
-        for (&b, &c) in &self.buckets {
-            seen = seen.saturating_add(c);
-            if seen >= rank {
-                return Some(lower(b));
-            }
-        }
-        None
+    /// The lower bound of the bucket that holds the `p`th percentile (0–100,
+    /// the integer nearest rank: [`sketch::rank`]). `None` when empty.
+    pub fn percentile(&self, p: u32) -> Option<u64> {
+        sketch::ranked(self.buckets.iter().map(|(&b, &c)| (b, c)), self.count, p)
     }
-}
-
-/// The bucket of `v`.
-fn bucket(v: u64) -> u16 {
-    if v < EXACT {
-        return v as u16;
-    }
-    let e = u64::from(63 - v.leading_zeros());
-    let sub = (v >> (e - SUB_BITS)) - SUB_BUCKETS;
-    (EXACT + (e - EXACT_BITS) * SUB_BUCKETS + sub) as u16
-}
-
-/// The least value in bucket `b`.
-fn lower(b: u16) -> u64 {
-    let b = u64::from(b);
-    if b < EXACT {
-        return b;
-    }
-    let k = b - EXACT;
-    let e = EXACT_BITS + k / SUB_BUCKETS;
-    (SUB_BUCKETS + k % SUB_BUCKETS) << (e - SUB_BITS)
 }
 
 #[cfg(test)]
@@ -111,37 +76,46 @@ mod tests {
     #[test]
     fn small_values_count_exactly() {
         let mut h = ValueHistogram::default();
-        assert_eq!(h.percentile(50.0), None);
+        assert_eq!(h.percentile(50), None);
         assert_eq!(h.max(), None);
-        for v in 0..EXACT {
+        for v in 0..256 {
             h.add(v);
         }
-        assert_eq!(h.percentile(0.0), Some(0));
-        assert_eq!(h.percentile(50.0), Some(31));
-        assert_eq!(h.percentile(100.0), Some(63));
-        assert_eq!(h.max(), Some(63));
-        assert_eq!(h.count(), EXACT);
+        assert_eq!(h.percentile(0), Some(0));
+        assert_eq!(h.percentile(50), Some(127));
+        assert_eq!(h.percentile(100), Some(255));
+        assert_eq!(h.max(), Some(255));
+        assert_eq!(h.count(), 256);
+        assert_eq!(h.buckets.len(), 256);
     }
 
     #[test]
-    fn percentiles_read_within_a_thirty_second_below() {
-        for v in [64, 65, 100, 1_000, 4_096, 123_456, 1 << 40, u64::MAX] {
+    fn percentiles_read_within_a_129th_below() {
+        for v in [256, 257, 300, 1_000, 4_097, 123_456, 1 << 40, u64::MAX] {
             let mut h = ValueHistogram::default();
             h.add(v);
-            let got = h.percentile(50.0).unwrap();
-            assert!(got <= v && v - got <= v / 32, "{v}: {got}");
+            let got = h.percentile(50).unwrap();
+            assert!(got <= v && v - got <= v / 129, "{v}: {got}");
             assert_eq!(h.max(), Some(v));
         }
     }
 
     #[test]
-    fn buckets_are_ordered_and_bound_their_values() {
-        for v in 1..100_000u64 {
-            assert!(bucket(v) >= bucket(v - 1), "{v}");
-            assert!(lower(bucket(v)) <= v, "{v}");
-            assert_eq!(bucket(lower(bucket(v))), bucket(v), "{v}");
+    fn buckets_hold_a_128th_of_a_doubling() {
+        let mut h = ValueHistogram::default();
+        for v in 1 << 20..1 << 21 {
+            h.add(v);
         }
-        assert_eq!(bucket(u64::MAX), 1919);
+        assert_eq!(h.buckets.len(), 128);
+        h.add(u64::MAX);
+        h.add(0);
+        let mut all = ValueHistogram::default();
+        for e in 0..64 {
+            for v in [1u64 << e, (1u64 << e) | ((1u64 << e) - 1)] {
+                all.add(v);
+            }
+        }
+        assert!(all.buckets.len() <= 7424);
     }
 
     #[test]
@@ -153,10 +127,53 @@ mod tests {
         b.add(5_000);
         a.merge(&b);
         assert_eq!(a.count(), 3);
-        assert_eq!(a.percentile(50.0), Some(10));
+        assert_eq!(a.percentile(50), Some(10));
         assert_eq!(a.max(), Some(5_000));
-        let p = a.percentile(100.0).unwrap();
-        assert!((4_844..=5_000).contains(&p), "{p}");
+        assert_eq!(a.percentile(100), Some(4_992));
+    }
+
+    /// splitmix64's next value of `s`.
+    fn next(s: &mut u64) -> u64 {
+        *s = s.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = *s;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    }
+
+    #[test]
+    fn percentiles_read_what_the_sorted_values_read() {
+        let mut s = 3;
+        for round in 0..300 {
+            let n = 1 + next(&mut s) % 400;
+            let shift = next(&mut s) % 60;
+            let mut v: Vec<u64> = (0..n).map(|_| next(&mut s) >> shift).collect();
+            if round % 3 == 0 {
+                v.iter_mut().for_each(|x| *x %= 300);
+            }
+            let mut h = ValueHistogram::default();
+            v.iter().for_each(|&x| h.add(x));
+            v.sort_unstable();
+            for p in 0..=100 {
+                assert_eq!(h.percentile(p), sketch::percentile(&v, p), "{round} {p}");
+            }
+        }
+        // And the cases' non-negative integers, as Python and SQL read them.
+        let c = sketch::cases::cases();
+        let lists = c
+            .int_lists
+            .iter()
+            .filter(|(v, _)| v.iter().all(|&x| x >= 0));
+        let mut n = 0;
+        for (v, wants) in lists {
+            let mut h = ValueHistogram::default();
+            v.iter().for_each(|&x| h.add(x as u64));
+            for (&p, &want) in c.ps.iter().zip(wants) {
+                assert_eq!(h.percentile(p), Some(want as u64), "{p} {v:?}");
+            }
+            n += 1;
+        }
+        assert!(n > 10, "{n}");
     }
 
     #[test]
@@ -167,10 +184,10 @@ mod tests {
         }
         let n = h.nonzero();
         assert_eq!(
-            (n.count(), n.percentile(50.0), n.max()),
+            (n.count(), n.percentile(50), n.max()),
             (2, Some(7), Some(9))
         );
-        assert_eq!(h.percentile(50.0), Some(0));
+        assert_eq!(h.percentile(50), Some(0));
         let mut zeros = ValueHistogram::default();
         zeros.add(0);
         assert_eq!(zeros.nonzero(), ValueHistogram::default());

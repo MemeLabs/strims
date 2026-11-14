@@ -42,7 +42,12 @@ don't).
    entry declares its `aggregate` (a count or sum is its parts alone; a
    quantile, ratio, mean or distinct count keeps its whole), and
    test_semantic's Populations holds the rule. Goals and guardrails read
-   the `_honest` value.
+   the `_honest` value. A quantile (a percentile, a median) is the one
+   method: strims_base::stats::sketch's `percentile` over the values
+   sorted, in the unit the field is written in (`ValueHistogram` where
+   the sim keeps a histogram), and the lab's `simlab.sketch.quantile`
+   and scoring.sql's `sketch_quantile`; an integer percentile, never a
+   float q.
 4. **A row field named like a table column** is a name of its own
    in fields.toml (the rows' and each table's names are apart): give it
    a description of its own, and a name of its own where the meanings
