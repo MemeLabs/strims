@@ -108,8 +108,8 @@ fn run(seed: u64) -> (Report, Vec<String>) {
     w.run_for(Duration::from_secs(3));
     r.unicast_sent = sent.len();
     let mut seen: BTreeMap<(usize, String), usize> = BTreeMap::new();
-    for i in 0..NODES {
-        for (_, e) in &w.nodes[i].events {
+    for (i, node) in w.nodes.iter_mut().enumerate() {
+        for (_, e) in &node.events {
             if let Event::Message(d) = e {
                 r.max_hops = r.max_hops.max(d.hops);
                 *seen
@@ -117,7 +117,7 @@ fn run(seed: u64) -> (Report, Vec<String>) {
                     .or_default() += 1;
             }
         }
-        w.nodes[i].events.clear();
+        node.events.clear();
     }
     r.unicast_delivered = sent.iter().filter(|k| seen.contains_key(k)).count();
     r.duplicates_delivered = seen.values().filter(|&&n| n > 1).count();
@@ -129,8 +129,8 @@ fn run(seed: u64) -> (Report, Vec<String>) {
         w.broadcast(a, body.as_bytes());
         w.run_for(Duration::from_secs(1));
         let mut reach = 0;
-        for i in 0..NODES {
-            let n = w.nodes[i]
+        for node in &mut w.nodes {
+            let n = node
                 .events
                 .iter()
                 .filter(|(_, e)| matches!(e, Event::Message(d) if d.body == body.as_bytes()))
@@ -139,7 +139,7 @@ fn run(seed: u64) -> (Report, Vec<String>) {
                 r.duplicates_delivered += 1;
             }
             reach += n.min(1);
-            w.nodes[i].events.clear();
+            node.events.clear();
         }
         r.broadcast_reach.push(reach);
     }

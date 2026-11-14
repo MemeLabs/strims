@@ -193,8 +193,7 @@ fn dedup_is_per_network() {
     // A second network on both, over the same vnic peer.
     let key2 = key_from_seed(&[0xab; 32]).public;
     let mut nets = Vec::new();
-    for i in 0..2 {
-        let node = &mut w.nodes[i];
+    for node in &mut w.nodes {
         let net2 = node.vpn.add_network(&mut node.vnic, &key2).unwrap();
         node.vpn.set_handler(net2, APP_PORT, 2).unwrap();
         let peer = node.vnic.peers().next().unwrap().0;
