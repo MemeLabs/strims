@@ -106,13 +106,15 @@ fn striped(mut s: Scenario, streams: usize, policy: SeedPolicy) -> Scenario {
 
 // --- checks ---------------------------------------------------------------
 
-/// Every frame of swarm 0 written in `[from, to)` reached each of `who`.
+/// Every frame of swarm 0 written in `[from, to)` reached each honest one of
+/// `who` ([`complete_swarm`]).
 fn complete(r: &Report, who: &[HostIx], from: Duration, to: Duration) -> Result<(), String> {
     complete_swarm(r, 0, who, from, to)
 }
 
-/// Every frame of swarm `sw` written in `[from, to)` reached each of `who`,
-/// of those it was owed while it was there (`Report::owed`).
+/// Every frame of swarm `sw` written in `[from, to)` reached each honest
+/// one of `who`, of those it was owed while it was there (`Report::owed`).
+/// A hostile viewer isn't owed the stream: the protocol may starve it.
 fn complete_swarm(
     r: &Report,
     sw: usize,
@@ -122,6 +124,9 @@ fn complete_swarm(
 ) -> Result<(), String> {
     let written = r.frames_between(sw, from, to);
     for &h in who {
+        if matches!(r.scenario.hosts[h].class, HostClass::Hostile(_)) {
+            continue;
+        }
         let v = r
             .viewer(sw, h)
             .ok_or_else(|| format!("{} never read swarm {sw}", r.scenario.name_of(h)))?;
@@ -1498,9 +1503,11 @@ fn check_hold_and_latency(r: &Report) -> Result<(), String> {
 }
 
 /// The largest lag of any frame in `range` at any viewer.
+/// The honest viewers' largest lag over the frames of `range`.
 fn max_lag(r: &Report, range: std::ops::Range<u64>) -> u32 {
     r.viewers
         .iter()
+        .filter(|v| !matches!(r.scenario.hosts[v.host].class, HostClass::Hostile(_)))
         .map(|v| v.stats.lag_in(range.clone()).max)
         .max()
         .unwrap_or(0)

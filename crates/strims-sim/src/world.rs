@@ -1610,6 +1610,7 @@ impl World {
                     .is_some_and(|j| now.saturating_sub(j.start_ms) > 10_000)
                     && now.saturating_sub(hs.resumed_ms) > 10_000;
                 if in_window
+                    && !self.is_hostile(h)
                     && hs.node.is_some()
                     && hs.departed.is_none()
                     && !hs.reading_paused

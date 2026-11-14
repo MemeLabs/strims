@@ -418,9 +418,10 @@ pub struct Invariants {
     /// The run's live heap stays at or below this many bytes (needs the
     /// tracking allocator; see [`crate::memory`]).
     pub max_heap: Option<i64>,
-    /// Inside these windows, every running viewer that started reading
-    /// more than 10 s ago, isn't paused and didn't resume in the last 10 s
-    /// reads at least one frame between two samples.
+    /// Inside these windows, every running honest viewer that started
+    /// reading more than 10 s ago, isn't paused and didn't resume in the
+    /// last 10 s reads at least one frame between two samples (a hostile
+    /// one may be starved: [`HostClass::Hostile`]).
     pub progress: Vec<(Duration, Duration)>,
     /// No peer's data queue holds more than this many chunks (per
     /// priority), and no queue refuses a request or push for lack of room
