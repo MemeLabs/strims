@@ -65,8 +65,10 @@ them, so a change here changes that prompt too.
   1250 ms (the target: 2 s glass to glass) and 4250 ms (the most: 5 s).
   A player that plays D behind the live edge stalls when data arrives
   more than D late: `stalls` (each stall at each delay, played from the
-  viewer's `reads`) and the rows' `stalls_per_min_<D>`,
-  `stalled_share_<D>` and `startup_ms_<D>`.
+  viewer's `reads`) and the rows' `stalls_per_min_<D>_honest`,
+  `stalled_share_<D>_honest` and `startup_ms_<D>_honest`, the honest
+  viewers' (the unsuffixed fields count every viewer; a row from before
+  the split, which ran none dishonest, has those alone).
 - **Structural cells.** Cells where every arm of an experiment collapses
   on every seed (`structural(exp)`). No arm can be told from another
   there, so leave them out of totals, collapse counts and geomeans, and

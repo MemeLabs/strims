@@ -463,9 +463,13 @@ CREATE OR REPLACE MACRO viewer_lag_of(jobs) AS TABLE
 --                            the run's and its own, in which an honest
 --                            viewer lags past D ms: a player D behind
 --                            would stall then;
---   stalls_per_min_<D>,      the rows' playback at delay D (the mean over
---   stalled_share_<D>,       runs; NULL in rows from before the sims
---   startup_ms_<D>           played them);
+--   stalls_per_min_<D>,      the honest viewers' playback at delay D, the
+--   stalled_share_<D>,       rows' <name>_honest (the mean over runs; a
+--   startup_ms_<D>           row from before the sim split its viewers'
+--                            playback by population, which ran no
+--                            dishonest viewers, its <name>, the same
+--                            there; NULL in rows from before the sims
+--                            played them);
 --   unhealthy_max_s,         the longest unhealthy spell (episodes) of any
 --   unhealthy_p50_s          run, and the median of each run's longest;
 -- for D in @{delay_target_ms} and @{delay_max_ms} (analyze.py's
@@ -499,12 +503,18 @@ CREATE OR REPLACE MACRO dynamics(exp_name) AS TABLE
                count(*) FILTER (WHERE v.collapsed) AS collapsed,
                sum(coalesce(sp.s1, 0)) / count(*) AS spike_s_@{delay_target_ms},
                sum(coalesce(sp.s2, 0)) / count(*) AS spike_s_@{delay_max_ms},
-               avg(@{r.stalls_per_min_@{delay_target_ms}}) AS stalls_per_min_@{delay_target_ms},
-               avg(@{r.stalls_per_min_@{delay_max_ms}}) AS stalls_per_min_@{delay_max_ms},
-               avg(@{r.stalled_share_@{delay_target_ms}}) AS stalled_share_@{delay_target_ms},
-               avg(@{r.stalled_share_@{delay_max_ms}}) AS stalled_share_@{delay_max_ms},
-               avg(@{r.startup_ms_@{delay_target_ms}}) AS startup_ms_@{delay_target_ms},
-               avg(@{r.startup_ms_@{delay_max_ms}}) AS startup_ms_@{delay_max_ms},
+               avg(coalesce(@{r.stalls_per_min_@{delay_target_ms}_honest}, @{r.stalls_per_min_@{delay_target_ms}}))
+                   AS stalls_per_min_@{delay_target_ms},
+               avg(coalesce(@{r.stalls_per_min_@{delay_max_ms}_honest}, @{r.stalls_per_min_@{delay_max_ms}}))
+                   AS stalls_per_min_@{delay_max_ms},
+               avg(coalesce(@{r.stalled_share_@{delay_target_ms}_honest}, @{r.stalled_share_@{delay_target_ms}}))
+                   AS stalled_share_@{delay_target_ms},
+               avg(coalesce(@{r.stalled_share_@{delay_max_ms}_honest}, @{r.stalled_share_@{delay_max_ms}}))
+                   AS stalled_share_@{delay_max_ms},
+               avg(coalesce(@{r.startup_ms_@{delay_target_ms}_honest}, @{r.startup_ms_@{delay_target_ms}}))
+                   AS startup_ms_@{delay_target_ms},
+               avg(coalesce(@{r.startup_ms_@{delay_max_ms}_honest}, @{r.startup_ms_@{delay_max_ms}}))
+                   AS startup_ms_@{delay_max_ms},
                coalesce(max(u.longest), 0) AS unhealthy_max_s,
                sketch_quantile(coalesce(u.longest, 0), 50) AS unhealthy_p50_s
         FROM ej e JOIN verdicts v USING (k, src) JOIN rows r USING (k, src)

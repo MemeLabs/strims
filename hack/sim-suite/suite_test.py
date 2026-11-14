@@ -294,7 +294,10 @@ class Dynamics(unittest.TestCase):
     (k1) and seed 2 (k2, collapsed; its seed's uplink steps down at 35 s
     and a viewer departs at 45 s), cell d's seeds both collapsed. The
     viewers' phases are the verdict's rule's (viewer_phases): the run's
-    startup STARTUP_SECS, a join's join's horizon."""
+    startup STARTUP_SECS, a join's join's horizon. k1's viewer 2 is
+    hostile, its row's playback every viewer's and, apart, the honest
+    viewers' (`_honest`); k2's is a row from before the sims split them
+    (none of those), whose honest-only run makes them the same."""
 
     @classmethod
     def setUpClass(cls):
@@ -345,10 +348,14 @@ class Dynamics(unittest.TestCase):
             "v(exp_id, cell, why, matrix);",
             "CREATE TABLE verdicts AS SELECT * FROM (VALUES ('k1', 's', false), ('k2', 's', true), ('k3', 's', true), "
             "('k4', 's', true)) v(k, src, collapsed);",
-            "CREATE TABLE rows AS SELECT * FROM (VALUES ('k1', 's', 2.0, 0.5, 0.01, 0.0, 900.0, 4000.0), "
-            "('k2', 's', 4.0, 1.5, 0.03, 0.02, 1100.0, 4200.0), ('k3', 's', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), "
-            "('k4', 's', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)) v(k, src, stalls_per_min_1250, stalls_per_min_4250, "
-            "stalled_share_1250, stalled_share_4250, startup_ms_1250, startup_ms_4250);",
+            "CREATE TABLE rows AS SELECT * FROM (VALUES "
+            "('k1', 's', 2.0, 0.5, 0.01, 0.0, 900.0, 4000.0, 1.0, 0.25, 0.005, 0.0, 800.0, 3900.0), "
+            "('k2', 's', 4.0, 1.5, 0.03, 0.02, 1100.0, 4200.0, NULL, NULL, NULL, NULL, NULL, NULL), "
+            "('k3', 's', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0), "
+            "('k4', 's', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)) v(k, src, "
+            "stalls_per_min_1250, stalls_per_min_4250, stalled_share_1250, stalled_share_4250, startup_ms_1250, "
+            "startup_ms_4250, stalls_per_min_1250_honest, stalls_per_min_4250_honest, stalled_share_1250_honest, "
+            "stalled_share_4250_honest, startup_ms_1250_honest, startup_ms_4250_honest);",
             "CREATE TABLE viewers AS SELECT * FROM (VALUES ('k1', 's', 0, NULL, false), ('k1', 's', 1, 15000, false), "
             "('k1', 's', 2, NULL, true), ('k2', 's', 0, NULL, false), ('k3', 's', 0, NULL, false), "
             "('k4', 's', 0, NULL, false)) v(k, src, viewer, arrive_ms, hostile);",
@@ -400,9 +407,14 @@ class Dynamics(unittest.TestCase):
         # k1 spikes past 1250 at 30-32 and past 4250 at 32, k2 at 40 and
         # past 1250 at 47.
         self.assertEqual((c["spike_s_1250"], c["spike_s_4250"]), (2.5, 1.0))
-        self.assertEqual((c["stalls_per_min_1250"], c["stalls_per_min_4250"]), (3.0, 1.0))
-        self.assertAlmostEqual(c["stalled_share_1250"], 0.02)
-        self.assertEqual((c["startup_ms_1250"], c["startup_ms_4250"]), (1000.0, 4100.0))
+        # The playback is the honest viewers': k1's _honest fields (its
+        # hostile viewer's stalls and startup left out), k2's own (a row
+        # from before the split): 1.0 and 4.0 stalls a minute at 1250 ms,
+        # where every viewer's would read 3.0.
+        self.assertEqual((c["stalls_per_min_1250"], c["stalls_per_min_4250"]), (2.5, 0.875))
+        self.assertAlmostEqual(c["stalled_share_1250"], 0.0175)
+        self.assertAlmostEqual(c["stalled_share_4250"], 0.01)
+        self.assertEqual((c["startup_ms_1250"], c["startup_ms_4250"]), (950.0, 4050.0))
         # The runs' longest unhealthy spells, 5 and 12 s: the median is the
         # first (rank ceil(0.5 x 2)).
         self.assertEqual((c["unhealthy_max_s"], c["unhealthy_p50_s"]), (12, 5))
