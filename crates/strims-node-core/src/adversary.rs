@@ -88,7 +88,9 @@ impl fmt::Debug for AdversaryFactory {
 
 /// A peer as an [`Adversary`] sees it: its host id, which the runner names
 /// it by (its bytes are its ppspp peer id), and the channels of the swarms
-/// run with it.
+/// run with it. A frame of a link the node knows no peer of (before the
+/// peer's init, or as the link goes down) still goes through the
+/// adversary, its peer named by the zero id with no swarms.
 #[derive(Clone, Copy, Debug)]
 pub struct AdversaryPeer<'a> {
     pub host_id: &'a ID,

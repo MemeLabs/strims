@@ -247,6 +247,25 @@ pub(crate) struct ChannelIds {
     pub(crate) peer_channel: u64,
 }
 
+/// How an [`Adversary`](crate::adversary::Adversary) sees the peer of a
+/// ppspp frame: by its state, or for a link the node knows no peer of
+/// (before its init, or as it goes down), by the zero id with no swarms,
+/// so the adversary still sees every frame.
+fn adversary_peer(ps: Option<&PeerState>) -> AdversaryPeer<'_> {
+    static UNKNOWN: ID = ID([0; 4]);
+    static NO_SWARMS: BTreeMap<SwarmKey, ChannelIds> = BTreeMap::new();
+    match ps {
+        Some(ps) => AdversaryPeer {
+            host_id: &ps.host_id,
+            swarms: &ps.swarms,
+        },
+        None => AdversaryPeer {
+            host_id: &UNKNOWN,
+            swarms: &NO_SWARMS,
+        },
+    }
+}
+
 #[derive(Debug)]
 struct PeerState {
     host_id: ID,
@@ -742,16 +761,14 @@ impl State {
                     }
                     Tag::Ppspp(pp) => {
                         let mut body = f.body;
-                        if let (Some(a), Some(ps)) = (adversary.as_mut(), peers.get(f.peer)) {
-                            let peer = AdversaryPeer {
-                                host_id: &ps.host_id,
-                                swarms: &ps.swarms,
-                            };
+                        if let Some(a) = adversary.as_mut() {
+                            let ps = peers.get(f.peer);
+                            let peer = adversary_peer(ps);
                             adversary_frame.clear();
                             adversary_frame.extend_from_slice(f.body);
                             let n = a.0.ingress(peer, now, adversary_frame, f.body.len());
                             body = adversary_frame.get(..n).unwrap_or_default();
-                            if a.0.wants_transmit(&ps.host_id, now) {
+                            if ps.is_some_and(|ps| a.0.wants_transmit(&ps.host_id, now)) {
                                 adversary_wants.push(f.peer);
                             }
                         }
@@ -899,13 +916,12 @@ impl State {
                         None => runner.poll_transmit(pp, now, body),
                     };
                     let mut more = runner.wants_transmit(pp);
-                    if let (Some(a), Some(ps)) = (adversary.as_mut(), peers.get(f.peer)) {
-                        let peer = AdversaryPeer {
-                            host_id: &ps.host_id,
-                            swarms: &ps.swarms,
-                        };
-                        len = a.0.egress(peer, now, f.body, len).min(f.body.len());
-                        more |= a.0.wants_transmit(&ps.host_id, now);
+                    if let Some(a) = adversary.as_mut() {
+                        let ps = peers.get(f.peer);
+                        len =
+                            a.0.egress(adversary_peer(ps), now, f.body, len)
+                                .min(f.body.len());
+                        more |= ps.is_some_and(|ps| a.0.wants_transmit(&ps.host_id, now));
                     }
                     Fill { len, more }
                 }
