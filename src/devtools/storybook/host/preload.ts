@@ -21,8 +21,9 @@ export type FrameDocument =
     }
   | { kind: "index" };
 
-const parse = (): FrameDocument | null => {
-  const hash = location.hash.replace(/^#/, "");
+// The storybook role a document at `fragment` (a frame route) has, if any.
+export const parseFrameDocument = (fragment: string): FrameDocument | null => {
+  const hash = fragment.replace(/^#/, "");
   const q = hash.indexOf("?");
   const pathname = q < 0 ? hash : hash.substring(0, q);
   const params = new URLSearchParams(q < 0 ? "" : hash.substring(q + 1));
@@ -41,8 +42,8 @@ const parse = (): FrameDocument | null => {
   };
 };
 
-/** This document's storybook role, if it is a storybook frame. */
-export const frameDocument = parse();
+/** This document's storybook role, if it is a storybook frame, as it loaded. */
+export const frameDocument = parseFrameDocument(location.hash);
 
 const shape = frameDocument?.kind === "story" ? DEVICES[frameDocument.device] : null;
 
@@ -103,4 +104,10 @@ if (shape) {
 // (Story.landscape) before its story renders.
 export const setFrameOrientation = (value: number): void => {
   orientation = value;
+};
+
+// The device's own orientation, as the document loaded with, for the next
+// story a frame switches to in place.
+export const resetFrameOrientation = (): void => {
+  orientation = shape?.orientation;
 };

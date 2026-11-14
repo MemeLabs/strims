@@ -9,7 +9,7 @@ nothing; then reports the catalog's coverage.
                                   [--only PREFIX]... [--theme dark|light]
                                   [--device pc|portrait|landscape|TABLET]
                                   [--screenshots DIR] [--strict] [--list]
-                                  [--settle MS] [--timeout S] [-v]
+                                  [--fresh] [--settle MS] [--timeout S] [-v]
 
 `--port N` starts hack/console/server.py on 127.0.0.1:N (no indexing) to
 serve this checkout's target/console/dist and stops it afterwards; `--url`
@@ -21,15 +21,28 @@ The storybook's index document (#/storybook-index, the page's catalog
 builds its index there) embeds the index as JSON in
 <script id="storybook-index">: every story's route, every UI file under
 src/components, src/pages and src/watch as covered, skipped or missing,
-and catalog entries naming files that don't exist. Each story then loads
-as its frame document, the one the storybook page shows in an iframe, at
-#/storybook-frame/<route below /storybook/>?theme=..&device=.., in a fresh
-page whose viewport is the device's (pc 1372x1017, about the page's
-frame; portrait 390x844, landscape 844x390; the tablets ipad_portrait
-820x1180, ipad_landscape 1180x820, tablet_portrait 800x1280 and
-tablet_landscape 1280x800), and waits for its root
-([data-story-root]) to leave data-story-state="loading", then for
-`--settle` ms (default 1000) and the network to go quiet (up to 3 s more).
+and catalog entries naming files that don't exist. Each story then shows
+in its frame document, the one the storybook page shows in an iframe, at
+#/storybook-frame/<route below /storybook/>?theme=..&device=.., in a page
+whose viewport is the device's (pc 1372x1017, about the page's frame;
+portrait 390x844, landscape 844x390; the tablets ipad_portrait 820x1180,
+ipad_landscape 1180x820, tablet_portrait 800x1280 and tablet_landscape
+1280x800), and waits for its root ([data-story-root]) to leave
+data-story-state="loading", then for `--settle` ms (default 1000) and the
+network to go quiet (up to 3 s more).
+
+A browser takes the stories in batches, by route, of up to BATCH (fewer
+when that would leave a browser without one). A batch's first story loads
+a fresh frame document (its origin's storage cleared first); each story
+after it is switched to in place (navigation mode: the document's
+FrameSwitch, src/devtools/storybook/host/Frame.tsx, unmounts the story and
+puts back what the harness owns, then mounts the next), unless the story
+before recorded an error, allowed or not (React and i18next say a warning
+once a realm), which ends the document's run. A story that fails in place
+is rechecked in a fresh document, whose verdict it takes; the table lists
+the rechecked stories and how many the fresh document overturned. A build
+whose index doesn't say its frames switch (`switches`), and `--fresh`,
+load every story fresh.
 The page records the story's uncaught errors, unhandled rejections,
 console.error calls and render errors, marks each one its allow lists
 (the host's and the story's allowErrors) cover, and says them in
@@ -52,8 +65,9 @@ every error of a failing story, not just its first. Exits 1 when a story
   python3 hack/storybook/check.py (--port N | --url URL --base-port M)
                                   --compare REF [--build] [-j N] [--only PREFIX]...
                                   [--theme dark|light] [--device pc|portrait|landscape|TABLET]
-                                  [--all-modes] [--tolerance N] [--report DIR]
+                                  [--all-modes] [--tolerance N] [--report DIR] [--fresh]
                                   [--fail-on-diff] [--rebuild-base] [--settle MS] [--timeout S]
+  python3 hack/storybook/check.py (--port N | --url URL) --leaks [...]
 
 `--compare REF` is visual regression: each story of either build, this
 checkout's (head) and REF's (base), is shot in both, in the same browser
@@ -117,6 +131,30 @@ a fixed string so the box is the same in both builds) and the story's
 `visual.skip` holds isn't shot (src/devtools/storybook/types.ts). The
 root is shot until two shots two frames apart match (up to STABLE_SHOTS
 more; the report notes one that never did).
+
+Each browser shows each build in a window of its own and takes the
+stories in batches as strict mode does, each story captured in the head,
+then the base, so both builds' documents see the same stories in the same
+order and what a story leaves behind reaches the next the same way in
+both. A batch's first story loads a fresh document in each; each one after
+is switched to in place, where its FrameSwitch also puts the capture
+clock back at its start (its timers due now fired, the rest dropped) and
+empties the storage, once a critical memory pressure has purged the
+compositor's image decodes (a later draw of an image at another scale is
+resampled from one it holds, a few levels off a fresh decode). A story's
+captures end both documents' run when
+either recorded an error (allowed or not), when one build alone has the
+story, or when a build's index gives it `visual.fresh`, which captures
+it in fresh documents always. A story changed, failing or unstable in
+place is captured again in fresh documents in both builds, and that
+capture is its verdict; the report and the tables count the rechecked
+stories and the ones the fresh capture overturned, and list those. A
+base whose index doesn't say its frames switch (`switches`, a build
+from before they did) has every story captured fresh in both builds, as
+`--fresh` does. `--leaks` compares this checkout's build with itself, each
+story switched to in place (head: "in place") against a fresh document
+(base: "fresh"), without rechecks: a story it finds changed takes
+something from the stories before it that a fresh document doesn't have.
 
 The diff runs in Chromium (canvas pixels): a pixel changes when a channel
 moves by more than `--tolerance` (default 2 of 255) or only one shot has
@@ -222,6 +260,8 @@ NET_QUIET_S = 0.05
 EMPTY_STEP_MS = 100
 # Shots of a capture after its first, until two in a row match.
 STABLE_SHOTS = 5
+# The most stories one story frame document shows in a row (a batch's).
+BATCH = 16
 # A third-party document (an embed's iframe), answered by stub.
 STUB_DOCUMENT = base64.b64encode(b'<!doctype html><html style="background:#808080"></html>').decode()
 BASES = ROOT / "target" / "storybook" / "base"
@@ -359,6 +399,11 @@ class Page:
         # Compare mode's attached targets (workers, out-of-process frames):
         # each one's requests, which end with it.
         self.sessions = {}
+        # Its viewport (w, h), once set.
+        self.viewport = None
+        # The mode (theme, device) of the story frame document it holds,
+        # while the next story may switch into it in place; else None.
+        self.doc = None
 
     def send(self, method, params=None, session=None):
         """A command whose result nobody waits for (to an attached target's
@@ -473,15 +518,32 @@ def find_chromium(name):
 
 
 class Browser:
-    """A headless Chromium of its own, with one page `viewport` (w, h) in size."""
+    """A headless Chromium of its own, with one page `viewport` (w, h) in
+    size, and a window more (tab) for each build compare mode captures in,
+    each shown (a background tab's screenshots never come)."""
+
+    # Every browser started and not yet closed, which close_all closes: a
+    # Chromium runs in a session of its own, so an exit that skipped one
+    # would leave it running.
+    live = set()
+    lock = threading.Lock()
+    stopping = False
 
     def __init__(self, exe, profiles, i, viewport, flags=()):
+        self.tabs = {}
+        self.capturing = False
         self.profile = Path(tempfile.mkdtemp(prefix=f"b{i}-", dir=profiles))
         self.log = open(self.profile.parent / f"{self.profile.name}.log", "wb")
         self.proc = subprocess.Popen(
             [exe, *CHROMIUM_FLAGS, *flags, f"--user-data-dir={self.profile}",
              f"--window-size={viewport[0]},{viewport[1]}", "about:blank"],
             stdin=subprocess.DEVNULL, stdout=self.log, stderr=self.log, start_new_session=True)
+        with Browser.lock:
+            Browser.live.add(self)
+            stopping = Browser.stopping
+        if stopping:
+            self.close()
+            raise RuntimeError("the run is stopping")
         port_file = self.profile / "DevToolsActivePort"
         deadline = time.monotonic() + 30
         while not port_file.is_file() or not port_file.read_text().strip():
@@ -489,42 +551,80 @@ class Browser:
                 self.close()
                 raise RuntimeError(f"Chromium didn't start (its log: {self.log.name})")
             time.sleep(0.1)
-        port = int(port_file.read_text().split()[0])
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=10) as res:
-            targets = json.load(res)
-        target = next(t for t in targets if t.get("type") == "page")
-        self.page = Page(WebSocket(target["webSocketDebuggerUrl"]))
-        self.page.call("Network.enable")
-        self.page.call("Runtime.enable")
-        self.viewport = None
-        self.set_viewport(viewport)
+        self.port = int(port_file.read_text().split()[0])
+        self.initial_viewport = viewport
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/json/list", timeout=10) as res:
+                targets = json.load(res)
+            target = next(t for t in targets if t.get("type") == "page")
+            self.page = self.open(target)
+        except BaseException:
+            self.close()
+            raise
 
-    def set_viewport(self, viewport):
-        if viewport == self.viewport:
+    def open(self, target):
+        page = Page(WebSocket(target["webSocketDebuggerUrl"]))
+        page.call("Network.enable")
+        page.call("Runtime.enable")
+        self.set_viewport(self.initial_viewport, page)
+        if self.capturing:
+            self.capture_on(page)
+        return page
+
+    def tab(self, name):
+        """The page `name` (a build's), opened on first use in a window of
+        its own."""
+        if name not in self.tabs:
+            with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/json/version", timeout=10) as res:
+                ws = WebSocket(json.load(res)["webSocketDebuggerUrl"])
+            try:
+                target = Page(ws).call("Target.createTarget", {"url": "about:blank", "newWindow": True})
+            finally:
+                ws.close()
+            self.tabs[name] = self.open(
+                {"webSocketDebuggerUrl": f"ws://127.0.0.1:{self.port}/devtools/page/{target['targetId']}"})
+        return self.tabs[name]
+
+    def set_viewport(self, viewport, page=None):
+        page = page or self.page
+        if viewport == page.viewport:
             return
         # Not "mobile": the storybook page's iframes are desktop documents too;
         # the frame's own preload makes the realm a phone's.
-        self.page.call("Emulation.setDeviceMetricsOverride", {
+        page.call("Emulation.setDeviceMetricsOverride", {
             "width": viewport[0], "height": viewport[1], "deviceScaleFactor": 1, "mobile": False})
-        self.viewport = viewport
+        page.viewport = viewport
 
     def enable_capture(self):
-        """Compare mode's page: every document starts on the capture clock
+        """Compare mode's pages: every document starts on the capture clock
         (CAPTURE_SCRIPT), requests off the build's server get stubs, and
         the time zone, locale and focus are fixed."""
-        self.page.call("Page.enable")  # else no script evaluates on new documents
-        self.page.call("Page.addScriptToEvaluateOnNewDocument",
-                       {"source": CAPTURE_SCRIPT.replace("__T0__", str(FIXTURE_TIME_MS))})
-        self.page.call("Fetch.enable", {"patterns": [{"urlPattern": "https://*"}]})
-        self.page.call("Target.setAutoAttach", {"autoAttach": True, "waitForDebuggerOnStart": True,
-                                                "flatten": True})
-        self.page.call("Emulation.setTimezoneOverride", {"timezoneId": "UTC"})
-        self.page.call("Emulation.setLocaleOverride", {"locale": "en-US"})
-        self.page.call("Emulation.setFocusEmulationEnabled", {"enabled": True})
+        self.capturing = True
+        for page in [self.page, *self.tabs.values()]:
+            self.capture_on(page)
+
+    @staticmethod
+    def capture_on(page):
+        page.call("Page.enable")  # else no script evaluates on new documents
+        page.call("Page.addScriptToEvaluateOnNewDocument",
+                  {"source": CAPTURE_SCRIPT.replace("__T0__", str(FIXTURE_TIME_MS))})
+        page.call("Fetch.enable", {"patterns": [{"urlPattern": "https://*"}]})
+        page.call("Target.setAutoAttach", {"autoAttach": True, "waitForDebuggerOnStart": True, "flatten": True})
+        page.call("Emulation.setTimezoneOverride", {"timezoneId": "UTC"})
+        page.call("Emulation.setLocaleOverride", {"locale": "en-US"})
+        page.call("Emulation.setFocusEmulationEnabled", {"enabled": True})
+
+    def retire(self):
+        """No tab's document takes the next story in place."""
+        for page in [self.page, *self.tabs.values()]:
+            page.doc = None
 
     def close(self):
-        if getattr(self, "page", None):
-            self.page.ws.close()
+        with Browser.lock:
+            Browser.live.discard(self)
+        for page in [getattr(self, "page", None), *self.tabs.values()]:
+            if page:
+                page.ws.close()
         try:
             os.killpg(self.proc.pid, signal.SIGTERM)
             self.proc.wait(10)
@@ -535,6 +635,15 @@ class Browser:
                 pass
         self.log.close()
         shutil.rmtree(self.profile, ignore_errors=True)
+
+    @classmethod
+    def close_all(cls):
+        """Closes every live browser, and any started from now on."""
+        with cls.lock:
+            cls.stopping = True
+            live = list(cls.live)
+        for b in live:
+            b.close()
 
 
 # --- the checks ---
@@ -557,6 +666,7 @@ STORY_PROBE = """(() => {
   return JSON.stringify({
     root: true,
     state: root.dataset.storyState,
+    route: root.dataset.storyRoute ?? null,
     story: json ? JSON.parse(json) : null,
     visible,
     text: [root, ...portals].reduce((n, el) => n + el.innerText.trim().length, 0),
@@ -570,12 +680,34 @@ def first_line(text, width=110):
     return line if len(line) <= width else line[:width - 1] + "…"
 
 
-def frame_url(base, route, args):
-    """A story route's (/storybook/<module>/<name>) frame document."""
-    query = urllib.parse.urlencode({k: v for k, v in (("theme", args.theme), ("device", args.device))
+def frame_hash(route, theme, device):
+    """A story route's (/storybook/<module>/<name>) frame document's hash
+    route, #/storybook-frame/<module>/<name>?theme=..&device=.."""
+    query = urllib.parse.urlencode({k: v for k, v in (("theme", theme), ("device", device))
                                     if v and v not in ("dark", "pc")})
-    return (f"{base}/devtools.html#/storybook-frame/{route.removeprefix('/storybook/')}"
-            + (f"?{query}" if query else ""))
+    return f"#/storybook-frame/{route.removeprefix('/storybook/')}" + (f"?{query}" if query else "")
+
+
+def frame_url(base, route, args):
+    """A story route's frame document."""
+    return f"{base}/devtools.html{frame_hash(route, args.theme, args.device)}"
+
+
+def switch_story(page, route, theme, device):
+    """Switches the story frame document in `page` to `route` in place
+    (its FrameSwitch), or raises CDPError when it can't."""
+    page.exceptions = []
+    hash_ = frame_hash(route, theme, device)
+    if not evaluate(page, f"window.__storybookFrame.show({json.dumps(hash_)})"):
+        raise CDPError(f"the frame document wouldn't switch to {hash_} in place")
+
+
+def batches(routes, jobs):
+    """`routes` cut in order into batches of up to BATCH, fewer when that
+    leaves a browser of `jobs` without one: each batch's stories run one
+    after another in one browser, the first in a fresh document."""
+    size = max(1, min(BATCH, -(-len(routes) // jobs)))
+    return [routes[i:i + size] for i in range(0, len(routes), size)]
 
 
 def load_index(browser, base, route="/storybook-index"):
@@ -591,16 +723,25 @@ def load_index(browser, base, route="/storybook-index"):
              + (f" ({detail})" if detail else ""))
 
 
-def check_story(browser, base, story, args):
+def check_story(browser, base, story, args, fresh):
+    """A story in the page's story frame document, switched to in place
+    when the page holds one of this mode, else (`fresh`) in a fresh one."""
     route = story["route"]
     page = browser.page
     start = time.monotonic()
-    result = {"route": route, "status": "ok", "error": "", "errors": [], "allowed": 0}
-    page.navigate(frame_url(base, route, args))
+    mode = (args.theme, args.device)
+    inplace = not fresh and page.doc == mode
+    result = {"route": route, "status": "ok", "error": "", "errors": [], "allowed": 0, "inplace": inplace}
+    page.doc = None
+    if inplace:
+        switch_story(page, route, *mode)
+    else:
+        page.call("Storage.clearDataForOrigin", {"origin": base, "storageTypes": "all"})
+        page.navigate(frame_url(base, route, args))
 
     while True:
         probe = json.loads(page.try_eval(STORY_PROBE) or "{}")
-        if probe.get("state") in ("ok", "error"):
+        if probe.get("state") in ("ok", "error") and (not inplace or probe.get("route") == route):
             break
         if time.monotonic() - start > args.timeout:
             result["status"] = "FAIL"
@@ -642,6 +783,7 @@ def check_story(browser, base, story, args):
     errors = (probe.get("story") or {}).get("errors", [])
     failing = [e for e in errors if not e.get("allowedBy")]
     result["allowed"] = len(errors) - len(failing)
+    result["recorded"] = len(errors)
     result["errors"] = [f"[{e['kind']}] {e['text']}" for e in failing]
     if probe.get("state") == "error":
         result["status"] = "FAIL"
@@ -658,6 +800,8 @@ def check_story(browser, base, story, args):
         shot = page.call("Page.captureScreenshot", {"format": "png", "clip": clip, "captureBeyondViewport": True})
         name = route.removeprefix("/storybook/").replace("/", "__") + ".png"
         (Path(args.screenshots) / name).write_bytes(base64.b64decode(shot["data"]))
+    if args.navigate:
+        page.doc = mode
     result["time"] = time.monotonic() - start
     return result
 
@@ -700,6 +844,15 @@ def build():
 
 
 def start_server(port, log_dir, dist=None, log_name="server.log"):
+    """hack/console/server.py on 127.0.0.1:`port` (serving `dist`, else the
+    checkout's build), refused when something answers there already: its
+    answers would be taken for the new server's."""
+    try:
+        socket.create_connection(("127.0.0.1", port), timeout=2).close()
+    except OSError:
+        pass
+    else:
+        sys.exit(f"check: 127.0.0.1:{port} is taken (another server answers there)")
     log = open(log_dir / log_name, "wb")
     proc = subprocess.Popen(
         [sys.executable, str(ROOT / "hack" / "console" / "server.py"), "--port", str(port),
@@ -765,6 +918,13 @@ def print_table(results, verbose):
         print(f"\n--- {r['route']}")
         for text in r["errors"] if verbose else r["errors"][:1]:
             print("\n".join(text.splitlines()[:40 if verbose else 20]))
+    again = sorted((r for r in results if r.get("recheck")), key=lambda r: r["route"])
+    if again:
+        print(f"\nfailed in place, rechecked in a fresh document ({sum(r['recheck']['overturned'] for r in again)} "
+              "overturned):")
+        for r in again:
+            print(f"  {r['route'].removeprefix('/storybook/')}  fresh {r['status']}  "
+                  f"(in place: {first_line(r['recheck']['detail'], 100)})")
 
 
 # --- compare mode: each story's screenshot in two builds, diffed ---
@@ -1073,7 +1233,7 @@ CAPTURE_SCRIPT = r"""(() => {
   // the clock's time when a step first sees it (the time it began, as the
   // clock only moves in steps), and set to the clock's time since; once
   // that passes its end, it finishes.
-  const began = new WeakMap();
+  let began = new WeakMap();
   let held = false;
   const animate = () => {
     if (held) return;
@@ -1106,6 +1266,25 @@ CAPTURE_SCRIPT = r"""(() => {
     for (const t of timers.values()) due = Math.min(due, t.due);
     return due;
   };
+  // The timers due by now, in the order they fall due.
+  const dueNow = () => [...timers.values()].filter((t) => t.due <= now)
+    .sort((a, b) => a.due - b.due || a.id - b.id);
+  // Fires timer `t` (unless cleared since), true if it ran.
+  const fire = (t) => {
+    if (!timers.has(t.id)) return false;
+    if (t.every) t.due += t.every;
+    else timers.delete(t.id);
+    nesting = t.level;
+    try {
+      if (typeof t.fn === "function") t.fn.apply(window, t.args);
+      else (0, eval)(String(t.fn));
+    } catch (e) {
+      reportError(e);
+    } finally {
+      nesting = 0;
+    }
+    return true;
+  };
 
   // Lets the page settle (a task's turn, and real frames while the DOM
   // changes: its layout, observers and scroll events), then fires the
@@ -1130,22 +1309,9 @@ CAPTURE_SCRIPT = r"""(() => {
     if (due <= now || (advance && due <= (limit ?? Infinity))) {
       now = Math.max(now, due);
       animate();
-      const batch = [...timers.values()].filter((t) => t.due <= now)
-        .sort((a, b) => a.due - b.due || a.id - b.id);
-      for (const t of batch) {
-        if (!timers.has(t.id)) continue;
-        if (t.every) t.due += t.every;
-        else timers.delete(t.id);
-        nesting = t.level;
+      for (const t of dueNow()) {
+        if (!fire(t)) continue;
         fired++;
-        try {
-          if (typeof t.fn === "function") t.fn.apply(window, t.args);
-          else (0, eval)(String(t.fn));
-        } catch (e) {
-          reportError(e);
-        } finally {
-          nesting = 0;
-        }
         await turn();
       }
     } else if (advance && limit !== null && limit > now) {
@@ -1157,13 +1323,41 @@ CAPTURE_SCRIPT = r"""(() => {
     const t = realNow();
     return { now, fired, waiting, next: Number.isFinite(after) ? after : null,
              state: root ? root.dataset.storyState ?? null : null,
+             route: root ? root.dataset.storyRoute ?? null : null,
              pending: [...pending.values()].map((p) => ({ url: p.url, ms: Math.round(t - p.at) })) };
   };
   // Stops the clock's hold on animations, for FINISH_SCRIPT's.
   const hold = () => {
     held = true;
   };
-  window.__storybookCapture = { step, turn, frame, hold, now: () => now, mutations: () => mutations };
+  // The clock as the document started it, for the next story a frame
+  // switches to in place (its FrameSwitch), once the timeouts due now
+  // have fired, and those they set off, a chain of 0 ms timeouts clamped
+  // to 4 ms among them (a module's queue drained on a 0 ms timeout,
+  // process.nextTick's, would stay stuck behind a dropped one; up to 1000
+  // rounds): at 0, no timer, frame or idle
+  // callback due, random and crypto on the seed's first draw, animations
+  // on the clock again, and no worker heard from. What the document has
+  // pending (a chunk's script, a fetch) stays pending.
+  const reset = () => {
+    for (let i = 0; i < 1000; i++) {
+      const soon = [...timers.values()].filter((t) => !t.every && t.due <= now + 4)
+        .sort((a, b) => a.due - b.due || a.id - b.id);
+      if (!soon.length) break;
+      soon.forEach(fire);
+    }
+    now = 0;
+    timers.clear();
+    frames = new Map();
+    frameTimer = 0;
+    nesting = 0;
+    seed = 0x5eed;
+    began = new WeakMap();
+    held = false;
+    workerAt = -Infinity;
+    unanswered.clear();
+  };
+  window.__storybookCapture = { step, turn, frame, hold, reset, now: () => now, mutations: () => mutations };
 })()"""
 
 # Holds what still moves before the screenshot: finite animations and
@@ -1330,12 +1524,20 @@ class Build:
     """A build of the storybook as compare mode serves it: `name` (head or
     base), its server's base URL, its commit, and how its stories load
     (`frames`: each in its frame document; `page`: in the storybook page,
-    before the per-story frames)."""
+    before the per-story frames). `fresh`: its every story is captured in
+    a fresh document (--leaks' base)."""
 
-    def __init__(self, name, url, commit, protocol):
+    def __init__(self, name, url, commit, protocol, fresh=False):
         self.name, self.url, self.commit, self.protocol = name, url, commit, protocol
+        self.fresh = fresh
+        # Its side's name in the report and the printed tables.
+        self.label = name
         self.index = None
         self.stories = {}
+
+    def switches(self):
+        """Its story frame documents switch stories in place, as its index says."""
+        return bool((self.index or {}).get("switches"))
 
     def built(self):
         """When its build began, as its index says (None: it doesn't)."""
@@ -1570,30 +1772,43 @@ def waiting_on(page, pending):
     return out
 
 
-def capture(browser, build, route, theme, device, masks, args):
-    """One story's screenshot in `build`, on the capture clock: the clock
+def capture(browser, build, route, theme, device, masks, args, fresh):
+    """One story's screenshot in `build`, in its tab: switched to in place
+    when the tab holds a story frame document of this mode, else (and
+    with `fresh`) in a fresh document. On the capture clock: the clock
     moves only while the network is quiet and the document has nothing
     pending, to the next timer until the story's root leaves "loading",
     then on to --settle ms after that, then (an empty root) by
     EMPTY_STEP_MS until it shows something or --timeout s of clock time
     pass. Then FINISH_SCRIPT holds what still moves, masks are painted, and
-    the root is shot. {status, error, errors, png, time, rounds
-    (FINISH_SCRIPT's), clock_ms, unstable (no two shots matched)}. Raises
-    Stalled when --timeout s pass with a request in flight or anything
-    pending."""
-    page = browser.page
+    the root is shot. {status, error, errors, recorded (the errors the
+    story recorded, allowed or not), png, time, rounds (FINISH_SCRIPT's),
+    clock_ms, unstable (no two shots matched), inplace}. Raises Stalled
+    when --timeout s pass with a request in flight or anything pending."""
+    page = browser.tab(build.name)
     start = time.monotonic()
     deadline = start + args.timeout
-    out = {"status": "ok", "error": "", "errors": [], "png": None}
+    mode = (theme, device)
+    inplace = not fresh and not build.fresh and page.doc == mode
+    out = {"status": "ok", "error": "", "errors": [], "recorded": 0, "png": None, "inplace": inplace}
 
     def fail(error, errors=None):
         out.update(status="FAIL", error=first_line(error), errors=errors or [error],
                    time=time.monotonic() - start)
         return out
 
-    browser.set_viewport(build.viewport(device))
-    page.call("Storage.clearDataForOrigin", {"origin": build.url, "storageTypes": "all"})
-    page.navigate(build.story_url(route, theme, device))
+    page.doc = None
+    if inplace:
+        # The compositor's image decodes outlive the story that drew them,
+        # and a later draw of the image at another scale is resampled from
+        # one when it can be, a few levels off a fresh decode's: so none is
+        # left for the next story (a critical memory pressure purges them).
+        page.call("Memory.simulatePressureNotification", {"level": "critical"})
+        switch_story(page, route, theme, device)
+    else:
+        browser.set_viewport(build.viewport(device), page)
+        page.call("Storage.clearDataForOrigin", {"origin": build.url, "storageTypes": "all"})
+        page.navigate(build.story_url(route, theme, device))
     phase, limit, mounted, now, pending = "load", None, None, 0, []
     while True:
         if time.monotonic() > deadline:
@@ -1613,7 +1828,7 @@ def capture(browser, build, route, theme, device, masks, args):
         pending = r["pending"]
         quiet = quiet and not r["waiting"]
         now = r["now"]
-        if phase == "load" and r["state"] in ("ok", "error"):
+        if phase == "load" and r["state"] in ("ok", "error") and (not inplace or r["route"] == route):
             phase, mounted = "settle", now
             limit = mounted + args.settle
             continue
@@ -1633,6 +1848,7 @@ def capture(browser, build, route, theme, device, masks, args):
     rounds = evaluate(page, FINISH_SCRIPT, timeout=max(5, deadline - time.monotonic()))
     probe = json.loads(page.eval(STORY_PROBE))
     errors = (probe.get("story") or {}).get("errors", [])
+    out["recorded"] = len(errors)
     failing = [f"[{e['kind']}] {e['text']}" for e in errors if not e.get("allowedBy")]
     if probe.get("state") == "error":
         fail(failing[0] if failing else "error state", failing)
@@ -1648,7 +1864,7 @@ def capture(browser, build, route, theme, device, masks, args):
         r = probe["rect"]
         clip = {"x": max(0, r["x"]), "y": max(0, r["y"]), "width": max(1, r["width"]),
                 "height": max(1, r["height"]), "scale": 1}
-        vw, vh = browser.viewport
+        vw, vh = page.viewport
         beyond = clip["x"] + clip["width"] > vw or clip["y"] + clip["height"] > vh
 
         def shot():
@@ -1666,14 +1882,16 @@ def capture(browser, build, route, theme, device, masks, args):
             out["png"] = again
         else:
             out["unstable"] = True
+    if args.navigate and not build.fresh:
+        page.doc = mode
     out["time"] = time.monotonic() - start
     return out
 
 
 def diff_images(browser, base_png, head_png, tolerance):
-    """DIFF_SCRIPT over two PNGs, in `browser`'s page as the last capture
-    left it: {changed, width, height, base, head (their sizes), diff (PNG
-    bytes or None)}."""
+    """DIFF_SCRIPT over two PNGs, in `browser`'s first page (no build's tab,
+    so no story's document): {changed, width, height, base, head (their
+    sizes), diff (PNG bytes or None)}."""
     url = lambda png: "data:image/png;base64," + base64.b64encode(png).decode()
     r = evaluate(browser.page, f"({DIFF_SCRIPT})({json.dumps(url(base_png))}, {json.dumps(url(head_png))}, "
                                f"{tolerance})", timeout=120)
@@ -1682,10 +1900,10 @@ def diff_images(browser, base_png, head_png, tolerance):
     return r
 
 
-def compare_story(browser, builds, mode, route, args):
-    """A story in one mode: its capture in each build that has it, and their
-    diff. {mode, route, kind (changed, unchanged, added, removed, failing,
-    skipped), ...}."""
+def compare_story(browser, builds, mode, route, args, fresh):
+    """A story in one mode: its capture in each build that has it (each in
+    a fresh document with `fresh`), and their diff. {mode, route, kind
+    (changed, unchanged, added, removed, failing, skipped), ...}."""
     theme, device = MODES[mode]
     entries = {b.name: b.stories.get(route) for b in builds}
     res = {"mode": mode, "route": route, "time": 0.0}
@@ -1694,6 +1912,8 @@ def compare_story(browser, builds, mode, route, args):
     if skip:
         res.update(kind="skipped", reason=skip.get("reason", ""))
         return res
+    if any(v.get("fresh") for v in visual):
+        fresh = res["own_document"] = True
     # [selector, text]: a host mask may name text to put in its element before
     # it's measured, so build-dependent text (the git hash) masks the same box
     # in both builds; an older base's entries lack it, so the head's wins.
@@ -1710,7 +1930,7 @@ def compare_story(browser, builds, mode, route, args):
     for b in builds:
         if entries[b.name]:
             try:
-                shots[b.name] = capture(browser, b, route, theme, device, masks, args)
+                shots[b.name] = capture(browser, b, route, theme, device, masks, args, fresh)
             except CHECKER_ERRORS as e:
                 e.side = b.name
                 raise
@@ -1735,6 +1955,81 @@ def compare_story(browser, builds, mode, route, args):
             if d["changed"] and res["kind"] == "unchanged":
                 res["kind"] = "changed"
     return res
+
+
+def needs_recheck(r, args):
+    """A story whose captures, one in place at least, found it changed,
+    failing or unstable: its verdict is a fresh capture's (not --leaks')."""
+    shots = r.get("shots", {}).values()
+    return (not args.leaks and not r.get("checker") and any(s.get("inplace") for s in shots)
+            and (r["kind"] in ("changed", "failing") or any(s.get("unstable") for s in shots)))
+
+
+def recheck_of(nav, fresh):
+    """What a recheck's fresh capture says of the captures in place `nav`:
+    {kind (nav's), overturned (fresh's kind is another), detail}."""
+    if nav["kind"] == "changed":
+        detail = f"{nav['changed']:,} px changed"
+    elif nav["kind"] == "failing":
+        detail = "; ".join(f"{side}: {s['error']}" for side, s in nav["shots"].items() if s["status"] != "ok")
+    else:
+        detail = "no two shots in a row matched: " + ", ".join(
+            side for side, s in nav["shots"].items() if s.get("unstable"))
+    return {"kind": nav["kind"], "overturned": fresh["kind"] != nav["kind"], "detail": detail}
+
+
+def leaves_state(r):
+    """A compared story after which no tab's document takes the next story
+    in place: one whose captures recorded errors (allowed ones too: React
+    and i18next say a warning once a realm), one only one build has (the
+    tabs would see different stories), one in a document of its own
+    (visual.fresh), and the checker's own failure."""
+    shots = r.get("shots", {}).values()
+    return (r.get("own_document") or r.get("checker") or r.get("retried") or len(shots) == 1
+            or any(s.get("recorded") for s in shots))
+
+
+def start_browser(new_browser, slot):
+    """new_browser(slot), tried once more when the first doesn't come up
+    (its DevTools socket closing on a loaded machine)."""
+    try:
+        return new_browser(slot)
+    except (RuntimeError, ConnectionError, CDPError, TimeoutError, OSError) as e:
+        print(f"check: browser {slot} didn't start ({e}): trying again", file=sys.stderr)
+        return new_browser(slot)
+
+
+def start_browsers(new_browser, slots, browsers):
+    """A browser for each slot, started side by side (start_browser) and
+    appended to `browsers` as each comes up, so a failure leaves none
+    unlisted (to close)."""
+    with concurrent.futures.ThreadPoolExecutor(max(1, len(slots))) as pool:
+        futures = [pool.submit(start_browser, new_browser, i) for i in slots]
+        error = None
+        for f in futures:
+            try:
+                browsers.append(f.result())
+            except Exception as e:  # noqa: BLE001 - the first is raised once all are in
+                error = error or e
+    if error:
+        raise error
+
+
+def rechecks(results):
+    """(rechecked, overturned): how many of `results` a fresh capture
+    rechecked, and how many of those it gave another kind."""
+    again = [r for r in results if r.get("recheck")]
+    return len(again), sum(r["recheck"]["overturned"] for r in again)
+
+
+def capture_note(args):
+    """How the run's stories were captured, for the report and the tables."""
+    if args.leaks:
+        return "each story switched to in place (in place) and in a fresh document (fresh)"
+    if args.navigate:
+        return ("stories switched to in place, batches of up to "
+                f"{BATCH} in a document; changed, failing or unstable ones rechecked in fresh documents")
+    return f"every story in a fresh document ({getattr(args, 'why_fresh', None) or '--fresh'})"
 
 
 def slug(route):
@@ -1766,6 +2061,7 @@ def write_report(path, results, builds, modes, args, elapsed):
         rows.append((r, imgs))
     order = {"changed": 0, "failing": 1, "added": 2, "removed": 3, "skipped": 4}
     rows.sort(key=lambda x: (order[x[0]["kind"]], -x[0].get("ratio", 0), x[0]["mode"], x[0]["route"]))
+    label = {b.name: b.label for b in builds}
 
     def counts(mode):
         c = {k: 0 for k in ("changed", "unchanged", "added", "removed", "failing", "skipped")}
@@ -1776,7 +2072,8 @@ def write_report(path, results, builds, modes, args, elapsed):
 
     summary = "".join(
         f"<tr><td>{m}</td>" + "".join(f"<td class='n{' hot' if k != 'unchanged' and v else ''}'>{v}</td>"
-                                      for k, v in counts(m).items()) + "</tr>"
+                                      for k, v in counts(m).items())
+        + "".join(f"<td class='n'>{v}</td>" for v in rechecks([r for r in results if r["mode"] == m])) + "</tr>"
         for m in modes)
     cards = []
     for r, imgs in rows:
@@ -1792,27 +2089,38 @@ def write_report(path, results, builds, modes, args, elapsed):
         else:
             what = r["kind"]
         notes = []
+        if r.get("recheck"):
+            notes.append(f"<p class='note'>in place: {esc(r['recheck']['kind'])} ({esc(r['recheck']['detail'])}); "
+                         "this is the fresh capture</p>")
         for side, s in r.get("shots", {}).items():
             if s["status"] != "ok":
-                notes.append(f"<pre><b>{side}:</b> {esc(chr(10).join(s['errors'][:3]))}</pre>")
+                notes.append(f"<pre><b>{label[side]}:</b> {esc(chr(10).join(s['errors'][:3]))}</pre>")
             if s.get("rounds") == -1:
-                notes.append(f"<p class='note'>{side}: still moving after 10 rounds</p>")
+                notes.append(f"<p class='note'>{label[side]}: still moving after 10 rounds</p>")
             if s.get("unstable"):
-                notes.append(f"<p class='note'>{side}: no two shots in a row matched</p>")
+                notes.append(f"<p class='note'>{label[side]}: no two shots in a row matched</p>")
         figs = "".join(
-            f"<figure><figcaption>{k}</figcaption><a href='{imgs[k]}'><img loading='lazy' src='{imgs[k]}'></a>"
-            f"</figure>" for k in ("base", "head", "diff") if imgs.get(k))
+            f"<figure><figcaption>{label.get(k, k)}</figcaption><a href='{imgs[k]}'><img loading='lazy' "
+            f"src='{imgs[k]}'></a></figure>" for k in ("base", "head", "diff") if imgs.get(k))
         cards.append(f"<section class='card {r['kind']}'><h3><span class='mode'>{r['mode']}</span> "
                      f"{esc(story)} <span class='what'>{what}</span></h3>"
                      f"{''.join(notes)}<div class='figs'>{figs}</div></section>")
-    title = f"storybook: {head.commit[:12]} vs {base.commit[:12]}"
+    title = (f"storybook: {head.commit[:12]} in place vs fresh" if args.leaks
+             else f"storybook: {head.commit[:12]} vs {base.commit[:12]}")
     built = lambda b: f", built {esc(b.built())}" if b.built() else ""  # noqa: E731
     logs = "".join(f" · <a href='{n}'>{n}</a>" for n in ("head-server.log", "base-server.log") if (path / n).exists())
+    builds_meta = (f"{esc(head.commit)}{built(head)}" if args.leaks else
+                   f"base {esc(base.commit)} ({esc(args.compare)}){built(base)} · head {esc(head.commit)}{built(head)}")
     again = [r for r in results if r.get("retried")]
     retried = (f"<p class='note'>{len(again)} passed on a second try in a fresh browser, after the checker's own "
                "failure: " + "; ".join(f"{r['mode']} {esc(r['route'].removeprefix('/storybook/'))} "
                                       f"({esc(first_line(r['retried'][0], 200))})" for r in again) + "</p>"
                if again else "")
+    overturned = [r for r in results if (r.get("recheck") or {}).get("overturned")]
+    if overturned:
+        retried += (f"<p class='note'>{len(overturned)} overturned by a fresh capture: " + "; ".join(
+            f"{r['mode']} {esc(r['route'].removeprefix('/storybook/'))} (in place {r['recheck']['kind']}, "
+            f"fresh {r['kind']})" for r in overturned) + "</p>")
     doc = f"""<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title>
@@ -1845,34 +2153,43 @@ pre {{ white-space: pre-wrap; font-size: 12px; margin: 4px 0; }}
 .note {{ color: var(--muted); margin: 4px 0; }}
 </style></head><body>
 <h1>{esc(title)}</h1>
-<p class="meta">base {esc(base.commit)} ({esc(args.compare)}){built(base)} · head {esc(head.commit)}{built(head)}
+<p class="meta">{builds_meta}
  · tolerance {args.tolerance} per channel · settle {args.settle} ms · {elapsed:.0f} s{logs}</p>
+<p class="meta">{esc(capture_note(args))}</p>
 {retried}
 <table><tr><th>mode</th><th>changed</th><th>unchanged</th><th>added</th><th>removed</th><th>failing</th>
-<th>skipped</th></tr>{summary}</table>
+<th>skipped</th><th>rechecked</th><th>overturned</th></tr>{summary}</table>
 {''.join(cards) or '<p>No story changed.</p>'}
 </body></html>
 """
     (path / "index.html").write_text(doc)
+    rechecked, overturned = rechecks(results)
     (path / "report.json").write_text(json.dumps({
-        "base": {"commit": base.commit, "ref": args.compare, "built": base.built()},
-        "head": {"commit": head.commit, "built": head.built()},
+        "base": {"commit": base.commit, "ref": None if args.leaks else args.compare, "built": base.built(),
+                 "label": base.label},
+        "head": {"commit": head.commit, "built": head.built(), "label": head.label},
+        "capture": capture_note(args), "navigate": bool(args.navigate), "rechecked": rechecked,
+        "overturned": overturned,
         "tolerance": args.tolerance, "modes": modes, "elapsed_s": round(elapsed, 1),
         "stories": [{k: v for k, v in r.items() if k not in ("shots", "diff")}
                     | {"status": {s: v["status"] for s, v in r.get("shots", {}).items()},
+                       "capture_s": {s: round(v.get("time", 0), 2) for s, v in r.get("shots", {}).items()},
+                       "inplace": [s for s, v in r.get("shots", {}).items() if v.get("inplace")],
                        "errors": {s: v["errors"][:3] for s, v in r.get("shots", {}).items() if v["errors"]},
                        "unstable": [s for s, v in r.get("shots", {}).items() if v.get("unstable")]}
                     for r in results]}, indent=1) + "\n")
     return path / "index.html"
 
 
-def print_compare(results, builds, modes, report, elapsed, times, ref):
-    kinds =("changed", "added", "removed", "failing", "skipped", "unchanged")
-    print(f"{'mode':{MODE_WIDTH}}  {'stories':>7}  " + "  ".join(f"{k:>9}" for k in kinds) + "  done at")
+def print_compare(results, builds, modes, report, elapsed, times, args):
+    kinds = ("changed", "added", "removed", "failing", "skipped", "unchanged")
+    print(f"{'mode':{MODE_WIDTH}}  {'stories':>7}  " + "  ".join(f"{k:>9}" for k in kinds)
+          + f"  {'rechecked':>9}  {'overturned':>10}  done at")
     for m in modes:
         rs = [r for r in results if r["mode"] == m]
+        again, overturned = rechecks(rs)
         print(f"{m:{MODE_WIDTH}}  {len(rs):7}  " + "  ".join(f"{sum(r['kind'] == k for r in rs):9}" for k in kinds)
-              + f"  {times.get(m, 0):.0f} s")
+              + f"  {again:9}  {overturned:10}  {times.get(m, 0):.0f} s")
     changed = sorted((r for r in results if r["kind"] == "changed"), key=lambda r: -r["ratio"])
     if changed:
         print("\nchanged, by the share of pixels:")
@@ -1883,6 +2200,7 @@ def print_compare(results, builds, modes, report, elapsed, times, ref):
                   f"{100 * r['ratio']:6.2f}%  {r['changed']:>9,} px  in {cw}x{ch} at {x},{y}")
         if len(changed) > 40:
             print(f"  ... and {len(changed) - 40} more")
+    labels = {b.name: b.label for b in builds}
     for kind in ("added", "removed", "failing", "skipped"):
         rs = [r for r in results if r["kind"] == kind]
         if rs:
@@ -1890,26 +2208,39 @@ def print_compare(results, builds, modes, report, elapsed, times, ref):
             for r in rs[:40]:
                 detail = ""
                 if kind == "failing":
-                    detail = "; ".join(f"{s}: {v['error']}" for s, v in r["shots"].items() if v["status"] != "ok")
+                    detail = "; ".join(f"{labels[s]}: {v['error']}" for s, v in r["shots"].items()
+                                       if v["status"] != "ok")
                 elif kind == "skipped":
                     detail = r["reason"]
                 print(f"  {r['mode']:{MODE_WIDTH}}  {r['route'].removeprefix('/storybook/')}  {detail}")
             if len(rs) > 40:
                 print(f"  ... and {len(rs) - 40} more")
+    overturned = [r for r in results if (r.get("recheck") or {}).get("overturned")]
+    if overturned:
+        print("\noverturned by a fresh capture (in place, then fresh):")
+        for r in overturned:
+            print(f"  {r['mode']:{MODE_WIDTH}}  {r['route'].removeprefix('/storybook/')}  "
+                  f"{r['recheck']['kind']} ({first_line(r['recheck']['detail'], 120)}) -> {r['kind']}")
     again = [r for r in results if r.get("retried")]
     if again:
         print("\npassed on a second try, after the checker's own failure:")
         for r in again:
-            print(f"  {r['mode']:{MODE_WIDTH}}  {r['route'].removeprefix('/storybook/')}  {first_line(r['retried'][0], 200)}")
+            print(f"  {r['mode']:{MODE_WIDTH}}  {r['route'].removeprefix('/storybook/')}  "
+                  f"{first_line(r['retried'][0], 200)}")
     unstable = [(r, s) for r in results for s, v in r.get("shots", {}).items() if v.get("unstable")]
     if unstable:
         print("\nno two shots in a row matched:")
         for r, side in unstable:
-            print(f"  {r['mode']:{MODE_WIDTH}}  {r['route'].removeprefix('/storybook/')}  ({side})")
-    print(f"\n{len({r['route'] for r in results})} stories in {len(modes)} mode(s) compared in {elapsed:.0f} s")
+            print(f"  {r['mode']:{MODE_WIDTH}}  {r['route'].removeprefix('/storybook/')}  ({labels[side]})")
+    rechecked, overturned = rechecks(results)
+    print(f"\n{len({r['route'] for r in results})} stories in {len(modes)} mode(s) compared in {elapsed:.0f} s: "
+          f"{capture_note(args)}; {rechecked} rechecked fresh, {overturned} of them overturned")
     head, base = builds
     built = lambda b: f" (built {b.built()})" if b.built() else ""  # noqa: E731
-    print(f"head {head.commit}{built(head)}\nbase {base.commit} ({ref}){built(base)}")
+    if args.leaks:
+        print(f"build {head.commit}{built(head)}, in place vs fresh")
+    else:
+        print(f"head {head.commit}{built(head)}\nbase {base.commit} ({args.compare}){built(base)}")
     print(f"report: {report}")
 
 
@@ -1919,11 +2250,12 @@ def compare_main(args, exe, work):
     modes = list(ALL_MODES) if args.all_modes else [
         next(m for m, td in MODES.items() if td == (args.theme, args.device))]
     base_port = args.base_port or (args.port + 1 if args.port else None)
-    if not base_port:
+    if not base_port and not args.leaks:
         sys.exit("check: --compare with --url needs --base-port")
     # The report's directory from the start: the servers log into it.
+    against = "leaks" if args.leaks else f"vs-{resolve(args.compare)[:8]}"
     report_dir = (Path(args.report) if args.report else REPORTS / (
-        f"{time.strftime('%Y%m%dT%H%M%S')}-{git('rev-parse', 'HEAD')[:8]}-vs-{resolve(args.compare)[:8]}")).resolve()
+        f"{time.strftime('%Y%m%dT%H%M%S')}-{git('rev-parse', 'HEAD')[:8]}-{against}")).resolve()
     made = not report_dir.exists()
     report_dir.mkdir(parents=True, exist_ok=True)
     servers, browsers, ran = [], [], False
@@ -1934,7 +2266,7 @@ def compare_main(args, exe, work):
         else:
             head_url = args.url.rstrip("/").removesuffix("/devtools.html")
         new_browser = lambda i: Browser(exe, work, i, VIEWPORTS["pc"], COMPARE_FLAGS)
-        browsers.append(new_browser(0))
+        browsers.append(start_browser(new_browser, 0))
         # The head first: one that isn't the tree's is refused before the
         # base builds.
         head = Build("head", head_url, None, protocol_of(ROOT))
@@ -1946,18 +2278,31 @@ def compare_main(args, exe, work):
                 cure += f" (and does {args.url} serve {ROOT / 'target' / 'console' / 'dist'}?)"
             print(f"check: {why}: {cure}", file=sys.stderr)
             return 2
-        sha, dist, base_protocol = build_base(args.compare, args.rebuild_base)
-        servers.append(start_server(base_port, report_dir, dist=dist, log_name="base-server.log"))
-        base = Build("base", servers[-1][2], sha, base_protocol)
-        base.index = load_index(browsers[0], base.url, base.index_route())
-        said = (base.index.get("build") or {}).get("commit")
-        if said and said != sha:
-            print(f"check: the base build in {dist} says it is of {said[:12]}, not {sha[:12]} ({args.compare}): "
-                  "--rebuild-base builds it again", file=sys.stderr)
-            return 2
+        if args.leaks:
+            # The tree's build twice over: its stories switched to in place
+            # (head) and each in a fresh document (base).
+            head.label = "in place"
+            base = Build("base", head.url, head.commit, head.protocol, fresh=True)
+            base.label = "fresh"
+            base.index = head.index
+            if not head.switches():
+                print("check: --leaks: the build's frames can't switch stories in place", file=sys.stderr)
+                return 2
+            print(f"check: {head.commit[:12]} (built {head.built()}): each story in place and fresh; "
+                  f"the report and the server's log in {report_dir}", file=sys.stderr)
+        else:
+            sha, dist, base_protocol = build_base(args.compare, args.rebuild_base)
+            servers.append(start_server(base_port, report_dir, dist=dist, log_name="base-server.log"))
+            base = Build("base", servers[-1][2], sha, base_protocol)
+            base.index = load_index(browsers[0], base.url, base.index_route())
+            said = (base.index.get("build") or {}).get("commit")
+            if said and said != sha:
+                print(f"check: the base build in {dist} says it is of {said[:12]}, not {sha[:12]} "
+                      f"({args.compare}): --rebuild-base builds it again", file=sys.stderr)
+                return 2
+            print(f"check: head {head.commit[:12]} (built {head.built()}) vs base {sha[:12]} ({args.compare}); "
+                  f"the report and the servers' logs in {report_dir}", file=sys.stderr)
         builds = (head, base)
-        print(f"check: head {head.commit[:12]} (built {head.built()}) vs base {sha[:12]} ({args.compare}); "
-              f"the report and the servers' logs in {report_dir}", file=sys.stderr)
         started, ran = time.monotonic(), True
 
         prefixes = [o if o.startswith("/") else f"/storybook/{o}" for o in args.only]
@@ -1968,10 +2313,14 @@ def compare_main(args, exe, work):
         if not routes:
             print(f"check: no story's route starts with {' or '.join(prefixes)}", file=sys.stderr)
             return 2
-        tasks = [(m, r) for m in modes for r in routes]
+        args.navigate = not args.fresh and all(b.switches() for b in builds)
+        if not args.fresh and not args.navigate:
+            args.why_fresh = "the base build's frames can't switch stories in place"
+            print(f"check: {args.why_fresh}: every story is captured in a fresh document", file=sys.stderr)
+        total = len(modes) * len(routes)
+        tasks = [(m, b) for m in modes for b in batches(routes, args.jobs)]
         jobs = max(1, min(args.jobs, len(tasks)))
-        with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
-            browsers += list(pool.map(new_browser, range(1, jobs)))
+        start_browsers(new_browser, range(1, jobs), browsers)
         for b in browsers:
             b.enable_capture()
         todo = queue.Queue()
@@ -1980,44 +2329,59 @@ def compare_main(args, exe, work):
         results, lock = [], threading.Lock()
         mode_done = {}
 
+        def attempt(slot, mode, route, fresh):
+            # The checker's own failure (the browser stalled or went, a
+            # request never answered) gets a fresh browser and one more
+            # try; each is said as it happens, and a story that passes on
+            # its second try keeps its first's in `retried`.
+            retried = []
+            for n in range(2):
+                try:
+                    r = compare_story(browsers[slot], builds, mode, route, args, fresh)
+                    if retried:
+                        r["retried"] = retried
+                    return r
+                except CHECKER_ERRORS as e:
+                    error = f"checker: {e}"
+                    side = getattr(e, "side", "head")
+                    r = {"mode": mode, "route": route, "kind": "failing", "time": 0.0, "checker": str(e),
+                         "shots": {side: {"status": "FAIL", "error": error.splitlines()[0],
+                                          "errors": [error], "png": None}}}
+                    retried.append(f"{side}: {error}")
+                    print(f"check: {mode} {route}: {side}: {error}"
+                          + ("; trying again in a fresh browser" if not n else ""), file=sys.stderr)
+                    browsers[slot].close()
+                    try:
+                        browsers[slot] = start_browser(new_browser, slot)
+                        browsers[slot].enable_capture()
+                    except (RuntimeError, CDPError, TimeoutError, OSError) as e:
+                        r["checker"] += f"; no fresh browser: {e}"
+                        return r
+            return r
+
         def worker(slot):
             while True:
                 try:
-                    mode, route = todo.get_nowait()
+                    mode, batch = todo.get_nowait()
                 except queue.Empty:
                     return
-                # The checker's own failure (the browser stalled or went, a
-                # request never answered) gets a fresh browser and one more
-                # try; each is said as it happens, and a story that passes
-                # on its second try keeps its first's in `retried`.
-                retried = []
-                for attempt in range(2):
-                    try:
-                        r = compare_story(browsers[slot], builds, mode, route, args)
-                        if retried:
-                            r["retried"] = retried
-                        break
-                    except CHECKER_ERRORS as e:
-                        error = f"checker: {e}"
-                        side = getattr(e, "side", "head")
-                        r = {"mode": mode, "route": route, "kind": "failing", "time": 0.0, "checker": str(e),
-                             "shots": {side: {"status": "FAIL", "error": error.splitlines()[0],
-                                              "errors": [error], "png": None}}}
-                        retried.append(f"{side}: {error}")
-                        print(f"check: {mode} {route}: {side}: {error}"
-                              + ("; trying again in a fresh browser" if not attempt else ""), file=sys.stderr)
-                        browsers[slot].close()
-                        try:
-                            browsers[slot] = new_browser(slot)
-                            browsers[slot].enable_capture()
-                        except (RuntimeError, CDPError, TimeoutError, OSError) as e:
-                            r["checker"] += f"; no fresh browser: {e}"
-                            break
-                with lock:
-                    results.append(r)
-                    mode_done[mode] = time.monotonic() - started
-                    print(f"[{len(results)}/{len(tasks)}] {r['kind']:9} {r['time']:4.1f}s {mode:{MODE_WIDTH}} {route}",
-                          file=sys.stderr)
+                browsers[slot].retire()
+                for route in batch:
+                    r = attempt(slot, mode, route, args.fresh)
+                    if needs_recheck(r, args):
+                        nav = r
+                        r = attempt(slot, mode, route, True)
+                        r["time"] += nav["time"]
+                        r["recheck"] = recheck_of(nav, r)
+                    if leaves_state(r):
+                        browsers[slot].retire()
+                    with lock:
+                        results.append(r)
+                        mode_done[mode] = time.monotonic() - started
+                        again = (f"  (in place {r['recheck']['kind']}, fresh {r['kind']})"
+                                 if r.get("recheck") else "")
+                        print(f"[{len(results)}/{total}] {r['kind']:9} {r['time']:4.1f}s {mode:{MODE_WIDTH}} "
+                              f"{route}{again}", file=sys.stderr)
 
         threads = [threading.Thread(target=worker, args=(i,), daemon=True) for i in range(jobs)]
         for t in threads:
@@ -2027,15 +2391,14 @@ def compare_main(args, exe, work):
         elapsed = time.monotonic() - started
         results.sort(key=lambda r: (modes.index(r["mode"]), r["route"]))
         report = write_report(report_dir, results, builds, modes, args, elapsed)
-        print_compare(results, builds, modes, report, elapsed, mode_done, args.compare)
+        print_compare(results, builds, modes, report, elapsed, mode_done, args)
         if any(r.get("checker") for r in results):
             return 2
         if args.fail_on_diff and any(r["kind"] not in ("unchanged", "skipped") for r in results):
             return 1
         return 0
     finally:
-        for b in browsers:
-            b.close()
+        Browser.close_all()
         for proc, log, _ in servers:
             proc.terminate()
             try:
@@ -2068,8 +2431,12 @@ def main(argv=None):
     p.add_argument("--timeout", type=float, default=20, metavar="S", help="per story (default 20)")
     p.add_argument("--chromium", help="the browser (default the snap's, else chromium on PATH)")
     p.add_argument("-v", "--verbose", action="store_true", help="every error of a failing story")
+    p.add_argument("--fresh", action="store_true",
+                   help="every story in a fresh document (else switched to in place, rechecked fresh)")
     cmp = p.add_argument_group("compare mode")
     cmp.add_argument("--compare", metavar="REF", help="diff every story's screenshot against REF's build")
+    cmp.add_argument("--leaks", action="store_true",
+                     help="diff each story's capture switched to in place against its fresh one, in this build")
     cmp.add_argument("--base-port", type=int, metavar="N", help="the base's server (default --port + 1)")
     cmp.add_argument("--all-modes", action="store_true",
                      help="dark, light, portrait, landscape and the Android tablet's two in one run "
@@ -2080,15 +2447,24 @@ def main(argv=None):
     cmp.add_argument("--fail-on-diff", action="store_true", help="exit 1 when any story differs")
     cmp.add_argument("--rebuild-base", action="store_true", help="build REF again even if cached")
     args = p.parse_args(argv)
-    if args.compare and (args.list or args.screenshots or args.strict or args.files):
-        p.error("--compare takes none of --list, --screenshots, --strict, --files")
-    if args.compare and args.all_modes and (args.theme, args.device) != ("dark", "pc"):
+    comparing = args.compare or args.leaks
+    if args.compare and args.leaks:
+        p.error("--leaks compares this build with itself: no --compare")
+    if args.leaks and (args.fresh or args.base_port or args.rebuild_base):
+        p.error("--leaks takes none of --fresh, --base-port, --rebuild-base")
+    if comparing and (args.list or args.screenshots or args.strict or args.files):
+        p.error("--compare and --leaks take none of --list, --screenshots, --strict, --files")
+    if comparing and args.all_modes and (args.theme, args.device) != ("dark", "pc"):
         p.error("--all-modes takes no --theme or --device")
-    if args.compare and (args.theme, args.device) not in MODES.values():
+    if comparing and (args.theme, args.device) not in MODES.values():
         p.error(f"--compare's modes are {', '.join(f'{t}/{d}' for t, d in MODES.values())}")
 
+    # A run told to stop closes its browsers and servers on the way out (each
+    # Chromium is in a session of its own, which a killed run would orphan).
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda n, _: sys.exit(128 + n))
     exe = find_chromium(args.chromium)
-    if args.compare and (why := head_modules()):
+    if comparing and (why := head_modules()):
         print(f"check: {why}", file=sys.stderr)
         return 2
     if args.build:
@@ -2100,7 +2476,7 @@ def main(argv=None):
     profiles_root = (Path.home() / "snap" / "chromium" / "common") if "/snap/" in exe else Path(tempfile.gettempdir())
     profiles_root.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="storybook-check-", dir=profiles_root))
-    if args.compare:
+    if comparing:
         try:
             return compare_main(args, exe, work)
         finally:
@@ -2119,7 +2495,7 @@ def main(argv=None):
                 base = base.removesuffix("/devtools.html")
 
         viewport = VIEWPORTS[args.device]
-        browsers.append(Browser(exe, work, 0, viewport))
+        browsers.append(start_browser(lambda i: Browser(exe, work, i, viewport), 0))
         index = load_index(browsers[0], base)
         prefixes = [o if o.startswith("/") else f"/storybook/{o}" for o in args.only]
         stories = [s for s in index["stories"] if not prefixes or any(s["route"].startswith(x) for x in prefixes)]
@@ -2134,29 +2510,50 @@ def main(argv=None):
             print("\n".join(coverage_lines(index, args.files)))
             return 0
 
-        jobs = max(1, min(args.jobs, len(stories)))
-        with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
-            browsers += list(pool.map(lambda i: Browser(exe, work, i, viewport), range(1, jobs)))
+        args.navigate = not args.fresh and bool(index.get("switches"))
+        if not args.fresh and not args.navigate:
+            args.why_fresh = "the build's frames can't switch stories in place"
+        tasks = batches(stories, args.jobs)
+        jobs = max(1, min(args.jobs, len(tasks)))
+        start_browsers(lambda i: Browser(exe, work, i, viewport), range(1, jobs), browsers)
         todo = queue.Queue()
-        for s in stories:
-            todo.put(s)
+        for t in tasks:
+            todo.put(t)
         results, lock = [], threading.Lock()
+
+        def attempt(browser, story, fresh):
+            try:
+                return check_story(browser, base, story, args, fresh)
+            except (CDPError, TimeoutError, ConnectionError, json.JSONDecodeError) as e:
+                return {"route": story["route"], "status": "FAIL", "error": f"checker: {e}",
+                        "errors": [f"checker: {e}"], "allowed": 0, "time": 0.0}
 
         def worker(browser):
             while True:
                 try:
-                    story = todo.get_nowait()
+                    batch = todo.get_nowait()
                 except queue.Empty:
                     return
-                try:
-                    r = check_story(browser, base, story, args)
-                except (CDPError, TimeoutError, ConnectionError, json.JSONDecodeError) as e:
-                    r = {"route": story["route"], "status": "FAIL", "error": f"checker: {e}",
-                         "errors": [f"checker: {e}"], "allowed": 0, "time": 0.0}
-                with lock:
-                    results.append(r)
-                    print(f"[{len(results)}/{len(stories)}] {r['status']:4} {r['time']:4.1f}s {r['route']}",
-                          file=sys.stderr)
+                browser.retire()
+                for story in batch:
+                    r = attempt(browser, story, args.fresh)
+                    # A story that fails in place is rechecked in a fresh
+                    # document, whose verdict it takes.
+                    if r["status"] != "ok" and args.navigate and r.get("inplace", True):
+                        nav = r
+                        r = attempt(browser, story, True)
+                        r["time"] += nav["time"]
+                        r["recheck"] = {"kind": "FAIL", "overturned": r["status"] == "ok",
+                                        "detail": nav["error"]}
+                    # Errors (allowed ones too: React and i18next say a
+                    # warning once a realm) end the document's run.
+                    if r.get("recorded") or r["status"] != "ok":
+                        browser.retire()
+                    with lock:
+                        results.append(r)
+                        again = f"  (in place: {first_line(r['recheck']['detail'], 80)})" if r.get("recheck") else ""
+                        print(f"[{len(results)}/{len(stories)}] {r['status']:4} {r['time']:4.1f}s {r['route']}{again}",
+                              file=sys.stderr)
 
         threads = [threading.Thread(target=worker, args=(b,), daemon=True) for b in browsers[:jobs]]
         for t in threads:
@@ -2168,9 +2565,12 @@ def main(argv=None):
         print()
         failed = [r for r in results if r["status"] != "ok"]
         times = [r["time"] for r in results]
+        rechecked, overturned = rechecks(results)
+        how = (f"{rechecked} failing in place rechecked fresh, {overturned} of them overturned" if args.navigate
+               else capture_note(args))
         print(f"stories: {len(results) - len(failed)} ok, {len(failed)} failed of {len(results)} "
               f"(theme {args.theme}, device {args.device}); {time.monotonic() - started:.1f} s total, "
-              f"{(sum(times) / len(times)) if times else 0:.1f} s a story on {jobs} browsers")
+              f"{(sum(times) / len(times)) if times else 0:.1f} s a story on {jobs} browsers; {how}")
         print("\n".join(coverage_lines(index, args.files)))
         module_errors = [m for m in index["modules"] if m.get("error")]
         catalog_failed = args.strict and (
@@ -2180,8 +2580,7 @@ def main(argv=None):
             print("strict: the catalog has missing or stale files")
         return 1 if failed or module_errors or catalog_failed else 0
     finally:
-        for b in browsers:
-            b.close()
+        Browser.close_all()
         if server:
             proc, log, _ = server
             proc.terminate()

@@ -40,6 +40,13 @@ export interface StoryVisual {
   mask?: string[];
   /** Not compared at all. */
   skip?: boolean;
+  /**
+   * Captured in a document of its own, never switched to in place nor
+   * followed by another story in its document: for a story whose capture
+   * takes something from the stories before it, or leaves something to
+   * those after, that the frame's switch doesn't put back.
+   */
+  fresh?: boolean;
 }
 
 /**

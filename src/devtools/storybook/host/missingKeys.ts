@@ -46,6 +46,13 @@ const flush = () => {
 
 let installed = false;
 
+/** Forgets the keys reported so far: a story a frame switches to in place
+ * reports the keys it renders as a fresh document would. */
+export const forgetReportedKeys = (): void => {
+  reported.clear();
+  pending = [];
+};
+
 /** Reports the keys this document's stories render that en lacks. */
 export const reportMissingKeys = (): void => {
   if (installed) {

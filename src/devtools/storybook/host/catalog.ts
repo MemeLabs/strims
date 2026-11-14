@@ -130,6 +130,10 @@ export interface IndexData {
    * webpack config was read (BUILD_TIME, ms since the epoch), so
    * hack/storybook/check.py --compare knows a build that isn't the tree's. */
   build: { commit: string; time: number };
+  /** A story frame document switches to another story of its theme and
+   * device in place (Frame.tsx's FrameSwitch), so hack/storybook/check.py
+   * can capture this build's stories in navigation mode. */
+  switches: true;
 }
 
 // Loads every story module and resolves the catalog against them.
@@ -148,6 +152,7 @@ export const buildIndex = async (): Promise<IndexData> => {
     })),
     hostMask: HOST_MASK,
     build: { commit: GIT_HASH, time: BUILD_TIME },
+    switches: true,
   };
   const covering = new Map<string, string[]>();
   const skips = new Map<string, { reason: string; module: string }>();
