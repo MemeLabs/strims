@@ -80,10 +80,10 @@ commit, with +dirty when those inputs have changes git sees (the build
 holds them). A base whose index names another commit than REF's is
 refused too (`--rebuild-base`). A
 mode is a theme and a device: dark (pc), light (pc), portrait and
-landscape (dark), and each tablet (dark); `--all-modes` runs the first
-four, else `--theme` and `--device` name one. A build from before the
-per-story frames loads its stories in the storybook page at 1600x1100,
-as it did then, shot by its story root.
+landscape (dark), and each tablet (dark); `--all-modes` runs all but the
+iPad's two (ALL_MODES), else `--theme` and `--device` name one. A build
+from before the per-story frames loads its stories in the storybook page
+at 1600x1100, as it did then, shot by its story root.
 
 A capture holds everything that moves still, so a build compared with
 itself diffs to nothing: before its own scripts each document gets a
@@ -191,11 +191,15 @@ EXTRA_SETTLE_S = 3.0
 # raster's edges blend a few levels apart: a badge's corners over an
 # image), and colours are sRGB's.
 COMPARE_FLAGS = ["--disable-threaded-animation", "--disable-partial-raster", "--force-color-profile=srgb"]
-# Compare mode. A mode is a theme and a device; --all-modes runs ALL_MODES.
-# The tablets' modes are --device's alone: each costs as much as another.
+# Compare mode. A mode is a theme and a device; --all-modes runs ALL_MODES,
+# the Android tablet's two among them but not the iPad's, which take the same
+# portable layout at about the same sizes.
 ALL_MODES = {"dark": ("dark", "pc"), "light": ("light", "pc"),
-             "portrait": ("dark", "portrait"), "landscape": ("dark", "landscape")}
+             "portrait": ("dark", "portrait"), "landscape": ("dark", "landscape"),
+             "tablet_portrait": ("dark", "tablet_portrait"), "tablet_landscape": ("dark", "tablet_landscape")}
 MODES = {**ALL_MODES, **{d: ("dark", d) for d in TABLETS}}
+# A mode's name in the printed tables.
+MODE_WIDTH = max(map(len, MODES))
 # The storybook page's own size, which a build from before the per-story
 # frames (no src/devtools/storybook/host/protocol.ts) renders its stories in.
 PAGE_VIEWPORT = (1600, 1100)
@@ -1850,10 +1854,10 @@ pre {{ white-space: pre-wrap; font-size: 12px; margin: 4px 0; }}
 
 def print_compare(results, builds, modes, report, elapsed, times, ref):
     kinds =("changed", "added", "removed", "failing", "skipped", "unchanged")
-    print(f"{'mode':10}  {'stories':>7}  " + "  ".join(f"{k:>9}" for k in kinds) + "  done at")
+    print(f"{'mode':{MODE_WIDTH}}  {'stories':>7}  " + "  ".join(f"{k:>9}" for k in kinds) + "  done at")
     for m in modes:
         rs = [r for r in results if r["mode"] == m]
-        print(f"{m:10}  {len(rs):7}  " + "  ".join(f"{sum(r['kind'] == k for r in rs):9}" for k in kinds)
+        print(f"{m:{MODE_WIDTH}}  {len(rs):7}  " + "  ".join(f"{sum(r['kind'] == k for r in rs):9}" for k in kinds)
               + f"  {times.get(m, 0):.0f} s")
     changed = sorted((r for r in results if r["kind"] == "changed"), key=lambda r: -r["ratio"])
     if changed:
@@ -1861,7 +1865,7 @@ def print_compare(results, builds, modes, report, elapsed, times, ref):
         width = max(len(r["route"]) for r in changed[:40]) - len("/storybook/")
         for r in changed[:40]:
             x, y, cw, ch = r["box"]
-            print(f"  {r['mode']:10}  {r['route'].removeprefix('/storybook/').ljust(width)}  "
+            print(f"  {r['mode']:{MODE_WIDTH}}  {r['route'].removeprefix('/storybook/').ljust(width)}  "
                   f"{100 * r['ratio']:6.2f}%  {r['changed']:>9,} px  in {cw}x{ch} at {x},{y}")
         if len(changed) > 40:
             print(f"  ... and {len(changed) - 40} more")
@@ -1875,19 +1879,19 @@ def print_compare(results, builds, modes, report, elapsed, times, ref):
                     detail = "; ".join(f"{s}: {v['error']}" for s, v in r["shots"].items() if v["status"] != "ok")
                 elif kind == "skipped":
                     detail = r["reason"]
-                print(f"  {r['mode']:10}  {r['route'].removeprefix('/storybook/')}  {detail}")
+                print(f"  {r['mode']:{MODE_WIDTH}}  {r['route'].removeprefix('/storybook/')}  {detail}")
             if len(rs) > 40:
                 print(f"  ... and {len(rs) - 40} more")
     again = [r for r in results if r.get("retried")]
     if again:
         print("\npassed on a second try, after the checker's own failure:")
         for r in again:
-            print(f"  {r['mode']:10}  {r['route'].removeprefix('/storybook/')}  {first_line(r['retried'][0], 200)}")
+            print(f"  {r['mode']:{MODE_WIDTH}}  {r['route'].removeprefix('/storybook/')}  {first_line(r['retried'][0], 200)}")
     unstable = [(r, s) for r in results for s, v in r.get("shots", {}).items() if v.get("unstable")]
     if unstable:
         print("\nno two shots in a row matched:")
         for r, side in unstable:
-            print(f"  {r['mode']:10}  {r['route'].removeprefix('/storybook/')}  ({side})")
+            print(f"  {r['mode']:{MODE_WIDTH}}  {r['route'].removeprefix('/storybook/')}  ({side})")
     print(f"\n{len({r['route'] for r in results})} stories in {len(modes)} mode(s) compared in {elapsed:.0f} s")
     head, base = builds
     built = lambda b: f" (built {b.built()})" if b.built() else ""  # noqa: E731
@@ -1998,7 +2002,7 @@ def compare_main(args, exe, work):
                 with lock:
                     results.append(r)
                     mode_done[mode] = time.monotonic() - started
-                    print(f"[{len(results)}/{len(tasks)}] {r['kind']:9} {r['time']:4.1f}s {mode:9} {route}",
+                    print(f"[{len(results)}/{len(tasks)}] {r['kind']:9} {r['time']:4.1f}s {mode:{MODE_WIDTH}} {route}",
                           file=sys.stderr)
 
         threads = [threading.Thread(target=worker, args=(i,), daemon=True) for i in range(jobs)]
@@ -2054,7 +2058,8 @@ def main(argv=None):
     cmp.add_argument("--compare", metavar="REF", help="diff every story's screenshot against REF's build")
     cmp.add_argument("--base-port", type=int, metavar="N", help="the base's server (default --port + 1)")
     cmp.add_argument("--all-modes", action="store_true",
-                     help="dark, light, portrait and landscape in one run (else --theme and --device's)")
+                     help="dark, light, portrait, landscape and the Android tablet's two in one run "
+                          "(else --theme and --device's)")
     cmp.add_argument("--tolerance", type=int, default=2, metavar="N",
                      help="a channel's change that still counts as the same pixel (default 2 of 255)")
     cmp.add_argument("--report", metavar="DIR", help="the report's directory (default under target/storybook/compare)")
