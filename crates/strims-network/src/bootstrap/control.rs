@@ -24,10 +24,12 @@ use strims_dao::schema::network::{BootstrapClients, BootstrapConfig, Networks};
 use strims_dao::{Recv, ReplicatedStore, Singleton, StoreEvent, Table};
 use strims_kademlia::ID;
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
 use strims_proto::network::v1::bootstrap::{
     BootstrapPeer, BootstrapPeerGetPublishEnabledRequest, BootstrapPeerPublishRequest,
     PeerServiceClient, bootstrap_client, register_peer_service_service,
 };
+use strims_proto::network::v1::errors::ErrorCode;
 use strims_proto::profile::v1::Profile;
 use strims_proto::service::Error as RpcError;
 use strims_proto::types::{CertificateRequestBody, KeyType, KeyUsage};
@@ -36,9 +38,10 @@ use strims_rpc::{Client, RetryClient, Router, Timer};
 use super::schedule::{Dial, Schedule};
 use super::service::PeerService;
 use super::{Config, Failure, Host};
+use crate::refuse;
 
-fn rpc_error(e: impl std::fmt::Display) -> RpcError {
-    RpcError::new(0, e.to_string())
+fn rpc_error(e: impl ErrorCoded) -> RpcError {
+    e.to_rpc()
 }
 
 /// A linked peer.
@@ -258,9 +261,12 @@ impl<K: Kv, H: Host, T: Timer> BootstrapControl<K, H, T> {
             let p = peers
                 .values()
                 .find(|p| p.id == peer_id)
-                .ok_or_else(|| rpc_error("peer id not found"))?;
+                .ok_or_else(|| refuse(ErrorCode::PeerNotFound, "peer id not found"))?;
             if p.publishing != Some(true) {
-                return Err(rpc_error("peer does not support network bootstrapping"));
+                return Err(refuse(
+                    ErrorCode::BootstrapUnsupported,
+                    "peer does not support network bootstrapping",
+                ));
             }
             (p.client.clone(), p.profile_key.clone())
         };
@@ -269,16 +275,18 @@ impl<K: Kv, H: Host, T: Timer> BootstrapControl<K, H, T> {
             Networks::get(&mut tx, network_id)
                 .await
                 .map_err(rpc_error)?
-                .ok_or_else(|| rpc_error("network not found"))?
+                .ok_or_else(|| refuse(ErrorCode::NetworkNotFound, "network not found"))?
         };
-        let config = network
-            .server_config
-            .as_ref()
-            .ok_or_else(|| rpc_error("only managed networks can be published"))?;
+        let config = network.server_config.as_ref().ok_or_else(|| {
+            refuse(
+                ErrorCode::NetworkNotManaged,
+                "only managed networks can be published",
+            )
+        })?;
         let key = config
             .key
             .as_ref()
-            .ok_or_else(|| rpc_error("network has no key"))?;
+            .ok_or_else(|| refuse(ErrorCode::NetworkHasNoKey, "network has no key"))?;
         let csr = CertificateRequestBody {
             key: profile_key,
             key_type: KeyType::Ed25519 as i32,
@@ -294,13 +302,13 @@ impl<K: Kv, H: Host, T: Timer> BootstrapControl<K, H, T> {
             s.timer.now(),
             &mut rng,
         )
-        .map_err(rpc_error)?;
+        .map_err(|e| refuse(ErrorCode::Crypto, e.to_string()))?;
         client
             .publish(&BootstrapPeerPublishRequest {
                 certificate: Some(certificate),
             })
             .await
-            .map_err(|e| rpc_error(format!("publishing failed: {e}")))?;
+            .map_err(|e| RpcError::new(e.code(), format!("publishing failed: {e}")))?;
         Ok(())
     }
 

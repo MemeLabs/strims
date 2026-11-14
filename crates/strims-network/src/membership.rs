@@ -11,9 +11,11 @@ use strims_crypto::{
     DEFAULT_CERT_TTL, Error as CryptoError, Issuer, generate_key, new_certificate_request,
     sign_certificate_request, sign_certificate_request_with_network, verify_certificate,
 };
+use strims_proto::ErrorCoded;
 use strims_proto::network::v1::directory::ServerConfig as DirectoryConfig;
 use strims_proto::network::v1::directory::server_config::Integrations;
 use strims_proto::network::v1::directory::server_config::integrations::Swarm;
+use strims_proto::network::v1::errors::ErrorCode;
 use strims_proto::network::v1::{InvitationV0, Network, ServerConfig};
 use strims_proto::profile::v1::Profile;
 use strims_proto::types::{Certificate, Image, KeyUsage};
@@ -36,6 +38,19 @@ pub enum MembershipError {
     Crypto(#[from] CryptoError),
     #[error("invalid certificate: {0}")]
     Certificate(String),
+}
+
+impl ErrorCoded for MembershipError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            MembershipError::NoProfileKey => ErrorCode::NoProfileKey,
+            MembershipError::NoCertificate => ErrorCode::NoCertificate,
+            MembershipError::InvalidInvitation => ErrorCode::InvalidInvitation,
+            MembershipError::Crypto(_) => ErrorCode::Crypto,
+            MembershipError::Certificate(_) => ErrorCode::InvalidCertificate,
+        };
+        code.into()
+    }
 }
 
 fn subject<'a>(profile: &'a Profile, alias: &'a str) -> &'a str {

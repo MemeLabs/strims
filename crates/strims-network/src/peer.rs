@@ -7,6 +7,8 @@ use std::rc::Weak;
 
 use strims_kademlia::ID;
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
+use strims_proto::network::v1::errors::ErrorCode;
 use strims_proto::network::v1::{
     NetworkPeerCloseRequest, NetworkPeerCloseResponse, NetworkPeerNegotiateRequest,
     NetworkPeerNegotiateResponse, NetworkPeerOpenRequest, NetworkPeerOpenResponse,
@@ -17,6 +19,7 @@ use strims_rpc::Timer;
 
 use crate::control::Shared;
 use crate::host::Host;
+use crate::refuse;
 use crate::state::Refusal;
 
 /// Serves one link's requests. Holds the control weakly: the control
@@ -35,12 +38,12 @@ impl<K: Kv, H: Host, T: Timer> PeerService<K, H, T> {
     pub(crate) fn shared(&self) -> Result<std::rc::Rc<Shared<K, H, T>>, RpcError> {
         self.shared
             .upgrade()
-            .ok_or_else(|| RpcError::new(0, "network control stopped"))
+            .ok_or_else(|| refuse(ErrorCode::ControlStopped, "network control stopped"))
     }
 }
 
 pub(crate) fn refused(r: Refusal) -> RpcError {
-    RpcError::new(0, r.to_string())
+    r.to_rpc()
 }
 
 impl<K: Kv, H: Host, T: Timer> NetworkPeerService for PeerService<K, H, T> {

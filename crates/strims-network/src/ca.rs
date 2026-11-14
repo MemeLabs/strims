@@ -42,10 +42,10 @@ use strims_dao::schema::network::{
 };
 use strims_dao::{ReplicatedStore, Table, WriteTx};
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
 use strims_proto::network::v1::ca::ca_find_request::Query;
 use strims_proto::network::v1::errors::ErrorCode;
 use strims_proto::network::v1::{Network, Peer};
-use strims_proto::service::Error as RpcError;
 use strims_proto::types::{Certificate, CertificateBody, CertificateRequest, KeyUsage};
 
 /// The salt the CA's address is published under, with the network's key.
@@ -91,19 +91,21 @@ pub(crate) enum CaError {
     Store(#[from] strims_dao::Error),
 }
 
-impl CaError {
-    pub(crate) fn code(&self) -> ErrorCode {
-        match self {
+impl ErrorCoded for CaError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            CaError::Invalid(_) => ErrorCode::InvalidCaRequest,
+            CaError::NotCa => ErrorCode::NotCa,
             CaError::AliasInUse => ErrorCode::AliasInUse,
             CaError::AliasCooldown => ErrorCode::AliasChangeCooldownViolatied,
             CaError::QuotaExceeded => ErrorCode::InvitationQuotaExceeded,
             CaError::InviterBanned => ErrorCode::InviterBanned,
-            _ => ErrorCode::Unknown,
-        }
-    }
-
-    pub(crate) fn to_rpc(&self) -> RpcError {
-        RpcError::new(self.code(), self.to_string())
+            CaError::Banned => ErrorCode::PeerBanned,
+            CaError::NotFound => ErrorCode::CertificateNotFound,
+            CaError::RateLimited => ErrorCode::TooManyRenewals,
+            CaError::Store(e) => return e.code(),
+        };
+        code.into()
     }
 }
 

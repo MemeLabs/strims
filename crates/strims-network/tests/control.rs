@@ -442,11 +442,11 @@ fn repeated_renewal_failures_notify_once() {
         settle().await;
         tokio::time::sleep((RENEW_RETRY * 3).to_std().unwrap()).await;
         let n = read_network(&member, 110).await;
-        assert_eq!(n.certificate_renewal_error, ErrorCode::Unknown as i32);
+        assert_eq!(n.certificate_renewal_error, ErrorCode::CaNotPublished as i32);
         let failed = read_notifications(&member).await;
         assert_eq!(failed.len(), 1, "{failed:?}");
         assert_eq!(failed[0].status, Status::Error as i32);
-        assert_eq!(failed[0].error_code, ErrorCode::Unknown as i32);
+        assert_eq!(failed[0].error_code, ErrorCode::CaNotPublished as i32);
         assert_eq!(failed[0].subject, Some(network_subject(110)));
         assert!(!failed[0].message.is_empty());
         let mut raised = Vec::new();
@@ -559,6 +559,7 @@ fn find_certificate_answers_locally_and_over_vpn() {
             .await
             .unwrap_err();
         assert_eq!(e.message, "not found");
+        assert_eq!(e.code, ErrorCode::CertificateNotFound as i32);
 
         // with the CA's address withdrawn, the owner still answers from
         // its store, and a member can't reach the CA
@@ -581,6 +582,7 @@ fn find_certificate_answers_locally_and_over_vpn() {
             .await
             .unwrap_err();
         assert_eq!(e.message, "not found");
+        assert_eq!(e.code, ErrorCode::CertificateNotFound as i32);
         let e = alice
             .control
             .find_certificate(&key, by_subject(&bob), false)

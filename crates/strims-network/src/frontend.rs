@@ -23,7 +23,9 @@ use strims_dao::schema::network::{
 };
 use strims_dao::{Recv, Singleton, StoreEvent, Subscription, Table, ref_key};
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
 use strims_proto::network::v1::create_network_from_invitation_request::Invitation as InvitationField;
+use strims_proto::network::v1::errors::ErrorCode;
 use strims_proto::network::v1::network_event::{
     Body, NetworkPeerCountUpdate, NetworkStart, NetworkStop,
 };
@@ -50,16 +52,17 @@ use crate::ca::{self, CaError};
 use crate::control::NetworkControl;
 use crate::host::Host;
 use crate::membership::{network_from_invitation_v0, new_network};
+use crate::refuse;
 
 /// The longest invitation accepted.
 const MAX_INVITATION_BYTES: usize = 64 * 1024;
 
-fn rpc_error(e: impl std::fmt::Display) -> RpcError {
-    RpcError::new(0, e.to_string())
+fn rpc_error(e: impl ErrorCoded) -> RpcError {
+    e.to_rpc()
 }
 
-fn not_found(what: &str) -> RpcError {
-    RpcError::new(0, format!("{what} not found"))
+fn invalid_invitation(e: prost::DecodeError) -> RpcError {
+    refuse(ErrorCode::InvalidInvitation, e.to_string())
 }
 
 /// Serves `strims.network.v1.NetworkFrontend` for a profile's network
@@ -81,7 +84,7 @@ impl<K: Kv, H: Host, T: Timer> NetworkFrontend<K, H, T> {
         let mut peer = NetworkPeers::get(&mut tx, id)
             .await
             .map_err(rpc_error)?
-            .ok_or_else(|| not_found("peer"))?;
+            .ok_or_else(|| refuse(ErrorCode::PeerNotFound, "peer not found"))?;
         f(&mut peer);
         let peer = NetworkPeers::update(&mut tx, peer)
             .await
@@ -96,7 +99,7 @@ impl<K: Kv, H: Host, T: Timer> NetworkFrontend<K, H, T> {
         Networks::get(&mut tx, id)
             .await
             .map_err(rpc_error)?
-            .ok_or_else(|| not_found("network"))
+            .ok_or_else(|| refuse(ErrorCode::NetworkNotFound, "network not found"))
     }
 }
 
@@ -109,18 +112,20 @@ pub fn bind_frontend<K: Kv, H: Host, T: Timer>(router: &Router, control: &Networ
 /// The bytes of an invitation, as the UI passes it: base64 with or
 /// without padding, or raw.
 fn invitation_bytes(field: Option<InvitationField>) -> Result<Vec<u8>, RpcError> {
-    let b = match field.ok_or_else(|| rpc_error("invitation has no content"))? {
+    let b = match field
+        .ok_or_else(|| refuse(ErrorCode::InvalidInvitation, "invitation has no content"))?
+    {
         InvitationField::InvitationB64(s) => {
             let s = s.trim();
             BASE64_NOPAD
                 .decode(s.as_bytes())
                 .or_else(|_| BASE64.decode(s.as_bytes()))
-                .map_err(|_| rpc_error("invitation isn't base64"))?
+                .map_err(|_| refuse(ErrorCode::InvalidInvitation, "invitation isn't base64"))?
         }
         InvitationField::InvitationBytes(b) => b,
     };
     if b.len() > MAX_INVITATION_BYTES {
-        return Err(rpc_error("invitation too large"));
+        return Err(refuse(ErrorCode::InvalidInvitation, "invitation too large"));
     }
     Ok(b)
 }
@@ -157,18 +162,21 @@ impl<K: Kv, H: Host, T: Timer> NetworkFrontendService for NetworkFrontend<K, H, 
         let s = &self.control.shared;
         let config = req
             .server_config
-            .ok_or_else(|| rpc_error("server config missing"))?;
+            .ok_or_else(|| refuse(ErrorCode::ServerConfigMissing, "server config missing"))?;
         let mut tx = s.store.write(s.timer.now()).await.map_err(rpc_error)?;
         let mut network = Networks::get(&mut tx, req.network_id)
             .await
             .map_err(rpc_error)?
-            .ok_or_else(|| not_found("network"))?;
+            .ok_or_else(|| refuse(ErrorCode::NetworkNotFound, "network not found"))?;
         let prev = network
             .server_config
             .as_ref()
-            .ok_or_else(|| rpc_error("network has no server config"))?;
+            .ok_or_else(|| refuse(ErrorCode::NotCa, "network has no server config"))?;
         if prev.key != config.key {
-            return Err(rpc_error("a network's key can't change"));
+            return Err(refuse(
+                ErrorCode::NetworkKeyChanged,
+                "a network's key can't change",
+            ));
         }
         network.server_config = Some(config);
         let network = Networks::update(&mut tx, network)
@@ -188,7 +196,7 @@ impl<K: Kv, H: Host, T: Timer> NetworkFrontendService for NetworkFrontend<K, H, 
         let s = &self.control.shared;
         let mut tx = s.store.write(s.timer.now()).await.map_err(rpc_error)?;
         if !Networks::delete(&mut tx, req.id).await.map_err(rpc_error)? {
-            return Err(not_found("network"));
+            return Err(refuse(ErrorCode::NetworkNotFound, "network not found"));
         }
         tx.commit().await.map_err(rpc_error)?;
         Ok(DeleteNetworkResponse {})
@@ -228,7 +236,12 @@ impl<K: Kv, H: Host, T: Timer> NetworkFrontendService for NetworkFrontend<K, H, 
             let c = BootstrapClients::get(&mut tx, req.bootstrap_client_id)
                 .await
                 .map_err(rpc_error)?
-                .ok_or_else(|| not_found("bootstrap client"))?;
+                .ok_or_else(|| {
+                    refuse(
+                        ErrorCode::BootstrapClientNotFound,
+                        "bootstrap client not found",
+                    )
+                })?;
             bootstrap_clients.push(c);
         }
         let invitation = self
@@ -246,12 +259,16 @@ impl<K: Kv, H: Host, T: Timer> NetworkFrontendService for NetworkFrontend<K, H, 
         req: CreateNetworkFromInvitationRequest,
     ) -> Result<CreateNetworkFromInvitationResponse, RpcError> {
         let s = &self.control.shared;
-        let wrapper =
-            Invitation::decode(invitation_bytes(req.invitation)?.as_slice()).map_err(rpc_error)?;
+        let wrapper = Invitation::decode(invitation_bytes(req.invitation)?.as_slice())
+            .map_err(invalid_invitation)?;
         if wrapper.version != 0 {
-            return Err(rpc_error("unsupported invitation version"));
+            return Err(refuse(
+                ErrorCode::InvalidInvitation,
+                "unsupported invitation version",
+            ));
         }
-        let invitation = InvitationV0::decode(wrapper.data.as_slice()).map_err(rpc_error)?;
+        let invitation =
+            InvitationV0::decode(wrapper.data.as_slice()).map_err(invalid_invitation)?;
         let now = s.timer.now();
         let mut rng = fork(&mut s.rng.borrow_mut());
         let mut tx = s.store.write(now).await.map_err(rpc_error)?;
@@ -316,13 +333,13 @@ impl<K: Kv, H: Host, T: Timer> NetworkFrontendService for NetworkFrontend<K, H, 
     ) -> Result<UpdateAliasResponse, RpcError> {
         let s = &self.control.shared;
         if req.alias.len() > ca::MAX_SUBJECT_LEN {
-            return Err(rpc_error("alias too long"));
+            return Err(refuse(ErrorCode::AliasTooLong, "alias too long"));
         }
         let mut tx = s.store.write(s.timer.now()).await.map_err(rpc_error)?;
         let mut network = Networks::get(&mut tx, req.id)
             .await
             .map_err(rpc_error)?
-            .ok_or_else(|| not_found("network"))?;
+            .ok_or_else(|| refuse(ErrorCode::NetworkNotFound, "network not found"))?;
         network.alias = req.alias;
         let network = Networks::update(&mut tx, network)
             .await
@@ -407,7 +424,7 @@ impl<K: Kv, H: Host, T: Timer> NetworkFrontendService for NetworkFrontend<K, H, 
         let peer = NetworkPeers::get(&mut tx, req.id)
             .await
             .map_err(rpc_error)?
-            .ok_or_else(|| not_found("peer"))?;
+            .ok_or_else(|| refuse(ErrorCode::PeerNotFound, "peer not found"))?;
         NetworkPeers::delete(&mut tx, req.id)
             .await
             .map_err(rpc_error)?;
@@ -445,9 +462,17 @@ impl<K: Kv, H: Host, T: Timer> NetworkFrontendService for NetworkFrontend<K, H, 
         let mut r = AliasReservations::get(&mut tx, req.id)
             .await
             .map_err(rpc_error)?
-            .ok_or_else(|| not_found("alias reservation"))?;
+            .ok_or_else(|| {
+                refuse(
+                    ErrorCode::AliasReservationNotFound,
+                    "alias reservation not found",
+                )
+            })?;
         if !r.peer_key.is_empty() {
-            return Err(rpc_error("cannot reset the cooldown of an alias in use"));
+            return Err(refuse(
+                ErrorCode::AliasReservationInUse,
+                "cannot reset the cooldown of an alias in use",
+            ));
         }
         r.reserved_until = 0;
         AliasReservations::update(&mut tx, r)

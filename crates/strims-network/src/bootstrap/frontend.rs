@@ -11,6 +11,7 @@ use std::rc::Rc;
 use strims_dao::schema::network::{BootstrapClients, BootstrapConfig, client_options_key};
 use strims_dao::{Singleton, Table};
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
 use strims_proto::network::v1::bootstrap::{
     BootstrapClient, BootstrapClientWebSocketOptions, BootstrapFrontendService,
     CreateBootstrapClientRequest, CreateBootstrapClientResponse, DeleteBootstrapClientRequest,
@@ -22,18 +23,23 @@ use strims_proto::network::v1::bootstrap::{
     create_bootstrap_client_request, register_bootstrap_frontend_service,
     update_bootstrap_client_request,
 };
+use strims_proto::network::v1::errors::ErrorCode;
 use strims_proto::service::{Context, Error as RpcError};
 use strims_rpc::{Router, Timer};
 
 use super::Host;
 use super::control::BootstrapControl;
+use crate::refuse;
 
-fn rpc_error(e: impl std::fmt::Display) -> RpcError {
-    RpcError::new(0, e.to_string())
+fn rpc_error(e: impl ErrorCoded) -> RpcError {
+    e.to_rpc()
 }
 
 fn not_found() -> RpcError {
-    rpc_error("bootstrap client not found")
+    refuse(
+        ErrorCode::BootstrapClientNotFound,
+        "bootstrap client not found",
+    )
 }
 
 /// Serves `strims.network.v1.bootstrap.BootstrapFrontend` for a profile's
@@ -54,10 +60,16 @@ impl<K: Kv, H: Host, T: Timer> BootstrapFrontend<K, H, T> {
         o: BootstrapClientWebSocketOptions,
     ) -> Result<BootstrapClientWebSocketOptions, RpcError> {
         if !(o.url.starts_with("ws://") || o.url.starts_with("wss://")) {
-            return Err(rpc_error("bootstrap client url must be ws:// or wss://"));
+            return Err(refuse(
+                ErrorCode::InvalidBootstrapUrl,
+                "bootstrap client url must be ws:// or wss://",
+            ));
         }
         if o.url.len() > self.control.shared.config.max_url_bytes {
-            return Err(rpc_error("bootstrap client url too long"));
+            return Err(refuse(
+                ErrorCode::InvalidBootstrapUrl,
+                "bootstrap client url too long",
+            ));
         }
         Ok(o)
     }
@@ -95,7 +107,9 @@ impl<K: Kv, H: Host, T: Timer> BootstrapFrontendService for BootstrapFrontend<K,
         req: SetConfigRequest,
     ) -> Result<SetConfigResponse, RpcError> {
         let s = &self.control.shared;
-        let config = req.config.ok_or_else(|| rpc_error("config required"))?;
+        let config = req
+            .config
+            .ok_or_else(|| refuse(ErrorCode::ConfigMissing, "config required"))?;
         let mut tx = s.store.write(s.timer.now()).await.map_err(rpc_error)?;
         let config = BootstrapConfig::set(&mut tx, config)
             .await
@@ -115,7 +129,10 @@ impl<K: Kv, H: Host, T: Timer> BootstrapFrontendService for BootstrapFrontend<K,
         let Some(create_bootstrap_client_request::ClientOptions::WebsocketOptions(o)) =
             req.client_options
         else {
-            return Err(rpc_error("unexpected client options type"));
+            return Err(refuse(
+                ErrorCode::InvalidClientOptions,
+                "unexpected client options type",
+            ));
         };
         let options = bootstrap_client::ClientOptions::WebsocketOptions(self.checked(o)?);
         let mut tx = s.store.write(s.timer.now()).await.map_err(rpc_error)?;
@@ -137,7 +154,10 @@ impl<K: Kv, H: Host, T: Timer> BootstrapFrontendService for BootstrapFrontend<K,
                 .len()
                 >= s.config.max_clients
         {
-            return Err(rpc_error("too many bootstrap clients"));
+            return Err(refuse(
+                ErrorCode::TooManyBootstrapClients,
+                "too many bootstrap clients",
+            ));
         }
         let id = tx.generate_id().await.map_err(rpc_error)?;
         let client = BootstrapClients::insert(
@@ -165,7 +185,10 @@ impl<K: Kv, H: Host, T: Timer> BootstrapFrontendService for BootstrapFrontend<K,
         let Some(update_bootstrap_client_request::ClientOptions::WebsocketOptions(o)) =
             req.client_options
         else {
-            return Err(rpc_error("unexpected client options type"));
+            return Err(refuse(
+                ErrorCode::InvalidClientOptions,
+                "unexpected client options type",
+            ));
         };
         let options = bootstrap_client::ClientOptions::WebsocketOptions(self.checked(o)?);
         let mut tx = s.store.write(s.timer.now()).await.map_err(rpc_error)?;

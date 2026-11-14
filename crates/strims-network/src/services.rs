@@ -52,6 +52,7 @@ use strims_dao::schema::notification::{self, network_subject, new_notification};
 use strims_dao::{Table, lease};
 use strims_kademlia::ID;
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
 use strims_proto::network::v1::Network;
 use strims_proto::network::v1::ca::ca_find_request::Query;
 use strims_proto::network::v1::ca::{
@@ -175,20 +176,23 @@ pub(crate) fn renew_time(n: &Network, now: Time) -> Option<Time> {
     Some((not_after - RENEW_AHEAD).max(now))
 }
 
-fn remote_error(e: CallError) -> (ErrorCode, String) {
+/// A failed call's code and message: the remote error's, `UNKNOWN` for
+/// one without a code (a renewal's `UNDEFINED` means it succeeded), and the
+/// RPC layer's for the caller's own failures.
+fn remote_error(e: CallError) -> (i32, String) {
     match e {
-        CallError::Remote(e) => {
-            let code = ErrorCode::try_from(e.code)
-                .ok()
-                .filter(|c| *c != ErrorCode::Undefined)
-                .unwrap_or(ErrorCode::Unknown);
-            (code, e.message)
-        }
-        e => (ErrorCode::Unknown, e.to_string()),
+        CallError::Remote(e) if e.code == 0 => (ErrorCode::Unknown.into(), e.message),
+        CallError::Remote(e) => (e.code, e.message),
+        e => (e.code(), e.to_string()),
     }
 }
 
-fn to_rpc((code, message): (ErrorCode, String)) -> RpcError {
+/// A failure of the network's own.
+fn failure(code: ErrorCode, message: &str) -> (i32, String) {
+    (code.into(), message.to_owned())
+}
+
+fn to_rpc((code, message): (i32, String)) -> RpcError {
     RpcError::new(code, message)
 }
 
@@ -265,14 +269,13 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
     async fn ca_client(
         self: &Rc<Self>,
         key: &[u8],
-    ) -> Result<CaClient<RetryClient<T>>, (ErrorCode, String)> {
-        let fail = |m: String| (ErrorCode::Unknown, m);
+    ) -> Result<CaClient<RetryClient<T>>, (i32, String)> {
         let net = self
             .state
             .borrow()
             .network(key)
             .map(|(_, net)| net)
-            .ok_or_else(|| fail("network not joined".into()))?;
+            .ok_or_else(|| failure(ErrorCode::NotJoined, "network not joined"))?;
         let existing = self
             .services
             .borrow()
@@ -283,15 +286,15 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
             None => {
                 let cert = self
                     .host_certificate(key)
-                    .ok_or_else(|| fail("no host certificate".into()))?;
+                    .ok_or_else(|| failure(ErrorCode::NoCertificate, "no host certificate"))?;
                 let (_, reader, writer) = self
                     .host
                     .open_vpn_port(net)
                     .await
-                    .map_err(|e| fail(e.to_string()))?;
+                    .map_err(|e| (e.code(), e.to_string()))?;
                 let (client, conn) =
                     vpn::connect(VpnConfig::default(), &cert, reader, writer, None)
-                        .map_err(|e| fail(e.to_string()))?;
+                        .map_err(|e| (ErrorCode::InvalidCertificate.into(), e.to_string()))?;
                 let (conn, abort) = abortable(conn);
                 self.spawn(
                     async move {
@@ -321,8 +324,13 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
             .host
             .resolve_address(net, key.to_vec(), CA_SALT.to_vec())
             .await
-            .map_err(|e| fail(e.to_string()))?
-            .ok_or_else(|| fail("the network's CA isn't published".into()))?;
+            .map_err(|e| (e.code(), e.to_string()))?
+            .ok_or_else(|| {
+                failure(
+                    ErrorCode::CaNotPublished,
+                    "the network's CA isn't published",
+                )
+            })?;
         let retry = RetryClient::new(client.to(addr), self.timer.clone(), RetryPolicy::vpn());
         Ok(CaClient::new(retry))
     }
@@ -334,13 +342,13 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
         key: &[u8],
         cert: &Certificate,
         csr: &CertificateRequest,
-    ) -> Result<Certificate, (ErrorCode, String)> {
+    ) -> Result<Certificate, (i32, String)> {
         let n = self
             .records
             .borrow()
             .get(key)
             .cloned()
-            .ok_or((ErrorCode::Unknown, "network not found".to_owned()))?;
+            .ok_or_else(|| failure(ErrorCode::NetworkNotFound, "network not found"))?;
         if n.server_config.is_some() {
             return self.renew_locally(&n, cert, csr).await;
         }
@@ -351,7 +359,7 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
         };
         let res = client.renew(&req).await.map_err(remote_error)?;
         res.certificate
-            .ok_or((ErrorCode::Unknown, "no certificate".to_owned()))
+            .ok_or_else(|| failure(ErrorCode::InvalidCertificateIssued, "no certificate"))
     }
 
     /// Finds the certificate the network's CA issued that matches
@@ -368,7 +376,7 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
             .borrow()
             .get(key)
             .cloned()
-            .ok_or_else(|| RpcError::new(ErrorCode::Unknown, "network not found"))?;
+            .ok_or_else(|| RpcError::new(ErrorCode::NetworkNotFound, "network not found"))?;
         if n.server_config.is_some() {
             return ca::find(&self.store, n.id, Some(&query), full_chain)
                 .await
@@ -382,7 +390,7 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
             .is_some_and(|c| membership_trusted(c, self.timer.now()));
         if !trusted {
             return Err(RpcError::new(
-                ErrorCode::Unknown,
+                ErrorCode::MembershipNotTrusted,
                 "membership not trusted by the network's CA",
             ));
         }
@@ -396,7 +404,7 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
             .await
             .map_err(|e| to_rpc(remote_error(e)))?;
         res.certificate
-            .ok_or_else(|| RpcError::new(ErrorCode::Unknown, "no certificate"))
+            .ok_or_else(|| RpcError::new(ErrorCode::InvalidCertificateIssued, "no certificate"))
     }
 
     /// Renews at this side's CA, under its rate limit.
@@ -405,7 +413,7 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
         n: &Network,
         cert: &Certificate,
         csr: &CertificateRequest,
-    ) -> Result<Certificate, (ErrorCode, String)> {
+    ) -> Result<Certificate, (i32, String)> {
         let err = |e: CaError| (e.code(), e.to_string());
         let now = self.timer.now();
         let csr_key = CertificateRequestBody::decode(csr.body.as_slice())
@@ -480,7 +488,7 @@ pub(crate) async fn renew<K: Kv, H: Host, T: Timer>(
     };
     let now = s.timer.now();
     let (certificate, code, message) = match outcome {
-        Ok(c) => (Some(c), ErrorCode::Undefined, String::new()),
+        Ok(c) => (Some(c), i32::from(ErrorCode::Undefined), String::new()),
         Err((code, message)) => {
             tracing::info!(network = id, error = %message, "certificate renewal failed");
             s.update(|st, now| st.schedule_renewal(&key, Some(now + RENEW_RETRY)));
@@ -496,8 +504,8 @@ pub(crate) async fn renew<K: Kv, H: Host, T: Timer>(
         let Some(mut n) = Networks::get(&mut tx, id).await? else {
             return Ok(());
         };
-        let notify = certificate.is_some() || n.certificate_renewal_error != i32::from(code);
-        n.certificate_renewal_error = code.into();
+        let notify = certificate.is_some() || n.certificate_renewal_error != code;
+        n.certificate_renewal_error = code;
         if let Some(c) = certificate {
             n.certificate = Some(c);
         }
@@ -506,7 +514,7 @@ pub(crate) async fn renew<K: Kv, H: Host, T: Timer>(
             let nid = tx.generate_id().await?;
             let subject = Some(network_subject(id));
             let mut note = new_notification(nid, now, status, title, &message, subject);
-            note.error_code = code.into();
+            note.error_code = code;
             notification::dispatch(&mut tx, note).await?;
         }
         tx.commit().await
@@ -524,7 +532,7 @@ async fn renew_once<K: Kv, H: Host, T: Timer>(
     s: &Rc<Shared<K, H, T>>,
     key: &[u8],
     via: Option<(ID, u64)>,
-) -> Option<(u64, Result<Certificate, (ErrorCode, String)>)> {
+) -> Option<(u64, Result<Certificate, (i32, String)>)> {
     let n = s.records.borrow().get(key).cloned()?;
     let cert = n.certificate.clone()?;
     let profile_key = s.profile.key.as_ref()?;
@@ -553,7 +561,7 @@ async fn renew_once<K: Kv, H: Host, T: Timer>(
         match client.renew(&req).await {
             Ok(r) => r
                 .certificate
-                .ok_or((ErrorCode::Unknown, "no certificate".to_owned())),
+                .ok_or_else(|| failure(ErrorCode::InvalidCertificateIssued, "no certificate")),
             Err(e) => Err(remote_error(e)),
         }
     } else {
@@ -565,7 +573,10 @@ async fn renew_once<K: Kv, H: Host, T: Timer>(
         if ok {
             Ok(c)
         } else {
-            Err((ErrorCode::Unknown, "invalid certificate issued".to_owned()))
+            Err(failure(
+                ErrorCode::InvalidCertificateIssued,
+                "invalid certificate issued",
+            ))
         }
     });
     Some((n.id, res))
@@ -700,7 +711,7 @@ impl<K: Kv, H: Host, T: Timer> CaServer<K, H, T> {
         let s = self
             .shared
             .upgrade()
-            .ok_or_else(|| RpcError::new(0, "network control stopped"))?;
+            .ok_or_else(|| RpcError::new(ErrorCode::ControlStopped, "network control stopped"))?;
         let n = s
             .records
             .borrow()

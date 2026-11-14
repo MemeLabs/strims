@@ -97,6 +97,8 @@ mod state;
 mod state_test;
 
 use strims_base::time::Duration;
+use strims_proto::network::v1::errors::ErrorCode;
+use strims_proto::service::Error as RpcError;
 use strims_rpc::RetryPolicy;
 
 pub use control::{NetworkControl, NetworkInfo};
@@ -191,4 +193,9 @@ pub struct Metrics {
     pub call_errors: u64,
     /// Node operations that failed.
     pub host_errors: u64,
+}
+
+/// A refusal of the network's own, with its code.
+pub(crate) fn refuse(code: ErrorCode, message: impl Into<String>) -> RpcError {
+    RpcError::new(code, message)
 }

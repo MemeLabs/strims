@@ -59,7 +59,9 @@ use strims_crypto::{
 };
 use strims_kademlia::ID;
 use strims_mpc::Block;
+use strims_proto::ErrorCoded;
 use strims_proto::network::v1::NetworkPeerBinding;
+use strims_proto::network::v1::errors::ErrorCode;
 use strims_proto::types::Certificate;
 
 use crate::psi::{InlinePsi, PsiEngine, PsiOutcome, PsiReady, PsiRole, PsiSession};
@@ -182,6 +184,20 @@ pub(crate) enum Refusal {
     Provisional,
     #[error("network binding not found")]
     BindingNotFound,
+}
+
+impl ErrorCoded for Refusal {
+    fn code(&self) -> i32 {
+        let code = match self {
+            Refusal::NotLinked => ErrorCode::NotLinked,
+            Refusal::MissingCertificate => ErrorCode::MissingCertificate,
+            Refusal::InvalidCertificate => ErrorCode::InvalidCertificate,
+            Refusal::OwnerMismatch => ErrorCode::OwnerMismatch,
+            Refusal::Provisional => ErrorCode::ProvisionalCertificate,
+            Refusal::BindingNotFound => ErrorCode::BindingNotFound,
+        };
+        code.into()
+    }
 }
 
 /// A run's PSI session.
