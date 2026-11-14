@@ -13,6 +13,7 @@
 //! attached; the queued dials after each pass.
 
 use std::future::Future;
+use std::net::SocketAddr;
 use std::pin::Pin;
 
 use futures_util::StreamExt;
@@ -22,36 +23,41 @@ use strims_node_core::{
     NodeError, NodeEvents, NodeIo, NodeSetup, RtcFactory, SpawnNode, TaskGuard,
 };
 use strims_vnic::DialTarget;
-use strims_vnic::tcp::format_tcp_uri;
+use strims_vnic::tcp::{TcpError, format_tcp_uri};
 use strims_vnic::ws::{WsListenAddress, format_ws_uri};
 use strims_webrtc::stun::StunServer;
-use tokio::task::AbortHandle;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::sync::mpsc;
+use tokio::task::{AbortHandle, JoinHandle};
 use tokio::time::Sleep;
+use tokio_tungstenite::WebSocketStream;
 
 use crate::clock::{Clock, SimClock, SystemClock};
 use crate::link::{self, Transport};
+use crate::link_tls::LinkTls;
 use crate::model_rtc;
 use crate::net::Net;
 use crate::rtc::{NativeRtc, UdpTasks, bind_webrtc};
 use crate::transport::{self, IoConfig};
 use crate::udp;
 
-/// The link interfaces native nodes have: TCP, and `wss://` dials fail in
-/// the transport (no TLS client yet).
+/// The link interfaces native nodes have: TCP and `wss://` dials.
 const NATIVE_INTERFACES: Interfaces = Interfaces {
     tcp: true,
-    wss: false,
+    wss: true,
 };
 
 /// Builds the node, binds its listeners and spawns the node task on the
 /// current runtime (a current-thread runtime for determinism; turmoil
-/// hosts are one).
-pub(crate) async fn spawn<N: Net, C: Clock>(
+/// hosts are one). Its WebSocket links take `tls`; [`Node::spawn`] gives
+/// them [`LinkTls::default`].
+pub async fn spawn_with_tls<N: Net, C: Clock>(
     config: NodeConfig,
     net: N,
     clock: C,
+    tls: LinkTls,
 ) -> Result<(Node, NodeEvents), NodeError> {
-    let (setup, io) = NativeIo::bind(&config, net, clock).await?;
+    let (setup, io) = NativeIo::bind(&config, net, clock, tls).await?;
     let (node, events, task) = strims_node_core::start(&config, setup, io)?;
     tokio::spawn(task.run());
     Ok((node, events))
@@ -63,7 +69,7 @@ impl<N: Net> SpawnNode<N> for SystemClock {
         config: NodeConfig,
         net: N,
     ) -> impl Future<Output = Result<(Node, NodeEvents), NodeError>> + Send {
-        spawn(config, net, self)
+        spawn_with_tls(config, net, self, LinkTls::default())
     }
 }
 
@@ -73,7 +79,7 @@ impl<N: Net> SpawnNode<N> for SimClock {
         config: NodeConfig,
         net: N,
     ) -> impl Future<Output = Result<(Node, NodeEvents), NodeError>> + Send {
-        spawn(config, net, self)
+        spawn_with_tls(config, net, self, LinkTls::default())
     }
 }
 
@@ -103,6 +109,7 @@ impl<N: Net, C: Clock> NativeIo<N, C> {
         config: &NodeConfig,
         net: N,
         clock: C,
+        tls: LinkTls,
     ) -> Result<(NodeSetup, NativeIo<N, C>), NodeError> {
         let profile_key = config.profile_public_key()?;
         let tcp_listener = match &config.tcp_listen {
@@ -128,8 +135,19 @@ impl<N: Net, C: Clock> NativeIo<N, C> {
             .public_ip
             .map(|ip| ip.to_string())
             .unwrap_or_default();
-        let tcp_uri =
-            tcp_addr.and_then(|a| format_tcp_uri(&a.to_string(), &host_ip, &profile_key).ok());
+        let unadvertised = |listener: &str, addr: SocketAddr, e: TcpError| {
+            tracing::warn!(
+                listener,
+                %addr,
+                error = %e,
+                "the listener's links have no URI to advertise: give it a public IP or hostname",
+            );
+        };
+        let tcp_uri = tcp_addr.and_then(|a| {
+            format_tcp_uri(&a.to_string(), &host_ip, &profile_key)
+                .map_err(|e| unadvertised("tcp", a, e))
+                .ok()
+        });
         let ws_uri = ws_addr.and_then(|a| {
             let public_hostname = if config.ws_public_hostname.is_empty() {
                 host_ip.clone()
@@ -142,9 +160,11 @@ impl<N: Net, C: Clock> NativeIo<N, C> {
                 public_port: config.ws_public_port,
                 // TODO: a config flag to advertise `wss://` when TLS
                 // terminates at a reverse proxy.
-                secure: false,
+                secure: tls.server.is_some(),
             };
-            format_ws_uri(&addr, &profile_key).ok()
+            format_ws_uri(&addr, &profile_key)
+                .map_err(|e| unadvertised("ws", a, e))
+                .ok()
         });
 
         let (rtc, udp_tasks, webrtc_addrs, stun, model_rtc) = if !config.webrtc.enabled {
@@ -169,6 +189,7 @@ impl<N: Net, C: Clock> NativeIo<N, C> {
             ws: config.ws,
             dial_timeout: config.dial_timeout,
             profile_key,
+            tls,
         };
         Ok((
             NodeSetup {
@@ -342,23 +363,13 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
                 if probe {
                     link_probe = self.net.link_probe(ws.get_ref(), true);
                 }
-                let (sink, stream) = (*ws).split();
-                let reader = tokio::spawn(link::ws_reader(
-                    link,
-                    stream,
-                    read_free,
-                    inputs.clone(),
-                    self.io.ws.read_timeout,
-                ));
-                tokio::spawn(link::ws_writer(
-                    link,
-                    sink,
-                    writes,
-                    inputs,
-                    self.io.ws.write_timeout,
-                    self.io.ws.ping_interval,
-                ));
-                reader
+                self.spawn_ws(link, *ws, read_free, writes, inputs)
+            }
+            Transport::Wss(ws) => {
+                if probe {
+                    link_probe = self.net.link_probe(ws.get_ref().get_ref().0, true);
+                }
+                self.spawn_ws(link, *ws, read_free, writes, inputs)
             }
         };
         LinkTasks {
@@ -372,5 +383,35 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
         for t in self.tasks.drain(..) {
             t.abort();
         }
+    }
+}
+
+impl<N: Net, C: Clock> NativeIo<N, C> {
+    /// A WebSocket link's reader and writer tasks; the reader's handle.
+    fn spawn_ws<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
+        &self,
+        link: LinkKey,
+        ws: WebSocketStream<S>,
+        read_free: mpsc::Receiver<Vec<u8>>,
+        writes: mpsc::Receiver<Vec<u8>>,
+        inputs: Inputs<Transport<N>>,
+    ) -> JoinHandle<()> {
+        let (sink, stream) = ws.split();
+        let reader = tokio::spawn(link::ws_reader(
+            link,
+            stream,
+            read_free,
+            inputs.clone(),
+            self.io.ws.read_timeout,
+        ));
+        tokio::spawn(link::ws_writer(
+            link,
+            sink,
+            writes,
+            inputs,
+            self.io.ws.write_timeout,
+            self.io.ws.ping_interval,
+        ));
+        reader
     }
 }

@@ -225,8 +225,8 @@ for networks its profile owns, over the bootstrap API on its HLS listener
 1. Open `https://<dev machine IP>:8080/watch` and click a stream.
 
 Outside the dev server, give the HLS listener a certificate (`--tls-cert`,
-`--tls-key`) so browsers reach the API over HTTP/2, and put a TLS proxy in
-front of `--ws-listen` for the `--bootstrap-ws-url`. The page (`watch.html`
+`--tls-key`) so browsers reach the API over HTTP/2, and serve `--ws-listen`
+over TLS with it too (`--ws-tls`) for a `wss://` `--bootstrap-ws-url`. The page (`watch.html`
 in `dist/web`, served for `/watch` and every path under it) asks the API on
 its own origin; one served from another origin is built with
 `WATCH_API_URL=https://<the HLS listener's host:port> pnpm exec webpack --mode

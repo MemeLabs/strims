@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! A service on localhost with the operator's certificate: HLS over HTTPS,
-//! HTTP/1.1 or HTTP/2, at an `https://` base URL, the API over `wss://`, a
-//! renewal served to new connections without a restart, and certificates
-//! that don't load refused at the start.
+//! HTTP/1.1 or HTTP/2, at an `https://` base URL, the API over `wss://`,
+//! the node's links over `wss://`, which another service trusting the
+//! certificate bootstraps to, a renewal served to new connections without
+//! a restart, and certificates that don't load refused at the start.
 
 #![allow(
     clippy::unwrap_used,
@@ -19,6 +20,11 @@ use std::time::Duration as StdDuration;
 
 use strims_ppspp::{SwarmId, Uri};
 use strims_proto::auth::v1::{AuthFrontendClient, SignUpRequest};
+use strims_proto::debug::v1::{DebugClient, LinkKind, ReadMetricsRequest};
+use strims_proto::network::v1::bootstrap::{
+    BootstrapClientWebSocketOptions, BootstrapFrontendClient, CreateBootstrapClientRequest,
+    create_bootstrap_client_request,
+};
 use strims_proto::network::v1::directory::ListingSnippet;
 use strims_proto::network::v1::{CreateServerRequest, ListNetworksRequest, NetworkFrontendClient};
 use strims_proto::video::v1::{
@@ -232,6 +238,93 @@ fn a_renewed_certificate_serves_new_connections_without_a_restart() {
         assert!(connect(&client, hls_addr, "localhost").await.is_ok());
 
         svc.stop().await;
+        let _ = std::fs::remove_dir_all(&dir);
+    });
+}
+
+/// Signs `name` up; its profile's public key.
+async fn sign_up(ui: &Ui, name: &str) -> Vec<u8> {
+    let res = AuthFrontendClient::new(ui.client.clone())
+        .sign_up(&SignUpRequest {
+            name: name.into(),
+            password: "pw".into(),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    res.profile.unwrap().key.unwrap().public
+}
+
+#[test]
+fn node_links_take_wss_with_the_operator_certificate() {
+    run(async {
+        let dir = dir("links");
+        let first = TestCert::new(&["localhost", "127.0.0.1"]);
+        let (cert_path, key_path) = first.write(&dir, 0);
+        let alice = Svc::start(Config {
+            tls: Some(TlsConfig {
+                links: true,
+                reload_interval: StdDuration::from_millis(50),
+                ..TlsConfig::new(&cert_path, &key_path)
+            }),
+            ..local_config()
+        })
+        .await
+        .unwrap();
+        let alice_ui = connect_ui(&alice).await;
+        let key = data_encoding::HEXLOWER.encode(&sign_up(&alice_ui, "alice").await);
+        let info = alice.node_info().unwrap();
+        let uri = info.ws_uri.unwrap();
+        let ws_addr = info.ws_addr.unwrap();
+        assert_eq!(uri, format!("wss://{ws_addr}/{key}"));
+
+        // Bob trusts the certificate and bootstraps to alice over wss://.
+        let mut config = local_config();
+        config.app.tls_roots = vec![first.der.clone()];
+        let bob = Svc::start(config).await.unwrap();
+        let bob_ui = connect_ui(&bob).await;
+        sign_up(&bob_ui, "bob").await;
+        BootstrapFrontendClient::new(bob_ui.client.clone())
+            .create_client(&CreateBootstrapClientRequest {
+                client_options: Some(
+                    create_bootstrap_client_request::ClientOptions::WebsocketOptions(
+                        BootstrapClientWebSocketOptions {
+                            url: uri.clone(),
+                            insecure_skip_verify_tls: false,
+                        },
+                    ),
+                ),
+            })
+            .await
+            .unwrap();
+        let alice_id = info.host_id.to_bytes().to_vec();
+        let debug = DebugClient::new(bob_ui.client.clone());
+        eventually("bob's wss:// link to alice", STEP, || async {
+            let m = debug.read_metrics(&ReadMetricsRequest {}).await.ok()?;
+            let links = m.metrics?.node?.links;
+            links
+                .iter()
+                .any(|l| l.host_id == alice_id && l.kind == LinkKind::Ws as i32)
+                .then_some(())
+        })
+        .await;
+
+        // A renewal reaches the links' handshakes after it.
+        let renewed = TestCert::new(&["localhost", "127.0.0.1"]);
+        renewed.write(&dir, 1);
+        let client = renewed.client(&[]);
+        eventually("the renewed link certificate", STEP, || async {
+            connect(&client, ws_addr, "127.0.0.1").await.ok()
+        })
+        .await;
+        assert!(
+            connect(&first.client(&[]), ws_addr, "127.0.0.1")
+                .await
+                .is_err()
+        );
+
+        bob.stop().await;
+        alice.stop().await;
         let _ = std::fs::remove_dir_all(&dir);
     });
 }

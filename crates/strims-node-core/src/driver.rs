@@ -270,7 +270,7 @@ impl IdleOk {
     }
 }
 
-/// The link interfaces a driver has. Natively `{ tcp: true, wss: false }`;
+/// The link interfaces a driver has. Natively `{ tcp: true, wss: true }`;
 /// in a browser `{ tcp: false, wss: true }`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Interfaces {

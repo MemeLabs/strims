@@ -18,6 +18,7 @@
 //! |---|---|
 //! | `native` | the core's `NodeIo`: spawning, the clock, the timer; [`Node::spawn`] on a [`Net`] with a [`SystemClock`] or [`SimClock`] |
 //! | `link`, `transport` | link I/O tasks; TCP and WebSocket dial and accept |
+//! | [`link_tls`] | [`LinkTls`]: what `wss://` dials verify, and the WebSocket listener's certificate ([`spawn_with_tls`]) |
 //! | `rtc`, `udp` | the WebRTC endpoint (str0m) in the node task; its UDP socket tasks and the STUN resolver |
 //! | `model_rtc` | on a net that models data channels ([`Net::models_channels`]), WebRTC as a browser worker runs it: the core's endpoint proxy, its connections the net's streams |
 //! | [`Net`], [`Clock`] | sockets and time: tokio or turmoil, wall clock or simulated |
@@ -71,6 +72,8 @@
 //!   up to 2 bytes. A trace with WebRTC must leave out datagram contents
 //!   and sizes, and with them `DriverMetrics::udp_bytes_read` and
 //!   `udp_bytes_written`.
+//! - rustls draws its keys and randoms from the OS, so `wss://` links'
+//!   bytes differ between runs; [`Node::spawn`]'s listeners take `ws://`.
 //!
 //! # Simulating with turmoil
 //!
@@ -115,6 +118,7 @@ pub mod clock;
 pub mod codec;
 pub mod fetch;
 mod link;
+pub mod link_tls;
 mod model_rtc;
 mod native;
 pub mod net;
@@ -152,6 +156,8 @@ pub use event::{
     ChannelInfo, DriverMetrics, LinkInfo, NetworkInfo, NodeEvent, NodeMetrics, PeerInfo,
     RunnerMetrics, RunnerPeerInfo, StoreInfo, SwarmInfo, WriterInfo,
 };
+pub use link_tls::LinkTls;
+pub use native::spawn_with_tls;
 #[cfg(feature = "turmoil")]
 pub use net::TurmoilNet;
 pub use net::{Net, TokioNet};

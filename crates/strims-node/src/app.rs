@@ -32,6 +32,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use futures_util::future::LocalBoxFuture;
+use rustls::pki_types::CertificateDer;
 use strims_base::time::Time;
 use strims_chat::WhisperConfig;
 use strims_directory::Fetch;
@@ -49,7 +50,8 @@ pub use strims_node_core::app::{
 };
 
 use crate::codec::{FfmpegConfig, NodeVideoHost};
-use crate::fetch::{NetFetch, tls_client_config};
+use crate::fetch::{NetFetch, tls_client_config_with};
+use crate::link_tls::LinkTls;
 use crate::psi::ThreadPsi;
 use crate::{Clock, Net, Node, NodeConfig, NodeError, NodeEvents, NodeInfo};
 
@@ -133,6 +135,12 @@ pub struct AppConfig {
     pub ws_public_port: u16,
     /// Whether the node dials `ws://` links, which aren't encrypted by TLS.
     pub allow_insecure_ws: bool,
+    /// The WebSocket listener's certificate: with it, `ws_listen` takes
+    /// `wss://` links and advertises `wss://` URIs.
+    pub ws_tls: Option<Arc<rustls::ServerConfig>>,
+    /// Roots the node's `wss://` dials and HTTPS requests trust besides
+    /// the public ones.
+    pub tls_roots: Vec<CertificateDer<'static>>,
     /// The largest peer budget the node takes from the profile's vnic
     /// config; `None` takes it as stored.
     pub max_peers: Option<u32>,
@@ -195,7 +203,8 @@ pub struct NativePlatform<N: Net, C: Clock> {
     net: N,
     clock: C,
     config: AppConfig,
-    /// The TLS client config of every node's HTTPS requests.
+    /// The TLS client config of every node's HTTPS requests and `wss://`
+    /// dials: the public roots and [`AppConfig::tls_roots`].
     tls: Arc<rustls::ClientConfig>,
     hls: HlsRoutes,
     /// The PSI thread, once a start under [`PsiMode::Thread`] started it.
@@ -208,8 +217,8 @@ impl<N: Net, C: Clock> NativePlatform<N, C> {
         NativePlatform {
             net,
             clock,
+            tls: tls_client_config_with(&config.tls_roots),
             config,
-            tls: tls_client_config(),
             hls: HlsRoutes::new(),
             psi_thread: RefCell::new(None),
         }
@@ -281,7 +290,11 @@ impl<N: Net, C: Clock> AppPlatform for NativePlatform<N, C> {
         &self,
         config: NodeConfig,
     ) -> impl Future<Output = Result<(Node, NodeEvents), NodeError>> {
-        crate::native::spawn(config, self.net.clone(), self.clock.clone())
+        let tls = LinkTls {
+            client: self.tls.clone(),
+            server: self.config.ws_tls.clone(),
+        };
+        crate::native::spawn_with_tls(config, self.net.clone(), self.clock.clone(), tls)
     }
 
     fn timer(&self) -> NodeTimer<C> {

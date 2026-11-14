@@ -12,13 +12,14 @@
 //!   the connection), and hand the stream plus the bytes read past the init
 //!   to vnic with `LinkConfig::tcp_accept`.
 //! - WebSocket: a listener of its own upgrades at `/<hex profile key>` and
-//!   answers 404 elsewhere; then `LinkConfig::ws`. Only `ws://`: dialing
-//!   `wss://` fails.
+//!   answers 404 elsewhere; then `LinkConfig::ws`. A `wss://` dial runs
+//!   TLS before the upgrade, as does the listener when it has a
+//!   certificate ([`LinkTls`]).
 //!
-//! `NodeConfig::dial_timeout` bounds a dial's connect plus upgrade, and an
-//! accepted connection's wait for its `TCPMuxInit` or upgrade. Every
-//! dialed and accepted socket, WebSocket ones included, gets
-//! [`Net::configure_tcp`] and the send-queue options.
+//! `NodeConfig::dial_timeout` bounds a dial's connect, TLS and upgrade,
+//! and an accepted connection's wait for its `TCPMuxInit`, or its TLS and
+//! upgrade. Every dialed and accepted socket, WebSocket ones included,
+//! gets [`Net::configure_tcp`] and the send-queue options.
 
 use std::net::SocketAddr;
 
@@ -27,11 +28,13 @@ use strims_vnic::ws::ws_path;
 use strims_vnic::{DialTarget, LinkConfig, TcpMux, TcpMuxAcceptor, TcpOptions};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::sync::mpsc;
+use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::http::{StatusCode, Uri};
 
 use crate::config::TcpSocketConfig;
 use crate::link::{ACCEPT_BACKOFF, Input, Transport, with_timeout, ws_config};
+use crate::link_tls::{LinkTls, server_name};
 use crate::net::Net;
 
 /// What the transport tasks need from the config.
@@ -43,6 +46,8 @@ pub(crate) struct IoConfig {
     pub(crate) dial_timeout: strims_base::time::Duration,
     /// This node's profile public key: the TCP mux route and WS path.
     pub(crate) profile_key: [u8; 32],
+    /// The WebSocket links' TLS.
+    pub(crate) tls: LinkTls,
 }
 
 /// Connects a dial's transport and reports it to the node task.
@@ -90,20 +95,36 @@ async fn connect<N: Net>(
             ))
         }
         DialTarget::Ws(t) => {
-            if t.secure {
-                // TODO: wss:// via tokio-rustls behind a `tls` feature.
-                return Err("wss:// is not supported yet (no TLS)".to_owned());
-            }
             let addr = ws_authority(&t.url)?;
             let s = net.tcp_connect(addr).await.map_err(|e| e.to_string())?;
             // WebSocket links carry vnic's small writes too: TCP_NODELAY.
             net.configure_tcp(&s, &io.tcp).map_err(|e| e.to_string())?;
             let lowat = send_queue(net, &s, io);
-            let (ws, _) =
-                tokio_tungstenite::client_async_with_config(t.url.as_str(), s, Some(ws_config()))
+            let url = t.url.as_str();
+            let transport = if t.secure {
+                let client = if t.insecure_skip_verify {
+                    io.tls.insecure_client()
+                } else {
+                    io.tls.client.clone()
+                };
+                let s = TlsConnector::from(client)
+                    .connect(server_name(url)?, s)
                     .await
-                    .map_err(|e| e.to_string())?;
-            Ok((Transport::Ws(Box::new(ws)), LinkConfig::ws(), lowat))
+                    .map_err(|e| format!("tls: {e}"))?;
+                let s = TlsStream::Client(s);
+                let (ws, _) =
+                    tokio_tungstenite::client_async_with_config(url, s, Some(ws_config()))
+                        .await
+                        .map_err(|e| e.to_string())?;
+                Transport::Wss(Box::new(ws))
+            } else {
+                let (ws, _) =
+                    tokio_tungstenite::client_async_with_config(url, s, Some(ws_config()))
+                        .await
+                        .map_err(|e| e.to_string())?;
+                Transport::Ws(Box::new(ws))
+            };
+            Ok((transport, LinkConfig::ws(), lowat))
         }
     }
 }
@@ -118,7 +139,7 @@ fn send_queue<N: Net>(net: &N, stream: &N::TcpStream, io: &IoConfig) -> Option<u
         })
 }
 
-/// `host:port` of a `ws://` URL (port 80 when absent).
+/// `host:port` of a `ws://` or `wss://` URL (port 80 or 443 when absent).
 fn ws_authority(url: &str) -> Result<String, String> {
     let uri: Uri = url.parse().map_err(|e| format!("invalid url {url}: {e}"))?;
     let a = uri
@@ -126,9 +147,10 @@ fn ws_authority(url: &str) -> Result<String, String> {
         .ok_or_else(|| format!("no host in {url}"))?
         .as_str();
     let hostport = a.rsplit_once('@').map_or(a, |(_, h)| h);
-    Ok(match uri.port_u16() {
-        Some(_) => hostport.to_owned(),
-        None => format!("{hostport}:80"),
+    Ok(match (uri.port_u16(), uri.scheme_str()) {
+        (Some(_), _) => hostport.to_owned(),
+        (None, Some("wss")) => format!("{hostport}:443"),
+        (None, _) => format!("{hostport}:80"),
     })
 }
 
@@ -218,7 +240,8 @@ async fn read_mux_init<S: AsyncRead + Unpin>(s: &mut S) -> Result<([u8; 32], Vec
     }
 }
 
-/// Accepts WebSocket upgrades at `/<hex profile key>` until aborted.
+/// Accepts WebSocket upgrades at `/<hex profile key>`, after TLS when
+/// the listener has a certificate, until aborted.
 pub(crate) async fn ws_accept_loop<N: Net>(
     net: N,
     listener: N::TcpListener,
@@ -261,23 +284,35 @@ async fn ws_accept<N: Net>(
             Err(r)
         }
     };
-    let res = with_timeout(
-        io.dial_timeout,
-        tokio_tungstenite::accept_hdr_async_with_config(stream, check, Some(ws_config())),
-    )
-    .await;
-    let msg = match res {
-        Some(Ok(ws)) => Input::Connected {
+    let upgrade = async {
+        let config = Some(ws_config());
+        match &io.tls.server {
+            None => tokio_tungstenite::accept_hdr_async_with_config(stream, check, config)
+                .await
+                .map(|ws| Transport::Ws(Box::new(ws)))
+                .map_err(|e| e.to_string()),
+            Some(server) => {
+                let s = TlsAcceptor::from(server.clone())
+                    .accept(stream)
+                    .await
+                    .map_err(|e| format!("tls: {e}"))?;
+                tokio_tungstenite::accept_hdr_async_with_config(TlsStream::Server(s), check, config)
+                    .await
+                    .map(|ws| Transport::Wss(Box::new(ws)))
+                    .map_err(|e| e.to_string())
+            }
+        }
+    };
+    let msg = match with_timeout(io.dial_timeout, upgrade).await {
+        Some(Ok(transport)) => Input::Connected {
             dial: None,
-            transport: Transport::Ws(Box::new(ws)),
+            transport,
             config: LinkConfig::ws(),
             leftover: Vec::new(),
             notsent_lowat,
             rtc: None,
         },
-        Some(Err(e)) => Input::AcceptFailed {
-            error: e.to_string(),
-        },
+        Some(Err(error)) => Input::AcceptFailed { error },
         None => Input::AcceptFailed {
             error: "websocket upgrade timeout".to_owned(),
         },
@@ -295,6 +330,8 @@ mod tests {
     fn ws_authorities() {
         assert_eq!(ws_authority("ws://a.b:81/x").unwrap(), "a.b:81");
         assert_eq!(ws_authority("ws://a.b/x").unwrap(), "a.b:80");
+        assert_eq!(ws_authority("wss://a.b/x").unwrap(), "a.b:443");
+        assert_eq!(ws_authority("wss://a.b:8082/x").unwrap(), "a.b:8082");
         assert_eq!(ws_authority("ws://u:p@[::1]:9/x").unwrap(), "[::1]:9");
         assert!(ws_authority("/x").is_err());
     }
@@ -312,6 +349,7 @@ mod tests {
             ws: strims_vnic::ws::WsOptions::default(),
             dial_timeout: strims_base::time::Duration::from_secs(5),
             profile_key: key,
+            tls: LinkTls::default(),
         };
         let net = TokioNet;
         let listener = net.tcp_bind("127.0.0.1:0".to_owned()).await.unwrap();
@@ -370,6 +408,7 @@ mod tests {
                 ws: strims_vnic::ws::WsOptions::default(),
                 dial_timeout: strims_base::time::Duration::from_secs(5),
                 profile_key: key,
+                tls: LinkTls::default(),
             };
             let tcp = net.tcp_bind("127.0.0.1:0".to_owned()).await.unwrap();
             let tcp_addr = net.tcp_listener_addr(&tcp).unwrap();

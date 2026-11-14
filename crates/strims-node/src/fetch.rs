@@ -24,7 +24,7 @@ use std::io;
 use std::sync::Arc;
 
 use futures_util::future::LocalBoxFuture;
-use rustls::pki_types::ServerName;
+use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::{ClientConfig, RootCertStore};
 use strims_directory::{FetchError, HttpFetch, HttpRequest, HttpResponse};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -46,8 +46,21 @@ const READ_CHUNK: usize = 16 * 1024;
 /// A TLS client config on the ring provider with the `webpki-roots`
 /// roots, offering HTTP/1.1 by ALPN.
 pub fn tls_client_config() -> Arc<ClientConfig> {
+    tls_client_config_with(&[])
+}
+
+/// [`tls_client_config`] trusting `extra` roots too. A root that doesn't
+/// parse as a trust anchor is left out.
+pub fn tls_client_config_with(extra: &[CertificateDer<'static>]) -> Arc<ClientConfig> {
     let mut roots = RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let (_, ignored) = roots.add_parsable_certificates(extra.iter().cloned());
+    if ignored > 0 {
+        tracing::warn!(
+            ignored,
+            "extra TLS roots that aren't trust anchors are left out"
+        );
+    }
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     #[allow(clippy::expect_used)]
     // invariant: ring's provider supports rustls's safe default versions

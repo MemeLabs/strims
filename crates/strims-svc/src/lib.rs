@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The headless service: runs a profile's node, serves the UI's frontend
-//! RPC over WebSocket, and serves the node's HLS streams over HTTP, both
-//! with TLS when given a certificate.
+//! RPC over WebSocket, and serves the node's HLS streams over HTTP, each
+//! with TLS when given a certificate, as the node's WebSocket links can
+//! be.
 //!
 //! [`Svc`] opens the profiles' stores in one redb file, runs their
 //! sessions through a [`Manager`] with the node session factory
@@ -52,16 +53,18 @@
 //! is `http://` and the listener's IP, or for an unspecified address
 //! [`AppConfig::public_ip`], else [`AppConfig::ws_public_hostname`]. Over
 //! TLS, it is `https://` and the first of those three the certificate
-//! names, else the first DNS name the certificate names that isn't a
-//! wildcard, else the first of the three, with a warning. With none of
-//! them, the base URL stays empty and the HLS config must name the
-//! address. The base URL is set when the service starts.
+//! names, else the first host the certificate names (a DNS name that isn't
+//! a wildcard, else an IP address), else the first of the three, with a
+//! warning. With none of them, the base URL stays empty and the HLS config
+//! must name the address. The base URL is set when the service starts.
 //!
 //! # TLS
 //!
 //! With [`Config::tls`], the HLS listener serves HTTPS, HTTP/2 to the
-//! players whose handshake offers it and HTTP/1.1 to the others, and with
-//! [`TlsConfig::api`] the API takes `wss://` connections, with the
+//! players whose handshake offers it and HTTP/1.1 to the others, with
+//! [`TlsConfig::api`] the API takes `wss://` connections, and with
+//! [`TlsConfig::links`] the node's WebSocket listener
+//! ([`AppConfig::ws_listen`]) takes `wss://` links, all with the
 //! operator's certificate: a PEM file of its chain, the service's own
 //! certificate first, and one of its private key. The service doesn't
 //! start unless both load and match. A connection's handshake counts
@@ -70,6 +73,15 @@
 //! or its upgrade. Every [`TlsConfig::reload_interval`] the files are
 //! checked, and a renewed pair serves the connections accepted after it
 //! loads.
+//!
+//! The node's `wss://` link URIs name [`AppConfig::ws_public_hostname`]
+//! when it is set. Otherwise they name the first of
+//! [`AppConfig::public_ip`] and the listener's address that the
+//! certificate names, else the first host the certificate names, else
+//! the first of the two, with a warning: so a browser, which dials only
+//! `wss://`, reaches a node on a LAN at a URI its certificate verifies.
+//! Native nodes verify it with [`AppConfig::tls_roots`] besides the public
+//! roots, or not at all for a bootstrap client that skips verification.
 //!
 //! An HTTP/2 player makes one TLS handshake for all its requests. One that
 //! speaks only HTTP/1.1 makes one for each, since an HTTP/1.1 connection
@@ -197,8 +209,9 @@ pub struct Config {
     /// `host:port` HLS is served to players on, over HTTP, or HTTPS with
     /// [`tls`](Config::tls); port 0 picks one. `None` serves no HLS.
     pub hls_listen: Option<String>,
-    /// The certificate HLS is served with over TLS, and the API with
-    /// [`TlsConfig::api`]. `None` serves both without TLS.
+    /// The certificate HLS is served with over TLS, the API with
+    /// [`TlsConfig::api`], and the node's WebSocket links with
+    /// [`TlsConfig::links`]. `None` serves them all without TLS.
     pub tls: Option<TlsConfig>,
     /// The profile whose node runs from the start
     /// ([headless](crate#headless-profile)); `None` starts a node only
@@ -253,6 +266,9 @@ pub struct TlsConfig {
     pub key_path: PathBuf,
     /// The API takes its connections over TLS too, as `wss://`.
     pub api: bool,
+    /// The node's WebSocket listener takes its links over TLS too, as
+    /// `wss://`, and its link URIs say so.
+    pub links: bool,
     /// How often the files are checked for a renewed certificate; zero
     /// never checks.
     pub reload_interval: StdDuration,
@@ -266,6 +282,7 @@ impl TlsConfig {
             cert_path: cert_path.into(),
             key_path: key_path.into(),
             api: false,
+            links: false,
             reload_interval: DEFAULT_TLS_RELOAD_INTERVAL,
         }
     }
@@ -387,8 +404,8 @@ impl Svc {
                 "the HLS part hold-back is under three part targets: players start three part targets behind"
             );
         }
-        // The host a certificate renewal should name too.
-        let mut tls_host = None;
+        // The hosts a certificate renewal should name too.
+        let mut tls_hosts = Vec::new();
         if let Some((_, addr)) = &hls_listener {
             if app.video.hls.base_url.is_empty() {
                 if let Some(base) = hls_base_url(*addr, &app, cert.as_ref()) {
@@ -399,7 +416,7 @@ impl Svc {
                                 "the TLS certificate doesn't name the HLS URLs' host"
                             );
                         }
-                        tls_host = Some(base.host);
+                        tls_hosts.push(base.host);
                     }
                     app.video.hls.base_url = base.url;
                 }
@@ -409,6 +426,18 @@ impl Svc {
                     "HLS is served over TLS, but its base URL is http://"
                 );
             }
+        }
+        if let (Some(tls), Some(cert), Some(listen)) = (&tls, &cert, &app.ws_listen)
+            && config.tls.as_ref().is_some_and(|t| t.links)
+        {
+            if let Some(host) = link_host(listen, &app, cert) {
+                if !cert.valid_for(&host) {
+                    tracing::warn!(host, "the TLS certificate doesn't name the link URIs' host");
+                }
+                tls_hosts.push(host.clone());
+                app.ws_public_hostname = host;
+            }
+            app.ws_tls = Some(tls.links());
         }
         if let Some(ffmpeg) = &app.ffmpeg {
             let version = strims_node::codec::probe_ffmpeg(ffmpeg)
@@ -483,7 +512,7 @@ impl Svc {
         });
         let watch = tls
             .filter(|t| !t.reload_interval().is_zero())
-            .map(|t| spawn_local(tls::watch(t, tls_host)).abort_handle());
+            .map(|t| spawn_local(tls::watch(t, tls_hosts)).abort_handle());
         Ok(Svc {
             manager,
             api,
@@ -594,6 +623,12 @@ enum Host {
 }
 
 impl Host {
+    /// `host` as an IP address if it is one, else as a name.
+    fn parse(host: &str) -> Host {
+        host.parse()
+            .map_or_else(|_| Host::Name(host.to_owned()), Host::Ip)
+    }
+
     fn base_url(self, scheme: &str, port: u16) -> BaseUrl {
         match self {
             Host::Ip(ip) => BaseUrl {
@@ -634,9 +669,33 @@ fn hls_base_url(addr: SocketAddr, app: &AppConfig, cert: Option<&Certificate>) -
     };
     let named = hosts.iter().find(|h| h.valid_for(cert)).cloned();
     named
-        .or_else(|| cert.dns_names().into_iter().next().map(Host::Name))
+        .or_else(|| cert.names().first().map(|n| Host::parse(n)))
         .or_else(|| hosts.into_iter().next())
         .map(|h| h.base_url("https", addr.port()))
+}
+
+/// The host the node's `wss://` link URIs name for a WebSocket listener at
+/// `listen` (`host:port`), by the rule of [TLS](crate#tls): an IP address
+/// without brackets, or a DNS name; `None` for no host.
+fn link_host(listen: &str, app: &AppConfig, cert: &Certificate) -> Option<String> {
+    if !app.ws_public_hostname.is_empty() {
+        return Some(app.ws_public_hostname.clone());
+    }
+    let mut hosts: Vec<String> = app.public_ip.iter().map(ToString::to_string).collect();
+    if let Some((host, _)) = listen.rsplit_once(':') {
+        let host = host
+            .strip_prefix('[')
+            .and_then(|h| h.strip_suffix(']'))
+            .unwrap_or(host);
+        let unspecified = host.parse::<IpAddr>().is_ok_and(|ip| ip.is_unspecified());
+        if !host.is_empty() && !unspecified {
+            hosts.push(host.to_owned());
+        }
+    }
+    let named = hosts.iter().find(|h| cert.valid_for(h)).cloned();
+    named
+        .or_else(|| cert.names().into_iter().next())
+        .or_else(|| hosts.into_iter().next())
 }
 
 /// Whether `url` starts with `scheme`, in any case.
@@ -721,6 +780,65 @@ mod tests {
         assert_eq!(
             hls_base_url(at("0.0.0.0:8443"), &app, Some(&wildcard)),
             None
+        );
+
+        // A certificate of IP addresses alone names its first.
+        assert_eq!(
+            url("0.0.0.0:8443", &app, Some(&ips)),
+            "https://10.0.0.1:8443"
+        );
+        let v6 = load(&["2001:db8::1"]);
+        assert_eq!(
+            url("[::]:8443", &app, Some(&v6)),
+            "https://[2001:db8::1]:8443"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn certificates_name_their_dns_names_then_their_ips() {
+        let dir = dir("names");
+        let (cert, key, _) = self_signed(&["10.0.0.134", "node.example", "*.example", "::1"]);
+        let (c, k) = write(&dir, &cert, &key);
+        let cert = Certificate::load(&c, &k).unwrap();
+        assert_eq!(cert.names(), ["node.example", "10.0.0.134", "::1"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn link_uris_name_a_host_the_certificate_names() {
+        let dir = dir("link-host");
+        let load = |names: &[&str]| {
+            let (cert, key, _) = self_signed(names);
+            let (c, k) = write(&dir, &cert, &key);
+            Certificate::load(&c, &k).unwrap()
+        };
+        let lab = load(&["10.0.0.134"]);
+        let mut app = AppConfig::default();
+
+        // On an unspecified address, the certificate's host.
+        assert_eq!(link_host("0.0.0.0:8082", &app, &lab).unwrap(), "10.0.0.134");
+        assert_eq!(link_host("[::]:8082", &app, &lab).unwrap(), "10.0.0.134");
+        // The listener's address or the public IP the certificate names.
+        let two = load(&["10.0.0.2", "10.0.0.1"]);
+        assert_eq!(link_host("10.0.0.1:8082", &app, &two).unwrap(), "10.0.0.1");
+        app.public_ip = Some("10.0.0.2".parse().unwrap());
+        assert_eq!(link_host("10.0.0.1:8082", &app, &two).unwrap(), "10.0.0.2");
+        // Else the certificate's host, over a public IP it doesn't name.
+        assert_eq!(link_host("0.0.0.0:8082", &app, &lab).unwrap(), "10.0.0.134");
+        // Else the first of them, which the certificate doesn't name.
+        let wildcard = load(&["*.example"]);
+        assert_eq!(
+            link_host("0.0.0.0:8082", &app, &wildcard).unwrap(),
+            "10.0.0.2"
+        );
+        app.public_ip = None;
+        assert_eq!(link_host("0.0.0.0:8082", &app, &wildcard), None);
+        // An operator's public hostname stands.
+        app.ws_public_hostname = "node.example".into();
+        assert_eq!(
+            link_host("0.0.0.0:8082", &app, &lab).unwrap(),
+            "node.example"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

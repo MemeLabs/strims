@@ -388,10 +388,6 @@ and dropped are in `TRIED.md`.
     squatters, sybil colluders and poisoners, and NAT, setup-latency and
     CPU models. Make sampled index answers the default, and port the
     winning pool to the node's app layer once it holds.
-- **TLS for `wss://` on native nodes.** Native nodes don't dial `wss://`
-  yet. tokio-tungstenite can take the rustls `ClientConfig` that
-  `NodeFactory` builds once for the node's HTTPS
-  (`strims_node::fetch::tls_client_config`).
 - **Link and peer housekeeping:**
   - cache host certificates until near expiry;
   - QoS: a per-link gate if per-session blocking shows up in profiles;

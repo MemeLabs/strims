@@ -31,4 +31,7 @@ strims-svc ... --hls-listen 0.0.0.0:8443 --public-ip <IP.1> \
   --tls-cert hack/tls/development.crt --tls-key hack/tls/development.key
 ```
 
-`--api-tls` serves the API over wss:// with it too.
+`--api-tls` serves the API over wss:// with it too, and `--ws-tls` the
+node's `--ws-listen` links, which advertise `wss://<IP.1>:<port>/<key>`.
+Native nodes dialing them trust the CA with `--tls-ca
+hack/tls/development-ca.crt`.

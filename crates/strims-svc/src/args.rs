@@ -7,6 +7,8 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 
 use data_encoding::BASE64URL_NOPAD;
+use rustls::pki_types::CertificateDer;
+use rustls::pki_types::pem::PemObject;
 use strims_base::time::Duration;
 use strims_node::CaptureConfig;
 use strims_node::app::PsiMode;
@@ -37,6 +39,14 @@ options:
   --public-hostname <host>  the host WebSocket link URIs advertise
   --ws-public-port <port>   the port WebSocket link URIs advertise
   --allow-insecure-ws       dial ws:// links, which TLS doesn't protect
+  --ws-tls                  the --ws-listen listener takes wss:// links with
+                            the --tls-cert certificate, and its link URIs are
+                            wss:// at --public-hostname, else the first of
+                            --public-ip and its address the certificate
+                            names, else the certificate's first name
+  --tls-ca <path>           a PEM file of roots the node's wss:// dials and
+                            HTTPS requests trust besides the public ones;
+                            repeatable
   --max-peers <n>           the most peers the node takes, whatever the
                             profile's vnic settings allow
   --max-upload <bytes/s>    the most bytes per second the node uploads,
@@ -60,9 +70,10 @@ options:
                             how far behind live players of parts start, up
                             to 60; three part targets at least, a shorter
                             one raised to them (default 6)
-  --tls-cert <path>         serve HLS over HTTPS (HTTP/2 or HTTP/1.1) with
-                            the certificate chain in this PEM file, the
-                            service's own first
+  --tls-cert <path>         serve HLS over HTTPS (HTTP/2 or HTTP/1.1), the
+                            API with --api-tls and the node's links with
+                            --ws-tls, with the certificate chain in this PEM
+                            file, the service's own first
   --tls-key <path>          the PEM file of the certificate's private key
   --api-tls                 the API takes wss:// connections, with the
                             --tls-cert certificate
@@ -92,8 +103,8 @@ options:
   --bootstrap-ws-url <url>  the ws:// or wss:// URL the --ws-listen
                             listener is reached at, which the bootstrap
                             API's invitations dial with the profile's key
-                            appended; browsers dial only wss://, through a
-                            TLS proxy
+                            appended; browsers dial only wss://: --ws-tls,
+                            or a TLS proxy
   --help                    print this
 
 Players accept a certificate that chains to a root their device trusts
@@ -169,6 +180,8 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
     let mut tls_cert = None;
     let mut tls_key = None;
     let mut api_tls = false;
+    let mut ws_tls = false;
+    let mut tls_ca = Vec::new();
     let mut profile = None;
     let mut password_file = None;
     let mut bootstrap_networks = Vec::new();
@@ -245,6 +258,8 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
             "--tls-cert" => tls_cert = Some(PathBuf::from(value()?)),
             "--tls-key" => tls_key = Some(PathBuf::from(value()?)),
             "--api-tls" => api_tls = true,
+            "--ws-tls" => ws_tls = true,
+            "--tls-ca" => tls_ca.push(PathBuf::from(value()?)),
             "--ffmpeg" => {
                 app.ffmpeg = Some(FfmpegConfig {
                     program: PathBuf::from(value()?),
@@ -320,20 +335,37 @@ pub(crate) fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, S
             })
         }
     };
+    if ws_tls && config.app.ws_listen.is_none() {
+        return Err("--ws-tls needs --ws-listen".to_owned());
+    }
     config.tls = match (tls_cert, tls_key) {
         (Some(cert), Some(key)) => {
-            if config.hls_listen.is_none() && !api_tls {
-                return Err("--tls-cert serves --hls-listen, or the API with --api-tls".to_owned());
+            if config.hls_listen.is_none() && !api_tls && !ws_tls {
+                return Err(
+                    "--tls-cert serves --hls-listen, the API with --api-tls, or links with --ws-tls"
+                        .to_owned(),
+                );
             }
             Some(TlsConfig {
                 api: api_tls,
+                links: ws_tls,
                 ..TlsConfig::new(cert, key)
             })
         }
         (None, None) if api_tls => return Err("--api-tls needs --tls-cert".to_owned()),
+        (None, None) if ws_tls => return Err("--ws-tls needs --tls-cert".to_owned()),
         (None, None) => None,
         _ => return Err("--tls-cert and --tls-key go together".to_owned()),
     };
+    for path in tls_ca {
+        let roots = CertificateDer::pem_file_iter(&path)
+            .and_then(|certs| certs.collect::<Result<Vec<_>, _>>())
+            .map_err(|e| format!("--tls-ca {}: {e}", path.display()))?;
+        if roots.is_empty() {
+            return Err(format!("--tls-ca {} holds no certificate", path.display()));
+        }
+        config.app.tls_roots.extend(roots);
+    }
     Ok(Command::Run(Box::new(config)))
 }
 
@@ -450,12 +482,14 @@ mod tests {
             "/etc/strims/fullchain.pem",
             "--tls-key=/etc/strims/privkey.pem",
             "--api-tls",
+            "--ws-tls",
         ])
         .unwrap();
         assert_eq!(
             c.tls,
             Some(TlsConfig {
                 api: true,
+                links: true,
                 ..TlsConfig::new("/etc/strims/fullchain.pem", "/etc/strims/privkey.pem")
             })
         );
@@ -536,7 +570,34 @@ mod tests {
         .unwrap();
         let tls = c.tls.unwrap();
         assert!(!tls.api);
+        assert!(!tls.links);
         assert_eq!(tls.reload_interval, strims_svc::DEFAULT_TLS_RELOAD_INTERVAL);
+        assert!(c.app.tls_roots.is_empty());
+    }
+
+    #[test]
+    fn tls_ca_files_add_their_roots() {
+        let dir = std::env::temp_dir().join(format!("strims-svc-args-ca-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pem = |name: &str| {
+            let key = rcgen::generate_simple_self_signed(vec![name.to_owned()]).unwrap();
+            let b64 = data_encoding::BASE64.encode(key.cert.der());
+            let path = dir.join(format!("{name}.pem"));
+            let pem = format!("-----BEGIN CERTIFICATE-----\n{b64}\n-----END CERTIFICATE-----\n");
+            std::fs::write(&path, pem).unwrap();
+            path.to_str().unwrap().to_owned()
+        };
+        let (a, b) = (pem("a.example"), pem("b.example"));
+        let c = run(&["--db-memory", "--tls-ca", &a, &format!("--tls-ca={b}")]).unwrap();
+        assert_eq!(c.app.tls_roots.len(), 2);
+        let empty = dir.join("empty.pem");
+        std::fs::write(&empty, "").unwrap();
+        let e = run(&["--db-memory", "--tls-ca", empty.to_str().unwrap()]);
+        assert!(e.err().unwrap().contains("no certificate"));
+        let missing = dir.join("missing.pem");
+        let e = run(&["--db-memory", "--tls-ca", missing.to_str().unwrap()]);
+        assert!(e.err().unwrap().contains("--tls-ca"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -680,6 +741,11 @@ mod tests {
             (&["--hls-listen=:0", "--tls-key=k"], "go together"),
             (&["--hls-listen=:0", "--api-tls"], "--api-tls needs"),
             (&["--tls-cert=c", "--tls-key=k"], "serves --hls-listen"),
+            (&["--ws-listen=:0", "--ws-tls"], "--ws-tls needs --tls-cert"),
+            (
+                &["--tls-cert=c", "--tls-key=k", "--ws-tls"],
+                "--ws-tls needs --ws-listen",
+            ),
         ] {
             let args = [&["--db-memory"][..], args].concat();
             let e = run(&args).err().unwrap();
@@ -687,6 +753,15 @@ mod tests {
         }
         let api_only = run(&["--db-memory", "--tls-cert=c", "--tls-key=k", "--api-tls"]);
         assert!(api_only.unwrap().tls.unwrap().api);
+        let links_only = run(&[
+            "--db-memory",
+            "--ws-listen=:0",
+            "--tls-cert=c",
+            "--tls-key=k",
+            "--ws-tls",
+        ]);
+        let tls = links_only.unwrap().tls.unwrap();
+        assert!(tls.links && !tls.api);
         assert!(matches!(
             parse(["--help".to_owned()]).unwrap(),
             Command::Help

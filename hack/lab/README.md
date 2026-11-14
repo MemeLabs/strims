@@ -24,4 +24,18 @@ node hack/lab/server.mjs 10.0.0.134    # the dev machine's LAN address
   async function body on the device, and its JSON-safe value comes back),
   `GET /log?n=N`.
 
+A strims-svc on the LAN serves the UI's API and its node's links over
+`wss://` with the lab's certificate, so the devices' browsers link to it
+directly:
+
+```
+strims-svc --db ./strims.redb --api-listen 0.0.0.0:8083 --api-path /manage \
+  --api-tls --ws-listen 0.0.0.0:8082 --ws-tls \
+  --tls-cert hack/lab/tls/server.crt --tls-key hack/lab/tls/server.key
+```
+
+Signing in logs the node's bootstrap URL, `node started ...
+ws_uri="wss://10.0.0.134:8082/<profile key>"`. Native nodes bootstrapping to
+it pass `--tls-ca hack/lab/tls/ca.crt`.
+
 `tls/` and the server's `events.jsonl` stay out of git (`.gitignore`).

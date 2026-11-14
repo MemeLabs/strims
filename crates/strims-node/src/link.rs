@@ -60,6 +60,9 @@ pub(crate) enum Transport<N: Net> {
     Channel(N::TcpStream),
     /// Boxed: tungstenite's state is large and a link is built once.
     Ws(Box<WebSocketStream<N::TcpStream>>),
+    /// A WebSocket link over TLS: dialed `wss://`, or accepted by a
+    /// listener with a certificate.
+    Wss(Box<WebSocketStream<tokio_rustls::TlsStream<N::TcpStream>>>),
 }
 
 /// What the node task hears from the native transport tasks.
