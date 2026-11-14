@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use strims_base::rng::{DetRng, det_rng};
 use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy, SendFate, SendHow};
-use strims_sim::topology::random_mesh;
+use strims_sim::topology::{random_graph, random_hub, random_mesh};
 use strims_sim::{
     Arrivals, Binding, ClockSkew, Competing, Fault, HostIx, Invariants, NetworkSpec, ParentLoss,
     Report, Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport, VpnProbes, knob,
@@ -3372,6 +3372,70 @@ fn wan_residential_seed_adaptive_uncapped_step() {
         |s| uncapped(striped(wan_residential_seed_step(s), STRIPES, ADAPTIVE)),
         check_wan_long,
     );
+}
+
+// 10g. A sized audience: residential viewers around the Atlantic of a
+// Chicago seed, as many as the knobs say, in a sparse random graph.
+
+/// The viewers of [`wan_cable_seed`] unless `STRIMS_SIM_VIEWERS` says.
+const CABLE_VIEWERS: usize = 50;
+/// Its stream in Mibit/s (32 KiB munros every 250 ms, 128 KiB/s each)
+/// unless `STRIMS_SIM_MBIT` says.
+const CABLE_MBIT: usize = 6;
+/// The links each of its viewers draws, and its seed's.
+const CABLE_DEGREE: usize = 6;
+const CABLE_SEED_DEGREE: usize = 32;
+
+/// `STRIMS_SIM_VIEWERS` residential viewers in North America and Europe
+/// (default [`CABLE_VIEWERS`]) of a seed in Chicago on
+/// `STRIMS_SIM_SEED_ACCESS` (`cable`, the default, `fiber` or
+/// `datacenter`), over TCP: each viewer draws links to [`CABLE_DEGREE`]
+/// others ([`random_graph`]) and the seed to [`CABLE_SEED_DEGREE`]
+/// viewers. The stream is `STRIMS_SIM_MBIT` Mibit/s (default
+/// [`CABLE_MBIT`]), that many 32 KiB munros written every 250 ms in 4 KiB
+/// chunks, from 5 s to 65 s ([`WAN_WINDOW`]'s bytes of window), in
+/// [`STRIPES`] streams in Hybrid with the adaptive seed; send buffers and
+/// no upload limits ([`uncapped`]). The sites are
+/// [`wan_residential_seed`]'s draws, as many as there are viewers.
+fn wan_cable_seed_scenario(seed: u64) -> Scenario {
+    let viewers = knob("STRIMS_SIM_VIEWERS").unwrap_or(CABLE_VIEWERS);
+    let mbit = knob("STRIMS_SIM_MBIT").unwrap_or(CABLE_MBIT);
+    let access = match knob::<String>("STRIMS_SIM_SEED_ACCESS").as_deref() {
+        None | Some("cable") => Access::Cable,
+        Some("fiber") => Access::Fiber,
+        Some("datacenter") => Access::Datacenter,
+        Some(a) => panic!("STRIMS_SIM_SEED_ACCESS={a}: cable, fiber or datacenter"),
+    };
+    let mut s = Scenario::new(&format!(
+        "wan_cable_seed x{viewers} {mbit} Mibit/s {access}"
+    ));
+    let mut rng = det_rng(seed);
+    let seed_host = s.host_at("seed", Site::new(City::Chicago, access));
+    let vs = s.hosts_at("v", &viewer_sites(seed, viewers, &atlantic(), RESIDENTIAL));
+    random_hub(&mut s, &mut rng, seed_host, &vs, CABLE_SEED_DEGREE, 0.0);
+    random_graph(&mut s, &mut rng, &vs, CABLE_DEGREE, 0.0);
+    let mut swarm = SwarmSpec::live(seed_host, vs, WAN_RATE, secs(5), secs(65))
+        .with_push_mode(PushMode::Hybrid)
+        .with_live_window(WAN_WINDOW);
+    // `mbit` munros of 1 KiB frames a write, then signed a munro at a time.
+    swarm.frames_per_write = mbit * 32;
+    swarm.options.chunks_per_signature = swarm.frames_per_write;
+    let swarm = swarm.with_chunks(4096, 32768).unwrap();
+    s.invariants = Invariants {
+        max_heap: Some(16 * MIB * (viewers as i64 + 1)),
+        ..Invariants::for_window(swarm.options.live_window)
+    };
+    s.swarm(swarm);
+    s.duration = secs(75);
+    uncapped(striped(s, STRIPES, ADAPTIVE))
+}
+
+/// [`wan_cable_seed_scenario`] at one seed: a measurement at the size the
+/// knobs ask for, checked only for sound frames and invariants.
+#[test]
+#[ignore = "WAN, a sized audience of 6 Mbit/s; run in release with --include-ignored"]
+fn wan_cable_seed() {
+    sweep_n("wan_cable_seed", 1, wan_cable_seed_scenario, sound);
 }
 
 // --- sampling -----------------------------------------------------------------
