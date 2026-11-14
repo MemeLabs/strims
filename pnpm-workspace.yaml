@@ -12,3 +12,10 @@ allowBuilds:
   core-js-pure: false
   esbuild: false
 strictDepBuilds: true
+
+# Resolve only versions published at least 7 days ago (in minutes), so a
+# hijacked release is likely caught and unpublished before it can land here.
+# An urgent fix younger than that goes in minimumReleaseAgeExclude, by name,
+# until it ages out. Off until the lockfile's newest versions are a week old
+# (crates/PLAN.md, "Dependencies").
+# minimumReleaseAge: 10080

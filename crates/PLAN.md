@@ -155,6 +155,16 @@ on it is in `CONVENTIONS.md`.
 - strims-node's TLS runs on ring, which compiles C, so each desktop and
   mobile cross build needs a C toolchain for its target.
 
+### Dependencies
+- On or after 2026-11-21, turn on pnpm's 7-day release age gate: uncomment
+  `minimumReleaseAge` in `pnpm-workspace.yaml`. It waits because the
+  lockfile holds versions from the week before 2026-11-14 (oxlint,
+  oxlint-tsgolint, prettier, sass, ws, postcss and others). Their ranges
+  have no version a week old, so `pnpm update` under the gate fails with
+  `ERR_PNPM_NO_MATURE_MATCHING_VERSION`. Run `pnpm update` with it on
+  before committing. A dependency bumped since then that is still under a
+  week old waits, or goes in `minimumReleaseAgeExclude` until it ages out.
+
 ### Capture
 - Captures from the app's page node (OPFS, or dumps streamed to the UI).
 - A capture runs for its node's life, from a driver flag. A runtime
