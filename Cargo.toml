@@ -43,7 +43,6 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 license = "AGPL-3.0-only"
-repository = "https://github.com/MemeLabs/strims"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -84,7 +83,6 @@ strims-network = { path = "crates/strims-network" }
 strims-directory = { path = "crates/strims-directory" }
 strims-chat = { path = "crates/strims-chat" }
 strims-video = { path = "crates/strims-video" }
-strims-player = { path = "crates/strims-player" }
 strims-debug = { path = "crates/strims-debug" }
 strims-session = { path = "crates/strims-session" }
 strims-testworld = { path = "crates/strims-testworld" }
@@ -92,16 +90,13 @@ strims-golden = { path = "crates/strims-golden" }
 strims-wan = { path = "crates/strims-wan" }
 strims-node-core = { path = "crates/strims-node-core" }
 strims-node = { path = "crates/strims-node" }
-strims-sim = { path = "crates/strims-sim" }
 strims-testbed = { path = "crates/strims-testbed" }
 strims-svc = { path = "crates/strims-svc" }
-strims-wasm = { path = "crates/strims-wasm" }
 
 # general
 thiserror = "2"
 tracing = "0.1"
 bytes = "1"
-smallvec = "1"
 slotmap = "1"
 indexmap = "2"
 hex = "0.4"
@@ -113,7 +108,6 @@ regex-automata = { version = "0.4", default-features = false, features = ["std",
 
 # randomness: never thread_rng / OsRng in core crates (see crates/CONVENTIONS.md)
 rand_core = "0.10"
-rand = { version = "0.10", default-features = false, features = ["alloc"] }
 rand_chacha = { version = "0.10", default-features = false }
 
 # async (app layer and drivers; never in core crates)
@@ -150,7 +144,6 @@ sha1 = "0.11"
 sha2 = "0.11"
 hmac = "0.13"
 sha3 = "0.12"
-md-5 = "0.11"
 pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }
 
 # drivers and simulation (never in core crates)
