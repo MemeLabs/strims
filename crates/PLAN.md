@@ -199,6 +199,12 @@ on it is in `CONVENTIONS.md`.
   - Where the code differs only in strims-sim's harness, which should
     leave the timeline alone, rerun the base at a couple of the run's
     seeds and reuse the rest only if their traces match.
+- Retire the vendored turmoil (`third_party/turmoil`). Check back on
+  upstream (tokio-rs/turmoil) once its turmoil-net stack lands: the
+  harness API (#299) and the swap onto it (#296). Then either drive
+  turmoil-net directly from strims-sim's WAN scheduler, without turmoil's
+  topology, or move to a release whose topology doesn't walk every pair
+  of hosts each step. Raise that per-pair cost upstream before then.
 
 ### Swarm
 Hybrid (`PushMode::Hybrid`) is the design: push trees carry the stream
