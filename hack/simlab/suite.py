@@ -404,8 +404,8 @@ TIERS = {
         cell("cable-50-6-grabbers", SIM, "wan_cable_seed",
              cable(50, 6, STRIMS_SIM_STREAM_SECS="45", STRIMS_SIM_HOSTILE="grabber:0.2"), cable_gib(50),
              "50 viewers at 6 Mibit/s, a fifth grabbers: answer backlogs, memory"),
-        cell("cable-50-6", SIM, "wan_cable_seed", cable(50, 6, STRIMS_SIM_STREAM_SECS="45"), cable_gib(50),
-             "the grabbers' swarm with honest viewers only"),
+        cell("cable-50-6", SIM, "wan_cable_seed", cable(50, 6, STRIMS_SIM_STREAM_SECS="45", STRIMS_SIM_HOSTILE="off"),
+             cable_gib(50), "the grabbers' swarm with honest viewers only"),
         cell("cable-500-2", SIM, "wan_cable_seed", cable(500, 2, STRIMS_SIM_STREAM_SECS="45"), cable_gib(500),
              "500 viewers at 2 Mibit/s: depth, fan-out, relay use at scale"),
         cell("cable-1000-2", SIM, "wan_cable_seed", cable(1000, 2, STRIMS_SIM_STREAM_SECS="30"), cable_gib(1000),
@@ -432,6 +432,25 @@ TIERS["startup"] = [c for t in ("peers", "robust") for c in TIERS[t] if (c["sim"
 TIERS["peers"] = [audience(c) for c in TIERS["peers"]] + peers_audience(TIERS["peers"])
 TIERS["scale"] = [audience(c) for c in TIERS["scale"]]
 TIERS["robust"] = robust_tier()
+
+# The measuring tiers' viewers include defectors by default: the dishonest
+# mix (STRIMS_SIM_HOSTILE=mix, a run's draw of 10-20 % of the first swarm's
+# viewers as free riders and liars), so a change is judged with them there.
+# A cell that names its own hostile setting keeps it, `off` keeping it
+# honest; the tiers built from these cells (browsers, net, sign, measure)
+# inherit it.
+MIX_TIERS = ("startup", "peers", "scale", "robust")
+
+
+def with_mix(c):
+    """Cell `c` with the dishonest mix, unless it names its own."""
+    if c["sim"] != SIM or "STRIMS_SIM_HOSTILE" in c["env"]:
+        return c
+    return {**c, "env": {**c["env"], "STRIMS_SIM_HOSTILE": "mix"}}
+
+
+for _t in MIX_TIERS:
+    TIERS[_t] = [with_mix(c) for c in TIERS[_t]]
 
 
 def recip_tier():
