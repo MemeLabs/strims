@@ -844,6 +844,13 @@ class Static(unittest.TestCase):
         self.assertEqual(call("GET", "/devtools.abc.js").headers["Content-Type"], "text/javascript")
         h = call("HEAD", "/devtools.abc.js")
         self.assertEqual((h.status, h.headers["Content-Length"], h.text), (200, "14", b""))
+        # Files named by their bytes' hash are cached for good; the rest are asked for each time.
+        (dist / "devtools.0123456789abcdef0123.js").write_text("console.log(2)")
+        (dist / "0123456789abcdef0123.png").write_bytes(b"\x89PNG")
+        for path, cache in [("/devtools.0123456789abcdef0123.js", "public, max-age=31536000, immutable"),
+                            ("/0123456789abcdef0123.png", "public, max-age=31536000, immutable"),
+                            ("/devtools.html", "no-cache"), ("/devtools.abc.js", "no-cache")]:
+            self.assertEqual(call("GET", path).headers["Cache-Control"], cache, path)
         for path in ["/../secret.txt", "/%2e%2e/secret.txt", "/nope.js", "/console/../../secret.txt", "/%ff"]:
             self.assertEqual(call("GET", path).status, 404, path)
         self.assertEqual(post("/", {}).status, 404)

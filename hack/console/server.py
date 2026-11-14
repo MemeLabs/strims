@@ -21,7 +21,10 @@ commit's, as hack/storybook/check.py --compare builds it). A file's body
 is the file as opened, at its size then (a rebuild meanwhile ends the
 connection rather than the body overrunning or falling short of its
 Content-Length); a client gone mid-file and a file slower than SLOW_S
-are said in the log. The dev
+are said in the log. A file named by its content's hash (HASHED: the
+build's chunks and assets) is cached for good (immutable), so a page
+loads and compiles each once; the rest (devtools.html, locales) are
+fetched afresh each time (no-cache). The dev
 server proxies /console to it too (webpack.config.js). The catalog is
 simlab.lake_root() (simdb.py's cache root: `SIM_DB_ROOT`, else the main
 checkout's target/sim-db), read through a pool of simlab.engine's guarded
@@ -154,6 +157,9 @@ BUILD = ["pnpm", "run", "console:build"]
 # What the build is made from: a build older than any of them is stale.
 SOURCES = [ROOT / "src" / "devtools", ROOT / "pnpm-lock.yaml", ROOT / "webpack.config.js"]
 TYPES = {".js": "text/javascript", ".map": "application/json", ".wasm": "application/wasm"}
+# A file webpack names by its bytes' hash: the console build's [contenthash]
+# chunks (realContentHash) and its [hash]-named assets.
+HASHED = re.compile(r"(^|\.)[0-9a-f]{20}\.")
 NDJSON = "application/x-ndjson"
 # A file served slower than this is said in the log.
 SLOW_S = 1.0
@@ -979,7 +985,8 @@ class Console:
             h.send_header("Content-Type", TYPES.get(p.suffix) or mimetypes.guess_type(p.name)[0]
                           or "application/octet-stream")
             h.send_header("Content-Length", str(size))
-            h.send_header("Cache-Control", "no-cache")
+            h.send_header("Cache-Control",
+                          "public, max-age=31536000, immutable" if HASHED.search(p.name) else "no-cache")
             h.send_header("X-Content-Type-Options", "nosniff")
             h.end_headers()
             if h.command == "HEAD":

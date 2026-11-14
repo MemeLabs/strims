@@ -380,10 +380,15 @@ module.exports = (env, argv) => {
           devtool: "source-map",
           output: {
             filename: "[name].[contenthash].js",
-            chunkFilename: "[id].[chunkhash].js",
+            chunkFilename: "[id].[contenthash].js",
             path: path.resolve(__dirname, "target", "console", "dist"),
             publicPath: "/",
             clean: true,
+          },
+          // A file's name holds its bytes' hash, which server.py caches for
+          // good by (a development build's hashes are its modules' alone).
+          optimization: {
+            realContentHash: true,
           },
           cache: {
             type: "filesystem",
