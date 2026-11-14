@@ -44,6 +44,14 @@
 //!   `u8,t200`), in chunks of `STRIMS_SIM_CHUNK` bytes ([`MEDIA_CHUNK`]
 //!   without it), the policy setting the chunks per signature.
 //!   `STRIMS_SIM_SIGN=off`, or either alone, changes nothing.
+//! - `STRIMS_SIM_PUSH_MODE=<mode>` runs every swarm in that push mode
+//!   ([`with_push_mode`](crate::SwarmSpec::with_push_mode)): `pull` (pull
+//!   alone, HAVEs and the requests they bring at the tick), `eager-have`
+//!   (pull, HAVEs and requests as soon as they can go) or `hybrid` (push
+//!   subscriptions over eager HAVEs).
+//! - `STRIMS_SIM_STREAMS=<n>` gives every swarm `n` streams, at least 1
+//!   ([`with_stream_count`](crate::SwarmSpec::with_stream_count)): chunk
+//!   `i` is pushed in stream `i % n`.
 //! - `STRIMS_SIM_STREAM_SECS=<s>` streams every swarm for `s` seconds from
 //!   its start, the run ending 10 s after the last stops: the WAN cases'
 //!   minute, longer. A scenario's faults, steps and competing uploads keep
@@ -122,6 +130,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::thread;
 use std::time::Duration;
 
+use strims_ppspp::PushMode;
 use strims_wan::live::{Encoder, Sign};
 
 use crate::report::Report;
@@ -260,6 +269,33 @@ fn media_knobs() -> Option<(Encoder, Sign)> {
     let sign = env("STRIMS_SIM_SIGN")
         .and_then(|s| Sign::parse(s.trim()).unwrap_or_else(|e| panic!("STRIMS_SIM_SIGN={e}")));
     encoder.zip(sign)
+}
+
+/// `STRIMS_SIM_PUSH_MODE`'s modes: `pull`, `eager-have` or `hybrid`.
+fn parse_push_mode(v: &str) -> Result<PushMode, String> {
+    match v.trim() {
+        "pull" => Ok(PushMode::Off),
+        "eager-have" => Ok(PushMode::EagerHave),
+        "hybrid" => Ok(PushMode::Hybrid),
+        other => Err(format!("{other} is no mode: pull, eager-have or hybrid")),
+    }
+}
+
+/// `STRIMS_SIM_PUSH_MODE` ([`parse_push_mode`]), if set and not blank.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn push_mode_knob() -> Option<PushMode> {
+    let v = env("STRIMS_SIM_PUSH_MODE").filter(|v| !v.trim().is_empty())?;
+    Some(parse_push_mode(&v).unwrap_or_else(|e| panic!("STRIMS_SIM_PUSH_MODE={e}")))
+}
+
+/// `STRIMS_SIM_STREAMS`, if set and not blank: at least 1.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn streams_knob() -> Option<usize> {
+    let n: usize = knob("STRIMS_SIM_STREAMS")?;
+    if n == 0 {
+        panic!("STRIMS_SIM_STREAMS=0: at least 1");
+    }
+    Some(n)
 }
 
 /// `STRIMS_SIM_EXP`'s flags, comma-separated; `off` is none.
@@ -475,6 +511,8 @@ fn sweep_seeds(
     let stream_secs: Option<u64> = knob("STRIMS_SIM_STREAM_SECS");
     let segment: Option<usize> = knob("STRIMS_SIM_TCP_SEGMENT");
     let media = media_knobs();
+    let push_mode = push_mode_knob();
+    let streams = streams_knob();
     let rtc = rtc_knob();
     let organic = env("STRIMS_SIM_DISCOVERY").is_some_and(|s| s.trim() == "1");
     let exp = exp_knob();
@@ -531,6 +569,14 @@ fn sweep_seeds(
                         .unwrap_or_else(|e| fail(test, seed, &e, &[]))
                 })
                 .collect();
+        }
+        for s in &mut spec.swarms {
+            if let Some(mode) = push_mode {
+                s.options.push_mode = mode;
+            }
+            if let Some(n) = streams {
+                s.options.stream_count = n;
+            }
         }
         if let Some(which) = known_uplink.as_deref() {
             let seeds: Vec<HostIx> = spec.swarms.iter().map(|s| s.seed).collect();
@@ -684,6 +730,16 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+
+    #[test]
+    fn push_mode_knob_takes_the_three_modes() {
+        assert_eq!(parse_push_mode("pull"), Ok(PushMode::Off));
+        assert_eq!(parse_push_mode(" eager-have "), Ok(PushMode::EagerHave));
+        assert_eq!(parse_push_mode("hybrid"), Ok(PushMode::Hybrid));
+        for bad in ["off", "Hybrid", "eager", "push", "default"] {
+            assert!(parse_push_mode(bad).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn hostile_knob_takes_kinds_shares_and_the_mix() {

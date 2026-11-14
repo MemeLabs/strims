@@ -503,6 +503,39 @@ TIERS["sign"] = sign_tier()
 TIERS["sign-confirm"] = sign_confirm_tier()
 TIERS["sign-sens"] = sign_sens_tier()
 
+# The pushpull tier's cells, by tier and name: stars behind a 10 and a 5
+# Mbit/s seed, a halving, thin relays, a worldwide WAN audience and the
+# cable seed's 100 viewers; and the push modes (STRIMS_SIM_PUSH_MODE) each
+# runs in, with the stream counts (STRIMS_SIM_STREAMS) of each mode. Streams
+# are what Hybrid pushes: pull and eager HAVEs run the same run (its trace)
+# at any count, so each runs once, at the cell's own.
+PUSHPULL = [("robust", "star-15-10"), ("robust", "star-31-5"), ("robust", "halve-15-10"), ("robust", "thin-15-10"),
+            ("robust", "wan-global-audience"), ("peers", "cable-100-4")]
+PUSH_MODES = {"pull": (None,), "eager-have": (None,), "hybrid": (1, 4, 16)}
+
+
+def pushpull_tier():
+    """How pull, eager HAVEs and Hybrid push compare, Hybrid by stream
+    count: each of PUSHPULL's cells, as its tier runs it (the dishonest mix
+    and the audience included), in each mode of PUSH_MODES at each of its
+    counts, a cell each, named `<cell>-<mode>` and `<cell>-hybrid-x<n>`."""
+    out = []
+    for tier, name in PUSHPULL:
+        c = next(x for x in TIERS[tier] if x["name"] == name)
+        for mode, counts in PUSH_MODES.items():
+            for n in counts:
+                env = {**c["env"], "STRIMS_SIM_PUSH_MODE": mode}
+                if n is None:
+                    out.append({**c, "name": f"{name}-{mode}", "env": env, "why": f"{c['why']}, {mode}"})
+                    continue
+                env["STRIMS_SIM_STREAMS"] = str(n)
+                streams = "a stream" if n == 1 else f"{n} streams"
+                out.append({**c, "name": f"{name}-{mode}-x{n}", "env": env, "why": f"{c['why']}, {mode} in {streams}"})
+    return out
+
+
+TIERS["pushpull"] = pushpull_tier()
+
 # The measure tier's cells, by mechanism: robust's (steady, overload, the
 # seed's uplink halved, thin relays, joins and departures, jitter), then
 # peers' (mobile viewers).

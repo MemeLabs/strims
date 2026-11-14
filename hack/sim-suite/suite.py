@@ -78,6 +78,16 @@ Tiers:
           that crash (SIGN_SIM), at each stream of SIGN_MEDIA, of
           SIGN_CONFIRM_MEDIA to confirm a screen, and of SIGN_SENS_MEDIA's
           other keyframe ratios and scene spreads.
+  pushpull
+          how pull, eager HAVEs and Hybrid push compare, Hybrid by stream
+          count: stars behind a 10 and a 5 Mbit/s seed, a halving, thin
+          relays, a worldwide WAN audience and the cable seed's 100 viewers
+          (PUSHPULL), each as its tier runs it, defectors included, in
+          each push mode (STRIMS_SIM_PUSH_MODE), a cell each: pull and
+          eager-have once (`<cell>-pull`, `<cell>-eager-have`: their runs
+          are the same at any stream count), hybrid at 1, 4 and 16 streams
+          (STRIMS_SIM_STREAMS, `<cell>-hybrid-x<n>`); a run's scorecard
+          compares two arms at every point of the matrix.
 
 The audience: a cell's viewers trickle in (`STRIMS_SIM_ARRIVALS` =
 trickle: all of them within the stream's first third, at random) where
