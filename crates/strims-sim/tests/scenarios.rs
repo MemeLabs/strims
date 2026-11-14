@@ -505,6 +505,116 @@ fn a_pull_stream_has_no_relays_or_holders() {
     );
 }
 
+// --- 1d. dishonest viewers by kind -------------------------------------------
+
+/// Each viewer's hostile kind in swarm 0's order, `None` for an honest one.
+fn kinds_of(r: &Report) -> Vec<Option<&'static str>> {
+    r.scenario.swarms[0]
+        .viewers
+        .iter()
+        .map(|&v| match r.scenario.hosts[v].class {
+            HostClass::Hostile(k) => Some(k),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The row counts the run's hosts of each kind (`free_riders`, `liars`,
+/// `whitewashers`, `hogs`, `grabbers`, `withholders`, `colluders`,
+/// `echo_free_riders`, `echo_liars`).
+fn row_counts_kinds(r: &Report, test: &str) -> Result<(), String> {
+    let row: serde_json::Value =
+        serde_json::from_str(&r.row(test, None)).map_err(|e| e.to_string())?;
+    let kinds = kinds_of(r);
+    for (kind, field) in [
+        ("free-rider", "free_riders"),
+        ("liar", "liars"),
+        ("whitewasher", "whitewashers"),
+        ("hog", "hogs"),
+        ("grabber", "grabbers"),
+        ("withholder", "withholders"),
+        ("colluder", "colluders"),
+        ("free-rider+echo", "echo_free_riders"),
+        ("liar+echo", "echo_liars"),
+    ] {
+        let n = kinds.iter().filter(|k| **k == Some(kind)).count() as u64;
+        if row[field].as_u64() != Some(n) {
+            return Err(format!("row {field} {}, {n} {kind}s", row[field]));
+        }
+    }
+    Ok(())
+}
+
+/// The dishonest mix (`Scenario::mix`), which the run draws after its
+/// viewers' arrivals: 10-20 % of the 10 viewers, free riders and liars in
+/// turn, never the viewer the scenario keeps honest, and the row counts
+/// each kind; the draw replays with the run.
+#[test]
+fn the_dishonest_mix_is_drawn_by_the_run_and_counted_by_kind() {
+    const TEST: &str = "the_dishonest_mix_is_drawn_by_the_run_and_counted_by_kind";
+    sweep(
+        TEST,
+        |s| {
+            let mut m = streaming(
+                "dishonest_mix",
+                s,
+                10,
+                (8 * RATE, 4 * RATE),
+                PushMode::Hybrid,
+                (3, 23),
+            );
+            m.s.arrivals = Arrivals::Trickle { rate: None };
+            m.s.mix = true;
+            m.s.keep_honest.insert(m.viewers[0]);
+            m.s
+        },
+        |r| {
+            sound(r)?;
+            let kinds = kinds_of(r);
+            let drawn: Vec<&str> = kinds.iter().flatten().copied().collect();
+            let free = drawn.iter().filter(|&&k| k == "free-rider").count();
+            if !(1..=2).contains(&drawn.len())
+                || free.abs_diff(drawn.len() - free) > 1
+                || drawn.iter().any(|k| !["free-rider", "liar"].contains(k))
+                || kinds[0].is_some()
+            {
+                return Err(format!("the mix drew {kinds:?}"));
+            }
+            row_counts_kinds(r, TEST)
+        },
+    );
+}
+
+/// `Scenario::hostile`'s kinds over 10 viewers: two of each kind given a
+/// fifth, interleaved, and the row counts them.
+#[test]
+fn hostile_kinds_interleave_and_are_counted_by_kind() {
+    const TEST: &str = "hostile_kinds_interleave_and_are_counted_by_kind";
+    sweep(
+        TEST,
+        |s| {
+            let mut m = streaming(
+                "hostile_kinds",
+                s,
+                10,
+                (8 * RATE, 4 * RATE),
+                PushMode::Hybrid,
+                (3, 23),
+            );
+            m.s.hostile(&[("free-rider", 0.2), ("liar", 0.2)]);
+            m.s
+        },
+        |r| {
+            sound(r)?;
+            let drawn: Vec<&str> = kinds_of(r).into_iter().flatten().collect();
+            if drawn != ["free-rider", "liar", "free-rider", "liar"] {
+                return Err(format!("hostile viewers {drawn:?}"));
+            }
+            row_counts_kinds(r, TEST)
+        },
+    );
+}
+
 // --- 2. a seed capped at 3x the stream rate --------------------------------
 
 const SEED_CAP: u64 = 3 * RATE;

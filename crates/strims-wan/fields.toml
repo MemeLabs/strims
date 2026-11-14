@@ -302,6 +302,12 @@ lines = ["attackers"]
 type = "int"
 description = "1 when SIM_COLLUDE is set and not 0 (the greedy viewers collude), else 0."
 
+[rows.colluders]
+sims = ["strims-sim"]
+type = "int"
+description = "The first swarm's dishonest viewers that collude: liars whose reports to the seed rate their group well and every other peer they hear from badly; 0 in a run without any."
+notes.strims-sim = "Its hosts of hostile kind colluder (`hostile.rs`, `hostile::Group`), set by STRIMS_SIM_HOSTILE's shares."
+
 [rows.control_bps_link]
 sims = ["strims-sim"]
 type = "num"
@@ -466,6 +472,18 @@ lines = ["attackers"]
 type = "int"
 description = "The honest nodes' echoes of path probes they never sent (PathMeter::unknown_echoes), over their links."
 
+[rows.echo_free_riders]
+sims = ["strims-sim"]
+type = "int"
+description = "The first swarm's dishonest viewers that free-ride and answer path probes late: free riders whose links hold each echo, so their paths read farther than they are; 0 in a run without any."
+notes.strims-sim = "Its hosts of hostile kind free-rider+echo (`hostile.rs`, `ECHO_HOLD`), set by STRIMS_SIM_HOSTILE's shares; `free_riders` doesn't count them."
+
+[rows.echo_liars]
+sims = ["strims-sim"]
+type = "int"
+description = "The first swarm's dishonest viewers that lie and forge their answers to path probes: liars whose links echo nonces they never read, so their paths go unmeasured; 0 in a run without any."
+notes.strims-sim = "Its hosts of hostile kind liar+echo (`hostile.rs`), set by STRIMS_SIM_HOSTILE's shares; `liars` doesn't count them."
+
 [rows.eclipsed_share]
 sims = ["strims-sim"]
 type = "num"
@@ -533,10 +551,10 @@ type = "num"
 description = "Of the seed's push slots (one stream at one neighbour) over the samples after the warm-up, the share at free riders."
 
 [rows.free_riders]
-sims = []
-lines = ["attackers"]
+sims = ["strims-sim"]
 type = "int"
-description = "The greedy viewers that free-ride."
+description = "The first swarm's dishonest viewers that free-ride: they take the stream and serve nothing, announcing nothing either; 0 in a run without any."
+notes.strims-sim = "Its hosts of hostile kind free-rider (`hostile.rs`), set by STRIMS_SIM_HOSTILE's shares or drawn by its dishonest mix (`mix`, `hostile::draw_mix`)."
 
 [rows.grabber_slots]
 sims = []
@@ -545,10 +563,10 @@ type = "num"
 description = "Of the seed's push slots (one stream at one neighbour) over the samples after the warm-up, the share at grabbers."
 
 [rows.grabbers]
-sims = []
-lines = ["attackers"]
+sims = ["strims-sim"]
 type = "int"
-description = "The greedy viewers that grab."
+description = "The first swarm's dishonest viewers that grab: they serve and announce as honest viewers do, but ask every peer that announces a chunk for it at once, never cancel and ignore being choked; 0 in a run without any."
+notes.strims-sim = "Its hosts of hostile kind grabber (`hostile.rs`, `GRAB_ROOM`), set by STRIMS_SIM_HOSTILE's shares."
 
 [rows.grafts]
 sims = []
@@ -586,6 +604,12 @@ sims = ["strims-sim"]
 type = "num"
 unit = "fraction"
 description = "The honest viewers' mean share of their channels whose peer they ask for lazy HAVEs, over their meter samples with channels while a swarm streams (Report::lazy_shares)."
+
+[rows.hogs]
+sims = ["strims-sim"]
+type = "int"
+description = "The first swarm's dishonest viewers that hog links: free riders that, where hosts find their own links, link every host they find and keep every link, dialing again at once; 0 in a run without any."
+notes.strims-sim = "Its hosts of hostile kind hog (`hostile.rs`, `PoolConfig::greedy`), set by STRIMS_SIM_HOSTILE's shares; outside the organic mode (`STRIMS_SIM_DISCOVERY`) a hog is a free rider."
 
 [rows.holder_changes]
 sims = []
@@ -689,10 +713,10 @@ type = "num"
 description = "Of the seed's push slots (one stream at one neighbour) over the samples after the warm-up, the share at liars."
 
 [rows.liars]
-sims = []
-lines = ["attackers"]
+sims = ["strims-sim"]
 type = "int"
-description = "The greedy viewers that lie."
+description = "The first swarm's dishonest viewers that lie: they take the stream and announce what they hold, and serve none of it; 0 in a run without any."
+notes.strims-sim = "Its hosts of hostile kind liar (`hostile.rs`), set by STRIMS_SIM_HOSTILE's shares or drawn by its dishonest mix (`mix`, `hostile::draw_mix`)."
 
 [rows.links_dropped_per_host_min]
 sims = ["strims-sim"]
@@ -1720,6 +1744,12 @@ type = "int"
 description = "Transport chunks the first swarm's honest viewers received that they already had (SwarmSchedulerStats::wasted_chunks), summed over them."
 notes.strims-sim = "Every incarnation's (`Report::chunk_reads`)."
 
+[rows.whitewashers]
+sims = ["strims-sim"]
+type = "int"
+description = "The first swarm's dishonest viewers that whitewash: free riders that rejoin under a fresh identity every 30 s, newcomers to their peers each time; 0 in a run without any."
+notes.strims-sim = "Its hosts of hostile kind whitewasher (`hostile.rs`, `REJOIN_EVERY`), set by STRIMS_SIM_HOSTILE's shares: each crashes and restarts under a fresh host key, from 20 s into the swarm, staggered 3 s a whitewasher."
+
 [rows.wire_per_media]
 sims = ["strims-sim"]
 type = "num"
@@ -1729,6 +1759,12 @@ description = "Every host's upload per media byte per viewer: the bytes uploaded
 sims = ["strims-sim"]
 type = "num"
 description = "The wire bytes through every uplink (`up_wire`) over the bytes of the stream the honest viewers read (`useful_bytes`)."
+
+[rows.withholders]
+sims = ["strims-sim"]
+type = "int"
+description = "The first swarm's dishonest viewers that withhold pushes: they take push subscriptions and keep them, but send a peer only the data it requested; 0 in a run without any."
+notes.strims-sim = "Its hosts of hostile kind withholder (`hostile.rs`), set by STRIMS_SIM_HOSTILE's shares: its STREAM_CLOSEs go out as STREAM_OPENs."
 
 [rows.worst_region_p99_ms]
 sims = []

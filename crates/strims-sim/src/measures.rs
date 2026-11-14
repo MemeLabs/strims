@@ -1298,8 +1298,11 @@ impl Report {
     /// it passed), with clock skew its hosts'
     /// offsets (`clock_offsets_ms`, each host's in host order;
     /// `clock_max_ms`, the largest; `clock_<class>`, the hosts per
-    /// [`SkewClass::name`]), then per scenario swarm 0 its stream count
-    /// (`streams`, at least 1), delivery, lag (overall and per bucket), its
+    /// [`SkewClass::name`]), then per scenario swarm 0 its viewers of each
+    /// hostile kind (`free_riders`, `liars`, `whitewashers`, `hogs`,
+    /// `grabbers`, `withholders`, `colluders`, `echo_free_riders`,
+    /// `echo_liars`: `hostile.rs`), its stream count (`streams`, at least
+    /// 1), delivery, lag (overall and per bucket), its
     /// viewers' playback at each delay `D` of [`DELAYS_MS`]
     /// (`stalls_per_min_D`, `stalled_share_D`, `startup_ms_D`: [`Totals`]
     /// of their playouts, and with hostile hosts the honest viewers' with
@@ -1361,6 +1364,20 @@ impl Report {
         }
         if let Some(d) = self.scenario.departures {
             j.str(RowText::Depart, &d.to_string());
+        }
+        let viewers = self
+            .scenario
+            .swarms
+            .get(swarm)
+            .map_or(&[][..], |s| &s.viewers);
+        for &kind in crate::hostile::KINDS {
+            if let Some(field) = crate::hostile::count_field(kind) {
+                let n = viewers
+                    .iter()
+                    .filter(|&&v| self.class(v) == HostClass::Hostile(kind))
+                    .count();
+                j.int(field, n as u64);
+            }
         }
         let lag = self.lag(swarm);
         let buckets = self.lag_buckets(swarm);

@@ -376,6 +376,13 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms. None is written as an empty field.
     ClockMaxMs,
+    /// The first swarm's dishonest viewers that collude: liars whose reports to
+    /// the seed rate their group well and every other peer they hear from
+    /// badly; 0 in a run without any.
+    ///
+    /// strims-sim: Its hosts of hostile kind colluder (`hostile.rs`,
+    /// `hostile::Group`), set by STRIMS_SIM_HOSTILE's shares.
+    Colluders,
     /// The STREAM_REQUESTs the first swarm's honest viewers (the seed aside)
     /// declined as parents, each counted at the viewer's first sample after it,
     /// from its previous sample of the same incarnation (an incarnation's first
@@ -451,6 +458,21 @@ pub(crate) enum RowInt {
     ///
     /// Unit: bytes.
     DupBytes,
+    /// The first swarm's dishonest viewers that free-ride and answer path
+    /// probes late: free riders whose links hold each echo, so their paths read
+    /// farther than they are; 0 in a run without any.
+    ///
+    /// strims-sim: Its hosts of hostile kind free-rider+echo (`hostile.rs`,
+    /// `ECHO_HOLD`), set by STRIMS_SIM_HOSTILE's shares; `free_riders` doesn't
+    /// count them.
+    EchoFreeRiders,
+    /// The first swarm's dishonest viewers that lie and forge their answers to
+    /// path probes: liars whose links echo nonces they never read, so their
+    /// paths go unmeasured; 0 in a run without any.
+    ///
+    /// strims-sim: Its hosts of hostile kind liar+echo (`hostile.rs`), set by
+    /// STRIMS_SIM_HOSTILE's shares; `liars` doesn't count them.
+    EchoLiars,
     /// The honest viewers' peer exchanges that ended Answered
     /// (ExchangeOutcome).
     ExchAnswered,
@@ -474,6 +496,28 @@ pub(crate) enum RowInt {
     /// Relays' fan-out, its p-th percentile: push subscribers per transfer
     /// sample of a first-swarm viewer or relay that had any.
     FanoutPP(u16),
+    /// The first swarm's dishonest viewers that free-ride: they take the stream
+    /// and serve nothing, announcing nothing either; 0 in a run without any.
+    ///
+    /// strims-sim: Its hosts of hostile kind free-rider (`hostile.rs`), set by
+    /// STRIMS_SIM_HOSTILE's shares or drawn by its dishonest mix (`mix`,
+    /// `hostile::draw_mix`).
+    FreeRiders,
+    /// The first swarm's dishonest viewers that grab: they serve and announce
+    /// as honest viewers do, but ask every peer that announces a chunk for it
+    /// at once, never cancel and ignore being choked; 0 in a run without any.
+    ///
+    /// strims-sim: Its hosts of hostile kind grabber (`hostile.rs`,
+    /// `GRAB_ROOM`), set by STRIMS_SIM_HOSTILE's shares.
+    Grabbers,
+    /// The first swarm's dishonest viewers that hog links: free riders that,
+    /// where hosts find their own links, link every host they find and keep
+    /// every link, dialing again at once; 0 in a run without any.
+    ///
+    /// strims-sim: Its hosts of hostile kind hog (`hostile.rs`,
+    /// `PoolConfig::greedy`), set by STRIMS_SIM_HOSTILE's shares; outside the
+    /// organic mode (`STRIMS_SIM_DISCOVERY`) a hog is a free rider.
+    Hogs,
     /// Over the first swarm's honest viewers' first joins (each one's first
     /// incarnation's): the ms from the join to its first frame read
     /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
@@ -522,6 +566,13 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     LagP99MsWho(u16),
+    /// The first swarm's dishonest viewers that lie: they take the stream and
+    /// announce what they hold, and serve none of it; 0 in a run without any.
+    ///
+    /// strims-sim: Its hosts of hostile kind liar (`hostile.rs`), set by
+    /// STRIMS_SIM_HOSTILE's shares or drawn by its dishonest mix (`mix`,
+    /// `hostile::draw_mix`).
+    Liars,
     /// The median of the honest viewers' link counts over their stats samples
     /// from NET_WARM after their arrival on, while they were there
     /// (Report::link_counts).
@@ -897,6 +948,22 @@ pub(crate) enum RowInt {
     ///
     /// strims-sim: Every incarnation's (`Report::chunk_reads`).
     Wasted,
+    /// The first swarm's dishonest viewers that whitewash: free riders that
+    /// rejoin under a fresh identity every 30 s, newcomers to their peers each
+    /// time; 0 in a run without any.
+    ///
+    /// strims-sim: Its hosts of hostile kind whitewasher (`hostile.rs`,
+    /// `REJOIN_EVERY`), set by STRIMS_SIM_HOSTILE's shares: each crashes and
+    /// restarts under a fresh host key, from 20 s into the swarm, staggered 3 s
+    /// a whitewasher.
+    Whitewashers,
+    /// The first swarm's dishonest viewers that withhold pushes: they take push
+    /// subscriptions and keep them, but send a peer only the data it requested;
+    /// 0 in a run without any.
+    ///
+    /// strims-sim: Its hosts of hostile kind withholder (`hostile.rs`), set by
+    /// STRIMS_SIM_HOSTILE's shares: its STREAM_CLOSEs go out as STREAM_OPENs.
+    Withholders,
 }
 
 impl RowInt {
@@ -932,6 +999,7 @@ impl RowInt {
             RowInt::ChunksRead => "chunks_read",
             RowInt::ClockClass(i) => at(&ROWINT_CLOCK_CLASS, i),
             RowInt::ClockMaxMs => "clock_max_ms",
+            RowInt::Colluders => "colluders",
             RowInt::Declined => "declined",
             RowInt::DeclinedIdle => "declined_idle",
             RowInt::DepartExcessLagAreaMsS => "depart_excess_lag_area_ms_s",
@@ -944,6 +1012,8 @@ impl RowInt {
             RowInt::DepartedDishonest => "departed_dishonest",
             RowInt::DownWire => "down_wire",
             RowInt::DupBytes => "dup_bytes",
+            RowInt::EchoFreeRiders => "echo_free_riders",
+            RowInt::EchoLiars => "echo_liars",
             RowInt::ExchAnswered => "exch_answered",
             RowInt::ExchConnected => "exch_connected",
             RowInt::ExchFailed => "exch_failed",
@@ -952,12 +1022,16 @@ impl RowInt {
             RowInt::ExchRemoteConnected => "exch_remote_connected",
             RowInt::ExchTimedOut => "exch_timed_out",
             RowInt::FanoutPP(i) => at(&ROWINT_FANOUT_P_P, i),
+            RowInt::FreeRiders => "free_riders",
+            RowInt::Grabbers => "grabbers",
+            RowInt::Hogs => "hogs",
             RowInt::JoinUnread => "join_unread",
             RowInt::KnownUplink => "known_uplink",
             RowInt::LagP50Ms => "lag_p50_ms",
             RowInt::LagP50MsWho(i) => at(&ROWINT_LAG_P50_MS_WHO, i),
             RowInt::LagP99Ms => "lag_p99_ms",
             RowInt::LagP99MsWho(i) => at(&ROWINT_LAG_P99_MS_WHO, i),
+            RowInt::Liars => "liars",
             RowInt::LinksP50 => "links_p50",
             RowInt::LinksP90 => "links_p90",
             RowInt::NPop(i) => at(&ROWINT_N_POP, i),
@@ -1027,6 +1101,8 @@ impl RowInt {
             RowInt::UpWire => "up_wire",
             RowInt::UsefulBytes => "useful_bytes",
             RowInt::Wasted => "wasted",
+            RowInt::Whitewashers => "whitewashers",
+            RowInt::Withholders => "withholders",
         }
     }
 

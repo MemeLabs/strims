@@ -62,6 +62,7 @@ use strims_ppspp::codec::{
 use strims_ppspp::{SwarmKey, SwarmOptions};
 use strims_vnic::EchoGreed;
 
+use crate::fields::RowInt;
 use crate::spec::{HostClass, HostIx, Scenario};
 
 /// The kinds a host can be ([`adversary`]).
@@ -76,6 +77,22 @@ pub const KINDS: &[&str] = &[
     "free-rider+echo",
     "liar+echo",
 ];
+
+/// The row field that counts a run's hosts of `kind` (`Report::row`).
+pub fn count_field(kind: &str) -> Option<RowInt> {
+    match kind {
+        "free-rider" => Some(RowInt::FreeRiders),
+        "liar" => Some(RowInt::Liars),
+        "whitewasher" => Some(RowInt::Whitewashers),
+        "hog" => Some(RowInt::Hogs),
+        "grabber" => Some(RowInt::Grabbers),
+        "withholder" => Some(RowInt::Withholders),
+        "colluder" => Some(RowInt::Colluders),
+        "free-rider+echo" => Some(RowInt::EchoFreeRiders),
+        "liar+echo" => Some(RowInt::EchoLiars),
+        _ => None,
+    }
+}
 
 /// How often a whitewasher rejoins.
 pub const REJOIN_EVERY: std::time::Duration = std::time::Duration::from_secs(30);
@@ -851,6 +868,18 @@ mod tests {
             }
         }
         firsts
+    }
+
+    #[test]
+    fn every_kind_has_an_adversary_and_a_count() {
+        let options = swarm(1).swarms[0].options.clone();
+        for kind in KINDS {
+            assert!(
+                adversary(kind, &options, &Group::default()).is_some(),
+                "{kind}"
+            );
+            assert!(count_field(kind).is_some(), "{kind}");
+        }
     }
 
     #[test]
