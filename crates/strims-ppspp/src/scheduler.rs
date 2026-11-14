@@ -59,6 +59,31 @@ pub(crate) trait PeerTaskQueue {
         t: Time,
         pri: PeerPriority,
     ) -> bool;
+    /// Queues the answer to a request for `b` that arrived at `t`, as
+    /// `push_data` does, unless the channel has `cap` entries at `pri`: a
+    /// refused answer is false.
+    fn push_answer(
+        &mut self,
+        peer: PeerKey,
+        swarm: SwarmKey,
+        b: Bin,
+        t: Time,
+        pri: PeerPriority,
+        cap: usize,
+    ) -> bool;
+    /// Whether the channel's entries at `pri` cover every chunk of `b`.
+    fn covers_data(&self, peer: PeerKey, swarm: SwarmKey, b: Bin, pri: PeerPriority) -> bool;
+    /// Drops the channel's entries at `pri` for the bins numbered before
+    /// `from` (each starts before it), passing each bin, its entries and
+    /// the time of the first to `f`.
+    fn remove_data_before(
+        &mut self,
+        peer: PeerKey,
+        swarm: SwarmKey,
+        from: Bin,
+        pri: PeerPriority,
+        f: impl FnMut(Bin, u32, Time),
+    );
     /// Puts a bin back at the front.
     fn push_front_data(
         &mut self,

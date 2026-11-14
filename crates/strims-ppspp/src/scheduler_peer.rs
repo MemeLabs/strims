@@ -414,7 +414,7 @@ pub(crate) struct SwarmState {
     chunks_sent: u64,
     pushed_chunks: u64,
     /// Requests queued to answer, those a full queue refused, and answers
-    /// dropped at write time ([`TapKind::DataDropped`]).
+    /// dropped unwritten ([`TapKind::DataDropped`]).
     answers_queued: u64,
     answers_refused: u64,
     answers_dropped: u64,
@@ -679,7 +679,7 @@ impl SwarmState {
         }
     }
 
-    /// Reports `bin`, queued for `peer`, dropped at write time
+    /// Reports `bin`, queued for `peer`, dropped unwritten
     /// ([`TapKind::DataDropped`]), and counts an answer's.
     fn drop_data(&mut self, peer: PeerKey, bin: Bin, push: bool) {
         if !push {
@@ -2711,14 +2711,29 @@ impl PeerSwarmScheduler {
         true
     }
 
-    /// The peer requested `b`, arriving at `now`: queue the answer below
-    /// pushes ([`SwarmState::answer_priority`]), stamped with `now` (the
-    /// request's own timestamp is the peer's clock). False if the bin was
-    /// refused.
+    /// The peer requested `b`, arriving at `now`, while the store's window
+    /// starts at `window_start`: queue the answer below pushes
+    /// ([`SwarmState::answer_priority`]), stamped with `now` (the request's
+    /// own timestamp is the peer's clock). False if the bin was refused as
+    /// invalid.
+    ///
+    /// Whatever a peer requests, the channel's queued answers are bins of
+    /// the window's span, each adding a chunk the others don't cover, so
+    /// they number at most the window's chunks (the most requests a
+    /// requester has outstanding, [`max_pending_requests`]), past which
+    /// requests are refused as by a full queue. A bin that starts before
+    /// the window is never written again, so the answers of those go first
+    /// ([`TapKind::DataDropped`], as at write time), and a request for one,
+    /// or for a bin past the span, is dropped the same way; a request whose
+    /// chunks queued answers cover is answered by them. Once the window is
+    /// full its span ends at the newest chunk, so a request for a chunk not
+    /// yet stored is dropped: requests sent ahead of what the peer holds (a
+    /// requester that doesn't wait for HAVEs) need the span to reach past it.
     pub(crate) fn handle_request(
         &mut self,
         peer: PeerKey,
         b: Bin,
+        window_start: Bin,
         now: Time,
         q: &mut impl PeerTaskQueue,
     ) -> bool {
@@ -2736,20 +2751,35 @@ impl PeerSwarmScheduler {
         if s.have_bins.filled_at(b) && s.announce_bins.empty_at(b) {
             return false;
         }
-        if q.push_data(peer, s.key, b, now, s.answer_priority()) {
-            s.answers_queued = s.answers_queued.saturating_add(1);
-        } else {
-            s.answers_refused = s.answers_refused.saturating_add(1);
-            s.tap.emit(s.key, Some(peer), || TapKind::DataRefused {
-                bin: b,
-                push: false,
-            });
-            if s.seed_log.is_some() {
-                let pri = s.answer_priority();
-                let (mut x, r) = b.base();
-                while x <= r {
-                    s.seed_refused(c, x, pri, now);
-                    x += 2;
+        let (key, pri) = (s.key, s.answer_priority());
+        q.remove_data_before(peer, key, window_start, pri, |x, n, t| {
+            for _ in 0..n {
+                s.drop_data(peer, x, false);
+                s.seed_sent(peer, Some(&*c), x, t, pri, SendFate::Dropped, 0, now);
+            }
+        });
+        let window_end = Bin(window_start.0.saturating_add(s.live_window.0));
+        if b.base_left() < window_start || b.base_right() >= window_end {
+            s.drop_data(peer, b, false);
+            s.seed_sent(peer, Some(&*c), b, now, pri, SendFate::Dropped, 0, now);
+            return true;
+        }
+        if !q.covers_data(peer, key, b, pri) {
+            let cap = max_pending_requests(s.window);
+            if q.push_answer(peer, key, b, now, pri, cap) {
+                s.answers_queued = s.answers_queued.saturating_add(1);
+            } else {
+                s.answers_refused = s.answers_refused.saturating_add(1);
+                s.tap.emit(key, Some(peer), || TapKind::DataRefused {
+                    bin: b,
+                    push: false,
+                });
+                if s.seed_log.is_some() {
+                    let (mut x, r) = b.base();
+                    while x <= r {
+                        s.seed_refused(c, x, pri, now);
+                        x += 2;
+                    }
                 }
             }
         }
@@ -3604,10 +3634,13 @@ pub struct SwarmSchedulerStats {
     /// Chunks written to anyone at least once (a seed's count of distinct
     /// chunks uploaded).
     pub distinct_chunks_sent: u64,
-    /// Requests queued to answer, those a full queue refused, and answers
-    /// dropped at write time ([`TapKind::DataDropped`]): a part with no
-    /// data to write, a chunk no longer stored, or one too big for an empty
-    /// frame.
+    /// Requests queued to answer, those a full queue (or the channel's
+    /// window of answers) refused, and answers dropped unwritten
+    /// ([`TapKind::DataDropped`]): at write time, a part with no data to
+    /// write, a chunk no longer stored, or one too big for an empty frame;
+    /// before it, at the peer's next request, one whose bin starts before
+    /// the store's window, or on arrival, a request for a bin outside the
+    /// window's span.
     pub answers_queued: u64,
     pub answers_refused: u64,
     pub answers_dropped: u64,

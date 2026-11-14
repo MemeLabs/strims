@@ -24,9 +24,9 @@
 //!   step; and the answer gate's pace as it changes.
 //! - **Sends** ([`SeedSend`]): one per chunk the seed pushed or answered,
 //!   once it ended: written to the frame, dropped at write time (stale,
-//!   cancelled by the peer, announced by its HAVEs, or unwritable),
-//!   refused by the peer's full queue, or still queued when the channel
-//!   closed. A push opens when it
+//!   cancelled by the peer, announced by its HAVEs, or unwritable) or, an
+//!   answer, once outside the store's window, refused by the peer's full
+//!   queue, or still queued when the channel closed. A push opens when it
 //!   is queued; an answer is recorded as it is written or dropped, from
 //!   the request's time.
 //!
@@ -363,10 +363,13 @@ pub enum SendFate {
     /// A push dropped at write time: the peer's HAVEs announced the chunk
     /// (where peers send HAVEs).
     Suppressed,
-    /// The peer's queue was full: never queued.
+    /// The peer's queue (or, for an answer, its channel's window of them)
+    /// was full: never queued.
     Refused,
-    /// Dropped at write time: its data was gone, data-less, or too large
-    /// for an empty frame.
+    /// Dropped unwritten: at write time, its data was gone, data-less, or
+    /// too large for an empty frame; an answer, also once its bin started
+    /// before the store's window, or on arrival, its request's bin outside
+    /// the window's span.
     Dropped,
     /// A push still queued when the peer's channel closed, or the
     /// scheduler went.

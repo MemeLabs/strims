@@ -426,8 +426,9 @@ pub struct Invariants {
     /// No peer's data queue holds more than this many chunks (per
     /// priority), and no queue refuses a request or push for lack of room
     /// (`PeerStats::dropped`). ppspp's hard cap is `DATA_QUEUE_CAP`
-    /// (8192, eight [`LIVE_WINDOW`]s); a queue toward an honest peer holds
-    /// at most what that peer may have requested, one window.
+    /// (8192, eight [`LIVE_WINDOW`]s) a queue; a channel's answers, to any
+    /// peer, cover distinct chunks of the window's span, one window at
+    /// most, whatever the peer requests.
     pub max_data_queue: Option<usize>,
     /// No channel tracks more than this many request deadlines
     /// (`ChannelSchedulerStats::pending_requests`: requests sent within

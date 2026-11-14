@@ -18,13 +18,20 @@
 //! - the ring is compacted whenever dead entries outnumber live ones by
 //!   64, so it holds at most `2 * len + 64` entries;
 //! - [`PeerDataQueue::push`] refuses entries past [`DATA_QUEUE_CAP`] live
-//!   ones. A refused request is never answered; the requester times it out
-//!   and asks again, from us or another peer.
+//!   ones, and [`PeerDataQueue::push_capped`] past a channel's own cap. A
+//!   refused request is never answered; the requester times it out and
+//!   asks again, from us or another peer.
+//! - the index counts each channel's live entries, tells whether they
+//!   cover a bin ([`PeerDataQueue::covers`]) in a lookup per layer and a
+//!   range query per live bin inside it, and drops a channel's entries for
+//!   the bins numbered before a bin ([`PeerDataQueue::remove_before`]) in
+//!   one range query, O(log n) per removed bin.
 //!
 //! Each entry carries a time the scheduler gets back on pop: when a
 //! request arrived, or when a push was queued. The answer gate reads the
 //! oldest live entry's ([`PeerDataQueue::front_time`]).
 
+use core::ops::RangeBounds;
 use std::collections::{BTreeMap, VecDeque};
 
 use strims_base::time::Time;
@@ -51,6 +58,35 @@ struct Live {
     /// The lowest number a live entry can have: the number of the entry
     /// queued while the bin had none.
     since: u64,
+    /// That entry's time.
+    t: Time,
+}
+
+/// One channel's live entries: `n` in all, by bin, none above layer `top`.
+#[derive(Clone, Debug, Default)]
+struct Lives {
+    n: usize,
+    bins: BTreeMap<Bin, Live>,
+    top: u64,
+}
+
+impl Lives {
+    /// Whether the live bins inside `b` cover it.
+    fn cover(&self, b: Bin) -> bool {
+        if self.bins.contains_key(&b) {
+            return true;
+        }
+        if b.is_base()
+            || self
+                .bins
+                .range(b.base_left()..=b.base_right())
+                .next()
+                .is_none()
+        {
+            return false;
+        }
+        self.cover(b.left()) && self.cover(b.right())
+    }
 }
 
 /// One priority's queue of `(channel, bin, time)` entries.
@@ -61,8 +97,9 @@ pub(crate) struct PeerDataQueue<K: Copy + Ord> {
     /// The live entries per channel and bin. Bound: `len` entries.
     /// Invariant: for each (channel, bin) here, the ring holds exactly `n`
     /// of its entries numbered `since` or later, and those are the live
-    /// ones. Every other ring entry is dead.
-    live: BTreeMap<K, BTreeMap<Bin, Live>>,
+    /// ones. Every other ring entry is dead. A channel's `n` sums its
+    /// bins'.
+    live: BTreeMap<K, Lives>,
     /// Live entries.
     len: usize,
     /// The next entry's number.
@@ -81,32 +118,44 @@ impl<K: Copy + Ord> Default for PeerDataQueue<K> {
 }
 
 impl<K: Copy + Ord> PeerDataQueue<K> {
-    /// Counts a new live entry for `(k, b)` and returns its number.
-    fn count(&mut self, k: K, b: Bin) -> u64 {
+    /// Counts a new live entry for `(k, b)`, queued at `t`, and returns its
+    /// number.
+    fn count(&mut self, k: K, b: Bin, t: Time) -> u64 {
         let seq = self.seq;
         self.seq += 1;
-        self.live
-            .entry(k)
-            .or_default()
+        let c = self.live.entry(k).or_default();
+        c.bins
             .entry(b)
-            .or_insert(Live { n: 0, since: seq })
+            .or_insert(Live {
+                n: 0,
+                since: seq,
+                t,
+            })
             .n += 1;
+        c.n += 1;
+        c.top = c.top.max(b.layer());
         self.len += 1;
         seq
     }
 
-    fn is_live(live: &BTreeMap<K, BTreeMap<Bin, Live>>, i: &Item<K>) -> bool {
+    fn is_live(live: &BTreeMap<K, Lives>, i: &Item<K>) -> bool {
         live.get(&i.k)
-            .and_then(|m| m.get(&i.b))
+            .and_then(|c| c.bins.get(&i.b))
             .is_some_and(|e| i.seq >= e.since)
     }
 
     /// Appends an entry; false if the queue is full.
     pub(crate) fn push(&mut self, k: K, b: Bin, t: Time) -> bool {
-        if self.len >= DATA_QUEUE_CAP {
+        self.push_capped(k, b, t, usize::MAX)
+    }
+
+    /// Appends an entry; false if the queue is full or `k` has `cap` live
+    /// entries.
+    pub(crate) fn push_capped(&mut self, k: K, b: Bin, t: Time, cap: usize) -> bool {
+        if self.len >= DATA_QUEUE_CAP || self.channel_len(k) >= cap {
             return false;
         }
-        let seq = self.count(k, b);
+        let seq = self.count(k, b, t);
         self.ring.push_back(Item { k, b, t, seq });
         self.maybe_compact();
         true
@@ -116,7 +165,7 @@ impl<K: Copy + Ord> PeerDataQueue<K> {
     /// that didn't fit a frame, so it is never refused: it at most restores
     /// what was popped, split into at most 62 parts.
     pub(crate) fn push_front(&mut self, k: K, b: Bin, t: Time) {
-        let seq = self.count(k, b);
+        let seq = self.count(k, b, t);
         self.ring.push_front(Item { k, b, t, seq });
         self.maybe_compact();
     }
@@ -126,31 +175,83 @@ impl<K: Copy + Ord> PeerDataQueue<K> {
         if b.is_none() {
             return;
         }
-        let Some(m) = self.live.get_mut(&k) else {
-            return;
-        };
         let (l, r) = (b.base_left(), b.base_right());
         if l > r {
             return;
         }
-        while let Some((&bin, &e)) = m.range(l..=r).next() {
-            m.remove(&bin);
-            self.len -= e.n as usize;
+        if self.remove_range(k, l..=r, |_, _, _| {}).is_some() {
+            self.maybe_clear();
+            self.maybe_compact();
         }
-        if m.is_empty() {
+    }
+
+    /// Drops `k`'s entries for the bins numbered before `from`, each of
+    /// which starts before it, passing each bin, its live entries and the
+    /// time of the entry that made it live to `f`.
+    pub(crate) fn remove_before(&mut self, k: K, from: Bin, f: impl FnMut(Bin, u32, Time)) {
+        if self.remove_range(k, ..from, f) == Some(true) {
+            self.maybe_clear();
+            self.maybe_compact();
+        }
+    }
+
+    /// Drops `k`'s entries for the bins numbered in `range`, passing each
+    /// bin, its live entries and the time of the entry that made it live
+    /// to `f`. `None` if `k` has no entries, else whether any went.
+    fn remove_range(
+        &mut self,
+        k: K,
+        range: impl RangeBounds<Bin> + Clone,
+        mut f: impl FnMut(Bin, u32, Time),
+    ) -> Option<bool> {
+        let c = self.live.get_mut(&k)?;
+        let mut removed = false;
+        while let Some((&bin, &e)) = c.bins.range(range.clone()).next() {
+            c.bins.remove(&bin);
+            c.n -= e.n as usize;
+            self.len -= e.n as usize;
+            removed = true;
+            f(bin, e.n, e.t);
+        }
+        if c.bins.is_empty() {
             self.live.remove(&k);
+        }
+        Some(removed)
+    }
+
+    /// Drops all of `k`'s entries.
+    pub(crate) fn remove_all(&mut self, k: K) {
+        if let Some(c) = self.live.remove(&k) {
+            self.len -= c.n;
         }
         self.maybe_clear();
         self.maybe_compact();
     }
 
-    /// Drops all of `k`'s entries.
-    pub(crate) fn remove_all(&mut self, k: K) {
-        if let Some(m) = self.live.remove(&k) {
-            self.len -= m.values().map(|e| e.n as usize).sum::<usize>();
+    /// Whether `k`'s live entries cover every chunk of `b`: an entry for
+    /// `b` or a bin around it, or entries for bins inside it that cover
+    /// it. Costs O(log n) per layer up to `k`'s largest bin, and per live
+    /// bin inside `b` per layer of `b`.
+    pub(crate) fn covers(&self, k: K, b: Bin) -> bool {
+        let Some(c) = self.live.get(&k) else {
+            return false;
+        };
+        if b.is_none() {
+            return false;
         }
-        self.maybe_clear();
-        self.maybe_compact();
+        let mut x = b.parent();
+        while x.layer() <= c.top {
+            if c.bins.contains_key(&x) {
+                return true;
+            }
+            x = x.parent();
+        }
+        c.cover(b)
+    }
+
+    /// `k`'s live entries.
+    pub(crate) fn channel_len(&self, k: K) -> usize {
+        self.live.get(&k).map_or(0, |c| c.n)
     }
 
     /// The time of the oldest live entry: the front's, once the dead
@@ -168,14 +269,15 @@ impl<K: Copy + Ord> PeerDataQueue<K> {
     /// Takes the oldest live entry.
     pub(crate) fn pop(&mut self) -> Option<(K, Bin, Time)> {
         while let Some(i) = self.ring.pop_front() {
-            if let Some(m) = self.live.get_mut(&i.k)
-                && let Some(e) = m.get_mut(&i.b)
+            if let Some(c) = self.live.get_mut(&i.k)
+                && let Some(e) = c.bins.get_mut(&i.b)
                 && i.seq >= e.since
             {
                 e.n -= 1;
+                c.n -= 1;
                 if e.n == 0 {
-                    m.remove(&i.b);
-                    if m.is_empty() {
+                    c.bins.remove(&i.b);
+                    if c.bins.is_empty() {
                         self.live.remove(&i.k);
                     }
                 }
@@ -389,10 +491,25 @@ mod tests {
         #[derive(Clone, Copy, Debug)]
         enum Op {
             Push(u8, u64),
+            PushCapped(u8, u64, usize),
             PushFront(u8, u64),
             Remove(u8, u64),
+            RemoveBefore(u8, u64),
             RemoveAll(u8),
             Pop,
+        }
+
+        impl Op {
+            fn bin(self) -> Option<(u8, Bin)> {
+                match self {
+                    Op::Push(k, b)
+                    | Op::PushCapped(k, b, _)
+                    | Op::PushFront(k, b)
+                    | Op::Remove(k, b)
+                    | Op::RemoveBefore(k, b) => Some((k, Bin(b))),
+                    Op::RemoveAll(_) | Op::Pop => None,
+                }
+            }
         }
 
         fn op() -> impl Strategy<Value = Op> {
@@ -402,8 +519,11 @@ mod tests {
             let b = 0u64..32;
             prop_oneof![
                 4 => (k.clone(), b.clone()).prop_map(|(k, b)| Op::Push(k, b)),
+                2 => (k.clone(), b.clone(), 0usize..8)
+                    .prop_map(|(k, b, cap)| Op::PushCapped(k, b, cap)),
                 1 => (k.clone(), b.clone()).prop_map(|(k, b)| Op::PushFront(k, b)),
-                2 => (k.clone(), b).prop_map(|(k, b)| Op::Remove(k, b)),
+                2 => (k.clone(), b.clone()).prop_map(|(k, b)| Op::Remove(k, b)),
+                1 => (k.clone(), b).prop_map(|(k, b)| Op::RemoveBefore(k, b)),
                 1 => k.prop_map(Op::RemoveAll),
                 3 => Just(Op::Pop),
             ]
@@ -425,12 +545,24 @@ mod tests {
             fn matches_a_fifo_model(ops in proptest::collection::vec(op(), 1..400)) {
                 let mut q = PeerDataQueue::default();
                 let mut model: VecDeque<(u8, Bin, Time)> = VecDeque::new();
+                // The time of the entry that made each (channel, bin) live.
+                let mut made: BTreeMap<(u8, Bin), Time> = BTreeMap::new();
+                let of = |model: &VecDeque<(u8, Bin, Time)>, k: u8| {
+                    model.iter().filter(|e| e.0 == k).count()
+                };
                 for (i, op) in ops.into_iter().enumerate() {
                     let at = t(i as i64);
                     match op {
                         Op::Push(k, b) => {
                             let ok = model.len() < DATA_QUEUE_CAP;
                             prop_assert_eq!(q.push(k, Bin(b), at), ok);
+                            if ok {
+                                model.push_back((k, Bin(b), at));
+                            }
+                        }
+                        Op::PushCapped(k, b, cap) => {
+                            let ok = model.len() < DATA_QUEUE_CAP && of(&model, k) < cap;
+                            prop_assert_eq!(q.push_capped(k, Bin(b), at, cap), ok);
                             if ok {
                                 model.push_back((k, Bin(b), at));
                             }
@@ -443,6 +575,21 @@ mod tests {
                             q.remove(k, Bin(b));
                             model.retain(|&(mk, mb, _)| mk != k || !Bin(b).contains(mb));
                         }
+                        Op::RemoveBefore(k, b) => {
+                            let mut got = BTreeMap::new();
+                            q.remove_before(k, Bin(b), |x, n, t| {
+                                got.insert(x, (n, t));
+                            });
+                            let mut want = BTreeMap::new();
+                            for &(mk, mb, _) in &model {
+                                if mk == k && mb < Bin(b) {
+                                    let t = made.get(&(mk, mb)).copied();
+                                    want.entry(mb).or_insert((0, t.unwrap_or(Time::NIL))).0 += 1;
+                                }
+                            }
+                            prop_assert_eq!(got, want);
+                            model.retain(|&(mk, mb, _)| mk != k || mb >= Bin(b));
+                        }
                         Op::RemoveAll(k) => {
                             q.remove_all(k);
                             model.retain(|&(mk, _, _)| mk != k);
@@ -451,9 +598,25 @@ mod tests {
                             prop_assert_eq!(q.pop(), model.pop_front());
                         }
                     }
+                    made.retain(|&(k, b), _| model.iter().any(|e| (e.0, e.1) == (k, b)));
+                    for &(k, b, t) in &model {
+                        made.entry((k, b)).or_insert(t);
+                    }
                     prop_assert_eq!(q.len(), model.len());
                     prop_assert_eq!(q.is_empty(), model.is_empty());
                     prop_assert_eq!(q.front_time(), model.front().map(|e| e.2));
+                    for k in 0..2 {
+                        prop_assert_eq!(q.channel_len(k), of(&model, k));
+                    }
+                    if let Some((_, b)) = op.bin() {
+                        for k in 0..2 {
+                            let (l, r) = b.base();
+                            let covered = (l.0..=r.0).step_by(2).all(|x| {
+                                model.iter().any(|e| e.0 == k && e.1.contains(Bin(x)))
+                            });
+                            prop_assert_eq!(q.covers(k, b), covered);
+                        }
+                    }
                     if !matches!(op, Op::Pop) {
                         prop_assert!(q.ring_len() <= 2 * q.len() + 64);
                     }

@@ -13,8 +13,9 @@
 //!
 //! Bounds: the task queue holds each of the peer's channels at most once,
 //! and each data queue at most
-//! [`DATA_QUEUE_CAP`](crate::DATA_QUEUE_CAP) live entries; refused entries
-//! are counted in [`PeerStats::dropped`].
+//! [`DATA_QUEUE_CAP`](crate::DATA_QUEUE_CAP) live entries, a channel's
+//! answers at most a window of them (the scheduler's `handle_request`);
+//! refused entries are counted in [`PeerStats::dropped`].
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -115,7 +116,8 @@ pub struct PeerStats {
     pub queued_data: [usize; 2],
     /// Ring entries per priority, live or dead.
     pub queue_ring: [usize; 2],
-    /// Requests and pushes refused because a queue was full.
+    /// Requests and pushes refused because a queue, or a channel's window
+    /// of answers, was full.
     pub dropped: u64,
     /// The driver's measure of the link's path ([`Runner::set_peer_path`]).
     ///
@@ -260,6 +262,44 @@ impl PeerTaskQueue for Queues<'_> {
             return false;
         }
         true
+    }
+
+    fn push_answer(
+        &mut self,
+        peer: PeerKey,
+        swarm: SwarmKey,
+        b: Bin,
+        t: Time,
+        pri: PeerPriority,
+        cap: usize,
+    ) -> bool {
+        let Some(p) = self.peers.get_mut(peer) else {
+            return true;
+        };
+        if !p.queue_mut(pri).push_capped(swarm, b, t, cap) {
+            p.dropped = p.dropped.saturating_add(1);
+            return false;
+        }
+        true
+    }
+
+    fn covers_data(&self, peer: PeerKey, swarm: SwarmKey, b: Bin, pri: PeerPriority) -> bool {
+        self.peers
+            .get(peer)
+            .is_some_and(|p| p.queue(pri).covers(swarm, b))
+    }
+
+    fn remove_data_before(
+        &mut self,
+        peer: PeerKey,
+        swarm: SwarmKey,
+        from: Bin,
+        pri: PeerPriority,
+        f: impl FnMut(Bin, u32, Time),
+    ) {
+        if let Some(p) = self.peers.get_mut(peer) {
+            p.queue_mut(pri).remove_before(swarm, from, f);
+        }
     }
 
     fn push_front_data(

@@ -48,6 +48,29 @@ impl PeerTaskQueue for MockQueue {
         self.pushed.push((peer, b, pri));
         true
     }
+    fn push_answer(
+        &mut self,
+        peer: PeerKey,
+        swarm: SwarmKey,
+        b: Bin,
+        t: Time,
+        pri: PeerPriority,
+        _: usize,
+    ) -> bool {
+        self.push_data(peer, swarm, b, t, pri)
+    }
+    fn covers_data(&self, _: PeerKey, _: SwarmKey, _: Bin, _: PeerPriority) -> bool {
+        false
+    }
+    fn remove_data_before(
+        &mut self,
+        _: PeerKey,
+        _: SwarmKey,
+        _: Bin,
+        _: PeerPriority,
+        _: impl FnMut(Bin, u32, Time),
+    ) {
+    }
     fn push_front_data(&mut self, peer: PeerKey, _: SwarmKey, b: Bin, _: Time, pri: PeerPriority) {
         self.pushed_front.push((peer, b, pri));
     }
@@ -2844,7 +2867,10 @@ fn answers_queue_by_push_mode() {
         let mut f = fixture(options);
         let mut q = MockQueue::default();
         let p = add_ready(&mut f, &mut q, 0);
-        assert!(f.sched.handle_request(p, Bin(2), now(), &mut q));
+        assert!(
+            f.sched
+                .handle_request(p, Bin(2), f.swarm.store().window_start(), now(), &mut q)
+        );
         assert_eq!(q.pushed, [(p, Bin(2), pri)]);
         f.sched.handle_cancel(p, Bin(2), Bin(0), now(), &mut q);
         assert_eq!(q.removed, [(p, Bin(2), pri)]);
@@ -2880,7 +2906,10 @@ fn a_cancelled_push_is_not_sent() {
     );
     let st = f.sched.push_stats();
     assert_eq!((st.suppressed, st.stale_drops), (2, 1));
-    assert!(f.sched.handle_request(child, Bin(2), t, &mut q));
+    assert!(
+        f.sched
+            .handle_request(child, Bin(2), f.swarm.store().window_start(), t, &mut q)
+    );
     assert_eq!(
         q.pushed.last(),
         Some(&(child, Bin(2), PeerPriority::Scavenger))
@@ -3803,7 +3832,13 @@ fn a_joiner_answers_for_chunks_before_its_read_offset() {
     assert!(f.sched.s.first_chunk_set);
     assert_eq!(f.swarm.store().tail(), Bin(2 * 512));
 
-    assert!(f.sched.handle_request(p, Bin(2 * 100), now(), &mut q));
+    assert!(f.sched.handle_request(
+        p,
+        Bin(2 * 100),
+        f.swarm.store().window_start(),
+        now(),
+        &mut q
+    ));
     let mut buf = vec![0u8; 4096];
     let mut cw = MeteredWriter::new(&mut buf, 1);
     let pri = f.sched.s.answer_priority();
@@ -4081,10 +4116,22 @@ fn dataless_chunks_are_held_but_never_pushed_announced_or_sent() {
     // requests: data-less chunks alone are refused, a wider bin is sent in
     // parts whose data-less ones are dropped
     q.pushed.clear();
-    assert!(!f.sched.handle_request(p, Bin(4), now(), &mut q));
-    assert!(!f.sched.handle_request(p, Bin::new(2, 1), now(), &mut q));
+    assert!(
+        !f.sched
+            .handle_request(p, Bin(4), f.swarm.store().window_start(), now(), &mut q)
+    );
+    assert!(!f.sched.handle_request(
+        p,
+        Bin::new(2, 1),
+        f.swarm.store().window_start(),
+        now(),
+        &mut q
+    ));
     assert!(q.pushed.is_empty());
-    assert!(f.sched.handle_request(p, unit, now(), &mut q));
+    assert!(
+        f.sched
+            .handle_request(p, unit, f.swarm.store().window_start(), now(), &mut q)
+    );
     let cfg = f.swarm.reader_config();
     let (sched, swarm) = (&mut f.sched, &f.swarm);
     let sent = written(
@@ -4279,7 +4326,10 @@ fn eager_windows_override_a_lazy_pace() {
     haves_and_paces(&mut f, p, t, false);
     f.sched.consume(Bin(4), t, &f.swarm, &mut q);
     assert_eq!(haves_and_paces(&mut f, p, t, false).0, 0);
-    assert!(f.sched.handle_request(p, Bin(0), t, &mut q));
+    assert!(
+        f.sched
+            .handle_request(p, Bin(0), f.swarm.store().window_start(), t, &mut q)
+    );
     f.sched.consume(Bin(6), t, &f.swarm, &mut q);
     assert_eq!(haves_and_paces(&mut f, p, t, false).0, 1);
 }

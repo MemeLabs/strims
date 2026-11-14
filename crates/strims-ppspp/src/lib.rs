@@ -54,7 +54,8 @@
 //! reaches a buffer index or a binmap walk. Every per-message path costs at
 //! most O(live window), usually O(new bins), and every collection a peer
 //! can grow is bounded: HAVE history to two windows, outstanding requests
-//! and pending signatures to one window, data queues to [`DATA_QUEUE_CAP`]
+//! and pending signatures to one window, a channel's queued answers to one
+//! window of what it can still be sent, data queues to [`DATA_QUEUE_CAP`]
 //! entries per priority, extra messages to a fixed set per stream. A peer
 //! that announces chunks and withholds them, or sends invalid data, only
 //! delays them: they go to the other channels while the failing one backs

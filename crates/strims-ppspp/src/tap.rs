@@ -77,8 +77,10 @@ pub enum TapKind {
         bin: Bin,
         push: bool,
     },
-    /// A queued bin was dropped at write time: its integrity or data
-    /// couldn't be written, or one chunk doesn't fit an empty frame.
+    /// A queued bin was dropped unwritten: at write time, its integrity or
+    /// data couldn't be written, or one chunk doesn't fit an empty frame;
+    /// an answer, also once its bin starts before the store's window, or
+    /// on arrival, its request's bin outside the window's span.
     DataDropped {
         bin: Bin,
         push: bool,

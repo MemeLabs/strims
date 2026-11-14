@@ -877,6 +877,89 @@ fn chunks_that_never_fit_are_dropped() {
     );
 }
 
+impl Pair {
+    /// Hands the seed frames from the leech requesting the chunks
+    /// `chunks`, as a peer that never cancels and never reads would.
+    fn request(&mut self, chunks: impl IntoIterator<Item = u64>) {
+        self.request_bins(chunks.into_iter().map(|x| Bin(2 * x)));
+    }
+
+    /// Hands the seed frames from the leech requesting `bins`.
+    fn request_bins(&mut self, bins: impl IntoIterator<Item = Bin>) {
+        let bins: Vec<Bin> = bins.into_iter().collect();
+        for part in bins.chunks(128) {
+            let mut frame = vec![0u8; MTU];
+            let mut cw = ChannelWriter::new(&mut frame, 1);
+            for &bin in part {
+                cw.write(&Message::Request(crate::codec::Request {
+                    bin,
+                    timestamp: self.now,
+                }))
+                .unwrap();
+            }
+            let n = cw.finish();
+            self.seed
+                .runner
+                .handle_frame(self.seed.peer, self.now, &frame[..n])
+                .unwrap();
+        }
+    }
+
+    fn seed_window_start(&self) -> u64 {
+        let swarm = self.seed.runner.swarm(self.seed.swarm).unwrap();
+        swarm.store().window_start().base_offset()
+    }
+}
+
+#[test]
+fn a_request_flood_queues_at_most_a_window_of_answers() {
+    let mut p = Pair::with(hybrid(), hybrid());
+    p.tick(100);
+    p.tick(100);
+    let window = hybrid().live_window as u64;
+    // Two windows written: the first has left the seed's store.
+    while p.seed_window_start() < window {
+        p.write(1);
+    }
+    let from = p.seed_window_start();
+    let queued = |p: &Pair| p.seed.runner.peer_stats(p.seed.peer).unwrap().queued_data[1];
+    let dropped = |p: &Pair| {
+        p.seed
+            .runner
+            .swarm_counters(p.seed.swarm)
+            .unwrap()
+            .answers_dropped
+    };
+
+    // Every chunk of the window, three times, then bins of two of them and
+    // one of half a window: each chunk is queued once.
+    assert_eq!(from % 2, 0);
+    for _ in 0..3 {
+        p.request(from..from + window);
+    }
+    p.request_bins((from..from + window).step_by(2).map(|x| Bin::new(1, x / 2)));
+    p.request_bins([Bin::new(9, from.div_ceil(512))]);
+    assert_eq!(queued(&p), window as usize);
+
+    // Chunks before the window can't be sent, nor those past its span:
+    // none is queued.
+    p.request(0..from);
+    p.request(from + window..from + 2 * window);
+    assert_eq!(queued(&p), window as usize);
+    assert_eq!(dropped(&p), from + window);
+    assert_eq!(p.seed.runner.peer_stats(p.seed.peer).unwrap().dropped, 0);
+
+    // Once the window moves past them, the queued answers go with the
+    // peer's next request.
+    while p.seed_window_start() < from + window {
+        p.write(1);
+    }
+    let next = p.seed_window_start();
+    p.request([next]);
+    assert_eq!(queued(&p), 1);
+    assert_eq!(dropped(&p), from + 2 * window);
+}
+
 #[test]
 fn idle_peers_dont_tick() {
     // Peers without running channels have nothing to tick: no timer.
