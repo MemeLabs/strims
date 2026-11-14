@@ -14,9 +14,11 @@ DuckLake, so that any question is one SQL statement over it.
   lake(sql, write=False, out="json")
                  a script over the catalog, in a connection of its own:
                  a reader, or the indexer's writer
-  connected(write=False)
+  connected(write=False, scoring=False)
                  lake's connection, as a block's, for a session of
-                 several scripts
+                 several scripts (a reader of this process's own verdicts,
+                 and with `scoring` scoring objects, where they aren't the
+                 catalog's: below)
   pinned()       this thread's readers opened in the block at one
                  snapshot (below)
   pool(name, size=1, guard=engine.Guard()) -> engine.Pool
@@ -55,6 +57,9 @@ DuckLake, so that any question is one SQL statement over it.
   docs_of(info) -> dict
                  whether this process's docs are main's, which the
                  shared catalog holds (below)
+  owns(info) -> dict
+                 whether this process's verdicts and scoring objects are
+                 those the shared catalog serves (below)
 
 hack/sim-db/simdb.py's index, fetch, lake, view and describe commands
 call these (hack/sim-db/catalog.py's), printing an index's and a fetch's
@@ -154,8 +159,10 @@ jobs picked by `cells` and `arms`: store.pull_samples), indexes them,
 and returns what S3 charged for it, from the farm's S3 ledger.
 
 Progress events are Progress(kind, message, done, total): kind "index"
-(the lock, a catalog made again), "scan" (what changed), "derive" (the
-verdicts: done of total sources), "write" (the transaction, then
+(the lock, a catalog made again, what it left as main's, the private
+copy made again), "scan" (what changed), "derive" (the verdicts, the
+catalog's or the private copy's: done of total sources), "write" (the
+transaction, then
 compacting, a write the lock refused and its next try, compacting
 skipped), "pull" (a fetch's pulls) or "done"; message is the line the
 CLI prints.
@@ -271,6 +278,24 @@ code; docs_of) indexes the data and leaves the doc tables as they are,
 saying so, a table or column only it writes undocumented until its code
 reaches main (catalog_info's docs_main, docs_behind).
 
+It holds main's verdicts and scoring objects too, which every session
+reads. An index whose verdicts or scoring objects aren't the catalog's
+(owns: their version isn't, and its files aren't main's) leaves them as
+they are, saying so: the sources it adds have no verdicts until main's
+next index judges them, and the scoring objects are marked behind the
+data it adds (catalog_info's scoring_behind), for main's next index to
+make again. Its own verdicts are its checkout's private copy,
+target/sim-db-private/verdicts.duckdb (made_private: every cache source
+judged under its derived_version, their derived tables' files in one
+database, made again by its index whenever those files changed), which
+that process's readers read (connected's and lake's:
+simlab.scoring's sessions, the reports', golden.py's): each verdict
+table a TEMP view of the copy's, which a name's lookup finds before the
+catalog's, in the catalog's views and macros too (privately); lake's
+make the scoring objects TEMP too, as simlab.scoring's sessions do
+always. The console's readers (pool) read the catalog as it serves every
+session.
+
 An experiment's `tiers` are suite.py's TIERS (as they are now) its cells
 came from: each cell is matched by its name, test and env (a farm cell's
 env its index's, else its matrix's jobs', less their seeds and the run's
@@ -384,14 +409,17 @@ def spill():
 
 
 @contextlib.contextmanager
-def connected(write=False, threads=None, memory=None):
+def connected(write=False, threads=None, memory=None, scoring=False):
     """A connection to the catalog of its own, closed after the block
     (engine.close: a transaction left open rolls back, and the catalog's
     lock goes with it): a reader (engine.reader: READ_ONLY, pinned at the
     latest snapshot as it opens, or at pinned()'s) unless `write`, the
     indexer's writer (engine.writer: new data under lake/data/, none of it
     inlined), spilling to the cache's tmp/; store_host.DuckError when it
-    doesn't attach."""
+    doesn't attach. A reader of a process whose verdicts aren't the ones
+    the catalog serves reads its own (privately), and with `scoring` its
+    own scoring objects too; one inside latest() reads the catalog as it
+    is."""
     tmp = spill()
     try:
         if write:
@@ -405,6 +433,8 @@ def connected(write=False, threads=None, memory=None):
         if not write:
             for x in engine.settings_sql(tmp=tmp):
                 conn.execute(x)
+            if not getattr(PIN, "served", False):
+                privately(conn, scoring)
         yield conn
     finally:
         engine.close(conn)
@@ -412,11 +442,13 @@ def connected(write=False, threads=None, memory=None):
 
 def lake(sql, write=False, out="json", threads=None, memory=None):
     """Runs the script `sql` over the catalog in a connection of its own
-    (connected): what store_host.duck returns for `out`, the last shown
-    statement's rows, the -table text of every shown one, or None;
-    store_host.DuckError, DuckDB's message, on a failure. A write's
-    commits wait for its files to be on disk (durably)."""
-    with connected(write, threads, memory) as conn:
+    (connected, a reader's with this process's own verdicts and scoring
+    objects where they aren't the catalog's): what store_host.duck returns
+    for `out`, the last shown statement's rows, the -table text of every
+    shown one, or None; store_host.DuckError, DuckDB's message, on a
+    failure. A write's commits wait for its files to be on disk
+    (durably)."""
+    with connected(write, threads, memory, scoring=True) as conn:
         if not write:
             return store.results(conn, sql, out)
         got = durably(conn, sql, text=out == "text")
@@ -452,13 +484,14 @@ def pinned():
 @contextlib.contextmanager
 def latest():
     """This thread's readers at the latest snapshot in the block, a pin
-    set aside (an index's and compacting's own reads)."""
-    saved = getattr(PIN, "version", None)
-    PIN.version = None
+    set aside, and the catalog as it serves every session, no private
+    view (an index's and compacting's own reads)."""
+    saved = getattr(PIN, "version", None), getattr(PIN, "served", False)
+    PIN.version, PIN.served = None, True
     try:
         yield
     finally:
-        PIN.version = saved
+        PIN.version, PIN.served = saved
 
 
 def locked_out(e):
@@ -1112,14 +1145,15 @@ def repair(say):
     return sorted(f"{s}.{t}" for s, t in bad), docs
 
 
-def look(rec):
+def look(rec, own=True):
     """What an index over the catalog's record `rec` (recorded()'s) finds
     to do: the cache's sources and the metadata files as they are, the
     verdicts' version, the sim tables' files gone, changed and new, the
-    metadata files changed, the sources lacking verdicts of the version and
-    those whose runs to read again. A changed or new file that isn't a
-    whole Parquet file (unsound: a crash's) waits, {key: why} in `broken`,
-    until its source is run or fetched again."""
+    metadata files changed, the sources lacking verdicts of the version
+    (none where the verdicts this process makes aren't the catalog's:
+    `own`, owns') and those whose runs to read again. A changed or new file
+    that isn't a whole Parquet file (unsound: a crash's) waits, {key: why}
+    in `broken`, until its source is run or fetched again."""
     _, have, seen, done_srcs = rec
     cache = scan_cache()
     ins = inputs()
@@ -1133,24 +1167,29 @@ def look(rec):
     return {"cache": cache, "ins": ins, "version": version, "gone": [key for key in have if key not in now],
             "changed": changed, "new": new, "broken": broken,
             "ins_changed": {p for p, v in ins.items() if seen.get(p) != v} | {p for p in seen if p not in ins},
-            "need_verdicts": sorted(s for s in cache if done_srcs.get(s, {}).get("verdicts") != version),
+            "need_verdicts": sorted(s for s in cache if done_srcs.get(s, {}).get("verdicts") != version) if own else [],
             "runs_redo": sorted({s for s, t in [*changed, *new] if t == "runs"})}
 
 
 def state():
     """The catalog's catalog_info, and whether an index would find nothing
-    to do (`current`); None without a catalog, or one of another
-    CATALOG_VERSION."""
-    rec = recorded()
-    if rec is None:
-        return None
-    info = rec[0]
-    x = look(rec)
-    current = not any(x[k] for k in ("gone", "changed", "new", "ins_changed", "need_verdicts"))
-    current = current and info.get("verdict_version") == x["version"]
-    if current:
-        _, sv = lake_scoring(lake_columns())
-        current = (not sv or info.get("scoring_version") == sv) and not docs_of(info)["moved"]
+    to do (`current`: this checkout's private copy too, where it makes
+    one); None without a catalog, or one of another CATALOG_VERSION."""
+    with latest():
+        rec = recorded()
+        if rec is None:
+            return None
+        info = rec[0]
+        mine = owns(info)
+        x = look(rec, mine["verdicts"])
+        current = not any(x[k] for k in ("gone", "changed", "new", "ins_changed", "need_verdicts"))
+        current = current and (info.get("verdict_version") == x["version"] or not mine["verdicts"])
+        if current and mine["scoring"]:
+            _, sv = lake_scoring(lake_columns())
+            current = not sv or info.get("scoring_version") == sv and not info.get("scoring_behind")
+        current = current and not docs_of(info)["moved"]
+        if current and not mine["verdicts"]:
+            current = private_current(x["cache"])
     return {"info": info, "current": current}
 
 
@@ -1302,12 +1341,15 @@ class Indexed:
     """What an index did: whether it changed the catalog (only its doc
     tables, `docs`, or its scoring objects, `scoring`, or both), and
     whether it left the doc tables as main's, its own docs not
-    (`docs_kept`: docs_of); the cache sources whose files it added,
-    replaced or let go, and how many files each way; the sources it judged
-    (their verdicts made, or found made), and those whose verdicts failed,
-    {src: why} (they wait for the next index); why it skipped compacting
-    (the catalog's lock refused it: the next index compacts), or None; the
-    tables whose damaged files it made again (repair), "schema.table"."""
+    (`docs_kept`: docs_of), and the verdicts and the scoring objects
+    (`verdicts_kept`, `scoring_kept`: owns); the cache sources whose files
+    it added, replaced or let go, and how many files each way; the sources
+    it judged for the catalog (their verdicts made, or found made), and
+    those whose verdicts failed, {src: why} (they wait for the next
+    index); why it skipped compacting (the catalog's lock refused it: the
+    next index compacts), or None; the tables whose damaged files it made
+    again (repair), "schema.table"; whether it made this checkout's
+    private copy of its own verdicts again (`private`: made_private)."""
     changed: bool = False
     sources: list = dataclasses.field(default_factory=list)
     judged: list = dataclasses.field(default_factory=list)
@@ -1318,9 +1360,12 @@ class Indexed:
     scoring: bool = False
     docs: bool = False
     docs_kept: bool = False
+    verdicts_kept: bool = False
+    scoring_kept: bool = False
     elapsed_s: float = 0.0
     compact_skipped: str = None
     repaired: list = dataclasses.field(default_factory=list)
+    private: bool = False
 
 
 @dataclasses.dataclass
@@ -1371,20 +1416,26 @@ def index(workers=None, progress=None, wait=True):
             lake(BASE_SQL + "\n".join(own), write=True, out=None)
             rec = ({}, {}, {}, {})
         wal()
-        info, have, seen, _ = rec
-        x = look(rec)
+        info, have, seen, done_srcs = rec
+        mine = owns(info)
+        x = look(rec, mine["verdicts"])
         cache, ins, version = x["cache"], x["ins"], x["version"]
         gone, changed, new, ins_changed = x["gone"], x["changed"], x["new"], x["ins_changed"]
         need_verdicts = x["need_verdicts"]
         docs = docs_of(info) | {"info": info, "fresh": fresh or main_gone}
         kept = not docs["own"] and docs["version"] != info.get("docs_version")
+        held = {"verdicts_kept": not mine["verdicts"], "scoring_kept": not mine["scoring"]}
         if x["broken"]:
             say("index", f"index: {len(x['broken'])} cache files aren't whole, left out until their sources are run "
                 f"or fetched again: {', '.join(list(x['broken'].values())[:3])}")
-        if not (gone or changed or new or ins_changed or need_verdicts) and info.get("verdict_version") == version:
+        for line in kept_lines(mine):
+            say("index", line)
+        if not (gone or changed or new or ins_changed or need_verdicts) and (
+                info.get("verdict_version") == version or not mine["verdicts"]):
             cols = lake_columns()
-            scoring, sv = lake_scoring(cols)
-            moved = {"scoring_version": sv} if sv and info.get("scoring_version") != sv else {}
+            scoring, sv = lake_scoring(cols) if mine["scoring"] else ([], None)
+            moved = ({"scoring_version": sv} if sv and (info.get("scoring_version") != sv or info.get("scoring_behind"))
+                     else {})
             # The doc tables go with the scoring objects (scoring_docs), as
             # this process's docs only where they are main's.
             remade = docs["own"] and (docs["moved"] or bool(moved))
@@ -1392,15 +1443,17 @@ def index(workers=None, progress=None, wait=True):
                 moved |= {k: v for k, v in (("docs_version", docs["version"]), ("docs_main", docs["main"])) if v}
             if kept:
                 say("index", docs_kept(docs))
+            private = not mine["verdicts"] and made_private(cache, workers, say)
             if not moved:
                 skipped = owed(say)
                 say("done", f"the catalog is up to date ({took():.1f} s)")
-                return Indexed(docs_kept=kept, elapsed_s=took(), compact_skipped=skipped)
+                return Indexed(docs_kept=kept, elapsed_s=took(), compact_skipped=skipped, private=private, **held)
             # Only the docs or the scoring objects changed: the doc tables,
             # the scoring objects where theirs did, and the versions, alone;
             # the events counted again where an index left the doc tables
             # behind the data.
-            gone_keys = [*moved, *(["docs_behind"] if remade else [])]
+            gone_keys = [*moved, *(["docs_behind"] if remade else []),
+                         *(["scoring_behind"] if "scoring_version" in moved else [])]
             with scratch() as tmp:
                 written("\n".join(["BEGIN;", *(catalogs_sql(cols, tmp, recount=bool(info.get("docs_behind")))
                                                + rows_views_sql(cols) if remade else []),
@@ -1416,7 +1469,7 @@ def index(workers=None, progress=None, wait=True):
             say("done", f"index: {what} made again ({', '.join(f'{k} {v}' for k, v in moved.items())}; "
                 f"{took():.1f} s)")
             return Indexed(changed=True, scoring="scoring_version" in moved, docs=remade, docs_kept=kept,
-                           elapsed_s=took(), compact_skipped=skipped)
+                           elapsed_s=took(), compact_skipped=skipped, private=private, **held)
         say("scan", f"index: {len(new)} new files, {len(changed)} changed, {len(gone)} gone; "
             f"{len(ins_changed)} metadata files changed; verdicts for {len(need_verdicts)} sources")
         kept = not docs["own"] and not docs["fresh"]
@@ -1426,10 +1479,14 @@ def index(workers=None, progress=None, wait=True):
                 f"aren't main's: {'there were none to keep' if fresh else 'they were damaged'}")
         derived = verdict.derive(need_verdicts, workers, lambda m, done, total: say("derive", m, done, total))
         failed = derived.failed
+        # Each source's verdicts, as raw.sources records them: of this
+        # version, or the catalog's where they aren't this process's.
+        judged = ({s: None if s in failed else version for s in cache} if mine["verdicts"]
+                  else {s: done_srcs.get(s, {}).get("verdicts") for s in cache})
         with scratch() as tmp:
             kind_of = {p: v[2] for p, v in seen.items()} | {p: v[2] for p, v in ins.items()}
             sql = build(cache, have, gone, changed, new, x["runs_redo"], ins, ins_changed, kind_of,
-                        [s for s in need_verdicts if s not in failed], version, tmp, docs, failed)
+                        [s for s in need_verdicts if s not in failed], version, tmp, docs, judged, mine)
             say("write", f"index: writing ({took():.0f} s in)")
             try:
                 written(sql, say, "the transaction")
@@ -1451,15 +1508,20 @@ def index(workers=None, progress=None, wait=True):
         warn_branch_ids()
         say("write", f"index: compacting ({took():.0f} s in)")
         skipped = compacted(say)
+        private = not mine["verdicts"] and made_private(cache, workers, say)
         say("done", f"index: done in {took():.0f} s")
         return Indexed(changed=True, sources=sorted({s for s, _ in [*new, *changed, *gone]}), judged=derived.judged,
                        failed=failed, new=len(new), replaced=len(changed), gone=len(gone), docs_kept=kept,
-                       elapsed_s=took(), compact_skipped=skipped, repaired=repaired)
+                       elapsed_s=took(), compact_skipped=skipped, repaired=repaired, private=private, **held)
 
 
 def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of, need_verdicts, version, tmp, docs,
-          failed=()):
-    """The index's one transaction, as SQL; `docs` main_sql's."""
+          judged, own=None):
+    """The index's one transaction, as SQL; `docs` main_sql's, `judged`
+    sources_sql's, and `own` owns' (None: both this process's). The
+    verdicts it writes are of `version`, those of `need_verdicts`, where
+    the verdicts it makes are the catalog's."""
+    own = own or {"verdicts": True, "scoring": True}
     cols = lake_columns()
     pre, sql = [], ["BEGIN;"]
     # The store's runs columns, which the jobs table reads, before any file
@@ -1536,10 +1598,11 @@ def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of,
         sql.append(f"INSERT INTO raw.fields BY NAME SELECT * FROM "
                    f"{read_jsonl(jsonl(tmp / 'fields.jsonl', fields_rows), FIELD_COLS)};")
     sql += rows_sql(runs_redo, cache, cols)
-    sql += verdicts_sql(need_verdicts, cache, cols, version)
+    if own["verdicts"]:
+        sql += verdicts_sql(need_verdicts, cache, cols, version)
     meta, parsed = metadata_sql(ins, ins_changed, kind_of, cols, tmp)
     sql += meta
-    sql += sources_sql(cache, failed, version, tmp)
+    sql += sources_sql(cache, judged, tmp)
     for t in VERDICT_TABLES:
         if t in cols:
             sql.append(f"DELETE FROM raw.{t} WHERE src NOT IN (SELECT src FROM raw.sources);")
@@ -1547,7 +1610,7 @@ def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of,
     sql.append("INSERT INTO raw.inputs BY NAME SELECT * FROM " + read_jsonl(
         jsonl(tmp / "inputs.jsonl", [{"path": p, "size": a, "mtime_ns": b, "kind": c} for p, (a, b, c) in ins.items()]),
         {"path": "VARCHAR", "size": "BIGINT", "mtime_ns": "BIGINT", "kind": "VARCHAR"}) + ";")
-    sql += main_sql(cols, version, tmp, ins, parsed, docs, run_commits(cache, add, types))
+    sql += main_sql(cols, version, tmp, ins, parsed, docs, run_commits(cache, add, types), own)
     sql.append("COMMIT;")
     return "\n".join([*pre, *sql])
 
@@ -1750,10 +1813,11 @@ def metadata_sql(ins, changed, kind_of, cols, tmp):
     return out, parsed
 
 
-def sources_sql(cache, failed, version, tmp):
+def sources_sql(cache, judged, tmp):
     """raw.sources, a cache source each: its run, flush, manifest, the sim
-    tables it holds and the verdict_version its verdicts are of (none where
-    simdb.derive `failed`)."""
+    tables it holds and the verdict_version its verdicts are of (`judged`,
+    {src: version}: none where simdb.derive failed, or where the catalog
+    has none of its version)."""
     recs = []
     tables = set(store_host.TABLES)
     for s, c in cache.items():
@@ -1767,7 +1831,7 @@ def sources_sql(cache, failed, version, tmp):
             "manifest_at": m.get("at"), "keys": len(m.get("keys") or []),
             "listed": {t: (v or {}).get("bytes") for t, v in (m.get("tables") or {}).items()},
             "n_tables": sum(1 for t in c["files"] if t in tables),
-            "verdicts": None if s in failed else version, "indexed_at": iso(time.time())})
+            "verdicts": judged.get(s), "indexed_at": iso(time.time())})
     cols = {"src": "VARCHAR", "origin": "VARCHAR", "run": "VARCHAR", "flush": "VARCHAR", "seq": "BIGINT",
             "manifest_at": "VARCHAR", "keys": "BIGINT", "listed": "MAP(VARCHAR, BIGINT)", "n_tables": "BIGINT",
             "verdicts": "VARCHAR", "indexed_at": "TIMESTAMPTZ"}
@@ -2122,10 +2186,14 @@ def sim_tables(cols):
     return {t: (t if t not in OWN else f"sim_{t}") for t in sorted(cols) if t not in META}
 
 
-def main_sql(cols, version, tmp, ins, parsed, docs, commits=()):
+def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None):
     """The main tables, made again, and the views; the doc tables as
     `docs` (docs_of's, with the catalog_info it read, `info`, and whether
-    the catalog is new, `fresh`) has them made."""
+    the catalog is new, `fresh`) has them made; the scoring objects, and
+    catalog_info's versions of them and of the verdicts, this process's
+    where `own` (owns') has them its own, else the catalog's kept, the
+    scoring objects marked behind the data (scoring_behind)."""
+    own = own or {"verdicts": True, "scoring": True}
     out = [JOBS_SQL.format(csim=sim_case("csim"), promoted=",\n       ".join(
         f"{knob('env', v)} AS {n}" for n, v in PROMOTED.items()),
         job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]")]
@@ -2151,9 +2219,14 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=()):
             "analyze_verdict_version": verdict.VERDICT_VERSION, "duckdb_version": store_host.DUCKDB_VERSION,
             "ducklake_version": EXTENSIONS["ducklake"], "sqlite_version": EXTENSIONS["sqlite_scanner"],
             "indexed_at": iso(time.time())}
-    scoring, sv = lake_scoring(cols)
+    if not own["verdicts"]:
+        info |= {k: docs["info"][k] for k in ("verdict_version", "analyze_verdict_version") if k in docs["info"]}
+    scoring, sv = lake_scoring(cols) if own["scoring"] else ([], None)
     if sv:
         info["scoring_version"] = sv
+    if not own["scoring"]:
+        info |= {k: docs["info"][k] for k in ("scoring_version",) if k in docs["info"]}
+        info["scoring_behind"] = "1"
     # The doc tables: this process's docs where they are main's, or where
     # there are none to keep; else kept, behind the data.
     make = docs["own"] or docs["fresh"]
@@ -3062,10 +3135,8 @@ def docs_of(info):
     changes the data marks them behind it (docs_behind), and the next
     index whose docs are main's makes them again, counting again."""
     dv = lake_docs_version()
-    main = main_docs()
-    km = None if main is None else docs_key(main)
-    own = (main is None or docs_key(docs_ids()) == km
-           or bool(dv) and info.get("docs_version") == dv and info.get("docs_main") == km)
+    km, files = main_key()
+    own = files or bool(dv) and info.get("docs_version") == dv and info.get("docs_main") == km
     moved = bool(dv) and own and (info.get("docs_version") != dv or bool(info.get("docs_behind"))
                                   or km is not None and info.get("docs_main") != km)
     return {"version": dv, "main": km, "own": own, "moved": moved}
@@ -3074,6 +3145,15 @@ def docs_of(info):
 def docs_kept(docs):
     """The line an index whose docs aren't main's prints."""
     return f"index: the doc tables left as main's (this checkout's docs, docs_version {docs['version']}, aren't main's)"
+
+
+def main_key():
+    """main's docs key (main_docs', hashed: None where there is no main to
+    keep the catalog for), and whether this process's files (docs_ids) are
+    main's, as they are where there is none."""
+    main = main_docs()
+    km = None if main is None else docs_key(main)
+    return km, km is None or docs_key(docs_ids()) == km
 
 
 def docs_ids():
@@ -3139,6 +3219,220 @@ def blob_id(data):
 # names the code it runs.
 LOADED_DOCS = {relative(p): blob_id(p.read_bytes())
                for p in (*sorted(Path(__file__).parent.glob("*.py")), vocab.DOCUMENT) if p.exists()}
+
+
+# --- whose verdicts and scoring objects ---------------------------------------------
+
+
+def lake_scoring_version():
+    """scoring_version; none where suite.py's METRICS don't load (an index
+    then makes no scoring objects: lake_scoring)."""
+    try:
+        return scoring_version()
+    except Exception:
+        return None
+
+
+def owns(info):
+    """Whether the verdicts and the scoring objects this process makes are
+    those the shared catalog serves every session, `info` its catalog_info:
+    {"verdicts": ..., "scoring": ...}. Each is where this process's
+    version of it (derived_version, scoring_version) is the catalog's, or
+    the catalog holds none to keep; both are where its files are main's
+    (main_key: the main checkout's code, or a lake other than the main
+    checkout's). Any other process's (a branch's worktree, one older than
+    main's code) aren't: its index leaves the catalog's as they are
+    (main's), and its readers read their own (privately)."""
+    sv = lake_scoring_version()
+    mine = {"verdicts": info.get("verdict_version") in (None, verdict.derived_version()),
+            "scoring": sv is None or info.get("scoring_version") in (None, sv)}
+    if all(mine.values()) or main_key()[1]:
+        return {"verdicts": True, "scoring": True}
+    return mine
+
+
+def kept_lines(mine):
+    """The lines an index whose verdicts or scoring objects (`mine`, owns')
+    aren't the catalog's prints."""
+    out = []
+    if not mine["verdicts"]:
+        out.append(f"index: the verdicts left as main's (this checkout's, derived_version "
+                   f"{verdict.derived_version()}, aren't main's); its own are its private copy, {private_path()}")
+    if not mine["scoring"]:
+        out.append(f"index: the scoring objects left as main's (this checkout's, scoring_version "
+                   f"{lake_scoring_version()}, aren't main's); its readers make their own")
+    return out
+
+
+# --- this checkout's own verdicts ---------------------------------------------------
+
+# The private copy, as a reader attaches it.
+PRIVATE = "private"
+# What readers warned of, each once a process.
+WARNED = set()
+
+
+def private_root():
+    """This checkout's own place for its verdicts' tables where they aren't
+    the catalog's: target/sim-db-private/ under its root."""
+    return ROOT / "target" / "sim-db-private"
+
+
+def private_path():
+    """The private copy: a DuckDB database of VERDICT_TABLES (each with its
+    verdict_version), `sources` (those it holds) and `info` (what it was
+    made of: derived_version, cache_root, key)."""
+    return private_root() / "verdicts.duckdb"
+
+
+def private_files(cache):
+    """The derived files (verdict.derived_dir's, of this process's
+    derived_version) of the sources of `cache` (scan_cache's) holding each
+    of VERDICT_TABLES: {table: [path]}, those sources, and a key naming
+    them as they are, which the copy made of them records."""
+    files, judged, listing = {t: [] for t in VERDICT_TABLES}, [], []
+    dirs = {t: verdict.derived_dir(t) for t in VERDICT_TABLES}
+    for s in sorted(cache):
+        name = s.replace("/", "~") + ".parquet"
+        try:
+            stats = {t: os.stat(d / name) for t, d in dirs.items()}
+        except OSError:
+            continue
+        judged.append(s)
+        for t, st in stats.items():
+            files[t].append(str(dirs[t] / name))
+            listing.append([t, name, st.st_size, st.st_mtime_ns])
+    key = hashlib.sha256(json.dumps([verdict.derived_version(), str(store_host.cache_root()), listing]).encode())
+    return files, judged, key.hexdigest()[:12]
+
+
+def private_info():
+    """The private copy's `info`, {} where there is none to read."""
+    if not private_path().exists():
+        return {}
+    try:
+        conn = engine.duckdb.connect(str(private_path()), read_only=True)
+    except engine.duckdb.Error:
+        return {}
+    try:
+        return dict(conn.execute("SELECT key, value FROM info").fetchall())
+    except engine.duckdb.Error:
+        return {}
+    finally:
+        conn.close()
+
+
+def private_current(cache):
+    """Whether made_private would find nothing to do: every source of
+    `cache` judged under this process's derived_version, the copy made of
+    them as they are."""
+    _, judged, key = private_files(cache)
+    return len(judged) == len(cache) and private_info().get("key") == key
+
+
+def made_private(cache, workers=None, say=None):
+    """Brings this checkout's private copy of its verdicts' tables up to
+    date with the cache's sources (`cache`, scan_cache's), for an index
+    whose verdicts aren't the catalog's: the sources lacking derived tables
+    of its derived_version judged (verdict.derive, `workers` at a time),
+    and the copy made again where their files aren't those it was made of
+    (private_files' key), into a new file that then takes its place, so a
+    reader keeps the one it attached. Whether it made it again; a failure
+    to make it says why, the copy left as it was."""
+    say = say or (lambda kind, message, done=0, total=0: None)
+    _, judged, _ = private_files(cache)
+    lacking = sorted(set(cache) - set(judged))
+    if lacking:
+        verdict.derive(lacking, workers, lambda m, done, total: say("derive", m, done, total))
+    files, judged, key = private_files(cache)
+    if private_info().get("key") == key:
+        return False
+    dv = verdict.derived_version()
+    private_root().mkdir(parents=True, exist_ok=True)
+    part = private_root() / f"verdicts.{os.getpid()}.part"
+    part.unlink(missing_ok=True)
+    try:
+        conn = engine.duckdb.connect(str(part))
+        try:
+            for t in VERDICT_TABLES:
+                if files[t]:
+                    conn.execute(f"CREATE TABLE {t} AS SELECT COLUMNS(lambda c: c <> 'v'), {q(dv)} AS verdict_version "
+                                 f"FROM read_parquet({verdict.plist(files[t])}, union_by_name=true, "
+                                 "hive_partitioning=false);")
+                else:
+                    cols = verdict.VERDICT_COLS if t == "verdicts" else verdict.DERIVED[t]
+                    conn.execute(f"CREATE TABLE {t} ({', '.join(f'{ident(n)} {ty}' for n, ty in cols.items())}, "
+                                 "verdict_version VARCHAR);")
+            conn.execute("CREATE TABLE sources AS SELECT unnest($1::VARCHAR[]) AS src;", [judged])
+            rec = {"derived_version": dv, "analyze_verdict_version": verdict.VERDICT_VERSION,
+                   "cache_root": str(store_host.cache_root()), "key": key, "made_at": iso(time.time())}
+            conn.execute("CREATE TABLE info AS SELECT unnest($1::VARCHAR[]) AS key, unnest($2::VARCHAR[]) AS value;",
+                         [list(rec), list(rec.values())])
+        finally:
+            conn.close()
+        os.replace(part, private_path())
+    except (engine.duckdb.Error, OSError) as e:
+        part.unlink(missing_ok=True)
+        say("index", f"index: this checkout's own verdicts weren't made again ({e}); its copy is as it was")
+        return False
+    say("index", f"index: this checkout's own verdicts made again ({len(judged)} of {len(cache)} sources, "
+        f"derived_version {dv}): {private_path()}")
+    return True
+
+
+def warn_once(text):
+    if text not in WARNED:
+        WARNED.add(text)
+        print(text, file=sys.stderr)
+
+
+def privately(conn, scoring=False):
+    """In the session of reader `conn`, this process's own verdicts, and
+    with `scoring` its own scoring objects, where they aren't those the
+    catalog serves (owns): each of VERDICT_TABLES (and its _all) a TEMP
+    view of the private copy's (made_private), of the jobs' own sources
+    (jobs.src) as the catalog's are, and the scoring objects TEMP
+    (simlab.scoring.load) over them. A TEMP object comes first in a name's
+    lookup, the catalog's views and macros' own included. Without a copy
+    of this process's derived_version (an index from this checkout makes
+    one) the catalog's are read, and a copy lacking sources the catalog
+    holds has no verdicts of theirs: each said on stderr, once a
+    process."""
+    try:
+        info = dict(conn.execute("SELECT key, value FROM lake.raw.info").fetchall())
+    except engine.duckdb.Error:
+        return
+    mine = owns(info)
+    if not mine["verdicts"]:
+        dv = verdict.derived_version()
+        why = (f"catalog: this checkout's verdicts (derived_version {dv}) aren't the catalog's "
+               f"({info.get('verdict_version')})")
+        got = {}
+        if private_path().exists():
+            try:
+                conn.execute(f"ATTACH {q(str(private_path()))} AS {PRIVATE} (READ_ONLY);")
+                got = dict(conn.execute(f"SELECT key, value FROM {PRIVATE}.info;").fetchall())
+            except engine.duckdb.Error:
+                got = {}
+        if got.get("derived_version") != dv or got.get("cache_root") != str(store_host.cache_root()):
+            with contextlib.suppress(engine.duckdb.Error):
+                conn.execute(f"DETACH DATABASE IF EXISTS {PRIVATE};")
+            warn_once(f"{why}, and it has no copy of its own: reading the catalog's (simdb.py index from this "
+                      "checkout makes its own)")
+        else:
+            for t in VERDICT_TABLES:
+                conn.execute(f"CREATE OR REPLACE TEMP VIEW {t} AS SELECT x.* FROM {PRIVATE}.{t} x "
+                             "JOIN lake.main.jobs j_ ON j_.k = x.k AND j_.src = x.src;")
+                conn.execute(f"CREATE OR REPLACE TEMP VIEW {t}_all AS SELECT * FROM temp.main.{t};")
+            n = conn.execute(f"SELECT count(*) FROM lake.raw.sources s ANTI JOIN {PRIVATE}.sources p "
+                             "USING (src);").fetchone()[0]
+            if n:
+                warn_once(f"{why}: its own copy, {private_path()}, lacks {n} of the catalog's sources, read without "
+                          "verdicts (simdb.py index from this checkout brings it up to date)")
+    if scoring and not mine["scoring"]:
+        from . import scoring as session
+
+        session.load(conn)
 
 
 # --- maintenance ------------------------------------------------------------------

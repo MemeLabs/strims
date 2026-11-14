@@ -43,7 +43,12 @@ suite's and the farm's flushes), the suite's and the farm's indexes, the
 farm's costs and S3 ledger, and git, doing only what changed since it
 last ran, and makes the verdicts of every source that lacks them,
 `--workers` at a time (0: in its own process): local runs reach the
-catalog with the next index. `fetch` copies what S3 still holds of an
+catalog with the next index. From a checkout whose code isn't main's (a
+branch's worktree) it adds the data alone, leaving the catalog's doc
+tables, verdicts and scoring objects main's: its own verdicts go to its
+checkout's target/sim-db-private/, which its `lake` reads, with its own
+scoring macros (`--param`, `view` and `describe` read the catalog's).
+`fetch` copies what S3 still holds of an
 experiment's jobs into the cache (with `--tables` the bulky sample
 tables of the jobs picked by `--cells` and `--arms`, asks, haves and
 seed_sends with arrivals, their truth), indexes them, and

@@ -65,9 +65,12 @@ q = store_host.q
 SCORE_DB = None
 
 
-# The database's tables and their columns, as scoring_cols takes them.
-COLUMNS_SQL = ("SELECT table_name AS t, list(column_name) AS c FROM duckdb_columns() WHERE database_name = "
-               "current_database() AND schema_name = 'main' GROUP BY ALL;")
+# The database's tables and their columns, as scoring_cols takes them: a
+# TEMP one's where the session has one of the name (catalog.privately's
+# verdicts), as the macros read it.
+COLUMNS_SQL = ("SELECT table_name AS t, list(column_name) AS c FROM duckdb_columns() WHERE database_name IN "
+               "(current_database(), 'temp') AND schema_name = 'main' GROUP BY table_name, database_name "
+               "QUALIFY row_number() OVER (PARTITION BY table_name ORDER BY database_name = 'temp' DESC) = 1;")
 
 
 def query(sql):

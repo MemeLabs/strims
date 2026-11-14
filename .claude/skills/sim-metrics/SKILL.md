@@ -117,10 +117,13 @@ the Rust and Python checks, and what each golden diff means.
   each tree its own `CARGO_TARGET_DIR`: Cargo judges freshness by
   mtime, so a shared target dir reuses another tree's stale units.
 - **Index from main's code.** `simdb.py index` writes the catalog every
-  session reads, its docs, keys, views and macros made by the indexing
-  checkout's code. Index only from a checkout whose catalog code is
-  main's; a branch's report or check reads its own definitions without
-  indexing (`simlab.scoring` loads this checkout's scoring as TEMP).
+  session reads. An index from a checkout whose code isn't main's adds
+  its data but leaves the doc tables, the verdicts and the scoring
+  objects as main's (`catalog.docs_of`, `catalog.owns`), keeping its
+  own verdicts in its checkout's private copy, which its sessions read
+  (`catalog.privately`; `simlab.scoring` loads this checkout's scoring
+  as TEMP). Its keys and views are still its code's: index a new table
+  from main's checkout.
 
 ## Order of work
 

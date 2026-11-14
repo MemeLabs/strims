@@ -83,6 +83,22 @@ simlab.verdict's derive pool:
   DocsFresh    with no doc tables to keep, an index whose docs aren't
                main's makes its own, not as main's, and the next whose
                files are main's makes them again
+  Private      a branch's process (its code not main's, its verdict and
+               scoring objects its own): its readers before its index
+               read the catalog's, saying so; its index adds its data and
+               leaves the verdict tables, the scoring objects (macros,
+               views, metric_defs) and their versions as main's, its
+               source without verdicts, the scoring objects behind it,
+               and makes its private copy; its sessions (lake's,
+               simlab.scoring's) read its verdicts of every source, the
+               macros over them and its scoring objects, then nothing to
+               do; main's read main's, and main's next index judges the
+               source and makes the scoring objects again as they were;
+               what the branch's sessions read, a scorecard among it, is
+               what they read with the catalog its own (the index before
+               this one). A branch's reader in latest() reads the
+               catalog; one whose copy lacks a source main's index added
+               reads none of its verdicts, saying so, until its index
   MainDocs     main's doc files from git, for the main checkout's lake
                alone; this checkout's as git names their contents
   DocsVersion  docs_version hashes the code that loaded, and covers every
@@ -135,8 +151,8 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import (ask, catalog, describe, engine, forecast, query, semantic, store, store_host, suite,  # noqa: E402
-                    verdict, views, vocab)
+from simlab import (ask, catalog, describe, engine, forecast, query, scoring, semantic, store,  # noqa: E402
+                    store_host, suite, verdict, views, vocab)
 
 
 class Fixture(unittest.TestCase):
@@ -1541,6 +1557,159 @@ class DocsFresh(DocsFixture):
             got, events = self.index()
             self.assertEqual((got.changed, got.docs), (True, True))
             self.assertEqual(self.info()["docs_main"], catalog.docs_key(catalog.docs_ids()))
+
+
+class Private(DocsFixture):
+    """main_docs stood in, as DocsMain's: this checkout's files are main's,
+    and a branch (branch()) is this process with other code."""
+
+    def setUp(self):
+        super().setUp()
+        ids = catalog.docs_ids()
+        here = self.root / "checkout" / "target" / "sim-db-private"
+        for p in (mock.patch.object(catalog, "main_docs", lambda: dict(ids)),
+                  mock.patch.object(catalog, "private_root", lambda: here),
+                  mock.patch.object(catalog, "WARNED", set())):
+            p.start()
+            self.addCleanup(p.stop)
+
+    @contextlib.contextmanager
+    def branch(self):
+        """A branch's process: another catalog.py, a verdict of its own
+        (every run collapsed, under a derived_version of its own) and
+        scoring objects of their own (the first metric's tie another)."""
+        name, sql, better, kind, tie = suite.METRICS[0]
+        with mock.patch.object(catalog, "LOADED_DOCS", {**catalog.LOADED_DOCS, "hack/simlab/catalog.py": "0" * 40}), \
+                mock.patch.object(verdict, "derived_version", lambda: "b" * 12), \
+                mock.patch.object(verdict, "collapsed", lambda v: True), \
+                mock.patch.object(suite, "METRICS", [(name, sql, better, kind, tie + 0.5), *suite.METRICS[1:]]):
+            yield
+
+    def served(self):
+        """What the catalog serves every session, read as an index reads it
+        (catalog.latest: no private view): the verdict tables' rows, the
+        scoring objects (the macros' and views' SQL, metric_defs) and
+        catalog_info's versions."""
+        with catalog.latest():
+            info = self.info()
+            return {"verdicts": {t: catalog.lake(f"SELECT * FROM {t} ORDER BY ALL;") for t in catalog.VERDICT_TABLES},
+                    "macros": catalog.lake("SELECT function_name, macro_definition FROM duckdb_functions() WHERE "
+                                           "database_name = 'lake' AND function_type LIKE '%macro' ORDER BY ALL;"),
+                    "views": catalog.lake("SELECT view_name, sql FROM duckdb_views() WHERE database_name = 'lake' "
+                                          "AND view_name IN ('job_metrics', 'job_runs') ORDER BY ALL;"),
+                    "metric_defs": catalog.lake("SELECT * FROM metric_defs ORDER BY ord;"),
+                    "info": {k: info.get(k) for k in ("verdict_version", "analyze_verdict_version", "scoring_version")}}
+
+    def reads(self):
+        """What this process's sessions read: lake's and simlab.scoring's
+        verdicts, their macros' over them (structural), its scoring
+        objects (metric_defs' tie), and a scorecard of sf0001's arms as
+        golden.py's scorecards set prints one."""
+        runs = "SELECT count(*) AS runs, count(*) FILTER (WHERE collapsed) AS collapsed FROM verdicts;"
+        arms = catalog.lake("SELECT arm_labels FROM experiments WHERE exp_id = 'sf0001';")[0]["arm_labels"]
+        return {"lake": catalog.lake(runs)[0], "scoring": scoring.query(runs)[0],
+                "structural": scoring.query("SELECT count(*) AS n FROM structural('sf0001');")[0]["n"],
+                "tie": catalog.lake("SELECT tie FROM metric_defs WHERE ord = 1;")[0]["tie"],
+                "card": scoring.score("sf0001", arms[0], "sf0001", arms[1]).text()}
+
+    def test_a_branchs_index_leaves_the_catalogs_verdicts_and_scoring_objects_and_its_sessions_read_its_own(self):
+        got, _ = self.index()
+        self.assertEqual((got.verdicts_kept, got.scoring_kept, got.private), (False, False, False))
+        before, main_reads = self.served(), self.reads()
+        tie = suite.METRICS[0][4]
+        self.assertEqual(main_reads["tie"], tie)
+        self.assertLess(main_reads["lake"]["collapsed"], main_reads["lake"]["runs"])
+        with self.branch():
+            # A reader before its index has no copy of its own: the
+            # catalog's, said once.
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(scoring.query("SELECT count(*) AS runs, count(*) FILTER (WHERE collapsed) AS "
+                                               "collapsed FROM verdicts;")[0], main_reads["lake"])
+            self.assertIn("aren't the catalog's (", err.getvalue())
+            self.assertIn("and it has no copy of its own: reading the catalog's", err.getvalue())
+            # Its index adds its data, and leaves the verdicts and the
+            # scoring objects as main's.
+            self.add_source("suite/wt/branch")
+            got, events = self.index(0)
+            self.assertEqual((got.changed, got.sources, got.judged), (True, ["suite/wt/branch"], []))
+            self.assertEqual((got.verdicts_kept, got.scoring_kept, got.private), (True, True, True))
+            said = [e.message for e in events]
+            self.assertEqual(said[:2], catalog.kept_lines({"verdicts": False, "scoring": False}))
+            self.assertTrue(any(m.startswith("index: this checkout's own verdicts made again (") for m in said), said)
+            self.assertEqual(self.served(), before)
+            info = self.info()
+            self.assertEqual(info["scoring_behind"], "1")
+            sources = {r["src"]: r["verdicts"] for r in catalog.lake("SELECT src, verdicts FROM raw.sources;")}
+            self.assertIsNone(sources.pop("suite/wt/branch"))
+            self.assertEqual(set(sources.values()), {before["info"]["verdict_version"]})
+            # Its sessions read its own: its verdicts of every source (the
+            # one it added too), the macros over them, its scoring objects.
+            reads = self.reads()
+            runs = reads["lake"]["runs"]
+            self.assertEqual(reads["lake"], {"runs": runs, "collapsed": runs})
+            self.assertGreater(runs, main_reads["lake"]["runs"])
+            self.assertEqual(catalog.lake("SELECT count(*) AS n FROM verdicts WHERE src = 'suite/wt/branch';"),
+                             [{"n": 1}])
+            self.assertEqual(reads["scoring"], reads["lake"])
+            self.assertGreater(reads["structural"], main_reads["structural"])
+            self.assertEqual(reads["tie"], tie + 0.5)
+            self.assertNotEqual(reads["card"], main_reads["card"])
+            self.assertEqual(catalog.lake("SELECT DISTINCT verdict_version FROM verdicts_all;"),
+                             [{"verdict_version": "b" * 12}])
+            # Then nothing to do, the copy current.
+            self.assertTrue(catalog.state()["current"])
+            got, _ = self.index(0)
+            self.assertEqual((got.changed, got.private), (False, False))
+        # main's sessions read what the catalog serves: main's.
+        self.assertEqual(self.reads(), main_reads)
+        self.assertFalse(catalog.state()["current"])
+        # main's next index judges the source the branch added and makes
+        # the scoring objects again over its data.
+        got, _ = self.index()
+        self.assertEqual((got.changed, got.judged, got.verdicts_kept), (True, ["suite/wt/branch"], False))
+        self.assertNotIn("scoring_behind", self.info())
+        after = self.served()
+        self.assertEqual({k: after[k] for k in ("macros", "views", "metric_defs", "info")},
+                         {k: before[k] for k in ("macros", "views", "metric_defs", "info")})
+        self.assertEqual(catalog.lake("SELECT count(*) AS n FROM verdicts;")[0]["n"], runs)
+        branch_card = reads["card"]
+        # What the branch's sessions read is what they read when the
+        # catalog was the branch's, as an index from its checkout made it
+        # before (a lake that isn't the main checkout's: its indexer's).
+        with self.branch(), mock.patch.object(catalog, "main_docs", lambda: None):
+            got, _ = self.index(0)
+            self.assertEqual((got.verdicts_kept, got.scoring_kept, got.private), (False, False, False))
+            self.assertEqual(self.info()["verdict_version"], "b" * 12)
+            self.assertEqual(self.reads(), reads)
+            self.assertEqual(self.reads()["card"], branch_card)
+
+    def test_a_branchs_reader_in_latest_reads_the_catalog_and_one_whose_copy_lacks_a_source_says_so(self):
+        collapsed = "SELECT count(*) FILTER (WHERE collapsed) AS n FROM verdicts;"
+        self.index()
+        served = catalog.lake(collapsed)
+        with self.branch():
+            self.index(0)
+            self.assertNotEqual(catalog.lake(collapsed), served)
+            # An index's own reads (latest()) read the catalog as it is.
+            with catalog.latest():
+                self.assertEqual(catalog.lake(collapsed), served)
+        # A source main's index added since the branch's copy was made: the
+        # branch's readers have no verdicts of it, and say so.
+        self.add_source("suite/wt/later")
+        self.index()
+        with self.branch():
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                n = catalog.lake("SELECT count(*) AS n FROM verdicts WHERE src = 'suite/wt/later';")[0]["n"]
+            self.assertEqual(n, 0)
+            self.assertIn("lacks 1 of the catalog's sources, read without verdicts", err.getvalue())
+            self.assertFalse(catalog.state()["current"])
+            got, _ = self.index(0)
+            self.assertEqual((got.changed, got.private), (False, True))
+            self.assertTrue(catalog.state()["current"])
+            self.assertEqual(catalog.lake("SELECT count(*) FILTER (WHERE NOT collapsed) AS n FROM verdicts;"),
+                             [{"n": 0}])
 
 
 class MainDocs(unittest.TestCase):
