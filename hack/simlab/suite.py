@@ -267,13 +267,28 @@ NET_HOSTILE = ["org-star-15-20", "org-star-31-10", "org-thin-15-10", "org-wan-re
                "org-wan-global-audience"]
 
 
+# The hostile kinds of strims-sim's hostile.rs that both hostile tiers run,
+# in order; recip-hostile adds the pool's own, whitewashers and hogs.
+HOSTILE_KINDS = ("free-rider", "liar", "grabber", "withholder", "colluder", "free-rider+echo", "liar+echo")
+
+
+def kind_cell(c, kind, why=""):
+    """Cell `c` with a fifth of its viewers hostile of `kind`
+    (STRIMS_SIM_HOSTILE), named for the kind (`+` as `-`)."""
+    base, _, mod = kind.partition("+")
+    hosts = f"{base}s" + (f"+{mod}" if mod else "")
+    return {**c, "name": f"{c['name']}-{kind.replace('+', '-')}",
+            "env": {**c["env"], "STRIMS_SIM_HOSTILE": f"{kind}:0.2"}, "why": f"{c['why']}, a fifth {hosts}{why}"}
+
+
 def net_hostile_tier():
     """The net tier's browser cells with a fifth of the viewers hostile
-    (STRIMS_SIM_HOSTILE): free riders, then liars. The row splits the
-    honest viewers' lag and delivery from the hostile ones'."""
+    (STRIMS_SIM_HOSTILE), each kind of HOSTILE_KINDS in turn: free riders,
+    liars, grabbers, withholders, colluders, and free riders and liars
+    greedy with their path probes' echoes. The row splits the honest
+    viewers' lag and delivery from the hostile ones'."""
     net = {c["name"]: c for c in TIERS["net"]}
-    return [{**net[n], "name": f"{n}-{k}", "env": {**net[n]["env"], "STRIMS_SIM_HOSTILE": f"{k}:0.2"},
-             "why": f"{net[n]['why']}, a fifth {k}s"} for k in ("free-rider", "liar") for n in NET_HOSTILE]
+    return [kind_cell(net[n], k) for k in HOSTILE_KINDS for n in NET_HOSTILE]
 
 
 # The streams the sign tiers run (strims_wan::live's encoders): audio alone
@@ -391,17 +406,17 @@ HOG_POOL = "pool-role,pool-trial"
 
 def recip_hostile_tier():
     """The residential crowd of 31 with a fifth of its viewers each kind of
-    defector, and with viewers leaving and rejoining (churn: every viewer
-    there from the start, as churn's cells keep them). Hogs link every
-    host they find, which crowds honest viewers out only where their
+    defector (free riders, liars, whitewashers, hogs, then the rest of
+    HOSTILE_KINDS), and with viewers leaving and rejoining (churn: every
+    viewer there from the start, as churn's cells keep them). Hogs link
+    every host they find, which crowds honest viewers out only where their
     budgets are bounded: the hogs' cell gives honest pools `pool-role`
     with trials (HOG_POOL)."""
     crowd = next(c for c in TIERS["recip"] if c["name"] == "org-crowd-31")
-    pools = {"hog": {"STRIMS_SIM_EXP": HOG_POOL}}
-    cells = [{**crowd, "name": f"org-crowd-31-{k}",
-              "env": {**crowd["env"], "STRIMS_SIM_HOSTILE": f"{k}:0.2", **pools.get(k, {})},
-              "why": f"{crowd['why']}, a fifth {k}s" + (f", honest pools on {HOG_POOL}" if k in pools else "")}
-             for k in ("free-rider", "liar", "whitewasher", "hog")]
+    cells = [kind_cell(crowd, k) for k in HOSTILE_KINDS[:2] + ("whitewasher",)]
+    hog = kind_cell(crowd, "hog", f", honest pools on {HOG_POOL}")
+    cells.append({**hog, "env": {**hog["env"], "STRIMS_SIM_EXP": HOG_POOL}})
+    cells += [kind_cell(crowd, k) for k in HOSTILE_KINDS[2:]]
     churn = audience(crowd, "t0", STRIMS_SIM_CHURN="0.5:5")
     cells.append({**churn, "name": "org-crowd-31-churn",
                   "why": f"{crowd['why']}, a viewer leaving for 5 s every 2 minutes"})
