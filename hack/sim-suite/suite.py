@@ -55,8 +55,12 @@ Tiers:
   peers   the directional tier: the pull lock-in, a healthy star and its
           audience cells, a slow viewer, residential seeds on steady and
           varying uplinks, two streams, mobile viewers, a capped and a
-          starved seed, and viewers that crash.
-  scale   opt-in, memory and depth at scale: no cells yet.
+          starved seed, viewers that crash, and a cable seed's 100 viewers
+          in a sparse random graph (wan_cable_seed), steady and in an
+          event's burst.
+  scale   opt-in, memory and depth at scale: the cable seed's swarms of
+          200 viewers, 100 overloaded, 100 churning, 50 with a fifth
+          grabbers and without, 500 and 1000.
   browsers
           robust's cells under the window model with every host a browser
           (STRIMS_SIM_RTC=BROWSERS): WebRTC links on the model's data

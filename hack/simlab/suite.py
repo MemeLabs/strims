@@ -81,6 +81,24 @@ SS_BASE = {"STRIMS_SIM_JOB": "1", "STRIMS_SIM_TCP": "1", "STRIMS_SIM_SERIES": "1
 SS_STAR = {**SS_BASE, "STRIMS_SIM_CAL_MESH": "full", "STRIMS_SIM_CHUNK": "4096", "STRIMS_SIM_MUNRO": "32768"}
 
 
+def cable(viewers, mibit, **env):
+    """wan_cable_seed's env: `viewers` residential viewers in North America
+    and Europe of a cable seed in Chicago, a stream of `mibit` Mibit/s in 16
+    Hybrid streams from the adaptive seed, 4 KiB chunks and 32 KiB munros,
+    each viewer drawing 6 links and the seed 32; its stream a minute unless
+    `env` sets STRIMS_SIM_STREAM_SECS."""
+    return {**SS_BASE, "STRIMS_SIM_VIEWERS": str(viewers), "STRIMS_SIM_MBIT": str(mibit),
+            "STRIMS_SIM_SEED_ACCESS": "cable", **env}
+
+
+def cable_gib(viewers):
+    """A wan_cable_seed cell's memory budget, in GiB: 0.3 GiB and 5 MiB a
+    viewer, rounded up. Its peak is about 0.2 GiB and 4.6 MiB a viewer at
+    a 10 s stream and grows with the stream: 2.2 GiB for 500 viewers at
+    10 s, 2.6 GiB at 45 s; 4.7 GiB for 1000 at 10 s, 5.2 GiB at 30 s."""
+    return math.ceil(0.3 + 5 * viewers / 1024)
+
+
 def cell(name, sim, test, env, mem_gib, why, seeds=None):
     """A cell: `seeds` overrides the tier's seed count (cheap cells take
     more, for tighter intervals)."""
@@ -103,10 +121,12 @@ DEPART = {SIM: "STRIMS_SIM_DEPART"}
 # name, and how: every scripted event of theirs comes after the last
 # arrival and its grace. The rest keep every viewer at the start: the
 # collapse reproducers (lock-in, star-31-5, the halvings, thin, the slow
-# viewer) and the fixed-fault cells (seed-starved, latency-step,
-# seed-restart, viewer-churn, capped-seed, the capped hybrid). The uplink
-# step's arrivals come at a second each, done well before it, as its
-# stream's first third would not be.
+# viewer), the fixed-fault cells (seed-starved, latency-step,
+# seed-restart, viewer-churn, capped-seed, the capped hybrid), the cable
+# seed's churn and its 1000 viewers (all of them there for the whole run:
+# memory and depth at their most). The uplink step's arrivals come at a
+# second each, done well before it, as its stream's first third would not
+# be.
 TRICKLE = {
     **{(SIM, n): "trickle" for n in ("star-15", "residential-uncapped", "residential-varying", "two-streams",
                                       "mobile-uncapped")},
@@ -117,6 +137,8 @@ TRICKLE = {
                                       "wan-mobile-viewers", "wan-residential-two-streams",
                                       "wan-residential-seed-varying", "wan-super-peer-varying")},
     (SIM, "wan-residential-seed-step"): "trickle:1",
+    **{(SIM, n): "trickle" for n in ("cable-100-4", "cable-200-4", "cable-100-6", "cable-50-6-grabbers", "cable-50-6",
+                                      "cable-500-2")},
 }
 
 
@@ -343,6 +365,8 @@ TIERS = {
         cell("star-15", SIM, "calibration_star", {**SS_STAR, "STRIMS_SIM_CAL_VIEWERS": "15",
              "STRIMS_SIM_CAL_SEED_UP_MBIT": "10", "STRIMS_SIM_CAL_SECS": "20"}, 1, "the real stack runs", 1),
         cell("capped-hybrid", SIM, "capped_seed_hybrid", SS_BASE, 1, "pull behind a capped seed", 1),
+        cell("cable-50-2", SIM, "wan_cable_seed", cable(50, 2, STRIMS_SIM_STREAM_SECS="10"), cable_gib(50),
+             "a sized audience runs", 1),
     ],
     "peers": [
         cell("lock-in", SIM, "calibration_star", {**SS_STAR, "STRIMS_SIM_CAL_VIEWERS": "31",
@@ -362,23 +386,51 @@ TIERS = {
         cell("starved-hybrid", SIM, "seed_starved_hybrid", SS_BASE, 1, "a seed starved for a while", CHEAP),
         cell("viewer-churn", SIM, "viewer_churn_hybrid", SS_BASE, 1, "real stack: viewers crash and restart",
              CHEAP),
+        cell("cable-100-4", SIM, "wan_cable_seed", cable(100, 4), cable_gib(100),
+             "100 viewers of a cable seed at 4 Mibit/s in a sparse random graph"),
     ],
-    "scale": [],
+    # The cable seed's swarms at scale. A stream runs 45 s where its viewers
+    # trickle in (all of them in its first 15 s, so the last one's join is
+    # done 10 s before its end) and 30 s where they start with the seed;
+    # churn's runs the scenario's minute, the churn from 20 s in.
+    "scale": [
+        cell("cable-200-4", SIM, "wan_cable_seed", cable(200, 4, STRIMS_SIM_STREAM_SECS="45"), cable_gib(200),
+             "200 viewers at 4 Mibit/s: depth, under five copies from the seed's 20 Mbit/s", TIPPING),
+        cell("cable-100-6", SIM, "wan_cable_seed", cable(100, 6, STRIMS_SIM_STREAM_SECS="45"), cable_gib(100),
+             "100 viewers at 6 Mibit/s, three copies from the seed's 20 Mbit/s: overload", TIPPING),
+        cell("cable-100-4-churn", SIM, "wan_cable_seed", cable(100, 4, STRIMS_SIM_CHURN="120:5"), cable_gib(100),
+             "100 viewers at 4 Mibit/s, two a second leaving in turn and back 5 s on: trees repair or tip",
+             TIPPING),
+        cell("cable-50-6-grabbers", SIM, "wan_cable_seed",
+             cable(50, 6, STRIMS_SIM_STREAM_SECS="45", STRIMS_SIM_HOSTILE="grabber:0.2"), cable_gib(50),
+             "50 viewers at 6 Mibit/s, a fifth grabbers: answer backlogs, memory"),
+        cell("cable-50-6", SIM, "wan_cable_seed", cable(50, 6, STRIMS_SIM_STREAM_SECS="45"), cable_gib(50),
+             "the grabbers' swarm with honest viewers only"),
+        cell("cable-500-2", SIM, "wan_cable_seed", cable(500, 2, STRIMS_SIM_STREAM_SECS="45"), cable_gib(500),
+             "500 viewers at 2 Mibit/s: depth, fan-out, relay use at scale"),
+        cell("cable-1000-2", SIM, "wan_cable_seed", cable(1000, 2, STRIMS_SIM_STREAM_SECS="30"), cable_gib(1000),
+             "1000 viewers at 2 Mibit/s, all there from the start: memory and depth"),
+    ],
     "robust": robust_t0(),
 }
 
 
 def peers_audience(peers):
     """The peers tier's audience cells (`audience_cells`): the real stack's
-    healthy star (`peers`: the tier's cells)."""
-    star = next(c for c in peers if c["name"] == "star-15")
-    return audience_cells(star, "STRIMS_SIM_CAL_SECS")
+    healthy star's, and the cable seed's 100 viewers' event (`peers`: the
+    tier's cells). The cable seed's sparse graph keeps no departures: with
+    60 % leaving, about one run in ten would strand a viewer whose every
+    link left, which a full mesh can't."""
+    by = {c["name"]: c for c in peers}
+    event = [c for c in audience_cells(by["cable-100-4"], "STRIMS_SIM_STREAM_SECS") if c["name"].endswith("-event")]
+    return audience_cells(by["star-15"], "STRIMS_SIM_CAL_SECS") + event
 
 
 # Today's cells that the audience default moves, as an explicit stress test
 # under their names, then the default and the audience cells.
 TIERS["startup"] = [c for t in ("peers", "robust") for c in TIERS[t] if (c["sim"], c["name"]) in TRICKLE]
 TIERS["peers"] = [audience(c) for c in TIERS["peers"]] + peers_audience(TIERS["peers"])
+TIERS["scale"] = [audience(c) for c in TIERS["scale"]]
 TIERS["robust"] = robust_tier()
 
 
