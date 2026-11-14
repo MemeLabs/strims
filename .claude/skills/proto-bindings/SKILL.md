@@ -13,32 +13,21 @@ any change under schema/ (crates/CONVENTIONS.md, "Formats").
 
 ## Regenerating
 
-The bindings reproduce only with the generators they were made with:
-protoc 3.21.12, protoc-gen-go v1.28.1 (go.mod's google.golang.org/protobuf),
-and MemeLabs/protobuf's ts, tsrpc and gorpc plugins (protoc-gen-ts,
-protoc-gen-tsrpc, protoc-gen-gorpc) built at their pinned versions. The
-dev machine's private notes hold how to build them. Check
-`protoc --version`, then put the plugins first on PATH:
+Every committed binding reproduces with protoc 3.21.12, protoc-gen-go
+v1.28.1 (go.mod's google.golang.org/protobuf), and MemeLabs/protobuf's
+ts, tsrpc and gorpc plugins (protoc-gen-ts, protoc-gen-tsrpc,
+protoc-gen-gorpc) at go.mod's v0.3.5. The dev machine's private notes
+hold how to build them. Put them first on PATH:
 
     PATH=<plugin dir>:$PATH bash hack/protogen.sh
 
-- TS reproduces exactly: only the messages you changed differ in
-  `src/apis`.
-- Each Go file's header names the protoc version that made it, so every
-  file in `pkg/apis` made by an older protoc gets a one-line header diff.
-  Restore those files, and keep the ones the schema change touched. This
-  is safe in a worktree, but never in a checkout with other sessions'
-  changes:
-
-      git diff --numstat -- pkg/apis > target/protogen-numstat.txt
-      awk '$1 == 1 && $2 == 1 {print $3}' target/protogen-numstat.txt > target/protogen-header-only.txt
-      git checkout --pathspec-from-file=target/protogen-header-only.txt
-
-  First check that the listed files' diffs are only the `// protoc` line.
-  Afterwards, `git diff --stat -- pkg/apis` should list only the files of
-  the changed protos.
-- In a worktree-isolated session the guard rejects `$(...)`, pipes into
-  git and git inside scripts. Run each git step above as its own command.
+- protogen.sh refuses any other protoc or protoc-gen-go version
+  (`PROTOC_VERSION`, `PROTOC_GEN_GO_VERSION`), which would rewrite every
+  Go file's header, so a regeneration differs only in the changed
+  protos' outputs.
+- The ts, tsrpc and gorpc plugins report no version, so the script
+  can't check theirs: a diff in an unchanged proto's output means one
+  isn't at v0.3.5.
 - Then build what reads the bindings: `pnpm run typecheck`,
   `go build ./...` (infra imports `pkg/apis`), and the Rust crates that
   use the changed messages.
