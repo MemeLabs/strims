@@ -103,5 +103,3 @@ one mode (`--theme`, `--device`).
   stay out of CI. They need wasm builds, Firefox and ffmpeg.
   `hack/check.sh --full` runs all of them but ui_watch, whose header gives
   its command.
-- Playwright is reserved for new multi-peer or WebKit tests. Don't port
-  check.py or the browser suites to it.

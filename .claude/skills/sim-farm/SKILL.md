@@ -35,7 +35,9 @@ local day; AWS bills by UTC day.
 
 1. Size it to its question (below).
 2. Quote it with `farm.py estimate`, with `--regions` and without.
-   Never price a run by hand.
+   Never price a run by hand: the estimate times each job by the walls
+   earlier runs of its test measured (target/sim-farm/walls.jsonl) and
+   prices them at the pools' spot prices, which no guess matches.
 3. Give the user the quote, the question the run answers, and why a
    narrower run can't answer it. Nothing runs without their explicit
    approval, unless it fits farm spend they already granted for the
@@ -111,7 +113,8 @@ With `--keep`, a stopped run leaves its instances for a rerun to adopt.
 
 - The account's IAM policy is narrow: what farm.py's docstring lists,
   and little more. On AccessDenied, ask the user for the permission,
-  with the JSON policy statement it needs. Never work around it.
+  with the JSON policy statement it needs. Never work around it: the
+  prescribed fix, the permission, beats a hack.
 - A new permission needs the user's approval, as runs and spend do.
 
 ## Editing farm.py, worker.py or a matrix

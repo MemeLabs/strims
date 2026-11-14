@@ -47,7 +47,9 @@ chart.
   panel's selectable columns and time field.
 - `--check` confirms the experiment, cell, arms and seed ran and that
   the selection matches a row. Give links with it.
-- Never write a console URL by hand. `SIM_CONSOLE_URL` sets the host.
+- Never write a console URL by hand: `ui.py link` builds it and `--check`
+  checks it, as a fragile step belongs in a script. `SIM_CONSOLE_URL`
+  sets the host.
   Otherwise the host is the one the user's latest tab reached.
 
 ## The server

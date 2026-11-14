@@ -66,7 +66,8 @@ in a `<package>.errors` package. crates/strims-proto/build/errors.rs
 gives each package a range, and the build fails on a value outside its
 range, an `ErrorCode` enum in an unlisted package, an enum nested in a
 message, or overlapping ranges. `0` is `UNDEFINED`, meaning no code.
-Callers branch on codes, never on messages.
+Callers branch on codes, never on messages: a code is immutable, and a
+message's wording isn't.
 
 To add codes:
 
