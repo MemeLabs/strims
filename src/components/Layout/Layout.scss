@@ -153,12 +153,16 @@ $chat-width-sm: 260px;
     padding-bottom: 0;
   }
 
+  // The drawer shows nothing beside itself: the chat's room menu, closed,
+  // waits beside the chat on the side it opens from, the drawer's left when
+  // the panels are swapped.
   .foo_2 {
     position: fixed;
     height: var(--layout-height);
     width: var(--layout-width);
     box-shadow: var(--shadow-elevation-3);
     --swipable-peek-size: 50px;
+    overflow-x: clip;
   }
 
   .layout__chat,
