@@ -107,8 +107,10 @@ changed: to the next timer until the root leaves
 the root is empty, on in 100 ms steps up to `--timeout` s). A story frame
 on the clock renders once i18next has its strings. Then finite
 animations and transitions jump to their end, infinite ones (spinners,
-animated emotes) and SVG animations hold at their start, videos pause,
-images decode and fonts load, until nothing changes; each index's
+animated emotes) and SVG animations hold at their start, videos pause
+and fonts load, until nothing changes (a tile is rastered once its
+images are decoded, each at the scale it's drawn at: no checker imaging,
+no img.decode()); each index's
 hostMask selectors (the landing page's build hash, its text first set to
 a fixed string so the box is the same in both builds) and the story's
 `visual.mask` are painted over in both shots, and a story whose
@@ -195,8 +197,11 @@ EXTRA_SETTLE_S = 3.0
 # leaves its layer rastered at a scale of its own: an animated emote's
 # sprite resampled), a tile changed in part is rastered whole (a partial
 # raster's edges blend a few levels apart: a badge's corners over an
-# image), and colours are sRGB's.
-COMPARE_FLAGS = ["--disable-threaded-animation", "--disable-partial-raster", "--force-color-profile=srgb"]
+# image), a tile is rastered with its images decoded (no checker imaging,
+# which leaves a large image out of a tile until a decode of its own comes
+# in, maybe after the shots), and colours are sRGB's.
+COMPARE_FLAGS = ["--disable-threaded-animation", "--disable-partial-raster", "--disable-checker-imaging",
+                 "--force-color-profile=srgb"]
 # Compare mode. A mode is a theme and a device; --all-modes runs ALL_MODES,
 # the Android tablet's two among them but not the iPad's, which take the same
 # portable layout at about the same sizes.
@@ -1164,8 +1169,13 @@ CAPTURE_SCRIPT = r"""(() => {
 # Holds what still moves before the screenshot: finite animations and
 # transitions jump to their end, infinite ones (spinners, animated emotes'
 # sprites) and SVG animations hold at their start, videos pause; then
-# images decode, fonts load, two real frames pass and the timers due now
-# fire, until a round changes nothing (the round, or -1 if none did).
+# fonts load, two real frames pass and the timers due now fire, until a
+# round changes nothing (the round, or -1 if none did). Images are left to
+# the raster, which waits for their decodes (COMPARE_FLAGS): an
+# img.decode() decodes the image whole, and a decode the compositor still
+# holds when it next draws the image smaller is resampled from it, where
+# its own draw decodes a JPEG to the drawn scale (libjpeg's), a few levels
+# off, so the raster's pixels would hang on which came first.
 FINISH_SCRIPT = r"""(async () => {
   const c = window.__storybookCapture;
   c.hold();
@@ -1218,8 +1228,6 @@ FINISH_SCRIPT = r"""(async () => {
         changed++;
       }
     }
-    await Promise.all([...document.images].map((i) => Promise.race([
-      i.decode().catch(() => {}), new Promise((r) => c.frame().then(c.frame).then(r))])));
     await document.fonts.ready;
     await c.frame();
     await c.frame();
