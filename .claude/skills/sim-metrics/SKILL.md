@@ -70,6 +70,15 @@ the Rust and Python checks, and what each golden diff means.
   one rng), no decision reads it, and no iteration order moves. Prove it
   against the parent commit (`references/checks.md`): the sims are
   deterministic, so any moved trace has a cause.
+- **Tests hold under any schedule.** A metric's tests assert what holds
+  however a run is timed: identities with another log (the seed's
+  chunks sent are its seed log's sends), causal order (a chunk is
+  signed before it is read), bounds, and cases with a known answer (a
+  holder that misses no deadline is never short; a pull stream has no
+  relays), over synthetic samples in the measure's unit tests and in a
+  scenario (`seed_answers_relays_and_holders_hold_under_any_schedule`).
+  Never a value the run's timing sets: any change to the timeline moves
+  it.
 - **One library, one definition.** The work goes in hack/simlab; saved
   views are SQL over the lake. A metric shown in both a report and the
   console has one definition, a lake SQL macro in

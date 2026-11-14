@@ -1,0 +1,134 @@
+---
+name: sim-farm
+description: "The sim farm (hack/sim-farm: strims-sim and testbed matrices on EC2 spot instances): quoting a run with farm.py estimate, launching, watching, stopping and cleaning up runs, slot memory, regions, S3, spot interruptions, the AWS permissions, what needs the user's approval, and sizing a run to its question. Use when launching, estimating, monitoring, stopping or editing the sim farm or its matrices, and when sizing a farm run. For reading results, use sim-lab."
+---
+
+# The sim farm
+
+`hack/sim-farm/farm.py` runs matrices on EC2 spot instances: strims-sim
+sweeps (one seed a job, `STRIMS_SIM_SEED`) and testbed matrices
+(`kind = "testbed"`: the testbed skill). Its module docstring documents
+every key, flag and mechanism. The ppspp sim is a correctness harness:
+no matrix runs it, and its timings are never evidence.
+
+Every checkout's farm.py uses the main checkout's state (target/sim-farm)
+and config, hack/sim-farm/config.toml (gitignored). The account's values
+(ids, network, quotas, IAM names) live in that file and in the user's
+private `sim-farm-aws` memory. Never write them into the repo.
+
+## Commands
+
+    python3 hack/sim-farm/farm.py estimate MATRIX.toml... [--regions R,...] [--json]
+    python3 hack/sim-farm/farm.py run MATRIX.toml... [--job-timeout MIN] [--max-vcpus N] [--keep]
+    python3 hack/sim-farm/farm.py run MATRIX.toml --local [--slots N]
+    python3 hack/sim-farm/farm.py status [MATRIX.toml]
+    python3 hack/sim-farm/farm.py down [MATRIX.toml]
+    python3 hack/sim-farm/farm.py report MATRIX.toml [--group KEY,...]
+    python3 hack/sim-farm/farm.py spend [--csv DIR]
+
+`estimate` builds and launches nothing, and `--local` runs the jobs
+here without AWS. `status` lists the instances in every region, plus a
+matrix's jobs with rows when given one. `spend` reports estimates by
+local day; AWS bills by UTC day.
+
+## Before a run
+
+1. Size it to its question (below).
+2. Quote it with `farm.py estimate`, with `--regions` and without.
+   Never price a run by hand.
+3. Give the user the quote, the question the run answers, and why a
+   narrower run can't answer it. Nothing runs without their explicit
+   approval, unless it fits farm spend they already granted for the
+   task. Spend past a grant needs a new approval.
+
+## Sizing a run to its question
+
+- Run the change's scoped tests with its switch on first. Then take
+  direction from the free local suite (`suite.py run --only CELL,...`).
+  The farm settles only what local runs can't.
+- Pick tiers and cells by mechanism; skip what the change can't reach.
+- Screen at most two arms. Confirm only the chosen arm on fresh seeds,
+  on the tiers where the call is close.
+- Don't rerun baselines for a row-only change. Batch such changes.
+- No local run blocks for more than 15 minutes: put it under
+  `timeout 900`. A broader screen goes to the farm, split so each run's
+  estimated wall is about 15 minutes.
+- One `farm.py run` of several matrices shares one queue, boot and
+  canary: run a tier, or several, as one run.
+
+## Running and watching
+
+- Start `farm.py run` or `suite.py farm` in the background, and watch
+  target/sim-farm/MATRIX/farm.log and `farm.py status MATRIX.toml`.
+- **The build race.** Builds from any checkout take
+  target/sim-farm/build.lock in turn ("waiting for another farm build"),
+  and an arm built meanwhile is reused, so two runs of one commit can
+  start together. Never remove target/sim-farm/src or the lock while a
+  farm process runs.
+- **Slots.** An instance runs one job per core, or fewer where memory
+  binds. Its memory, less 4 GiB, is divided by the largest
+  `slot_mem_gib` among the run's matrices, so run big cells apart from
+  small ones. `suite.py farm` sizes each cell's slot from its `mem_gib`
+  (`suite.cable_gib`: every cable cell fits 6 GiB). Where kept local rows
+  measured the cell, it caps the slot at 1.25 times their peak.
+- **The memory guard.** The worker starts no job while MemAvailable is
+  under one slot. If "the worker isn't running; restarting it" repeats
+  in farm.log, jobs outgrow their slots and the run loops while billing.
+  Stop it and raise `slot_mem_gib`.
+- A job past `--job-timeout` (60 min) is killed. From suite.py, pass it
+  with `suite.py farm --farm-args ARGS`.
+
+## Stopping a run
+
+1. Signal the farm.py process itself, not suite.py or a `timeout`
+   wrapper: `pgrep -a python3 | grep 'farm.py run'`, then `kill -INT PID`.
+2. Let it wind down: it flushes (2 minutes at most), then terminates
+   every instance. A second signal doesn't cut the cleanup short.
+3. Check that `farm.py status` lists none, and run `farm.py down` if any
+   remain.
+
+With `--keep`, a stopped run leaves its instances for a rerun to adopt.
+
+## Regions, S3 and interruptions
+
+- **Regions.** A run uses `--regions`, else the config's `aws_regions`.
+  Pools from every region rank as one by price per unit of work. A
+  region's budget is its spot quota less the vCPUs in use outside the
+  run, shutting-down instances included, reread every 2 minutes.
+  `status` and `down` sweep every region in target/sim-farm/regions.
+- **S3.** Boots fetch binaries from the config's bucket by presigned
+  URL, falling back to SSH. Instances flush their tables to sim-data/
+  and sim-samples/ (`hack/sim-farm/s3sign.py`), and a job's index line
+  waits for its flush to land. A run pulls nothing; `simdb.py pull` or
+  suite.py copies the data into the cache. Data expires after a week,
+  and a job's line is reused for 6 days (`RETAIN_S`).
+- **Spot interruptions.** At a notice, the instance gives back its jobs
+  that won't end within 20 s, flushes within 90 s, and is left for AWS
+  to reclaim (unbilled in its first hour). Its pool is skipped for 10
+  minutes. Each run's costs.jsonl line lists its `interruptions`.
+
+## Permissions and approval
+
+- The account's IAM policy is narrow: what farm.py's docstring lists,
+  and little more. On AccessDenied, ask the user for the permission,
+  with the JSON policy statement it needs. Never work around it.
+- A new permission needs the user's approval, as runs and spend do.
+
+## Editing farm.py, worker.py or a matrix
+
+- Every session's `suite.py farm` loads the main checkout's farm.py
+  from disk, and boots ship its worker.py, s3sign.py and store_host.py.
+  A worktree's own `farm.py run` runs its own code on main's state.
+- Develop in a worktree and test with `farm.py run --local` of
+  `scenarios-smoke.toml`. Land in one commit once no run is live
+  (`pgrep -a python3 | grep -E 'farm.py|suite.py'`, `farm.py status`).
+  Keep every save of the main checkout's copy runnable.
+- `pgrep -f` waits and guards match their own `bash -c` line. Use
+  `pgrep -a python3 | grep`, give a guard an `else echo` branch, and wait
+  on a PID (`while kill -0 PID`). Kill hung sims by PID, never with
+  `pkill -f`.
+
+## Reading results
+
+That is sim-lab's. `suite.py farm` prints its run's scorecards when the
+run ends. `suite.py score RUN:ARM RUN:ARM` scores arms across runs.

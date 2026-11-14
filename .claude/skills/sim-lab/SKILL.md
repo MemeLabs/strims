@@ -63,11 +63,12 @@ both, so take a name's meaning from it, not from a guess at the name.
 | Raw tables of a selection of runs, pulling their reads from S3 on demand | `simdb.py sql 'SQL' --src/--cell/--arm/--seed ... [--reads]` |
 | Deep dives into a few runs | `simdb.py pooled`, `aligned EVENT`, `events`, `osc`, `spec`, `forecast`, `rows` (each takes a selection) |
 | A study over the catalog's logs: the arrival forecast (is time the right predictor of when a neighbour holds a chunk?), seed coverage (how soon each chunk reaches a node but the seed, by which route; the seed's children of each stream; why late chunks were late) | `simdb.py forecast-report`, `simdb.py coverage-report` (its definitions are the macros `coverage_runs_of`, `seed_children_of`, `coverage_chunks_of` and `seed_cover_of`: `simdb.py describe macros`); `simdb.py --help` gives each `*-report` command's sections and what it reads |
-| Comparing arms | `python3 hack/sim-suite/suite.py score RUN:ARM RUN:ARM` (farm runs, the base first); `suite.py race --flags A,B,...` races flags in local runs |
-| Data the catalog lacks that S3 still holds (7 days) | `simdb.py fetch --exp EXP [--tables reads]`, which prints what S3 charged |
+| Comparing arms | `python3 hack/sim-suite/suite.py score RUN:ARM RUN:ARM` (farm runs, the base first: a base the farm holds isn't run again); `suite.py race --flags A,B,...` races a knob's flags in local runs |
+| Data the catalog lacks that S3 still holds (`farm.S3_KEPT_DAYS` days) | `simdb.py fetch --exp EXP [--tables reads]`, which prints what S3 charged |
 | After new local runs | `simdb.py index` |
-| Local runs | `suite.py run [--base REF] [--tier T] [--seeds N]` |
-| New farm runs | `suite.py farm ... --no-run` writes the matrices (target/sim-suite/farm/RUN-NN.toml); the main checkout's `python3 hack/sim-farm/farm.py estimate MATRICES...` quotes them; nothing runs without the user's explicit approval |
+| Local runs | `suite.py run [--base REF] [--tier T] [--seeds N]`; `--tree-env KEY=VALUE` sets a knob for the working tree alone, `--env KEY=VALUE` for every arm, as part of each cell; `suite.py calibrate`, the base against itself at other seeds, gives the seed noise a tie band must clear |
+| New farm runs (procedure: the sim-farm skill) | `suite.py farm ... --no-run` writes the matrices (target/sim-suite/farm/RUN-NN.toml); the main checkout's `python3 hack/sim-farm/farm.py estimate MATRICES...` quotes them; nothing runs without the user's explicit approval |
+| What nodes decided and why, from a capture (strims-sim's `STRIMS_SIM_CAPTURE=<dir>`, a testbed run's `CAPTURE=1`) | `python3 hack/capture/analyze.py reduce DIR > run.jsonl`, then a table per question (the seed, queues, links, prunes, pulls, a node, holders, bytes, ...: its header) |
 
 `simdb.py` is `hack/sim-db/simdb.py`. Each command's `--help` says more:
 `simdb.py --help` holds the cache's selections and its tables' list
@@ -88,22 +89,78 @@ their joins.
   lake` reads the branch's verdicts and macros, while `lake --param`,
   `view` and `describe` read main's. Index a new table from main's
   checkout.
+- **Tiers and knobs.** hack/sim-suite/suite.py's module docs describe
+  the tiers; `suite.py list --tier T` prints a tier's cells, audience and
+  settings. peers is the local directional tier (about half an hour of
+  CPU at 4 seeds); scale is opt-in (50 to 1000 viewers, about 2.5 CPU
+  hours, up to 6 GiB a run). Each checkout builds into its own
+  target/sim-suite, the tree apart from the bases (`suite.TREE_CARGO`).
+  The knobs are sweep.rs's `STRIMS_SIM_*` (its docs): `STRIMS_SIM_HOSTILE`,
+  `STRIMS_SIM_CHURN`, pushpull's `STRIMS_SIM_PUSH_MODE` and
+  `STRIMS_SIM_STREAMS`, seed-alloc's `STRIMS_SIM_SEED_PIN` and
+  `STRIMS_SIM_SEED_LINKS`, `STRIMS_SIM_LOOPS` (not with
+  `STRIMS_SIM_CAPTURE`), ...
+
+## Which runs are evidence
+
+- **strims-sim alone measures**, real nodes over turmoil. The ppspp sim
+  (`crates/strims-ppspp/tests/sim.rs`) is a correctness harness: its
+  links model no socket queue or acknowledgement and no node layer runs.
+  Its timing is never evidence, and no lab tool runs it.
+- **Defectors by default.** The measuring tiers (`suite.MIX_TIERS`:
+  startup, peers, scale, robust) and the tiers built from their cells
+  run the dishonest mix (`STRIMS_SIM_HOSTILE=mix`: 10–20 % of the viewers
+  free riders and liars) where a cell names no hostile setting
+  (`suite.with_mix`); smoke stays honest. An honest-only comparison is
+  an explicit `STRIMS_SIM_HOSTILE=off` arm.
+- **Older rows.** No row from before 44048b46 stands for a measuring
+  cell: every one's env changed there. Hostile cells don't compare across
+  7708ae2e, before which liars served data.
+- **Honest viewers.** The verdicts, the viewer measures and the
+  scenarios' checks (`complete_swarm`, `max_lag`, the progress invariant)
+  read honest viewers alone. Before 357cd646 the checks owed defectors
+  the stream, so a mix run's `passed` 0 there says nothing.
 
 ## Rules
 
 - A farm run costs money. Quote it first with `farm.py estimate`, and run
-  nothing on the farm without the user's explicit approval.
-- Report dynamics, not a bare p99. Keep startup tails apart from
-  steady-state spikes (`dynamics(exp)`), and give stalls at the 1250 and
-  4250 ms playout delays. Put absolute values beside ratios.
+  nothing on the farm without the user's explicit approval (procedure:
+  the sim-farm skill).
+- The data decides: when it clearly favours an option, record the
+  decision in crates/PLAN.md and plan the default; when it is thin,
+  propose the farm A/B that would settle it, not a pick.
+- Reject a winner whose edge comes from what the sim lacks or holds
+  fixed (a steady uplink, no competing flows): add that variation before
+  ranking. An estimator must keep adapting mid-flight.
+- The Docker testbed (hack/testbed) is one configuration: it checks that
+  a mechanism exists on a real stack and that a fix does no harm there,
+  never effect sizes or rankings, which the sims' breadth decides. A gap
+  to its sim twin (hack/testbed/twin.py) is the sim model's to fix.
+- Report dynamics, not a bare p99. Lead with steady state and joins into
+  a running swarm (most cells' viewers trickle in, `suite.TRICKLE`; the
+  audience cells burst into a warm swarm): every viewer starting with
+  the seed (the startup tier, the collapse reproducers) is a stress
+  case, its tail a footnote. Keep startup tails apart from steady-state spikes
+  (`dynamics(exp)`), and give stalls at the 1250 and 4250 ms playout
+  delays. Put absolute values beside ratios.
+- Judge lag against delivery's share of the 2 s target and 5 s maximum
+  glass to glass: 1250 and 4250 ms (`verdict.DELIVERY_TARGET_MS`,
+  `verdict.DELIVERY_MAX_MS`). A base median just under 1250 ms crosses
+  on noise: read the interval.
 - Judge collapse counts by their Fisher p (`collapse_test`), never by
   which seeds collapsed. Leave structural cells (`structural(exp)`) out of
   totals, and say how many collapses they hold.
-- Decide at 32 seeds; 8 rarely can. Confirm a winner on fresh seeds
-  (3033 and up), not only on the seeds it was tuned on.
+- Decide at 32 seeds; 8 rarely can. Before calling a cell a fail, check
+  that the changed signal reaches a decision in the code. Confirm a
+  winner on fresh seeds (3033 and up), not only on the seeds it was tuned
+  on, and screen every seed of a cell, never only those that collapsed.
 - The sims are deterministic: a binary, a cell and a seed always give the
   same run. A result is never "flaky", and a difference has a cause.
+- Results are caches: no archive of rows, no importer of old ones.
+  Compare against main; rerun what an older commit gave.
 - If the CLI can't answer something, add a thin wrapper: the work goes in
   hack/simlab, and a command in simdb.py or catalog.py only parses and
   prints. Don't write an ad-hoc script over the cache's parquet files,
-  and don't curl the console server.
+  and don't curl the console server. A new question over captures is a
+  command of analyze.py (its fields the capture crate's), never a private
+  script.
