@@ -487,6 +487,19 @@ const initRTCChartTotals = {
   openConns: 0,
 };
 
+/** The fields of the WebRTC stats spec's RTCDataChannelStats, which the dom lib lacks, that the chart reads. */
+interface DataChannelStats extends RTCStats {
+  label?: string;
+  bytesReceived?: number;
+  bytesSent?: number;
+  messagesReceived?: number;
+  messagesSent?: number;
+}
+
+/** Whether a connection's stats report is its "data" channel's. */
+const isDataChannel = (report: RTCStats): report is DataChannelStats =>
+  report.type === "data-channel" && (report as DataChannelStats).label === "data";
+
 export const RTCChart: React.FC = () => {
   const [values, setValues] = useState<RTCChartValues>(initRTCChartValues);
   const [total, setTotal] = useState(initRTCChartTotals);
@@ -534,8 +547,8 @@ export const RTCChart: React.FC = () => {
 
         for (const res of results) {
           if (res.status === "fulfilled") {
-            res.value.forEach((report) => {
-              if (report.type === "data-channel" && report.label === "data") {
+            res.value.forEach((report: RTCStats) => {
+              if (isDataChannel(report)) {
                 updateNext("tx", report.id, report.timestamp, report.bytesSent);
                 updateNext("rx", report.id, report.timestamp, report.bytesReceived);
               }
@@ -556,8 +569,8 @@ export const RTCChart: React.FC = () => {
         };
         for (const res of results) {
           if (res.status === "fulfilled") {
-            res.value.forEach((report) => {
-              if (report.type === "data-channel" && report.label === "data") {
+            res.value.forEach((report: RTCStats) => {
+              if (isDataChannel(report)) {
                 next.timestamp = report.timestamp;
                 next.bytesReceived += report.bytesReceived;
                 next.bytesSent += report.bytesSent;

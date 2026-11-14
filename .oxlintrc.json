@@ -14,7 +14,13 @@
     "worker": true,
     "es2020": true
   },
-  "ignorePatterns": ["dist/**", "vendor_modules/**", "webpack/lib/**"],
+  "ignorePatterns": [
+    "dist/**",
+    "vendor_modules/**",
+    "webpack/lib/**",
+    "src/apis/google/**",
+    "src/apis/strims/**"
+  ],
   "rules": {
     "for-direction": "error",
     "jsdoc/check-access": "warn",

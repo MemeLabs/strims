@@ -118,8 +118,8 @@ const Emote: React.FC<EmoteProps> = () => {
       ctx.putImageData(imgd[f], 0, 0);
     };
 
-    const out = [];
-    const dels = [];
+    const out: ArrayBuffer[] = [];
+    const dels: number[] = [];
     for (let i = 0; i < frameCount; i++) {
       paintFrame(i);
       out.push(ctx.getImageData(0, 0, cw, ch).data.buffer);

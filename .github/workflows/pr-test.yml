@@ -35,6 +35,26 @@ jobs:
     - name: Clippy wasm
       run: cargo clippy -p strims-node-core -p strims-wasm --target wasm32-unknown-unknown --all-targets --features strims-wasm/e2e -- -D warnings
 
+  web:
+    name: Web
+    runs-on: ubuntu-26.04
+    steps:
+    - uses: actions/checkout@v4
+    # pnpm at package.json's packageManager version, Node at .nvmrc's.
+    - uses: pnpm/action-setup@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+    - name: Install
+      run: pnpm install --frozen-lockfile
+    - name: Typecheck
+      run: pnpm run typecheck
+    - name: Lint
+      run: pnpm run lint
+    - name: Test
+      run: pnpm run test:js
+
   go:
     name: Go (infra)
     runs-on: ubuntu-latest
