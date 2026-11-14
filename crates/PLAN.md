@@ -233,10 +233,20 @@ and dropped are in `TRIED.md`.
      data-less chunk costs little), so a neighbour can predict when a
      chunk is held: speculative requests to peers that haven't announced
      a chunk, and declared lag summaries in place of HAVEs, assume it.
+   - Replace HAVEs with declared lag summaries and an arrival model:
+     speculative requests to peers that haven't announced a chunk, which
+     adapt when a peer's lag trend breaks (halvings, joins, parent
+     changes), while a chunk the asked peer declares takes the ordinary
+     request round. Give every HAVE consumer a model-based replacement,
+     measured with no HAVEs at all, judge the model by its prediction
+     error against true holds (`simdb.py forecast-report`), and fit the
+     requests to the one-window answer cap (`max_pending_requests`).
+     Tune the collapse cures (first waves, repair stalls) only after.
    - Without a known capacity the upload meter still trails a known
      uplink. Measure the gap on the robust tier by role
      (`STRIMS_SIM_KNOWN_UPLINK=seed` and `=viewers`) before choosing the
-     next meter change.
+     next meter change, which reads the uplink whatever the node sends,
+     never by probes timed behind its own bursts.
    - A relay with few links reads a standing queue once each backs up a
      window, so its drained reading is what those links deliver, not its
      uplink: star-3-10's viewers (20 Mbit/s uplinks) read about 550 KB/s
@@ -284,7 +294,9 @@ and dropped are in `TRIED.md`.
      the runner, riding the first channel payload written to it, would
      feed every channel's controller to that peer (no wire change); it
      changes what the controllers see, so gate it on strims-sim's WAN
-     cases.
+     cases. A controller keeps a round trip through the peer's queues
+     that arrives whether or not its requests are answered; vnic's echoes
+     skip those queues.
 3. **Greedy peers.** Liars and colluders, most of their cost on the
    child side.
    - **Pull from liars.** A liar still gets requests when the channels

@@ -1,24 +1,22 @@
 ---
 name: protocol-design
-description: "Design rules for the strims swarm protocol, its links and the sims' model, and how to test a change to them. Use when designing or changing the ppspp protocol or runner (crates/strims-ppspp): its messages, schedulers, upload meter, request control or seed allocation; transport selection or links (strims-vnic, strims-vpn, strims-network); how many peers a node keeps; the sims' model (clocks, rng, hostile kinds); or when planning how to test such a change. For sim results use sim-lab; for what the sims record, sim-metrics."
+description: "Design rules for the strims swarm protocol, its links and the sims' model, and how to test a change to them. Use when designing or changing the ppspp protocol (crates/strims-ppspp): its messages and wire format, or what a peer's claims may decide; transport selection or links (strims-vnic, strims-vpn, strims-network); the sims' model (clocks, rng, hostile kinds); or when planning how to test a protocol or scheduler change. The schedulers' behaviour is crates/PLAN.md's open work, not this skill's. For sim results use sim-lab; for what the sims record, sim-metrics."
 ---
 
 # Designing the swarm protocol
 
 `crates/CONVENTIONS.md` holds the rules every crate keeps; these are the
 design rules above them. Dropped ideas are in `crates/TRIED.md`, open
-work in `crates/PLAN.md`.
+work in `crates/PLAN.md`. The schedulers' behaviour is PLAN.md's: its
+Swarm and Network construction items.
 
 ## Trust
 
 CONVENTIONS' "Hostile peers" governs. A peer's claim about itself is
 never a signal: one that claims spare capacity draws the seed's copies
-and withholds them. The adaptive seed ranks holders by round trips it
-times, and bars one only on a quorum of reporters (`REPORT_QUORUM`), each
-checked against its own pushes (`crates/strims-ppspp/src/scheduler_seed.rs`).
-Node-wide path readings take a low quantile across links
-(`strims_base::path::aggregate`), so a minority that delays its echoes
-can't move them.
+and withholds them. Node-wide path readings take a low quantile across
+links (`strims_base::path::aggregate`), so a minority that delays its
+echoes can't move them.
 
 ## Wire
 
@@ -49,51 +47,6 @@ between peers; the ppspp codec's format is pinned by
   (`strims_base::path`, `Runner::set_peer_path`), whose probes ride the
   link's byte stream above every transport. TCP-only detail (unacked,
   cwnd) stays in capture samples (`crates/strims-ppspp-capture/src/sample.rs`).
-
-## Peer pool
-
-How many peers a node keeps is the equilibrium of its measured uplink,
-hardware and network, never a tuned constant: a constant fits the config
-it was tuned on. Fixed budgets (`capN` in
-`crates/strims-sim/src/pool.rs`) are arms and references only.
-`NodeConfig::max_peers` is the user's ceiling, not a pool size.
-
-## Request control and the meter
-
-- **Controllers keep pings.** Request windows time PING/PONG round trips
-  (`RequestController::on_ping_rtt`): a pong waits in the peer's queues
-  and arrives whether or not requests are answered. vnic's echoes skip
-  the peer's queues
-  (`crates/strims-ppspp/src/queue_delay.rs`), so timeouts from them run
-  short; answered requests give no sample before the first answer or
-  while the peer answers nothing; timed-out ages taken as round trips
-  (censored samples) stretch timeouts on lossy paths. A ping-free
-  controller needs an always-on round trip through the peer's queue.
-- **The meter reads the uplink whatever the node sends.** A due probe
-  leaves with the next frame QoS lets through (`PathMeter::probe_due`),
-  so `UploadMeter` (`crates/strims-ppspp/src/runner.rs`) sees a burst's
-  queue only where a probe rides into it. Timing probes behind the
-  node's own bursts, per link or node-wide, is rejected: the reading then
-  rests on the node's traffic pattern (HAVE frames carrying probes into
-  push bursts), and fails when that pattern changes.
-
-## HAVE removal and speculative requests
-
-- **Summaries, not exact state.** Decisions that replace HAVEs come from
-  a lightweight declared summary and an arrival model. When the model
-  falls short, improve it (other statistics, censoring, calibration,
-  trend breaks), judged by prediction error against true holds
-  (`LagForecast`, `simdb.py forecast-report`). Every HAVE consumer gets
-  a model-based replacement, measured with no HAVEs at all.
-- **Cures wait.** Tuning cures for slow first waves and repair stalls
-  waits on speculative requests that adapt to trend breaks (halvings,
-  joins, parent changes).
-- **The answer cap.** A channel's queued answers hold at most a window
-  (`max_pending_requests`; `handle_request`, d27c8828): stale answers go,
-  requests outside the window's span drop, covered ones queue nothing,
-  and once the window is full its span ends at the newest chunk, so a
-  request ahead of what the peer holds drops. A speculative or HAVE-less
-  design must make room there.
 
 ## The sims' model
 
@@ -133,6 +86,5 @@ it was tuned on. Fixed budgets (`capN` in
    a941bf5f did); in strims-sim, `suite.py neutral --base PARENT`
    (`.claude/skills/sim-metrics/references/checks.md`).
 3. **Measurement:** strims-sim's tiers with the mix, `suite.py run --base
-   PARENT --tier robust` (`browsers` for transports, `net` and
-   `net-hostile` for the pool); then the sim-lab skill judges the
-   evidence.
+   PARENT --tier robust` (`browsers` for transports); then the sim-lab
+   skill judges the evidence.
