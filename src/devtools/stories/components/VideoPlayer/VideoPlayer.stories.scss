@@ -17,8 +17,10 @@
   background-position: center;
 }
 
-// The sliders show only under the pointer: these stories show them so.
-.video_story__player--hover {
+// The sliders show only under the pointer: these stories show them so,
+// over VideoControls.scss's hidden sliders (.video_player__controls
+// .video_volume__slider) whichever of the two style sheets came first.
+.video_story__player--hover .video_player__controls {
   .video_progress_bar__slider,
   .video_volume__slider {
     opacity: 1;

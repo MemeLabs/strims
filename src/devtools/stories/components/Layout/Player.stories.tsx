@@ -1,6 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+// The layout's variables the player sizes itself by (--layout-header-height
+// under the frame's layout--pc), as the app's Layout has them.
+import "../../../../components/Layout/Layout.scss";
 import "./Layout.stories.scss";
 
 import { Base64 } from "js-base64";

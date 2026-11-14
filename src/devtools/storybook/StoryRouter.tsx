@@ -12,6 +12,7 @@ import {
   useNavigate,
 } from "react-router";
 
+import Button from "../../components/Form/Button";
 import { Provider as BackgroundRouteProvider } from "../../contexts/BackgroundRoute";
 import { useStoryHost } from "./context";
 
@@ -43,12 +44,8 @@ const NavigatedAway: React.FC<{ initialPath: string }> = ({ initialPath }) => {
       <p>
         navigated to <code>{pathname + search}</code>
       </p>
-      <button className="input input_button" onClick={() => navigate(-1)}>
-        back
-      </button>
-      <button className="input input_button" onClick={() => navigate(initialPath)}>
-        start over
-      </button>
+      <Button onClick={() => navigate(-1)}>back</Button>
+      <Button onClick={() => navigate(initialPath)}>start over</Button>
     </div>
   );
 };

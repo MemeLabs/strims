@@ -6,6 +6,7 @@ import "./chat.stories.scss";
 import React, { useState } from "react";
 
 import EmoteDetails from "../../../../components/Chat/EmoteDetails";
+import Button from "../../../../components/Form/Button";
 import { MockChat, RoomProvider, RoomStyles } from "../../../contexts/Chat";
 import { replay } from "../../../mocks/chat/MessageEmitter";
 import ChatService from "../../../mocks/chat/service";
@@ -27,11 +28,7 @@ const Details: React.FC<DetailsProps> = ({ name, modifiers = [] }) => {
         <RoomStyles className="chat_story" waitForEmotes>
           <p className="chat_story__caption">
             {open ? `details of ${name}` : "closed; "}
-            {!open && (
-              <button className="input input_button" onClick={() => setOpen(true)}>
-                open again
-              </button>
-            )}
+            {!open && <Button onClick={() => setOpen(true)}>open again</Button>}
           </p>
           {open && (
             <EmoteDetails

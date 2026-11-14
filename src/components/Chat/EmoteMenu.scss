@@ -81,7 +81,9 @@
     &__list_item {
       cursor: pointer;
 
-      &--emoji {
+      // Over Emoji.scss's .chat__emoji line height, whichever style sheet
+      // came first.
+      &--emoji.chat__emoji {
         line-height: 1em;
       }
     }
