@@ -57,7 +57,8 @@ root or in what it portals into the document's body by `--timeout` s
 PNG per story, of its frame, named by its route (chat/Chat/Chat ->
 chat__Chat__Chat.png). `--strict` also fails on catalog files neither
 covered nor skipped, and on stale catalog entries. `--list` prints the
-stories and the coverage without loading them. `-j N` runs N browsers
+stories and the coverage without loading them (with `--strict`, it exits
+1 when the catalog fails, as a run would). `-j N` runs N browsers
 (default JOBS: three in four of the cores, at most 12). `-v` prints
 every error of a failing story, not just its first. Exits 1 when a story
 (or, with --strict, the catalog) fails.
@@ -66,7 +67,8 @@ every error of a failing story, not just its first. Exits 1 when a story
                                   --compare REF [--build] [-j N] [--only PREFIX]...
                                   [--theme dark|light] [--device pc|portrait|landscape|TABLET]
                                   [--all-modes] [--tolerance N] [--report DIR] [--fresh]
-                                  [--fail-on-diff] [--rebuild-base] [--no-scope | --list]
+                                  [--fail-on-diff] [--fail-on-error] [--summary FILE]
+                                  [--rebuild-base] [--no-scope | --list]
                                   [--settle MS] [--timeout S]
   python3 hack/storybook/check.py (--port N | --url URL) --leaks [...]
 
@@ -197,9 +199,14 @@ and one more try, the failure said as it happens and, when the second
 try passes, kept in the story's `retried`: a browser that stalls or
 goes, or a capture still waiting at `--timeout` s on a request (no
 answer, or a body unfinished) or on what its document has pending, which
-names its URL. Exits 0, 1 with `--fail-on-diff` when a story changed,
-failed, or is added or removed, and 2 on a checker error (a refused head
-or base, and a hole in a manifest, among them).
+names its URL. `--summary FILE` appends the outcome to FILE in Markdown
+(summary_markdown: the tables, the scope, and the changed, failing,
+added and removed stories and the holes, by name), as a CI job's step
+summary takes it. Exits 0, 1 with `--fail-on-diff` when a story changed,
+failed, or is added or removed, 1 with `--fail-on-error` when a story
+fails in the head build (one failing in the base alone, or changed, added
+or removed, doesn't), and 2 on a checker error (a refused head or base,
+and a hole in a manifest, among them).
 """
 
 import argparse
@@ -923,6 +930,17 @@ def start_server(port, log_dir, dist=None, log_name="server.log"):
 
 def in_scope(path, files):
     return not files or any(path.startswith(f) for f in files)
+
+
+def catalog_failed(index, args):
+    """Whether --strict fails the catalog: a file under --files' prefixes
+    neither covered nor skipped, or a stale entry there; said when so."""
+    failed = args.strict and (
+        any(f["status"] == "missing" and in_scope(f["path"], args.files) for f in index["files"])
+        or any(in_scope(x["path"], args.files) for x in index.get("stale", [])))
+    if failed:
+        print("strict: the catalog has missing or stale files")
+    return failed
 
 
 def coverage_lines(index, files=()):
@@ -2478,6 +2496,77 @@ def print_compare(results, builds, modes, report, elapsed, times, args):
     print(f"report: {report}")
 
 
+def head_failures(results):
+    """The compared stories that fail in the head build (an added story's
+    among them); a story failing in the base alone isn't one."""
+    return [r for r in results if (r.get("shots", {}).get("head") or {}).get("status", "ok") != "ok"]
+
+
+def summary_markdown(results, builds, modes, report, elapsed, args, limit=50):
+    """The compare's outcome in Markdown, as --summary appends it (a CI
+    job's step summary): the builds, a table per mode, the scope, then the
+    changed stories by their share of pixels, the failing (head first),
+    added and removed ones and the manifests' holes, each list at most
+    `limit` long, and the report's path."""
+    head, base = builds
+    labels = {b.name: b.label for b in builds}
+
+    def story(r):
+        return f"`{urllib.parse.unquote(r['route'].removeprefix('/storybook/'))}`"
+
+    def code(text):
+        return "`" + first_line(text, 200).replace("`", "'") + "`"
+
+    def listed(rs, line):
+        out = [f"- {r['mode']} · {story(r)}{line(r)}" for r in rs[:limit]]
+        return out + ([f"- … and {len(rs) - limit} more"] if len(rs) > limit else [])
+
+    title = (f"in place vs fresh, `{head.commit[:12]}`" if args.leaks
+             else f"head `{head.commit[:12]}` vs base `{base.commit[:12]}` ({args.compare})")
+    kinds = ("changed", "failing", "added", "removed", "skipped", "unchanged", "identical")
+    lines = [f"### Storybook: {title}", "",
+             "| mode | " + " | ".join(kinds) + " |", "|---|" + "---:|" * len(kinds)]
+    for m in modes:
+        rs = [r for r in results if r["mode"] == m]
+        lines.append(f"| {m} | " + " | ".join(str(sum(r["kind"] == k for r in rs)) for k in kinds) + " |")
+    rechecked, overturned = rechecks(results)
+    note = (f"{len({r['route'] for r in results})} stories in {len(modes)} mode(s) in {elapsed:.0f} s; "
+            f"{rechecked} rechecked fresh, {overturned} of them overturned")
+    sc = getattr(args, "scope", None)
+    if sc and sc["why"]:
+        note += f"; not scoped ({sc['why']}): every story captured"
+    elif sc:
+        note += (f"; {len(sc['identical'])} identical by the builds' manifests"
+                 + (", captured and checked" if args.no_scope else ", not captured"))
+    lines += ["", note + "."]
+    if sc and not sc["why"] and sc["changed"]:
+        top = sorted(sc["changed"].items(), key=lambda kv: (-len(kv[1]), kv[0]))
+        more = f", and {len(top) - 10} more" if len(top) > 10 else ""
+        lines += ["", "Inputs that differ, by the stories each reaches: " + ", ".join(
+            f"`{input_name(k)}` ({len(v)})" for k, v in top[:10]) + more]
+    changed = sorted((r for r in results if r["kind"] == "changed"), key=lambda r: -r["ratio"])
+    failing = [r for r in results if r["kind"] == "failing"]
+    in_head = head_failures(failing)
+    sections = [
+        ("Changed, by the share of pixels", changed, lambda r: f" {100 * r['ratio']:.2f}%"),
+        (f"Failing in the {labels['head']} build", in_head,
+         lambda r: ": " + code(r["shots"]["head"].get("error") or "failed")),
+        (f"Failing in the {labels['base']} build only", [r for r in failing if r not in in_head],
+         lambda r: ": " + code(r["shots"]["base"].get("error") or "failed")),
+        ("Added", [r for r in results if r["kind"] == "added"], lambda r: ""),
+        ("Removed", [r for r in results if r["kind"] == "removed"], lambda r: ""),
+    ]
+    for name, rs, line in sections:
+        if rs:
+            lines += ["", f"**{name}** ({len(rs)}):", *listed(rs, line)]
+    holes = getattr(args, "holes", [])
+    if holes:
+        lines += ["", f"**Holes in a manifest** ({len(holes)}):"]
+        lines += [f"- {m} · {story({'route': r})}: {code(w)}" for m, r, w in holes[:limit]]
+    lines += ["", f"Report: `{report}`", ""]
+    return "\n".join(lines)
+
+
 def compare_main(args, exe, work):
     """--compare: every story of either build in each mode, captured in both
     and diffed; the report; the exit code."""
@@ -2654,9 +2743,14 @@ def compare_main(args, exe, work):
         args.holes = manifest_holes(results, sc["identical"] if sc else set())
         report = write_report(report_dir, results, builds, modes, args, elapsed)
         print_compare(results, builds, modes, report, elapsed, mode_done, args)
+        if args.summary:
+            with open(args.summary, "a") as f:
+                f.write(summary_markdown(results, builds, modes, report, elapsed, args))
         if any(r.get("checker") for r in results) or args.holes:
             return 2
         if args.fail_on_diff and any(r["kind"] not in ("unchanged", "skipped", "identical") for r in results):
+            return 1
+        if args.fail_on_error and head_failures(results):
             return 1
         return 0
     finally:
@@ -2708,6 +2802,9 @@ def main(argv=None):
                      help="a channel's change that still counts as the same pixel (default 2 of 255)")
     cmp.add_argument("--report", metavar="DIR", help="the report's directory (default under target/storybook/compare)")
     cmp.add_argument("--fail-on-diff", action="store_true", help="exit 1 when any story differs")
+    cmp.add_argument("--fail-on-error", action="store_true",
+                     help="exit 1 when a story fails in the head build (changes don't)")
+    cmp.add_argument("--summary", metavar="FILE", help="append the outcome to FILE in Markdown (a CI step summary)")
     cmp.add_argument("--rebuild-base", action="store_true", help="build REF again even if cached")
     cmp.add_argument("--no-scope", action="store_true",
                      help="capture the stories the builds' manifests call identical too, and exit 2 if one differs")
@@ -2719,6 +2816,8 @@ def main(argv=None):
         p.error("--leaks takes none of --fresh, --base-port, --rebuild-base, --no-scope")
     if args.no_scope and not args.compare:
         p.error("--no-scope is --compare's")
+    if (args.summary or args.fail_on_error) and not comparing:
+        p.error("--summary and --fail-on-error are --compare's and --leaks'")
     if comparing and (args.screenshots or args.strict or args.files):
         p.error("--compare and --leaks take none of --screenshots, --strict, --files")
     if args.leaks and args.list:
@@ -2779,7 +2878,7 @@ def main(argv=None):
                 allow = f"  allowErrors {', '.join(s['allowErrors'])}" if s["allowErrors"] else ""
                 print(f"{s['route']}{allow}")
             print("\n".join(coverage_lines(index, args.files)))
-            return 0
+            return 1 if catalog_failed(index, args) else 0
 
         args.navigate = not args.fresh and bool(index.get("switches"))
         if not args.fresh and not args.navigate:
@@ -2844,12 +2943,7 @@ def main(argv=None):
               f"{(sum(times) / len(times)) if times else 0:.1f} s a story on {jobs} browsers; {how}")
         print("\n".join(coverage_lines(index, args.files)))
         module_errors = [m for m in index["modules"] if m.get("error")]
-        catalog_failed = args.strict and (
-            any(f["status"] == "missing" and in_scope(f["path"], args.files) for f in index["files"])
-            or any(in_scope(x["path"], args.files) for x in index.get("stale", [])))
-        if catalog_failed:
-            print("strict: the catalog has missing or stale files")
-        return 1 if failed or module_errors or catalog_failed else 0
+        return 1 if failed or module_errors or catalog_failed(index, args) else 0
     finally:
         Browser.close_all()
         if server:
