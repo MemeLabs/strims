@@ -70,10 +70,10 @@ var historyCmd = &cobra.Command{
 		}
 
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader(header)
-		table.AppendBulk(data)
-		table.Render()
-
-		return nil
+		table.Header(header)
+		if err := table.Bulk(data); err != nil {
+			return err
+		}
+		return table.Render()
 	},
 }

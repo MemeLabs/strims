@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/golang/geo/s2"
-	account "github.com/scaleway/scaleway-sdk-go/api/account/v2alpha1"
+	iam "github.com/scaleway/scaleway-sdk-go/api/iam/v1alpha1"
 	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
 	"github.com/scaleway/scaleway-sdk-go/scw"
 	"golang.org/x/sync/errgroup"
@@ -34,6 +34,9 @@ var scalewayRegions = []*Region{
 func NewScalewayDriver(organizationID, accessKey, secretKey string) (*ScalewayDriver, error) {
 	client, err := scw.NewClient(
 		scw.WithDefaultOrganizationID(organizationID),
+		// An organization's default project has the organization's ID. IAM
+		// creates SSH keys in a project, the default one unless told.
+		scw.WithDefaultProjectID(organizationID),
 		scw.WithAuth(accessKey, secretKey),
 	)
 	if err != nil {
@@ -119,13 +122,13 @@ func scalewaySKU(name string, serverType *instance.ServerType) *SKU {
 	}
 }
 
-func (d *ScalewayDriver) findOrAddKey(ctx context.Context, public string) (*account.SSHKey, error) {
-	opt := &account.ListSSHKeysRequest{
+func (d *ScalewayDriver) findOrAddKey(ctx context.Context, public string) (*iam.SSHKey, error) {
+	opt := &iam.ListSSHKeysRequest{
 		PageSize: scw.Uint32Ptr(100),
 	}
 	var page int32 = 0
 	for {
-		res, err := account.NewAPI(d.client).ListSSHKeys(opt, scw.WithContext(ctx))
+		res, err := iam.NewAPI(d.client).ListSSHKeys(opt, scw.WithContext(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +146,7 @@ func (d *ScalewayDriver) findOrAddKey(ctx context.Context, public string) (*acco
 		opt.Page = scw.Int32Ptr(page)
 	}
 
-	key, err := account.NewAPI(d.client).CreateSSHKey(&account.CreateSSHKeyRequest{
+	key, err := iam.NewAPI(d.client).CreateSSHKey(&iam.CreateSSHKeyRequest{
 		Name:      fmt.Sprintf("key-%d", time.Now().UnixNano()),
 		PublicKey: public,
 	}, scw.WithContext(ctx))
@@ -196,8 +199,8 @@ func (d *ScalewayDriver) Create(ctx context.Context, req *CreateRequest) (*Node,
 		Zone:           scw.Zone(req.Region),
 		Name:           req.Name,
 		CommercialType: req.SKU,
-		Image:          image.ID,
-		EnableIPv6:     true,
+		Image:          scw.StringPtr(image.ID),
+		EnableIPv6:     scw.BoolPtr(true),
 	}, scw.WithContext(ctx))
 	if err != nil {
 		return nil, err

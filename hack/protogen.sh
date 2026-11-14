@@ -4,10 +4,13 @@
 # change the generated files, so the script refuses them.
 # protoc: the version pkg/apis/*.pb.go's headers name.
 PROTOC_VERSION="3.21.12"
-# protoc-gen-go: go.mod's google.golang.org/protobuf.
-PROTOC_GEN_GO_VERSION="v1.28.1"
-# MemeLabs/protobuf's ts, tsrpc and gorpc plugins (go.mod's and
-# package.json's v0.3.5) report no version, so they go unchecked.
+# protoc-gen-go: go.mod's google.golang.org/protobuf, read from go.mod so
+# the generator moves with the runtime.
+PROTOC_GEN_GO_VERSION="$(awk '$1 == "google.golang.org/protobuf" {print $2}' \
+  "$(dirname "$(realpath "$0")")/../go.mod")"
+# MemeLabs/protobuf's ts, tsrpc and gorpc plugins (go.mod's
+# github.com/MemeLabs/protobuf, package.json's @memelabs/protobuf) report
+# no version, so they go unchecked.
 
 set -e
 pushd $(/bin/pwd) > /dev/null

@@ -12,6 +12,7 @@ import (
 
 	"github.com/MemeLabs/strims/infra/pkg/node"
 	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/tw"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
@@ -36,14 +37,14 @@ var skusCmd = &cobra.Command{
 			"Price Monthly",
 			"Price Hourly",
 		}
-		alignment := []int{
-			tablewriter.ALIGN_DEFAULT,
-			tablewriter.ALIGN_DEFAULT,
-			tablewriter.ALIGN_DEFAULT,
-			tablewriter.ALIGN_DEFAULT,
-			tablewriter.ALIGN_DEFAULT,
-			tablewriter.ALIGN_RIGHT,
-			tablewriter.ALIGN_RIGHT,
+		alignment := tw.Alignment{
+			tw.AlignDefault,
+			tw.AlignDefault,
+			tw.AlignDefault,
+			tw.AlignDefault,
+			tw.AlignDefault,
+			tw.AlignRight,
+			tw.AlignRight,
 		}
 		var data [][]string
 
@@ -70,7 +71,7 @@ var skusCmd = &cobra.Command{
 			data = rows
 		} else {
 			header = append([]string{"Provider"}, header...)
-			alignment = append([]int{tablewriter.ALIGN_DEFAULT}, alignment...)
+			alignment = append(tw.Alignment{tw.AlignDefault}, alignment...)
 
 			eg, ctx := errgroup.WithContext(cmd.Context())
 			for _, driver := range backend.NodeDrivers {
@@ -90,12 +91,14 @@ var skusCmd = &cobra.Command{
 		}
 
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader(header)
-		table.SetColumnAlignment(alignment)
-		table.AppendBulk(data)
-		table.Render()
-
-		return nil
+		table.Configure(func(cfg *tablewriter.Config) {
+			cfg.Row.Alignment.PerColumn = alignment
+		})
+		table.Header(header)
+		if err := table.Bulk(data); err != nil {
+			return err
+		}
+		return table.Render()
 	},
 }
 

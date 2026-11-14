@@ -13,11 +13,13 @@ any change under schema/ (crates/CONVENTIONS.md, "Formats").
 
 ## Regenerating
 
-Every committed binding reproduces with protoc 3.21.12, protoc-gen-go
-v1.28.1 (go.mod's google.golang.org/protobuf), and MemeLabs/protobuf's
-ts, tsrpc and gorpc plugins (protoc-gen-ts, protoc-gen-tsrpc,
-protoc-gen-gorpc) at go.mod's v0.3.5. The dev machine's private notes
-hold how to build them. Put them first on PATH:
+Every committed binding reproduces only with the generators the pins at
+the top of `hack/protogen.sh` name: protoc (`PROTOC_VERSION`),
+protoc-gen-go at go.mod's google.golang.org/protobuf
+(`PROTOC_GEN_GO_VERSION`), and MemeLabs/protobuf's ts, tsrpc and gorpc
+plugins (protoc-gen-ts, protoc-gen-tsrpc, protoc-gen-gorpc) at go.mod's
+github.com/MemeLabs/protobuf. The dev machine's private notes hold how to
+build them. Put them first on PATH:
 
     PATH=<plugin dir>:$PATH bash hack/protogen.sh
 
@@ -27,7 +29,9 @@ hold how to build them. Put them first on PATH:
   protos' outputs.
 - The ts, tsrpc and gorpc plugins report no version, so the script
   can't check theirs: a diff in an unchanged proto's output means one
-  isn't at v0.3.5.
+  isn't at go.mod's version.
+- Bumping google.golang.org/protobuf in go.mod moves the protoc-gen-go
+  pin with it, so the same change regenerates every Go binding.
 - Then build what reads the bindings: `pnpm run typecheck`,
   `go build ./...` (infra imports `pkg/apis`), and the Rust crates that
   use the changed messages.

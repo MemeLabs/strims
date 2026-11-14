@@ -166,7 +166,7 @@ type DNSAPI struct {
 }
 
 func (d *DNSAPI) GetRecord(ctx context.Context) (cloudflare.DNSRecord, error) {
-	records, err := d.api.DNSRecords(ctx, d.zoneID, cloudflare.DNSRecord{Name: d.domain})
+	records, _, err := d.api.ListDNSRecords(ctx, cloudflare.ZoneIdentifier(d.zoneID), cloudflare.ListDNSRecordsParams{Name: d.domain})
 	if err != nil {
 		return cloudflare.DNSRecord{}, err
 	}
@@ -177,7 +177,16 @@ func (d *DNSAPI) GetRecord(ctx context.Context) (cloudflare.DNSRecord, error) {
 }
 
 func (d *DNSAPI) UpdateRecord(ctx context.Context, r cloudflare.DNSRecord) error {
-	return d.api.UpdateDNSRecord(ctx, d.zoneID, r.ID, r)
+	_, err := d.api.UpdateDNSRecord(ctx, cloudflare.ZoneIdentifier(d.zoneID), cloudflare.UpdateDNSRecordParams{
+		ID:      r.ID,
+		Type:    r.Type,
+		Name:    r.Name,
+		Content: r.Content,
+		TTL:     r.TTL,
+		Proxied: r.Proxied,
+		Tags:    r.Tags,
+	})
+	return err
 }
 
 // NewRaft creates a minimal raft cluster to leverage the leader election

@@ -1,4 +1,4 @@
-FROM golang:1.19 as build
+FROM golang:1.27.4 as build
 
 ARG GIT_SHA
 ARG BUILD_DATE

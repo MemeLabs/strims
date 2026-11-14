@@ -23,9 +23,9 @@ import (
 	"github.com/MemeLabs/strims/infra/pkg/node"
 	"github.com/MemeLabs/strims/infra/pkg/wgutil"
 	"github.com/appleboy/easyssh-proxy"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/gofrs/flock"
 	"github.com/golang/geo/s2"
-	"github.com/mitchellh/mapstructure"
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 
