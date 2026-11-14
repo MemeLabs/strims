@@ -18,7 +18,11 @@
 //!   released in the previous walk, and by partitions (`partition` clears
 //!   the queue, `partition_oneway` drops one direction). So a queue is
 //!   always the records the last walk kept, followed by new messages. A
-//!   walk checks this and fails the run when it doesn't hold.
+//!   walk visits only the links with records or messages in flight
+//!   (`Sim::busy_links`), and passes over one whose queue is as long as
+//!   its records and none of them due: it checks the queue of every other
+//!   link it visits, and that every link with records has messages in
+//!   flight, and fails the run when either doesn't hold.
 //! - `hold` turns every message on a link back to held, so it never runs on
 //!   a link with a message released in the same walk.
 //! - `repair` makes a link healthy, so a repaired link is held anew.
@@ -197,6 +201,8 @@ struct Record {
     /// Charged [`NOMINAL_DATAGRAM`], and never lost.
     nominal: bool,
     state: State,
+    /// The link it is in flight on ([`Scheduler::links`]).
+    link: usize,
 }
 
 /// The records in flight by id, never iterated, and how many of them a
@@ -599,6 +605,9 @@ struct LinkState {
     hosts: Option<(HostIx, HostIx)>,
     /// Its in-flight messages, in queue order.
     records: VecDeque<u64>,
+    /// Whether one of them may be due: a walk passes over a link with
+    /// neither a due record nor a new message.
+    due: bool,
 }
 
 /// A delivered record's place in its link's queue until the queue
@@ -692,6 +701,12 @@ pub(crate) struct Scheduler {
     links: Vec<LinkState>,
     /// The link between each pair of hosts.
     link_of: BTreeMap<(HostIx, HostIx), usize>,
+    /// The links with records: a walk visits them and the links turmoil
+    /// has messages in flight on (`Sim::busy_links`), no other.
+    recorded: BTreeSet<usize>,
+    /// Scratch for [`Scheduler::match_queues`]: the links that released a
+    /// message in the walk, ascending.
+    released: Vec<usize>,
     records: Records,
     /// Pending events by time, then record. A record has at most one, and
     /// an event of a forgotten record is skipped.
@@ -826,6 +841,7 @@ impl Scheduler {
                     pair,
                     hosts,
                     records: VecDeque::new(),
+                    due: false,
                 });
             }
         });
@@ -845,6 +861,8 @@ impl Scheduler {
             ip_host,
             links,
             link_of,
+            recorded: BTreeSet::new(),
+            released: Vec::new(),
             records: Records::default(),
             events: BTreeMap::new(),
             next: 0,
@@ -940,9 +958,9 @@ impl Scheduler {
                 self.cross_pump(start, i);
             }
         }
-        let (fresh, released) = self.match_queues(sim)?;
+        let fresh = self.match_queues(sim)?;
         self.send(now - self.tick, fresh);
-        self.purge(sim, &released);
+        self.purge(sim);
         self.admit(now);
         if now >= self.next_queue_sample {
             self.next_queue_sample = now + self.queue_every;
@@ -1080,6 +1098,9 @@ impl Scheduler {
                         if let Some(r) = self.records.get_mut(&id) {
                             if done <= now {
                                 r.state = State::Due;
+                                if let Some(ls) = self.links.get_mut(r.link) {
+                                    ls.due = true;
+                                }
                             } else {
                                 self.events.insert((done, id), Event::Deliver);
                             }
@@ -1114,12 +1135,18 @@ impl Scheduler {
                     // through, in time order with the rest.
                     if done <= now && (window.is_none() || data.is_none()) {
                         r.state = State::Due;
+                        if let Some(ls) = self.links.get_mut(r.link) {
+                            ls.due = true;
+                        }
                     } else {
                         self.events.insert((done.max(t), id), Event::Deliver);
                     }
                 }
                 Event::Deliver => {
                     r.state = State::Due;
+                    if let Some(ls) = self.links.get_mut(r.link) {
+                        ls.due = true;
+                    }
                     let conn = (r.src, r.dst);
                     if let (Some(_), What::Data { seq, len }) = (window, r.what)
                         && !self.assocs.contains_key(&conn)
@@ -1571,22 +1598,45 @@ impl Scheduler {
     }
 
     /// Lines every queue up against its records, releases the due ones and
-    /// records new messages. Returns the new records in queue order, and
-    /// which links released a message.
-    fn match_queues(&mut self, sim: &Sim<'_>) -> Result<(Vec<u64>, Vec<bool>), String> {
+    /// records new messages, on the links with records or messages in
+    /// flight: a link with neither has nothing to line up. Returns the new
+    /// records in queue order; [`Scheduler::released`] holds the links that
+    /// released a message.
+    fn match_queues(&mut self, sim: &Sim<'_>) -> Result<Vec<u64>, String> {
         let mut fresh = Vec::new();
-        let mut released = vec![false; self.links.len()];
+        let released = &mut self.released;
+        released.clear();
         let mut err = None;
         let links = &mut self.links;
+        let recorded = &mut self.recorded;
         let records = &mut self.records;
         let ip_host = &self.ip_host;
         let assocs = &self.assocs;
         let frozen = &self.frozen;
         let next = &mut self.next;
+        // A link with records whose queue turmoil emptied on its own.
+        let emptied = |recorded: &BTreeSet<usize>, after: Option<usize>, before: Option<usize>| {
+            let from = after.map_or(0, |a| a + 1);
+            let mut range = match before {
+                Some(b) if b >= from => recorded.range(from..b),
+                Some(_) => return None,
+                None => recorded.range(from..),
+            };
+            range
+                .next()
+                .map(|li| format!("wan: link {li} dropped in-flight messages the scheduler didn't"))
+        };
+        let mut last = None;
         // Data channels whose reader takes messages through a chunk.
         let mut reads: Vec<(ConnKey, u64)> = Vec::new();
-        sim.links(|iter| {
-            'links: for (li, link) in iter.enumerate() {
+        sim.busy_links(|iter| {
+            'links: for link in iter {
+                let li = link.index();
+                if let Some(e) = emptied(recorded, last, Some(li)) {
+                    err = Some(e);
+                    break;
+                }
+                last = Some(li);
                 let Some(ls) = links.get_mut(li) else {
                     err = Some(format!("wan: turmoil has a link {li} it didn't have"));
                     break;
@@ -1602,6 +1652,10 @@ impl Scheduler {
                 let Some((a, b)) = ls.hosts else {
                     continue;
                 };
+                // Nothing to release and nothing new.
+                if !ls.due && link.len() == ls.records.len() {
+                    continue;
+                }
                 let frozen = frozen.contains(&pair_key(a, b));
                 // A data channel hands its reader whole messages: a chunk
                 // goes once every chunk of its connection through the end
@@ -1641,6 +1695,7 @@ impl Scheduler {
                 // order; those it delivers leave a mark until it compacts.
                 let known = ls.records.len();
                 let (mut seen, mut gone) = (0, 0);
+                ls.due = false;
                 for sent in link {
                     let (src, dst) = sent.pair();
                     let what = What::of(sent.protocol());
@@ -1661,15 +1716,17 @@ impl Scheduler {
                             ));
                             break 'links;
                         }
-                        if r.state == State::Due && !frozen && !held(r) {
+                        if r.state == State::Due && (frozen || held(r)) {
+                            ls.due = true;
+                        } else if r.state == State::Due {
                             sent.deliver();
                             records.remove(&id);
                             if let Some(x) = ls.records.get_mut(at) {
                                 *x = DELIVERED;
                             }
                             gone += 1;
-                            if let Some(x) = released.get_mut(li) {
-                                *x = true;
+                            if released.last() != Some(&li) {
+                                released.push(li);
                             }
                         }
                         continue;
@@ -1697,6 +1754,7 @@ impl Scheduler {
                             packets,
                             nominal: nominal(sent.protocol()),
                             state: State::InFlight,
+                            link: li,
                         },
                     );
                     ls.records.push_back(id);
@@ -1716,6 +1774,14 @@ impl Scheduler {
                 if gone > 0 {
                     ls.records.retain(|&id| id != DELIVERED);
                 }
+                if ls.records.is_empty() {
+                    recorded.remove(&li);
+                } else {
+                    recorded.insert(li);
+                }
+            }
+            if err.is_none() {
+                err = emptied(recorded, last, None);
             }
         });
         for (conn, seq) in reads {
@@ -1725,7 +1791,7 @@ impl Scheduler {
         }
         match err {
             Some(e) => Err(e),
-            None => Ok((fresh, released)),
+            None => Ok(fresh),
         }
     }
 
@@ -1903,18 +1969,21 @@ impl Scheduler {
     /// Clears the lost datagrams of every direction that holds nothing
     /// else, on links that released nothing in this walk and are neither
     /// partitioned nor frozen.
-    fn purge(&mut self, sim: &Sim<'_>, released: &[bool]) {
+    fn purge(&mut self, sim: &Sim<'_>) {
         if self.records.dropped == 0 {
             return;
         }
         let mut purges = Vec::new();
-        for (li, ls) in self.links.iter().enumerate() {
+        for &li in &self.recorded {
+            let Some(ls) = self.links.get(li) else {
+                continue;
+            };
             let Some((a, b)) = ls.hosts else {
                 continue;
             };
             let key = pair_key(a, b);
             if ls.records.is_empty()
-                || released.get(li).copied().unwrap_or(true)
+                || self.released.binary_search(&li).is_ok()
                 || self.frozen.contains(&key)
                 || self.partitioned.contains(&key)
             {
@@ -1948,6 +2017,9 @@ impl Scheduler {
                 }
                 !mine
             });
+            if ls.records.is_empty() {
+                self.recorded.remove(&li);
+            }
         }
     }
 
@@ -1964,6 +2036,10 @@ impl Scheduler {
         {
             for id in ls.records.drain(..) {
                 self.records.remove(&id);
+            }
+            ls.due = false;
+            if let Some(&li) = self.link_of.get(&pair_key(a, b)) {
+                self.recorded.remove(&li);
             }
         }
         self.net.cut(a, b);
