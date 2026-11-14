@@ -68,6 +68,7 @@ def cmd_run(args):
     env = {k: v for k, v in os.environ.items()
            if k not in ("VIEWERS", "SEED_UP_MBIT", "SECS", "SEED_UP_STEPS", "COMPETE", "BENCH_WEBRTC", "KINDS")}
     for k in range(1, repeats + 1):
+        os.makedirs(os.path.join(root, f"r{k}"), exist_ok=True)
         for c in args or all_cases():
             out = os.path.join(root, f"r{k}", c)
             if os.path.exists(os.path.join(out, "node-0.jsonl")):
