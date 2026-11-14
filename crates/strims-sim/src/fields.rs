@@ -383,6 +383,24 @@ pub(crate) enum RowInt {
     /// strims-sim: Its hosts of hostile kind colluder (`hostile.rs`,
     /// `hostile::Group`), set by STRIMS_SIM_HOSTILE's shares.
     Colluders,
+    /// With a second swarm, the median lag in ms of every frame its honest
+    /// viewers read of those written from its stream's start to its stop: read
+    /// time less the write time the frame carries; left out without one.
+    ///
+    /// strims-sim: Scenario swarm 1 (`Report::cross`), as `lag_p50_ms_honest`
+    /// reads swarm 0.
+    ///
+    /// Unit: ms.
+    CrossP50Ms,
+    /// With a second swarm, the p99 lag in ms of every frame its honest viewers
+    /// read of those written from its stream's start to its stop: read time
+    /// less the write time the frame carries; left out without one.
+    ///
+    /// strims-sim: Scenario swarm 1 (`Report::cross`), as `lag_p99_ms_honest`
+    /// reads swarm 0.
+    ///
+    /// Unit: ms.
+    CrossP99Ms,
     /// The STREAM_REQUESTs the first swarm's honest viewers (the seed aside)
     /// declined as parents, each counted at the viewer's first sample after it,
     /// from its previous sample of the same incarnation (an incarnation's first
@@ -815,6 +833,38 @@ pub(crate) enum RowInt {
     /// strims-sim: Scenario swarm 0's `SwarmOptions::stream_count`, at least 1
     /// (1 without a swarm).
     Streams,
+    /// The p90 in ms of the first swarm's munro lags: per honest viewer and
+    /// munro it read every frame of, of the frames `lag_p99_ms_honest` counts,
+    /// the lag of its slowest frame, which in several streams is the munro's
+    /// slowest stripe's; left out for a media swarm, and without a munro read
+    /// whole.
+    ///
+    /// strims-sim: A frame stream's munro is `chunks_per_signature` chunks of
+    /// whole frames, every frame of it written, and signed, in one write, so
+    /// each frame's lag runs from the munro's publication; a viewer reads in
+    /// order, so the slowest of a munro's frames is its last
+    /// (`Report::stripe_lags`). A media swarm's units hold no fixed run of
+    /// chunks with frames, and are left out: `signed_lag_p99_ms` reads its lag
+    /// from each unit's signing.
+    ///
+    /// Unit: ms.
+    StripeP90Ms,
+    /// The p99 in ms of the first swarm's munro lags: per honest viewer and
+    /// munro it read every frame of, of the frames `lag_p99_ms_honest` counts,
+    /// the lag of its slowest frame, which in several streams is the munro's
+    /// slowest stripe's; left out for a media swarm, and without a munro read
+    /// whole.
+    ///
+    /// strims-sim: A frame stream's munro is `chunks_per_signature` chunks of
+    /// whole frames, every frame of it written, and signed, in one write, so
+    /// each frame's lag runs from the munro's publication; a viewer reads in
+    /// order, so the slowest of a munro's frames is its last
+    /// (`Report::stripe_lags`). A media swarm's units hold no fixed run of
+    /// chunks with frames, and are left out: `signed_lag_p99_ms` reads its lag
+    /// from each unit's signing.
+    ///
+    /// Unit: ms.
+    StripeP99Ms,
     /// Parents replaced: the first swarm's runner counters summed over every
     /// host (SwarmCounters::switched).
     Switched,
@@ -964,6 +1014,19 @@ pub(crate) enum RowInt {
     /// strims-sim: Its hosts of hostile kind withholder (`hostile.rs`), set by
     /// STRIMS_SIM_HOSTILE's shares: its STREAM_CLOSEs go out as STREAM_OPENs.
     Withholders,
+    /// In WAN mode, the worst region's lag p99 in ms: per region of the first
+    /// swarm's honest viewers' sites, the p99 of the lags of the frames they
+    /// read that `lag_p99_ms_honest` counts, and the highest of those; left out
+    /// outside WAN mode.
+    ///
+    /// strims-sim: A viewer's region is its site's city's
+    /// (`strims_wan::Region`, `Report::region_lags`). A pool's quantile never
+    /// passes the highest of its parts', so it is at least `lag_p99_ms_honest`,
+    /// and equal to it where every viewer is in one region (the calibration
+    /// stars, all in Chicago).
+    ///
+    /// Unit: ms.
+    WorstRegionP99Ms,
 }
 
 impl RowInt {
@@ -1000,6 +1063,8 @@ impl RowInt {
             RowInt::ClockClass(i) => at(&ROWINT_CLOCK_CLASS, i),
             RowInt::ClockMaxMs => "clock_max_ms",
             RowInt::Colluders => "colluders",
+            RowInt::CrossP50Ms => "cross_p50_ms",
+            RowInt::CrossP99Ms => "cross_p99_ms",
             RowInt::Declined => "declined",
             RowInt::DeclinedIdle => "declined_idle",
             RowInt::DepartExcessLagAreaMsS => "depart_excess_lag_area_ms_s",
@@ -1077,6 +1142,8 @@ impl RowInt {
             RowInt::StaleBytes => "stale_bytes",
             RowInt::StartupMsDelayPop(i) => at(&ROWINT_STARTUP_MS_DELAY_POP, i),
             RowInt::Streams => "streams",
+            RowInt::StripeP90Ms => "stripe_p90_ms",
+            RowInt::StripeP99Ms => "stripe_p99_ms",
             RowInt::Switched => "switched",
             RowInt::TimeoutsHonest => "timeouts_honest",
             RowInt::TimeoutsDishonest => "timeouts_dishonest",
@@ -1103,6 +1170,7 @@ impl RowInt {
             RowInt::Wasted => "wasted",
             RowInt::Whitewashers => "whitewashers",
             RowInt::Withholders => "withholders",
+            RowInt::WorstRegionP99Ms => "worst_region_p99_ms",
         }
     }
 
@@ -1369,6 +1437,16 @@ pub(crate) enum RowNum {
     /// with vnic's frames on the keepalive port, over every host
     /// (Report::path_overhead); left out without link time.
     ControlBpsLink,
+    /// With a second swarm, cross traffic on the first's links and uplinks, its
+    /// honest viewers' delivery: of the frames each was owed while it was
+    /// there, the share it received; left out without one.
+    ///
+    /// strims-sim: Scenario swarm 1 (`Report::delivery_of` over its honest
+    /// viewers, `Report::cross`): the cross_traffic cases' second seed's
+    /// stream, or two_streams' second stream from the one seed.
+    ///
+    /// Unit: fraction.
+    CrossDelivery,
     /// Over the honest viewers' stats samples from NET_WARM after their arrival
     /// on, in rounds of a second, the share with no path to their swarm's seed
     /// through honest hosts (Report::eclipse).
@@ -1756,6 +1834,7 @@ impl RowNum {
             RowNum::CapFanoutRho => "cap_fanout_rho",
             RowNum::CapHopsRho => "cap_hops_rho",
             RowNum::ControlBpsLink => "control_bps_link",
+            RowNum::CrossDelivery => "cross_delivery",
             RowNum::CutFromSeedShare => "cut_from_seed_share",
             RowNum::Delivery => "delivery",
             RowNum::DeliveryWho(i) => at(&ROWNUM_DELIVERY_WHO, i),

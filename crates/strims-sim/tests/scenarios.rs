@@ -1882,12 +1882,33 @@ fn cross_traffic(seed: u64, push: PushMode) -> Scenario {
     s
 }
 
-/// Both streams arrive whole at every viewer.
+/// Both streams arrive whole at every viewer, so the row's cross traffic,
+/// the second stream's, is delivered whole, with its lag the measure's;
+/// and outside WAN mode the row has no regions.
 fn check_cross_traffic(r: &Report) -> Result<(), String> {
     sound(r)?;
     for sw in 0..2 {
         let spec = &r.scenario.swarms[sw];
         complete_swarm(r, sw, &spec.viewers, spec.start, spec.stop)?;
+    }
+    let (delivery, lag) = r.cross().ok_or("no cross traffic")?;
+    let row: serde_json::Value =
+        serde_json::from_str(&r.row("cross_traffic", None)).map_err(|e| e.to_string())?;
+    let read = (
+        row["cross_delivery"].as_f64(),
+        row["cross_p50_ms"].as_u64(),
+        row["cross_p99_ms"].as_u64(),
+    );
+    let want = (
+        Some(1.0),
+        Some(u64::from(lag.p50)),
+        Some(u64::from(lag.p99)),
+    );
+    if delivery != 1.0 || lag.n == 0 || read != want || row.get("worst_region_p99_ms").is_some() {
+        return Err(format!(
+            "cross traffic delivered {delivery}, lag {lag} over {} frames; row {read:?}, worst region {}",
+            lag.n, row["worst_region_p99_ms"]
+        ));
     }
     Ok(())
 }
@@ -2442,6 +2463,72 @@ fn wan_two_continents() {
         "wan_two_continents",
         wan_two_continents_scenario,
         check_wan_two_continents,
+    );
+}
+
+/// What holds of the munro and region lags under any schedule, the two
+/// continents' viewers in Hybrid's 4 streams: a munro's lag is its slowest
+/// frame's, so none passes the honest viewers' slowest frame, and with
+/// every frame from 8 s on delivered each viewer read every munro written
+/// from then on whole; the worst region's p99 is at least the honest
+/// viewers' p99 together (a pool's quantile never passes its parts'
+/// highest) and at most their slowest frame; and the row holds what the
+/// measures read.
+#[test]
+fn stripe_and_region_lags_hold_under_any_schedule() {
+    const TEST: &str = "stripe_and_region_lags_hold_under_any_schedule";
+    sweep(
+        TEST,
+        |seed| {
+            let mut s = wan_two_continents_scenario(seed);
+            s.swarms[0].options.push_mode = PushMode::Hybrid;
+            striped(s, 4, ADAPTIVE)
+        },
+        |r| {
+            sound(r)?;
+            let spec = &r.scenario.swarms[0];
+            complete(r, &all_viewers(r), secs(8), spec.stop)?;
+            let honest = r.honest_viewers();
+            let lag = r.lag_of_between(0, &honest, spec.start, spec.stop);
+            let stripes = r.stripe_lags(0);
+            let o = &spec.options;
+            let frames =
+                (o.chunk_size * o.chunks_per_signature / strims_sim::stream::FRAME_LEN) as u64;
+            let whole = r.frames_between(0, secs(8), spec.stop);
+            let munros = (whole.end / frames).saturating_sub(whole.start.div_ceil(frames));
+            let want = munros * honest.len() as u64;
+            if (stripes.len() as u64) < want || stripes.last().is_some_and(|&m| m > lag.max) {
+                return Err(format!(
+                    "{} munro lags of {want} munros whole from 8 s, slowest {:?} ms, the frames' {} ms",
+                    stripes.len(),
+                    stripes.last(),
+                    lag.max
+                ));
+            }
+            let row: serde_json::Value =
+                serde_json::from_str(&r.row(TEST, None)).map_err(|e| e.to_string())?;
+            let p = |q: u32| strims_base::stats::sketch::percentile(&stripes, q).map(u64::from);
+            let read = (row["stripe_p90_ms"].as_u64(), row["stripe_p99_ms"].as_u64());
+            if read != (p(90), p(99)) || p(90) > p(99) {
+                return Err(format!(
+                    "row stripe p90/p99 {read:?}, measured {:?}",
+                    (p(90), p(99))
+                ));
+            }
+            let regions = r.region_lags(0);
+            let worst = regions.values().map(|x| x.p99).max().unwrap_or(0);
+            if regions.len() != 2
+                || worst < lag.p99
+                || worst > lag.max
+                || row["worst_region_p99_ms"].as_u64() != Some(u64::from(worst))
+            {
+                return Err(format!(
+                    "regions {regions:?}, row {}; honest lag {lag}",
+                    row["worst_region_p99_ms"]
+                ));
+            }
+            Ok(())
+        },
     );
 }
 

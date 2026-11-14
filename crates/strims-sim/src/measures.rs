@@ -84,6 +84,12 @@
 //!   the share of the seed's chunks that answered requests
 //!   ([`Report::seed_pull_share`]), and a media swarm's lag from each
 //!   chunk's signing ([`Report::signed_lag`]).
+//! - **stripes, regions and cross traffic**, over honest viewers and the
+//!   frames written from their swarm's start to its stop: per munro a
+//!   viewer read whole, its slowest frame's lag ([`Report::stripe_lags`]);
+//!   in WAN mode, the lag per region of the viewers' sites
+//!   ([`Report::region_lags`]); and a second swarm's delivery and lag
+//!   ([`Report::cross`]).
 //! - **series** (`Report::series_data`): with transfer samples, a swarm's run
 //!   second by second from its stream's start to the run's end, which the
 //!   tables carry ([`Report::write_tables`]) for
@@ -369,6 +375,116 @@ impl Report {
             })
             .collect();
         (!lags.is_empty()).then(|| Percentiles::of(lags))
+    }
+
+    /// Per honest viewer of frame swarm `swarm` and munro it read every
+    /// frame of, of the frames written from the stream's start to its stop
+    /// (those the row's honest lag counts), the lag of the munro's slowest
+    /// frame at its first read, sorted: the row's `stripe_p90_ms` and
+    /// `stripe_p99_ms`. A munro is the stream's `chunks_per_signature`
+    /// chunks, and a write is whole munros, every frame of it carrying the
+    /// write's time, so each frame's lag runs from its munro's publication
+    /// and the slowest is the one whose stripe came in last (a viewer reads
+    /// in order: the munro's last). Empty for a media swarm, whose units
+    /// hold no fixed run of frames, and for a swarm whose writes aren't
+    /// whole munros of whole frames.
+    pub fn stripe_lags(&self, swarm: usize) -> Vec<u32> {
+        let Some(s) = self.scenario.swarms.get(swarm) else {
+            return Vec::new();
+        };
+        if self.media.get(swarm).is_some_and(Option::is_some) {
+            return Vec::new();
+        }
+        let o = s
+            .options
+            .clone()
+            .assign_defaults(&strims_ppspp::SwarmOptions::default_options());
+        let frame = crate::stream::FRAME_LEN;
+        let bytes = o.chunk_size * o.chunks_per_signature;
+        let frames = (bytes / frame) as u64;
+        if frames == 0
+            || !bytes.is_multiple_of(frame)
+            || !s.frames_per_write.is_multiple_of(frames as usize)
+        {
+            return Vec::new();
+        }
+        let range = self.frames_between(swarm, s.start, s.stop);
+        let mut out = Vec::new();
+        for v in self
+            .viewers
+            .iter()
+            .filter(|v| v.swarm == swarm && self.class(v.host) == HostClass::Honest)
+        {
+            let mut first: BTreeMap<u64, u32> = BTreeMap::new();
+            for &(seq, lag) in v.stats.lags.iter().filter(|(q, _)| range.contains(q)) {
+                first.entry(seq).or_insert(lag);
+            }
+            let mut munro: Option<(u64, u64, u32)> = None;
+            for (&seq, &lag) in &first {
+                let m = seq / frames;
+                match &mut munro {
+                    Some((at, n, max)) if *at == m => {
+                        *n += 1;
+                        *max = (*max).max(lag);
+                    }
+                    _ => {
+                        out.extend(munro.filter(|&(_, n, _)| n == frames).map(|(_, _, l)| l));
+                        munro = Some((m, 1, lag));
+                    }
+                }
+            }
+            out.extend(munro.filter(|&(_, n, _)| n == frames).map(|(_, _, l)| l));
+        }
+        out.sort_unstable();
+        out
+    }
+
+    /// In WAN mode, the lag of the frames swarm `swarm`'s honest viewers read
+    /// of those written from its stream's start to its stop, per region of
+    /// the viewers' sites (`strims_wan::Region`): the row's
+    /// `worst_region_p99_ms` is the highest p99. Empty outside WAN mode.
+    pub fn region_lags(&self, swarm: usize) -> BTreeMap<strims_wan::Region, Percentiles> {
+        let Some(s) = self.scenario.swarms.get(swarm) else {
+            return BTreeMap::new();
+        };
+        if self.scenario.wan.is_none() {
+            return BTreeMap::new();
+        }
+        let range = self.frames_between(swarm, s.start, s.stop);
+        let mut by: BTreeMap<strims_wan::Region, Vec<u32>> = BTreeMap::new();
+        for v in self
+            .viewers
+            .iter()
+            .filter(|v| v.swarm == swarm && self.class(v.host) == HostClass::Honest)
+        {
+            let Some(site) = self.scenario.hosts.get(v.host).and_then(|h| h.site) else {
+                continue;
+            };
+            by.entry(site.city.region()).or_default().extend(
+                v.stats
+                    .lags
+                    .iter()
+                    .filter(|(seq, _)| range.contains(seq))
+                    .map(|&(_, l)| l),
+            );
+        }
+        by.into_iter()
+            .map(|(r, lags)| (r, Percentiles::of(lags)))
+            .collect()
+    }
+
+    /// With a second swarm (cross traffic on the first's links and
+    /// uplinks), its honest viewers' delivery ([`Report::delivery_of`]) and
+    /// the lag of the frames they read of those written from its stream's
+    /// start to its stop: the row's `cross_delivery`, `cross_p50_ms` and
+    /// `cross_p99_ms`. `None` without a second swarm.
+    pub fn cross(&self) -> Option<(f64, Percentiles)> {
+        let s = self.scenario.swarms.get(1)?;
+        let honest = self.honest_in(1);
+        Some((
+            self.delivery_of(1, &honest),
+            self.lag_of_between(1, &honest, s.start, s.stop),
+        ))
     }
 
     /// The lag per [`bucket`](Report::buckets).
@@ -1671,6 +1787,20 @@ impl Report {
         if !hostile.is_empty() {
             j.int(RowInt::TimeoutsDishonest, hostile_timeouts);
         }
+        let stripes = self.stripe_lags(swarm);
+        for (key, p) in [(RowInt::StripeP90Ms, 90), (RowInt::StripeP99Ms, 99)] {
+            if let Some(x) = sketch::percentile(&stripes, p) {
+                j.int(key, u64::from(x));
+            }
+        }
+        if let Some(worst) = self.region_lags(swarm).values().map(|p| p.p99).max() {
+            j.int(RowInt::WorstRegionP99Ms, u64::from(worst));
+        }
+        if let Some((delivery, lag)) = self.cross() {
+            j.num(RowNum::CrossDelivery, delivery)
+                .int(RowInt::CrossP50Ms, u64::from(lag.p50))
+                .int(RowInt::CrossP99Ms, u64::from(lag.p99));
+        }
         j.int(RowInt::LinksP50, links_p50)
             .int(RowInt::LinksP90, links_p90)
             .num(RowNum::LinksFormedPerHostMin, formed)
@@ -2940,7 +3070,7 @@ mod tests {
     use crate::report::HostReport;
     use crate::spec::{Scenario, SwarmSpec};
     use crate::stats::MeterSample;
-    use strims_wan::{Access, City, Site};
+    use strims_wan::{Access, City, Region, Site};
 
     /// A seed on a 1000 B/s uplink that halves from 20 s to 60 s, its
     /// meter reading `capacity(s)` each second of a 100 s stream.
@@ -3304,6 +3434,144 @@ mod tests {
         ];
         let lag = r.signed_lag(0).unwrap();
         assert_eq!((lag.n, lag.p50, lag.p99), (3, 200, 250));
+    }
+
+    /// A viewer of `swarm` on `host` that read `lags` (`(seq, lag)`), each
+    /// frame received.
+    fn reader(host: HostIx, swarm: usize, lags: Vec<(u64, u32)>) -> crate::report::ViewerReport {
+        let mut stats = crate::stream::ViewerStats::default();
+        for &(seq, _) in &lags {
+            stats.received.insert(seq);
+        }
+        stats.lags = lags;
+        crate::report::ViewerReport {
+            host,
+            name: format!("h{host}"),
+            swarm,
+            stats,
+        }
+    }
+
+    /// Munros of 4 frames, a write each (`five`'s 16 KiB/s in 1 KiB
+    /// frames), 160 frames written over its 10 s: viewer 1 reads munro 0
+    /// whole, munro 1 without frame 6, and munro 2 whole and frame 10 again
+    /// later, then frames past the stream's stop; viewer 2 reads munro 0;
+    /// the hostile viewer's read doesn't count.
+    #[test]
+    fn stripe_lags_take_each_whole_munros_slowest_first_read() {
+        let mut r = five(10, |_, _| None);
+        r.viewers = vec![
+            reader(
+                1,
+                0,
+                vec![
+                    (0, 100),
+                    (1, 120),
+                    (2, 150),
+                    (3, 130),
+                    (4, 10),
+                    (5, 10),
+                    (7, 10),
+                    (8, 50),
+                    (9, 60),
+                    (10, 300),
+                    (11, 70),
+                    (10, 900),
+                    (160, 5),
+                    (161, 5),
+                    (162, 5),
+                    (163, 5),
+                ],
+            ),
+            reader(2, 0, (0..4).map(|q| (q, 200)).collect()),
+            reader(4, 0, (0..4).map(|q| (q, 5000)).collect()),
+        ];
+        assert_eq!(r.stripe_lags(0), [150, 200, 300]);
+        let row: serde_json::Value = serde_json::from_str(&r.row("t", None)).unwrap();
+        assert_eq!(
+            (row["stripe_p90_ms"].as_u64(), row["stripe_p99_ms"].as_u64()),
+            (Some(300), Some(300))
+        );
+        // Writes of 4 frames aren't whole munros of 3.
+        let mut odd = r.clone();
+        odd.scenario.swarms[0].options.chunks_per_signature = 3;
+        assert!(odd.stripe_lags(0).is_empty());
+        let row: serde_json::Value = serde_json::from_str(&odd.row("t", None)).unwrap();
+        assert!(row.get("stripe_p99_ms").is_none(), "{row}");
+        // A media swarm's units hold no fixed run of frames.
+        r.media = vec![Some(crate::report::MediaLog::default())];
+        assert!(r.stripe_lags(0).is_empty());
+    }
+
+    /// A seed and viewers in Chicago, New York and London, and a hostile
+    /// one in Tokyo, in WAN mode, streaming two swarms of 8 frames each.
+    #[test]
+    fn regions_and_cross_traffic_read_the_honest_viewers() {
+        let mut s = Scenario::new("regions");
+        let site = |c: City| Site::new(c, Access::Cable);
+        let hosts: Vec<HostIx> = [
+            City::Chicago,
+            City::Chicago,
+            City::NewYork,
+            City::London,
+            City::Tokyo,
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(i, c)| s.host_at(&format!("h{i}"), site(c)))
+        .collect();
+        s.hosts[4].class = HostClass::Hostile("test");
+        let live = |viewers| {
+            SwarmSpec::live(
+                hosts[0],
+                viewers,
+                16 * 1024,
+                Duration::ZERO,
+                Duration::from_millis(500),
+            )
+        };
+        s.swarm(live(vec![1, 2, 3, 4]));
+        let mut r = seed_reading(|_| 0);
+        r.scenario = s.clone();
+        r.hosts = vec![HostReport::default(); 5];
+        let mut written = crate::stream::SeqSet::default();
+        for q in 0..8 {
+            written.insert(q);
+        }
+        r.written = vec![written.clone(), written];
+        r.viewers = vec![
+            reader(1, 0, vec![(0, 100), (1, 200)]),
+            reader(2, 0, vec![(0, 300), (1, 400)]),
+            reader(3, 0, vec![(0, 1000), (1, 50)]),
+            reader(4, 0, vec![(0, 9000)]),
+        ];
+        let regions = r.region_lags(0);
+        let p99: Vec<(Region, u32)> = regions.iter().map(|(&g, p)| (g, p.p99)).collect();
+        assert_eq!(p99, [(Region::NorthAmerica, 400), (Region::Europe, 1000)]);
+        let row: serde_json::Value = serde_json::from_str(&r.row("t", None)).unwrap();
+        assert_eq!(row["worst_region_p99_ms"].as_u64(), Some(1000));
+        assert!(row.get("cross_delivery").is_none(), "{row}");
+        // A second swarm: two honest viewers of 8 frames each, one with 6.
+        r.scenario.swarm(live(vec![1, 3, 4]));
+        r.viewers.extend([
+            reader(1, 1, (0..8).map(|q| (q, 10 * q as u32)).collect()),
+            reader(3, 1, (0..6).map(|q| (q, 100)).collect()),
+            reader(4, 1, vec![(0, 7000)]),
+        ]);
+        let (delivery, lag) = r.cross().unwrap();
+        assert!((delivery - 14.0 / 16.0).abs() < 1e-9, "{delivery}");
+        assert_eq!((lag.n, lag.p50, lag.p99), (14, 60, 100));
+        let row: serde_json::Value = serde_json::from_str(&r.row("t", None)).unwrap();
+        assert_eq!(row["cross_delivery"].as_f64(), Some(delivery));
+        assert_eq!(
+            (row["cross_p50_ms"].as_u64(), row["cross_p99_ms"].as_u64()),
+            (Some(60), Some(100))
+        );
+        // Outside WAN mode there are no regions.
+        r.scenario.wan = None;
+        assert!(r.region_lags(0).is_empty());
+        let row: serde_json::Value = serde_json::from_str(&r.row("t", None)).unwrap();
+        assert!(row.get("worst_region_p99_ms").is_none(), "{row}");
     }
 
     #[test]

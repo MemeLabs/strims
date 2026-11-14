@@ -21,10 +21,9 @@
 #                 HAVE removal's declared-summary line, seed-cover), p4tf
 #                 (its park4 line, seed-cover-p4tf), attackers (strims-sim's
 #                 behavioural attackers and dishonest mix), extras
-#                 (strims-sim's seed allocation pins, loop analysis, seed
-#                 verdicts, and stripe, region and cross-traffic lag); a
-#                 family's values a line adds to main's are keyed by the
-#                 line in its params
+#                 (strims-sim's seed allocation pins, loop analysis and
+#                 seed verdicts); a family's values a line adds to main's
+#                 are keyed by the line in its params
 #   retired       the sims whose older runs hold it, where no sim writes it
 #                 now (sims = []): a name whose meaning changes takes a new
 #                 one, and the old stays, retired, so older runs still read
@@ -314,24 +313,25 @@ type = "num"
 description = "The bytes per link per second the hosts wrote to measure their paths with vnic's frames on the keepalive port, over every host (Report::path_overhead); left out without link time."
 
 [rows.cross_delivery]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "num"
-description = "The cross-traffic swarm's delivery (CrossReport); 0 without one."
+unit = "fraction"
+description = "With a second swarm, cross traffic on the first's links and uplinks, its honest viewers' delivery: of the frames each was owed while it was there, the share it received; left out without one."
+notes.strims-sim = "Scenario swarm 1 (`Report::delivery_of` over its honest viewers, `Report::cross`): the cross_traffic cases' second seed's stream, or two_streams' second stream from the one seed."
 
 [rows.cross_p50_ms]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 unit = "ms"
-description = "The cross-traffic swarm's median lag in ms (CrossReport); 0 without one."
+description = "With a second swarm, the median lag in ms of every frame its honest viewers read of those written from its stream's start to its stop: read time less the write time the frame carries; left out without one."
+notes.strims-sim = "Scenario swarm 1 (`Report::cross`), as `lag_p50_ms_honest` reads swarm 0."
 
 [rows.cross_p99_ms]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 unit = "ms"
-description = "The cross-traffic swarm's p99 lag in ms (CrossReport); 0 without one."
+description = "With a second swarm, the p99 lag in ms of every frame its honest viewers read of those written from its stream's start to its stop: read time less the write time the frame carries; left out without one."
+notes.strims-sim = "Scenario swarm 1 (`Report::cross`), as `lag_p99_ms_honest` reads swarm 0."
 
 [rows.cut_from_seed_share]
 sims = ["strims-sim"]
@@ -1441,18 +1441,18 @@ description = "The first swarm's stream count: the streams its stream is split i
 notes.strims-sim = "Scenario swarm 0's `SwarmOptions::stream_count`, at least 1 (1 without a swarm)."
 
 [rows.stripe_p90_ms]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 unit = "ms"
-description = "The p90 in ms of the worst stripe's lag: per honest viewer and munro published after its warm-up, how long after publishing its last chunk arrived (Sim::munro_lags); munros it never received whole are left out."
+description = "The p90 in ms of the first swarm's munro lags: per honest viewer and munro it read every frame of, of the frames `lag_p99_ms_honest` counts, the lag of its slowest frame, which in several streams is the munro's slowest stripe's; left out for a media swarm, and without a munro read whole."
+notes.strims-sim = "A frame stream's munro is `chunks_per_signature` chunks of whole frames, every frame of it written, and signed, in one write, so each frame's lag runs from the munro's publication; a viewer reads in order, so the slowest of a munro's frames is its last (`Report::stripe_lags`). A media swarm's units hold no fixed run of chunks with frames, and are left out: `signed_lag_p99_ms` reads its lag from each unit's signing."
 
 [rows.stripe_p99_ms]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 unit = "ms"
-description = "The p99 in ms of the worst stripe's lag: per honest viewer and munro published after its warm-up, how long after publishing its last chunk arrived (Sim::munro_lags)."
+description = "The p99 in ms of the first swarm's munro lags: per honest viewer and munro it read every frame of, of the frames `lag_p99_ms_honest` counts, the lag of its slowest frame, which in several streams is the munro's slowest stripe's; left out for a media swarm, and without a munro read whole."
+notes.strims-sim = "A frame stream's munro is `chunks_per_signature` chunks of whole frames, every frame of it written, and signed, in one write, so each frame's lag runs from the munro's publication; a viewer reads in order, so the slowest of a munro's frames is its last (`Report::stripe_lags`). A media swarm's units hold no fixed run of chunks with frames, and are left out: `signed_lag_p99_ms` reads its lag from each unit's signing."
 
 [rows.switched]
 sims = ["strims-sim"]
@@ -1767,11 +1767,11 @@ description = "The first swarm's dishonest viewers that withhold pushes: they ta
 notes.strims-sim = "Its hosts of hostile kind withholder (`hostile.rs`), set by STRIMS_SIM_HOSTILE's shares: its STREAM_CLOSEs go out as STREAM_OPENs."
 
 [rows.worst_region_p99_ms]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 unit = "ms"
-description = "In WAN mode, the worst region's lag p99 in ms: per region, its honest viewers' lag p99 after their warm-ups (Sim::region_p99); 0 outside WAN mode."
+description = "In WAN mode, the worst region's lag p99 in ms: per region of the first swarm's honest viewers' sites, the p99 of the lags of the frames they read that `lag_p99_ms_honest` counts, and the highest of those; left out outside WAN mode."
+notes.strims-sim = "A viewer's region is its site's city's (`strims_wan::Region`, `Report::region_lags`). A pool's quantile never passes the highest of its parts', so it is at least `lag_p99_ms_honest`, and equal to it where every viewer is in one region (the calibration stars, all in Chicago)."
 
 # --- retired ----------------------------------------------------------------
 # Names older runs' rows hold, which no sim writes now.
