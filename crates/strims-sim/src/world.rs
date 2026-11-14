@@ -326,6 +326,7 @@ impl World {
             .collect();
         let clock_offsets = crate::skew::offsets(spec.clock_skew, spec.hosts.len(), &mut rng);
         crate::arrivals::resolve(&mut spec, &mut rng);
+        crate::hostile::draw_mix(&mut spec, &mut rng);
         let st = WorldState {
             trace: Vec::new(),
             hosts: (0..spec.hosts.len())

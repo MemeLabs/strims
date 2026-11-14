@@ -1817,7 +1817,7 @@ fn hostile_mesh(seed: u64, kind: &'static str, share: f64) -> Scenario {
         PushMode::Hybrid,
         (3, 33),
     );
-    m.s.hostile(kind, share);
+    m.s.hostile(&[(kind, share)]);
     m.s
 }
 
@@ -1983,7 +1983,7 @@ fn colluders_report_to_the_seed() {
         "colluders_report_to_the_seed",
         |s| {
             let mut sc = striped(capped_seed(s, PushMode::Hybrid), STRIPES, ADAPTIVE);
-            sc.hostile("colluder", 0.25);
+            sc.hostile(&[("colluder", 0.25)]);
             sc
         },
         |r| {
@@ -2384,14 +2384,21 @@ fn wan_super_peer(seed: u64, push: PushMode) -> Scenario {
 fn super_peer_mesh(seed: u64, push: PushMode) -> Streaming {
     let mut sites = viewer_sites(seed, 16, &atlantic(), RESIDENTIAL);
     sites.push(Site::new(City::NewYork, Access::Datacenter));
-    wan(
+    keep_super_peer(wan(
         &format!("wan_super_peer {push:?}"),
         seed,
         Site::new(City::Chicago, Access::Cable),
         &sites,
         push,
         (5, 65),
-    )
+    ))
+}
+
+/// `m` with its last viewer, the super-peer, kept out of the dishonest
+/// mix.
+fn keep_super_peer(mut m: Streaming) -> Streaming {
+    m.s.keep_honest.extend(m.viewers.last());
+    m
 }
 
 /// Viewers in the crowd cases unless `STRIMS_SIM_CROWD` says.
@@ -2427,14 +2434,14 @@ fn super_peer_crowd_mesh(seed: u64, push: PushMode) -> Streaming {
     let n = knob("STRIMS_SIM_CROWD").unwrap_or(CROWD);
     let mut sites = viewer_sites(seed, n, &atlantic(), RESIDENTIAL);
     sites.push(Site::new(City::NewYork, Access::Datacenter));
-    crowd_heap(wan(
+    keep_super_peer(crowd_heap(wan(
         &format!("wan_super_peer_crowd x{n} {push:?}"),
         seed,
         Site::new(City::Chicago, Access::Cable),
         &sites,
         push,
         (5, 65),
-    ))
+    )))
 }
 
 /// Everyone gets the stream from 10 s on while the seed sends at most 60 %
@@ -3468,6 +3475,7 @@ fn wan_slow_viewer(seed: u64) -> Scenario {
     if let Some(site) = s.hosts[v].site.as_mut() {
         *site = site.with_down(125_000);
     }
+    s.keep_honest.insert(v);
     // Pushes queue toward the slow viewer while its connection is backed
     // up, past one window, up to ppspp's cap; and what it sends about the
     // chunks it still lacks can be behind its neighbours' windows, which

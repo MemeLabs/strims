@@ -197,7 +197,7 @@ impl fmt::Display for Departures {
 }
 
 /// A uniform draw in `[0, 1)`.
-fn unit(rng: &mut DetRng) -> f64 {
+pub(crate) fn unit(rng: &mut DetRng) -> f64 {
     (rng.next_u64() >> 11) as f64 / (1u64 << 53) as f64
 }
 

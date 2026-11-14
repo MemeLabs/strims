@@ -36,6 +36,10 @@
 //!   answers to the peer's path probes [`ECHO_HOLD`], and a liar whose
 //!   links answer with nonces they never read, so their paths read
 //!   farther than they are, or go unmeasured.
+//!
+//! A scenario makes shares of its first swarm's viewers hostile by kind
+//! ([`Scenario::hostile`]), or takes the dishonest mix
+//! ([`Scenario::mix`]), which the run draws ([`draw_mix`]).
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
@@ -45,6 +49,7 @@ use std::sync::Arc;
 #[allow(clippy::disallowed_types)]
 use std::sync::Mutex;
 
+use rand_core::Rng;
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
@@ -56,6 +61,8 @@ use strims_ppspp::codec::{
 };
 use strims_ppspp::{SwarmKey, SwarmOptions};
 use strims_vnic::EchoGreed;
+
+use crate::spec::{HostClass, HostIx, Scenario};
 
 /// The kinds a host can be ([`adversary`]).
 pub const KINDS: &[&str] = &[
@@ -111,6 +118,57 @@ impl Group {
 
     fn members(&self) -> BTreeSet<HostId> {
         self.0.lock().map(|g| g.clone()).unwrap_or_default()
+    }
+}
+
+/// The share of the first swarm's viewers the dishonest mix makes
+/// hostile: uniform between the bounds, rounded to whole viewers.
+pub const MIX_SHARE: (f64, f64) = (0.10, 0.20);
+
+/// The kinds the dishonest mix's hosts take in turn.
+pub const MIX_KINDS: [&str; 2] = ["free-rider", "liar"];
+
+/// Draws the dishonest mix of a scenario with [`Scenario::mix`] from the
+/// run's rng: its share of the first swarm's viewers ([`MIX_SHARE`]),
+/// which of [`MIX_KINDS`] goes first, and the hosts, a uniform draw from
+/// the first swarm's honest viewers but those the scenario keeps honest
+/// ([`Scenario::keep_honest`]). The share counts every viewer of the
+/// swarm; the draw takes at most the viewers it may. Draws nothing
+/// without the mix.
+pub fn draw_mix(s: &mut Scenario, rng: &mut DetRng) {
+    let Some(viewers) = s
+        .swarms
+        .first()
+        .map(|sw| sw.viewers.clone())
+        .filter(|_| s.mix)
+    else {
+        return;
+    };
+    let (lo, hi) = MIX_SHARE;
+    let share = lo + (hi - lo) * crate::arrivals::unit(rng);
+    let mut kinds = MIX_KINDS;
+    if rng.next_u64() % 2 == 1 {
+        kinds.swap(0, 1);
+    }
+    let mut eligible: Vec<HostIx> = viewers
+        .iter()
+        .copied()
+        .filter(|h| !s.keep_honest.contains(h))
+        .filter(|&h| s.hosts.get(h).is_some_and(|x| x.class == HostClass::Honest))
+        .collect();
+    let m = ((viewers.len() as f64 * share).round() as usize).min(eligible.len());
+    // A partial shuffle: the first `m` are a uniform draw.
+    for i in 0..m {
+        let j = i + (rng.next_u64() % (eligible.len() - i) as u64) as usize;
+        eligible.swap(i, j);
+    }
+    let mut taken = [0; MIX_KINDS.len()];
+    for (i, &h) in eligible.iter().take(m).enumerate() {
+        let k = i % kinds.len();
+        if let (Some(&kind), Some(t)) = (kinds.get(k), taken.get_mut(k)) {
+            s.make_hostile(h, kind, *t);
+            *t += 1;
+        }
     }
 }
 
@@ -619,8 +677,13 @@ impl Adversary for Collude {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
-    use super::*;
+    use std::time::Duration as StdDuration;
+
+    use strims_base::rng::det_rng;
     use strims_ppspp::codec::{Cancel, Have};
+
+    use super::*;
+    use crate::spec::{Fault, SwarmSpec};
 
     fn cfg() -> ReaderConfig {
         ReaderConfig {
@@ -748,5 +811,162 @@ mod tests {
             due: false,
         };
         assert_eq!(c.subjects(), vec![(member, true), (other, false)]);
+    }
+
+    /// A seed and `n` viewers streaming from 5 s to 65 s.
+    fn swarm(n: usize) -> Scenario {
+        let mut s = Scenario::new("t");
+        let seed = s.host("seed", None);
+        let vs = s.hosts("v", n, None);
+        s.swarm(SwarmSpec::live(
+            seed,
+            vs,
+            1024,
+            StdDuration::from_secs(5),
+            StdDuration::from_secs(65),
+        ));
+        s
+    }
+
+    /// Each viewer's kind, in the swarm's order.
+    fn kinds(s: &Scenario) -> Vec<Option<&'static str>> {
+        s.swarms[0]
+            .viewers
+            .iter()
+            .map(|&v| match s.hosts[v].class {
+                HostClass::Hostile(k) => Some(k),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The first crash of each host the faults crash.
+    fn first_crashes(s: &Scenario) -> Vec<(HostIx, StdDuration)> {
+        let mut firsts: Vec<(HostIx, StdDuration)> = Vec::new();
+        for f in &s.faults {
+            if let Fault::Crash(h) = f.fault
+                && !firsts.iter().any(|&(x, _)| x == h)
+            {
+                firsts.push((h, f.at));
+            }
+        }
+        firsts
+    }
+
+    #[test]
+    fn one_kind_spreads_over_the_viewers_order() {
+        let mut s = swarm(15);
+        s.hostile(&[("liar", 0.2)]);
+        let k = kinds(&s);
+        let at: Vec<usize> = (0..15).filter(|&i| k[i].is_some()).collect();
+        assert_eq!(at, [2, 7, 12]);
+        assert!(k.iter().flatten().all(|&x| x == "liar"));
+        assert!(s.faults.is_empty());
+    }
+
+    #[test]
+    fn kinds_interleave_by_their_shares() {
+        let mut s = swarm(15);
+        s.hostile(&[("free-rider", 0.2), ("liar", 0.2)]);
+        let k = kinds(&s);
+        let at: Vec<usize> = (0..15).filter(|&i| k[i].is_some()).collect();
+        assert_eq!(at, [1, 3, 6, 8, 11, 13]);
+        let order: Vec<&str> = k.iter().flatten().copied().collect();
+        assert_eq!(
+            order,
+            [
+                "free-rider",
+                "liar",
+                "free-rider",
+                "liar",
+                "free-rider",
+                "liar"
+            ]
+        );
+
+        // 3 free riders and round(1.5) = 2 liars.
+        let mut s = swarm(15);
+        s.hostile(&[("free-rider", 0.2), ("liar", 0.1)]);
+        let order: Vec<&str> = kinds(&s).into_iter().flatten().collect();
+        assert_eq!(
+            order,
+            ["free-rider", "liar", "free-rider", "liar", "free-rider"]
+        );
+
+        // Shares past the whole swarm take every viewer.
+        let mut s = swarm(4);
+        s.hostile(&[("free-rider", 0.75), ("liar", 0.75)]);
+        assert!(kinds(&s).iter().all(Option::is_some));
+    }
+
+    #[test]
+    fn whitewashers_rejoin_staggered_among_their_own_kind() {
+        let mut s = swarm(15);
+        s.hostile(&[("liar", 0.2), ("whitewasher", 0.2)]);
+        let ww: Vec<HostIx> = s.swarms[0]
+            .viewers
+            .iter()
+            .zip(kinds(&s))
+            .filter(|(_, k)| *k == Some("whitewasher"))
+            .map(|(&v, _)| v)
+            .collect();
+        assert_eq!(ww.len(), 3);
+        let expect: Vec<(HostIx, StdDuration)> = ww
+            .iter()
+            .enumerate()
+            .map(|(j, &v)| (v, StdDuration::from_secs(5 + 20 + 3 * j as u64)))
+            .collect();
+        assert_eq!(first_crashes(&s), expect);
+    }
+
+    #[test]
+    fn the_mix_draws_its_share_of_the_viewers_in_turn() {
+        for n in [7, 15, 31, 63] {
+            let (lo, hi) = MIX_SHARE;
+            let bounds = (n as f64 * lo).round() as usize..=(n as f64 * hi).round() as usize;
+            let mut counts = BTreeSet::new();
+            let mut drawn = BTreeSet::new();
+            for seed in 0..1000 {
+                let mut s = swarm(n);
+                s.mix = true;
+                let kept = s.swarms[0].viewers[0];
+                s.keep_honest.insert(kept);
+                draw_mix(&mut s, &mut det_rng(seed));
+                let k = kinds(&s);
+                let m = k.iter().flatten().count();
+                assert!(bounds.contains(&m), "{n} viewers, seed {seed}: {m}");
+                let free = k.iter().flatten().filter(|&&x| x == "free-rider").count();
+                assert!(free.abs_diff(m - free) <= 1, "{k:?}");
+                assert!(k.iter().flatten().all(|x| MIX_KINDS.contains(x)));
+                assert_eq!(k[0], None, "a kept viewer was drawn");
+                assert_eq!(s.hosts[0].class, HostClass::Honest, "the seed was drawn");
+                assert!(s.faults.is_empty());
+                counts.insert(m);
+                drawn.extend((0..n).filter(|&i| k[i].is_some()));
+            }
+            assert_eq!(counts, bounds.collect(), "{n} viewers");
+            assert_eq!(drawn, (1..n).collect(), "{n} viewers");
+        }
+    }
+
+    #[test]
+    fn no_mix_draws_nothing() {
+        let mut s = swarm(15);
+        let mut rng = det_rng(9);
+        draw_mix(&mut s, &mut rng);
+        assert_eq!(rng.next_u64(), det_rng(9).next_u64());
+        assert!(kinds(&s).iter().all(Option::is_none));
+    }
+
+    #[test]
+    fn the_mix_passes_over_hostile_hosts() {
+        let mut s = swarm(10);
+        s.hostile(&[("hog", 0.5)]);
+        s.mix = true;
+        draw_mix(&mut s, &mut det_rng(1));
+        let k = kinds(&s);
+        assert_eq!(k.iter().flatten().filter(|&&x| x == "hog").count(), 5);
+        // round(10 share) of 1 or 2 more, from the honest five.
+        assert!((6..=7).contains(&k.iter().flatten().count()), "{k:?}");
     }
 }

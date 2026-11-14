@@ -98,7 +98,10 @@
 //! - with [`Scenario::arrivals`] or [`Scenario::departures`], the viewers'
 //!   arrival order and times, then who leaves and when, come from the same
 //!   rng after the clock offsets, before the controller's choices
-//!   ([`arrivals::resolve`]); without them nothing is drawn.
+//!   ([`arrivals::resolve`]); without them nothing is drawn;
+//! - with [`Scenario::mix`], the dishonest mix's share, first kind and
+//!   hosts come from the same rng after the departures, before the
+//!   controller's choices; without it nothing is drawn.
 //!
 //! The schedule stays fixed because every host, the controller and every
 //! task run on the turmoil thread, shared state is `Rc<RefCell<…>>` over

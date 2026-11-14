@@ -57,8 +57,13 @@
 //! - `STRIMS_SIM_DISCOVERY=1` lets the hosts make their swarms' links
 //!   ([`Scenario::organic`]): each keeps only its link to the signalling
 //!   relay and finds the others through transfer discovery.
-//! - `STRIMS_SIM_HOSTILE=<kind>:<share>` makes that share of the first
-//!   swarm's viewers hostile ([`Scenario::hostile`]).
+//! - `STRIMS_SIM_HOSTILE=<kind>:<share>[,<kind>:<share>...]` makes each
+//!   share of the first swarm's viewers hostile hosts of its kind
+//!   ([`Scenario::hostile`]; the kinds are `hostile.rs`'s: `free-rider`,
+//!   `liar`, `whitewasher`, `hog`, `grabber`, `withholder`, `colluder`,
+//!   `free-rider+echo`, `liar+echo`), the kinds interleaved; `mix` takes
+//!   the dishonest mix ([`Scenario::mix`]), which the run draws: 10-20 %
+//!   of the viewers, free riders and liars in turn; `off` none.
 //! - `STRIMS_SIM_CHURN=<viewers/min>:<away s>` makes the first swarm's
 //!   viewers leave and rejoin in turn ([`Scenario::churn`]); `off` none.
 //! - `STRIMS_SIM_ARRIVALS=<profile>` sets when the first swarm's viewers
@@ -276,24 +281,54 @@ fn exp_knob() -> Vec<&'static str> {
         .collect()
 }
 
-/// `STRIMS_SIM_HOSTILE=<kind>:<share>`: that share of the first swarm's
-/// viewers hostile ([`Scenario::hostile`]); `off` none.
+/// What `STRIMS_SIM_HOSTILE` makes of the first swarm's viewers.
+#[derive(Clone, Debug, PartialEq)]
+enum Hostile {
+    /// Each kind's share ([`Scenario::hostile`]).
+    Shares(Vec<(&'static str, f64)>),
+    /// The dishonest mix ([`Scenario::mix`]).
+    Mix,
+}
+
+/// `STRIMS_SIM_HOSTILE`'s forms: `<kind>:<share>[,<kind>:<share>...]`,
+/// each kind once with a share from 0 to 1, or `mix`; `off` or blank,
+/// none.
+fn parse_hostile(v: &str) -> Result<Option<Hostile>, String> {
+    let v = v.trim();
+    match v {
+        "off" | "" => return Ok(None),
+        "mix" => return Ok(Some(Hostile::Mix)),
+        _ => {}
+    }
+    let mut shares: Vec<(&'static str, f64)> = Vec::new();
+    for part in v.split(',') {
+        let (kind, share) = part
+            .split_once(':')
+            .ok_or_else(|| format!("{part} is no <kind>:<share>"))?;
+        let kind = crate::hostile::KINDS
+            .iter()
+            .copied()
+            .find(|&k| k == kind.trim())
+            .ok_or_else(|| format!("{kind} is no kind"))?;
+        if shares.iter().any(|&(k, _)| k == kind) {
+            return Err(format!("{kind} is named twice"));
+        }
+        let share = share
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|x| (0.0..=1.0).contains(x))
+            .ok_or_else(|| format!("{share} is no share from 0 to 1"))?;
+        shares.push((kind, share));
+    }
+    Ok(Some(Hostile::Shares(shares)))
+}
+
+/// `STRIMS_SIM_HOSTILE` ([`parse_hostile`]), if set.
 #[allow(clippy::panic)] // a mistyped setting fails its test
-fn hostile_knob() -> Option<(&'static str, f64)> {
-    let v = env("STRIMS_SIM_HOSTILE").filter(|v| v.trim() != "off")?;
-    let (kind, share) = v
-        .split_once(':')
-        .unwrap_or_else(|| panic!("STRIMS_SIM_HOSTILE: {v} is no <kind>:<share>"));
-    let kind = crate::hostile::KINDS
-        .iter()
-        .copied()
-        .find(|&k| k == kind.trim())
-        .unwrap_or_else(|| panic!("STRIMS_SIM_HOSTILE: {kind} is no kind"));
-    let share = share
-        .trim()
-        .parse()
-        .unwrap_or_else(|_| panic!("STRIMS_SIM_HOSTILE: {share} is no share"));
-    Some((kind, share))
+fn hostile_knob() -> Option<Hostile> {
+    let v = env("STRIMS_SIM_HOSTILE")?;
+    parse_hostile(&v).unwrap_or_else(|e| panic!("STRIMS_SIM_HOSTILE={v}: {e}"))
 }
 
 /// `STRIMS_SIM_CHURN=<viewers/min>:<away s>` ([`Scenario::churn`]); `off`
@@ -526,8 +561,10 @@ fn sweep_seeds(
             spec.organic();
         }
         spec.exp.extend(exp.iter().copied());
-        if let Some((kind, share)) = hostile {
-            spec.hostile(kind, share);
+        match &hostile {
+            Some(Hostile::Shares(kinds)) => spec.hostile(kinds),
+            Some(Hostile::Mix) => spec.mix = true,
+            None => {}
         }
         if let Some((per_min, away)) = churn {
             spec.churn(per_min, away);
@@ -640,4 +677,44 @@ fn sweep_seeds(
         );
     }
     reports
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    #[test]
+    fn hostile_knob_takes_kinds_shares_and_the_mix() {
+        assert_eq!(parse_hostile("off"), Ok(None));
+        assert_eq!(parse_hostile(" "), Ok(None));
+        assert_eq!(parse_hostile("mix"), Ok(Some(Hostile::Mix)));
+        assert_eq!(
+            parse_hostile("liar:0.2"),
+            Ok(Some(Hostile::Shares(vec![("liar", 0.2)])))
+        );
+        assert_eq!(
+            parse_hostile("free-rider:0.1, liar : 0.05,hog:0"),
+            Ok(Some(Hostile::Shares(vec![
+                ("free-rider", 0.1),
+                ("liar", 0.05),
+                ("hog", 0.0)
+            ])))
+        );
+        for bad in [
+            "liar",
+            "liar:",
+            "liar:x",
+            "liar:1.5",
+            "liar:-0.1",
+            "liar:NaN",
+            "honest:0.1",
+            "liar:0.1,liar:0.1",
+            "liar:0.1,",
+            "mix,liar:0.1",
+        ] {
+            assert!(parse_hostile(bad).is_err(), "{bad}");
+        }
+    }
 }

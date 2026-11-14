@@ -571,6 +571,16 @@ pub struct Scenario {
     /// ([`crate::arrivals`]), resolved by the run into
     /// [`Fault::Depart`]s; `None`: no one leaves.
     pub departures: Option<Departures>,
+    /// The dishonest mix (`STRIMS_SIM_HOSTILE=mix`): at its start the run
+    /// draws a share of the first swarm's viewers, between the bounds of
+    /// `hostile.rs`'s `MIX_SHARE`, from its honest ones but
+    /// [`keep_honest`](Self::keep_honest), and makes them hostile hosts of
+    /// `MIX_KINDS` in turn from a random first one, from the run's rng
+    /// after the departures (see [Determinism](crate#determinism)).
+    pub mix: bool,
+    /// The viewers the scenario singles out (the slow viewer, the
+    /// super-peer), which the dishonest mix never draws.
+    pub keep_honest: BTreeSet<HostIx>,
 }
 
 /// The experiment flags a scenario takes ([`Scenario::exp`]):
@@ -606,32 +616,61 @@ pub const EXP_FLAGS: &[&str] = &[
 ];
 
 impl Scenario {
-    /// Makes `share` of the first swarm's viewers hostile hosts of `kind`
-    /// (see `hostile.rs`), spread evenly over their order.
-    pub fn hostile(&mut self, kind: &'static str, share: f64) {
+    /// Makes each kind's share of the first swarm's viewers hostile hosts
+    /// of that kind (see `hostile.rs`): `round(n share)` of the `n`
+    /// viewers each, at most `n` in all, spread evenly over their order
+    /// and the kinds interleaved over those places, each place taking the
+    /// kind furthest behind its share of the places so far (the earlier
+    /// in `kinds` on a tie).
+    pub fn hostile(&mut self, kinds: &[(&'static str, f64)]) {
         let Some(viewers) = self.swarms.first().map(|s| s.viewers.clone()) else {
             return;
         };
         let n = viewers.len();
-        let m = ((n as f64 * share).round() as usize).min(n);
+        let counts: Vec<usize> = kinds
+            .iter()
+            .map(|&(_, share)| ((n as f64 * share).round() as usize).min(n))
+            .collect();
+        let m = counts.iter().sum::<usize>().min(n);
+        let mut taken = vec![0usize; kinds.len()];
         for j in 0..m {
+            // Behind by `(j + 1) count / m - taken`, in units of 1 / m.
+            let behind = |k: usize| {
+                let (c, t) = (counts.get(k).copied(), taken.get(k).copied());
+                ((j + 1) * c.unwrap_or(0)).cast_signed() - (t.unwrap_or(0) * m).cast_signed()
+            };
+            let Some(k) = (0..kinds.len())
+                .filter(|&k| taken.get(k) < counts.get(k))
+                .min_by_key(|&k| (std::cmp::Reverse(behind(k)), k))
+            else {
+                break;
+            };
             let i = ((j as f64 + 0.5) * n as f64 / m as f64) as usize;
-            if let Some(h) = viewers.get(i).and_then(|&v| self.hosts.get_mut(v)) {
-                h.class = HostClass::Hostile(kind);
-            }
-            // A whitewasher rejoins under a fresh host key, staggered.
-            if kind == "whitewasher"
-                && let (Some(&v), Some((start, stop))) = (
-                    viewers.get(i),
-                    self.swarms.first().map(|s| (s.start, s.stop)),
-                )
+            if let (Some(&v), Some(&(kind, _)), Some(t)) =
+                (viewers.get(i), kinds.get(k), taken.get_mut(k))
             {
-                let mut t = start + Duration::from_secs(20 + 3 * j as u64);
-                while t + Duration::from_secs(1) < stop {
-                    self.at(t, Fault::Crash(v));
-                    self.at(t + Duration::from_secs(1), Fault::Restart(v));
-                    t += crate::hostile::REJOIN_EVERY;
-                }
+                self.make_hostile(v, kind, *t);
+                *t += 1;
+            }
+        }
+    }
+
+    /// Makes viewer `v` a hostile host of `kind`, the `j`-th of its kind
+    /// (from 0): a whitewasher rejoins under a fresh host key from 20 s
+    /// into the first swarm, staggered 3 s a whitewasher, every
+    /// [`REJOIN_EVERY`](crate::hostile::REJOIN_EVERY).
+    pub(crate) fn make_hostile(&mut self, v: HostIx, kind: &'static str, j: usize) {
+        if let Some(h) = self.hosts.get_mut(v) {
+            h.class = HostClass::Hostile(kind);
+        }
+        if kind == "whitewasher"
+            && let Some((start, stop)) = self.swarms.first().map(|s| (s.start, s.stop))
+        {
+            let mut t = start + Duration::from_secs(20 + 3 * j as u64);
+            while t + Duration::from_secs(1) < stop {
+                self.at(t, Fault::Crash(v));
+                self.at(t + Duration::from_secs(1), Fault::Restart(v));
+                t += crate::hostile::REJOIN_EVERY;
             }
         }
     }
@@ -761,6 +800,8 @@ impl Scenario {
             clock_skew: ClockSkew::Real,
             arrivals: Arrivals::T0,
             departures: None,
+            mix: false,
+            keep_honest: BTreeSet::new(),
         }
     }
 
