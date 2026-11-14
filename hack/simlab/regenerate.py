@@ -117,8 +117,7 @@ def suite_command(tier, cells, seeds, kw):
     if "arms" in kw:
         out += ["--refs", ",".join(f"{a}={c}" for a, c in kw["arms"].items())]
     else:
-        knob = kw["knob"]
-        out += ["--knob", f"{knob.get('ppspp', '')},{knob.get('strims-sim', '')}", "--ref", str(kw["ref"]),
+        out += ["--knob", kw["knob"].get("strims-sim", ""), "--ref", str(kw["ref"]),
                 "--sets", ";".join(kw["sets"])]
         if kw["no_off"]:
             out.append("--no-off")

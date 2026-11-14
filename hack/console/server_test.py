@@ -62,15 +62,17 @@ CREATE TABLE experiments AS SELECT 'e1' AS exp_id, 'farm' AS kind,
   NULL::VARCHAR[] AS sets, MAP {'base': 'aaaa', 'new': 'bbbb'} AS arms, ['base', 'new'] AS arm_labels,
   'base' AS base, 'does it?' AS question, 2::BIGINT AS cells, 8::BIGINT AS jobs;
 CREATE TABLE experiment_cells AS SELECT * FROM (VALUES
-  ('e1', 'calm', MAP {'SIM_VIEWERS': '8'}), ('e1', 'storm', MAP {'SIM_VIEWERS': '16'})) t(exp_id, cell, env);
+  ('e1', 'calm', MAP {'STRIMS_SIM_VIEWERS': '8'}), ('e1', 'storm', MAP {'STRIMS_SIM_VIEWERS': '16'}))
+  t(exp_id, cell, env);
 CREATE TABLE raw.tier_cells AS SELECT * FROM (VALUES
-  ('robust', 'calm', 'ppspp', MAP {'SIM_VIEWERS': '8'}), ('robust', 'storm', 'ppspp', MAP {'SIM_VIEWERS': '16'}))
+  ('robust', 'calm', 'strims-sim', MAP {'STRIMS_SIM_VIEWERS': '8'}),
+  ('robust', 'storm', 'strims-sim', MAP {'STRIMS_SIM_VIEWERS': '16'}))
   t(tier, cell, sim, env);
 CREATE TABLE table_catalog AS SELECT 'nums' AS name, 'table' AS kind, 'one a number' AS grain,
   'i' AS keys, '' AS joins, 'numbers' AS description;
 CREATE TABLE metric_catalog AS SELECT 'i' AS name, 'nums' AS tbl, 'BIGINT' AS type,
   NOW() AS first_seen, NOW() AS last_seen;
-CREATE TABLE event_kinds AS SELECT 'join' AS kind, 'ppspp' AS sim, 'a viewer joins' AS description;
+CREATE TABLE event_kinds AS SELECT 'join' AS kind, 'strims-sim' AS sim, 'a viewer joins' AS description;
 CREATE TABLE catalog_info AS SELECT 'catalog_version' AS key, '1' AS value;
 CREATE TABLE nums AS SELECT range AS i FROM range(100000);""")
     finally:
@@ -160,8 +162,8 @@ TASKS = {"index": "server_test:fake_index", "fetch": "server_test:fake_fetch"}
 class FakeSuite:
     """suite.cells and suite.write_matrices, writing matrices as suite.py
     farm names them; each call kept."""
-    TIERS = {"robust": [{"name": "calm", "sim": "ppspp", "env": {"SIM_VIEWERS": "8"}},
-                        {"name": "storm", "sim": "ppspp", "env": {"SIM_VIEWERS": "32"}}]}
+    TIERS = {"robust": [{"name": "calm", "sim": "strims-sim", "env": {"STRIMS_SIM_VIEWERS": "8"}},
+                        {"name": "storm", "sim": "strims-sim", "env": {"STRIMS_SIM_VIEWERS": "32"}}]}
 
     def __init__(self, out):
         self.out = out
@@ -553,7 +555,7 @@ class Commands(unittest.TestCase):
         self.assertEqual(r.body["state"], "quoted")
         self.assertEqual(r.body["quote"], "16 jobs, ~$0.05")
         self.assertEqual(r.body["estimate"], {"jobs": 16, "cost": 0.05})
-        self.assertEqual(r.body["warnings"], ["storm: env differs from e1's at SIM_VIEWERS (16 -> 32)"])
+        self.assertEqual(r.body["warnings"], ["storm: env differs from e1's at STRIMS_SIM_VIEWERS (16 -> 32)"])
         self.assertEqual(SUITE.calls,
                          [(["calm", "storm"], [2001, 2002, 2003], {"arms": {"base": "aaaa", "new": "bbbb"}})])
         self.assertEqual(r.body["commands"], [["suite.py", "farm", "--tier", "robust", "--only", "calm,storm",

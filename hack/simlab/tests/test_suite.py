@@ -62,13 +62,13 @@ class Matrices(unittest.TestCase):
 
     def test_sets_as_the_cli_writes_them(self):
         text, m, tmp = self.written(sets=["x", "y,z"], ref=golden_suite.A,
-                                    knob={"strims-sim": "STRIMS_SIM_EXP", "ppspp": "SIM_EXP"})
+                                    knob={"strims-sim": "STRIMS_SIM_EXP"})
         self.assertEqual(text, self.golden("smoke-sets"))
         cells = lab.cells("smoke")
         self.assertEqual([(Path(x.path).relative_to(tmp / "work" / "farm").name, x.cell, x.env) for x in m.matrices],
                          [(f"{m.name}-{i:02d}.toml", c["name"], c["env"]) for i, c in enumerate(cells)])
         self.assertEqual((m.index["base"], m.index["values"], m.index["knob"]),
-                         ("off", ["off", "x", "y,z"], {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_EXP"}))
+                         ("off", ["off", "x", "y,z"], {"strims-sim": "STRIMS_SIM_EXP"}))
 
     def test_refs_as_the_cli_writes_them(self):
         text, m, _ = self.written(arms={"base": golden_suite.A, "new": golden_suite.B})
@@ -77,9 +77,9 @@ class Matrices(unittest.TestCase):
         self.assertNotIn("knob", m.index)
 
     def test_cells(self):
-        every = lab.cells("peers", ["churn", "star-15"], ["SIM_DEPART=60:40:10", "X=a=b"])
-        self.assertEqual([c["name"] for c in every], ["churn", "star-15"])
-        self.assertEqual([(c["env"]["SIM_DEPART"], c["env"]["X"]) for c in every], [("60:40:10", "a=b")] * 2)
+        every = lab.cells("peers", ["viewer-churn", "star-15"], ["STRIMS_SIM_DEPART=60:40:10", "X=a=b"])
+        self.assertEqual([c["name"] for c in every], ["star-15", "viewer-churn"])
+        self.assertEqual([(c["env"]["STRIMS_SIM_DEPART"], c["env"]["X"]) for c in every], [("60:40:10", "a=b")] * 2)
         self.assertEqual(lab.cells("smoke"), lab.TIERS["smoke"])
 
 

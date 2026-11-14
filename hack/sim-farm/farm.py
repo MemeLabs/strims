@@ -17,20 +17,19 @@
   hack/sim-farm/farm.py spend  [--csv DIR]
 
 A matrix (matrices/*.toml) names tests that run one config from their
-environment and print one `ROW {json}` line: the ppspp sim's `sim_job`,
-or a strims-sim sweep (target "scenarios") under STRIMS_SIM_JOB=1, which
-runs the one seed STRIMS_SIM_SEED names. It names the arms to run them at
-(git refs), the environment every job shares, and the axes whose product
-gives the jobs:
+environment and print one `ROW {json}` line: a strims-sim sweep (target
+"scenarios") under STRIMS_SIM_JOB=1, which runs the one seed
+STRIMS_SIM_SEED names. It names the arms to run them at (git refs), the
+environment every job shares, and the axes whose product gives the jobs:
 
-  package = "strims-ppspp"      # the tests' crate,
-  target = "sim"                # integration test target
-  test = "sim_job"              # and test, or a list of tests (an axis)
+  package = "strims-sim"        # the tests' crate,
+  target = "scenarios"          # integration test target
+  test = "calibration_star"     # and test, or a list of tests (an axis)
   slot_mem_gib = 3              # the memory one job needs
   [arms]    name = "git ref"
   [env]     SIM_X = "fixed"
   [axes]    SIM_Y = ["a", "b"]
-  [canary]  SIM_SECS = "2"      # overrides for the canary job (below)
+  [canary]  STRIMS_SIM_STREAM_SECS = "5"  # overrides for the canary job (below)
   [report]  columns = ["field:mean,max", "num/den:ratio"]
             group = ["arm", "SIM_Y"]   # default: arm, test if there are
                                        # several, every axis but the seed
@@ -656,16 +655,16 @@ PENDING = "pending.jsonl"
 # for its instances to flush what they hold (wind_down): a notice's span.
 WIND_DOWN_S = 120
 # Each sim's knob naming the dir it writes its tables to (hack/sim-db).
-OUT_KNOBS = {"strims-ppspp": "SIM_OUT", "strims-sim": "STRIMS_SIM_OUT"}
+OUT_KNOBS = {"strims-sim": "STRIMS_SIM_OUT"}
 # A test matrix's sim, as fields.toml names it, by its package.
-SIM_OF_PACKAGE = {"strims-ppspp": "ppspp", "strims-sim": "strims-sim"}
+SIM_OF_PACKAGE = {"strims-sim": "strims-sim"}
 # Every test index line's key, matrix, offset in its index.jsonl, job id
 # and time, a line each (row_index), and how far each matrix's index.jsonl
 # has been read into it.
 ROW_KEYS = FARM / "index-keys.jsonl"
 ROW_KEYS_READ = FARM / "index-keys-read.json"
 # The seed knobs, which reports don't group by.
-SEED_KEYS = {"SIM_SEED", "STRIMS_SIM_SEED"}
+SEED_KEYS = {"STRIMS_SIM_SEED"}
 # What a test binary is built from: commits that change none of it share
 # a binary, and jobs.
 SOURCES = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "third_party"]

@@ -1,6 +1,6 @@
 ---
 name: sim-metrics
-description: "Adding or changing what the strims sims record or the sim lab computes: a row field or per-second series, a METRICS score, a new sim table or log or a column on one, an event kind (crates/strims-wan/vocab.toml), a verdict-derived table or run metric, a simlab analysis module with its simdb.py report command, or a saved console view. Use it when planning such a change and before editing the sims' tables or rows (strims-sim's tables.rs or measures.rs, the ppspp sim's tests/sim.rs), hack/simlab's store_host, catalog, suite METRICS, verdict or views, or hack/console/views, even for a docs-only change there. For querying results use sim-lab; for console links and selections, sim-console."
+description: "Adding or changing what the strims sims record or the sim lab computes: a row field or per-second series, a METRICS score, a new sim table or log or a column on one, an event kind (crates/strims-wan/vocab.toml), a verdict-derived table or run metric, a simlab analysis module with its simdb.py report command, or a saved console view. Use it when planning such a change and before editing strims-sim's tables or rows (its tables.rs or measures.rs), hack/simlab's store_host, catalog, suite METRICS, verdict or views, or hack/console/views, even for a docs-only change there. For querying results use sim-lab; for console links and selections, sim-console."
 ---
 
 # Adding a metric to the sims and the lab
@@ -10,14 +10,14 @@ a view or reading the user's selection: sim-console.
 
 ## The pipeline
 
-Both sims (strims-sim, and the ppspp sim in
-`crates/strims-ppspp/tests/sim.rs`) write each run's row (one JSON
+strims-sim, the one measuring sim, writes each run's row (one JSON
 line), its tables (CSV beside a schema file each) and its events. Every
-name they record is declared in `crates/strims-wan/fields.toml` (its
+name it records is declared in `crates/strims-wan/fields.toml` (its
 schema is `hack/simlab/spec.py`): `python3 hack/simlab/vocab.py write`
-generates each sim's typed names from it, and each sim writes through
-its module (`crates/strims-sim/src/fields.rs`,
-`crates/strims-ppspp/tests/sim/fields.rs`).
+generates its typed names from it, which it writes through
+(`crates/strims-sim/src/fields.rs`). The ppspp sim
+(`crates/strims-ppspp/tests/sim.rs`) is a correctness harness: it
+records nothing the lab reads.
 `hack/simlab/store_host.py` folds a job's tables into the cache, and the
 farm's hosts run that same file. The catalog (`hack/simlab/catalog.py`)
 indexes the cache into the DuckLake: views over the tables, the
@@ -38,7 +38,6 @@ and then reverted at the user's call. The plan settles:
 Plan: <the metric>
 - Definition: what it measures, over whom, in what unit; what "none" is.
 - Lines: which lines get it (main, decl, p4tf), and where the mechanism lives.
-- Sims: both, with one name and one meaning, or each sim's meaning written down.
 - Knob: one the measure tier already sets (suite MEASURE_LOGS), or a new one added there.
 - Tables: each one's grain and keys, its size at star-31-5 seed 2004, sample table or not.
 - Truth: computed in the sim, or joined in the lab's view from what the sim logs.
@@ -53,9 +52,9 @@ Read the reference for the change, and the main commit that shows it:
 | Change | Reference | Main's example |
 |---|---|---|
 | A new table or log, or a column on one | `references/sim-tables.md` | 6e2d479a + 3ed18cb8 (stalls, parents); 6262342c + 051596ac (the request logs); e18b801c (truth in the view) |
-| A row field, a series or bins column, a METRICS score | `references/row-fields.md` | 8f6f4977 (a row field in both sims); e6533e0f (METRICS) |
+| A row field, a series or bins column, a METRICS score | `references/row-fields.md` | 8f6f4977 (a row field); e6533e0f (METRICS) |
 | A verdict run metric, a derived table, a scoring macro | `references/derived.md` | 47f3ec81 (one phase rule); a28bcfdd (phases from events) |
-| An event kind | `references/event-kinds.md` | cc950b02 (the vocabulary); f23ab376 (one name in both sims) |
+| An event kind | `references/event-kinds.md` | cc950b02 (the vocabulary); f23ab376 (one name for one kind) |
 | An analysis module and its report command | `references/reports.md` | 56cee325 (forecast-report) |
 | A saved console view | `references/console-views.md` | b0705011, c23b84dd, 8959d6c8 |
 
@@ -64,11 +63,9 @@ the Rust and Python checks, and what each golden diff means.
 
 ## Rules
 
-- **Both sims, one meaning.** Give a value one name in both sims when it
-  means the same thing; otherwise document each sim's meaning where the
-  catalog reads it. A pair of names for one reading makes every
-  consumer coalesce them (`meter_budget_seeds` and `budget_capacity`,
-  8f6f4977), and a sim left out is a gap no test sees.
+- **One name, one meaning.** Give a reading one name, and a new
+  meaning a new name. A pair of names for one reading makes every
+  consumer coalesce them (8f6f4977 named one reading twice).
 - **Trace-neutral.** A log draws no randomness of its own (the sims have
   one rng), no decision reads it, and no iteration order moves. Prove it
   against the parent commit (`references/checks.md`): the sims are
@@ -82,9 +79,9 @@ the Rust and Python checks, and what each golden diff means.
   console's own port of the scoring, which had drifted).
 - **The vocabulary is the authority.** What a field, a table or a
   column holds is its `crates/strims-wan/fields.toml` entry's
-  description, with each sim's notes: the catalog's descriptions come
+  description, with the sim's notes: the catalog's descriptions come
   from it (`catalog.field_docs`), from the event vocabulary and from the
-  registries, so an edit there moves the cli golden. The sims' doc
+  registries, so an edit there moves the cli golden. The sim's doc
   tables point at it. No dev logs; rationale goes in rustdoc or module
   docs; results go in the commit message and in notebooks under target/,
   never in tracked files.
@@ -127,8 +124,8 @@ the Rust and Python checks, and what each golden diff means.
 
 ## Order of work
 
-1. The Rust lands on main first where main has the mechanism: both sims
-   in one commit, trace-neutral against main's head. A module the lines
+1. The Rust lands on main first where main has the mechanism, in one
+   commit, trace-neutral against main's head. A module the lines
    share stays world-agnostic (its callers pass in their world's
    reading), so the lines' merges of main resolve to one file. A
    mechanism that only a line has gets its log on that line.

@@ -71,17 +71,12 @@ TREE_CARGO = WORK / "cargo-tree"
 GiB = 1 << 30
 
 
-PPSPP = "ppspp"
 SIM = "strims-sim"
 # The test binaries: (package, test target, the package's directory).
 BINARIES = {
-    PPSPP: ("strims-ppspp", "sim", "crates/strims-ppspp"),
     SIM: ("strims-sim", "scenarios", "crates/strims-sim"),
 }
 
-PP_BASE = {"SIM_STREAMS": "16", "SIM_CHUNK": "4096", "SIM_MUNRO": "32768", "SIM_SERIES": "1"}
-PP_CABLE = {**PP_BASE, "SIM_SCENARIO": "cable-seed", "SIM_SEED_POLICY": "adaptive", "SIM_SEED_ACCESS": "cable"}
-PP_AB = {**PP_BASE, "SIM_CASE": "AdaptiveQos"}
 SS_BASE = {"STRIMS_SIM_JOB": "1", "STRIMS_SIM_TCP": "1", "STRIMS_SIM_SERIES": "1"}
 SS_STAR = {**SS_BASE, "STRIMS_SIM_CAL_MESH": "full", "STRIMS_SIM_CHUNK": "4096", "STRIMS_SIM_MUNRO": "32768"}
 
@@ -97,26 +92,22 @@ CHEAP = 12
 # seeds only a huge effect shows.
 TIPPING = 8
 
-# The knobs that take a race's flags and a farm run's sets: the ppspp sim's,
-# then strims-sim's.
-DEFAULT_KNOB = "SIM_EXP,STRIMS_SIM_EXP"
+# The knob that takes a race's flags and a farm run's sets.
+DEFAULT_KNOB = "STRIMS_SIM_EXP"
 
 # Each sim's audience knobs (see the module docs): when the viewers arrive,
 # and who leaves for good.
-ARRIVALS = {PPSPP: "SIM_ARRIVALS", SIM: "STRIMS_SIM_ARRIVALS"}
-DEPART = {PPSPP: "SIM_DEPART", SIM: "STRIMS_SIM_DEPART"}
+ARRIVALS = {SIM: "STRIMS_SIM_ARRIVALS"}
+DEPART = {SIM: "STRIMS_SIM_DEPART"}
 # The cells whose viewers trickle in (the audience default), by sim and
 # name, and how: every scripted event of theirs comes after the last
 # arrival and its grace. The rest keep every viewer at the start: the
 # collapse reproducers (lock-in, star-31-5, the halvings, thin, the slow
-# viewer), the fixed-fault cells (seed-starved, latency-step, seed-restart,
-# viewer-churn, capped-seed, the capped hybrid) and churn. The 30 s ppspp
-# cells stream for 45 s (TRICKLE_SECS) so their last arrivals count for
-# 20 s; the uplink step's arrivals come at a second each, done well before
-# it, as its stream's first third would not be.
+# viewer) and the fixed-fault cells (seed-starved, latency-step,
+# seed-restart, viewer-churn, capped-seed, the capped hybrid). The uplink
+# step's arrivals come at a second each, done well before it, as its
+# stream's first third would not be.
 TRICKLE = {
-    **{(PPSPP, n): "trickle" for n in ("large-2mbit", "large-4mbit", "overload", "grabbers", "no-greedy",
-                                        "wan-global", "wan-mobile", "sparse-lossy", "residential")},
     **{(SIM, n): "trickle" for n in ("star-15", "residential-uncapped", "residential-varying", "two-streams",
                                       "mobile-uncapped")},
     **{(SIM, f"star-{v}-{m}"): "trickle" for v in (3, 7, 15, 31) for m in (5, 10, 20) if (v, m) != (31, 5)},
@@ -127,7 +118,6 @@ TRICKLE = {
                                       "wan-residential-seed-varying", "wan-super-peer-varying")},
     (SIM, "wan-residential-seed-step"): "trickle:1",
 }
-TRICKLE_SECS = {"30": "45"}
 
 
 def audience(c, arrivals=None, depart=None, **env):
@@ -139,8 +129,6 @@ def audience(c, arrivals=None, depart=None, **env):
         env.pop(ARRIVALS[c["sim"]], None)
     elif arrivals:
         env[ARRIVALS[c["sim"]]] = arrivals
-        if c["sim"] == PPSPP and env.get("SIM_SECS") in TRICKLE_SECS:
-            env["SIM_SECS"] = TRICKLE_SECS[env["SIM_SECS"]]
     if depart:
         env[DEPART[c["sim"]]] = depart
     return {**c, "env": env}
@@ -292,88 +280,56 @@ def net_hostile_tier():
 # at 128 kbit/s, then audio and video, CBR and VBR, to 6 Mbit/s.
 SIGN_MEDIA = ["128c", "512c", "1500c", "1500v", "3000c", "6000c", "6000v"]
 SIGN_CONFIRM_MEDIA = ["128c", "512c", "1500v", "3000c", "6000c"]
-SIGN_CONFIRM_SIM_MEDIA = ["128c", "1500v", "6000c"]
 # The sign tier's VBR streams at other keyframe ratios and scene spreads.
 SIGN_SENS_MEDIA = ["1500v:k3", "1500v:k12", "1500v:s0.35", "1500v:s1.2", "6000v:k12", "6000v:s1.2"]
 
 
-def media_cells(cells, media, knob):
+def media_cells(cells, media, knob="STRIMS_SIM_MEDIA"):
     """Each of `cells` at each stream of `media`, set by `knob`."""
     return [cell(f"{c['name']}@{m}", c["sim"], c["test"], {**c["env"], knob: m}, c["mem_gib"],
                  f"{c['why']}, streaming {m}") for c in cells for m in media]
 
 
-SIGN_PPSPP = ["wan-global", "wan-mobile", "residential", "sparse-lossy", "overload", "churn"]
+# The sign tiers' cells, robust's names: stars behind 10 and 20 Mbit/s
+# seeds, a halving, a sparse mesh, residential and super-peer seeds on
+# steady and varying uplinks, mobile viewers, a starved seed and viewers
+# that crash.
 SIGN_SIM = ["star-15-20", "star-15-10", "halve-15-20", "mesh6-31-10", "wan-residential-seed",
             "wan-residential-seed-varying", "wan-super-peer-varying", "wan-mobile-viewers", "seed-starved",
             "viewer-churn"]
 
 
+def sign_cells(media):
+    """SIGN_SIM's cells, each at each stream of `media`."""
+    robust = {c["name"]: c for c in TIERS["robust"]}
+    return media_cells([robust[n] for n in SIGN_SIM], media)
+
+
 def sign_tier():
     """How a live stream signs early, for a screen of sign policies (the
-    knob SIM_SIGN): the peers tier's ppspp cells on real-world uplinks
-    (wan-global, wan-mobile, residential; cable seeds of 100 viewers, steady
-    and churning), sparse-lossy's mesh, and 200 viewers at the higher rates,
-    each at each stream of SIGN_MEDIA."""
-    peers = {c["name"]: c for c in TIERS["peers"]}
-    cells = media_cells([peers[n] for n in SIGN_PPSPP], SIGN_MEDIA, "SIM_MEDIA")
-    return cells + media_cells([peers["large-4mbit"]], ["3000c", "6000c", "6000v"], "SIM_MEDIA")
+    knob STRIMS_SIM_SIGN): SIGN_SIM's cells at each stream of SIGN_MEDIA."""
+    return sign_cells(SIGN_MEDIA)
 
 
 def sign_confirm_tier():
-    """The sign tier's ppspp cells at SIGN_CONFIRM_MEDIA's streams, and the
-    real stack's (strims-sim, the knob STRIMS_SIM_SIGN) at
-    SIGN_CONFIRM_SIM_MEDIA's: stars behind 10 and 20 Mbit/s seeds, a
-    halving, a sparse mesh, residential and super-peer seeds on steady and
-    varying uplinks, mobile viewers, a starved seed and viewers that crash."""
-    peers = {c["name"]: c for c in TIERS["peers"]}
-    robust = {c["name"]: c for c in TIERS["robust"]}
-    return (media_cells([peers[n] for n in SIGN_PPSPP], SIGN_CONFIRM_MEDIA, "SIM_MEDIA")
-            + media_cells([robust[n] for n in SIGN_SIM], SIGN_CONFIRM_SIM_MEDIA, "STRIMS_SIM_MEDIA"))
+    """The sign tier's cells at SIGN_CONFIRM_MEDIA's streams, to confirm a
+    screen's policies."""
+    return sign_cells(SIGN_CONFIRM_MEDIA)
 
 
 def sign_sens_tier():
-    """The sign tier's ppspp cells at SIGN_SENS_MEDIA's streams: how much a
+    """The sign tier's cells at SIGN_SENS_MEDIA's streams: how much a
     policy's standing turns on the encoder model."""
-    peers = {c["name"]: c for c in TIERS["peers"]}
-    return media_cells([peers[n] for n in SIGN_PPSPP], SIGN_SENS_MEDIA, "SIM_MEDIA")
+    return sign_cells(SIGN_SENS_MEDIA)
 
 
 TIERS = {
     "smoke": [
-        cell("large", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "200", "SIM_MBIT": "2", "SIM_SECS": "10"}, 2,
-             "a large swarm runs", 1),
-        cell("wan-global", PPSPP, "sim_job", {**PP_AB, "SIM_SCENARIO": "WanGlobal", "SIM_SECS": "20"}, 1,
-             "relays on residential uplinks", 1),
         cell("star-15", SIM, "calibration_star", {**SS_STAR, "STRIMS_SIM_CAL_VIEWERS": "15",
              "STRIMS_SIM_CAL_SEED_UP_MBIT": "10", "STRIMS_SIM_CAL_SECS": "20"}, 1, "the real stack runs", 1),
         cell("capped-hybrid", SIM, "capped_seed_hybrid", SS_BASE, 1, "pull behind a capped seed", 1),
     ],
     "peers": [
-        cell("large-2mbit", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "500", "SIM_MBIT": "2", "SIM_SECS": "30"}, 5,
-             "500 viewers of a cable seed: depth, fan-out, relay use at scale"),
-        cell("large-4mbit", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "200", "SIM_MBIT": "4", "SIM_SECS": "30"}, 4,
-             "200 viewers at a higher rate", TIPPING),
-        cell("overload", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "100", "SIM_MBIT": "6", "SIM_SECS": "30"}, 3,
-             "100 viewers at 6 Mbit/s: trees fragment into cycles and pull-rooted chains", TIPPING),
-        cell("grabbers", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "50", "SIM_MBIT": "6", "SIM_SECS": "30",
-             "SIM_GREEDY_KINDS": "grab", "SIM_GREEDY_SHARE": "20"}, 6, "20 % grabbers: answer backlogs, memory"),
-        cell("no-greedy", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "50", "SIM_MBIT": "6", "SIM_SECS": "30",
-             "SIM_GREEDY": "0"}, 2, "the same swarm with honest viewers only"),
-        cell("churn", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "100", "SIM_MBIT": "4", "SIM_SECS": "60",
-             "SIM_CHURN": "120", "SIM_CHURN_AWAY": "5"}, 3,
-             "100 viewers, 120 % leaving a minute, new ones in their places 5 s on: trees repair or tip",
-             TIPPING),
-        cell("wan-global", PPSPP, "sim_job", {**PP_AB, "SIM_SCENARIO": "WanGlobal", "SIM_SECS": "60"}, 1,
-             "24 viewers worldwide, 6 links each, a datacenter seed", CHEAP),
-        cell("wan-mobile", PPSPP, "sim_job", {**PP_AB, "SIM_SCENARIO": "WanMobile", "SIM_SECS": "60"}, 1,
-             "mobile and cable viewers", CHEAP),
-        cell("sparse-lossy", PPSPP, "sim_job", {**PP_AB, "SIM_SCENARIO": "SparseLossy", "SIM_SECS": "60"}, 1,
-             "30 viewers, 6 links each, 1 % loss: repair by pull", CHEAP),
-        cell("capped-seed", PPSPP, "sim_job", {**PP_AB, "SIM_SCENARIO": "CappedSeed", "SIM_SECS": "60"}, 1,
-             "a capped seed: pull-heavy", CHEAP),
-        cell("residential", PPSPP, "sim_job", {**PP_AB, "SIM_SCENARIO": "WanResidentialSeed", "SIM_SECS": "60"}, 1,
-             "a residential seed and its relays", CHEAP),
         cell("lock-in", SIM, "calibration_star", {**SS_STAR, "STRIMS_SIM_CAL_VIEWERS": "31",
              "STRIMS_SIM_CAL_SEED_UP_MBIT": "5", "STRIMS_SIM_CAL_SECS": "60"}, 1,
              "real stack: 31 viewers behind a 5 Mbit/s seed, the pull lock-in"),
@@ -392,22 +348,16 @@ TIERS = {
         cell("viewer-churn", SIM, "viewer_churn_hybrid", SS_BASE, 1, "real stack: viewers crash and restart",
              CHEAP),
     ],
-    "scale": [
-        cell("scale-1000", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "1000", "SIM_MBIT": "2", "SIM_SECS": "30"}, 10,
-             "1000 viewers"),
-    ],
+    "scale": [],
     "robust": robust_t0(),
 }
 
 
 def peers_audience(peers):
-    """The peers tier's audience cells (`audience_cells`): the churn cell's
-    swarm (a cable seed's 100 viewers at 4 Mbit/s) and the real stack's
+    """The peers tier's audience cells (`audience_cells`): the real stack's
     healthy star (`peers`: the tier's cells)."""
-    cable = cell("cable", PPSPP, "sim_job", {**PP_CABLE, "SIM_PEERS": "100", "SIM_MBIT": "4"}, 3,
-                 "100 viewers of a cable seed at 4 Mbit/s")
     star = next(c for c in peers if c["name"] == "star-15")
-    return audience_cells(cable, "SIM_SECS") + audience_cells(star, "STRIMS_SIM_CAL_SECS")
+    return audience_cells(star, "STRIMS_SIM_CAL_SECS")
 
 
 # Today's cells that the audience default moves, as an explicit stress test
@@ -461,12 +411,11 @@ TIERS["sign-sens"] = sign_sens_tier()
 # peers' (mobile viewers).
 MEASURE_ROBUST = ["star-15-10", "star-31-5", "halve-15-10", "halve-31-10", "thin-15-10", "star-15-10-event",
                   "star-15-10-end-abrupt", "jitter-15-10"]
-MEASURE_PEERS = ["wan-mobile"]
+MEASURE_PEERS = ["mobile-uncapped"]
 # The logs a measurement keeps, by sim: the forecast log and its truth (the
 # chunks each node stored), and the scheduler's park and event logs. The
 # tables go to each job's output dir, as every job's do.
-MEASURE_LOGS = {PPSPP: {"SIM_FORECAST": "1", "SIM_SPEC": "1"},
-                SIM: {"STRIMS_SIM_FORECAST": "1", "STRIMS_SIM_SPEC": "1"}}
+MEASURE_LOGS = {SIM: {"STRIMS_SIM_FORECAST": "1", "STRIMS_SIM_SPEC": "1"}}
 MEASURE_SEEDS = 8
 # The logs hold a row per neighbour per chunk: a run's memory grows with
 # its viewers and its stream's length.
@@ -734,8 +683,7 @@ def run_jobs(jobs, slots, mem_gib, need_gib):
             lock.wait_for(lambda: used[0] + need <= mem_gib)
             used[0] += need
         try:
-            seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
-            env = {**os.environ, **c["env"], **extra, seed_key: str(seed)}
+            env = {**os.environ, **c["env"], **extra, SEED_KNOB[c["sim"]]: str(seed)}
             t0 = time.monotonic()
             p = subprocess.Popen(
                 [*TIME, str(bin_dir / c["sim"]), "--exact", c["test"], "--include-ignored", "--nocapture",
@@ -792,7 +740,9 @@ def load_rows(path):
 
 
 # Each sim's output dir knob (hack/sim-db): the run writes its tables there.
-OUT_KNOB = {PPSPP: "SIM_OUT", SIM: "STRIMS_SIM_OUT"}
+OUT_KNOB = {SIM: "STRIMS_SIM_OUT"}
+# Each sim's seed knob: the one seed a job runs.
+SEED_KNOB = {SIM: "STRIMS_SIM_SEED"}
 # Finished jobs fold into the invocation's store as they end, those that
 # ended while the last fold ran together, at most this many a transaction.
 FOLD_BATCH = 16
@@ -1000,7 +950,7 @@ def farm_jobs(name, cells):
     expired is left out, to run again."""
     want = []
     for i, c in enumerate(cells):
-        seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
+        seed_key = SEED_KNOB[c["sim"]]
         index = farm_root() / "target" / "sim-farm" / f"{name}-{i:02d}" / "index.jsonl"
         for rec in load_rows(index).values():
             if rec["test"] != c["test"]:
@@ -1130,8 +1080,8 @@ def write_matrices(cells, seeds, arms=None, sets=None, ref="HEAD", knob=None, en
     else:
         arms = {"x": git("rev-parse", ref)}
         values = ([] if no_off else ["off"]) + list(sets)
-    knob = knob or dict(zip((PPSPP, SIM), DEFAULT_KNOB.split(",")))
-    knob = {sim: knob[sim] for sim in (PPSPP, SIM) if sim in knob}
+    knob = knob or {SIM: DEFAULT_KNOB}
+    knob = {sim: knob[sim] for sim in BINARIES if sim in knob}
     seeds = [str(s) for s in seeds]
     # Matrix names are the run's EC2 tag, joined: keep them short, and
     # name the inputs so a rerun adopts the run. --env's settings join them
@@ -1150,16 +1100,16 @@ def write_matrices(cells, seeds, arms=None, sets=None, ref="HEAD", knob=None, en
     matrices, mems = [], []
     for i, c in enumerate(cells):
         package, target, _ = BINARIES[c["sim"]]
-        seed_key = "SIM_SEED" if c["sim"] == PPSPP else "STRIMS_SIM_SEED"
+        seed_key = SEED_KNOB[c["sim"]]
         mem = c["mem_gib"]
         if c["name"] in peaks:
             mem = min(mem, math.ceil(1.25 * peaks[c["name"]] * 2) / 2)
         mems.append(mem)
-        canary = {"SIM_SECS": "2"} if c["sim"] == PPSPP else {"STRIMS_SIM_STREAM_SECS": "5"}
+        canary = {"STRIMS_SIM_STREAM_SECS": "5"}
         # An audience that doesn't fit in the canary's stream starts with
         # the seed and stays (the module docs).
         if c["env"].get(ARRIVALS[c["sim"]], "trickle") != "trickle" or c["env"].get(DEPART[c["sim"]]):
-            canary |= {ARRIVALS[c["sim"]]: "t0", DEPART[c["sim"]]: "" if c["sim"] == PPSPP else "off"}
+            canary |= {ARRIVALS[c["sim"]]: "t0", DEPART[c["sim"]]: "off"}
         q = json.dumps
         text = "\n".join([
             f"# sim-suite farm {name}: {c['name']}, {c['why']}",
@@ -1206,9 +1156,9 @@ def arm_rows(run, cells, arm, index, knob):
     keeps the jobs of a cell and seed apart; an arm both ways name, with
     other rows, is refused as ambiguous."""
     if index:
-        if knob and index.get("knob") and knob != index["knob"]:
-            sys.exit(f"run {run}'s sets are its index's knob ({', '.join(index['knob'].values())}), "
-                     f"not --knob's ({', '.join(knob.values())})")
+        if knob and index.get("knob") and any(knob.get(s) != index["knob"].get(s) for s in BINARIES):
+            sys.exit(f"run {run}'s sets are its index's knob ({index['knob'].get(SIM)}), "
+                     f"not --knob's ({knob.get(SIM)})")
         rows = farm_rows(run, cells, index.get("knob"))
         if arm not in rows:
             kind = "sets" if index.get("knob") else "--refs names"
@@ -1217,7 +1167,7 @@ def arm_rows(run, cells, arm, index, knob):
         return rows[arm]
     jobs = farm_jobs(run, cells)
     named, have = [], set()
-    for k in (knob or dict(zip((PPSPP, SIM), DEFAULT_KNOB.split(","))), None):
+    for k in (knob or {SIM: DEFAULT_KNOB}, None):
         rows, clash = by_arm(jobs, k)
         have |= set(rows) - clash
         if arm in rows and arm not in clash:

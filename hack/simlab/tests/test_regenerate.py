@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
 from simlab import engine, farm, regenerate, suite  # noqa: E402
 
-SETS = {"exp_id": "e1", "kind": "farm", "knob": {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_EXP"},
+SETS = {"exp_id": "e1", "kind": "farm", "knob": {"strims-sim": "STRIMS_SIM_EXP"},
         "sets": ["off", "a", "b"], "arms": {"x": "cccc"}, "base": "off", "tiers": {"calm": "robust"}}
 REFS = {**SETS, "knob": None, "sets": None, "arms": {"main": "aaaa", "fix": "bbbb"}, "base": "main",
         "tiers": {"calm": "robust", "storm": "robust", "peer": "peers"}}
@@ -40,11 +40,11 @@ class Plan(unittest.TestCase):
     def test_a_sets_run_takes_the_sets_chosen_and_its_commit(self):
         planned = plan(arms=["b", "a"])
         self.assertEqual(planned, [("robust", ["calm"], [1], {
-            "sets": ["a", "b"], "ref": "cccc", "knob": {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_EXP"},
+            "sets": ["a", "b"], "ref": "cccc", "knob": {"strims-sim": "STRIMS_SIM_EXP"},
             "against": "a", "no_off": True})])
         self.assertEqual(regenerate.suite_command(*planned[0]), [
             "suite.py", "farm", "--tier", "robust", "--only", "calm", "--seeds", "1", "--first-seed", "1",
-            "--knob", "SIM_EXP,STRIMS_SIM_EXP", "--ref", "cccc", "--sets", "a;b", "--no-off", "--against", "a",
+            "--knob", "STRIMS_SIM_EXP", "--ref", "cccc", "--sets", "a;b", "--no-off", "--against", "a",
             "--no-run"])
         off = plan(arms=["off", "b"])[0][3]
         self.assertEqual((off["sets"], off["no_off"], off["against"]), (["b"], False, "off"))

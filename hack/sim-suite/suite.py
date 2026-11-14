@@ -10,29 +10,30 @@ working tree's sims against the base's, cell by cell, paired by seed.
                               [--tree-env KEY=VALUE ...] [--env KEY=VALUE ...]
   hack/sim-suite/suite.py calibrate [--base REF] [--tier ...] [--seeds N]
                                     [--only CELL,...] [--env KEY=VALUE ...]
-  hack/sim-suite/suite.py race --flags A,B,... [--knob SIM_EXP,STRIMS_SIM_EXP]
+  hack/sim-suite/suite.py race --flags A,B,... [--knob STRIMS_SIM_EXP]
                                [--base REF] [--tier ...] [--keep N]
                                [--env KEY=VALUE ...]
-  hack/sim-suite/suite.py farm (--sets "A,B;C" | --refs a=REF,b=REF) [--knob SIM_EXP,STRIMS_SIM_EXP]
+  hack/sim-suite/suite.py farm (--sets "A,B;C" | --refs a=REF,b=REF) [--knob STRIMS_SIM_EXP]
                                [--ref REF] [--tier ...] [--seeds N]
                                [--first-seed N] [--against SET] [--question TEXT]
                                [--farm-args ARGS] [--no-run] [--env KEY=VALUE ...]
   hack/sim-suite/suite.py score RUN:ARM RUN:ARM [--tier ...] [--only CELL,...]
-                                [--knob SIM_EXP,STRIMS_SIM_EXP] [--all]
+                                [--knob STRIMS_SIM_EXP] [--all]
   hack/sim-suite/suite.py list [--tier ...] [--only CELL,...]
   hack/sim-suite/suite.py neutral [--base REF ...] [--head REF] [--cells SET|CELL,...]
                                   [--seeds 2004,3033] [--expect TABLE[.COL] ...]
                                   [--renamed OLD=NEW ...] [--json] [--slots N] [--mem-gib N]
 
-`run` builds the ppspp sim and strims-sim's scenarios from the working
-tree (the checkout this script is in, changes and all) and from `--base`
-(default `main`, checked out in the suite's worktree,
-target/sim-suite/src/base), runs every cell of the tier at seeds 1..N under each,
-and prints a scorecard. Each sim's binary, and its rows, are kept by what
-it is built from: crates/, the vendored crates of third_party/ and the
-workspace's Cargo and toolchain files, less other packages' tests. A change to scripts, or to one sim's tests,
-reuses the rest; later runs against the same base run only the working
-tree, and a sim the working tree leaves as the base's isn't run twice.
+`run` builds strims-sim's scenarios from the working tree (the checkout
+this script is in, changes and all) and from `--base` (default `main`,
+checked out in the suite's worktree, target/sim-suite/src/base), runs
+every cell of the tier at seeds 1..N under each, and prints a scorecard.
+The binary, and its rows, are kept by what it is built from: crates/, the
+vendored crates of third_party/ and the workspace's Cargo and toolchain
+files, less other packages' tests. A change to scripts, or to another
+package's tests, reuses them; later runs against the same base run only
+the working tree, and a binary the working tree leaves as the base's
+isn't run twice.
 Rows are the sims' `ROW` objects with each run's wall time and peak
 memory; runs are deterministic, so a cell and seed always give the same
 row. Each run also writes its tables (hack/sim-db: its seconds, every
@@ -51,11 +52,11 @@ Tiers:
           Mbit/s seeds, halvings, sparse meshes, jitter, rate limits, thin
           relays, every WAN and fault case), for a change that must hold in
           general: run it with --seeds 8 or more.
-  peers   the directional tier (about 8 minutes on 16 cores, 5 once the
-          base's rows are kept): large swarms, an overloaded one, churn,
-          greedy peers, WAN mixes, pull-heavy seeds, and the real stack
-          (strims-sim).
-  scale   1000 viewers, opt-in: memory and depth at scale.
+  peers   the directional tier: the pull lock-in, a healthy star and its
+          audience cells, a slow viewer, residential seeds on steady and
+          varying uplinks, two streams, mobile viewers, a capped and a
+          starved seed, and viewers that crash.
+  scale   opt-in, memory and depth at scale: no cells yet.
   browsers
           robust's cells under the window model with every host a browser
           (STRIMS_SIM_RTC=BROWSERS): WebRTC links on the model's data
@@ -66,20 +67,27 @@ Tiers:
           cells the audience default (below) moved ran before: the
           near-pathological start, as an explicit stress test, under the
           names and settings those cells had, so their rows still pair.
+  sign, sign-confirm, sign-sens
+          live streams signed early (STRIMS_SIM_MEDIA, a screen of policies
+          by STRIMS_SIM_SIGN): stars, a halving, a sparse mesh, residential
+          and super-peer seeds, mobile viewers, a starved seed and viewers
+          that crash (SIGN_SIM), at each stream of SIGN_MEDIA, of
+          SIGN_CONFIRM_MEDIA to confirm a screen, and of SIGN_SENS_MEDIA's
+          other keyframe ratios and scene spreads.
 
-The audience: a cell's viewers trickle in (`SIM_ARRIVALS`,
-`STRIMS_SIM_ARRIVALS` = trickle: all of them within the stream's first
-third, at random) where its scripted events come after they're in
-(TRICKLE), as a broadcast's audience does; the collapse reproducers, the
-fixed-fault cells and churn keep every viewer at the start (t0), and the
-sims' tests keep it by default (the testbed twin, CI and the sweeps). The
+The audience: a cell's viewers trickle in (`STRIMS_SIM_ARRIVALS` =
+trickle: all of them within the stream's first third, at random) where
+its scripted events come after they're in (TRICKLE), as a broadcast's
+audience does; the collapse reproducers and the fixed-fault cells keep
+every viewer at the start (t0), and the sims' tests keep it by default
+(the testbed twin, CI and the sweeps). The
 audience cells (`audience_cells`, in peers, robust, browsers and net) add
 a scheduled event's burst into a warm swarm, an event's end (60 % leaving
 within 10 s, gracefully and abruptly, as separate cells) and the two
 together; strims-sim's run on stars and organic networks, where those
 leaving can't strand the rest. The verdicts count each viewer from its own
 join (analyze.py), so trickle cells need the stream to run past the last
-arrival and its grace: the ppspp sim's 30 s cells run 45 s.
+arrival and its grace.
 
 The scorecard, per cell, shows the seeds whose runs collapsed (8 unhealthy
 seconds in a row, lasting past the first 15 when viewers start with the
@@ -111,7 +119,7 @@ METRICS score its runs. golden.py checks the macros against the Python
 scoring suite.py had at golden.py's REFERENCE.
 
 `race` finds the best combination of the working tree's flags (a knob
-naming them comma-separated, by default SIM_EXP and STRIMS_SIM_EXP): round
+naming them comma-separated, by default STRIMS_SIM_EXP): round
 0 runs a two-level fractional factorial over them (each flag's main effect
 free of two-flag interactions) at half the cells' seeds, then each round
 keeps the better half at more seeds (all of them, then twice), and the
@@ -146,8 +154,7 @@ hack/sim-farm, which keeps its config and state, also when this script
 runs in a worktree). The farm builds commits, never the working tree, so
 it runs one commit (`--ref`, default HEAD) with a matrix per cell whose
 axes are the seeds (`--seeds` of them from `--first-seed`, every cell
-alike) and the knob (the first of `--knob` for the ppspp sim, the second
-for strims-sim) at `off` and at each set, the tier's matrices in one
+alike) and the knob (`--knob`) at `off` and at each set, the tier's matrices in one
 farm run (one boot of its instances, one tail). Each set is scored
 against `off`, which stands for the base: with its flags off the commit
 must reproduce the base's traces (`score` against a farm run of the base
@@ -180,10 +187,9 @@ run's arms are its sets alone, and a ref name never stands for one. A
 run without an index is read as the cells of `--tier` and `--only` in the
 order `farm` wrote them, which must be the run's, and its arms both ways,
 its sets by `--knob`'s value: an ARM naming a set and a ref with other
-rows is refused as ambiguous. A farm canary runs a ppspp cell's stream
-for 2 s and a strims-sim cell's for 5 s, so it starts every viewer with
-the seed and lets none leave when the cell's audience wouldn't fit in it
-(an event, departures).
+rows is refused as ambiguous. A farm canary runs a cell's stream for 5 s,
+so it starts every viewer with the seed and lets none leave when the
+cell's audience wouldn't fit in it (an event, departures).
 
 `list` prints a tier's cells: each one's sim, test, audience (arrivals
 and departures), seeds and settings.
@@ -261,11 +267,11 @@ def ranked(a):
 
 def race(a, cells, count, sha, base, sims, union):
     flags = [f.strip() for f in a.flags.split(",") if f.strip()]
-    knobs = [k.strip() for k in a.knob.split(",") if k.strip()]
+    knob = a.knob.strip()
     tree = {sim: lab.tree_binary(sim, base[sim]) for sim in sims}
 
     def arm_runs(arm, seeds):
-        env = {k: ",".join(arm) for k in knobs}
+        env = {knob: ",".join(arm)}
         tag = hashlib.sha1(json.dumps(sorted(env.items())).encode()).hexdigest()[:8]
         return {f"{label}~{tag}": (bin_dir, seeds, sim, env) for sim, (label, bin_dir) in tree.items()}
 
@@ -323,7 +329,7 @@ def farm(a, cells):
     m = lab.write_matrices(
         cells, range(a.first_seed, a.first_seed + a.seeds), arms=arms,
         sets=None if a.refs else [x.strip() for x in a.sets.split(";") if x.strip()], ref=a.ref,
-        knob=dict(zip((lab.PPSPP, lab.SIM), (k.strip() for k in a.knob.split(",")))), env=a.env,
+        knob={lab.SIM: a.knob.strip()}, env=a.env,
         question=a.question, against=a.against.strip() if a.against else None, no_off=a.no_off)
     name, index = m.name, m.index
     arms, base = index["arms"], index["base"]
@@ -354,7 +360,7 @@ def farm(a, cells):
 def list_cells(a):
     """`list`: each cell of the tier (every tier's without one), with its
     audience and settings, the base envs' common keys left out."""
-    common = {**lab.PP_BASE, **lab.SS_BASE}
+    common = lab.SS_BASE
     for tier in [a.tier] if a.tier else lab.TIERS:
         cells = lab.cells(tier, a.only.split(",") if a.only else None)
         print(f"{tier}: {len(cells)} cells")
@@ -369,14 +375,14 @@ def list_cells(a):
 
 def short(k):
     """A knob's name without its sim's prefix."""
-    for p in ("STRIMS_SIM_CAL_", "STRIMS_SIM_", "SIM_"):
+    for p in ("STRIMS_SIM_CAL_", "STRIMS_SIM_"):
         if k.startswith(p):
             return k[len(p):]
     return k
 
 
 def score(a, cells):
-    knob = dict(zip((lab.PPSPP, lab.SIM), (k.strip() for k in a.knob.split(",")))) if a.knob else None
+    knob = {lab.SIM: a.knob.strip()} if a.knob else None
     lab.settle_indexes()
     picked = []
     for arg in (a.a, a.b):
@@ -439,7 +445,7 @@ def main():
     rc = sub.add_parser("race")
     rc.add_argument("--flags", required=True, help="the flags to race, comma-separated")
     rc.add_argument("--knob", default=lab.DEFAULT_KNOB,
-                    help="the environment knobs that take the flags, comma-separated")
+                    help="the environment knob that takes the flags")
     rc.add_argument("--base", default="main")
     rc.add_argument("--tier", default="peers", choices=sorted(lab.TIERS))
     rc.add_argument("--seeds", type=int, default=4)
@@ -452,7 +458,7 @@ def main():
     fc.add_argument("--sets", help="flag sets, ;-separated, each comma-separated")
     fc.add_argument("--refs", help="commits instead, name=ref,...: the matrices' arms, the first the base")
     fc.add_argument("--knob", default=lab.DEFAULT_KNOB,
-                    help="the knobs that take a set: the ppspp sim's, then strims-sim's")
+                    help="the environment knob that takes a set")
     fc.add_argument("--ref", default="HEAD", help="the commit the farm builds")
     fc.add_argument("--tier", default="peers", choices=sorted(lab.TIERS))
     fc.add_argument("--seeds", type=int, default=32, help="seeds per cell, every cell alike")
@@ -471,8 +477,8 @@ def main():
     sc.add_argument("--tier", default="peers", choices=sorted(lab.TIERS),
                     help="a run's cells when it has no index: the tier it ran")
     sc.add_argument("--only", help="cells, comma-separated (the run's, when it has no index)")
-    sc.add_argument("--knob", help="the knobs that took the sets of a --sets run without an index: the ppspp "
-                                   f"sim's, then strims-sim's (default {lab.DEFAULT_KNOB}; an index names its own)")
+    sc.add_argument("--knob", help="the knob that took the sets of a --sets run without an index "
+                                   f"(default {lab.DEFAULT_KNOB}; an index names its own)")
     sc.add_argument("--all", action="store_true", help="every metric, ties too")
     ls = sub.add_parser("list")
     ls.add_argument("--tier", choices=sorted(lab.TIERS), help="one tier (default: every one)")

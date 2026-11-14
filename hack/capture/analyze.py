@@ -100,11 +100,11 @@ reads, the rows and series there; a testbed matrix's rows.jsonl and run
 dirs), index.jsonl or rows.jsonl files, or testbed run dirs
 (`hack/testbed/run.sh`'s out dir). A sim run's series is its tables'
 (`seconds` and `viewer_seconds`, which `Report::series_data` documents), with
-`STRIMS_SIM_SERIES=1` (strims-sim, where `calibration_star` always has
-it) or `SIM_SERIES=1` (the ppspp sim's `sim_job`); a testbed run's comes
-from its nodes' lines. `--where` keeps the runs whose env (or row field) has
-the value (a blank value matches a setting the run lacks); keys match
-with or without the STRIMS_SIM_CAL_, STRIMS_SIM_ or SIM_ prefix.
+`STRIMS_SIM_SERIES=1` (where `calibration_star` always has it); a
+testbed run's comes from its nodes' lines. `--where` keeps the runs whose
+env (or row field) has the value (a blank value matches a setting the run
+lacks); keys match with or without the STRIMS_SIM_CAL_ or STRIMS_SIM_
+prefix.
 
   series    per second: viewers present, on-time pushes against the chunks
             the viewers needed, the median viewer's delivery, the swarm's
@@ -468,8 +468,8 @@ def node(a):
 
 
 # Env keys that only number a run, not a cell.
-SEED_KEYS = {"STRIMS_SIM_SEED", "SIM_SEED", "seed", "repeat"}
-PREFIXES = ("STRIMS_SIM_CAL_", "STRIMS_SIM_", "SIM_")
+SEED_KEYS = {"STRIMS_SIM_SEED", "seed", "repeat"}
+PREFIXES = ("STRIMS_SIM_CAL_", "STRIMS_SIM_")
 
 
 def short(k):
@@ -1248,8 +1248,7 @@ def bytes_(a):
     secs = max((t1 - t0) / 1000, 1e-3)
 
     def role(n):
-        # The ppspp sim's labels add the seed's site ("Seed Chicago Cable").
-        seed = n.lower() == a.seed.lower() or n.lower().startswith(a.seed.lower() + " ")
+        seed = n.lower() == a.seed.lower()
         return "seed" if seed else "relay" if n in pushers else "leaf"
 
     folded = collections.defaultdict(Bytes)
@@ -1326,7 +1325,7 @@ def main():
     p.add_argument("--holder", help="one holder only")
     p = command("bytes", bytes_)
     p.add_argument("rows")
-    p.add_argument("--seed", default="seed", help="the seed's label, or its first word, in any case")
+    p.add_argument("--seed", default="seed", help="the seed's label, in any case")
     p.add_argument("--node", help="one node's frames per peer")
     p.add_argument("--step", type=float, help="seconds per line instead (with --node, that node's)")
     p = command("diverge", diverge)

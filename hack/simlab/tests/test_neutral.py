@@ -457,8 +457,8 @@ class Cells(unittest.TestCase):
     def test_sets(self):
         audit = neutral.cell_set()
         self.assertEqual([c["name"] for c in audit],
-                         ["star-31-5", "halve-15-10", "thin-15-10-trickle", "star-15-10-end-abrupt", "no-greedy",
-                          "grabbers", "churn", "wan-mobile", "cable-end-abrupt"])
+                         ["star-31-5", "halve-15-10", "thin-15-10-trickle", "star-15-10-end-abrupt", "viewer-churn",
+                          "wan-mobile-viewers"])
         for c in audit:
             for k, v in neutral.LOGS[c["sim"]].items():
                 self.assertEqual(c["env"][k], v)

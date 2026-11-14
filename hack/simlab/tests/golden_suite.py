@@ -58,10 +58,10 @@ def runs():
         out.append((f"{tier}-refs", ["--tier", tier, "--refs", f"base={A},new={B}"]))
     out += [
         ("peers-options", ["--tier", "peers", "--ref", A, "--sets", "x", "--seeds", "4", "--first-seed", "3001",
-                           "--env", "SIM_DEPART=60:40:10", "--env", "STRIMS_SIM_JOB=2", "--question", "does x help?",
-                           "--no-off", "--only", "churn,star-31-10"]),
+                           "--env", "STRIMS_SIM_DEPART=60:40:10", "--env", "STRIMS_SIM_JOB=2", "--question",
+                           "does x help?", "--no-off", "--only", "viewer-churn,star-31-10"]),
         ("robust-against", ["--tier", "robust", "--ref", A, "--sets", "x;y", "--against", "x",
-                            "--knob", "SIM_KNOB,STRIMS_SIM_KNOB", "--only", "star-7-5,halve-15-10"]),
+                            "--knob", "STRIMS_SIM_KNOB", "--only", "star-7-5,halve-15-10"]),
         ("smoke-bad-against", ["--tier", "smoke", "--ref", A, "--sets", "x", "--against", "nope"]),
     ]
     return out

@@ -560,7 +560,7 @@ class Store:
     def fold_job(self, wid: str, rec: dict) -> dict:
         job, res = rec["job"], rec["result"]
         env = job.get("env", {})
-        seed = env.get("SIM_SEED", env.get("STRIMS_SIM_SEED"))
+        seed = env.get("STRIMS_SIM_SEED")
         return {
             "k": job.get("key") or wid, "dir": self.fold_dir / wid, "sim": job.get("sim"), "test": job.get("test"),
             "cell": job.get("matrix"), "arm": job.get("arm"), "seed": int(seed) if str(seed or "").isdigit() else None,

@@ -3,7 +3,7 @@
 ## Trace-neutral
 
 A change that only records must change no run. The harness builds the
-parent and the change, runs both sims' cells on the same seeds with
+parent and the change, runs the sim's cells on the same seeds with
 every table and log on, and compares each run's trace and reads hash,
 every row key, every column of every table and `series_meta.json`:
 

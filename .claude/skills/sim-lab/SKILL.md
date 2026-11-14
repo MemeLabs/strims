@@ -6,7 +6,7 @@ description: The strims sims' results and the lab CLI that queries them. Use for
 # The sim lab
 
 Every sim result this machine knows of, local suite runs and farm runs of
-both sims, is in one read-only DuckDB catalog (a DuckLake), with suite.py's
+strims-sim, is in one read-only DuckDB catalog (a DuckLake), with suite.py's
 scoring as SQL macros. The CLI below answers questions over it. Run each
 tool as `python3 SCRIPT` from any checkout or worktree: the scripts re-exec
 under hack/'s uv venv, and every worktree reads the main checkout's

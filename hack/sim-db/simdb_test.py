@@ -74,19 +74,19 @@ TIER = {"cells": [{"name": "star-3-5", "sim": "strims-sim"}, {"name": "halve-7-1
                   {"name": "star-7-5", "sim": "strims-sim"}]}
 INDEXES = {
     "sa0001": TIER,
-    "sa0002": {"cells": [{"name": "org-star-7-5", "sim": "ppspp"}],
-               "knob": {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_EXP"}, "values": ["off", "a"]},
+    "sa0002": {"cells": [{"name": "org-star-7-5", "sim": "strims-sim"}],
+               "knob": {"strims-sim": "STRIMS_SIM_EXP"}, "values": ["off", "a"]},
     "sb0001": TIER,
 }
 # Kept apart by suite.py until its run started.
-PENDING = {"sb0002": {"cells": [{"name": "org-star-7-5", "sim": "ppspp"}]}}
+PENDING = {"sb0002": {"cells": [{"name": "org-star-7-5", "sim": "strims-sim"}]}}
 MATRICES = {A: ["sa0001-00", "sa0001-01", "sa0001-02", "sa0002-00"],
             B: ["sb0001-00", "sb0001-01", "sb0001-02", "sb0002-00"]}
 # source: (k, matrix, arm, env)
 STORED = {
     f"{A}/i-1/0": [("k1", "sa0001-00", "main", {}), ("k2", "sa0001-00", "fix", {}),
-                   ("k3", "sa0001-01", "main", {}), ("k4", "sa0002-00", "x", {"SIM_EXP": "off"}),
-                   ("k5", "sa0002-00", "x", {"SIM_EXP": "a"}),
+                   ("k3", "sa0001-01", "main", {}), ("k4", "sa0002-00", "x", {"STRIMS_SIM_EXP": "off"}),
+                   ("k5", "sa0002-00", "x", {"STRIMS_SIM_EXP": "a"}),
                    # the verify copy of a job the farm reused from B's run
                    ("kr", "sa0001-01", "main", {})],
     # a second instance's copy of k2
@@ -239,24 +239,22 @@ class Selection(unittest.TestCase):
 
 
 # Suite farm runs, as suite.py's `farm` leaves them: a --sets run (the
-# knob its index names, set apart from SIM_EXP for strims-sim), a --refs
+# knob its index names, apart from the default STRIMS_SIM_EXP), a --refs
 # run whose --env sets the default knob, one ref named as a set ("off"),
 # and two runs without an index: one of sets (the matrices' lone arm, x,
 # the default knob an axis), and one of refs whose env gives each the
 # other's name.
 LABEL_CELLS = [{"name": "star-3-5", "sim": "strims-sim", "test": "calibration_star"},
-               {"name": "org-star-7-5", "sim": "ppspp", "test": "sim_job"}]
-SETS_KNOB = {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_KNOWN_UPLINK"}
+               {"name": "org-star-7-5", "sim": "strims-sim", "test": "calibration_star"}]
+SETS_KNOB = {"strims-sim": "STRIMS_SIM_KNOWN_UPLINK"}
 LABEL_INDEXES = {"sd0001": {"cells": LABEL_CELLS, "knob": SETS_KNOB, "values": ["off", "seed", "1"]},
                  "sd0002": {"cells": LABEL_CELLS}}
 # run: [(arm, {sim: (knob, value)})]
 LABEL_ARMS = {
-    "sd0001": [("x", {"ppspp": ("SIM_EXP", v), "strims-sim": ("STRIMS_SIM_KNOWN_UPLINK", v)})
-               for v in ("off", "seed", "1")],
-    "sd0002": [(r, {"ppspp": ("SIM_EXP", "off"), "strims-sim": ("STRIMS_SIM_EXP", "off")}) for r in ("main", "off")],
-    "sd0003": [("x", {"ppspp": ("SIM_EXP", v), "strims-sim": ("STRIMS_SIM_EXP", v)}) for v in ("off", "a")],
-    "sd0004": [(r, {"ppspp": ("SIM_EXP", v), "strims-sim": ("STRIMS_SIM_EXP", v)})
-               for r, v in (("off", "on"), ("on", "off"))],
+    "sd0001": [("x", {"strims-sim": ("STRIMS_SIM_KNOWN_UPLINK", v)}) for v in ("off", "seed", "1")],
+    "sd0002": [(r, {"strims-sim": ("STRIMS_SIM_EXP", "off")}) for r in ("main", "off")],
+    "sd0003": [("x", {"strims-sim": ("STRIMS_SIM_EXP", v)}) for v in ("off", "a")],
+    "sd0004": [(r, {"strims-sim": ("STRIMS_SIM_EXP", v)}) for r, v in (("off", "on"), ("on", "off"))],
 }
 LABEL_SEEDS = (1, 2)
 
@@ -290,7 +288,7 @@ class ArmLabels(unittest.TestCase):
                     for s in LABEL_SEEDS:
                         k = f"{run}-{i}-{arm}-{value}-{s}"
                         self.jobs[k] = (run, c["name"], arm, value, s)
-                        e = {knob: value, "SIM_SEED" if c["sim"] == "ppspp" else "STRIMS_SIM_SEED": str(s)}
+                        e = {knob: value, "STRIMS_SIM_SEED": str(s)}
                         lines.append({"id": k, "key": k, "arm": arm, "test": c["test"], "env": e, "src": src,
                                       "row": {}})
                         stored.append((k, f"{run}-{i:02d}", arm, s, e))
@@ -337,9 +335,9 @@ class ArmLabels(unittest.TestCase):
             self.score("sd0001:x")
         self.assertIn("its arms are sets: 1, off, seed", str(cm.exception.code))
         with self.assertRaises(SystemExit) as cm:
-            self.score("sd0001:off", knob="SIM_EXP,STRIMS_SIM_EXP")
+            self.score("sd0001:off", knob="STRIMS_SIM_EXP")
         self.assertIn("index's knob", str(cm.exception.code))
-        self.assertEqual(self.score("sd0001:off", knob="SIM_EXP,STRIMS_SIM_KNOWN_UPLINK"), got["off"])
+        self.assertEqual(self.score("sd0001:off", knob="STRIMS_SIM_KNOWN_UPLINK"), got["off"])
 
     def test_a_refs_run_is_named_by_its_refs_alone(self):
         # Its env's knob value names no arm, and its ref named "off" holds
@@ -369,8 +367,9 @@ class ArmLabels(unittest.TestCase):
         # fixture's own indexes, cells without env, load as ever (above).
         cells = [{**suite.cell("star-3-5", suite.SIM, "calibration_star", {"STRIMS_SIM_CAL_VIEWERS": "3"}, 2,
                                "3 viewers"), "seeds": 12},
-                 suite.cell("large", suite.PPSPP, "sim_job", {"SIM_PEERS": "200"}, 3, "a large swarm")]
-        args = argparse.Namespace(refs=None, sets="seed;1", ref="HEAD", no_off=False, knob="SIM_EXP,STRIMS_SIM_EXP",
+                 suite.cell("large", suite.SIM, "calibration_star", {"STRIMS_SIM_CAL_VIEWERS": "200"}, 3,
+                            "a large swarm")]
+        args = argparse.Namespace(refs=None, sets="seed;1", ref="HEAD", no_off=False, knob="STRIMS_SIM_EXP",
                                   first_seed=2001, seeds=3, env=[], no_run=True, farm_args="", against=None,
                                   question="does seed help?", all=False, rank="lag")
         sha = "a" * 40
@@ -387,13 +386,13 @@ class ArmLabels(unittest.TestCase):
         self.assertEqual(idx["cells"], [
             {"name": "star-3-5", "sim": "strims-sim", "test": "calibration_star", "why": "3 viewers",
              "env": {"STRIMS_SIM_CAL_VIEWERS": "3"}, "mem_gib": 1.0},
-            {"name": "large", "sim": "ppspp", "test": "sim_job", "why": "a large swarm",
-             "env": {"SIM_PEERS": "200"}, "mem_gib": 3}])
+            {"name": "large", "sim": "strims-sim", "test": "calibration_star", "why": "a large swarm",
+             "env": {"STRIMS_SIM_CAL_VIEWERS": "200"}, "mem_gib": 3}])
         self.assertEqual((idx["arms"], idx["seeds"], idx["knob"], idx["values"]),
-                         ({"x": sha}, [2001, 2002, 2003], {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_EXP"},
-                          ["off", "seed", "1"]))
+                         ({"x": sha}, [2001, 2002, 2003], {"strims-sim": "STRIMS_SIM_EXP"}, ["off", "seed", "1"]))
         self.assertEqual((idx["base"], idx["question"]), ("off", "does seed help?"))
-        self.assertEqual(simdb.suite_cells([f"{path.stem}-01"]), {f"{path.stem}-01": (f"large@{path.stem}", "SIM_EXP")})
+        self.assertEqual(simdb.suite_cells([f"{path.stem}-01"]),
+                         {f"{path.stem}-01": (f"large@{path.stem}", "STRIMS_SIM_EXP")})
 
     def test_a_label_holding_two_jobs_is_refused(self):
         with self.assertRaises(SystemExit) as cm:

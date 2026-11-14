@@ -278,7 +278,7 @@ class Logs(Fixture):
         phases = {r["phase"] for r in query.spec(self.LOGS).requests.records()}
         self.assertTrue(phases)
         self.assertNotIn("all", phases)
-        with self.assertRaisesRegex(query.Refused, r"the selection has no spec_requests, parks .*SIM_SPEC=1"):
+        with self.assertRaisesRegex(query.Refused, r"the selection has no spec_requests, parks .*STRIMS_SIM_SPEC=1"):
             query.spec(query.Selection(src=["suite/wt/inv1"]))
 
     def test_the_logs_fields_around_an_event_about_a_node(self):
@@ -494,7 +494,7 @@ class Haves(unittest.TestCase):
     def test_need_refuses_the_logs_without_their_truth(self):
         query.need({"asks", "haves", "arrivals"}, "asks", "haves")
         with self.assertRaisesRegex(store.Refused, r"^the selection has no arrivals \(nor does S3: run with "
-                                                   r"SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 or SIM_SPEC=1"):
+                                                   r"STRIMS_SIM_FORECAST=1 or STRIMS_SIM_SPEC=1"):
             query.need({"asks", "reads"}, "asks", "reads")
 
     def test_mains_asks_take_the_view_of_the_lines(self):
@@ -543,7 +543,7 @@ class SeedLog(unittest.TestCase):
         self.assertIn("arrivals.incarnation = seed_sends.peer_incarnation", catalog.STANDARD_JOINS["seed_sends"])
         self.assertEqual({t: catalog.STANDARD_KEYS[t] for t in ("seed_decisions", "seed_sends")},
                          {"seed_decisions": "k, node, n", "seed_sends": "k, node, n"})
-        with self.assertRaisesRegex(query.Refused, r"seed_sends \(run with SIM_SPEC=1"):
+        with self.assertRaisesRegex(query.Refused, r"seed_sends \(run with STRIMS_SIM_SPEC=1"):
             query.need({"arrivals"}, "seed_sends")
 
     def test_the_views_read_no_peer_as_null(self):
@@ -578,7 +578,7 @@ class SeedLog(unittest.TestCase):
         self.assertEqual(store.with_truth(("seed_sends",)), ("seed_sends", "arrivals"))
         query.need({"seed_sends", "arrivals"}, "seed_sends")
         with self.assertRaisesRegex(store.Refused, r"^the selection has no arrivals \(nor does S3: run with "
-                                                   r"SIM_FORECAST=1 / STRIMS_SIM_FORECAST=1 or SIM_SPEC=1"):
+                                                   r"STRIMS_SIM_FORECAST=1 or STRIMS_SIM_SPEC=1"):
             query.need({"seed_sends", "reads"}, "seed_sends", "reads")
 
 

@@ -1,7 +1,7 @@
 # An event kind
 
-Main's examples: cc950b02 (one vocabulary that both sims' events name);
-f23ab376 (one name in both sims, and four ids retired).
+Main's examples: cc950b02 (one vocabulary that the sims' events name);
+f23ab376 (one name for one kind, and four ids retired).
 
 1. **The entry.** A `[kinds.<id>]` table in
    `crates/strims-wan/vocab.toml`. The file's header gives every key and
@@ -15,12 +15,10 @@ f23ab376 (one name in both sims, and four ids retired).
    `python3 hack/simlab/vocab.py check`. They are
    `crates/strims-wan/src/vocab.rs` and
    `src/devtools/components/console/vocab.ts`.
-3. **Both sims write it through `strims_wan::vocab::Kind`:**
-   strims-sim's `events_table` in `crates/strims-sim/src/tables.rs`, the
-   ppspp sim's `log` and `TimedEvent` in
-   `crates/strims-ppspp/tests/sim.rs`. Where a sim maps its own enum of
-   kinds to the vocabulary, it does so in one exhaustive match, so a new
-   variant can't go unnamed.
+3. **strims-sim writes it through `strims_wan::vocab::Kind`:** its
+   `events_table` in `crates/strims-sim/src/tables.rs`. Where the sim
+   maps its own enum of kinds to the vocabulary, it does so in one
+   exhaustive match, so a new variant can't go unnamed.
 4. **Ids are immutable.** A rename, or a change of meaning, retires the
    old id with `replaced_by` (by sim where the sims differ) and keeps its
    old meaning, so older runs' events still read. Main's golden fixture

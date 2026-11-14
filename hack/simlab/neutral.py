@@ -24,8 +24,8 @@ to move (`expect`).
                  writer's), a suite tier, or cell names, comma-separated
                  (SETS' cells, then the tiers'), each with LOGS on
   build(sha, log) -> (bin dir, build seconds or None when kept)
-                 `sha`'s test binaries of both sims (BUILD), built once in
-                 a detached worktree of their own with a CARGO_TARGET_DIR
+                 `sha`'s test binary (BUILD), built once in
+                 a detached worktree of its own with a CARGO_TARGET_DIR
                  of their own (target/neutral/bin/SHA12)
   run(bins, cells, seeds, slots, mem_gib, log) -> ({(sha, cell, seed):
         Run}, failures)
@@ -109,9 +109,9 @@ def _star(viewers, mbit, secs, **env):
 
 
 # The default cells: each kind of host, link and audience the logs record
-# (overload, a halved seed, thin relays, joins, departures, greedy peers,
-# churn, mobile links), cut short. star-31-5's overload writes the largest
-# logs.
+# (overload, a halved seed, thin relays, joins, departures, viewers that
+# crash and restart, mobile links over the WAN), cut short. star-31-5's
+# overload writes the largest logs.
 AUDIT = [
     lab.cell("star-31-5", lab.SIM, "calibration_star", _star(31, 5, 30), lab.MEASURE_MEM_GIB,
              "31 viewers behind a 5 Mbit/s seed: overload, the largest logs"),
@@ -123,43 +123,14 @@ AUDIT = [
     lab.cell("star-15-10-end-abrupt", lab.SIM, "calibration_star",
              _star(15, 10, 40, STRIMS_SIM_ARRIVALS="trickle", STRIMS_SIM_DEPART="60:20:5:abrupt"),
              2, "an event's end: 60 % of the viewers leaving abruptly within 5 s of 20 s"),
-    lab.cell("no-greedy", lab.PPSPP, "sim_job",
-             {**lab.PP_CABLE, "SIM_PEERS": "50", "SIM_MBIT": "6", "SIM_SECS": "20", "SIM_GREEDY": "0"},
-             2, "50 peers behind a cable seed, no greedy pulls"),
-    lab.cell("grabbers", lab.PPSPP, "sim_job",
-             {**lab.PP_CABLE, "SIM_PEERS": "30", "SIM_MBIT": "6", "SIM_SECS": "20", "SIM_GREEDY_KINDS": "grab",
-              "SIM_GREEDY_SHARE": "20"},
-             2, "a fifth of the peers grabbing"),
-    lab.cell("churn", lab.PPSPP, "sim_job",
-             {**lab.PP_CABLE, "SIM_PEERS": "50", "SIM_MBIT": "4", "SIM_SECS": "30", "SIM_CHURN": "120",
-              "SIM_CHURN_AWAY": "5"},
-             2, "peers leaving for 5 s and coming back"),
-    lab.cell("wan-mobile", lab.PPSPP, "sim_job", {**lab.PP_AB, "SIM_SCENARIO": "WanMobile", "SIM_SECS": "30"},
-             2, "mobile viewers over the WAN"),
-    lab.cell("cable-end-abrupt", lab.PPSPP, "sim_job",
-             {**lab.PP_CABLE, "SIM_PEERS": "50", "SIM_MBIT": "4", "SIM_SECS": "40", "SIM_ARRIVALS": "trickle",
-              "SIM_DEPART": "60:20:5:abrupt"},
-             2, "an event's end in the ppspp sim"),
+    lab.cell("viewer-churn", lab.SIM, "viewer_churn_hybrid", lab.SS_BASE, 2, "viewers crashing and restarting"),
+    lab.cell("wan-mobile-viewers", lab.SIM, "wan_mobile_viewers_adaptive_uncapped",
+             {**lab.SS_BASE, "STRIMS_SIM_STREAM_SECS": "30"}, 2, "mobile viewers over the WAN"),
 ]
 # The vocabulary's cells: AUDIT's, and every writer the audit leaves off
-# (the loop log, collusion, media, clock skew, hostile viewers, browsers,
-# discovery and the WAN scenarios' hosts), so a change to how the sims
-# name what they record shows on every name.
+# (media, clock skew, hostile viewers, browsers and discovery), so a change
+# to how the sims name what they record shows on every name.
 VOCAB = AUDIT + [
-    lab.cell("loops-collude", lab.PPSPP, "sim_job",
-             {**lab.PP_CABLE, "SIM_PEERS": "30", "SIM_MBIT": "6", "SIM_SECS": "20", "SIM_LOOPS": "1",
-              "SIM_COLLUDE": "1"},
-             2, "30 peers behind a cable seed, the loop log on, the greedy viewers colluding"),
-    lab.cell("media-sign", lab.PPSPP, "sim_job",
-             {**lab.PP_CABLE, "SIM_PEERS": "30", "SIM_SECS": "20", "SIM_MEDIA": "1500v", "SIM_SIGN": "u8,t200"},
-             2, "a signed 1500 kbit/s VBR stream in the ppspp sim"),
-    lab.cell("skew", lab.PPSPP, "sim_job",
-             {**lab.PP_CABLE, "SIM_PEERS": "30", "SIM_MBIT": "6", "SIM_SECS": "20", "SIM_CLOCK_SKEW": "real"},
-             2, "real-world clock skew in the ppspp sim"),
-    lab.cell("cross-traffic", lab.PPSPP, "sim_job", {**lab.PP_AB, "SIM_SCENARIO": "CrossTraffic", "SIM_SECS": "20"},
-             2, "uplinks shared with cross traffic"),
-    lab.cell("super-peer-20s", lab.PPSPP, "sim_job",
-             {**lab.PP_AB, "SIM_SCENARIO": "WanSuperPeer", "SIM_SECS": "20"}, 2, "a super-peer seed over the WAN"),
     lab.cell("star-media-sign", lab.SIM, "calibration_star",
              _star(15, 10, 30, STRIMS_SIM_MEDIA="1500v", STRIMS_SIM_SIGN="u8,t200"),
              2, "a signed 1500 kbit/s VBR stream on the real stack"),
@@ -176,8 +147,8 @@ DEFAULT_SET = "audit"
 
 # Every table and log, by sim: the measure tier's logs (the forecast log,
 # the request logs) and each node's bins; the output dir is each run's.
-BIN_NODES = {lab.PPSPP: "SIM_BIN_NODES", lab.SIM: "STRIMS_SIM_BIN_NODES"}
-LOGS = {sim: {**lab.MEASURE_LOGS[sim], BIN_NODES[sim]: "1"} for sim in (lab.PPSPP, lab.SIM)}
+BIN_NODES = {lab.SIM: "STRIMS_SIM_BIN_NODES"}
+LOGS = {sim: {**lab.MEASURE_LOGS[sim], BIN_NODES[sim]: "1"} for sim in lab.BINARIES}
 
 
 def cell_set(spec=DEFAULT_SET):
@@ -274,11 +245,11 @@ def pairs(bases, head="HEAD"):
 
 # --- builds -----------------------------------------------------------------
 
-# Both sims' test binaries, in one cargo invocation, and each one's name in
-# a bin dir (suite.run_jobs runs BIN_DIR/<cell's sim>).
-BUILD = ["cargo", "test", "--release", "--locked", "-p", "strims-sim", "--test", "scenarios", "-p", "strims-ppspp",
-         "--test", "sim", "--no-run", "--message-format=json"]
-TARGETS = {lab.SIM: "scenarios", lab.PPSPP: "sim"}
+# The sim's test binary, and its name in a bin dir (suite.run_jobs runs
+# BIN_DIR/<cell's sim>).
+BUILD = ["cargo", "test", "--release", "--locked", "-p", "strims-sim", "--test", "scenarios", "--no-run",
+         "--message-format=json"]
+TARGETS = {lab.SIM: "scenarios"}
 PRUNE_DAYS = 7
 
 
@@ -308,10 +279,10 @@ def drop_tree(src):
 
 
 def build(sha, log=None):
-    """`sha`'s bin dir (both sims' binaries and build.json) and the
+    """`sha`'s bin dir (the sim's binary and build.json) and the
     seconds its build took, None when it was kept: built in a detached
     worktree of the commit with a target dir of its own, both removed once
-    the binaries are copied out. BuildError when cargo fails (its output in
+    the binary is copied out. BuildError when cargo fails (its output in
     bin/SHA12.build.log)."""
     log = log or _log
     key = sha[:12]
@@ -1031,7 +1002,7 @@ class Report:
     def text(self):
         out = []
         logs = {k: v for c in self.cells for k, v in LOGS[c["sim"]].items()}
-        inherited = sorted(k for k in os.environ if k.startswith(("SIM_", "STRIMS_SIM_")))
+        inherited = sorted(k for k in os.environ if k.startswith("STRIMS_SIM_"))
         out.append(f"neutral: {len(self.cells)} cells x seeds {', '.join(map(str, self.seeds))}, every table and "
                    f"log on ({' '.join(f'{k}={v}' for k, v in sorted(logs.items()))})")
         if inherited:

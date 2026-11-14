@@ -1,10 +1,10 @@
 # A new sim table or log, or a column on one
 
-Main's examples: 6e2d479a (`stalls` and `parents` in both sims) with
-3ed18cb8 (their lab side); 6262342c (the request logs in both sims)
-with 051596ac (their lab side); e7dfc404 (a departed host's last logs).
+Main's examples: 6e2d479a (`stalls` and `parents`) with 3ed18cb8
+(their lab side); 6262342c (the request logs) with 051596ac (their lab
+side); e7dfc404 (a departed host's last logs).
 
-## Rust: both sims, one commit
+## Rust: one commit
 
 Main gets it first where main has the mechanism, and the lines merge
 main (SKILL.md's order of work).
@@ -31,7 +31,7 @@ main (SKILL.md's order of work).
    departs or crashes. Without it a departed host's last logs were lost
    (e7dfc404). A log delivered through a sink of its own (as
    `NodeConfig::parent_log`'s `ParentSink` is) carries its lost count to
-   both sims too.
+   the sim too.
 3. **strims-sim.**
    - A field on `Scenario` (`Scenario::request_logs`) and its knob,
      `STRIMS_SIM_<X>`, read in `crates/strims-sim/src/sweep.rs`, whose
@@ -52,22 +52,17 @@ main (SKILL.md's order of work).
      the others, declared under fields.toml's `meta`, written whenever
      the knob is on, alike on every line, so that 0 says the log was on
      and lost nothing.
-4. **The ppspp sim** (`crates/strims-ppspp/tests/sim.rs`): `Sim::keep_*`
-   (`Sim::keep_requests`), the table in `Sim::write_tables` through
-   `Table::new` and its generated columns, compressed by the same
-   generated `ZSTD`, the `series_meta.json` key, and the knob,
-   `SIM_<X>`, read with `knob::<u32>` where the job starts.
-5. **Columns.**
+4. **Columns.**
    - Declared first: the table in fields.toml's `tables` (its sims,
      grain and keys) and each column in its `columns` table (type, unit,
      none, description). `python3 hack/simlab/vocab.py write` generates
-     each sim's `cols` enums, which both sims' tables take.
+     strims-sim's `cols` enums, which its tables take.
    - Keys: a log stamped once per pass needs an order column, and a
      wide log whose records repeat every natural key (several of one
      kind at one ms) needs an ordinal column, so its key is unique.
    - "None" and "never" are an empty field, NULL in the lake, never -1
      or 0. List every column that writes a sentinel ("0 until measured"
-     is one) and write it empty, or have the view nullify it (step 12),
+     is one) and write it empty, or have the view nullify it (step 11),
      with a test of each. When `held_ms` went from -1 to empty,
      simdb.py's censored count read `held_ms < 0` and had to change
      (06c539f2).
@@ -76,46 +71,44 @@ main (SKILL.md's order of work).
    - A column named for a quantile holds that quantile, on every line
      that writes the table (`predicted_p90_ms` is the 90th percentile
      wherever it is written).
-   - A quantity the sims know (a stream count, a host's role) is
+   - A quantity the sim knows (a stream count, a host's role) is
      recorded, never inferred in the lab from other columns.
    - Where another line writes a table of the same name, keep a
      column's name where it means the same and give a new meaning a new
      name. The catalog reads every file's schema as it is written, and
      a column a file lacks is NULL.
-6. **Docs**, which the catalog reads from fields.toml
+5. **Docs**, which the catalog reads from fields.toml
    (`catalog.field_docs`):
    - The table's entry: its grain (one row per what), a description of
-     its own, a sim's note where it differs, and its `knobs`, which the
-     grain names in each sim and test_catalog holds to
-     `query.TABLE_KNOBS`.
+     its own, the sim's note where it says more, and its `knobs`, which
+     the grain names and test_catalog holds to `query.TABLE_KNOBS`.
    - Each column's description, in words of its own (a column's doc is
-     never another's sentence), a sim's note where its reading differs.
+     never another's sentence), the sim's note where its reading says
+     more.
      A wide log with per-kind columns says each column's meaning by
      kind in that column's description. A shared formatter's columns
-     are one list both sims write (the seed log's formatter,
+     are one list (the seed log's formatter,
      `crates/strims-ppspp/src/scheduler_seed_log.rs`, takes its columns
      from the generated `crates/strims-ppspp/src/seed_log_columns.rs`).
-   - The `series_meta.json` key in fields.toml's `meta`, and the sims'
+   - The `series_meta.json` key in fields.toml's `meta`, and the sim's
      paragraphs listing the logs.
-7. **Truth that needs later holds** goes in the lab's view, not the sim:
-   the sims log what a decision was made on, and the view joins what
+6. **Truth that needs later holds** goes in the lab's view, not the sim:
+   the sim logs what a decision was made on, and the view joins what
    became of it (e18b801c, `asks` joined to `arrivals`).
-8. **Tests:**
+7. **Tests:**
    - the log's unit tests in the ppspp crate;
-   - a semantic test of every new table (strims-sim's
-     `request_logs_say_what_they_are` in
-     `crates/strims-sim/tests/capture.rs`), with departures where hosts
-     leave (`a_departures_logs_keep_every_hold`): a departure behaviour
-     gets its test;
+   - a semantic test of every new table (`request_logs_say_what_they_are`
+     in `crates/strims-sim/tests/capture.rs`), with departures where
+     hosts leave (`a_departures_logs_keep_every_hold`);
    - the knob turned on in `a_run_with_tables_keeps_its_trace`
-     (capture.rs), so that
-     every nextest run checks the trace stays the same, with a scenario
-     that takes the path the change touches (departures and crashes for
-     what `NodeConfig::last_metrics` hands over).
-9. **Neutrality and size:** `checks.md`.
-10. **The cli golden:** an edit to fields.toml's docs (`catalog.FIELDS`)
-    moves the catalog's outputs. Re-capture in the same commit: e7dfc404
-    landed with the golden failing and cf9fb1bc re-captured it after.
+     (capture.rs), so that every nextest run checks the trace stays the
+     same, with a scenario that takes the path the change touches
+     (departures and crashes for what `NodeConfig::last_metrics` hands
+     over).
+8. **Neutrality and size:** `checks.md`.
+9. **The cli golden:** an edit to fields.toml's docs (`catalog.FIELDS`)
+   moves the catalog's outputs. Re-capture in the same commit: e7dfc404
+   landed with the golden failing and cf9fb1bc re-captured it after.
 
 A mechanism that exists only on a branch has its table and columns
 declared on main all the same, with `sims = []` and the branch's line
@@ -125,13 +118,13 @@ in `lines` (SKILL.md's rules); main registers the table (below).
 
 Main's examples: 9af57af6, 7973c432, b16bf6a3, 051596ac.
 
-11. **`store_host.TABLES`**, and `store_host.SAMPLE_TABLES` for a bulky
+10. **`store_host.TABLES`**, and `store_host.SAMPLE_TABLES` for a bulky
     table (fields.toml's `sample`): literal tuples, as the farm's hosts
     run this file alone (SKILL.md's farm rule), which test_catalog's
     `Registries` holds to fields.toml's tables in its order. A sample
     table changes the farm's uploads and what a pull fetches
     (b16bf6a3).
-12. **The catalog**, whose registries are fields.toml's table entry
+11. **The catalog**, whose registries are fields.toml's table entry
     (`catalog.STANDARD_KEYS`, `catalog.STANDARD_JOINS` and
     `catalog.NORMALIZED` are its `keys`, `joins` and `normalized`):
     - its `keys`, once the key is unique on real data: count the
@@ -151,25 +144,25 @@ Main's examples: 9af57af6, 7973c432, b16bf6a3, 051596ac.
       read `arrivals`) needs that table too: fetch and pull bring it
       along, or the view refuses. It never reads a table it lacks as
       "never held".
-13. **The table's `knobs`** (`query.TABLE_KNOBS`), the knob a run writes
+12. **The table's `knobs`** (`query.TABLE_KNOBS`), the knob a run writes
     the table under; the hints of `query.need` and simdb.py's help are
     made from it.
-14. **Docs:** the joins paragraph of catalog.py's module docs, and
+13. **Docs:** the joins paragraph of catalog.py's module docs, and
     simdb.py's `SQL_DOC` where the table joins the viewers. simdb.py's
     help and `simdb.py fetch`'s help list `store_host.TABLES` and
     `store_host.SAMPLE_TABLES` themselves.
-15. **Tests:**
+14. **Tests:**
     - test_store's `FoldExport` fixture writes the new table, plain and
       `.zst`; its `assertTrue(rows, t)` fails without it.
     - test_query: a pull, and the view's columns and truth;
     - test_catalog's `Tables`: the lake view, its nullified sentinels and
       its table_catalog row; its `Registries` fails until the registries
       above hold the table.
-16. **Goldens:** `golden.py check`. The cli set moves in help, sql-help
+15. **Goldens:** `golden.py check`. The cli set moves in help, sql-help
     and the catalog's fingerprints: re-capture it, then run the full
     check.
-17. **Land** with no farm run live; then each line merges main.
-18. **After the first runs**, index from main's checkout (an index from
+16. **Land** with no farm run live; then each line merges main.
+17. **After the first runs**, index from main's checkout (an index from
     a branch's checkout writes that branch's docs, keys and views into
     the catalog every session reads): `simdb.py index`, then
     `simdb.py describe NAME`. Read every column's doc: each must be the
@@ -184,6 +177,6 @@ Main's examples: 9af57af6, 7973c432, b16bf6a3, 051596ac.
 
 ## A column on an existing table
 
-Main's examples: 8f6f4977, e18b801c. Steps 3 to 10 and 14, the test
+Main's examples: 8f6f4977, e18b801c. Steps 3 to 9 and 13, the test
 fixtures' columns, and `catalog.NORMALIZED` where the view changes it.
 A column new to the lake takes the type most of its files give it.

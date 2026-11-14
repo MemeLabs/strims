@@ -971,7 +971,7 @@ class Tiers(Fixture):
         (self.runs / f"{name}.json").write_text(json.dumps({"cells": [
             {"name": c["name"], "sim": c["sim"], "test": c["test"], "why": "w"} for c in cells]}))
         for i, c in enumerate(cells):
-            seed = "SIM_SEED" if c["sim"] == suite.PPSPP else "STRIMS_SIM_SEED"
+            seed = "STRIMS_SIM_SEED"
             d = self.farm / f"{name}-{i:02d}"
             d.mkdir()
             (d / "index.jsonl").write_text(json.dumps({

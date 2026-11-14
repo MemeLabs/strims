@@ -52,8 +52,8 @@ and `simdb.py forecast-report`).
 6. **Tests:** `hack/simlab/tests/test_<name>.py` over a fixture catalog
    of its own (golden_cli's job dirs and the tables the study reads,
    folded, exported and indexed, as `test_forecast.py` builds its own),
-   with jobs of both sims (a ppspp sim job among them), each section's
-   numbers worked by hand, the command's text and its `--json`.
+   each section's numbers worked by hand, the command's text and its
+   `--json`.
 7. **Goldens:** `golden.py check`; the cli set's help moves with the new
    command: re-capture it and say why.
 8. **Validation on runs** goes through sim-lab, under its rules.

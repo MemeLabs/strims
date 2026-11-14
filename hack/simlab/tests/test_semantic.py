@@ -349,22 +349,22 @@ class FarmNames(unittest.TestCase):
             tests += 1
             with self.subTest(matrix=path.name):
                 self.assertEqual(sorted(set(m.row_fields()) - self.rows), [])
-        self.assertGreater(tests, 30)
+        self.assertGreater(tests, 10)
 
     def test_the_controller_reads_a_renamed_field_by_its_current_name(self):
         farm = farm_module("farm")
         doc = copy.deepcopy(vocab.fields())
-        doc["rows"]["lag_old_ms"] = {"sims": [], "retired": ["ppspp"], "replaced_by": "lag_p99_ms", "rename": True,
-                                     "type": "int", "unit": "ms", "description": "x"}
+        doc["rows"]["lag_old_ms"] = {"sims": [], "retired": ["strims-sim"], "replaced_by": "lag_p99_ms",
+                                     "rename": True, "type": "int", "unit": "ms", "description": "x"}
         with tempfile.TemporaryDirectory() as d, mock.patch.object(vocab, "fields", lambda path=None: doc):
             path = Path(d) / "m.toml"
-            path.write_text('package = "strims-ppspp"\ntarget = "sim"\ntest = "sim_job"\n[arms]\na = "HEAD"\n'
-                            '[report]\ncolumns = ["lag_p99_ms:median", "delivery:mean"]\n')
+            path.write_text('package = "strims-sim"\ntarget = "scenarios"\ntest = "calibration_star"\n'
+                            '[arms]\na = "HEAD"\n[report]\ncolumns = ["lag_p99_ms:median", "delivery:mean"]\n')
             m = farm.Matrix(str(path))
-            self.assertEqual(m.sim, "ppspp")
+            self.assertEqual(m.sim, "strims-sim")
             # An older binary's row holds the retired name: the index line keeps it.
             self.assertEqual(m.row_fields(), ["lag_p99_ms", "lag_old_ms", "delivery"])
-            self.assertEqual(farm.current_row("ppspp", {"lag_old_ms": 900, "delivery": 1.0}),
+            self.assertEqual(farm.current_row("strims-sim", {"lag_old_ms": 900, "delivery": 1.0}),
                              {"lag_p99_ms": 900, "delivery": 1.0})
             # A testbed's row, no sim's, reads as written.
             self.assertEqual(farm.current_row(None, {"lag_old_ms": 900}), {"lag_old_ms": 900})
@@ -372,7 +372,8 @@ class FarmNames(unittest.TestCase):
                            derive=(("SIM_X", "lag_old_ms:round"), ("SIM_Y", "lag_p99_ms")))
             for row in ({"lag_old_ms": 899.6}, {"lag_p99_ms": 899.6}):
                 with self.subTest(row=row):
-                    self.assertEqual(farm.derived_env(job, row, "ppspp"), ({"SIM_X": "900", "SIM_Y": "899.6"}, None))
+                    self.assertEqual(farm.derived_env(job, row, "strims-sim"),
+                                     ({"SIM_X": "900", "SIM_Y": "899.6"}, None))
 
 
 if __name__ == "__main__":

@@ -467,7 +467,7 @@ class PhaseLags(unittest.TestCase):
                        f"{frames[i][k]})" for i in range(n) for k in range(secs))
         spans = ", ".join(f"('k1', 's', {i}, '{p}', {a}, {b})" for i, p, a, b in verdict.viewer_phases(s, v))
         sql = [
-            "CREATE TABLE jobs AS SELECT 'k1' AS k, 's' AS src, 'ppspp' AS sim, 't' AS trace, '' AS reads_hash;",
+            "CREATE TABLE jobs AS SELECT 'k1' AS k, 's' AS src, 'strims-sim' AS sim, 't' AS trace, '' AS reads_hash;",
             "CREATE TABLE experiment_jobs AS SELECT 'pl' AS exp_id, 'c' AS cell, 'x' AS arm_label, 1 AS seed, "
             "'k1' AS k, 's' AS src, 's' AS flush, 'pl-00' AS matrix;",
             "CREATE TABLE verdicts AS SELECT 'k1' AS k, 's' AS src, false AS collapsed;",

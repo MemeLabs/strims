@@ -78,9 +78,8 @@ from .verdict import DERIVED, derived_dir, files, judge, load_series, plist, wan
 # (`--pull-mb`).
 PULL_MB = 1000
 # The settings a run writes a table under, as fields.toml's tables declare
-# them (`knobs`): each knob's name after SIM_ (the ppspp sim's) and
-# STRIMS_SIM_ (strims-sim's), any one of them writing it; a table not here
-# every run with tables writes.
+# them (`knobs`): each knob's name after STRIMS_SIM_, any one of them
+# writing it; a table not here every run with tables writes.
 TABLE_KNOBS = {t: tuple(e["knobs"]) for t, e in vocab.fields()["tables"].items() if e.get("knobs")}
 # macros.sql: the views' macros.
 MACROS = Path(__file__).with_name("sql") / "macros.sql"
@@ -654,10 +653,9 @@ def macros(have):
 
 
 def knobs_text(table):
-    """The settings that write `table`, as both sims name them
-    (TABLE_KNOBS: "SIM_SPEC=1 / STRIMS_SIM_SPEC=1"), alternatives joined
-    by "or"; None for a table every run writes."""
-    return " or ".join(f"SIM_{k}=1 / STRIMS_SIM_{k}=1" for k in TABLE_KNOBS[table]) if table in TABLE_KNOBS else None
+    """The settings that write `table` (TABLE_KNOBS: "STRIMS_SIM_SPEC=1"),
+    alternatives joined by "or"; None for a table every run writes."""
+    return " or ".join(f"STRIMS_SIM_{k}=1" for k in TABLE_KNOBS[table]) if table in TABLE_KNOBS else None
 
 
 def scoring_macros(have):
