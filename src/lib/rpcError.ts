@@ -9,6 +9,7 @@ import { ErrorCode as DirectoryErrorCode } from "../apis/strims/network/v1/direc
 import { ErrorCode as NetworkErrorCode } from "../apis/strims/network/v1/errors/errors";
 import { ErrorCode as NodeErrorCode } from "../apis/strims/node/errors/errors";
 import { ErrorCode as RpcErrorCode } from "../apis/strims/rpc/errors/errors";
+import { ErrorCode as VideoErrorCode } from "../apis/strims/video/v1/errors/errors";
 
 // Every API's error-code enum. Each codes its errors in a range of its own
 // (strims-proto's build/errors.rs), so a code is in at most one of them.
@@ -19,6 +20,7 @@ export const errorCodeEnums: readonly Record<number, string>[] = [
   NodeErrorCode,
   DirectoryErrorCode,
   ChatErrorCode,
+  VideoErrorCode,
 ];
 
 // The code of `e`, a call's rejection: its rpc.Error's code, or 0 (no

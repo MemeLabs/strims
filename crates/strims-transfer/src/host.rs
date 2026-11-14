@@ -8,6 +8,7 @@ use std::future::Future;
 
 use futures_core::Stream;
 use strims_kademlia::ID;
+use strims_proto::ErrorCoded;
 
 /// The node operations behind transfers: swarm channels, and the peer
 /// index for discovery.
@@ -21,8 +22,9 @@ pub trait Host: 'static {
     /// The hosts a peer index search finds, as they arrive, until it
     /// ends. Dropping it ends the search.
     type Search: Stream<Item = ID> + Unpin + 'static;
-    /// A failed node call.
-    type Error: fmt::Display;
+    /// A failed node call, with its code for the services that answer with
+    /// it.
+    type Error: ErrorCoded;
 
     /// The node's host id.
     fn host_id(&self) -> ID;

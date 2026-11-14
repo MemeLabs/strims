@@ -107,6 +107,7 @@ use strims_proto::network::v1::directory::listing::{Content, Media};
 use strims_proto::network::v1::directory::{Listing, ListingSnippet};
 use strims_proto::types::Key;
 use strims_proto::video::v1::capture_config::Codec;
+use strims_proto::video::v1::errors::ErrorCode;
 use strims_proto::video::v1::{CaptureConfig, CaptureUnit};
 use strims_rpc::Timer;
 use strims_transfer::{SwarmHost, SwarmWrite, TransferId};
@@ -641,7 +642,10 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
         });
         if !fresh {
             self.remove_host_swarm(swarm).await;
-            return Err(VideoError::Host("the capture's swarm id is in use".into()));
+            return Err(VideoError::Host(
+                ErrorCode::SwarmIdInUse.into(),
+                "the capture's swarm id is in use".into(),
+            ));
         }
         self.transfers.add(swarm, &swarm_id, Vec::new());
         self.publish_joined(&t);

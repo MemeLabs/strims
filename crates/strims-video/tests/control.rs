@@ -34,6 +34,7 @@ use strims_proto::chat::v1::Server;
 use strims_proto::network::v1::directory::ListingSnippet;
 use strims_proto::service::CallError;
 use strims_proto::types::KeyUsage;
+use strims_proto::video::v1::errors::ErrorCode;
 use strims_proto::video::v1::video_channel::{Local, LocalShare, Owner, RemoteShare};
 use strims_proto::video::v1::{
     HlsEgressClient, HlsEgressCloseStreamRequest, HlsEgressConfig, HlsEgressGetConfigRequest,
@@ -123,6 +124,14 @@ fn start_with<V: VideoHost>(n: &Node, host: V, config: Config) -> Side<V> {
 fn refusal<T: Debug>(r: Result<T, CallError>) -> String {
     match r {
         Err(CallError::Remote(e)) => e.message,
+        r => panic!("not refused: {r:?}"),
+    }
+}
+
+/// The code of a call's remote error.
+fn refused_code<T: Debug>(r: Result<T, CallError>) -> i32 {
+    match r {
+        Err(CallError::Remote(e)) => e.code,
         r => panic!("not refused: {r:?}"),
     }
 }
@@ -307,6 +316,10 @@ fn channels_round_trip_through_the_frontend() {
             "video channel not found"
         );
         assert_eq!(refusal(s.get(missing).await), "video channel not found");
+        assert_eq!(
+            refused_code(s.get(missing).await),
+            ErrorCode::ChannelNotFound as i32
+        );
         let delete = |id| s.channels.delete(&VideoChannelDeleteRequest { id });
         delete(a.id).await.unwrap();
         assert_eq!(refusal(delete(a.id).await), "video channel not found");

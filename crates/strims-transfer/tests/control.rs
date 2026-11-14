@@ -179,12 +179,28 @@ impl FakeHost {
     }
 }
 
+/// A fake host call's failure.
+#[derive(Debug)]
+struct Refused(&'static str);
+
+impl std::fmt::Display for Refused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl strims_proto::ErrorCoded for Refused {
+    fn code(&self) -> i32 {
+        0
+    }
+}
+
 impl Host for FakeHost {
     type Network = u8;
     type Swarm = u32;
     type Publication = IndexKey;
     type Search = futures_util::stream::Iter<std::vec::IntoIter<ID>>;
-    type Error = String;
+    type Error = Refused;
 
     fn host_id(&self) -> ID {
         self.id
@@ -196,14 +212,14 @@ impl Host for FakeHost {
         swarm: u32,
         channel: u64,
         peer_channel: u64,
-    ) -> Result<(), String> {
+    ) -> Result<(), Refused> {
         self.log(Rec::RunStart(host, swarm));
         tokio::time::sleep(self.delay).await;
         if self.fail_runs.get() {
-            return Err("refused".into());
+            return Err(Refused("refused"));
         }
         if self.running.borrow().contains_key(&(host, swarm)) {
-            return Err("channel running".into());
+            return Err(Refused("channel running"));
         }
         self.running
             .borrow_mut()
@@ -212,7 +228,7 @@ impl Host for FakeHost {
         Ok(())
     }
 
-    async fn stop_swarm(&self, host: ID, swarm: u32) -> Result<(), String> {
+    async fn stop_swarm(&self, host: ID, swarm: u32) -> Result<(), Refused> {
         tokio::time::sleep(self.delay).await;
         self.running.borrow_mut().remove(&(host, swarm));
         self.log(Rec::Stop(host, swarm));
@@ -224,7 +240,7 @@ impl Host for FakeHost {
         net: u8,
         key: Vec<u8>,
         salt: Vec<u8>,
-    ) -> Result<IndexKey, String> {
+    ) -> Result<IndexKey, Refused> {
         let k = (net, key, salt);
         self.world
             .0
@@ -236,7 +252,7 @@ impl Host for FakeHost {
         Ok(k)
     }
 
-    async fn index_unpublish(&self, k: IndexKey) -> Result<(), String> {
+    async fn index_unpublish(&self, k: IndexKey) -> Result<(), Refused> {
         if let Some(hosts) = self.world.0.borrow_mut().index.get_mut(&k) {
             hosts.remove(&self.id);
         }
@@ -248,7 +264,7 @@ impl Host for FakeHost {
         net: u8,
         key: Vec<u8>,
         salt: Vec<u8>,
-    ) -> Result<Self::Search, String> {
+    ) -> Result<Self::Search, Refused> {
         let w = self.world.0.borrow();
         let hosts = w.index.get(&(net, key, salt));
         let hosts: Vec<ID> = hosts
@@ -257,7 +273,7 @@ impl Host for FakeHost {
         Ok(futures_util::stream::iter(hosts))
     }
 
-    async fn connect_peer(&self, _: u8, host: ID) -> Result<bool, String> {
+    async fn connect_peer(&self, _: u8, host: ID) -> Result<bool, Refused> {
         self.world.0.borrow_mut().connects.push((self.id, host));
         Ok(true)
     }

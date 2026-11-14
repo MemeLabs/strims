@@ -83,6 +83,7 @@ use futures_util::StreamExt;
 use futures_util::stream::unfold;
 use strims_directory::Host;
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
 use strims_proto::autoseed::v1::{
     AutoseedFrontendService, CreateRuleRequest, CreateRuleResponse, DeleteRuleRequest,
     DeleteRuleResponse, GetConfigRequest, GetConfigResponse, GetRuleRequest, GetRuleResponse,

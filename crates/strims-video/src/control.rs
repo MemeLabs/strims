@@ -7,7 +7,6 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt;
 use std::future::poll_fn;
 use std::rc::Rc;
 use std::task::{Poll, Waker};
@@ -24,6 +23,7 @@ use strims_dao::{Broadcast, Recv, ReplicatedStore, Singleton, StoreEvent, Subscr
 use strims_directory::{DirectoryControl, DirectoryEvent, Host, ListingKeeper};
 use strims_kv::Kv;
 use strims_network::{NetworkControl, NetworkEvent};
+use strims_proto::ErrorCoded;
 use strims_proto::autoseed::v1::{Config as SeedConfig, Rule};
 use strims_proto::profile::v1::Profile;
 use strims_proto::types::Key;
@@ -318,10 +318,10 @@ impl<K: Kv, H: Host, V: VideoHost, T: Timer> Shared<K, H, V, T> {
     }
 
     /// Counts a failed node call, and the error it answers with.
-    pub(crate) fn host_failed(&self, what: &str, e: &impl fmt::Display) -> VideoError {
+    pub(crate) fn host_failed(&self, what: &str, e: &impl ErrorCoded) -> VideoError {
         self.metrics.borrow_mut().host_errors += 1;
         tracing::warn!(error = %e, "{what} failed");
-        VideoError::Host(e.to_string())
+        VideoError::Host(e.code(), e.to_string())
     }
 
     /// Removes `swarm` from the node. Remove its transfer first.

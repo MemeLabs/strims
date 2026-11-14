@@ -4,13 +4,14 @@
 //! Why a video control operation failed.
 
 use strims_directory::SnippetError;
-use strims_proto::service::Error as RpcError;
+use strims_proto::ErrorCoded;
+use strims_proto::video::v1::errors::ErrorCode;
 
 use crate::config::ConfigError;
 use crate::hls::RouteError;
 
-/// Why a video control operation failed. A frontend answers with
-/// [`VideoError::to_rpc`]: code 0 and this error's message.
+/// Why a video control operation failed. A frontend answers with its
+/// [`ErrorCoded::to_rpc`]: its code and message.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
 #[non_exhaustive]
 pub enum VideoError {
@@ -117,9 +118,9 @@ pub enum VideoError {
     /// A swarm write failed; the capture writes no more.
     #[error("writing the stream failed: {0}")]
     StreamWrite(String),
-    /// A node call failed.
-    #[error("node error: {0}")]
-    Host(String),
+    /// A node call failed: the node error's code, and its message.
+    #[error("node error: {1}")]
+    Host(i32, String),
     /// Signing a snippet failed.
     #[error("signing failed: {0}")]
     Sign(#[from] strims_crypto::Error),
@@ -158,22 +159,85 @@ pub enum VideoError {
     AutoseedRule(&'static str),
 }
 
-impl VideoError {
-    /// The RPC error a frontend answers with; see the type docs.
-    pub fn to_rpc(&self) -> RpcError {
-        RpcError::new(0, self.to_string())
+impl ErrorCoded for VideoError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            VideoError::ChannelNotFound => ErrorCode::ChannelNotFound,
+            VideoError::TooManyChannels => ErrorCode::TooManyChannels,
+            VideoError::NetworkNotFound => ErrorCode::NetworkNotFound,
+            VideoError::Snippet(e) => return e.code(),
+            VideoError::NoStreamKey => ErrorCode::NoStreamKey,
+            VideoError::NoProfileKey => ErrorCode::NoProfileKey,
+            VideoError::Config(e) => return e.code(),
+            VideoError::Store(e) => return e.code(),
+            VideoError::NetworkKeyCount => ErrorCode::NetworkKeyCount,
+            VideoError::NetworkKeyTooLong => ErrorCode::NetworkKeyTooLong,
+            VideoError::TooManyCaptures => ErrorCode::TooManyCaptures,
+            VideoError::CaptureNotFound => ErrorCode::CaptureNotFound,
+            VideoError::CaptureMedia(_) => ErrorCode::InvalidCaptureMedia,
+            VideoError::CaptureRate => ErrorCode::CaptureRate,
+            VideoError::CaptureBusy => ErrorCode::CaptureBusy,
+            VideoError::UriTooLong => ErrorCode::UriTooLong,
+            VideoError::Uri(_) => ErrorCode::InvalidSwarmUri,
+            VideoError::SwarmOption(_) => ErrorCode::UnsupportedSwarmOption,
+            VideoError::UnsupportedFormat(_) => ErrorCode::UnsupportedFormat,
+            VideoError::TooManySwarms => ErrorCode::TooManySwarms,
+            VideoError::TooManyStreams => ErrorCode::TooManyStreams,
+            VideoError::ListingOptions => ErrorCode::ListingOptions,
+            VideoError::ReopenTooSoon => ErrorCode::ReopenTooSoon,
+            VideoError::StreamClosed => ErrorCode::StreamClosed,
+            VideoError::StreamRead(_) => ErrorCode::StreamRead,
+            VideoError::StreamWrite(_) => ErrorCode::StreamWrite,
+            VideoError::Host(code, _) => return *code,
+            VideoError::Sign(_) => ErrorCode::Sign,
+            VideoError::HlsNotSupported => ErrorCode::HlsNotSupported,
+            VideoError::HlsUnavailable(_) => ErrorCode::HlsUnavailable,
+            VideoError::HlsDisabled => ErrorCode::HlsDisabled,
+            VideoError::HlsNoServerAddr => ErrorCode::HlsNoServerAddr,
+            VideoError::TooManyHlsStreams => ErrorCode::TooManyHlsStreams,
+            VideoError::HlsStreamNotFound => ErrorCode::HlsStreamNotFound,
+            VideoError::AutoseedRuleNotFound => ErrorCode::AutoseedRuleNotFound,
+            VideoError::TooManyAutoseedRules => ErrorCode::TooManyAutoseedRules,
+            VideoError::AutoseedRule(_) => ErrorCode::InvalidAutoseedRule,
+        };
+        code.into()
+    }
+}
+
+impl ErrorCoded for ConfigError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            ConfigError::ServerAddrTooLong => ErrorCode::ServerAddrTooLong,
+            ConfigError::ServerAddr => ErrorCode::InvalidServerAddr,
+            ConfigError::PublicAddrTooLong => ErrorCode::PublicAddrTooLong,
+            ConfigError::PublicUrl => ErrorCode::InvalidPublicUrl,
+            ConfigError::TooManyServiceNetworks => ErrorCode::TooManyServiceNetworks,
+            ConfigError::ServiceNetworkKeyTooLong => ErrorCode::ServiceNetworkKeyTooLong,
+        };
+        code.into()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use strims_proto::service::Error as RpcError;
+
     use super::*;
 
     #[test]
-    fn errors_answer_with_their_messages() {
+    fn errors_answer_with_their_codes_and_messages() {
         assert_eq!(
             VideoError::ChannelNotFound.to_rpc(),
-            RpcError::new(0, "video channel not found")
+            RpcError::new(ErrorCode::ChannelNotFound, "video channel not found")
+        );
+        // A wrapped error answers with its own code.
+        assert_eq!(
+            VideoError::Snippet(SnippetError::TooLarge).code(),
+            SnippetError::TooLarge.code()
+        );
+        assert_eq!(
+            VideoError::Store(strims_dao::Error::NotFound).code(),
+            strims_dao::Error::NotFound.code()
         );
         assert_eq!(
             VideoError::Snippet(SnippetError::TooLarge).to_rpc().message,

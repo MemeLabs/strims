@@ -26,6 +26,7 @@ const RANGES: &[(&str, RangeInclusive<i32>)] = &[
     ("strims.node.errors", 3000..=3999),
     ("strims.network.v1.directory.errors", 4000..=4999),
     ("strims.chat.v1.errors", 5000..=5999),
+    ("strims.video.v1.errors", 6000..=6999),
 ];
 
 /// The enum every error-code package declares.
