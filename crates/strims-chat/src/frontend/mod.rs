@@ -73,6 +73,8 @@ use strims_crypto::certificate_body;
 use strims_dao::{Index, ReplicatedStore, Table, WriteTx};
 use strims_directory::{Host, MAX_ALIAS_BYTES};
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
+use strims_proto::chat::v1::errors::ErrorCode;
 use strims_proto::chat::v1::{
     register_chat_frontend_service, register_chat_server_frontend_service,
 };
@@ -109,12 +111,17 @@ pub const MAX_RECORD_BYTES: usize = 4 * 1024 * 1024;
 
 const _: () = assert!(MAX_RECORD_BYTES + ITEM_OVERHEAD < MAX_RESPONSE_BYTES / 2);
 
-fn rpc_error(e: impl std::fmt::Display) -> RpcError {
-    RpcError::new(0, e.to_string())
+fn rpc_error(e: impl ErrorCoded) -> RpcError {
+    e.to_rpc()
+}
+
+/// A refusal of the frontend's own.
+fn refuse(code: ErrorCode, message: impl Into<String>) -> RpcError {
+    RpcError::new(code, message)
 }
 
 fn not_found(what: &str) -> RpcError {
-    RpcError::new(0, format!("{what} not found"))
+    refuse(ErrorCode::NotFound, format!("{what} not found"))
 }
 
 /// Serves the UI's chat calls for a node's chat and whisper controls; see
@@ -173,7 +180,7 @@ impl<K: Kv, H: Host, T: Timer> ChatFrontend<K, H, T> {
         if let Query::Subject(alias) = &query
             && alias.len() > MAX_ALIAS_BYTES
         {
-            return Err(rpc_error("alias too long"));
+            return Err(refuse(ErrorCode::AliasTooLong, "alias too long"));
         }
         let cert = self
             .chat
@@ -181,7 +188,7 @@ impl<K: Kv, H: Host, T: Timer> ChatFrontend<K, H, T> {
             .find_certificate(network_key, query, false)
             .await
             .map_err(|e| RpcError::new(e.code, format!("finding peer cert failed: {e}")))?;
-        certificate_body(&cert).map_err(rpc_error)
+        certificate_body(&cert).map_err(|e| refuse(ErrorCode::InvalidCertificate, e.to_string()))
     }
 
     /// `peer_key`, or when it's empty the key of the holder of `alias` on

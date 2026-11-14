@@ -3,8 +3,12 @@
 
 //! The chat server's refusals.
 
-/// Why a chat server refused a call. Callers receive the message as the
-/// RPC error, so the messages are part of the wire format.
+use strims_proto::ErrorCoded;
+use strims_proto::chat::v1::errors::ErrorCode;
+
+/// Why a chat server refused a call. Callers receive it as the RPC error,
+/// with its code ([`ErrorCoded`]), which a node reads back with
+/// [`ChatError::from_code`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ChatError {
     /// The caller already posted the running combo's emote.
@@ -38,25 +42,23 @@ impl ChatError {
         ChatError::TooLarge,
     ];
 
-    /// The prefixes that mark a muted refusal, with either spelling of
-    /// "messages" taken; any text may follow them.
-    const MUTED_PREFIXES: [&str; 2] = [
-        "cannot send messages while muted",
-        "cannot send mesasges while muted",
-    ];
+    /// The error whose code is `code`.
+    pub fn from_code(code: i32) -> Option<ChatError> {
+        ChatError::ALL.into_iter().find(|e| e.code() == code)
+    }
+}
 
-    /// The error whose message is `message`. A muted refusal is matched
-    /// by its prefix.
-    pub fn from_message(message: &str) -> Option<ChatError> {
-        if ChatError::MUTED_PREFIXES
-            .iter()
-            .any(|p| message.starts_with(p))
-        {
-            return Some(ChatError::Muted);
-        }
-        ChatError::ALL
-            .into_iter()
-            .find(|e| e.to_string() == message)
+impl ErrorCoded for ChatError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            ChatError::ComboDuplicate => ErrorCode::ComboDuplicate,
+            ChatError::NotModerator => ErrorCode::NotModerator,
+            ChatError::Muted => ErrorCode::Muted,
+            ChatError::MessageTooLong => ErrorCode::MessageTooLong,
+            ChatError::TooFast => ErrorCode::TooFast,
+            ChatError::TooLarge => ErrorCode::TooLarge,
+        };
+        code.into()
     }
 }
 
@@ -84,26 +86,12 @@ mod tests {
     }
 
     #[test]
-    fn every_error_is_found_by_its_message() {
+    fn every_error_is_found_by_its_code() {
+        // A code two errors shared would find only the first of them.
         for e in ChatError::ALL {
-            assert_eq!(ChatError::from_message(&e.to_string()), Some(e));
+            assert_eq!(ChatError::from_code(e.code()), Some(e));
         }
-        assert_eq!(ChatError::from_message("sending too fast!"), None);
-        assert_eq!(ChatError::from_message(""), None);
-    }
-
-    #[test]
-    fn a_muted_refusal_may_carry_its_expiry() {
-        assert_eq!(
-            ChatError::from_message(
-                "cannot send mesasges while muted. mute expires: 2026-10-17 12:00:00 +0000 UTC"
-            ),
-            Some(ChatError::Muted)
-        );
-        assert_eq!(
-            ChatError::from_message("cannot send messages while muted. mute expires: soon"),
-            Some(ChatError::Muted)
-        );
-        assert_eq!(ChatError::from_message("cannot send"), None);
+        assert_eq!(ChatError::from_code(0), None);
+        assert_eq!(ChatError::from_code(ErrorCode::WhisperRefused.into()), None);
     }
 }

@@ -25,6 +25,8 @@ use strims_dao::{Recv, ReplicatedStore, StoreEvent, Table};
 use strims_directory::{Host, MAX_ALIAS_BYTES, MAX_PEER_KEY_BYTES, Net};
 use strims_kv::Kv;
 use strims_network::{NetworkControl, NetworkEvent};
+use strims_proto::ErrorCoded;
+use strims_proto::chat::v1::errors::ErrorCode;
 use strims_proto::chat::v1::message::Entities;
 use strims_proto::chat::v1::{Message, MessageState, WhisperRecord, WhisperThread};
 use strims_proto::profile::v1::Profile;
@@ -131,6 +133,20 @@ pub enum EnqueueError {
     Full,
     #[error(transparent)]
     Store(#[from] strims_dao::Error),
+}
+
+impl ErrorCoded for EnqueueError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            EnqueueError::NoNetwork => ErrorCode::NetworkNotFound,
+            EnqueueError::ToSelf => ErrorCode::WhisperToSelf,
+            EnqueueError::TooLong => ErrorCode::MessageTooLong,
+            EnqueueError::TooLarge => ErrorCode::TooLarge,
+            EnqueueError::Full => ErrorCode::TooManyWhispersPending,
+            EnqueueError::Store(e) => return e.code(),
+        };
+        code.into()
+    }
 }
 
 /// A joined network.

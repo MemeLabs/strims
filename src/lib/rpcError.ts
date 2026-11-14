@@ -3,6 +3,7 @@
 
 import { Error as RPCError } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 
+import { ErrorCode as ChatErrorCode } from "../apis/strims/chat/v1/errors/errors";
 import { ErrorCode as DaoErrorCode } from "../apis/strims/dao/v1/errors/errors";
 import { ErrorCode as DirectoryErrorCode } from "../apis/strims/network/v1/directory/errors/errors";
 import { ErrorCode as NetworkErrorCode } from "../apis/strims/network/v1/errors/errors";
@@ -17,6 +18,7 @@ export const errorCodeEnums: readonly Record<number, string>[] = [
   DaoErrorCode,
   NodeErrorCode,
   DirectoryErrorCode,
+  ChatErrorCode,
 ];
 
 // The code of `e`, a call's rejection: its rpc.Error's code, or 0 (no

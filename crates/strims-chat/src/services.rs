@@ -21,6 +21,8 @@ use strims_dao::Table;
 use strims_dao::schema::chat::{ChatProfiles, profile_peer_key};
 use strims_directory::{Caller, Host};
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
+use strims_proto::chat::v1::errors::ErrorCode;
 use strims_proto::chat::v1::{
     ChatClient, ChatService, GetMuteRequest, GetMuteResponse, MuteRequest, MuteResponse,
     SendMessageRequest, SendMessageResponse, UnmuteRequest, UnmuteResponse,
@@ -193,7 +195,9 @@ impl<K: Kv, H: Host, T: Timer> ChatServer<K, H, T> {
         let caller = ctx
             .certificate()
             .and_then(Caller::from_certificate)
-            .ok_or_else(|| RpcError::new(0, "no caller certificate"))?;
+            .ok_or_else(|| {
+                RpcError::new(ErrorCode::NoCallerCertificate, "no caller certificate")
+            })?;
         serve(&s, &r, &caller, req).await.map_err(|e| e.to_rpc())
     }
 }

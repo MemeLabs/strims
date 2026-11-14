@@ -25,6 +25,8 @@ use strims_dao::{Broadcast, Recv, ReplicatedStore, StoreEvent, Subscription, Tab
 use strims_directory::{Caller, DirectoryControl, DirectoryEvent, Host, ListingKeeper, Net};
 use strims_kv::Kv;
 use strims_network::{NetworkControl, NetworkEvent};
+use strims_proto::ErrorCoded;
+use strims_proto::chat::v1::errors::ErrorCode;
 use strims_proto::chat::v1::{ChatClient, GetMuteResponse, MuteRequest, UnmuteRequest};
 use strims_proto::profile::v1::Profile;
 use strims_proto::service::{CallError, Error as RpcError};
@@ -51,10 +53,9 @@ const MEMBER_RETRY: Duration = Duration::from_secs(10);
 
 /// Why a chat call or client stream failed.
 ///
-/// A frontend answers with [`ChatFailure::to_rpc`]: a remote error as the
-/// server sent it, and anything else with code 0 and this error's message,
-/// which for a refusal is the [`ChatError`]'s, as the server would have
-/// sent it.
+/// A frontend answers with its [`ErrorCoded::to_rpc`]: a remote error as the
+/// server sent it, and anything else with its code and message, which for a
+/// refusal are the [`ChatError`]'s, as the server would have sent them.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
 pub enum ChatFailure {
     /// The node doesn't run the network.
@@ -87,30 +88,53 @@ pub enum ChatFailure {
     /// The call failed on this side: no answer, or a broken connection.
     #[error(transparent)]
     Call(CallError),
-    /// A node operation failed.
-    #[error("node: {0}")]
-    Host(String),
+    /// A node operation failed: the node error's code, and its message.
+    #[error("node: {1}")]
+    Host(i32, String),
     /// The store of the server this node runs failed.
     #[error(transparent)]
     Store(strims_dao::Error),
 }
 
 impl ChatFailure {
-    /// The RPC error a frontend answers with; see the type docs.
-    pub fn to_rpc(&self) -> RpcError {
-        match self {
-            ChatFailure::Remote(e) => e.clone(),
-            e => RpcError::new(0, e.to_string()),
-        }
-    }
-
     pub(crate) fn from_call(e: CallError) -> ChatFailure {
         match e {
-            CallError::Remote(e) => match ChatError::from_message(&e.message) {
+            CallError::Remote(e) => match ChatError::from_code(e.code) {
                 Some(c) => ChatFailure::Refused(c),
                 None => ChatFailure::Remote(e),
             },
             e => ChatFailure::Call(e),
+        }
+    }
+
+    /// A failed node operation.
+    pub(crate) fn host(e: &impl ErrorCoded) -> ChatFailure {
+        ChatFailure::Host(e.code(), e.to_string())
+    }
+}
+
+impl ErrorCoded for ChatFailure {
+    fn code(&self) -> i32 {
+        let code = match self {
+            ChatFailure::NoNetwork => ErrorCode::NetworkNotFound,
+            ChatFailure::NotJoined => ErrorCode::NotJoined,
+            ChatFailure::OtherNetwork => ErrorCode::OtherNetwork,
+            ChatFailure::NoServer => ErrorCode::ServerNotFound,
+            ChatFailure::TooManyRooms => ErrorCode::TooManyRooms,
+            ChatFailure::TooManyStreams => ErrorCode::TooManyStreams,
+            ChatFailure::Refused(e) => return e.code(),
+            ChatFailure::Remote(e) => return e.code,
+            ChatFailure::Call(e) => return e.code(),
+            ChatFailure::Host(code, _) => return *code,
+            ChatFailure::Store(e) => return e.code(),
+        };
+        code.into()
+    }
+
+    fn to_rpc(&self) -> RpcError {
+        match self {
+            ChatFailure::Remote(e) => e.clone(),
+            e => RpcError::new(e.code(), e.to_string()),
         }
     }
 }
@@ -920,7 +944,7 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
             .host
             .resolve_address(net, server_key.to_vec(), ADDRESS_SALT.to_vec())
             .await
-            .map_err(|e| ChatFailure::Host(e.to_string()))?
+            .map_err(|e| ChatFailure::host(&e))?
             .ok_or(ChatFailure::NoServer)?;
         let policy = match req {
             Request::SendMessage(_) => self.config.send_policy,
@@ -1315,16 +1339,26 @@ mod tests {
 
     #[test]
     fn a_remote_chat_error_is_a_refusal() {
-        let remote = |m: &str| CallError::Remote(RpcError::new(0, m));
-        assert_eq!(
-            ChatFailure::from_call(remote("operation requires moderator role")),
-            ChatFailure::Refused(ChatError::NotModerator)
-        );
+        let remote = |code: ErrorCode, m: &str| CallError::Remote(RpcError::new(code, m));
         assert_eq!(
             ChatFailure::from_call(remote(
-                "cannot send mesasges while muted. mute expires: 2026-10-17 12:00:00 +0000 UTC"
+                ErrorCode::NotModerator,
+                "operation requires moderator role"
+            )),
+            ChatFailure::Refused(ChatError::NotModerator)
+        );
+        // The code decides, whatever the message says.
+        assert_eq!(
+            ChatFailure::from_call(remote(
+                ErrorCode::Muted,
+                "cannot send messages while muted. mute expires: soon"
             )),
             ChatFailure::Refused(ChatError::Muted)
+        );
+        let uncoded = RpcError::new(0, "operation requires moderator role");
+        assert_eq!(
+            ChatFailure::from_call(CallError::Remote(uncoded.clone())),
+            ChatFailure::Remote(uncoded)
         );
         let other = RpcError::new(3, "updating profile failed: record not found");
         assert_eq!(
@@ -1334,7 +1368,11 @@ mod tests {
         assert_eq!(ChatFailure::Remote(other.clone()).to_rpc(), other);
         assert_eq!(
             ChatFailure::Refused(ChatError::TooFast).to_rpc(),
-            RpcError::new(0, "sending too fast")
+            RpcError::new(ErrorCode::TooFast, "sending too fast")
+        );
+        assert_eq!(
+            ChatFailure::NoServer.to_rpc(),
+            RpcError::new(ErrorCode::ServerNotFound, "chat server not found")
         );
         assert_eq!(
             ChatFailure::from_call(CallError::Timeout),

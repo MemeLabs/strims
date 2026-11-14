@@ -19,6 +19,8 @@ use strims_dao::schema::chat::{
 };
 use strims_directory::{Caller, Host, MAX_ALIAS_BYTES, MAX_PEER_KEY_BYTES, Net};
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
+use strims_proto::chat::v1::errors::ErrorCode;
 use strims_proto::chat::v1::{
     Message, MessageState, WhisperClient, WhisperRecord, WhisperSendMessageRequest,
     WhisperSendMessageResponse, WhisperService, WhisperThread, register_whisper_service,
@@ -213,13 +215,19 @@ enum Refusal {
 
 impl Refusal {
     /// The answer: [`ChatError::TooFast`] for a sender over its rate,
-    /// which may try again later, and [`WHISPER_REFUSED`] for the rest.
+    /// which may try again later, and [`refused`] for the rest.
     fn to_rpc(&self) -> RpcError {
         match self {
-            Refusal::TooFast => RpcError::new(0, ChatError::TooFast.to_string()),
-            _ => RpcError::new(0, WHISPER_REFUSED),
+            Refusal::TooFast => ChatError::TooFast.to_rpc(),
+            _ => refused(),
         }
     }
+}
+
+/// A whisper's refusal: [`WHISPER_REFUSED`], coded `WHISPER_REFUSED`
+/// whatever the reason, so the sender learns no more than that.
+fn refused() -> RpcError {
+    RpcError::new(ErrorCode::WhisperRefused, WHISPER_REFUSED)
 }
 
 impl From<strims_dao::Error> for Refusal {
@@ -254,7 +262,7 @@ impl<K: Kv, H: Host, T: Timer> WhisperService for WhisperServer<K, H, T> {
         req: WhisperSendMessageRequest,
     ) -> Result<WhisperSendMessageResponse, RpcError> {
         let Some(s) = self.shared.upgrade() else {
-            return Err(RpcError::new(0, WHISPER_REFUSED));
+            return Err(refused());
         };
         let res = receive(&s, ctx.certificate(), req).await;
         {
@@ -389,7 +397,7 @@ async fn receive<K: Kv, H: Host, T: Timer>(
 /// How a delivery attempt ended.
 pub(crate) enum Outcome {
     Delivered,
-    /// The recipient answered [`WHISPER_REFUSED`].
+    /// The recipient refused the whisper (`WHISPER_REFUSED`).
     Refused,
     /// Anything else that failed; the attempt is retried.
     Failed(String),
@@ -468,7 +476,9 @@ async fn call<K: Kv, H: Host, T: Timer>(
     };
     match WhisperClient::new(retry).send_message(&req).await {
         Ok(_) => Outcome::Delivered,
-        Err(CallError::Remote(e)) if e.message == WHISPER_REFUSED => Outcome::Refused,
+        Err(CallError::Remote(e)) if e.code == i32::from(ErrorCode::WhisperRefused) => {
+            Outcome::Refused
+        }
         Err(e) => Outcome::Failed(e.to_string()),
     }
 }

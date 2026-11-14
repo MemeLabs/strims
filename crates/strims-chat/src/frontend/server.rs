@@ -11,6 +11,8 @@ use strims_dao::schema::chat::{ChatEmotes, ChatModifiers, ChatServerIcons, ChatS
 use strims_dao::{Index, Table, WriteTx, ref_key};
 use strims_directory::Host;
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
+use strims_proto::chat::v1::errors::ErrorCode;
 use strims_proto::chat::v1::list_emotes_request::Part;
 use strims_proto::chat::v1::{
     ChatServerFrontendService, CreateEmoteRequest, CreateEmoteResponse, CreateModifierRequest,
@@ -31,37 +33,48 @@ use strims_proto::chat::v1::{
 use strims_proto::service::{Context, Error as RpcError};
 use strims_rpc::Timer;
 
-use super::{ChatFrontend, MAX_LABELS, MAX_NAME_BYTES, MAX_RECORD_BYTES, not_found, rpc_error};
+use super::{
+    ChatFrontend, MAX_LABELS, MAX_NAME_BYTES, MAX_RECORD_BYTES, not_found, refuse, rpc_error,
+};
 use crate::ChatFailure;
 use crate::reader::RoomLimits;
 
 fn check_name(what: &str, name: &str) -> Result<(), RpcError> {
     if name.is_empty() {
-        return Err(rpc_error(format!("{what} name is empty")));
+        return Err(refuse(
+            ErrorCode::NameEmpty,
+            format!("{what} name is empty"),
+        ));
     }
     if name.len() > MAX_NAME_BYTES {
-        return Err(rpc_error(format!("{what} name too long")));
+        return Err(refuse(
+            ErrorCode::NameTooLong,
+            format!("{what} name too long"),
+        ));
     }
     Ok(())
 }
 
 fn check_size(what: &str, r: &impl Message) -> Result<(), RpcError> {
     if r.encoded_len() > MAX_RECORD_BYTES {
-        return Err(rpc_error(format!("{what} too large")));
+        return Err(refuse(
+            ErrorCode::RecordTooLarge,
+            format!("{what} too large"),
+        ));
     }
     Ok(())
 }
 
 fn check_room(room: Option<&Room>) -> Result<(), RpcError> {
     if room.is_some_and(|r| r.name.len() > MAX_NAME_BYTES) {
-        return Err(rpc_error("room name too long"));
+        return Err(refuse(ErrorCode::NameTooLong, "room name too long"));
     }
     Ok(())
 }
 
 fn check_labels(labels: &[String]) -> Result<(), RpcError> {
     if labels.len() > MAX_LABELS {
-        return Err(rpc_error("too many labels"));
+        return Err(refuse(ErrorCode::TooManyLabels, "too many labels"));
     }
     labels.iter().try_for_each(|l| check_name("label", l))
 }
@@ -75,7 +88,10 @@ fn check_emote(e: &Emote) -> Result<(), RpcError> {
 fn check_modifier(m: &Modifier) -> Result<(), RpcError> {
     check_name("modifier", &m.name)?;
     if !(0.0..=1.0).contains(&m.proc_chance) {
-        return Err(rpc_error("proc chance must be from 0 to 1"));
+        return Err(refuse(
+            ErrorCode::InvalidProcChance,
+            "proc chance must be from 0 to 1",
+        ));
     }
     check_size("modifier", m)
 }
@@ -83,7 +99,7 @@ fn check_modifier(m: &Modifier) -> Result<(), RpcError> {
 fn check_tag(t: &Tag) -> Result<(), RpcError> {
     check_name("tag", &t.name)?;
     if t.color.len() > MAX_NAME_BYTES {
-        return Err(rpc_error("tag color too long"));
+        return Err(refuse(ErrorCode::TagColorTooLong, "tag color too long"));
     }
     check_size("tag", t)
 }
@@ -112,7 +128,7 @@ impl Parts {
             match Part::try_from(*part) {
                 Ok(Part::Meta) => p.meta = true,
                 Ok(Part::Assets) => p.assets = true,
-                _ => return Err(rpc_error("invalid part")),
+                _ => return Err(refuse(ErrorCode::InvalidPart, "invalid part")),
             }
         }
         Ok(p)
@@ -160,7 +176,7 @@ impl<K: Kv, H: Host, T: Timer> ChatFrontend<K, H, T> {
     fn check_network(&self, key: &[u8]) -> Result<(), RpcError> {
         match self.chat.network().network(key) {
             Some(_) => Ok(()),
-            None => Err(not_found("network")),
+            None => Err(refuse(ErrorCode::NetworkNotFound, "network not found")),
         }
     }
 
@@ -178,14 +194,17 @@ impl<K: Kv, H: Host, T: Timer> ChatFrontend<K, H, T> {
             .map_err(rpc_error)?
             .is_none()
         {
-            return Err(not_found("chat server"));
+            return Err(refuse(ErrorCode::ServerNotFound, "chat server not found"));
         }
         let n = R::index_ids(tx, ix, &ref_key(server_id))
             .await
             .map_err(rpc_error)?
             .len();
         if n >= max {
-            return Err(rpc_error(format!("too many {what}")));
+            return Err(refuse(
+                ErrorCode::TooManyRecords,
+                format!("too many {what}"),
+            ));
         }
         Ok(())
     }
@@ -353,7 +372,7 @@ impl<K: Kv, H: Host, T: Timer> ChatServerFrontendService for ChatFrontend<K, H, 
             .map_err(rpc_error)?
             .is_none()
         {
-            return Err(not_found("chat server"));
+            return Err(refuse(ErrorCode::ServerNotFound, "chat server not found"));
         }
         let icon = ChatServerIcons::upsert(&mut tx, icon)
             .await
@@ -467,7 +486,7 @@ impl<K: Kv, H: Host, T: Timer> ChatServerFrontendService for ChatFrontend<K, H, 
         req: UpdateEmotesRequest,
     ) -> Result<UpdateEmotesResponse, RpcError> {
         if req.ids.len() > self.limits().max_emotes {
-            return Err(rpc_error("too many emotes"));
+            return Err(refuse(ErrorCode::TooManyRecords, "too many emotes"));
         }
         check_labels(&req.add_labels)?;
         check_labels(&req.remove_labels)?;

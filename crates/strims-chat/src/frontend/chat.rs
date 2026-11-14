@@ -12,6 +12,8 @@ use strims_dao::schema::chat::{
 use strims_dao::{Index, Singleton, Table};
 use strims_directory::Host;
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
+use strims_proto::chat::v1::errors::ErrorCode;
 use strims_proto::chat::v1::{
     ChatFrontendService, ClientGetMuteRequest, ClientGetMuteResponse, ClientMuteRequest,
     ClientMuteResponse, ClientSendMessageRequest, ClientSendMessageResponse, ClientUnmuteRequest,
@@ -31,15 +33,23 @@ use strims_rpc::Timer;
 use super::open::OpenClient;
 use super::{
     ChatFrontend, ITEM_OVERHEAD, MAX_NAME_BYTES, MAX_RECORD_BYTES, delete_indexed, not_found,
-    rpc_error, watch,
+    refuse, rpc_error, watch,
 };
 use crate::duration;
 
 /// The duration a mute or ignore is given as.
 fn parse_duration(s: &str) -> Result<Duration, RpcError> {
-    let d = duration::parse(s).map_err(|e| rpc_error(format!("parsing duration failed: {e}")))?;
+    let d = duration::parse(s).map_err(|e| {
+        refuse(
+            ErrorCode::InvalidDuration,
+            format!("parsing duration failed: {e}"),
+        )
+    })?;
     if d.is_negative() {
-        return Err(rpc_error("duration must not be negative"));
+        return Err(refuse(
+            ErrorCode::InvalidDuration,
+            "duration must not be negative",
+        ));
     }
     Ok(d)
 }
@@ -176,7 +186,10 @@ impl<K: Kv, H: Host, T: Timer> ChatFrontendService for ChatFrontend<K, H, T> {
         } else if !req.alias.is_empty() {
             Query::Subject(req.alias)
         } else {
-            return Err(rpc_error("whisper subject undefined"));
+            return Err(refuse(
+                ErrorCode::WhisperSubjectUndefined,
+                "whisper subject undefined",
+            ));
         };
         let cert = self.peer_certificate(&req.network_key, query).await?;
         self.whispers
@@ -275,7 +288,7 @@ impl<K: Kv, H: Host, T: Timer> ChatFrontendService for ChatFrontend<K, H, T> {
     ) -> Result<SetUiConfigResponse, RpcError> {
         let config = req.ui_config.unwrap_or_default();
         if config.encoded_len() > MAX_RECORD_BYTES {
-            return Err(rpc_error("ui config too large"));
+            return Err(refuse(ErrorCode::RecordTooLarge, "ui config too large"));
         }
         let mut tx = self.write().await?;
         ChatUiConfig::set(&mut tx, config)
@@ -377,7 +390,7 @@ impl<K: Kv, H: Host, T: Timer> ChatFrontendService for ChatFrontend<K, H, T> {
     /// Tags the holder of the alias with the color.
     async fn tag(&self, _: &Context, req: TagRequest) -> Result<TagResponse, RpcError> {
         if req.color.len() > MAX_NAME_BYTES {
-            return Err(rpc_error("tag color too long"));
+            return Err(refuse(ErrorCode::TagColorTooLong, "tag color too long"));
         }
         let cert = self
             .peer_certificate(&req.network_key, Query::Subject(req.alias))

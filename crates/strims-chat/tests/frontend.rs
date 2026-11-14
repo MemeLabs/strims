@@ -28,6 +28,7 @@ use strims_dao::{Recv, Subscription, Table};
 use strims_kv::MemoryKv;
 use strims_ppspp::{SwarmId, Uri, UriOptions};
 use strims_proto::chat::v1::emote_effect::{Effect, SpriteAnimation};
+use strims_proto::chat::v1::errors::ErrorCode;
 use strims_proto::chat::v1::list_emotes_request::Part;
 use strims_proto::chat::v1::message::DirectoryRef;
 use strims_proto::chat::v1::open_client_response::Body as OpenBody;
@@ -117,6 +118,14 @@ fn start_with(n: &Node, config: Config, max_response: Option<usize>) -> Side {
 fn refusal<T: Debug>(r: Result<T, CallError>) -> String {
     match r {
         Err(CallError::Remote(e)) => e.message,
+        r => panic!("not refused: {r:?}"),
+    }
+}
+
+/// The code of a call's remote error.
+fn refused_code<T: Debug>(r: Result<T, CallError>) -> i32 {
+    match r {
+        Err(CallError::Remote(e)) => e.code,
         r => panic!("not refused: {r:?}"),
     }
 }
@@ -971,11 +980,20 @@ fn a_moderator_mutes_by_alias() {
             refusal(mute(&b.ui, &alice_alias, "5m").await),
             "operation requires moderator role"
         );
+        // The server's refusals reach the UI with their codes.
+        assert_eq!(
+            refused_code(mute(&b.ui, &alice_alias, "5m").await),
+            ErrorCode::NotModerator as i32
+        );
 
         mute(&a.ui, &bob_alias, "10m").await.unwrap();
         assert_eq!(
             refusal(send(&b.ui, "still here").await),
             "cannot send messages while muted"
+        );
+        assert_eq!(
+            refused_code(send(&b.ui, "still here").await),
+            ErrorCode::Muted as i32
         );
         let m = get_mute(&b.ui).await.unwrap();
         let now = bob.timer.now().unix();
