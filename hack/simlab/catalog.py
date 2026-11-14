@@ -176,7 +176,10 @@ crates/strims-wan/vocab.toml (simlab.vocab), with how many of each the
 runs hold: an index warns on stderr of a kind the runs hold that it
 lacks, of the fields and columns the runs hold that
 crates/strims-wan/fields.toml doesn't declare (undeclared), which it
-documents, and of a verdict table's columns without a doc):
+documents, and of a verdict table's columns without a doc; the views,
+the doc tables and that warning leave out the ppspp sim's jobs
+(SKIPPED_SIMS) and the fields and columns only its runs hold,
+skipped_names'):
 
   experiments       one an experiment: a suite farm run (exp_id its name,
                     s7ae7e), or a local suite invocation (exp_id its cache
@@ -306,7 +309,8 @@ since, or --env set more) is in none, nor is one with no env (its index
 predates cells' env, and no matrix of its ran).
 
 The physical tables are in schema `raw`, a source's rows each under its
-`src`; the views above read them through `jobs`.
+`src`; the views above read them through `jobs`, without the columns
+only the skipped sims' runs hold (counted).
 """
 
 import collections
@@ -347,7 +351,9 @@ SIMS = verdict.SIM_NAMES
 # The names a run's sim holds for the ppspp sim (crates/strims-ppspp/tests/sim.rs),
 # a correctness harness whose runs the lab doesn't read: the index leaves
 # their jobs out (jobs, experiment_cells, experiment_jobs), and every view
-# with them (canon), and a farm job of SIM_ knobs alone with them.
+# with them (canon), and a farm job of SIM_ knobs alone with them; and the
+# fields and columns only their runs hold (skipped_names) out of the views,
+# the doc tables and the names fields.toml should declare (undeclared).
 SKIPPED_SIMS = ("ppspp", "strims-ppspp:sim")
 # The sims' tables that are a job's ids and times, not readings: kept as
 # they are where -1 elsewhere is no reading.
@@ -1458,9 +1464,14 @@ def index(workers=None, progress=None, wait=True):
             # behind the data.
             gone_keys = [*moved, *(["docs_behind"] if remade else []),
                          *(["scoring_behind"] if "scoring_version" in moved else [])]
+            # The columns as the views take them (counted), the skipped
+            # sims' names left out.
+            cols, hidden = counted(cols, skipped_names(fields_held()))
+            if "scoring_version" in moved:
+                scoring, _ = lake_scoring(cols)
             with scratch() as tmp:
                 written("\n".join(["BEGIN;", *(catalogs_sql(cols, tmp, recount=bool(info.get("docs_behind")))
-                                               + rows_views_sql(cols) if remade else []),
+                                               + rows_views_sql(cols, hidden) if remade else []),
                                    *(scoring if "scoring_version" in moved else []),
                                    f"DELETE FROM raw.info WHERE key IN ({', '.join(q(k) for k in gone_keys)});",
                                    "INSERT INTO raw.info VALUES "
@@ -1598,10 +1609,21 @@ def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of,
                             for n, ty in have_cols.items() if n not in ("k", "src")]
     if files_rows:
         sql.append(f"INSERT INTO raw.files BY NAME SELECT * FROM {read_jsonl(jsonl(tmp / 'files.jsonl', files_rows), FILE_COLS)};")
+    new_fields = []
     if fields_rows:
-        sql.append(f"INSERT INTO raw.fields BY NAME SELECT * FROM "
-                   f"{read_jsonl(jsonl(tmp / 'fields.jsonl', fields_rows), FIELD_COLS)};")
-    sql += rows_sql(runs_redo, cache, cols)
+        new_fields.append(read_jsonl(jsonl(tmp / "fields.jsonl", fields_rows), FIELD_COLS))
+        sql.append(f"INSERT INTO raw.fields BY NAME SELECT * FROM {new_fields[-1]};")
+    rows, row_fields = rows_sql(runs_redo, cache, cols, tmp)
+    sql += rows
+    new_fields += [row_fields] if row_fields else []
+    # What raw.fields holds once the transaction commits, for the names only
+    # skipped sims' runs hold: its records but those the transaction
+    # deletes, and those it inserts.
+    gone_fields = [{"src": s, "tbl": "rows" if t == "runs" else t} for s, t in drop]
+    held = fields_held(
+        add=" UNION ALL BY NAME ".join(f"SELECT * FROM {r}" for r in new_fields) or None,
+        gone=read_jsonl(jsonl(tmp / "fields_gone.jsonl", gone_fields), {"src": "VARCHAR", "tbl": "VARCHAR"})
+        if gone_fields else None)
     if own["verdicts"]:
         sql += verdicts_sql(need_verdicts, cache, cols, version)
     meta, parsed = metadata_sql(ins, ins_changed, kind_of, cols, tmp)
@@ -1614,7 +1636,8 @@ def build(cache, have, gone, changed, new, runs_redo, ins, ins_changed, kind_of,
     sql.append("INSERT INTO raw.inputs BY NAME SELECT * FROM " + read_jsonl(
         jsonl(tmp / "inputs.jsonl", [{"path": p, "size": a, "mtime_ns": b, "kind": c} for p, (a, b, c) in ins.items()]),
         {"path": "VARCHAR", "size": "BIGINT", "mtime_ns": "BIGINT", "kind": "VARCHAR"}) + ";")
-    sql += main_sql(cols, version, tmp, ins, parsed, docs, run_commits(cache, add, types), own)
+    shown, hidden = counted(cols, skipped_names(held))
+    sql += main_sql(shown, version, tmp, ins, parsed, docs, run_commits(cache, add, types), own, hidden)
     sql.append("COMMIT;")
     return "\n".join([*pre, *sql])
 
@@ -1665,14 +1688,15 @@ def run_commits(cache, keys, types):
     return out
 
 
-def rows_sql(srcs, cache, cols):
+def rows_sql(srcs, cache, cols, tmp):
     """raw.rows from the sources' runs: a column a row field, of the type its
     values have (numbers DOUBLE, lists of them DOUBLE[], strings VARCHAR),
     the columns growing with the fields later rows hold; and raw.fields'
-    record of each source's fields."""
+    record of each source's fields, the sims (normalized) whose rows hold
+    it, which it returns too, as a relation (None without)."""
     srcs = [s for s in srcs if "runs" in cache.get(s, {}).get("files", {})]
     if not srcs:
-        return []
+        return [], None
     paths = [cache[s]["files"]["runs"]["path"] for s in srcs]
     struct = {}
     for i in range(0, len(paths), 200):
@@ -1698,21 +1722,28 @@ def rows_sql(srcs, cache, cols):
             out.append(f"ALTER TABLE raw.rows ADD COLUMN {ident(n)} {ty};")
             table[n] = ty
     fields = {n: ty for n, ty in table.items() if n not in ("k", "src")}
-    if fields:
-        shape = q(json.dumps({n: ty for n, ty in fields.items()}))
-        lst = ", ".join(q(s) for s in srcs)
-        # A flush holding one job under two cells (a matrix that reused a
-        # row of its own run's) holds its row twice: one is the job's.
-        out.append(f"INSERT INTO raw.rows BY NAME SELECT k, src, unnest(json_transform(row_json, {shape})) "
-                   f"FROM raw.runs WHERE src IN ({lst}) QUALIFY row_number() OVER (PARTITION BY k, src ORDER BY cell) = 1;")
-        sims = f"CASE {' '.join(f'WHEN sim = {q(a)} THEN {q(b)}' for a, b in SIMS.items())} ELSE sim END"
-        out.append(f"INSERT INTO raw.fields BY NAME SELECT src, 'rows' AS tbl, name, any_value(ty) AS type, "
-                   f"list(DISTINCT {sims} ORDER BY {sims}) AS sims FROM (SELECT src, sim, unnest(json_keys(row_json)) "
-                   f"AS name, NULL::VARCHAR AS ty FROM raw.runs WHERE src IN ({lst})) GROUP BY ALL;")
-        out.append(f"UPDATE raw.fields f SET type = c.data_type FROM information_schema.columns c "
-                   f"WHERE f.tbl = 'rows' AND f.type IS NULL AND c.table_catalog = 'lake' AND c.table_schema = 'raw' "
-                   f"AND c.table_name = 'rows' AND c.column_name = f.name;")
-    return out
+    if not fields:
+        return out, None
+    shape = q(json.dumps({n: ty for n, ty in fields.items()}))
+    lst = ", ".join(q(s) for s in srcs)
+    # A flush holding one job under two cells (a matrix that reused a
+    # row of its own run's) holds its row twice: one is the job's.
+    out.append(f"INSERT INTO raw.rows BY NAME SELECT k, src, unnest(json_transform(row_json, {shape})) "
+               f"FROM raw.runs WHERE src IN ({lst}) QUALIFY row_number() OVER (PARTITION BY k, src ORDER BY cell) = 1;")
+    recs = []
+    for i in range(0, len(paths), 200):
+        for r in duck(f"SELECT src, name, list(DISTINCT sim) FILTER (WHERE sim IS NOT NULL) AS sims FROM ("
+                      f"SELECT src, sim, unnest(json_keys(row_json)) AS name FROM read_parquet("
+                      f"{verdict.plist(paths[i:i + 200])}, union_by_name=true)) GROUP BY ALL;"):
+            recs.append({"src": r["src"], "tbl": "rows", "name": r["name"], "type": None,
+                         "sims": sorted({SIMS.get(x, x) for x in r["sims"] or []})})
+    rel = read_jsonl(jsonl(tmp / "row_fields.jsonl", recs), FIELD_COLS) if recs else None
+    if rel:
+        out.append(f"INSERT INTO raw.fields BY NAME SELECT * FROM {rel};")
+    out.append(f"UPDATE raw.fields f SET type = c.data_type FROM information_schema.columns c "
+               f"WHERE f.tbl = 'rows' AND f.type IS NULL AND c.table_catalog = 'lake' AND c.table_schema = 'raw' "
+               f"AND c.table_name = 'rows' AND c.column_name = f.name;")
+    return out, rel
 
 
 def verdicts_sql(srcs, cache, cols, version):
@@ -2037,30 +2068,35 @@ CREATE OR REPLACE VIEW main.catalog_info AS SELECT key, value FROM raw.info;
 """
 
 
-def renamed_select(t, have):
+def star(hide=()):
+    """`x.*` without the columns `hide` names."""
+    return "x.*" + (f" EXCLUDE ({', '.join(ident(n) for n in hide)})" if hide else "")
+
+
+def renamed_select(t, have, hide=()):
     """main.rows' or main.scalars' select list over raw.`t` (`have` its
-    columns): `x.*`, a renamed field (vocab.renames, fields.toml's
-    `rename`) read under its current name for the jobs of the sims it's
-    renamed for, its own value where a row holds both. In rows its column
-    goes where every sim it's retired for has its values renamed, else
-    reads none for those that have; in scalars the name (a list's
-    `name[i]` too) is the current one."""
+    columns, and `hide` those it leaves out): `x.*`, a renamed field
+    (vocab.renames, fields.toml's `rename`) read under its current name for
+    the jobs of the sims it's renamed for, its own value where a row holds
+    both. In rows its column goes where every sim it's retired for has its
+    values renamed, else reads none for those that have; in scalars the
+    name (a list's `name[i]` too) is the current one."""
     doc = vocab.fields(FIELDS)
     renames = vocab.renames(doc=doc)
     sims = lambda ss: f"j_.sim IN ({', '.join(q(s) for s in ss)})"
     if t == "scalars":
         whens = [f"WHEN {sims(ss)} AND (x.name = {q(old)} OR starts_with(x.name, {q(old + '[')})) "
                  f"THEN {q(new)} || x.name[{len(old) + 1}:]" for old, new, ss in renames]
-        return f"x.* REPLACE (CASE {' '.join(whens)} ELSE x.name END AS name)" if whens else "x.*"
+        return f"{star(hide)} REPLACE (CASE {' '.join(whens)} ELSE x.name END AS name)" if whens else star(hide)
     renames = [r for r in renames if r[0] in have]
     if not renames:
-        return "x.*"
+        return star(hide)
     into, moved = {}, {}
     for old, new, ss in renames:
         into.setdefault(new, []).append((old, ss))
         moved.setdefault(old, set()).update(ss)
     retired = {old: set(doc["rows"][old]["retired"]) for old in moved}
-    exclude = [ident(o) for o in moved if moved[o] >= retired[o]]
+    exclude = [*hide, *(o for o in moved if moved[o] >= retired[o])]
     replace, add = [], []
     for o in moved:
         if moved[o] < retired[o]:
@@ -2070,16 +2106,18 @@ def renamed_select(t, have):
         case = " ".join(f"WHEN {sims(ss)} THEN coalesce({', '.join(own + [f'x.{ident(o)}'])})" for o, ss in olds)
         expr = f"CASE {case} ELSE {own[0] if own else 'NULL'} END AS {ident(new)}"
         (replace if own else add).append(expr)
-    return ("x.*" + (f" EXCLUDE ({', '.join(exclude)})" if exclude else "")
-            + (f" REPLACE ({', '.join(replace)})" if replace else "") + "".join(f", {a}" for a in add))
+    return (star(exclude) + (f" REPLACE ({', '.join(replace)})" if replace else "")
+            + "".join(f", {a}" for a in add))
 
 
-def rows_views_sql(cols):
+def rows_views_sql(cols, hidden=None):
     """main.rows and main.scalars, made again: the jobs' rows, renamed
-    fields read under their current names (renamed_select). fields.toml's
-    renames are in its docs (retired_text), so an index that makes the doc
-    tables again makes these too."""
-    return [f"CREATE OR REPLACE VIEW main.{t} AS SELECT {renamed_select(t, cols[t])} {canon(t)};"
+    fields read under their current names (renamed_select), without the
+    columns `hidden` names (counted's). fields.toml's renames are in its
+    docs (retired_text), so an index that makes the doc tables again makes
+    these too."""
+    hidden = hidden or {}
+    return [f"CREATE OR REPLACE VIEW main.{t} AS SELECT {renamed_select(t, cols[t], hidden.get(t, ()))} {canon(t)};"
             for t in ("rows", "scalars") if t in cols]
 
 
@@ -2104,11 +2142,13 @@ NONE_NEGATIVE = {t: frozenset(n for n, (_, e) in cols.items() if e.get("none") =
 # arrivals' nodes the sims write -1 for none; its times they leave empty.
 
 
-def view_sql(t, cols, name, viewers, arrivals=None):
+def view_sql(t, cols, name, viewers, arrivals=None, hidden=None):
     """The view `name` of sim table `t` (its columns `cols`), normalized as
     the module docs say; `viewers` the viewers table's columns, for the
     viewers' stays, and `arrivals` the arrivals table's, for the asks'
-    truth (simlab.query's asks_view)."""
+    truth (simlab.query's asks_view); without the columns `hidden` names
+    of each table (counted's)."""
+    hidden = hidden or {}
     num = lambda c: cols[c].split("(")[0] in NUMERIC
     rest = [c for c in cols if c not in ("k", "src")]
     nullify = lambda c: f"nullif(x.{ident(c)}, -1) AS {ident(c)}" if num(c) else f"x.{ident(c)}"
@@ -2118,8 +2158,10 @@ def view_sql(t, cols, name, viewers, arrivals=None):
     sentinel = lambda c: (nullify(c) if c in none else
                           f"CASE WHEN x.{ident(c)} >= 0 THEN x.{ident(c)} END AS {ident(c)}" if c in negative
                           else plain(c))
-    replaced = lambda: ("x.* REPLACE (" + ", ".join(f"nullif(x.{ident(c)}, -1) AS {ident(c)}" for c in rest
-                                                    if c in none) + ")" if any(c in none for c in rest) else "x.*")
+    kept = star(hidden.get(t, ()))
+    replaced = lambda: (f"{kept} REPLACE (" + ", ".join(f"nullif(x.{ident(c)}, -1) AS {ident(c)}" for c in rest
+                                                     if c in none) + ")" if any(c in none for c in rest) else kept)
+    held = f"(SELECT {star(hidden.get('arrivals', ()))} {canon('arrivals')})"
     head = f"CREATE OR REPLACE VIEW main.{ident(name)} AS SELECT"
     if t == "viewers":
         node = ("coalesce(x.node, x.host)" if "node" in cols and "host" in cols else
@@ -2164,17 +2206,14 @@ def view_sql(t, cols, name, viewers, arrivals=None):
             sel.append("NULL::BIGINT AS n")
         return f"{head} {', '.join(sel)} {canon(t)};"
     if t == "seed_sends":
-        star = replaced()
-        return query.seed_sends_view(f"main.{ident(name)}", f"(SELECT {star} {canon(t)})",
-                                     f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
+        return query.seed_sends_view(f"main.{ident(name)}", f"(SELECT {replaced()} {canon(t)})", held, cols,
+                                     arrivals or {})
     if t == "asks":
-        return query.asks_view(f"main.{ident(name)}", f"(SELECT x.* {canon(t)})",
-                               f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
+        return query.asks_view(f"main.{ident(name)}", f"(SELECT {kept} {canon(t)})", held, cols, arrivals or {})
     if t == "haves":
-        star = replaced()
-        return query.haves_view(f"main.{ident(name)}", f"(SELECT {star} {canon(t)})",
-                                f"(SELECT x.* {canon('arrivals')})", cols, arrivals or {})
-    return f"{head} x.* {canon(t)};"
+        return query.haves_view(f"main.{ident(name)}", f"(SELECT {replaced()} {canon(t)})", held, cols,
+                                arrivals or {})
+    return f"{head} {kept} {canon(t)};"
 
 
 # The catalog's own names, which a sim table's view doesn't take (it is
@@ -2192,14 +2231,17 @@ def sim_tables(cols):
     return {t: (t if t not in OWN else f"sim_{t}") for t in sorted(cols) if t not in META}
 
 
-def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None):
+def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None, hidden=None):
     """The main tables, made again, and the views; the doc tables as
     `docs` (docs_of's, with the catalog_info it read, `info`, and whether
     the catalog is new, `fresh`) has them made; the scoring objects, and
     catalog_info's versions of them and of the verdicts, this process's
     where `own` (owns') has them its own, else the catalog's kept, the
-    scoring objects marked behind the data (scoring_behind)."""
+    scoring objects marked behind the data (scoring_behind). `cols` and
+    `hidden` are counted's: the views leave out the columns hidden names,
+    and there is none of a sim table it leaves out."""
     own = own or {"verdicts": True, "scoring": True}
+    hidden = hidden or {}
     skipped = ", ".join(q(s) for s in SKIPPED_SIMS)
     out = [JOBS_SQL.format(csim=sim_case("csim"), promoted=",\n       ".join(
         f"{knob('env', v)} AS {n}" for n, v in PROMOTED.items()),
@@ -2215,8 +2257,12 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None):
     out.append(EXP_RUNS_SQL)
     out += commits_sql(tmp, ins, parsed, commits)
     for t, name in sim_tables(cols).items():
-        out.append(view_sql(t, cols[t], name, cols.get("viewers", {}), cols.get("arrivals", {})))
-    out += rows_views_sql(cols)
+        out.append(view_sql(t, cols[t], name, cols.get("viewers", {}), cols.get("arrivals", {}), hidden))
+    # A sim table counted leaves out (only skipped sims' runs hold it) has
+    # no view, an earlier index's going.
+    for name in sim_tables({t: None for t in hidden if t not in cols}).values():
+        out.append(f"DROP VIEW IF EXISTS main.{ident(name)};")
+    out += rows_views_sql(cols, hidden)
     for t in VERDICT_TABLES:
         if t in cols:
             out.append(f"CREATE OR REPLACE VIEW main.{t}_all AS SELECT x.* {canon(t)};")
@@ -2583,9 +2629,11 @@ def kind_docs():
 
 
 def catalogs_sql(cols, tmp, recount=True):
-    """metric_catalog, event_kinds and table_catalog, made again: the
-    events of each kind counted again, or without `recount` kept as
-    event_kinds holds them (the runs unchanged)."""
+    """metric_catalog, event_kinds and table_catalog, made again over the
+    columns `cols` (counted's): the events of each kind counted again, or
+    without `recount` kept as event_kinds holds them (the runs unchanged).
+    The sims a column names, and when the sources holding it were made,
+    are the jobs' sims' (not SKIPPED_SIMS')."""
     docs = field_docs()
     out = []
     # table_catalog
@@ -2662,10 +2710,10 @@ def catalogs_sql(cols, tmp, recount=True):
     view_of = " ".join(f"WHEN f.tbl = {q(t)} THEN {q(v)}" for t, v in names.items())
     out.append(f"""CREATE OR REPLACE TABLE main.metric_catalog AS
 WITH seen AS (
-    SELECT CASE {view_of} ELSE f.tbl END AS tbl, f.name, list_distinct(flatten(list(f.sims))) AS sims,
+    SELECT CASE {view_of} ELSE f.tbl END AS tbl, f.name, list_distinct(flatten(list({unskipped('f.sims')}))) AS sims,
            min(TRY_CAST(s.manifest_at AS TIMESTAMPTZ)) AS first_seen,
            max(TRY_CAST(s.manifest_at AS TIMESTAMPTZ)) AS last_seen
-    FROM raw.fields f LEFT JOIN raw.sources s USING (src) GROUP BY ALL)
+    FROM raw.fields f LEFT JOIN raw.sources s USING (src) WHERE NOT {skipped_only('f.sims')} GROUP BY ALL)
 SELECT d.name, d.tbl, d.type, d.unit, d.description, d.better, d.kind, d.tie, d.guard, d.fields, d.source,
        d.metric, list_sort(s.sims) AS sims, s.first_seen, s.last_seen
 FROM {read_jsonl(jsonl(tmp / 'metric_catalog.jsonl', recs), mcols)} d LEFT JOIN seen s USING (tbl, name)
@@ -2702,16 +2750,88 @@ def undocumented():
     return out
 
 
+def skipped_list():
+    """SKIPPED_SIMS as a SQL list."""
+    return "[" + ", ".join(q(s) for s in SKIPPED_SIMS) + "]"
+
+
+def unskipped(sims):
+    """SQL: `sims`, a raw.fields record's list of sims, without the skipped
+    sims (SKIPPED_SIMS)."""
+    return f"list_filter({sims}, sim_ -> sim_ IS NULL OR NOT list_contains({skipped_list()}, sim_))"
+
+
+def skipped_only(sims):
+    """SQL: whether `sims`, a raw.fields record's list of sims, names
+    skipped sims alone: false for a record of no sim known."""
+    return f"coalesce(len({sims}) > 0 AND len({unskipped(sims)}) = 0, false)"
+
+
+def fields_held(add=None, gone=None):
+    """What raw.fields' records say of each name, {(table, name): (alone,
+    among)}: alone where every record of it names skipped sims alone
+    (skipped_only), among where every one names a skipped sim. With `add`
+    a relation of records beside them, and `gone` one of (src, tbl) whose
+    records leave: the index's transaction's, before it commits."""
+    recs = "SELECT src, tbl, name, sims FROM raw.fields"
+    if gone:
+        recs += f" ANTI JOIN {gone} USING (src, tbl)"
+    if add:
+        recs += f" UNION ALL BY NAME SELECT src, tbl, name, sims FROM ({add})"
+    return {(r["tbl"], r["name"]): (r["alone"], r["among"]) for r in lake(
+        f"SELECT tbl, name, bool_and({skipped_only('sims')}) AS alone, "
+        f"bool_and(coalesce(list_has_any(sims, {skipped_list()}), false)) AS among FROM ({recs}) GROUP BY ALL;")}
+
+
+def skipped_names(held, decl=None):
+    """The fields and columns only skipped sims' runs hold, {table: {name}},
+    of `held` (fields_held's; `decl` vocab.declared's of fields.toml, read
+    now where None). A row field's record names the sims whose rows hold
+    it, so a field is theirs where every record of it names them alone. A
+    table's record is its source's, which names each sim the source's runs
+    have: a source of a skipped sim's jobs and another's names both for
+    each column, either's jobs holding it. So a column is theirs where every
+    record of it names them alone, or where every one names them and
+    fields.toml, which declares no skipped sim's names, doesn't declare it.
+    The views, the doc tables and undeclared leave them out (counted): sim
+    data is ephemeral, and no source has held such jobs since the lab
+    stopped running those sims."""
+    decl = decl or vocab.declared(doc=tomllib.loads(Path(FIELDS).read_text()))
+    out = {}
+    for (t, n), (alone, among) in held.items():
+        if n not in ("k", "src") and (alone or t != "rows" and among and n not in decl["columns"].get(t, {})):
+            out.setdefault(t, set()).add(n)
+    return out
+
+
+def counted(cols, skipped):
+    """The raw tables' columns `cols` ({table: {name: type}}) as the views
+    and the doc tables take them, without `skipped`'s names
+    (skipped_names'), a sim table with none but k and src left without;
+    and the columns left out, {table: [name]}, a sim table left out
+    with every one of its own."""
+    shown, hidden = {}, {}
+    for t, c in cols.items():
+        keep = {n: ty for n, ty in c.items() if n not in skipped.get(t, ())}
+        if len(keep) < len(c):
+            hidden[t] = [n for n in c if n not in keep]
+        if set(keep) - {"k", "src"} or t in META:
+            shown[t] = keep
+    return shown, hidden
+
+
 def undeclared():
     """The fields and columns the sources hold (raw.fields) that fields.toml
     doesn't declare for any sim or line, {table: [name]}, the rows' as
-    `rows`: undocumented in metric_catalog until it does."""
+    `rows`: undocumented in metric_catalog until it does. Those only
+    skipped sims' runs hold (skipped_names) aren't among them."""
     decl = vocab.declared(doc=tomllib.loads(Path(FIELDS).read_text()))
     tables = set(decl["columns"]) | set(sim_tables(lake_columns()))
+    held = fields_held()
+    skipped = skipped_names(held, decl)
     out = {}
-    for r in lake("SELECT DISTINCT tbl, name FROM raw.fields ORDER BY tbl, name;"):
-        t, c = r["tbl"], r["name"]
-        if c in ("k", "src") or (t != "rows" and t not in tables):
+    for t, c in sorted(held):
+        if c in ("k", "src") or (t != "rows" and t not in tables) or c in skipped.get(t, ()):
             continue
         if c not in (decl["rows"] if t == "rows" else decl["columns"].get(t, {})):
             out.setdefault(t, []).append(c)
@@ -3119,8 +3239,8 @@ def canonical(v):
 # the SQL helpers (q, ident, jsonl, read_jsonl).
 DOCS_VALUES = (field_docs, run_metric_docs, suite_metrics, lake_docs, guards, scoring_docs, kind_docs)
 DOCS_DATA = ("TABLE_DOCS", "NORMALIZED", "STANDARD_KEYS", "STANDARD_JOINS", "VERDICT_DOCS", "VERDICT_TABLES",
-             "KIND_COLS", "DERIVED_SIM", "UNITS", "PLAIN", "OWN", "META")
-DOCS_CODE = (catalogs_sql, sim_tables, unit_of)
+             "KIND_COLS", "DERIVED_SIM", "UNITS", "PLAIN", "OWN", "META", "SKIPPED_SIMS")
+DOCS_CODE = (catalogs_sql, sim_tables, unit_of, unskipped, skipped_only, skipped_list)
 DOCS_SOURCES = tuple(inspect.getsource(f) for f in DOCS_CODE)
 
 

@@ -72,6 +72,15 @@ simlab.verdict's derive pool:
                counts kept, then nothing to do; the docs as they were give
                the version they had; an index warns of the columns the
                runs hold that fields.toml doesn't declare
+  Skipped      the ppspp sim's jobs (catalog.SKIPPED_SIMS), a source of
+               their own and one beside a strims-sim job: the row fields
+               and viewers columns only they hold, undeclared, neither
+               warned of nor in the views and the doc tables (the raw
+               tables keep them), the doc tables naming strims-sim alone,
+               also once an index makes them again alone; strims-sim's
+               undeclared names warned of, a row field of the shared
+               source's among them; a strims-sim source gone, a field and
+               a table only the ppspp sim's then leave in that index
   DocsMain     the shared catalog's docs are main's: an index whose doc
                files are main's records them at main's key; one whose code
                isn't main's (a branch's, the console server's) and whose
@@ -1462,6 +1471,131 @@ class Docs(DocsFixture):
         self.assertIn(f"index: viewers's columns churned aren't declared in {catalog.relative(copy)}", lines)
         self.assertIn("lag_p99_ms", next(s for s in lines if s.startswith("index: rows's fields ")))
         self.assertEqual(self.docs_index(), first)
+
+
+class Skipped(DocsFixture):
+    def job(self, src, k, sim, row=(), viewers=(), decisions=False):
+        """golden_cli's first job as `sim`'s, key `k`, its row with `row`'s
+        fields too, its viewers with `viewers`' columns (BIGINT, the
+        viewer's number), and with `decisions` a seed_decisions table, as
+        fold takes it."""
+        d = self.root / "jobs-tables" / src.replace("/", "~") / k
+        meta = golden_cli.job_dir(d, (src, k, sim, *golden_cli.JOBS[0][3:]))
+        meta["row"] |= dict.fromkeys(row, 7)
+        if decisions:
+            golden_cli.write_table(d, "seed_decisions", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT")],
+                                   [(1000, 0, 1)])
+        if viewers:
+            schema = d / "viewers.schema.json"
+            schema.write_text(json.dumps(json.loads(schema.read_text()) + [[c, "BIGINT"] for c in viewers]))
+            head, *lines = (d / "viewers.csv").read_text().splitlines()
+            (d / "viewers.csv").write_text("\n".join([",".join([head, *viewers]),
+                                                      *(",".join([s, *[s.split(",")[0]] * len(viewers)])
+                                                        for s in lines)]) + "\n")
+        return meta
+
+    def source(self, src, jobs):
+        db = self.root / "jobs-tables" / f"{src.replace('/', '~')}.duckdb"
+        store_host.fold(db, jobs, src)
+        store_host.export(db, store_host.cache_root() / "cache" / src)
+
+    def columns(self, view):
+        return {r["column_name"] for r in catalog.lake(
+            f"SELECT column_name FROM information_schema.columns WHERE table_catalog = 'lake' "
+            f"AND table_schema = 'main' AND table_name = {catalog.q(view)};")}
+
+    def decisions(self):
+        """Whether the catalog has a seed_decisions view, and table_catalog
+        its entry."""
+        return (bool(self.columns("seed_decisions")),
+                bool(catalog.lake("SELECT name FROM table_catalog WHERE name = 'seed_decisions';")))
+
+    def test_a_skipped_sims_fields_and_columns_are_left_out(self):
+        self.index()
+        before = catalog.undeclared()
+        rows, viewers = self.columns("rows"), self.columns("viewers")
+        self.assertEqual(self.decisions(), (False, False))
+        # The ppspp sim's jobs, one a source of its own and one beside a
+        # strims-sim job (a suite run of both sims), write row fields and the
+        # viewers' node, none of which fields.toml declares (the sim's
+        # alone); strims-sim's jobs, undeclared names of theirs, shared_ms
+        # and a seed_decisions table with a ppspp job.
+        self.source("suite/wt/pp-alone", [self.job("suite/wt/pp-alone", "pp-1", "ppspp",
+                                                   ["pp_alone_ms", "shared_ms"], ["node"], decisions=True)])
+        self.source("suite/wt/pp-mixed", [self.job("suite/wt/pp-mixed", "pp-2", "strims-ppspp:sim", ["pp_mixed_ms"],
+                                                   ["node"]),
+                                          self.job("suite/wt/pp-mixed", "st-2", "strims-sim", ["st_mixed_ms"])])
+        self.source("suite/wt/st-new", [self.job("suite/wt/st-new", "st-3", "strims-sim:scenarios",
+                                                 ["st_new_ms", "shared_ms"], ["st_new_col"], decisions=True)])
+        ppspp = {"pp_alone_ms", "pp_mixed_ms", "node"}
+        decl = vocab.declared(catalog.FIELDS)
+        self.assertEqual({*ppspp, "shared_ms", "st_mixed_ms", "st_new_ms", "st_new_col"}
+                         & {*decl["rows"], *decl["columns"]["viewers"]}, set())
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.index()
+        # The raw tables hold every name the runs wrote, jobs the strims-sim
+        # jobs alone.
+        raw = {(r["table_name"], r["column_name"]) for r in catalog.lake(
+            "SELECT table_name, column_name FROM information_schema.columns WHERE table_catalog = 'lake' "
+            "AND table_schema = 'raw' AND table_name IN ('rows', 'viewers');")}
+        self.assertLessEqual({("rows", "pp_alone_ms"), ("rows", "pp_mixed_ms"), ("viewers", "node")}, raw)
+        jobs = {r["k"]: r["sim"] for r in catalog.lake("SELECT k, sim FROM jobs WHERE src LIKE 'suite/wt/%-%';")}
+        self.assertEqual(jobs, {"st-2": "strims-sim", "st-3": "strims-sim"})
+        # The warning names strims-sim's undeclared names alone: a row field
+        # of the source both sims' jobs share among them, and one a ppspp
+        # job wrote too.
+        want = {**before, "rows": sorted([*before["rows"], "shared_ms", "st_mixed_ms", "st_new_ms"]),
+                "viewers": ["st_new_col"]}
+        self.assertEqual(catalog.undeclared(), want)
+        lines = undeclared_lines(err)
+        self.assertEqual([s.split("'s ", 1)[0] for s in lines], [f"index: {t}" for t in sorted(want)])
+        for name in ppspp:
+            self.assertFalse([s for s in lines if re.search(rf"\b{name}\b", s)], name)
+        self.assertIn(f"index: viewers's columns st_new_col aren't declared in {catalog.relative(catalog.FIELDS)}",
+                      lines)
+
+        # Nor do the views and the doc tables hold the ppspp sim's names, or
+        # name the sim; strims-sim's undeclared ones they hold, undocumented.
+        def shown():
+            self.assertEqual(self.columns("rows"), rows | {"shared_ms", "st_mixed_ms", "st_new_ms"})
+            self.assertEqual(self.columns("viewers"), viewers | {"st_new_col"})
+            got = {(r["tbl"], r["name"]): r for r in catalog.lake(
+                "SELECT tbl, name, description, sims FROM metric_catalog WHERE tbl IN ('rows', 'viewers');")}
+            self.assertEqual({n for _, n in got} & ppspp, set())
+            self.assertIsNone(got[("rows", "st_mixed_ms")]["description"])
+            self.assertEqual([got[("rows", "shared_ms")]["sims"], got[("viewers", "st_new_col")]["sims"]],
+                             [["strims-sim"]] * 2)
+            # A column of the source of both sims' jobs: strims-sim's.
+            self.assertEqual(got[("viewers", "up")]["sims"], ["strims-sim"])
+            # Its strims-sim job's node its host, as a source of strims-sim's
+            # alone reads it.
+            got = catalog.lake("SELECT count(*) AS n, count(*) FILTER (WHERE v.node = r.host) AS host FROM viewers v "
+                               "JOIN raw.viewers r USING (k, src, viewer) WHERE k = 'st-2';")[0]
+            self.assertEqual(got["host"], got["n"])
+            self.assertGreater(got["n"], 0)
+            self.assertEqual(self.decisions(), (True, True))
+
+        shown()
+        self.assertFalse(self.index()[0].changed)
+        # An index that makes the doc tables again alone (a registry's
+        # entry moved) leaves them out too.
+        with mock.patch.dict(catalog.STANDARD_KEYS, {"viewers": "k, viewer, marker"}):
+            self.docs_index()
+            shown()
+        self.docs_index()
+        # With the strims-sim source gone, shared_ms and seed_decisions are
+        # the ppspp sim's alone, in the index that drops the source: its
+        # records leave before it commits.
+        shutil.rmtree(store_host.cache_root() / "cache" / "suite/wt/st-new")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertTrue(self.index()[0].changed)
+        self.assertEqual(catalog.undeclared(), {**before, "rows": sorted([*before["rows"], "st_mixed_ms"])})
+        self.assertNotIn("shared_ms", "\n".join(undeclared_lines(err)))
+        self.assertNotIn("shared_ms", self.columns("rows"))
+        self.assertIn("st_mixed_ms", self.columns("rows"))
+        self.assertEqual(self.decisions(), (False, False))
 
 
 class DocsMain(DocsFixture):
