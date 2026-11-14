@@ -6,13 +6,11 @@
 -- stream's start (t2_s its end, for spans).
 --
 --   lag      the viewers' lag per second (viewer_seconds: each viewer's
---            p99 in strims-sim, its last read's in the ppspp sim), its
---            p50, p99 and max across the viewers there
+--            p99), its p50, p99 and max across the viewers there
 --   heat     each viewer's lag each second: a startup tail is a block at
 --            the left, an intermittent spike a stripe
 --   stall    each stall at a playout delay of $delay ms, $min_stall_ms or
---            longer (the ppspp sim stalls per 4 KiB chunk: many are tiny):
---            the sims' `stalls` table, or for a run without one, its
+--            longer: the sim's `stalls` table, or for a run without one, its
 --            reads played (scoring.sql's playback_of)
 --   phase    the verdict's phase each second (the vocabulary's: startup,
 --            after_down, ..., steady), and `unhealthy` seconds

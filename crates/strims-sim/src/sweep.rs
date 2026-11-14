@@ -62,8 +62,8 @@
 //! - `STRIMS_SIM_CHURN=<viewers/min>:<away s>` makes the first swarm's
 //!   viewers leave and rejoin in turn ([`Scenario::churn`]); `off` none.
 //! - `STRIMS_SIM_ARRIVALS=<profile>` sets when the first swarm's viewers
-//!   arrive ([`Scenario::arrivals`], [`crate::arrivals`]), in the ppspp
-//!   sim's `SIM_ARRIVALS` forms, times in seconds from the stream's start:
+//!   arrive ([`Scenario::arrivals`], [`crate::arrivals`]), times in
+//!   seconds from the stream's start:
 //!   `t0` (the default) with the run; `trickle` within the stream's first
 //!   third, in random order, or `trickle:<per s>` as a Poisson stream at
 //!   that rate; `event:<warm %>:<at s>:<window s>` that percentage of them

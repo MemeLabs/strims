@@ -45,7 +45,7 @@ hack/simlab/store.py's, in the duckdb module: every command but
 `duckdb`, `fold` and `export` (the store's, in the CLI, under any
 python3) runs under hack/'s uv venv, which the script execs itself into.
 
-A run of either sim given an output dir (`SIM_OUT`, `STRIMS_SIM_OUT`)
+A run of the sim given an output dir (`STRIMS_SIM_OUT`)
 writes its tables there as CSV files (the large ones zstd-compressed,
 `<table>.csv.zst`), each beside a `<table>.schema.json` of its columns'
 names and types, and a `series_meta.json`. crates/strims-wan/fields.toml
@@ -307,7 +307,7 @@ from simlab import vocab  # noqa: E402
 # The sims' event kinds, those a knob gates after the others, by knob.
 EVENT_KINDS = "; ".join(
     [", ".join(k for k in vocab.kinds() if vocab.kind(k)["class"] != "derived" and "env_gate" not in vocab.kind(k))]
-    + [f"with {knob}=1 / STRIMS_{knob}=1 {', '.join(ks)}" for knob, ks in vocab.knobs().items()])
+    + [f"with {knob}=1 {', '.join(ks)}" for knob, ks in vocab.knobs().items()])
 
 
 def listed(doc, fields):
@@ -335,7 +335,7 @@ the same rows but keeps both `src` columns, to name as runs.src. Beside
 (k, src) the views join on their own columns: reads and viewer_seconds to
 viewers USING (k, src, viewer), as stalls does; events, parents, node_bins,
 forecast, arrivals, spec_requests, parks, asks and haves to viewers USING (k, src,
-node) (`node` in both sims; strims-sim's viewers also name it `host`),
+node) (`node`, the viewers' `host`),
 and asks and haves to arrivals on the peer's holds (arrivals.node =
 asks.peer, seq, arrivals.incarnation = asks.peer_incarnation, as haves':
 the views' truth); seed_decisions and seed_sends (the seed's, node the

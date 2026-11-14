@@ -55,10 +55,6 @@ threads-required = 3
 priority = 50
 
 [[profile.default.overrides]]
-filter = 'package(strims-ppspp) & test(=sim_job)'
-priority = 85
-
-[[profile.default.overrides]]
 filter = '(package(strims-ppspp) | package(strims-vpn)) & binary(sim)'
 priority = 50
 

@@ -7,11 +7,11 @@
 //! A profile is data in the scenario; the run resolves it at its start
 //! ([`resolve`]) into each viewer's [`HostSpec::arrive_at`] and a
 //! [`Fault::Depart`] per leaver, from the run's rng after the draws every
-//! run makes (see [Determinism](crate#determinism)). The knobs take the
-//! ppspp sim's forms, shares in percent and times in seconds, here from the
-//! swarm's stream start: a cell's stream starts after its seed has booted,
-//! a few seconds into the run, where the ppspp sim's starts a second after
-//! its own, so a profile lands at the same point of the stream in both.
+//! run makes (see [Determinism](crate#determinism)). The knobs take shares
+//! in percent and times in seconds from the swarm's stream start: a cell's
+//! stream starts after its seed has booted, a few seconds into the run, so
+//! a profile lands at the same point of the stream whatever the boot
+//! takes.
 //!
 //! - **Arrivals** ([`Arrivals`]): with [`Arrivals::T0`] every host boots
 //!   with the run. Otherwise the seed (and every host that isn't a viewer
@@ -111,7 +111,7 @@ fn percent(s: &str) -> Result<f64, String> {
 }
 
 /// `t0`, `trickle`, `trickle:<per s>` or `event:<warm %>:<at s>:<window
-/// s>` (`STRIMS_SIM_ARRIVALS`), the ppspp sim's `SIM_ARRIVALS` forms.
+/// s>` (`STRIMS_SIM_ARRIVALS`).
 impl FromStr for Arrivals {
     type Err = String;
 
@@ -158,8 +158,7 @@ impl fmt::Display for Arrivals {
     }
 }
 
-/// `<share %>:<at s>:<window s>[:abrupt|:graceful]` (`STRIMS_SIM_DEPART`),
-/// the ppspp sim's `SIM_DEPART` forms.
+/// `<share %>:<at s>:<window s>[:abrupt|:graceful]` (`STRIMS_SIM_DEPART`).
 impl FromStr for Departures {
     type Err = String;
 

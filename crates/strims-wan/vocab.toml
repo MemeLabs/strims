@@ -1,5 +1,5 @@
-# The sims' event vocabulary: every kind of event an `events` table holds
-# (both sims', and the verdict's `derived_events`), the verdict's phases
+# The sim's event vocabulary: every kind of event an `events` table holds
+# (strims-sim's, and the verdict's `derived_events`), the verdict's phases
 # and episodes, the `parents` table's reasons, and the states a run is in
 # by the verdict (collapse_grid's). Rust embeds it and names
 # its kinds (src/vocab.rs), simlab reads it (hack/simlab/vocab.py), and the
@@ -17,11 +17,10 @@
 #                observation: the run's response; decision: a node's
 #                scheduler decisions, from its event log; derived: the
 #                verdict's own, made from the series (`derived_events`)
-#   sims         the sims here that write it: strims-sim, ppspp (a retired
-#                kind's, those that wrote it). Empty for a kind only other
-#                builds' runs hold; none for a derived kind
-#   env_gate     the knob a sim writes it under (SIM_X, strims-sim's
-#                STRIMS_SIM_X)
+#   sims         the sims here that write it: strims-sim (a retired kind's,
+#                those that wrote it). Empty for a kind only other builds'
+#                runs hold; none for a derived kind
+#   env_gate     the knob a sim writes it under (STRIMS_SIM_X)
 #   description  what happened
 #   node, peer   what those columns hold, -1 for none
 #   value, unit  what `value` holds, and in what
@@ -58,11 +57,11 @@
 
 [kinds.join]
 class = "scenario"
-sims = ["strims-sim", "ppspp"]
+sims = ["strims-sim"]
 description = "A viewer incarnation starts reading the stream."
 node = "the viewer"
 # First of the scenario's kinds: a viewer's join outranks the span it ends
-# (`leave`'s, `crash`'s at its restart).
+# (`crash`'s at its restart).
 phase = "startup"
 scope = "viewer"
 # A joiner's lag settles 1-15 s after it joins into a swarm whose trees
@@ -74,7 +73,6 @@ horizon_s = 20
 
 [kinds.join.notes]
 strims-sim = "Each viewer incarnation's (`Join`'s start), a restart's too."
-ppspp = "Each viewer's, at the start or its arrival, and on taking a place again (`Churn`)."
 
 [kinds.partition]
 class = "scenario"
@@ -138,7 +136,7 @@ node = "the host"
 
 [kinds.latency]
 class = "scenario"
-sims = ["strims-sim", "ppspp"]
+sims = ["strims-sim"]
 description = "A fixed one-way latency from then on."
 node = "the host, or the first group's first host"
 peer = "the second group's first host; -1 for every link of the node"
@@ -151,7 +149,6 @@ horizon_s = 15
 
 [kinds.latency.notes]
 strims-sim = "Between two groups of hosts (`Fault::Latency`), `node` and `peer` the groups' first hosts. In WAN mode it replaces the paths' base latency, and jitter, loss and bandwidth still apply."
-ppspp = "A seed step (`SeedStep::Latency`): every link to and from the seed, `node` the seed and `peer` -1."
 
 [kinds.pause_reading]
 class = "scenario"
@@ -207,7 +204,7 @@ horizon_s = 30
 
 [kinds.depart]
 class = "scenario"
-sims = ["strims-sim", "ppspp"]
+sims = ["strims-sim"]
 description = "A viewer leaves for good."
 node = "the viewer"
 value = "1 for an abrupt departure, 0 for a graceful one"
@@ -222,11 +219,10 @@ horizon_s = 45
 
 [kinds.depart.notes]
 strims-sim = "`Fault::Depart`. An abrupt departure is a crash that leaves the host cut off and stopped, and counts no restart."
-ppspp = "`Depart`. Older runs hold `value` 0 for an abrupt one too: `detail` says how. Gracefully, its neighbours see its links close and drop them, and each viewer among them asks for another at once (`relink`); abruptly, it goes silent, and its neighbours' links to it close at their read timeouts."
 
 [kinds.uplink_rate]
 class = "scenario"
-sims = ["strims-sim", "ppspp"]
+sims = ["strims-sim"]
 description = "The rate of a host's uplink from then on, a level: its starting rate at the run's start (`t_us` 0 or less, at or before the stream's start), then each step."
 node = "the host"
 value = "the rate"
@@ -241,7 +237,6 @@ horizon_s = 60
 
 [kinds.uplink_rate.notes]
 strims-sim = "The upload available on the host's site uplink, in WAN mode (`HostSpec::up_steps`), as when other traffic takes part of it for a while: the starting rate for the first swarm's seed and for each host that steps, if it has a site. A software cap is `rate_limit`'s, competing uploads `competing_start`'s."
-ppspp = "The seed's uplink: its starting rate, then each seed step (`SeedStep::Uplink`); `node` the seed. An incident's slowed relay is `incident`'s."
 
 [kinds.competing_start]
 class = "scenario"
@@ -268,45 +263,11 @@ sims = ["strims-sim"]
 description = "A host that comes after the run's start boots (`HostSpec::arrive_at`): its node starts, joins its swarms and dials its links."
 node = "the host"
 
-[kinds.leave]
-class = "scenario"
-sims = ["ppspp"]
-description = "A viewer leaves mid-stream (`Churn`): its neighbours see its links close, as a closed tab's, and a new viewer with nothing takes its place on the same links a while later (its `join`)."
-node = "the viewer"
-phase = "after_departure"
-until = "join"
-# The churn cell's: no leave moves the others' lag off the cell's level,
-# and its successor's settles at it 3-5 s after its join.
-horizon_s = 20
-
-[kinds.reconnect]
-class = "scenario"
-sims = ["ppspp"]
-description = "The seed's channels close and open again on both ends, as after a dropped and redialed link (`SeedStep::Reconnect`)."
-node = "the seed"
-phase = "after_disruption"
-# No run holds one yet: the seed's children open their streams again.
-horizon_s = 30
-
-[kinds.incident]
-class = "scenario"
-sims = ["ppspp"]
-description = "Something happens to the busiest relay, the honest peer that uploaded the most so far, mid-stream (`Incident`): it disappears without a word, or its uplink drops."
-node = "the relay"
-value = "its new uplink, 0 when it dies"
-unit = "bytes/s"
-detail = "what happened"
-details = ["dies", "slows"]
-phase = { dies = "after_departure", slows = "after_down" }
-# No run holds one yet: a relay that dies is an abrupt departure's (its
-# children notice at READ_TIMEOUT), one that slows a step down's.
-horizon_s = 60
-
 # --- observation ------------------------------------------------------------
 
 [kinds.first_read]
 class = "observation"
-sims = ["strims-sim", "ppspp"]
+sims = ["strims-sim"]
 description = "A viewer incarnation's first read."
 node = "the viewer"
 value = "the time since its join"
@@ -314,23 +275,21 @@ unit = "ms"
 
 [kinds.first_read.notes]
 strims-sim = "Its first frame read (`Join`)."
-ppspp = "Its first chunk read."
 
 [kinds.caught_up]
 class = "observation"
-sims = ["strims-sim", "ppspp"]
-description = "A viewer incarnation's first read within delivery's share of the 2 s glass-to-glass target of its publishing (strims-sim's `CAUGHT_UP_MS`, the ppspp sim's `CAUGHT_UP`)."
+sims = ["strims-sim"]
+description = "A viewer incarnation's first read within delivery's share of the 2 s glass-to-glass target of its publishing (`CAUGHT_UP_MS`)."
 node = "the viewer"
 value = "the time since its join"
 unit = "ms"
 
 [kinds.caught_up.notes]
 strims-sim = "Its first frame read that fresh (`Join`)."
-ppspp = "Its first chunk read that fresh."
 
 [kinds.parent_departed]
 class = "observation"
-sims = ["strims-sim", "ppspp"]
+sims = ["strims-sim"]
 description = "A viewer's push parent departed (`depart`): one for each viewer whose parent of some stream it was, timed at the departure. The scheduler's own event of a parent's channel closing is another kind, `parent_channel_closed`."
 node = "the viewer"
 peer = "the parent that departed"
@@ -340,7 +299,6 @@ details = ["graceful", "abrupt"]
 
 [kinds.parent_departed.notes]
 strims-sim = "`Report::parent_losses`: a host that departed while it was a push parent of one of the viewer's streams of the first swarm, at the viewer's last stats sample before. The viewer's notice is `parent_noticed`'s."
-ppspp = "Each neighbour whose open parent it was on some stream."
 
 [kinds.parent_noticed]
 class = "observation"
@@ -350,13 +308,6 @@ node = "the viewer"
 peer = "the parent that departed"
 value = "the time since the departure"
 unit = "ms"
-
-[kinds.relink]
-class = "observation"
-sims = ["ppspp"]
-description = "A viewer that lost a neighbour to a departure links to another (`Sim::relink`), as a client keeping its peers asks its tracker again once a link closes."
-node = "the viewer"
-peer = "the node it links to"
 
 [kinds.copies]
 class = "observation"
@@ -368,7 +319,7 @@ value = "its copies"
 [kinds.parent_channel_closed]
 class = "observation"
 sims = []
-env_gate = "SIM_SPEC"
+env_gate = "STRIMS_SIM_SPEC"
 description = "The scheduler's own event: the child's channel with its parent of a stream closed, whatever the cause (the parent departing or closing it, a read timeout, or the child's own close). Timed at the close, one for each stream."
 node = "the child"
 peer = "the parent"
@@ -381,7 +332,7 @@ value = "the stream"
 [kinds.parent_choice]
 class = "decision"
 sims = []
-env_gate = "SIM_SPEC"
+env_gate = "STRIMS_SIM_SPEC"
 description = "A parent check asked the peer to push a stream (STREAM_REQUEST)."
 node = "the node"
 peer = "the peer asked"
@@ -392,7 +343,7 @@ details = ["open", "switch"]
 [kinds.parent_open]
 class = "decision"
 sims = []
-env_gate = "SIM_SPEC"
+env_gate = "STRIMS_SIM_SPEC"
 description = "The peer opened a stream that had no open parent."
 node = "the node"
 peer = "the parent"
@@ -401,7 +352,7 @@ value = "the stream"
 [kinds.parent_switch]
 class = "decision"
 sims = []
-env_gate = "SIM_SPEC"
+env_gate = "STRIMS_SIM_SPEC"
 description = "The peer opened a stream in place of its open parent."
 node = "the node"
 peer = "the new parent"
@@ -410,7 +361,7 @@ value = "the stream"
 [kinds.prune]
 class = "decision"
 sims = []
-env_gate = "SIM_SPEC"
+env_gate = "STRIMS_SIM_SPEC"
 description = "The node cancelled the peer as a stream's parent for its misses."
 node = "the node"
 peer = "the parent"
@@ -421,7 +372,7 @@ details = ["silent", "lossy", "silent_lossy"]
 [kinds.shed_by]
 class = "decision"
 sims = []
-env_gate = "SIM_SPEC"
+env_gate = "STRIMS_SIM_SPEC"
 description = "The peer, the node's parent of a stream, closed it (STREAM_CLOSE)."
 node = "the node"
 peer = "the parent"
@@ -430,7 +381,7 @@ value = "the stream"
 [kinds.window_collapse]
 class = "decision"
 sims = []
-env_gate = "SIM_SPEC"
+env_gate = "STRIMS_SIM_SPEC"
 description = "The request window to the peer fell to its minimum (`ledbat::MIN_WINDOW`), by a congestion timeout or by the delay signal."
 node = "the node"
 peer = "the peer"
@@ -442,7 +393,7 @@ details = ["cto", "delay"]
 [kinds.timeout_loss]
 class = "decision"
 sims = []
-env_gate = "SIM_SPEC"
+env_gate = "STRIMS_SIM_SPEC"
 description = "Requests to the peer timed out, and the request window went from one size to another, halved at most once a round trip."
 node = "the node"
 peer = "the peer"
@@ -453,7 +404,7 @@ details = ["halved"]
 [kinds.read_skip]
 class = "decision"
 sims = []
-env_gate = "SIM_SPEC"
+env_gate = "STRIMS_SIM_SPEC"
 description = "A low latency reader that waited on the first chunk missing after its first read position moved on to its newest stored run (`FIRST_GAP_WAIT`)."
 node = "the node"
 value = "the chunks passed over"
@@ -532,28 +483,26 @@ unit = "bytes/s"
 
 [kinds.uplink]
 class = "scenario"
-sims = ["strims-sim", "ppspp"]
-replaced_by = { strims-sim = "rate_limit", ppspp = "uplink_rate" }
-description = "A host's upload limit from then on: a cap on its software in strims-sim, the seed's link in the ppspp sim."
+sims = ["strims-sim"]
+replaced_by = "rate_limit"
+description = "A host's upload limit from then on: a cap on its software."
 node = "the host"
 value = "the limit"
 unit = "bytes/s"
 
 [kinds.uplink.notes]
 strims-sim = "A new upload cap for the host (`Fault::Uplink`, `Node::set_rate_limit`), applied within 100 ms. Its site's own rate steps are `up_step`'s."
-ppspp = "A seed step (`SeedStep::Uplink`): the seed's uplink becomes `value`; `node` the seed. Its steps alone, not its starting rate."
 
 [kinds.parent_lost]
 class = "observation"
-sims = ["strims-sim", "ppspp"]
-replaced_by = { strims-sim = "parent_noticed", ppspp = "parent_departed" }
-description = "A viewer's push parent departed (`depart`), as older runs name it. Their rows read as the current kinds by sim and, in strims-sim, by `value` (the lab's events views, `simlab.query.current_kind_sql`): the ppspp sim's as `parent_departed`; strims-sim's as `parent_noticed`, and those of `value` -1 as `parent_departed` with no `value`."
+sims = ["strims-sim"]
+replaced_by = "parent_noticed"
+description = "A viewer's push parent departed (`depart`), as older runs name it. Their rows read as the current kinds by `value` (the lab's events views, `simlab.query.current_kind_sql`): as `parent_noticed`, and those of `value` -1 as `parent_departed` with no `value`."
 node = "the viewer"
 peer = "the parent that departed"
 
 [kinds.parent_lost.notes]
 strims-sim = "`Report::parent_losses`: a host that departed while it was a push parent of one of the viewer's streams of the first swarm, at the viewer's last stats sample before. Timed when the viewer stopped counting on it (its link to it closed, or a stats sample named it parent of no stream), or at the departure if it never did; `value` the ms from the departure until then, -1 if it never did; `detail` empty. A row of `value` 0 or more reads as `parent_noticed`, its `value` as it is; one of -1, timed at the departure, as `parent_departed`, its `value` none (it held no stream count)."
-ppspp = "Timed at the departure, one for each neighbour whose open parent it was on some stream; `value` the streams it was the parent of; `detail` the departure's, graceful or abrupt. It reads as `parent_departed`, its `value` and `detail` as they are."
 
 # --- phases -----------------------------------------------------------------
 # What each second of a run, and of each viewer, is (`verdict.timeline`):
@@ -572,7 +521,7 @@ description = "Trees forming: the run's first seconds (`start`'s horizon, `START
 colour = "#2a78d6"
 
 [phases.after_down]
-description = "After a host's upload fell: its uplink's rate or its cap stepped down (`uplink_rate`, `rate_limit`, against its previous level), other software's uploads shared it (`competing_start`, to its stop), or the busiest relay's slowed (`incident`)."
+description = "After a host's upload fell: its uplink's rate or its cap stepped down (`uplink_rate`, `rate_limit`, against its previous level), or other software's uploads shared it (`competing_start`, to its stop)."
 colour = "#eb6834"
 
 [phases.after_up]
@@ -584,11 +533,11 @@ description = "Every other second of the verdict's: no window holds it."
 colour = "#c3c2b7"
 
 [phases.after_departure]
-description = "After a peer went: a viewer departed (`depart`) or left a while (`leave`, to its successor's join), a host crashed (`crash`, to its restart), or the busiest relay died (`incident`)."
+description = "After a peer went: a viewer departed (`depart`), or a host crashed (`crash`, to its restart)."
 colour = "#d55181"
 
 [phases.after_disruption]
-description = "After the swarm's links or stream were disturbed: a latency step (`latency`), a partition (`partition`, to its repair), a hold (`hold`, to its release), a host's readers paused (`pause_reading`, to their resume), the seed's new epoch (`reset_writer`), a new link (`connect`), the seed's channels reopened (`reconnect`)."
+description = "After the swarm's links or stream were disturbed: a latency step (`latency`), a partition (`partition`, to its repair), a hold (`hold`, to its release), a host's readers paused (`pause_reading`, to their resume), the seed's new epoch (`reset_writer`), a new link (`connect`)."
 colour = "#008300"
 
 [phases.tail]
@@ -626,7 +575,7 @@ description = "A STREAM_OPEN replaced the open parent (graft before prune)."
 colour = "#d95926"
 
 [reasons.lost]
-description = "No one ended the subscription: the channel to the parent closed, or a new stream started (a reset). The sims' `parents` count the node's own stop too: strims-sim's crash or abrupt departure, the ppspp sim's node that left, departed or died."
+description = "No one ended the subscription: the channel to the parent closed, or a new stream started (a reset). The `parents` table counts the node's own stop too: its crash or abrupt departure."
 colour = "#199e70"
 
 [reasons.prune]

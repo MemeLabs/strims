@@ -225,8 +225,8 @@ class Compare(unittest.TestCase):
     def test_renamed(self):
         """A row field or series_meta key renamed (Renamed) is compared
         under its new name: the rename moves nothing, its value may."""
-        a, b = self.pair(base={"row": {"relay_sheds": 4}, "meta": {"sim": "ppspp", "asks_lost": 0, "old_lost": 1}},
-                         head={"row": {"sheds_sent": 4}, "meta": {"sim": "ppspp", "asks_lost": 0, "lost": 1}})
+        a, b = self.pair(base={"row": {"relay_sheds": 4}, "meta": {"sim": "strims-sim", "asks_lost": 0, "old_lost": 1}},
+                         head={"row": {"sheds_sent": 4}, "meta": {"sim": "strims-sim", "asks_lost": 0, "lost": 1}})
         self.assertEqual(sorted((m.name, m.kind) for m in neutral.compare(a, b, neutral.Expect())),
                          [("row.relay_sheds", "gone"), ("row.sheds_sent", "new"), ("series_meta.lost", "new"),
                           ("series_meta.old_lost", "gone")])
@@ -234,11 +234,11 @@ class Compare(unittest.TestCase):
         self.assertEqual(neutral.compare(a, b, neutral.Expect(), renamed), [])
         self.assertEqual(renamed.unused(), ["no_such=x"])
         # A value moved under the new name is a move, the new name's.
-        b2 = job(self.root, "b2", row={"sheds_sent": 5}, meta={"sim": "ppspp", "asks_lost": 0, "lost": 1})
+        b2 = job(self.root, "b2", row={"sheds_sent": 5}, meta={"sim": "strims-sim", "asks_lost": 0, "lost": 1})
         self.assertEqual([(m.name, m.kind, m.text) for m in neutral.compare(a, b2, neutral.Expect(), renamed)],
                          [("row.sheds_sent", "value", "row.sheds_sent: 4 -> 5")])
         # A base that holds the new name too keeps both as written.
-        a2 = job(self.root, "a2", row={"relay_sheds": 4, "sheds_sent": 4}, meta={"sim": "ppspp", "asks_lost": 0,
+        a2 = job(self.root, "a2", row={"relay_sheds": 4, "sheds_sent": 4}, meta={"sim": "strims-sim", "asks_lost": 0,
                                                                                  "lost": 1})
         self.assertEqual([(m.name, m.kind) for m in neutral.compare(a2, b, neutral.Expect(), renamed)],
                          [("row.relay_sheds", "gone")])

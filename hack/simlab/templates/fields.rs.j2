@@ -205,7 +205,6 @@ impl JsonRow {
 {% endif %}
 {% if "text" in methods %}
 
-{% if text_check == "filter" %}
     /// A string, its quotes, backslashes and control characters left out
     /// (names and hashes).
     pub(crate) fn str(&mut self, key: impl TextKey, v: &str) -> &mut Self {
@@ -215,14 +214,6 @@ impl JsonRow {
             .collect();
         self.field(key.name(), format_args!("\"{v}\""))
     }
-{% else %}
-    /// A string without quotes, backslashes or control characters (names
-    /// and tokens); one with any is the sim's mistake.
-    pub(crate) fn str(&mut self, key: impl TextKey, v: &str) -> &mut Self {
-        assert!(!v.contains(|c: char| c == '"' || c == '\\' || c.is_control()), "{v:?}");
-        self.field(key.name(), format_args!("\"{v}\""))
-    }
-{% endif %}
 {% endif %}
 {% if "json" in methods %}
 

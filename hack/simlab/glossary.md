@@ -12,8 +12,8 @@ them, so a change here changes that prompt too.
 
 ## The sims and their results
 
-- **Sims.** Two simulators of the strims swarm: `ppspp` (strims-ppspp's
-  sim) and `strims-sim`. Both are deterministic: a binary, a cell's env
+- **Sims.** The simulator of the strims swarm, `strims-sim` (real nodes
+  on a simulated network). It is deterministic: a binary, a cell's env
   and a seed give the same run every time.
 - **Cell.** A scenario with its settings (`experiment_cells.env`): how
   many viewers, the seed's and viewers' uplinks, steps in them, churn,

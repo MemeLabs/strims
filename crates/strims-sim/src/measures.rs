@@ -124,8 +124,7 @@ use strims_wan::playout::{self, DELAYS_MS, Totals};
 const DEPTH_WARM: Duration = Duration::from_secs(10);
 /// The share of the push deadlines that come due in an interval between
 /// samples that a viewer holding a whole copy from the seed must meet with
-/// on-time pushes to count as whole in it ([`Report::holder_short`]), the
-/// ppspp sim's bound.
+/// on-time pushes to count as whole in it ([`Report::holder_short`]).
 const HOLDER_WHOLE: f64 = 0.95;
 /// A swarm's joins ([`Report::joins`]): how many, and the ms each took to
 /// its first frame and to catch up, ascending, of those that did.
@@ -456,8 +455,7 @@ impl Report {
         out
     }
 
-    /// The row's playback columns, as the ppspp sim's rows have them: per
-    /// delay `D` of [`DELAYS_MS`], `swarm`'s viewers' playouts of what they
+    /// The row's playback columns: per delay `D` of [`DELAYS_MS`], `swarm`'s viewers' playouts of what they
     /// read ([`playout::play`], the tables' `stalls`), each viewer from its
     /// playback's start to its last frame's play, or its departure if that
     /// came first ([`Totals`]): the stalls per minute played
@@ -523,8 +521,7 @@ impl Report {
         }
     }
 
-    /// The row's columns of a run with arrivals or departures, named as the
-    /// ppspp sim's rows name them:
+    /// The row's columns of a run with arrivals or departures:
     /// - `arrived_honest`, `arrived_dishonest`: the honest and, with hostile
     ///   hosts, the hostile viewers that arrived after the run's start
     ///   ([`HostSpec::arrive_at`](crate::HostSpec::arrive_at));
@@ -673,8 +670,7 @@ impl Report {
     /// Viewer `v`'s lag in each second of `swarm`'s stream, in ms: the p99
     /// of the frames it read in the second, or a second more than the last
     /// second's in one it read none in (`None` before its first read), as
-    /// `hack/capture/analyze.py` reads the series and the ppspp sim's rows
-    /// measure recovery.
+    /// `hack/capture/analyze.py` reads the series.
     pub fn lag_by_second(&self, swarm: usize, v: &ViewerReport) -> Vec<Option<u32>> {
         let Some(spec) = self.scenario.swarms.get(swarm) else {
             return Vec::new();
@@ -706,7 +702,7 @@ impl Report {
     /// viewers there before the departures' window opened that didn't
     /// leave. Each second's lag is the p90 over them of each one's
     /// ([`Report::lag_by_second`]), from the second the window opens in to
-    /// the stream's stop, as the ppspp sim's rows measure it.
+    /// the stream's stop.
     pub fn departure_recovery(&self, swarm: usize) -> Option<Recovery> {
         let d = self.scenario.departures?;
         let spec = self.scenario.swarms.get(swarm)?;
@@ -1032,7 +1028,7 @@ impl Report {
     /// them and their incarnations at the run's end: those they accepted
     /// and rejected as a parent, and those they closed because their
     /// uplink saturated (`PushStats`' accepted, rejected and sheds_sent,
-    /// as the ppspp sim's row sums them).
+    /// summed).
     pub fn honest_relay_counters(&self, swarm: usize) -> (u64, u64, u64) {
         let Some(spec) = self.scenario.swarms.get(swarm) else {
             return (0, 0, 0);
@@ -1302,17 +1298,15 @@ impl Report {
     /// it passed), with clock skew its hosts'
     /// offsets (`clock_offsets_ms`, each host's in host order;
     /// `clock_max_ms`, the largest; `clock_<class>`, the hosts per
-    /// [`SkewClass::name`]), as the ppspp sim's rows name them, then per
-    /// scenario swarm 0 its stream count (`streams`, at least 1, as the
-    /// ppspp sim's rows name it), delivery, lag (overall and per bucket), its
+    /// [`SkewClass::name`]), then per scenario swarm 0 its stream count
+    /// (`streams`, at least 1), delivery, lag (overall and per bucket), its
     /// viewers' playback at each delay `D` of [`DELAYS_MS`]
     /// (`stalls_per_min_D`, `stalled_share_D`, `startup_ms_D`: [`Totals`]
     /// of their playouts, and with hostile hosts the honest viewers' with
     /// `_honest`), the meter's measures, and the relays, whole-copy holders
     /// and seed's answers (`relay_share`, `holder_short`,
     /// `seed_pull_share`; see the module docs). With
-    /// arrivals or departures, in the ppspp sim's rows' names: their
-    /// profiles (`arrivals`, `depart`), the viewers that arrived and
+    /// arrivals or departures: their profiles (`arrivals`, `depart`), the viewers that arrived and
     /// departed (`arrived`, `departed`, each with `_honest`), the joins
     /// ([`Report::joins`]: `join_p50_ms`, `join_p90_ms`, `join_unread`,
     /// `caught_up_p50_ms`, `caught_up_p90_ms`, `caught_up_never`), the
@@ -1772,8 +1766,8 @@ impl Report {
         }
     }
 
-    /// The uplinks' bytes by layer over every host, in the ppspp sim's
-    /// rows' terms (`up_*`, adding up to `up_wire`): the ppspp layers from
+    /// The uplinks' bytes by layer over every host (`up_*`, adding up to
+    /// `up_wire`): the ppspp layers from
     /// the honest hosts' runners; `up_hostile`, what hostile hosts wrote;
     /// `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame
     /// headers, control frames and link handshakes; and in WAN mode
@@ -1949,8 +1943,8 @@ impl Report {
     }
 
     /// The request windows of the honest hosts' open channels of `swarm`
-    /// at every stats sample while it streamed ([`WindowSamples`]), as the
-    /// ppspp sim's rows name them: the window's p10, p50 and p90 and the
+    /// at every stats sample while it streamed ([`WindowSamples`]): the
+    /// window's p10, p50 and p90 and the
     /// flight's p50 and p90 in KiB, the requests out's p50, p90 and most,
     /// and the queuing delay's and the request timeout's p50 and p90 in
     /// ms. Most samples of a push channel have nothing out, so the flight
@@ -2189,8 +2183,8 @@ impl Report {
     }
 
     /// The requests of swarm `swarm` that timed out unanswered
-    /// ([`crate::stats::SwarmCounters::timeouts`], every incarnation), as
-    /// the ppspp sim's rows count them: the honest viewers' (every host but
+    /// ([`crate::stats::SwarmCounters::timeouts`], every incarnation): the
+    /// honest viewers' (every host but
     /// the seed and the hostile ones), the seed's, and the hostile hosts'.
     pub fn timeouts(&self, swarm: usize) -> (u64, u64, u64) {
         let seed = self.scenario.swarms.get(swarm).map(|s| s.seed);

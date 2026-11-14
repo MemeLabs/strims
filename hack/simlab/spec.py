@@ -24,10 +24,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from . import vocab
 
-SIMS = ("strims-sim", "ppspp")
-LINES = ("decl", "p4tf")
-Sim = Literal["strims-sim", "ppspp"]
-Line = Literal["decl", "p4tf"]
+SIMS = ("strims-sim",)
+LINES = ("decl", "p4tf", "attackers", "extras")
+Sim = Literal["strims-sim"]
+Line = Literal["decl", "p4tf", "attackers", "extras"]
 # The lab's programs that add a field to a sim's row, its name an
 # underscore's: suite (hack/simlab/suite.py's local runs).
 Writer = Literal["suite"]
@@ -98,8 +98,8 @@ class Table(BaseModel):
     grain: str | None = None
     keys: str | None = None
     joins: str | None = None
-    knobs: list[str] = Field([], description="The settings that write it, without their sim's prefix "
-                                             "(STRIMS_SIM_ or SIM_).")
+    knobs: list[str] = Field([], description="The settings that write it, without their prefix "
+                                             "(STRIMS_SIM_).")
     sample: bool = Field(False, description="A sample table (store_host.SAMPLE_TABLES): the farm uploads it apart.")
     zstd: bool = Field(False, description="Written zstd-compressed, <table>.csv.zst.")
     normalized: str | None = Field(None, description="What the catalog's view changes.")
@@ -107,7 +107,7 @@ class Table(BaseModel):
         None, description="Every numeric column but the ids writes none as -1, declared or not: the view reads "
                           "-1 as none in each.")
     shared: Literal["seed_log"] | None = Field(
-        None, description="Its columns are a shared formatter's, which both sims write through.")
+        None, description="Its columns are a shared formatter's, which the sim writes through.")
     description: str | None = None
     notes: dict[Sim, str] = {}
 

@@ -77,36 +77,41 @@ def simdb_test():
 
 T0 = [(None, None)] * 5
 TRICKLE = [(None, None), (None, None), (3, None), (6, None), (9, 31)]
-PP_ENV = {"SIM_STREAMS": "16", "SIM_CHUNK": "4096", "SIM_SERIES": "1"}
 SS_ENV = {"STRIMS_SIM_JOB": "1", "STRIMS_SIM_TCP": "1", "STRIMS_SIM_SERIES": "1"}
+STAR_ENV = {**SS_ENV, "STRIMS_SIM_CAL_VIEWERS": "5", "STRIMS_SIM_CHUNK": "4096"}
 # (src, k, sim, test, cell, arm, seed, env, stays, shape): shape is how the
 # run goes wrong, if it does.
 FARM = "farm/sf0001-00+1more-aaaa"
 OTHER = "farm/se0001-01+0more-cccc"
 JOBS = [
-    ("suite/wt/inv1", "pp-base:star-5:1", "ppspp", "sim_job", "star-5", "ppspp-base", 1, PP_ENV, T0, None),
-    ("suite/wt/inv1", "pp-tree:star-5:1", "ppspp", "sim_job", "star-5", "ppspp-tree", 1, PP_ENV, T0, "collapse"),
+    ("suite/wt/inv1", "st-base:star-5:1", "strims-sim", "calibration_star", "star-5", "star-base", 1, STAR_ENV, T0,
+     None),
+    ("suite/wt/inv1", "st-tree:star-5:1", "strims-sim", "calibration_star", "star-5", "star-tree", 1, STAR_ENV, T0,
+     "collapse"),
     ("suite/wt/inv1", "ss-base:halve-5:1", "strims-sim", "calibration_star", "halve-5", "ss-base", 1, SS_ENV,
      TRICKLE, "step"),
     ("suite/wt/inv1", "ss-tree:halve-5:1", "strims-sim", "calibration_star", "halve-5", "ss-tree", 1, SS_ENV,
      TRICKLE, "rise"),
-    ("suite/wt/inv2", "pp-base:star-5:2", "ppspp", "sim_job", "star-5", "ppspp-base", 2, PP_ENV, TRICKLE, None),
-    ("suite/wt/inv2", "pp-tree:star-5:2", "ppspp", "sim_job", "star-5", "ppspp-tree", 2, PP_ENV, TRICKLE, "rise"),
+    ("suite/wt/inv2", "st-base:star-5:2", "strims-sim", "calibration_star", "star-5", "star-base", 2, STAR_ENV,
+     TRICKLE, None),
+    ("suite/wt/inv2", "st-tree:star-5:2", "strims-sim", "calibration_star", "star-5", "star-tree", 2, STAR_ENV,
+     TRICKLE, "rise"),
     # the second suite invocation holds a copy of the first's job
-    ("suite/wt/inv2", "pp-base:star-5:1", "ppspp", "sim_job", "star-5", "ppspp-base", 1, PP_ENV, T0, None),
-    (f"{FARM}/i-1/0", "f-off-2001", "strims-ppspp:sim", "sim_job", "sf0001-00", "x", 2001,
-     {**PP_ENV, "SIM_EXP": "off", "SIM_SEED": "2001"}, T0, None),
-    (f"{FARM}/i-1/0", "f-a-2001", "strims-ppspp:sim", "sim_job", "sf0001-00", "x", 2001,
-     {**PP_ENV, "SIM_EXP": "a", "SIM_SEED": "2001"}, T0, "collapse"),
+    ("suite/wt/inv2", "st-base:star-5:1", "strims-sim", "calibration_star", "star-5", "star-base", 1, STAR_ENV, T0,
+     None),
+    (f"{FARM}/i-1/0", "f-off-2001", "strims-sim:scenarios", "calibration_star", "sf0001-00", "x", 2001,
+     {**STAR_ENV, "STRIMS_SIM_EXP": "off", "STRIMS_SIM_SEED": "2001"}, T0, None),
+    (f"{FARM}/i-1/0", "f-a-2001", "strims-sim:scenarios", "calibration_star", "sf0001-00", "x", 2001,
+     {**STAR_ENV, "STRIMS_SIM_EXP": "a", "STRIMS_SIM_SEED": "2001"}, T0, "collapse"),
     (f"{FARM}/i-1/0", "g-off-2001", "strims-sim:scenarios", "calibration_star", "sf0001-01", "x", 2001,
      {**SS_ENV, "STRIMS_SIM_EXP": "off", "STRIMS_SIM_SEED": "2001"}, TRICKLE, "step"),
     (f"{FARM}/i-1/0", "g-a-2001", "strims-sim:scenarios", "calibration_star", "sf0001-01", "x", 2001,
      {**SS_ENV, "STRIMS_SIM_EXP": "a", "STRIMS_SIM_SEED": "2001"}, TRICKLE, None),
     # a second instance's flush, pulled without its reads
-    (f"{FARM}/i-2/3", "f-off-2002", "strims-ppspp:sim", "sim_job", "sf0001-00", "x", 2002,
-     {**PP_ENV, "SIM_EXP": "off", "SIM_SEED": "2002"}, TRICKLE, None),
-    (f"{FARM}/i-2/3", "f-a-2002", "strims-ppspp:sim", "sim_job", "sf0001-00", "x", 2002,
-     {**PP_ENV, "SIM_EXP": "a", "SIM_SEED": "2002"}, TRICKLE, "rise"),
+    (f"{FARM}/i-2/3", "f-off-2002", "strims-sim:scenarios", "calibration_star", "sf0001-00", "x", 2002,
+     {**STAR_ENV, "STRIMS_SIM_EXP": "off", "STRIMS_SIM_SEED": "2002"}, TRICKLE, None),
+    (f"{FARM}/i-2/3", "f-a-2002", "strims-sim:scenarios", "calibration_star", "sf0001-00", "x", 2002,
+     {**STAR_ENV, "STRIMS_SIM_EXP": "a", "STRIMS_SIM_SEED": "2002"}, TRICKLE, "rise"),
     # a job of another run, which sf0001-01 reused
     (f"{OTHER}/i-1/0", "g-off-2002", "strims-sim:scenarios", "calibration_star", "se0001-01", "x", 2002,
      {**SS_ENV, "STRIMS_SIM_EXP": "off", "STRIMS_SIM_SEED": "2002"}, T0, None),
@@ -114,7 +119,7 @@ JOBS = [
 # The flushes whose reads S3 keeps but the cache lacks.
 NO_READS = {f"{FARM}/i-2/3"}
 # The jobs with a forecast log and per-node bins.
-FORECAST = {"pp-base:star-5:1", "f-off-2001"}
+FORECAST = {"st-base:star-5:1", "f-off-2001"}
 
 
 def series(sim, stays, shape):
@@ -169,8 +174,7 @@ def job_dir(d, job):
     """Writes `job`'s output dir as its sim writes it, and returns the job
     simdb.fold takes."""
     src, k, sim, test, cell, arm, seed, env, stays, shape = job
-    ss = sim.startswith("strims-sim")
-    s = series("strims-sim" if ss else "ppspp", stays, shape)
+    s = series("strims-sim", stays, shape)
     d.mkdir(parents=True)
     n = len(stays)
     up = lambda t: [u for at, u in s["seed_up"] if at <= t][-1]
@@ -182,22 +186,16 @@ def job_dir(d, job):
                                ("avail", "BIGINT"), ("busy", "BIGINT"), ("copies", "BIGINT"), ("pushed", "BIGINT")],
                 seconds)
     vs = [(v, t, s["lag"][v][t], s["frames"][v][t]) for v in range(n) for t in range(SECS)
-          if not (ss and s["frames"][v][t] < 0)]
+          if s["frames"][v][t] >= 0]
     write_table(d, "viewer_seconds", [("viewer", "BIGINT"), ("sec", "BIGINT"), ("lag_ms", "BIGINT"),
                                       ("frames", "BIGINT")], vs)
-    start = -7 if ss else -1000
+    start = -7
     arrive = [start if a < 0 else a for a in s["arrive_ms"]]
-    if ss:
-        write_table(d, "viewers", [("viewer", "BIGINT"), ("host", "BIGINT"), ("name", "VARCHAR"), ("up", "BIGINT"),
-                                   ("hostile", "BOOLEAN"), ("churned", "BOOLEAN"), ("arrive_ms", "BIGINT"),
-                                   ("depart_ms", "BIGINT")],
-                    [(v, v + 1, f"v{v}", 2_000_000, False, s["depart_ms"][v] is not None, arrive[v],
-                      s["depart_ms"][v]) for v in range(n)])
-    else:
-        write_table(d, "viewers", [("viewer", "BIGINT"), ("node", "BIGINT"), ("up", "BIGINT"), ("hostile", "BOOLEAN"),
-                                   ("churned", "BOOLEAN"), ("arrive_ms", "BIGINT"), ("depart_ms", "BIGINT")],
-                    [(v, v + 1, 2_000_000, False, s["depart_ms"][v] is not None, arrive[v], s["depart_ms"][v])
-                     for v in range(n)])
+    write_table(d, "viewers", [("viewer", "BIGINT"), ("host", "BIGINT"), ("name", "VARCHAR"), ("up", "BIGINT"),
+                               ("hostile", "BOOLEAN"), ("churned", "BOOLEAN"), ("arrive_ms", "BIGINT"),
+                               ("depart_ms", "BIGINT")],
+                [(v, v + 1, f"v{v}", 2_000_000, False, s["depart_ms"][v] is not None, arrive[v],
+                  s["depart_ms"][v]) for v in range(n)])
     # A read every 250 ms of each second a viewer reads, at its lag.
     reads = [(v, t * 1000 + q * 250, 4 * t + q, s["lag"][v][t]) for v in range(n) for t in range(SECS)
              for q in range(4) if s["lag"][v][t] >= 0 and s["frames"][v][t] > 0]
@@ -303,11 +301,11 @@ def build(root):
     runs = root / "target" / "sim-suite" / "farm-runs"
     runs.mkdir(parents=True)
     (runs / "sf0001.json").write_text(json.dumps({
-        "cells": [{"name": "star-5", "sim": "ppspp", "test": "sim_job", "why": "a star", "env": PP_ENV,
-                   "mem_gib": 2},
+        "cells": [{"name": "star-5", "sim": "strims-sim", "test": "calibration_star", "why": "a star",
+                   "env": STAR_ENV, "mem_gib": 2},
                   {"name": "halve-5", "sim": "strims-sim", "test": "calibration_star", "why": "a halving",
                    "env": SS_ENV, "mem_gib": 2}],
-        "knob": {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_EXP"}, "values": ["off", "a"],
+        "knob": {"strims-sim": "STRIMS_SIM_EXP"}, "values": ["off", "a"],
         "arms": {"x": "1" * 40}, "seeds": [2001, 2002], "base": "off", "question": "does a help?"}) + "\n")
     farm = root / "target" / "sim-farm"
     (farm / FARM.split("/")[1]).mkdir(parents=True)
@@ -358,7 +356,7 @@ INVOCATIONS = [
     ("sql-runs", SIMDB, ["sql", "SELECT src, k, cell, arm, seed FROM runs ORDER BY ALL"]),
     ("sql-runs-json", SIMDB, ["sql", "SELECT src, k, cell, arm, seed, bin_ms FROM runs ORDER BY ALL", "--json"]),
     ("sql-cell-glob", SIMDB, ["sql", "SELECT k, cell, arm FROM runs ORDER BY ALL", "--cell", "star-5*",
-                              "--arm", "a", "--arm", "ppspp-*"]),
+                              "--arm", "a", "--arm", "star-*"]),
     ("sql-seed", SIMDB, ["sql", "SELECT k, cell, arm, seed FROM runs ORDER BY ALL;", "--seed", "2001", "--seed", "1"]),
     ("sql-reads", SIMDB, ["sql", "SELECT r.cell, r.arm, count(*) AS n, avg(lag_ms) AS lag, max(t_ms) AS last "
                                  "FROM reads JOIN runs r USING (k, src) GROUP BY ALL ORDER BY ALL", *S]),
@@ -405,7 +403,7 @@ INVOCATIONS = [
     ("events", SIMDB, ["events"]),
     ("events-json", SIMDB, ["events", "--json", "--cell", "halve-5*"]),
     ("osc", SIMDB, ["osc"]),
-    ("osc-json", SIMDB, ["osc", "--json", "--arm", "ppspp-*"]),
+    ("osc-json", SIMDB, ["osc", "--json", "--arm", "star-*"]),
     ("rows", SIMDB, ["rows", *S]),
     ("rows-fields", SIMDB, ["rows", "--fields", "lag_p99_ms,unhealthy,collapsed,trace", *S, "--src",
                             "farm/sf0001*/i-1/*"]),
@@ -433,8 +431,8 @@ INVOCATIONS = [
     ("series-where", ANALYZE, ["series", *FARM_MATRICES, "--where", "EXP=a", "--every", "10"]),
     ("map", ANALYZE, ["map", *FARM_MATRICES]),
     ("map-group", ANALYZE, ["map", *FARM_MATRICES, "--group", "EXP"]),
-    ("pair", ANALYZE, ["pair", FARM_MATRICES[0], "--a", "SIM_EXP=off", "--b", "SIM_EXP=a",
-                       "--ignore", "SIM_SEED"]),
+    ("pair", ANALYZE, ["pair", FARM_MATRICES[0], "--a", "STRIMS_SIM_EXP=off", "--b", "STRIMS_SIM_EXP=a",
+                       "--ignore", "STRIMS_SIM_SEED"]),
     ("track", ANALYZE, ["track", *FARM_MATRICES]),
     ("track-runs", ANALYZE, ["track", FARM_MATRICES[1], "--runs"]),
     ("delays", ANALYZE, ["delays", *FARM_MATRICES]),

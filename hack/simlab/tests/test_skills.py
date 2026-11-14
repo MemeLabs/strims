@@ -455,7 +455,7 @@ class Checks(unittest.TestCase):
             self.assertIsNotNone(py_problem(*PY_REF.match(bad).groups()), bad)
 
     def test_rust(self):
-        for good in ("Runner::take_held", "Sim::keep_*", "strims_wan::vocab::Kind", "Table::new", "v.collapsed::INT"):
+        for good in ("Runner::take_held", "Report::write_*", "strims_wan::vocab::Kind", "Table::new", "v.collapsed::INT"):
             self.assertIsNone(rust_problem(RUST_PATH.search(good).group(1)), good)
         for bad in ("Runner::nope", "strims_wan::vocab::Nope", "strims_wan::nope::Kind"):
             self.assertIsNotNone(rust_problem(bad), bad)

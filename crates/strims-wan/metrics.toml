@@ -174,7 +174,7 @@ unit = "fraction"
 name = "depth_mean"
 sql = "CASE WHEN coalesce(r.depth_1, 0) + coalesce(r.depth_2, 0) + coalesce(r.depth_3, 0) + coalesce(r.depth_4, 0) + coalesce(r.depth_5, 0) + coalesce(r.depth_6, 0) <> 0 THEN coalesce(1 * coalesce(r.depth_1, 0) + 2 * coalesce(r.depth_2, 0) + 3 * coalesce(r.depth_3, 0) + 4 * coalesce(r.depth_4, 0) + 5 * coalesce(r.depth_5, 0) + 6 * coalesce(r.depth_6, 0), 0) / (coalesce(r.depth_1, 0) + coalesce(r.depth_2, 0) + coalesce(r.depth_3, 0) + coalesce(r.depth_4, 0) + coalesce(r.depth_5, 0) + coalesce(r.depth_6, 0)) END"
 score = { kind = "ratio", tie = 0.05 }
-description = "The mean hops to the seed over the samples whose chain of open parents reaches it, from the row's `depth_1` to `depth_6` shares (the ppspp sim's)."
+description = "The mean hops to the seed over the samples whose chain of open parents reaches it, from the row's `depth_1` to `depth_6` shares."
 
 [[scored]]
 name = "depth_cycle"
@@ -710,8 +710,8 @@ macro = "seed_cover_of"
 description = "The runs' seed coverage: how soon a non-seed host first held each chunk the seed published."
 
 [dimensions.sim]
-description = "The sim a job ran: strims-sim (the real stack) or the ppspp sim."
-values = ["strims-sim", "ppspp"]
+description = "The sim a job ran: strims-sim (the real stack)."
+values = ["strims-sim"]
 column = "jobs.sim"
 
 [dimensions.cell]

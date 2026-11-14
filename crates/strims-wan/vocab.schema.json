@@ -7,10 +7,7 @@
         "sims": {
           "description": "The sims that write it; [] for a name only a line writes.",
           "items": {
-            "enum": [
-              "strims-sim",
-              "ppspp"
-            ],
+            "const": "strims-sim",
             "type": "string"
           },
           "title": "Sims",
@@ -22,7 +19,9 @@
           "items": {
             "enum": [
               "decl",
-              "p4tf"
+              "p4tf",
+              "attackers",
+              "extras"
             ],
             "type": "string"
           },
@@ -43,10 +42,7 @@
           "default": [],
           "description": "The sims whose older runs hold it, which no sim writes now: a retired name, kept so their rows and tables still read.",
           "items": {
-            "enum": [
-              "strims-sim",
-              "ppspp"
-            ],
+            "const": "strims-sim",
             "type": "string"
           },
           "title": "Retired",
@@ -62,10 +58,7 @@
                 "type": "string"
               },
               "propertyNames": {
-                "enum": [
-                  "strims-sim",
-                  "ppspp"
-                ]
+                "const": "strims-sim"
               },
               "type": "object"
             },
@@ -236,10 +229,7 @@
           "default": {},
           "description": "By sim, a param's values as the code's arrays (Rust expressions, concatenated): a generated test holds them equal.",
           "propertyNames": {
-            "enum": [
-              "strims-sim",
-              "ppspp"
-            ]
+            "const": "strims-sim"
           },
           "title": "Code",
           "type": "object"
@@ -254,10 +244,7 @@
           "default": {},
           "description": "By sim, the params whose values the code loops over as the generated module's consts.",
           "propertyNames": {
-            "enum": [
-              "strims-sim",
-              "ppspp"
-            ]
+            "const": "strims-sim"
           },
           "title": "Consts",
           "type": "object"
@@ -275,10 +262,7 @@
           "default": {},
           "description": "A sim's own doc where it says more, or other.",
           "propertyNames": {
-            "enum": [
-              "strims-sim",
-              "ppspp"
-            ]
+            "const": "strims-sim"
           },
           "title": "Notes",
           "type": "object"
@@ -297,10 +281,7 @@
       "properties": {
         "sims": {
           "items": {
-            "enum": [
-              "strims-sim",
-              "ppspp"
-            ],
+            "const": "strims-sim",
             "type": "string"
           },
           "title": "Sims",
@@ -311,7 +292,9 @@
           "items": {
             "enum": [
               "decl",
-              "p4tf"
+              "p4tf",
+              "attackers",
+              "extras"
             ],
             "type": "string"
           },
@@ -356,7 +339,7 @@
         },
         "knobs": {
           "default": [],
-          "description": "The settings that write it, without their sim's prefix (STRIMS_SIM_ or SIM_).",
+          "description": "The settings that write it, without their prefix (STRIMS_SIM_).",
           "items": {
             "type": "string"
           },
@@ -413,7 +396,7 @@
             }
           ],
           "default": null,
-          "description": "Its columns are a shared formatter's, which both sims write through.",
+          "description": "Its columns are a shared formatter's, which the sim writes through.",
           "title": "Shared"
         },
         "description": {
@@ -434,10 +417,7 @@
           },
           "default": {},
           "propertyNames": {
-            "enum": [
-              "strims-sim",
-              "ppspp"
-            ]
+            "const": "strims-sim"
           },
           "title": "Notes",
           "type": "object"

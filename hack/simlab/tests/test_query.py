@@ -204,7 +204,7 @@ class Logs(Fixture):
     def setUpClass(cls):
         super().setUpClass()
         with mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(cls.root / "target" / "sim-db")}):
-            job = (cls.SRC, "k-logs", *golden_cli.JOBS[0][2:4], "logs-5", "ppspp-logs", *golden_cli.JOBS[0][6:])
+            job = (cls.SRC, "k-logs", *golden_cli.JOBS[0][2:4], "logs-5", "strims-sim-logs", *golden_cli.JOBS[0][6:])
             d = cls.root / "jobs-logs" / "0"
             meta = golden_cli.job_dir(d, job)
             b = "BIGINT"

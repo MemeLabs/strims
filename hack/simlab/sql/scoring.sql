@@ -603,7 +603,7 @@ CREATE OR REPLACE MACRO lag_since(exp_name, before := 10, after := 120) AS TABLE
 -- (the seed the sim recorded, series_meta's `seed`: `series_meta`; else
 -- the node that published the most, arrivals' `own` rows: `arrivals`),
 -- streams and streams_from (the stream count the sim recorded,
--- series_meta's `streams` or the ppspp sim's row's `streams`:
+-- series_meta's `streams` or the row's `streams`:
 -- `series_meta`, `row`; else inferred, one more than the greatest stream
 -- its parents name, `parents`, else its asks', `asks`, else one, NULL;
 -- a chunk's stream is its seq mod streams), interval_ms (the run's chunk

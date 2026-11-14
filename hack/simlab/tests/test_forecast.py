@@ -63,8 +63,8 @@ SRC = "suite/wt/fs"
 # The second invocation, whose jobs are SRC's labelled again.
 RELABEL = "suite/wt/fs-relabel"
 ARMS = {"decl": "strims-sim-decl", "main": "strims-sim-main"}
-# The ppspp sim's job's arm label.
-PP = "ppspp-decl"
+# The arm label of the job whose dirs hold decl's seed-1 decisions again.
+PP = "strims-sim-pp"
 NAMES = {label: arm for arm, label in ARMS.items()} | {PP: "pp"}
 SEL = forecast.Selection(exp=[SRC], names=NAMES)
 END_MS = 35500
@@ -189,7 +189,8 @@ def build(root):
                 golden_cli.write_table(d, "haves", HAVE_COLS, haves())
             jobs.append(rec)
     d = root / "jobs" / "pp-1"
-    rec = golden_cli.job_dir(d, (SRC, f"{PP}:star-5:1", "ppspp", "sim_job", "star-5", PP, 1, golden_cli.PP_ENV,
+    rec = golden_cli.job_dir(d, (SRC, f"{PP}:star-5:1", "strims-sim", "calibration_star", "star-5", PP, 1,
+                                 golden_cli.STAR_ENV,
                                  golden_cli.T0, None))
     golden_cli.write_table(d, "arrivals", ARRIVAL_COLS, arrivals())
     golden_cli.write_table(d, "parents", PARENT_COLS, PARENTS)
@@ -411,7 +412,7 @@ class Grain(Fixture):
         b = got[("decl", "star-5b")]
         self.assertEqual((b["runs"], b["seeds"], b["asks"], b["fail_rate"]), (1, [1], 4, 3 / 4))
 
-    def test_the_ppspp_sims_job(self):
+    def test_a_job_of_another_label(self):
         # decl's seed-1 decisions in the ppspp sim's dirs read as decl's seed
         # 1 does.
         r = self.one("runs", arm="pp")

@@ -154,10 +154,11 @@ A change under `schema/` regenerates the UI's `src/apis` and infra's
 ## Testing
 
 1. Unit tests per crate.
-2. In-crate deterministic simulations for protocol behaviour: an event-queue
-   simulator, seeded latency and loss, and a virtual clock.
-3. Whole-node deterministic simulation with turmoil in `strims-sim`. Failures
-   print a one-line seed-replay command.
+2. In-crate deterministic simulations for protocol correctness: an
+   event-queue simulator, seeded latency and loss, and a virtual clock. They
+   check what must hold however a swarm is timed, never its timing.
+3. Whole-node deterministic simulation with turmoil in `strims-sim`, the
+   simulation that measures. Failures print a one-line seed-replay command.
 
 Both kinds of simulation can run on real-world paths from `strims-wan`:
 city-pair latency, access link rates, jitter and loss.
@@ -188,7 +189,7 @@ They stay on `cargo test`, which builds a binary's bundle once for all of
 its tests.
 
 The release simulations, the ignored ones included:
-`cargo nextest run --release -p strims-sim -p strims-ppspp --run-ignored all`.
+`cargo nextest run --release -p strims-sim --run-ignored all`.
 Trial matrices too large for one machine run on EC2 spot instances,
 one process per run: `hack/sim-farm/farm.py` (its docstring has the
 usage).

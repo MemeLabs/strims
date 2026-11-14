@@ -36,7 +36,7 @@ had. A chunk at a time:
              published the most (arrivals' `own` rows)
   pub_ms     the seed's own-store `arrivals` row (how `own`)
   stream     seq mod the run's stream count: the one the sim records
-             (series_meta's `streams`, else the ppspp sim's row's), else
+             (series_meta's `streams`, else the row's), else
              inferred (one more than the greatest stream its `parents`
              name, else its `asks`', else one); the report warns of
              every run whose count it inferred, and the latency section
@@ -83,13 +83,12 @@ group with each run's spread beside: a cell some experiments ran at more
 seeds than the others (2004 and 3033 beside 1-8) pools more runs unless
 `seed` picks them. A never-held chunk is never unless censored; past the
 suite cells' streams strims-sim runs another 10 s, so its chunks are
-seldom censored, while the ppspp sim's runs end about a second after
-their last publication.
+seldom censored.
 
 A run whose arrivals the catalog lacks (it wrote none, or they weren't
 fetched) has no chunks: it is left out of every section, with a warning,
 and a selection of no run with arrivals is refused (query.need). A run
-without parents rows (no push trees: the ppspp sim without hybrid push)
+without parents rows (no push trees: a pull stream)
 has no seed children to count: its I1 and its late chunks' classes are
 NULL, it is left out of the late section, and the report warns of it.
 The warnings go to `warn`: simdb.py prints them on stderr, and its

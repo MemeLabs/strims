@@ -232,8 +232,7 @@ fn text(s: &str) -> String {
         .collect()
 }
 
-/// A node's counters in the bins beyond the series', as the ppspp sim's
-/// tables name them too: requests timed out and chunks wasted, answers a
+/// A node's counters in the bins beyond the series': requests timed out and chunks wasted, answers a
 /// full queue refused (`answers_refused`) and answers dropped at write time
 /// (`answers_dropped`, ppspp's `DataDropped`), parents replaced
 /// (`switched`), parents lost to their closing the subscription (`shed`)
@@ -1409,8 +1408,7 @@ fn incarnation(starts: &[Vec<Duration>], h: HostIx, at: Duration) -> usize {
     })
 }
 
-/// The columns of the `asks` table (see the [module docs](self)), as the
-/// ppspp sim writes them too.
+/// The columns of the `asks` table (see the [module docs](self)).
 const ASK_COLS: [cols::Asks; 25] = [
     cols::Asks::TMs,
     cols::Asks::Node,

@@ -239,10 +239,10 @@ class Phases(unittest.TestCase):
         self.assertEqual(self.phases(s)[25], "after_departure")
 
     def test_each_churn_incarnation_gets_its_own_startup(self):
-        # Viewer 1 is there from the start, leaves at 20.6 s, takes its
-        # place again at 25.6 s, leaves at 50.2 s and is back at 55.2 s.
-        s = run(80, events=[ev(-1, "join", 1), ev(-1, "join", 2), ev(20.6, "leave", 2), ev(25.6, "join", 2),
-                            ev(50.2, "leave", 2), ev(55.2, "join", 2)])
+        # Viewer 1 is there from the start, crashes at 20.6 s, restarts at
+        # 25.6 s, crashes at 50.2 s and is back at 55.2 s.
+        s = run(80, events=[ev(-1, "join", 1), ev(-1, "join", 2), ev(20.6, "crash", 2), ev(25.6, "restart", 2),
+                            ev(25.6, "join", 2), ev(50.2, "crash", 2), ev(55.2, "restart", 2), ev(55.2, "join", 2)])
         self.assertEqual(verdict.incarnations(s, verdict.rule_events(s))[1],
                          [(None, 20.6), (25.6, 50.2), (55.2, None)])
         st = verdict.presence(s)[1]
@@ -252,13 +252,12 @@ class Phases(unittest.TestCase):
         self.assertEqual(st[49:56], ["counts", "leaving", None, None, None, None, "own"])
         self.assertEqual(st[own(55.2) - 1:own(55.2) + 1], ["own", "counts"])
         spans = [x for x in self.spans(s) if x[0] == 1]
-        # Its leaving second 20 is the run's (the leave's window from 20.6
+        # Its leaving second 20 is the run's (the crash's window from 20.6
         # s holds 21 on).
         self.assertEqual([x for x in spans if x[1] == "startup"],
                          [(1, "startup", 0, 21), (1, "startup", 25, own(25.6)), (1, "startup", 55, own(55.2))])
-        # Each leave's window runs to its successor's join, then the
-        # horizon.
-        stop = lambda join: math.ceil(join + verdict.ANCHORS["leave"]["horizon_s"] - 0.5)
+        # Each crash's window runs to its restart, then the horizon.
+        stop = lambda join: math.ceil(join + verdict.ANCHORS["crash"]["horizon_s"] - 0.5)
         self.assertEqual(self.phases(s), ["startup"] * 21 + ["after_departure"] * (stop(25.6) - 21)
                          + ["steady"] * (50 - stop(25.6)) + ["after_departure"] * (stop(55.2) - 50)
                          + ["steady"] * (80 - stop(55.2)))

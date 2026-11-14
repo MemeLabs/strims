@@ -16,9 +16,7 @@ run's tail):
   viewer's incarnations by its events (`events`: its joins, and the
   departures, leaves and crashes that end them), else by its `arrive_ms`
   and `depart_ms` (the viewers table's, from the stream's start), else
-  by strims-sim's -1 frames in the seconds it wasn't there; the ppspp
-  sim's series alone (a viewer absent reads nothing) can't tell, and
-  reads as one there throughout.
+  by its -1 frames in the seconds it wasn't there.
 - A viewer's lag in a second is the p99 of the frames it read then; in a
   second it reads none, its lag from the last second grows by a second (it
   falls behind live). The swarm's lag is the LAG_PERCENTILE of its
@@ -84,8 +82,7 @@ phase, and for how long, `horizon_s`):
   from its stay, and the seed's uplink from `seed_up` (its starting level
   where the events lack one, and its steps where they hold none), so
   analyze.py's testbed series and a row's series read as their runs'
-  events do; `seed_up` reads each second's end in the ppspp sim, a step
-  at t s at second ceil(t) - 1, the events at t.
+  events do.
 
 Over time, for hack/sim-db's tables and sim-suite's paired metrics:
 `phases` names each second, `events` lists a run's (its start, the
@@ -863,8 +860,7 @@ VERDICT_VERSION = verdict_version()
 # series_meta.json's keys that aren't the series'.
 META_ONLY = {"sim", "seconds", "viewers", "bin_ms"}
 # The sims by the names a run's `sim` holds (a farm job's, its binary's).
-SIM_NAMES = {"ppspp": "ppspp", "strims-ppspp:sim": "ppspp", "strims-sim": "strims-sim",
-             "strims-sim:scenarios": "strims-sim"}
+SIM_NAMES = {"strims-sim": "strims-sim", "strims-sim:scenarios": "strims-sim"}
 # The ids a sim's runs name the rule's kinds by, (sim, id, current id):
 # each current one's own, and each retired one's replacement for that
 # sim, as load_series reads them.
@@ -959,8 +955,8 @@ def load_series(pairs):
                       f"FROM read_parquet({plist(files(srcs, 'viewer_seconds'))}, union_by_name=true) "
                       f"SEMI JOIN {want} USING (src, k) GROUP BY ALL;"):
             vs[(r["src"], r["k"])].append(r)
-    # The viewers' nodes (strims-sim's hosts) and stays, where the tables
-    # have them (both sims' since their arrivals and departures).
+    # The viewers' nodes (their hosts) and stays, where the tables have
+    # them.
     stays = collections.defaultdict(list)
     viewers = files(srcs, "viewers")
     if viewers:

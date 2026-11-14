@@ -1442,7 +1442,7 @@ class Playback(unittest.TestCase):
 # whose jobs a farm flush holds (F1, strims-sim), a second flush holding a
 # copy of one of them with fewer tables (F2), a job it reused from another
 # run that the cache never held (k9), and a local suite invocation's
-# ppspp job (L).
+# job (L).
 F1, F2, L = "farm/sa0001-00+1more-aaaa/i-1/0", "farm/sa0001-00+1more-aaaa/i-2/0", "suite/wt/inv"
 SHA = "0" * 40
 
@@ -1491,8 +1491,9 @@ class Catalog(unittest.TestCase):
              json.dumps(row()))])
         (simdb.cache_root() / "cache" / F2 / "manifest.json").write_text(json.dumps({"keys": ["k1"], "at": old}))
         self.put(L, "runs", ["sim", "test", "cell", "arm", "seed", "env", "at", "row_json"], [
-            ("k3", "ppspp", "churn", "churn", "ppspp-123", 2, "{}", recent, json.dumps({"lag_p99_ms": 400}))])
-        # an old ppspp viewers file: churned an integer
+            ("k3", "strims-sim", "churn", "churn", "strims-sim-123", 2, "{}", recent,
+             json.dumps({"lag_p99_ms": 400}))])
+        # an older viewers file: node for its host, churned an integer
         self.put(L, "viewers", ["viewer", "node", "up", "churned", "arrive_ms", "depart_ms"], [
             ("k3", 0, 1, 50, 0, -1000, None), ("k3", 1, 2, 50, 1, 2500, 4000)])
         self.put(L, "viewer_seconds", ["viewer", "sec", "lag_ms", "frames"],
@@ -1504,7 +1505,7 @@ class Catalog(unittest.TestCase):
         runs.mkdir(parents=True)
         (runs / "sa0001.json").write_text(json.dumps({
             "cells": [{"name": "star", "sim": "strims-sim", "test": "t", "why": "w", "env": {"STRIMS_SIM_TCP": "1"}}],
-            "knob": {"ppspp": "SIM_EXP", "strims-sim": "STRIMS_SIM_EXP"}, "values": ["off", "a"],
+            "knob": {"strims-sim": "STRIMS_SIM_EXP"}, "values": ["off", "a"],
             "arms": {"x": SHA}, "seeds": [1], "base": "off", "question": "does a help?"}))
         farm = root / "target" / "sim-farm"
         (farm / "sa0001-00").mkdir(parents=True)
@@ -1550,7 +1551,7 @@ class Catalog(unittest.TestCase):
         self.assertEqual(set(jobs), {"k1", "k2", "k3", "k9"})
         # the copy holding the most tables
         self.assertEqual(jobs["k1"]["src"], F1)
-        self.assertEqual((jobs["k1"]["sim"], jobs["k3"]["sim"]), ("strims-sim", "ppspp"))
+        self.assertEqual((jobs["k1"]["sim"], jobs["k3"]["sim"]), ("strims-sim", "strims-sim"))
         self.assertEqual((jobs["k2"]["exp"], jobs["k2"]["e"], jobs["k2"]["transport"]), ("a", "a", "tcp"))
         self.assertEqual((jobs["k9"]["cached"], jobs["k9"]["sim"], jobs["k9"]["seed"], jobs["k9"]["trace"]),
                          (False, "strims-sim", 1, "tr-k9"))
@@ -1573,7 +1574,7 @@ class Catalog(unittest.TestCase):
         v = {(r["k"], r["viewer"]): r for r in self.q("SELECT * FROM viewers")}
         self.assertEqual((v[("k1", 0)]["node"], v[("k1", 0)]["arrive_ms"], v[("k1", 0)]["up"]), (7, None, None))
         self.assertEqual((v[("k1", 1)]["arrive_ms"], v[("k1", 1)]["churned"]), (2000, True))
-        # the ppspp file's integer churned, as a BOOLEAN; its -1000 start NULL
+        # the older file's integer churned, as a BOOLEAN; its -1000 start NULL
         self.assertEqual((v[("k3", 0)]["node"], v[("k3", 0)]["churned"], v[("k3", 0)]["arrive_ms"]), (1, False, None))
         self.assertEqual(v[("k3", 1)]["churned"], True)
         # viewer 1 of k3 was there from 2.5 s to 4 s: seconds 2 and 3, which its stay overlaps
@@ -1633,10 +1634,16 @@ class Catalog(unittest.TestCase):
                          "converted")
         # a new source: only its files are added
         self.put("suite/wt/inv2", "runs", ["sim", "test", "cell", "arm", "seed", "env", "row_json"],
-                 [("k4", "ppspp", "churn", "churn", "a", 1, "{}", "{}")])
+                 [("k4", "strims-sim", "churn", "churn", "a", 1, "{}", "{}")])
         got = self.index()
         self.assertEqual((got.new, got.gone), (1, 0))
         self.assertIn("k4", {r["k"] for r in self.q("SELECT k FROM jobs")})
+        # a job of the ppspp sim's the index leaves out
+        self.put("suite/wt/inv3", "runs", ["sim", "test", "cell", "arm", "seed", "env", "row_json"],
+                 [("k5", "ppspp", "churn", "churn", "a", 1, "{}", "{}")])
+        got = self.index()
+        self.assertEqual((got.new, got.gone), (1, 0))
+        self.assertNotIn("k5", {r["k"] for r in self.q("SELECT k FROM jobs")})
         # the cache drops F1 (simdb.py gc): its jobs' tables leave, F2's copy of k1 stands in
         shutil.rmtree(simdb.cache_root() / "cache" / F1)
         got = self.index()
@@ -1654,7 +1661,7 @@ class Catalog(unittest.TestCase):
                           m[("suite", "lag_p99_ms")]["tie"]), ("lower", "ratio", 0.05))
         self.assertEqual(m[("suite", "lag_p99_ms")]["fields"], ["lag_p99_ms", "lag_p99_ms_honest"])
         self.assertEqual((m[("rows", "lag_p99_ms")]["better"], m[("rows", "lag_p99_ms")]["sims"]),
-                         ("lower", ["ppspp", "strims-sim"]))
+                         ("lower", ["strims-sim"]))
         self.assertTrue(m[("viewer_seconds", "lag_ms")]["description"])
         t = {r["name"] for r in self.q("SELECT name FROM table_catalog")}
         self.assertTrue({"jobs", "experiments", "viewers", "verdicts", "availability"} <= t)
@@ -1663,7 +1670,7 @@ class Catalog(unittest.TestCase):
                          ("derived", "start")} <= kinds)
         retired = {r["sim"]: r["replaced_by"] for r in self.q("SELECT sim, replaced_by FROM event_kinds "
                                                               "WHERE kind = 'parent_lost'")}
-        self.assertEqual(retired, {"strims-sim": "parent_noticed", "ppspp": "parent_departed"})
+        self.assertEqual(retired, {"strims-sim": "parent_noticed"})
 
 
 if __name__ == "__main__":

@@ -113,9 +113,7 @@ pub const MAX_SKEW: Duration = Duration::from_secs(10 * 60);
 /// [`ClockSkew::Real`] draws a class by its [`CLOCK_SHARES`], then a
 /// magnitude in its bounds, floored to whole milliseconds, then a sign; a
 /// report counts any offset into the class its magnitude falls in
-/// ([`SkewClass::of`]). The ppspp sim (`strims-ppspp`'s `tests/sim.rs`)
-/// draws its nodes' clocks from the same classes, and its rows name them
-/// alike.
+/// ([`SkewClass::of`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SkewClass {
     /// Under [`SYNCED_MAX`], uniform: clocks NTP keeps.

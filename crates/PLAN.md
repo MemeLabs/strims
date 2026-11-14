@@ -210,15 +210,11 @@ and dropped are in `TRIED.md`.
 
 1. **Ship it.** Swarms run Hybrid with the adaptive seed by default, and
    each later trial should measure against the defaults it would change.
-   - Choose a media swarm's stream count from its bitrate. Fewer streams
-     do better at 2-4 Mbit/s (1 or 4 against 16 behind a cable seed and in
-     the ppspp sim's A/B scenarios) and 16 at 8-12 Mbit/s; media swarms
-     run 16 meanwhile. An ingest could take the
-     bitrate from the publisher's metadata, a capture from its encoder.
-     The matrices that chose 4 KiB chunks and 32 KiB munros ran 10 s
-     streams, which weigh startup heavily: rerun `defaults-cable` and
-     `defaults-ab` at 2-minute streams to confirm or revise them and the
-     stream count.
+   - Choose a media swarm's stream count from its bitrate, on
+     strims-sim's media cells. An ingest could take the bitrate from the
+     publisher's metadata, a capture from its encoder.
+   - Confirm or revise the chunk and munro sizes and the stream count at
+     2-minute streams on strims-sim.
    - Streams whose bitrate swings widely trail what they did with the
      early units' padding sent (`sign-sens` at u8,t300, 32 seeds:
      1500v:s1.2 lag p99 x1.05-1.14; overload x1.14 [1.02,1.27]). Relays'
@@ -281,8 +277,8 @@ and dropped are in `TRIED.md`.
      change). Ping per peer, not per channel: one ping loop per peer in
      the runner, riding the first channel payload written to it, would
      feed every channel's controller to that peer (no wire change); it
-     changes what the controllers see, so gate it on the ppspp sim's A/B
-     matrix and strims-sim's WAN cases.
+     changes what the controllers see, so gate it on strims-sim's WAN
+     cases.
 3. **Greedy peers.** Liars and colluders, most of their cost on the
    child side.
    - **Pull from liars.** A liar still gets requests when the channels
@@ -299,8 +295,7 @@ and dropped are in `TRIED.md`.
      greedy viewers that praise a liar or defame an honest holder decide
      it where they outnumber its honest reporters: holders with few (far
      ones, and at 6 Mbit/s those whose children aren't the seed's
-     neighbours). In the ppspp sim's `SIM_COLLUDE` rows they get honest
-     holders barred and save no liar. Weigh a reporter by how long the
+     neighbours). Weigh a reporter by how long the
      seed has seen it announce, or require a quorum that grows with the
      reporters seen; decide whether colluders join the default greedy
      mix.

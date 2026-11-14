@@ -137,13 +137,13 @@ class Execute(Scratch):
 
 class FoldExport(Scratch):
     def jobs(self):
-        """golden_cli's jobs, written as the sims write them, with the
+        """golden_cli's jobs, written as the sim writes them, with the
         speculative requests', parks', arrivals', asks', haves' and the seed
-        log's tables golden_cli's don't write: the ppspp sim's, then
-        strims-sim's (whose viewers add host and name, and whose reads, asks
-        and haves are zstd-compressed, `<table>.csv.zst`, as the sims write
-        their large tables, and the seed log's too, so the fold takes the
-        tables registered last in either form), then a job folded again."""
+        log's tables golden_cli's don't write: the suite's, then the farm's
+        (whose reads, asks and haves are zstd-compressed, `<table>.csv.zst`,
+        as the sim writes its large tables, and the seed log's too, so the
+        fold takes the tables registered last in either form), then a job
+        folded again."""
         jobs = [golden_cli.job_dir(self.dir / "jobs" / f"{i:02d}", j) for i, j in enumerate(golden_cli.JOBS)]
         for n, j in enumerate(jobs):
             d = Path(j["dir"])
@@ -169,13 +169,13 @@ class FoldExport(Scratch):
             golden_cli.write_table(d, "seed_sends", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
                                                      ("how", "VARCHAR"), ("seq", "BIGINT"), ("fate", "VARCHAR")],
                                    [(885 + n, 0, 1, "push", 6, "written")])
-            if j["sim"].startswith("strims-sim"):
+            if ":" in j["sim"]:
                 for t in ("reads", "asks", "haves", "seed_decisions", "seed_sends"):
                     csv = d / f"{t}.csv"
                     (d / f"{t}.csv.zst").write_bytes(zstd.compress(csv.read_bytes()))
                     csv.unlink()
-        pp = [j for j in jobs if "ppspp" in j["sim"]]
-        ss = [j for j in jobs if j["sim"].startswith("strims-sim")]
+        pp = [j for j in jobs if ":" not in j["sim"]]
+        ss = [j for j in jobs if ":" in j["sim"]]
         self.assertTrue(pp and ss)
         return [pp, ss, [dict(pp[0], wall_s=9.5)]]
 

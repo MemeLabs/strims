@@ -161,7 +161,7 @@ workspace_build() {
 }
 doctest() { cargo test --locked --workspace --doc; }
 sims_build() {
-  cargo nextest list --locked --release -p strims-sim -p strims-ppspp \
+  cargo nextest list --locked --release -p strims-sim \
     --list-type binaries-only --message-format json >"$out/sims-binaries.json"
 }
 

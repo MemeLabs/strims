@@ -11,8 +11,7 @@ knowledge delay, and its requests on that knowledge).
   Selection(exp, cell, arm, seed, names, phases, collapsed)
                  the jobs a report reads: experiments, cells and arm labels
                  (globs), seeds; `names` an arm's name by label glob, so
-                 one arm's two sims' labels (a ppspp sim's and strims-sim's)
-                 report as one; `phases` the requester's viewer phases kept
+                 one arm's labels report as one; `phases` the requester's viewer phases kept
                  ('rest', every one but startup, by default); `collapsed`
                  the runs kept by their verdict (every one by default)
   report(sel, sections=SECTIONS, conn=None, say=None) -> {section: Result}

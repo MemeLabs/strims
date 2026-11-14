@@ -590,11 +590,10 @@ pub(crate) enum RowInt {
     /// Pushes that didn't arrive by their deadline, released to pull: the first
     /// swarm's runner counters summed over every host (SwarmCounters::misses).
     PushMisses,
-    /// Over the first swarm's honest viewers' later joins (strims-sim's
-    /// restarts, the ppspp sim's places taken again): the ms from each to its
-    /// first frame read (`rejoin_first_p50_ms`, `rejoin_first_p90_ms`;
-    /// `rejoin_unread`, those that read nothing) and to its first read within
-    /// the caught-up bound (`rejoin_caught_up_p50_ms`,
+    /// Over the first swarm's honest viewers' later joins (their restarts): the
+    /// ms from each to its first frame read (`rejoin_first_p50_ms`,
+    /// `rejoin_first_p90_ms`; `rejoin_unread`, those that read nothing) and to
+    /// its first read within the caught-up bound (`rejoin_caught_up_p50_ms`,
     /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`), timed as
     /// `join_p50_ms` is; left out without one.
     ///
@@ -603,22 +602,20 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     RejoinEventPPMs(u16),
-    /// Over the first swarm's honest viewers' later joins (strims-sim's
-    /// restarts, the ppspp sim's places taken again): the ms from each to its
-    /// first frame read (`rejoin_first_p50_ms`, `rejoin_first_p90_ms`;
-    /// `rejoin_unread`, those that read nothing) and to its first read within
-    /// the caught-up bound (`rejoin_caught_up_p50_ms`,
+    /// Over the first swarm's honest viewers' later joins (their restarts): the
+    /// ms from each to its first frame read (`rejoin_first_p50_ms`,
+    /// `rejoin_first_p90_ms`; `rejoin_unread`, those that read nothing) and to
+    /// its first read within the caught-up bound (`rejoin_caught_up_p50_ms`,
     /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`), timed as
     /// `join_p50_ms` is; left out without one.
     ///
     /// strims-sim: Every join after a viewer's first (`Report::joins`), timed
     /// as `join_p50_ms` is.
     RejoinCaughtUpNever,
-    /// Over the first swarm's honest viewers' later joins (strims-sim's
-    /// restarts, the ppspp sim's places taken again): the ms from each to its
-    /// first frame read (`rejoin_first_p50_ms`, `rejoin_first_p90_ms`;
-    /// `rejoin_unread`, those that read nothing) and to its first read within
-    /// the caught-up bound (`rejoin_caught_up_p50_ms`,
+    /// Over the first swarm's honest viewers' later joins (their restarts): the
+    /// ms from each to its first frame read (`rejoin_first_p50_ms`,
+    /// `rejoin_first_p90_ms`; `rejoin_unread`, those that read nothing) and to
+    /// its first read within the caught-up bound (`rejoin_caught_up_p50_ms`,
     /// `rejoin_caught_up_p90_ms`; `rejoin_caught_up_never`), timed as
     /// `join_p50_ms` is; left out without one.
     ///
@@ -662,13 +659,12 @@ pub(crate) enum RowInt {
     /// measured (PushStats::seed_budget).
     ///
     /// strims-sim: The adaptive seed's budget in stream slots, distinct from
-    /// the ppspp sim's `seed_slots`.
+    /// `seed_slots`.
     SeedBudget,
     /// An adaptive seed's copies in effect at its latest check
     /// (PushStats::seed_copies).
     ///
-    /// strims-sim: The adaptive seed's copies, distinct from the ppspp sim's
-    /// `seed_slots`.
+    /// strims-sim: The adaptive seed's copies, distinct from `seed_slots`.
     SeedCopies,
     /// The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after
     /// each drop of its available upload (Report::lag_after_changes); with
@@ -750,16 +746,16 @@ pub(crate) enum RowInt {
     ///
     /// Unit: bytes.
     StaleBytes,
-    /// The row's playback columns, as the ppspp sim's rows have them: per delay
-    /// `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read
-    /// (`playout::play`, the tables' `stalls`), each viewer from its playback's
-    /// start to its last frame's play, or its departure if that came first
-    /// (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share
-    /// of it stalled (`stalled_share_D`), and the mean ms from each one's join
-    /// (its reader's start, or the stream's if later, as `Report::joins` times
-    /// it) to its playback's start (`startup_ms_D`); every viewer's, dishonest
-    /// ones' in, then the honest viewers' (`_honest`, in every run) and the
-    /// dishonest hosts' (`_dishonest`, with any).
+    /// The row's playback columns: per delay `D` of `DELAYS_MS`, `swarm`'s
+    /// viewers' playouts of what they read (`playout::play`, the tables'
+    /// `stalls`), each viewer from its playback's start to its last frame's
+    /// play, or its departure if that came first (`Totals`): the stalls per
+    /// minute played (`stalls_per_min_D`), the share of it stalled
+    /// (`stalled_share_D`), and the mean ms from each one's join (its reader's
+    /// start, or the stream's if later, as `Report::joins` times it) to its
+    /// playback's start (`startup_ms_D`); every viewer's, dishonest ones' in,
+    /// then the honest viewers' (`_honest`, in every run) and the dishonest
+    /// hosts' (`_dishonest`, with any).
     ///
     /// Unit: ms.
     StartupMsDelayPop(u16),
@@ -775,9 +771,8 @@ pub(crate) enum RowInt {
     /// incarnation (SwarmCounters::timeouts): every host but the seed and the
     /// dishonest ones.
     TimeoutsHonest,
-    /// With dishonest peers, their requests that timed out unanswered
-    /// (strims-sim's hostile hosts; the ppspp sim's greedy viewers and
-    /// adversaries); left out without any.
+    /// With dishonest peers, their requests that timed out unanswered (the
+    /// hostile hosts'); left out without any.
     TimeoutsDishonest,
     /// A media swarm's chunks per unit; left out without media.
     Unit,
@@ -812,13 +807,12 @@ pub(crate) enum RowInt {
     ///
     /// Unit: bytes.
     UpHave,
-    /// The uplinks' bytes by layer over every host, in the ppspp sim's rows'
-    /// terms (`up_*`, adding up to `up_wire`): the ppspp layers from the honest
-    /// hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`,
-    /// vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control
-    /// frames and link handshakes; and in WAN mode `up_transport`, the
-    /// transports' framing and resends, and `up_acks`, pure ACKs and SACKs
-    /// alone.
+    /// The uplinks' bytes by layer over every host (`up_*`, adding up to
+    /// `up_wire`): the ppspp layers from the honest hosts' runners;
+    /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
+    /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
+    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
+    /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
     UpHostile,
@@ -837,13 +831,12 @@ pub(crate) enum RowInt {
     ///
     /// Unit: bytes.
     UpPing,
-    /// The uplinks' bytes by layer over every host, in the ppspp sim's rows'
-    /// terms (`up_*`, adding up to `up_wire`): the ppspp layers from the honest
-    /// hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`,
-    /// vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control
-    /// frames and link handshakes; and in WAN mode `up_transport`, the
-    /// transports' framing and resends, and `up_acks`, pure ACKs and SACKs
-    /// alone.
+    /// The uplinks' bytes by layer over every host (`up_*`, adding up to
+    /// `up_wire`): the ppspp layers from the honest hosts' runners;
+    /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
+    /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
+    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
+    /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
     UpPorts,
@@ -867,33 +860,30 @@ pub(crate) enum RowInt {
     ///
     /// Unit: bytes.
     UpStream,
-    /// The uplinks' bytes by layer over every host, in the ppspp sim's rows'
-    /// terms (`up_*`, adding up to `up_wire`): the ppspp layers from the honest
-    /// hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`,
-    /// vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control
-    /// frames and link handshakes; and in WAN mode `up_transport`, the
-    /// transports' framing and resends, and `up_acks`, pure ACKs and SACKs
-    /// alone.
+    /// The uplinks' bytes by layer over every host (`up_*`, adding up to
+    /// `up_wire`): the ppspp layers from the honest hosts' runners;
+    /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
+    /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
+    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
+    /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
     UpTransport,
-    /// The uplinks' bytes by layer over every host, in the ppspp sim's rows'
-    /// terms (`up_*`, adding up to `up_wire`): the ppspp layers from the honest
-    /// hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`,
-    /// vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control
-    /// frames and link handshakes; and in WAN mode `up_transport`, the
-    /// transports' framing and resends, and `up_acks`, pure ACKs and SACKs
-    /// alone.
+    /// The uplinks' bytes by layer over every host (`up_*`, adding up to
+    /// `up_wire`): the ppspp layers from the honest hosts' runners;
+    /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
+    /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
+    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
+    /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
     UpVnic,
-    /// The uplinks' bytes by layer over every host, in the ppspp sim's rows'
-    /// terms (`up_*`, adding up to `up_wire`): the ppspp layers from the honest
-    /// hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`,
-    /// vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control
-    /// frames and link handshakes; and in WAN mode `up_transport`, the
-    /// transports' framing and resends, and `up_acks`, pure ACKs and SACKs
-    /// alone.
+    /// The uplinks' bytes by layer over every host (`up_*`, adding up to
+    /// `up_wire`): the ppspp layers from the honest hosts' runners;
+    /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
+    /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
+    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
+    /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
     UpWire,
@@ -1525,8 +1515,8 @@ pub(crate) enum RowNum {
     ///
     /// Unit: per minute.
     SeedOffersPerMin,
-    /// The seed's packets through its uplink per second of the run (WAN mode in
-    /// strims-sim, left out outside it).
+    /// The seed's packets through its uplink per second of the run (in WAN
+    /// mode, left out outside it).
     SeedPps,
     /// Of the chunks the first swarm's seed sent, the share that answered
     /// requests: chunks sent less pushed, over chunks sent (its scheduler's
@@ -1565,9 +1555,8 @@ pub(crate) enum RowNum {
     /// run ended, its scenario's duration and the controller's last sample
     /// after it.
     ///
-    /// strims-sim: Not the ppspp sim's `reads_end_s`, whose run ends once every
-    /// peer has read the stream: a run here lasts its scenario's duration,
-    /// whatever its viewers read.
+    /// strims-sim: A run lasts its scenario's duration, whatever its viewers
+    /// read.
     ///
     /// Unit: s.
     SimSecs,
@@ -1576,29 +1565,29 @@ pub(crate) enum RowNum {
     ///
     /// Unit: fraction.
     SmallPacketShare,
-    /// The row's playback columns, as the ppspp sim's rows have them: per delay
-    /// `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read
-    /// (`playout::play`, the tables' `stalls`), each viewer from its playback's
-    /// start to its last frame's play, or its departure if that came first
-    /// (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share
-    /// of it stalled (`stalled_share_D`), and the mean ms from each one's join
-    /// (its reader's start, or the stream's if later, as `Report::joins` times
-    /// it) to its playback's start (`startup_ms_D`); every viewer's, dishonest
-    /// ones' in, then the honest viewers' (`_honest`, in every run) and the
-    /// dishonest hosts' (`_dishonest`, with any).
+    /// The row's playback columns: per delay `D` of `DELAYS_MS`, `swarm`'s
+    /// viewers' playouts of what they read (`playout::play`, the tables'
+    /// `stalls`), each viewer from its playback's start to its last frame's
+    /// play, or its departure if that came first (`Totals`): the stalls per
+    /// minute played (`stalls_per_min_D`), the share of it stalled
+    /// (`stalled_share_D`), and the mean ms from each one's join (its reader's
+    /// start, or the stream's if later, as `Report::joins` times it) to its
+    /// playback's start (`startup_ms_D`); every viewer's, dishonest ones' in,
+    /// then the honest viewers' (`_honest`, in every run) and the dishonest
+    /// hosts' (`_dishonest`, with any).
     ///
     /// Unit: fraction.
     StalledShareDelayPop(u16),
-    /// The row's playback columns, as the ppspp sim's rows have them: per delay
-    /// `D` of `DELAYS_MS`, `swarm`'s viewers' playouts of what they read
-    /// (`playout::play`, the tables' `stalls`), each viewer from its playback's
-    /// start to its last frame's play, or its departure if that came first
-    /// (`Totals`): the stalls per minute played (`stalls_per_min_D`), the share
-    /// of it stalled (`stalled_share_D`), and the mean ms from each one's join
-    /// (its reader's start, or the stream's if later, as `Report::joins` times
-    /// it) to its playback's start (`startup_ms_D`); every viewer's, dishonest
-    /// ones' in, then the honest viewers' (`_honest`, in every run) and the
-    /// dishonest hosts' (`_dishonest`, with any).
+    /// The row's playback columns: per delay `D` of `DELAYS_MS`, `swarm`'s
+    /// viewers' playouts of what they read (`playout::play`, the tables'
+    /// `stalls`), each viewer from its playback's start to its last frame's
+    /// play, or its departure if that came first (`Totals`): the stalls per
+    /// minute played (`stalls_per_min_D`), the share of it stalled
+    /// (`stalled_share_D`), and the mean ms from each one's join (its reader's
+    /// start, or the stream's if later, as `Report::joins` times it) to its
+    /// playback's start (`startup_ms_D`); every viewer's, dishonest ones' in,
+    /// then the honest viewers' (`_honest`, in every run) and the dishonest
+    /// hosts' (`_dishonest`, with any).
     StallsPerMinDelayPop(u16),
     /// The share of the uplink queue samples of the first swarm's honest
     /// viewers of each population (`meter_{pop}_p{p}`'s) while a swarm streams
@@ -2035,12 +2024,11 @@ const ROWNUM_VIEWER_UTIL_P_P: [&str; 3] = ["viewer_util_p50", "viewer_util_p90",
 /// The row's fields that hold text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RowText {
-    /// The run's arrivals profile, its knob's text (STRIMS_SIM_ARRIVALS,
-    /// SIM_ARRIVALS); left out for one with every viewer from the start
-    /// (strims-sim) or without arrivals or departures (the ppspp sim).
+    /// The run's arrivals profile, its knob's text (STRIMS_SIM_ARRIVALS); left
+    /// out for one with every viewer from the start.
     Arrivals,
-    /// The clock skew the run's clocks had (STRIMS_SIM_CLOCK_SKEW,
-    /// SIM_CLOCK_SKEW): its knob's text.
+    /// The clock skew the run's clocks had (STRIMS_SIM_CLOCK_SKEW): its knob's
+    /// text.
     ///
     /// None is written as an empty field.
     ClockSkew,
@@ -2233,8 +2221,7 @@ const ROWNUMS_OFF_CHANGE_ROLE: [&str; 6] = [
 /// The keys of `series_meta.json` that hold an integer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MetaInt {
-    /// The first swarm's seed: its host in strims-sim, its node (0) in the
-    /// ppspp sim.
+    /// The first swarm's seed: its host.
     Seed,
     /// The first swarm's stream count, at least 1: the streams of the parents
     /// table and of the logs run from 0 below it, whether or not a table has
@@ -2247,8 +2234,8 @@ pub(crate) enum MetaInt {
     Rate,
     /// The stream's chunk size, in bytes.
     Chunk,
-    /// The size of the frames the series counts, in bytes: strims-sim's frame
-    /// (FRAME_LEN; a media swarm's chunk), the ppspp sim's chunk.
+    /// The size of the frames the series counts, in bytes: the sim's frame
+    /// (FRAME_LEN; a media swarm's chunk).
     Frame,
     /// The stream's length in seconds; the seconds after it are the run's tail.
     ///
@@ -2316,7 +2303,7 @@ impl Key for MetaInt {
 /// The keys of `series_meta.json` that hold text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MetaText {
-    /// The sim that wrote the run: strims-sim or ppspp.
+    /// The sim that wrote the run: strims-sim.
     Sim,
 }
 
@@ -2555,7 +2542,7 @@ pub(crate) mod cols {
         ///
         /// Unit: ms. None is written as -1.
         LagMs,
-        /// The frames the viewer read in the second (chunks in the ppspp sim).
+        /// The frames the viewer read in the second.
         ///
         /// strims-sim: A second the viewer wasn't there in has no row.
         Frames,
@@ -2594,8 +2581,8 @@ pub(crate) mod cols {
         }
     }
 
-    /// The `reads` table's columns: a row per unit a viewer read: a frame in
-    /// strims-sim (its duplicates too), a chunk in the ppspp sim.
+    /// The `reads` table's columns: a row per unit a viewer read: a frame (its
+    /// duplicates too).
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum Reads {
         /// The viewer that read the frame, numbered as the viewers table
@@ -2701,24 +2688,23 @@ pub(crate) mod cols {
     /// (series_meta.json's `bin_ms`).
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum Bins {
-        /// A node's counters in the bins beyond the series', as the ppspp sim's
-        /// tables name them too: requests timed out and chunks wasted, answers
-        /// a full queue refused (`answers_refused`) and answers dropped at
-        /// write time (`answers_dropped`, ppspp's `DataDropped`), parents
-        /// replaced (`switched`), parents lost to their closing the
-        /// subscription (`shed`) and subscribers closed for a saturated uplink
-        /// (`sheds_sent`), outbound message bytes by kind, payloads and those
-        /// of HAVEs alone (from the node's `NODE_BIN_COUNTERS`), then stream
-        /// messages that lost a packet and packets lost (the network's
-        /// `UP_COUNTERS`). What a bin's waits give: pushes written and answers
-        /// sent in it, and the p50 and p99 of their waits, of the node's
-        /// WaitHistogram, quarter-octave buckets read at their lower bound
-        /// (never above the wait, at most a sixth under it below 46 s; empty
-        /// without any). The window model's acknowledgements alone through a
-        /// host's uplink, as `UP_COUNTERS` names them: TCP's pure ACKs and the
-        /// data channels' SACKs, packets and wire bytes of each. The row's
-        /// `packets_ack` and `up_acks` count both kinds, over the whole run and
-        /// every host.
+        /// A node's counters in the bins beyond the series': requests timed out
+        /// and chunks wasted, answers a full queue refused (`answers_refused`)
+        /// and answers dropped at write time (`answers_dropped`, ppspp's
+        /// `DataDropped`), parents replaced (`switched`), parents lost to their
+        /// closing the subscription (`shed`) and subscribers closed for a
+        /// saturated uplink (`sheds_sent`), outbound message bytes by kind,
+        /// payloads and those of HAVEs alone (from the node's
+        /// `NODE_BIN_COUNTERS`), then stream messages that lost a packet and
+        /// packets lost (the network's `UP_COUNTERS`). What a bin's waits give:
+        /// pushes written and answers sent in it, and the p50 and p99 of their
+        /// waits, of the node's WaitHistogram, quarter-octave buckets read at
+        /// their lower bound (never above the wait, at most a sixth under it
+        /// below 46 s; empty without any). The window model's acknowledgements
+        /// alone through a host's uplink, as `UP_COUNTERS` names them: TCP's
+        /// pure ACKs and the data channels' SACKs, packets and wire bytes of
+        /// each. The row's `packets_ack` and `up_acks` count both kinds, over
+        /// the whole run and every host.
         ///
         /// None is written as -1.
         WhoCounter(u16),
@@ -3209,24 +3195,23 @@ pub(crate) mod cols {
     /// The `node_bins` table's columns: a row per node and bin.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum NodeBins {
-        /// A node's counters in the bins beyond the series', as the ppspp sim's
-        /// tables name them too: requests timed out and chunks wasted, answers
-        /// a full queue refused (`answers_refused`) and answers dropped at
-        /// write time (`answers_dropped`, ppspp's `DataDropped`), parents
-        /// replaced (`switched`), parents lost to their closing the
-        /// subscription (`shed`) and subscribers closed for a saturated uplink
-        /// (`sheds_sent`), outbound message bytes by kind, payloads and those
-        /// of HAVEs alone (from the node's `NODE_BIN_COUNTERS`), then stream
-        /// messages that lost a packet and packets lost (the network's
-        /// `UP_COUNTERS`). What a bin's waits give: pushes written and answers
-        /// sent in it, and the p50 and p99 of their waits, of the node's
-        /// WaitHistogram, quarter-octave buckets read at their lower bound
-        /// (never above the wait, at most a sixth under it below 46 s; empty
-        /// without any). The window model's acknowledgements alone through a
-        /// host's uplink, as `UP_COUNTERS` names them: TCP's pure ACKs and the
-        /// data channels' SACKs, packets and wire bytes of each. The row's
-        /// `packets_ack` and `up_acks` count both kinds, over the whole run and
-        /// every host.
+        /// A node's counters in the bins beyond the series': requests timed out
+        /// and chunks wasted, answers a full queue refused (`answers_refused`)
+        /// and answers dropped at write time (`answers_dropped`, ppspp's
+        /// `DataDropped`), parents replaced (`switched`), parents lost to their
+        /// closing the subscription (`shed`) and subscribers closed for a
+        /// saturated uplink (`sheds_sent`), outbound message bytes by kind,
+        /// payloads and those of HAVEs alone (from the node's
+        /// `NODE_BIN_COUNTERS`), then stream messages that lost a packet and
+        /// packets lost (the network's `UP_COUNTERS`). What a bin's waits give:
+        /// pushes written and answers sent in it, and the p50 and p99 of their
+        /// waits, of the node's WaitHistogram, quarter-octave buckets read at
+        /// their lower bound (never above the wait, at most a sixth under it
+        /// below 46 s; empty without any). The window model's acknowledgements
+        /// alone through a host's uplink, as `UP_COUNTERS` names them: TCP's
+        /// pure ACKs and the data channels' SACKs, packets and wire bytes of
+        /// each. The row's `packets_ack` and `up_acks` count both kinds, over
+        /// the whole run and every host.
         ///
         /// None is written as an empty field.
         Counter(u16),
@@ -3374,8 +3359,7 @@ pub(crate) mod cols {
         ///
         /// Unit: ms.
         TMs,
-        /// The node whose forecast log sampled the HAVE: its host in
-        /// strims-sim, its node in the ppspp sim.
+        /// The node whose forecast log sampled the HAVE: its host.
         Node,
         /// The node's number in the viewers table; -1 for one that is no viewer
         /// (the seed, a hostile host).
@@ -3661,14 +3645,14 @@ pub(crate) mod cols {
         /// Unit: ms. None is written as an empty field.
         PredictedMs,
         /// The route's p90 expectation of when the row's peer would hold the
-        /// chunk. The routes predict no quantiles, so both sims write it empty
+        /// chunk. The routes predict no quantiles, so the sim writes it empty
         /// on every row (`predicted_horizon_ms` holds the route's latest
         /// expectation); the lab's `held_by_p90` and forecast.py's p90 read it.
         ///
         /// Unit: ms. None is written as an empty field.
         PredictedP90Ms,
         /// The route's p99 expectation of when the row's peer would hold the
-        /// chunk. The routes predict no quantiles, so both sims write it empty
+        /// chunk. The routes predict no quantiles, so the sim writes it empty
         /// on every row; the lab's `held_by_p99` and forecast.py's p99 read it.
         ///
         /// Unit: ms. None is written as an empty field.

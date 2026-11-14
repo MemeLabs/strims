@@ -78,7 +78,7 @@ class Host(unittest.TestCase):
             shutil.copy2(f, farm / Path(f).name)
         self.assertIn("store_host.py", {Path(f).name for f in sent})
         jobs = [golden_cli.job_dir(self.dir / "jobs" / f"{i:02d}", j) for i, j in enumerate(golden_cli.JOBS[:4])]
-        self.assertEqual({j["sim"] for j in jobs}, {"ppspp", "strims-sim"})
+        self.assertEqual({j["sim"] for j in jobs}, {"strims-sim"})
         (self.dir / "jobs.json").write_text(json.dumps(jobs))
         cli = store_host.duckdb_bin()
         env = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.dir), "SIM_DB_ROOT": str(self.dir / "store"),

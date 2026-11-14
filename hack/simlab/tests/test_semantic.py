@@ -262,28 +262,26 @@ class Retired(unittest.TestCase):
         self.assertEqual(spec.check(doc), [])
         base = {"type": "int", "description": "x"}
         cases = [
-            ("rows", "x", {**base, "sims": ["ppspp"], "retired": ["strims-sim"]},
+            ("rows", "x", {**base, "sims": ["strims-sim"], "retired": ["strims-sim"]},
              "[rows.x]: retired, and written by a sim, a line or a writer"),
-            ("rows", "x", {**base, "sims": [], "writers": ["suite"], "retired": ["ppspp"]},
+            ("rows", "x", {**base, "sims": [], "writers": ["suite"], "retired": ["strims-sim"]},
              "[rows.x]: retired, and written by a sim, a line or a writer"),
-            ("rows", "x", {**base, "sims": ["ppspp"], "replaced_by": "lag_p99_ms"},
+            ("rows", "x", {**base, "sims": ["strims-sim"], "replaced_by": "lag_p99_ms"},
              "[rows.x]: replaced_by on a name that isn't retired"),
-            ("rows", "x", {**base, "sims": [], "retired": ["ppspp"], "replaced_by": {"strims-sim": "lag_p99_ms"}},
-             "[rows.x]: replaced_by for ['strims-sim'], which it isn't retired for"),
-            ("rows", "x", {**base, "sims": [], "retired": ["ppspp"], "rename": True},
+            ("rows", "x", {**base, "sims": [], "retired": ["strims-sim"], "rename": True},
              "[rows.x]: rename without replaced_by, or off the rows"),
             ("rows", "x", {**base, "sims": [], "retired": ["strims-sim"], "replaced_by": "worst_region_p99_ms"},
              "[rows.x]: replaced_by worst_region_p99_ms, which strims-sim doesn't write"),
-            ("rows", "x", {**base, "sims": [], "retired": ["ppspp"], "replaced_by": "startup_p99_ms"},
-             "[rows.x]: replaced_by startup_p99_ms, which ppspp doesn't write"),
-            ("rows", "x_{q}", {**base, "sims": [], "retired": ["ppspp"], "params": {"q": ["a"]},
+            ("rows", "x", {**base, "sims": [], "retired": ["strims-sim"], "replaced_by": "startup_p99_ms"},
+             "[rows.x]: replaced_by startup_p99_ms, which strims-sim doesn't write"),
+            ("rows", "x_{q}", {**base, "sims": [], "retired": ["strims-sim"], "params": {"q": ["a"]},
                                "replaced_by": "lag_p99_ms"},
              "[rows.x_{q}]: replaced_by on a family"),
-            ("seed_decisions", "x", {**base, "sims": [], "retired": ["ppspp"], "replaced_by": "rate_bps",
+            ("seed_decisions", "x", {**base, "sims": [], "retired": ["strims-sim"], "replaced_by": "rate_bps",
                                      "rename": True},
              "[columns.seed_decisions.x]: rename without replaced_by, or off the rows"),
-            ("seed_decisions", "x", {**base, "sims": [], "retired": ["ppspp"], "replaced_by": "lag_p99_ms"},
-             "[columns.seed_decisions.x]: replaced_by lag_p99_ms, which ppspp doesn't write"),
+            ("seed_decisions", "x", {**base, "sims": [], "retired": ["strims-sim"], "replaced_by": "lag_p99_ms"},
+             "[columns.seed_decisions.x]: replaced_by lag_p99_ms, which strims-sim doesn't write"),
         ]
         for where, key, e, want in cases:
             d = copy.deepcopy(doc)
@@ -293,8 +291,8 @@ class Retired(unittest.TestCase):
                 self.assertIn(want, got)
         # A rename by sim, each sim's replacement one it writes, is sound.
         d = copy.deepcopy(doc)
-        d["rows"]["x"] = {**base, "sims": [], "retired": ["strims-sim", "ppspp"], "rename": True,
-                          "replaced_by": {"strims-sim": "lag_p99_ms", "ppspp": "worst_region_p99_ms"}}
+        d["rows"]["x"] = {**base, "sims": [], "retired": ["strims-sim"], "rename": True,
+                          "replaced_by": {"strims-sim": "lag_p99_ms"}}
         self.assertEqual(spec.check(d), [])
 
 
@@ -323,13 +321,15 @@ class FarmNames(unittest.TestCase):
 
     def test_the_hosts_names(self):
         worker = farm_module("worker")
-        self.assertEqual(sorted(set(worker.THIN) - self.rows), [], "worker.THIN")
+        # But `frames` and `bytes`, which older rows hold and no sim writes now.
+        self.assertEqual(sorted(set(worker.THIN) - self.rows), ["bytes", "frames"], "worker.THIN")
         store_host = (HACK / "simlab" / "store_host.py").read_text()
         read = set(re.findall(r'\brow\.get\("([a-z_][a-z0-9_]*)"\)', store_host))
         self.assertTrue({"trace", "frames", "bytes"} <= read, read)
         # But `series`, the JSON an older binary's row carried, which the
-        # fold refuses (no sim writes it now).
-        self.assertEqual(sorted(read - self.rows), ["series"], "store_host's row.get")
+        # fold refuses, and `frames` and `bytes`, which older rows hold: no
+        # sim writes them now.
+        self.assertEqual(sorted(read - self.rows), ["bytes", "frames", "series"], "store_host's row.get")
 
     def test_the_controllers_names(self):
         farm = farm_module("farm")

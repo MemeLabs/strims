@@ -840,15 +840,13 @@ def undeclared_lines(err):
 
 class Kinds(Fixture):
     def test_the_kinds_are_the_vocabularys_and_the_runs(self):
-        # A vocabulary that lacks uplink_rate (strims-sim's step jobs write
-        # it) and gives latency (every job's) to strims-sim alone.
-        doc = without(without(vocab.load(), "uplink_rate"), "latency", ["strims-sim"])
+        # A vocabulary that lacks uplink_rate (the step jobs write it).
+        doc = without(vocab.load(), "uplink_rate")
         err = io.StringIO()
         with mock.patch.object(vocab, "load", lambda path=None: doc), contextlib.redirect_stderr(err):
             self.index()
             docs = catalog.kind_docs()
         self.assertEqual(kind_lines(err), [
-            "index: event kind latency (ppspp) isn't in the vocabulary, crates/strims-wan/vocab.toml",
             "index: event kind uplink_rate (strims-sim) isn't in the vocabulary, crates/strims-wan/vocab.toml"])
         rows = catalog.lake("SELECT * EXCLUDE (first_seen, last_seen) FROM event_kinds ORDER BY sim, kind;")
         self.assertEqual(list(rows[0]), [*catalog.KIND_COLS, "documented", "n"])
@@ -859,7 +857,7 @@ class Kinds(Fixture):
         for d in docs:
             self.assertEqual({c: got[(d["kind"], d["sim"])][c] for c in d}, d)
         self.assertEqual(sorted(k for k, r in got.items() if not r["documented"]),
-                         [("latency", "ppspp"), ("uplink_rate", "strims-sim")])
+                         [("uplink_rate", "strims-sim")])
         lost = got[("uplink_rate", "strims-sim")]
         self.assertGreater(lost["n"], 0)
         self.assertEqual({c: lost[c] for c in catalog.KIND_COLS if c not in ("kind", "sim")},
@@ -867,9 +865,9 @@ class Kinds(Fixture):
         self.assertGreater(got[("latency", "strims-sim")]["n"], 0)
         # The fields as the document gives them: a sim's note, value with
         # its unit, a derived kind's sim.
-        join = got[("join", "ppspp")]
+        join = got[("join", "strims-sim")]
         self.assertEqual((join["class"], join["scope"], join["node"], join["notes"], join["value_meaning"]),
-                         ("scenario", "viewer", "the viewer", vocab.notes("join", "ppspp"), None))
+                         ("scenario", "viewer", "the viewer", vocab.notes("join", "strims-sim"), None))
         # A scenario kind's scope is run unless it names its own; another
         # class's none.
         self.assertEqual([got[(k, "strims-sim")]["scope"] for k in ("latency", "caught_up")], ["run", None])
@@ -877,23 +875,23 @@ class Kinds(Fixture):
         self.assertEqual((got[("collapse", "derived")]["class"], got[("collapse", "derived")]["value_meaning"]),
                          ("derived", "its length, s"))
         self.assertGreater(got[("start", "derived")]["n"], 0)
-        # A kind no run has written: n 0, for both sims when only other
+        # A kind no run has written: n 0, for every sim when only other
         # builds write it, its knob named.
         for sim in vocab.SIMS:
             spec = got[("parent_choice", sim)]
             self.assertEqual((spec["n"], spec["env_gate"], spec["details"], spec["documented"]),
-                             (0, "SIM_SPEC", ["open", "switch"], True))
-        self.assertEqual((got[("arrive", "strims-sim")]["n"], ("arrive", "ppspp") in got), (0, False))
+                             (0, "STRIMS_SIM_SPEC", ["open", "switch"], True))
+        self.assertEqual(got[("arrive", "strims-sim")]["n"], 0)
         # A retired kind's row per sim that wrote it, each with that sim's
         # replacement, none written by today's fixture.
-        for kid, by in (("uplink", {"strims-sim": "rate_limit", "ppspp": "uplink_rate"}),
-                        ("parent_lost", {"strims-sim": "parent_noticed", "ppspp": "parent_departed"}),
+        for kid, by in (("uplink", {"strims-sim": "rate_limit"}),
+                        ("parent_lost", {"strims-sim": "parent_noticed"}),
                         ("first_frame", {"strims-sim": "first_read"})):
             rows = {s: r for (k, s), r in got.items() if k == kid}
             self.assertEqual({s: r["replaced_by"] for s, r in rows.items()}, by, kid)
             self.assertTrue(all(r["n"] == 0 and r["documented"] for r in rows.values()), kid)
-        self.assertGreater(got[("parent_departed", "ppspp")]["n"], 0)
-        self.assertIsNone(got[("parent_departed", "ppspp")]["replaced_by"])
+        self.assertGreater(got[("parent_departed", "strims-sim")]["n"], 0)
+        self.assertIsNone(got[("parent_departed", "strims-sim")]["replaced_by"])
 
     def test_the_docs_name_the_vocabularys_kinds_and_phases(self):
         self.assertEqual(verdict.DERIVED_KINDS, tuple(vocab.derived()))
@@ -1200,16 +1198,12 @@ class Retired(Fixture):
     id it wrote."""
 
     EVENTS = {
-        "suite/wt/old-pp": (0, [(1000, "uplink", 0, -1, 5_000_000, ""), (2000, "parent_lost", 3, 1, 1, "graceful"),
-                                (3000, "first_read", 2, -1, 400, "")]),
         "suite/wt/old-ss": (2, [(1000, "up_step", 0, -1, 4_000_000, ""), (1500, "uplink", 0, -1, 3_000_000, ""),
                                 (2000, "first_frame", 2, -1, 300, ""), (2500, "parent_lost", 3, 1, 250, ""),
                                 (2600, "parent_lost", 4, 1, -1, ""), (3000, "uplink_rate", 0, -1, 2_000_000, "")]),
     }
     # (written, current) of each, in time order.
-    WANT = {"suite/wt/old-pp": [("uplink", "uplink_rate", 5_000_000), ("parent_lost", "parent_departed", 1),
-                                ("first_read", "first_read", 400)],
-            "suite/wt/old-ss": [("up_step", "uplink_rate", 4_000_000), ("uplink", "rate_limit", 3_000_000),
+    WANT = {"suite/wt/old-ss": [("up_step", "uplink_rate", 4_000_000), ("uplink", "rate_limit", 3_000_000),
                                 ("first_frame", "first_read", 300), ("parent_lost", "parent_noticed", 250),
                                 ("parent_lost", "parent_departed", None), ("uplink_rate", "uplink_rate", 2_000_000)]}
 
@@ -1235,9 +1229,6 @@ class Retired(Fixture):
             with query.views(query.Selection(src=[src]), derived=False) as v:
                 got = v.records("SELECT written_kind, kind, value FROM events ORDER BY t_us;")
             self.assertEqual([(r["written_kind"], r["kind"], r["value"]) for r in got], self.WANT[src], src)
-        # The detail of a ppspp parent_lost is its departure's, as parent_departed's.
-        self.assertEqual(catalog.lake(f"SELECT detail FROM events WHERE k = {catalog.q(keys['suite/wt/old-pp'])} "
-                                      "AND kind = 'parent_departed';"), [{"detail": "graceful"}])
         # What aligns on the events' kind names current ids alone.
         self.assertLessEqual(set(forecast.ALIGN_KINDS), set(vocab.kinds()))
 
@@ -1270,8 +1261,8 @@ class Renamed(Fixture):
     that sim's jobs alone; raw.rows keeps what was written; an index that
     makes the doc tables again alone makes the views again too."""
 
-    ENTRY = ('\n[rows.join_old_ms]\nsims = []\nretired = ["strims-sim", "ppspp"]\n'
-             'replaced_by = { ppspp = "join_p90_ms" }\nrename = true\ntype = "int"\nunit = "ms"\n'
+    ENTRY = ('\n[rows.join_old_ms]\nsims = []\nretired = ["strims-sim"]\n'
+             'replaced_by = "join_p90_ms"\nrename = true\ntype = "int"\nunit = "ms"\n'
              'description = "An older join p90."\n')
 
     def fold(self, src, job, row):
@@ -1285,8 +1276,9 @@ class Renamed(Fixture):
         return k
 
     def views(self, pp, ss):
-        rows = {r["k"]: r for r in catalog.lake(f"SELECT k, join_p90_ms, join_old_ms FROM rows WHERE k IN "
-                                                f"({catalog.q(pp)}, {catalog.q(ss)});")}
+        # Without a value under its old name the rows view has no join_old_ms.
+        rows = {r["k"]: {"join_old_ms": None, **r} for r in catalog.lake(
+            f"SELECT * FROM rows WHERE k IN ({catalog.q(pp)}, {catalog.q(ss)});")}
         scalars = {(r["k"], r["name"]): r["value"] for r in catalog.lake(
             f"SELECT k, name, value FROM scalars WHERE k IN ({catalog.q(pp)}, {catalog.q(ss)}) "
             "AND name IN ('join_p90_ms', 'join_old_ms');")}
@@ -1297,7 +1289,7 @@ class Renamed(Fixture):
             return {**{n: v for n, v in row.items() if n != "join_p90_ms"}, "join_old_ms": 777}
 
         pp = self.fold("suite/wt/renamed-pp", 0, old_pp)
-        ss = self.fold("suite/wt/renamed-ss", 2, lambda row: {**row, "join_old_ms": 555})
+        ss = self.fold("suite/wt/renamed-ss", 2, lambda row: row)
         d = self.root / "renamed"
         d.mkdir()
         fields = Path(shutil.copy(catalog.FIELDS, d / "fields.toml"))
@@ -1306,33 +1298,30 @@ class Renamed(Fixture):
         # Without the rename, as written.
         rows, scalars = self.views(pp, ss)
         self.assertEqual({k: (r["join_p90_ms"], r["join_old_ms"]) for k, r in rows.items()},
-                         {pp: (None, 777), ss: (910, 555)})
+                         {pp: (None, 777), ss: (910, None)})
         fields.write_text(fields.read_text() + self.ENTRY)
         with mock.patch.object(catalog, "FIELDS", fields), mock.patch.object(vocab, "NAMES", fields), \
                 contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(vocab.renames()[-1], ("join_old_ms", "join_p90_ms", ["ppspp"]))
+            self.assertEqual(vocab.renames()[-1], ("join_old_ms", "join_p90_ms", ["strims-sim"]))
             got, _ = self.index()
             self.assertTrue(got.docs)
             self.assertEqual(got.sources, [])
             rows, scalars = self.views(pp, ss)
-            # The ppspp job's under the current name; strims-sim's, no
-            # rename, as written.
+            # The older row's under the current name; the other's as written.
             self.assertEqual({k: (r["join_p90_ms"], r["join_old_ms"]) for k, r in rows.items()},
-                             {pp: (777, None), ss: (910, 555)})
-            self.assertEqual(scalars, {(pp, "join_p90_ms"): 777.0, (ss, "join_p90_ms"): 910.0,
-                                       (ss, "join_old_ms"): 555.0})
+                             {pp: (777, None), ss: (910, None)})
+            self.assertEqual(scalars, {(pp, "join_p90_ms"): 777.0, (ss, "join_p90_ms"): 910.0})
             self.assertEqual(catalog.lake(f"SELECT join_p90_ms, join_old_ms FROM raw.rows WHERE k = {catalog.q(pp)};"),
                              [{"join_p90_ms": None, "join_old_ms": 777.0}])
             got = query.rows([("suite/wt/renamed-pp", pp), ("suite/wt/renamed-ss", ss)])
             self.assertEqual((got[("suite/wt/renamed-pp", pp)]["join_p90_ms"],
                               "join_old_ms" in got[("suite/wt/renamed-pp", pp)]), (777, False))
-            self.assertEqual({n: got[("suite/wt/renamed-ss", ss)][n] for n in ("join_p90_ms", "join_old_ms")},
-                             {"join_p90_ms": 910, "join_old_ms": 555})
+            self.assertEqual((got[("suite/wt/renamed-ss", ss)]["join_p90_ms"],
+                              "join_old_ms" in got[("suite/wt/renamed-ss", ss)]), (910, False))
             doc = catalog.lake("SELECT description FROM metric_catalog WHERE tbl = 'rows' AND name = 'join_old_ms';")
-            self.assertEqual(doc, [{"description": "An older join p90. Retired: only the older runs of strims-sim and "
-                                                   "the ppspp sim hold it; `join_p90_ms` in the ppspp sim took its "
-                                                   "place, meaning the same, and the rows view reads its values under "
-                                                   "that name."}])
+            self.assertEqual(doc, [{"description": "An older join p90. Retired: only the older runs of strims-sim "
+                                                   "hold it; `join_p90_ms` took its place, meaning the same, and the "
+                                                   "rows view reads its values under that name."}])
         # fields.toml as it is: the views as written again.
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertTrue(self.index()[0].docs)
@@ -1401,7 +1390,7 @@ class Docs(DocsFixture):
         copy = Path(shutil.copy(catalog.FIELDS, self.root / "doc-files" / "fields.toml"))
         with mock.patch.object(catalog, "FIELDS", copy):
             self.assertFalse(self.index()[0].changed)
-            entry = '[columns.viewers.churned]\nsims = ["strims-sim", "ppspp"]\ntype = "bool"\ndescription = "'
+            entry = '[columns.viewers.churned]\nsims = ["strims-sim"]\ntype = "bool"\ndescription = "'
             text = copy.read_text()
             self.assertEqual(text.count(entry), 1)
             copy.write_text(text.replace(entry, entry + self.MARK + " "))
@@ -1776,7 +1765,7 @@ class Registries(unittest.TestCase):
     def test_the_sample_tables_are_tables(self):
         self.assertEqual(sorted(set(store_host.SAMPLE_TABLES) - set(store_host.TABLES)), [])
 
-    def test_fields_tables_are_tables_both_sims_write(self):
+    def test_fields_tables_are_the_sims_tables(self):
         tables = vocab.fields(catalog.FIELDS)["tables"]
         # store_host's tuples are literal (the farm's hosts run it alone):
         # fields.toml's, in its order.
@@ -1785,17 +1774,15 @@ class Registries(unittest.TestCase):
         self.assertEqual(list(store_host.SAMPLE_TABLES), [t for t, e in tables.items() if e.get("sample")])
         for t, tab in tables.items():
             with self.subTest(table=t):
-                self.assertIn(tab["sims"], ([], ["strims-sim", "ppspp"]), "a table one sim writes and the other doesn't")
+                self.assertIn(tab["sims"], ([], ["strims-sim"]), "a table the sim doesn't write")
 
-    def test_both_sims_compress_the_same_tables(self):
-        lists = {}
-        for sim, path in (("strims-sim", catalog.ROOT / "crates" / "strims-sim" / "src" / "fields.rs"),
-                          ("ppspp", catalog.ROOT / "crates" / "strims-ppspp" / "tests" / "sim" / "fields.rs")):
-            m = re.search(r"\bZSTD: \[&str; \d+\] = \[(.*?)\];", path.read_text(), re.S)
-            self.assertIsNotNone(m, f"{path}: no ZSTD list")
-            lists[sim] = sorted(re.findall(r'"([a-z_]+)"', m.group(1)))
-        self.assertEqual(lists["strims-sim"], lists["ppspp"], "the sims' ZSTD lists")
-        self.assertEqual(sorted(set(lists["ppspp"]) - set(store_host.TABLES)), [])
+    def test_the_sims_compressed_tables_are_registered(self):
+        path = catalog.ROOT / "crates" / "strims-sim" / "src" / "fields.rs"
+        m = re.search(r"\bZSTD: \[&str; \d+\] = \[(.*?)\];", path.read_text(), re.S)
+        self.assertIsNotNone(m, f"{path}: no ZSTD list")
+        zstd = sorted(re.findall(r'"([a-z_]+)"', m.group(1)))
+        self.assertTrue(zstd)
+        self.assertEqual(sorted(set(zstd) - set(store_host.TABLES)), [])
 
     def test_the_registries_are_fields_tomls(self):
         tables = vocab.fields(catalog.FIELDS)["tables"]
@@ -1816,10 +1803,9 @@ class Registries(unittest.TestCase):
         sql = catalog.view_sql("bins", {"k": "VARCHAR", "src": "VARCHAR", "bin": "BIGINT", "zz_old": "BIGINT"},
                                "bins", {}, {})
         self.assertIn('x."bin", nullif(x."zz_old", -1) AS "zz_old"', sql)
-        # A table's grain names them, in each sim.
+        # A table's grain names them.
         grain = catalog.field_docs()["tables"]["arrivals"][0]
-        self.assertTrue(grain.endswith(", with `STRIMS_SIM_FORECAST=1` or `STRIMS_SIM_SPEC=1` in strims-sim, "
-                                       "`SIM_FORECAST=1` or `SIM_SPEC=1` in the ppspp sim"), grain)
+        self.assertTrue(grain.endswith(", with `STRIMS_SIM_FORECAST=1` or `STRIMS_SIM_SPEC=1` in strims-sim"), grain)
 
 
 class Commands(Fixture):

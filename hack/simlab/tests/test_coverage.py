@@ -68,8 +68,8 @@ SRC = "suite/wt/cv"
 RUNS = {("decl", 1): None, ("decl", 2): None, ("main", 1): "step", ("main", 2): "collapse"}
 # The second invocation, whose jobs are SRC's labelled again.
 RELABEL = "suite/wt/cv-relabel"
-# The ppspp sim's job's arm label.
-PP = "ppspp-decl"
+# The arm label of the job that ends a second after its last publication.
+PP = "strims-sim-pp"
 NAMES = {f"strims-sim-{arm}": arm for arm in ("decl", "main", "bare", "noarr")} | {PP: "pp"}
 SEL = forecast.Selection(exp=[SRC], names=NAMES, phases="all")
 SEED = 0
@@ -189,7 +189,8 @@ def build(root):
             (d / "series_meta.json").write_text(json.dumps(meta | {"seed": SEED, "streams": 2}))
         jobs.append(rec)
     d = root / "jobs" / "pp-1"
-    rec = golden_cli.job_dir(d, (SRC, f"{PP}:star-5:1", "ppspp", "sim_job", "star-5", PP, 1, golden_cli.PP_ENV,
+    rec = golden_cli.job_dir(d, (SRC, f"{PP}:star-5:1", "strims-sim", "calibration_star", "star-5", PP, 1,
+                                 golden_cli.STAR_ENV,
                                  golden_cli.T0, None))
     rec["row"]["streams"] = 2
     golden_cli.write_table(d, "arrivals", ARRIVAL_COLS, [r for r in arrivals(1) if r[3] < PP_CHUNKS])
@@ -489,7 +490,7 @@ class Grain(Fixture):
         self.assertEqual((b["runs"], b["seeds"], b["chunks"], b["late"], b["never"], b["p99_ms"]),
                          (1, [1], JUDGED_STEADY, len(STEADY_LATE) + 1, 1, mine["p99_runs"][2]))
 
-    def test_the_ppspp_sims_job(self):
+    def test_a_job_that_ends_a_second_after_its_last_publication(self):
         # decl's seed-1 holds to chunk 153, published at 39 s, a second
         # before the run's end: its judged chunks are decl's seed 1's, and
         # 26 censored (chunks 128-153) where decl's have 32.

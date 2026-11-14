@@ -338,12 +338,17 @@ ROOT = Path(__file__).resolve().parents[2]
 CATALOG_VERSION = 1
 # How long S3 keeps a flush (farm.py's S3_KEPT_DAYS).
 S3_DAYS = 7
-# The env's knobs promoted to jobs' columns: the sims' setting of each
-# (SIM_<NAME> in ppspp, STRIMS_SIM_<NAME> in strims-sim).
+# The env's knobs promoted to jobs' columns: the sim's setting of each
+# (STRIMS_SIM_<NAME>).
 PROMOTED = {"known_uplink": "KNOWN_UPLINK", "arrivals": "ARRIVALS", "depart": "DEPART", "exp": "EXP"}
 # A job's own keys in its env, left out of env_hash: its seed and output.
-JOB_KEYS = ("SIM_SEED", "STRIMS_SIM_SEED", "SIM_OUT", "STRIMS_SIM_OUT")
+JOB_KEYS = ("STRIMS_SIM_SEED", "STRIMS_SIM_OUT")
 SIMS = verdict.SIM_NAMES
+# The names a run's sim holds for the ppspp sim (crates/strims-ppspp/tests/sim.rs),
+# a correctness harness whose runs the lab doesn't read: the index leaves
+# their jobs out (jobs, experiment_cells, experiment_jobs), and every view
+# with them (canon), and a farm job of SIM_ knobs alone with them.
+SKIPPED_SIMS = ("ppspp", "strims-ppspp:sim")
 # The sims' tables that are a job's ids and times, not readings: kept as
 # they are where -1 elsewhere is no reading.
 ID_COLS = {"k", "src", "sec", "bin", "t_ms", "t_us", "node", "viewer", "seq", "stream"}
@@ -849,11 +854,11 @@ FIELDS = vocab.NAMES
 # FIELDS is.
 METRICS_DOC = semantic.METRICS
 # A table's knob in each sim: the setting's prefix.
-KNOB_PREFIX = {"strims-sim": "STRIMS_SIM_", "ppspp": "SIM_"}
+KNOB_PREFIX = {"strims-sim": "STRIMS_SIM_"}
 
 
 # A sim's name in the docs' prose.
-SIM_TEXT = {"strims-sim": "strims-sim", "ppspp": "the ppspp sim"}
+SIM_TEXT = {"strims-sim": "strims-sim"}
 
 
 def field_text(e):
@@ -887,8 +892,7 @@ def retired_text(e):
 
 def knob_text(knobs, sims):
     """The settings that write a table (`knobs`, without their prefix) in
-    each of `sims`: ", with `STRIMS_SIM_SPEC=1` in strims-sim, `SIM_SPEC=1`
-    in the ppspp sim"."""
+    each of `sims`: ", with `STRIMS_SIM_SPEC=1` in strims-sim"."""
     if not knobs:
         return ""
     return ", with " + ", ".join(" or ".join(f"`{KNOB_PREFIX[s]}{k}=1`" for k in knobs) + f" in {SIM_TEXT[s]}"
@@ -1847,7 +1851,7 @@ def sim_case(col):
 
 
 def knob(env, name):
-    return f"coalesce({env}['STRIMS_SIM_{name}'], {env}['SIM_{name}'])"
+    return f"{env}['STRIMS_SIM_{name}']"
 
 
 JOBS_SQL = """
@@ -1875,7 +1879,7 @@ s AS (
                             WHEN len(list_filter(map_keys(env), lambda x: x LIKE 'SIM_%')) > 0 THEN 'ppspp' END) AS nsim
     FROM j)
 SELECT k, nsim AS sim, coalesce(ctest, f.test) AS test,
-       coalesce(cseed, TRY_CAST(env[CASE WHEN nsim = 'ppspp' THEN 'SIM_SEED' ELSE 'STRIMS_SIM_SEED' END] AS BIGINT)) AS seed,
+       coalesce(cseed, TRY_CAST(env['STRIMS_SIM_SEED'] AS BIGINT)) AS seed,
        coalesce(f.commit, ccommit) AS commit, CASE WHEN f.commit IS NOT NULL THEN false ELSE cdirty END AS dirty,
        coalesce(f.binary_sha256, cbinary) AS binary_sha256, env,
        CASE WHEN env['STRIMS_SIM_RTC'] IS NOT NULL THEN 'webrtc' WHEN env['STRIMS_SIM_TCP'] = '1' THEN 'tcp' END
@@ -1892,7 +1896,8 @@ SELECT k, nsim AS sim, coalesce(ctest, f.test) AS test,
        split_part(coalesce(csrc, f.src), '/', 2) AS run, csrc IS NOT NULL AS cached,
        coalesce(h.tables, []) AS tables, cell AS stored_cell, coalesce(arm, f.arm) AS stored_arm, bin_ms, frames,
        bytes
-FROM s LEFT JOIN held h ON h.src = s.csrc;
+FROM s LEFT JOIN held h ON h.src = s.csrc
+WHERE nsim IS NULL OR nsim NOT IN ({skipped});
 """
 
 EXPERIMENTS_SQL = """
@@ -1906,24 +1911,25 @@ SELECT c.exp_id, c.cell, {csim} AS sim, c.test, c.why,
        c.mem_gib, f.matrix
 FROM raw.suite_cells c JOIN raw.suite_runs r USING (exp_id)
 LEFT JOIN fenv f ON f.matrix = c.exp_id || '-' || lpad(c.i::VARCHAR, 2, '0')
+WHERE c.sim IS NULL OR c.sim NOT IN ({skipped})
 UNION ALL BY NAME
 SELECT src AS exp_id, cell, any_value({rsim}) AS sim, any_value(test) AS test,
        any_value(json_transform(env, '"MAP(VARCHAR, VARCHAR)"')) AS env
-FROM raw.runs WHERE src LIKE 'suite/%' GROUP BY src, cell;
+FROM raw.runs WHERE src LIKE 'suite/%' AND sim NOT IN ({skipped}) GROUP BY src, cell;
 
 CREATE OR REPLACE TABLE main.experiment_jobs AS
 SELECT u.* EXCLUDE (line), j.src FROM (
     SELECT c.exp_id, c.cell,
            CASE WHEN r.knob[c.sim] IS NULL THEN f.arm ELSE coalesce(f.env[r.knob[c.sim]], f.arm) END AS arm_label,
            f.arm AS ref, f.env[r.knob[c.sim]] AS knob_value, f.k,
-           TRY_CAST(f.env[CASE WHEN c.sim = 'ppspp' THEN 'SIM_SEED' ELSE 'STRIMS_SIM_SEED' END] AS BIGINT) AS seed,
+           TRY_CAST(f.env['STRIMS_SIM_SEED'] AS BIGINT) AS seed,
            f.matrix, f.reused_from IS NOT NULL AND f.reused_from <> f.matrix AS reused, f.src AS flush, f.line
     FROM raw.suite_cells c JOIN raw.suite_runs r USING (exp_id)
     JOIN raw.farm_index f ON f.matrix = c.exp_id || '-' || lpad(c.i::VARCHAR, 2, '0')
-    WHERE f.src IS NOT NULL AND f.k IS NOT NULL
+    WHERE f.src IS NOT NULL AND f.k IS NOT NULL AND (c.sim IS NULL OR c.sim NOT IN ({skipped}))
     UNION ALL BY NAME
     SELECT src AS exp_id, cell, arm AS arm_label, arm AS ref, k, seed, false AS reused, src AS flush, 0 AS line
-    FROM raw.runs WHERE src LIKE 'suite/%') u
+    FROM raw.runs WHERE src LIKE 'suite/%' AND sim NOT IN ({skipped})) u
 LEFT JOIN main.jobs j USING (k)
 QUALIFY row_number() OVER (PARTITION BY u.exp_id, u.cell, u.arm_label, u.seed, u.k ORDER BY u.reused, u.line DESC) = 1;
 
@@ -2194,16 +2200,17 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None):
     where `own` (owns') has them its own, else the catalog's kept, the
     scoring objects marked behind the data (scoring_behind)."""
     own = own or {"verdicts": True, "scoring": True}
+    skipped = ", ".join(q(s) for s in SKIPPED_SIMS)
     out = [JOBS_SQL.format(csim=sim_case("csim"), promoted=",\n       ".join(
         f"{knob('env', v)} AS {n}" for n, v in PROMOTED.items()),
-        job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]")]
+        job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped)]
     prices = s3_prices()
     if len(prices) < 7:
         prices = dict.fromkeys(("S3_TIER1", "S3_TIER2", "S3_INTER_REGION_GB", "S3_INTERNET_GB",
                                 "S3_STORAGE_GB_MONTH", "S3_KEPT_DAYS"), 0.0) | {"GB": 1.0}
     out.append(COSTS_SQL.format(**{k: repr(v) for k, v in prices.items()}))
     out.append(EXPERIMENTS_SQL.format(csim=sim_case("c.sim"), rsim=sim_case("sim"),
-                                      job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]"))
+                                      job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped))
     out.append(AVAILABILITY_SQL.format(days=S3_DAYS))
     out.append(EXP_RUNS_SQL)
     out += commits_sql(tmp, ins, parsed, commits)
@@ -2380,12 +2387,12 @@ TABLE_DOCS = {
         "experiment_jobs with its jobs' columns (jobs, but k and seed)."),
     "jobs": (
         "table", "a job", "k", "every table USING (k, src); commits ON commits.sha = jobs.commit",
-        "Every job the cache or the farm's indexes know: sim ('ppspp' or 'strims-sim'), test, seed, commit (the "
+        "Every job the cache or the farm's indexes know but the ppspp sim's: sim ('strims-sim'), test, seed, commit (the "
         "one its binary was built from: a farm job's from its index, a local one's from its run), dirty (whether "
         "the working tree's changes to that commit's build inputs went into the binary; false for the farm's, "
         "which builds commits alone) and binary_sha256, env (its settings, MAP) and knobs promoted from it "
         "(transport: 'tcp' or 'webrtc' (rtc_browsers the browsers) or NULL for the sim's own model; known_uplink, "
-        "arrivals, depart and exp: the sims' SIM_*/STRIMS_SIM_* settings), env_hash (its settings but seed and "
+        "arrivals, depart and exp: the sim's STRIMS_SIM_* settings), env_hash (its settings but seed and "
         "output, so equal settings match across experiments), trace and reads_hash (the digests a rerun must "
         "reproduce), wall_s and rss_mb (its host's), ran_at, and src: the cache source its tables come from "
         "(simdb.py's source_ranks: the one holding the most tables, then the later flush, then the later seq), or "
@@ -2476,7 +2483,7 @@ TABLE_DOCS = {
     "event_kinds": (
         "table", "an event kind of a sim", "kind, sim", "events, derived_events ON kind",
         "Every kind of the vocabulary (crates/strims-wan/vocab.toml), a row for each sim whose runs may hold it "
-        "(sim 'derived' for derived_events'; both sims for a kind only other builds write, under its knob), and "
+        "(sim 'derived' for derived_events'; every sim for a kind only other builds write, under its knob), and "
         "each kind a sim's events hold that the vocabulary doesn't give that sim (documented false, the rest "
         f"NULL): class ({either(vocab.CLASSES)}), scope (whose seconds a scenario kind bears on: run, every "
         "viewer's, or viewer, its node's viewer's alone, as a join's), description, what node, peer, value "

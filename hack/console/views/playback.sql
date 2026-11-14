@@ -3,8 +3,7 @@
 --
 -- What a player at a playout delay of $delay ms would have shown the
 -- honest viewers, by cell, arm and the viewer's phase, from the sims'
--- `stalls` tables (a frame's stall in strims-sim, a 4 KiB chunk's in the
--- ppspp sim: many are tiny). Long form, one `part` a chart:
+-- `stalls` tables (a frame's stall). Long form, one `part` a chart:
 --
 --   rate     stalls per viewer-minute and the share of viewing time
 --            stalled, per cell, arm and phase (stall_rate_of: viewing time
