@@ -104,11 +104,11 @@ def choose():
     """The default experiments: the latest two farm ones of at most four
     cells, and the latest local one of 4-40 jobs whose reads are local."""
     farm = lake("SELECT exp_id FROM experiments WHERE kind = 'farm' AND NOT pending AND cells <= 4 "
-                "AND len(arm_labels) >= 2 ORDER BY started_at DESC LIMIT 2")
+                "AND len(arm_labels) >= 2 ORDER BY started_at DESC, exp_id LIMIT 2")
     local = lake("SELECT e.exp_id FROM experiments e JOIN experiment_jobs j USING (exp_id) LEFT JOIN availability a "
                  "ON a.k = j.k AND a.tbl = 'reads' WHERE e.kind = 'local' GROUP BY e.exp_id, e.started_at "
                  "HAVING count(DISTINCT j.k) = count(DISTINCT j.k) FILTER (WHERE a.state = 'local') "
-                 "AND count(DISTINCT j.k) BETWEEN 4 AND 40 ORDER BY e.started_at DESC LIMIT 1")
+                 "AND count(DISTINCT j.k) BETWEEN 4 AND 40 ORDER BY e.started_at DESC, e.exp_id LIMIT 1")
     return [r["exp_id"] for r in farm + local]
 
 

@@ -138,11 +138,19 @@ def ref_metrics(ref):
     """The METRICS both sides have: simlab.suite's, which the macros score,
     without those the reference lacks, and the reference's without those
     simlab.suite lacks, each RESTATED one by its getter there. A metric
-    added or dropped since the reference is no part of the comparison."""
+    added or dropped since the reference is no part of the comparison. The
+    catalog's index (farm_rows') runs under simlab.suite's own METRICS:
+    it makes the scoring objects every session reads of them."""
     ours, theirs = {m[0] for m in lab.METRICS}, {m[0] for m in ref.METRICS}
     restated = [(m[0], RESTATED.get(m[0], m[1]), *m[2:]) for m in ref.METRICS if m[0] in ours]
+    own, index = lab.METRICS, lab.index_catalog
+
+    def indexed():
+        with mock.patch.object(lab, "METRICS", own):
+            index()
+
     with mock.patch.object(lab, "METRICS", [m for m in lab.METRICS if m[0] in theirs]), \
-            mock.patch.object(ref, "METRICS", restated):
+            mock.patch.object(ref, "METRICS", restated), mock.patch.object(lab, "index_catalog", indexed):
         yield
 
 
@@ -170,7 +178,8 @@ x AS (SELECT e.exp_id, any_value(e.sets) AS sets, any_value(e.base) AS base, any
              arg_max(r.arm_label, r.reused) AS reused_arm, max(r.reused) AS most_reused,
              any_value(e.started_at) AS started_at
       FROM e JOIN r USING (exp_id) GROUP BY e.exp_id)
-SELECT *, row_number() OVER (PARTITION BY sets ORDER BY started_at DESC) AS nth FROM x ORDER BY started_at DESC;""")
+SELECT *, row_number() OVER (PARTITION BY sets ORDER BY started_at DESC, exp_id) AS nth FROM x
+ORDER BY started_at DESC, exp_id;""")
     out = []
     for e in got:
         if not names and e["nth"] > n:
@@ -249,7 +258,7 @@ def local_cases(n):
     got = s.catalog().lake(f"""
 SELECT exp_id FROM experiments WHERE kind = 'local' AND len(list_filter(arm_labels, lambda x: x LIKE 'tree-%')) > 0
   AND len(list_filter(arm_labels, lambda x: x NOT LIKE 'tree-%')) > 0
-ORDER BY started_at DESC LIMIT {int(n)};""")
+ORDER BY started_at DESC, exp_id LIMIT {int(n)};""")
     out = []
     for e in got:
         jobs = s.catalog().lake(f"SELECT cell, arm_label, seed, k, src FROM experiment_jobs WHERE exp_id = "
