@@ -4,7 +4,23 @@
 import qs from "qs";
 
 import { Listing } from "../apis/strims/network/v1/directory/directory";
+import { ErrorCode } from "../apis/strims/network/v1/directory/errors/errors";
 import { PlayerSource } from "../contexts/Player";
+import { errorCode } from "./rpcError";
+
+// The directory's refusals of a Part or Unpublish that mean the host is no
+// longer in the listing: the listing, or the session that held the role,
+// already ended.
+const alreadyLeft = new Set<number>([
+  ErrorCode.LISTING_NOT_FOUND,
+  ErrorCode.SESSION_NOT_FOUND,
+  ErrorCode.NOT_VIEWING,
+  ErrorCode.NOT_PUBLISHING,
+]);
+
+// Whether `e`, the rejection of a Part or Unpublish, means the host had
+// already left the listing.
+export const isAlreadyLeft = (e: unknown): boolean => alreadyLeft.has(errorCode(e));
 
 export type ServiceSlug = "angelthump" | "twitch" | "twitch-vod" | "youtube";
 

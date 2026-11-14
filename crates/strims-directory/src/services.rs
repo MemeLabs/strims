@@ -71,6 +71,8 @@ use strims_proto::network::v1::directory::{
     UnpublishResponse, UserModeration, UserRecord, register_directory_service,
     register_directory_snippet_service,
 };
+use strims_proto::ErrorCoded;
+use strims_proto::network::v1::directory::errors::ErrorCode;
 use strims_proto::service::{Context, Error as RpcError, ServerStream};
 use strims_rpc::vpn::{self, VpnClient, VpnConnection};
 use strims_rpc::{RetryClient, Router, Timer};
@@ -367,7 +369,7 @@ impl<K: Kv, H: Host, T: Timer> DirectoryServer<K, H, T> {
         let caller = ctx
             .certificate()
             .and_then(Caller::from_certificate)
-            .ok_or_else(|| RpcError::new(0, "no caller certificate"))?;
+            .ok_or_else(|| RpcError::new(ErrorCode::NoCallerCertificate, "no caller certificate"))?;
         serve(&s, &r, &caller, req).await.map_err(|e| e.to_rpc())
     }
 }
@@ -1261,7 +1263,10 @@ impl SnippetHub {
             let mut subs = self.subscribers.borrow_mut();
             let of_swarm = subs.values().filter(|(s, _)| *s == id).count();
             if subs.len() >= MAX_SNIPPET_SUBSCRIBERS || of_swarm >= MAX_SUBSCRIBERS_PER_SWARM {
-                return Err(RpcError::new(0, "too many snippet subscribers"));
+                return Err(RpcError::new(
+                    ErrorCode::TooManySnippetSubscribers,
+                    "too many snippet subscribers",
+                ));
             }
             let slot = self.next_slot.get();
             self.next_slot.set(slot + 1);
@@ -1280,7 +1285,7 @@ impl SnippetHub {
 }
 
 fn snippet_not_found() -> RpcError {
-    RpcError::new(0, "snippet not found")
+    RpcError::new(ErrorCode::SnippetNotFound, "snippet not found")
 }
 
 /// A subscriber's stream of one snippet; see the [module docs](self).

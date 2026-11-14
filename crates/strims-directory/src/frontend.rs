@@ -61,6 +61,8 @@ use strims_proto::network::v1::directory::{
     Listing, ListingContentType, ListingQuery, Network, NetworkListings, NetworkListingsItem,
     register_directory_frontend_service,
 };
+use strims_proto::ErrorCoded;
+use strims_proto::network::v1::directory::errors::ErrorCode;
 use strims_proto::service::{Context, Error as RpcError, ServerStream};
 use strims_rpc::{Router, Timer};
 
@@ -159,8 +161,12 @@ fn test_embeds(services: EmbedServices) -> Vec<Listing> {
     out
 }
 
-fn not_found(what: &str) -> RpcError {
-    RpcError::new(0, format!("{what} not found"))
+fn network_not_found() -> RpcError {
+    RpcError::new(ErrorCode::NetworkNotFound, "network not found")
+}
+
+fn listing_not_found() -> RpcError {
+    RpcError::new(ErrorCode::ListingNotFound, "listing not found")
 }
 
 fn call_error(e: CallFailure) -> RpcError {
@@ -266,7 +272,7 @@ impl<K: Kv, H: Host, T: Timer> DirectoryFrontend<K, H, T> {
             .network()
             .network(key)
             .map(|i| describe(&i.network))
-            .ok_or_else(|| not_found("network"))
+            .ok_or_else(network_not_found)
     }
 
     /// The keys a request names, each one of the profile's networks;
@@ -405,7 +411,7 @@ impl<K: Kv, H: Host, T: Timer> DirectoryFrontendService for DirectoryFrontend<K,
             .find_certificate(&req.network_key, Query::Subject(req.alias), false)
             .await?;
         let peer_key = certificate_body(&cert)
-            .map_err(|e| RpcError::new(0, e.to_string()))?
+            .map_err(|e| RpcError::new(ErrorCode::InvalidCertificate, e.to_string()))?
             .key;
         self.control
             .moderate_user(&req.network_key, &peer_key, req.moderation)
@@ -460,7 +466,7 @@ impl<K: Kv, H: Host, T: Timer> DirectoryFrontendService for DirectoryFrontend<K,
             .query
             .as_ref()
             .and_then(|q| self.control.listing(n.id, q))
-            .ok_or_else(|| not_found("listing"))?;
+            .ok_or_else(listing_not_found)?;
         Ok(FrontendGetListingResponse {
             id: l.id,
             listing: Some(l.listing),

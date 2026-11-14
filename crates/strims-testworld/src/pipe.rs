@@ -22,6 +22,13 @@ impl std::fmt::Display for Closed {
     }
 }
 
+/// The node's code for a closed channel.
+impl strims_proto::ErrorCoded for Closed {
+    fn code(&self) -> i32 {
+        strims_proto::node::errors::ErrorCode::Closed.into()
+    }
+}
+
 #[derive(Default)]
 pub struct PipeState {
     queue: VecDeque<Vec<u8>>,

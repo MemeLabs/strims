@@ -134,6 +134,8 @@ mod sim_test;
 mod view_test;
 
 use strims_dao::key::Part;
+use strims_proto::ErrorCoded;
+use strims_proto::network::v1::directory::errors::ErrorCode;
 use strims_rpc::RetryPolicy;
 use strims_rpc::vpn::VpnConfig;
 
@@ -297,8 +299,9 @@ pub struct Metrics {
     pub store_errors: u64,
 }
 
-/// Why a directory request failed. Callers receive the message as the RPC
-/// error, so the messages are part of the wire format.
+/// Why a directory request failed. Callers receive it as the RPC error, with
+/// its code ([`ErrorCoded`]), which a node reads back with
+/// [`DirectoryError::from_code`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum DirectoryError {
     #[error("listing not found")]
@@ -359,11 +362,33 @@ impl DirectoryError {
         DirectoryError::TooLarge,
     ];
 
-    /// The error whose message is `message`.
-    pub fn from_message(message: &str) -> Option<DirectoryError> {
-        DirectoryError::ALL
-            .into_iter()
-            .find(|e| e.to_string() == message)
+    /// The error whose code is `code`.
+    pub fn from_code(code: i32) -> Option<DirectoryError> {
+        DirectoryError::ALL.into_iter().find(|e| e.code() == code)
+    }
+}
+
+impl ErrorCoded for DirectoryError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            DirectoryError::ListingNotFound => ErrorCode::ListingNotFound,
+            DirectoryError::SessionNotFound => ErrorCode::SessionNotFound,
+            DirectoryError::PublishDisabled => ErrorCode::PublishDisabled,
+            DirectoryError::JoinDisabled => ErrorCode::JoinDisabled,
+            DirectoryError::UnsupportedEmbed => ErrorCode::UnsupportedEmbed,
+            DirectoryError::InvalidEmbedId => ErrorCode::InvalidEmbedId,
+            DirectoryError::InvalidSwarmUri => ErrorCode::InvalidSwarmUri,
+            DirectoryError::UnsupportedContent => ErrorCode::UnsupportedContent,
+            DirectoryError::ListingBanned => ErrorCode::ListingBanned,
+            DirectoryError::PublishQuota => ErrorCode::PublishQuota,
+            DirectoryError::ViewQuota => ErrorCode::ViewQuota,
+            DirectoryError::NotPublishing => ErrorCode::NotPublishing,
+            DirectoryError::NotViewing => ErrorCode::NotViewing,
+            DirectoryError::PermissionDenied => ErrorCode::PermissionDenied,
+            DirectoryError::Full => ErrorCode::Full,
+            DirectoryError::TooLarge => ErrorCode::TooLarge,
+        };
+        code.into()
     }
 }
 
@@ -386,6 +411,19 @@ pub enum SnippetError {
     /// The body names an image that isn't on hand.
     #[error("snippet image missing")]
     MissingImage,
+}
+
+impl ErrorCoded for SnippetError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            SnippetError::Full => ErrorCode::TooManySnippets,
+            SnippetError::TooLarge => ErrorCode::SnippetTooLarge,
+            SnippetError::InvalidSignature => ErrorCode::InvalidSnippetSignature,
+            SnippetError::Malformed => ErrorCode::MalformedSnippet,
+            SnippetError::MissingImage => ErrorCode::SnippetImageMissing,
+        };
+        code.into()
+    }
 }
 
 #[cfg(test)]
@@ -428,20 +466,31 @@ mod tests {
     }
 
     #[test]
-    fn every_error_is_found_by_its_message() {
+    fn every_error_is_found_by_its_code() {
+        // A code two errors shared would find only the first of them.
         for e in DirectoryError::ALL {
-            assert_eq!(DirectoryError::from_message(&e.to_string()), Some(e));
+            assert_eq!(DirectoryError::from_code(e.code()), Some(e));
         }
-        assert_eq!(DirectoryError::from_message("listing not found!"), None);
+        assert_eq!(DirectoryError::from_code(0), None);
+        assert_eq!(
+            DirectoryError::from_code(ErrorCode::NetworkNotFound.into()),
+            None
+        );
     }
 
     #[test]
     fn a_remote_directory_error_is_a_refusal() {
         use strims_proto::service::{CallError, Error as RpcError};
-        let remote = |m: &str| CallError::Remote(RpcError::new(0, m));
+        let banned = RpcError::new(ErrorCode::ListingBanned, "listing banned");
         assert_eq!(
-            CallFailure::from_call(remote("listing banned")),
+            CallFailure::from_call(CallError::Remote(banned)),
             CallFailure::Refused(DirectoryError::ListingBanned)
+        );
+        // The code decides, not the message.
+        let uncoded = RpcError::new(0, "listing banned");
+        assert_eq!(
+            CallFailure::from_call(CallError::Remote(uncoded.clone())),
+            CallFailure::Remote(uncoded)
         );
         let other = RpcError::new(3, "something else");
         assert_eq!(
@@ -451,11 +500,19 @@ mod tests {
         assert_eq!(CallFailure::Remote(other.clone()).to_rpc(), other);
         assert_eq!(
             CallFailure::Refused(DirectoryError::PermissionDenied).to_rpc(),
-            RpcError::new(0, "permission denied")
+            RpcError::new(ErrorCode::PermissionDenied, "permission denied")
+        );
+        assert_eq!(
+            CallFailure::NoServer.to_rpc(),
+            RpcError::new(ErrorCode::ServerNotFound, "directory server not found")
         );
         assert_eq!(
             CallFailure::from_call(CallError::Timeout),
             CallFailure::Call(CallError::Timeout)
+        );
+        assert_eq!(
+            CallFailure::Call(CallError::Timeout).code(),
+            strims_proto::rpc::errors::ErrorCode::Timeout as i32
         );
     }
 }

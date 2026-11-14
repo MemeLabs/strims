@@ -4,6 +4,7 @@
 import { Error as RPCError } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 
 import { ErrorCode as DaoErrorCode } from "../apis/strims/dao/v1/errors/errors";
+import { ErrorCode as DirectoryErrorCode } from "../apis/strims/network/v1/directory/errors/errors";
 import { ErrorCode as NetworkErrorCode } from "../apis/strims/network/v1/errors/errors";
 import { ErrorCode as NodeErrorCode } from "../apis/strims/node/errors/errors";
 import { ErrorCode as RpcErrorCode } from "../apis/strims/rpc/errors/errors";
@@ -15,6 +16,7 @@ export const errorCodeEnums: readonly Record<number, string>[] = [
   RpcErrorCode,
   DaoErrorCode,
   NodeErrorCode,
+  DirectoryErrorCode,
 ];
 
 // The code of `e`, a call's rejection: its rpc.Error's code, or 0 (no
@@ -37,7 +39,7 @@ export const errorCodeName = (code: number): string | undefined => {
 };
 
 // `e`'s message for display, followed by its code when it has one, e.g.
-// "listing not found (4006 LISTING_NOT_FOUND)". Undefined when `e` has no
+// "listing not found (4000 LISTING_NOT_FOUND)". Undefined when `e` has no
 // message.
 export const formatError = (e: unknown): string | undefined => {
   const message = (e as { message?: unknown } | null | undefined)?.message;

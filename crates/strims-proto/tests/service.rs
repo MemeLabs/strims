@@ -336,8 +336,8 @@ fn errors_carry_the_rpc_layer_codes() {
         )
     );
     // A remote error keeps the server's code, whoever relays it.
-    let remote = Error::new(4006, "listing not found");
-    assert_eq!(CallError::Remote(remote.clone()).code(), 4006);
+    let remote = Error::new(4000, "listing not found");
+    assert_eq!(CallError::Remote(remote.clone()).code(), 4000);
     assert_eq!(remote.to_rpc(), remote);
 }
 

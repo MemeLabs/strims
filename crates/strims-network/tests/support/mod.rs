@@ -80,6 +80,12 @@ impl std::fmt::Display for Closed {
     }
 }
 
+impl strims_proto::ErrorCoded for Closed {
+    fn code(&self) -> i32 {
+        strims_proto::node::errors::ErrorCode::Closed.into()
+    }
+}
+
 #[derive(Default)]
 pub struct PipeState {
     queue: VecDeque<Vec<u8>>,

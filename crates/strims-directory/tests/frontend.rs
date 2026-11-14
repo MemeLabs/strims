@@ -22,6 +22,7 @@ use strims_dao::{Recv, Table};
 use strims_directory::{DirectoryFrontend, EmbedService, bind_frontend, embed};
 use strims_network::membership::{network_from_invitation_v0, new_invitation_v0, new_network};
 use strims_proto::network::v1::Network;
+use strims_proto::network::v1::directory::errors::ErrorCode;
 use strims_proto::network::v1::directory::frontend_watch_listing_users_response::UserEventType;
 use strims_proto::network::v1::directory::frontend_watch_listings_response::event::Event as Body;
 use strims_proto::network::v1::directory::listing::{Chat, Content, Embed, Service};
@@ -88,6 +89,14 @@ fn types(ts: &[ListingContentType]) -> Vec<i32> {
 fn refusal<T: std::fmt::Debug>(r: Result<T, CallError>) -> String {
     match r {
         Err(CallError::Remote(e)) => e.message,
+        r => panic!("not refused: {r:?}"),
+    }
+}
+
+/// The code of a call's remote error.
+fn refused_code<T: std::fmt::Debug>(r: Result<T, CallError>) -> i32 {
+    match r {
+        Err(CallError::Remote(e)) => e.code,
         r => panic!("not refused: {r:?}"),
     }
 }
@@ -246,6 +255,19 @@ fn calls_reach_the_directory_of_a_networks_key() {
         sleep_secs(3).await;
         assert_eq!(refusal(ub.get_listing(&get).await), "listing not found");
         assert!(alice.directory.listings(10).is_empty());
+        // Leaving a listing that ended is refused with the code a viewer
+        // reads as already gone.
+        let again = ub
+            .part(&FrontendPartRequest {
+                network_key: key.clone(),
+                id,
+            })
+            .await;
+        assert_eq!(refused_code(again), ErrorCode::ListingNotFound as i32);
+        assert_eq!(
+            refused_code(ub.get_listing(&get).await),
+            ErrorCode::ListingNotFound as i32
+        );
 
         let embed = Listing {
             content: Some(Content::Embed(Embed::default())),
@@ -270,7 +292,7 @@ fn calls_reach_the_directory_of_a_networks_key() {
                 network_key: vec![9; 32],
             })
             .await;
-        assert_eq!(refusal(unknown), "network not found");
+        assert_eq!(refused_code(unknown), ErrorCode::NetworkNotFound as i32);
     });
 }
 

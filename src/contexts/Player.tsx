@@ -7,7 +7,7 @@ import React, { ReactNode, createContext, useEffect, useMemo, useState } from "r
 
 import { FrontendClient } from "../apis/client";
 import curryDispatchActions from "../lib/curryDispatchActions";
-import { ServiceSlug, slugToService } from "../lib/directory";
+import { ServiceSlug, isAlreadyLeft, slugToService } from "../lib/directory";
 import promiseWithCancel from "../lib/promiseWithCancel";
 import { useClient } from "./FrontendApi";
 
@@ -107,14 +107,24 @@ const createActions = (
     return () => {
       cancel();
       setState((state) => ({ ...state, networkKey: null, listingId: null }));
-      void res.then(({ id }) => {
+      const leave = (id: bigint) => {
         switch (source.type) {
           case "embed":
             return client.directory.unpublish({ networkKey, id });
           case "swarm":
             return client.directory.part({ networkKey, id });
         }
-      });
+      };
+      void res.then(
+        ({ id }) =>
+          leave(id).catch((e: unknown) => {
+            if (!isAlreadyLeft(e)) {
+              throw e;
+            }
+          }),
+        // The publish or join failed: there is nothing to leave.
+        () => undefined
+      );
     };
   };
 

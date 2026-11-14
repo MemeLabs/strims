@@ -9,6 +9,7 @@ use std::future::Future;
 use futures_core::Stream;
 use futures_sink::Sink;
 use strims_kademlia::ID;
+use strims_proto::ErrorCoded;
 use strims_proto::types::Key;
 use strims_vpn::{Delivery, HostAddr};
 
@@ -29,8 +30,9 @@ pub trait Host: 'static {
     type VpnWriter: Sink<(HostAddr, Vec<u8>), Error = Self::Error> + Unpin + 'static;
     /// A published service address, until withdrawn.
     type Publication: 'static;
-    /// A failed node call.
-    type Error: fmt::Display;
+    /// A failed node call, with its code for the services that answer with
+    /// it.
+    type Error: ErrorCoded;
 
     /// The node's host id.
     fn host_id(&self) -> ID;

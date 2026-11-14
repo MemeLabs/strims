@@ -24,7 +24,9 @@ use strims_dao::{Broadcast, Recv, ReplicatedStore, Subscription};
 use strims_kv::Kv;
 use strims_network::{NetworkControl, NetworkEvent};
 use strims_ppspp::SwarmId;
+use strims_proto::ErrorCoded;
 use strims_proto::network::v1::Network;
+use strims_proto::network::v1::directory::errors::ErrorCode;
 use strims_proto::network::v1::directory::{
     AssetBundle, ClientConfig, DirectoryClient, Listing, ListingModeration, ListingQuery,
     UserModeration,
@@ -59,10 +61,9 @@ pub(crate) const MEMBER_RETRY: Duration = Duration::from_secs(10);
 
 /// Why a call to a network's directory server failed.
 ///
-/// A frontend answers with [`CallFailure::to_rpc`]: a remote error as the
-/// server sent it, and anything else with code 0 and this error's message,
-/// which for a refusal is the [`DirectoryError`]'s, as the server would
-/// have sent it.
+/// A frontend answers with its [`ErrorCoded::to_rpc`]: a remote error as the
+/// server sent it, and anything else with its code and message, which for a
+/// refusal are the [`DirectoryError`]'s, as the server would have sent them.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
 pub enum CallFailure {
     /// The node doesn't run the network.
@@ -84,30 +85,50 @@ pub enum CallFailure {
     /// The call failed on this side: no answer, or a broken connection.
     #[error(transparent)]
     Call(CallError),
-    /// A node operation failed.
-    #[error("node: {0}")]
-    Host(String),
+    /// A node operation failed: the node error's code, and its message.
+    #[error("node: {1}")]
+    Host(i32, String),
     /// The store of the server this node runs failed.
     #[error(transparent)]
     Store(strims_dao::Error),
 }
 
 impl CallFailure {
-    /// The RPC error a frontend answers with; see the type docs.
-    pub fn to_rpc(&self) -> RpcError {
-        match self {
-            CallFailure::Remote(e) => e.clone(),
-            e => RpcError::new(0, e.to_string()),
-        }
-    }
-
     pub(crate) fn from_call(e: CallError) -> CallFailure {
         match e {
-            CallError::Remote(e) => match DirectoryError::from_message(&e.message) {
+            CallError::Remote(e) => match DirectoryError::from_code(e.code) {
                 Some(d) => CallFailure::Refused(d),
                 None => CallFailure::Remote(e),
             },
             e => CallFailure::Call(e),
+        }
+    }
+
+    /// A failed node operation.
+    pub(crate) fn host(e: &impl ErrorCoded) -> CallFailure {
+        CallFailure::Host(e.code(), e.to_string())
+    }
+}
+
+impl ErrorCoded for CallFailure {
+    fn code(&self) -> i32 {
+        let code = match self {
+            CallFailure::NoNetwork => ErrorCode::NetworkNotFound,
+            CallFailure::NotJoined => ErrorCode::NotJoined,
+            CallFailure::NoServer => ErrorCode::ServerNotFound,
+            CallFailure::Refused(e) => return e.code(),
+            CallFailure::Remote(e) => return e.code,
+            CallFailure::Call(e) => return e.code(),
+            CallFailure::Host(code, _) => return *code,
+            CallFailure::Store(e) => return e.code(),
+        };
+        code.into()
+    }
+
+    fn to_rpc(&self) -> RpcError {
+        match self {
+            CallFailure::Remote(e) => e.clone(),
+            e => RpcError::new(e.code(), e.to_string()),
         }
     }
 }
@@ -574,7 +595,7 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
             .host
             .resolve_address(r.net, r.key.clone(), ADDRESS_SALT.to_vec())
             .await
-            .map_err(|e| CallFailure::Host(e.to_string()))?
+            .map_err(|e| CallFailure::host(&e))?
             .ok_or(CallFailure::NoServer)?;
         let retry = RetryClient::new(client.to(addr), self.timer.clone(), self.config.call_policy);
         services::call_remote(&DirectoryClient::new(retry), req).await

@@ -44,6 +44,7 @@ import { useStableCallback } from "../hooks/useStableCallback";
 import MessageSizeCache from "../lib/MessageSizeCache";
 import { compareBigInts } from "../lib/bigint";
 import curryDispatchActions from "../lib/curryDispatchActions";
+import { isAlreadyLeft } from "../lib/directory";
 import { applyActionInStateMap, deleteFromStateMap, setInStateMap } from "../lib/stateMap";
 import { useClient } from "./FrontendApi";
 
@@ -424,7 +425,16 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
   const closeRoom = (room: RoomThreadState) => {
     const { networkKey } = room;
     room.serverEvents.destroy();
-    void room.directoryJoinRes.then(({ id }) => client.directory.part({ networkKey, id }));
+    void room.directoryJoinRes.then(
+      ({ id }) =>
+        client.directory.part({ networkKey, id }).catch((e: unknown) => {
+          if (!isAlreadyLeft(e)) {
+            throw e;
+          }
+        }),
+      // The join failed: there is nothing to leave.
+      () => undefined
+    );
   };
 
   const closeTopic = (state: State, topic: Topic) => {

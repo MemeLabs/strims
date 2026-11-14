@@ -24,6 +24,7 @@ const RANGES: &[(&str, RangeInclusive<i32>)] = &[
     ("strims.rpc.errors", 1000..=1999),
     ("strims.dao.v1.errors", 2000..=2999),
     ("strims.node.errors", 3000..=3999),
+    ("strims.network.v1.directory.errors", 4000..=4999),
 ];
 
 /// The enum every error-code package declares.
@@ -35,7 +36,7 @@ pub(crate) fn check(fds: &FileDescriptorSet) -> Result<(), String> {
         if *ra.start() < 1 {
             errors.push(format!("{a}: range {ra:?} holds 0, which is no code"));
         }
-        for (b, rb) in &RANGES[i + 1..] {
+        for (b, rb) in RANGES.iter().skip(i + 1) {
             if ra.start() <= rb.end() && rb.start() <= ra.end() {
                 errors.push(format!("{a} {ra:?} and {b} {rb:?} overlap"));
             }
