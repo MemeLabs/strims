@@ -37,8 +37,10 @@ use strims_crypto::{certificate_body, certificate_root};
 use strims_dao::schema::network::network_key;
 use strims_dao::{Recv, Subscription};
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
 use strims_proto::network::v1::Network as NetworkRecord;
 use strims_proto::network::v1::ca::ca_find_request::Query;
+use strims_proto::network::v1::directory::errors::ErrorCode;
 use strims_proto::network::v1::directory::frontend_get_users_response::{
     Alias, User as AliasedUser,
 };
@@ -61,8 +63,6 @@ use strims_proto::network::v1::directory::{
     Listing, ListingContentType, ListingQuery, Network, NetworkListings, NetworkListingsItem,
     register_directory_frontend_service,
 };
-use strims_proto::ErrorCoded;
-use strims_proto::network::v1::directory::errors::ErrorCode;
 use strims_proto::service::{Context, Error as RpcError, ServerStream};
 use strims_rpc::{Router, Timer};
 

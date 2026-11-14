@@ -62,6 +62,8 @@ use strims_dao::schema::network::network_scoped_key;
 use strims_kademlia::ID;
 use strims_kv::Kv;
 use strims_ppspp::{SwarmId, WriterOptions};
+use strims_proto::ErrorCoded;
+use strims_proto::network::v1::directory::errors::ErrorCode;
 use strims_proto::network::v1::directory::{
     AssetBundle, DirectoryClient, DirectoryService, DirectorySnippetClient,
     DirectorySnippetService, JoinRequest, JoinResponse, Listing, ListingModeration, ListingQuery,
@@ -71,8 +73,6 @@ use strims_proto::network::v1::directory::{
     UnpublishResponse, UserModeration, UserRecord, register_directory_service,
     register_directory_snippet_service,
 };
-use strims_proto::ErrorCoded;
-use strims_proto::network::v1::directory::errors::ErrorCode;
 use strims_proto::service::{Context, Error as RpcError, ServerStream};
 use strims_rpc::vpn::{self, VpnClient, VpnConnection};
 use strims_rpc::{RetryClient, Router, Timer};
@@ -369,7 +369,9 @@ impl<K: Kv, H: Host, T: Timer> DirectoryServer<K, H, T> {
         let caller = ctx
             .certificate()
             .and_then(Caller::from_certificate)
-            .ok_or_else(|| RpcError::new(ErrorCode::NoCallerCertificate, "no caller certificate"))?;
+            .ok_or_else(|| {
+                RpcError::new(ErrorCode::NoCallerCertificate, "no caller certificate")
+            })?;
         serve(&s, &r, &caller, req).await.map_err(|e| e.to_rpc())
     }
 }
