@@ -10,6 +10,8 @@
 use std::rc::Rc;
 use std::time::Duration;
 
+use futures_util::StreamExt;
+use futures_util::stream::FuturesOrdered;
 use rand_core::Rng;
 use strims_node::{HashTableGetOptions, Node, NodeMetrics, SwarmKey};
 use tokio::task::spawn_local;
@@ -66,15 +68,25 @@ pub(crate) async fn controller(w: Rc<World>) -> turmoil::Result {
 /// Folds every running node's runner, link and network stats. A `full`
 /// sample also stores the metrics, samples the heap, checks the
 /// invariants, and logs two lines per host (with more counters on the
-/// `last` one). A host that departed isn't sampled: its node's last
-/// snapshot, as the node went, holds its counters and logs from its last
-/// sample on (`World::observe_stopped`).
+/// `last` one). Every node is asked at once, and each answer is folded in
+/// host order once the hosts before it are, so a round takes as long as
+/// its slowest answer. A host that departed before the round isn't
+/// sampled: its node's last snapshot, as the node went, holds its counters
+/// and logs from its last sample on (`World::observe_stopped`). One that
+/// leaves during the round and answers is folded, since its answer took
+/// its logs.
 async fn sample(w: &World, full: bool, last: bool) {
+    let mut asks = FuturesOrdered::new();
     for h in 0..w.spec.hosts.len() {
         let Some(node) = w.node(h).filter(|_| !w.departed(h)) else {
             continue;
         };
-        let Ok(Ok(m)) = tokio::time::timeout(CALL_TIMEOUT, node.metrics()).await else {
+        asks.push_back(
+            async move { (h, tokio::time::timeout(CALL_TIMEOUT, node.metrics()).await) },
+        );
+    }
+    while let Some((h, answer)) = asks.next().await {
+        let Ok(Ok(m)) = answer else {
             continue;
         };
         w.observe_stats(h, &m);
