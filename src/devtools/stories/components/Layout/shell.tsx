@@ -36,6 +36,15 @@ import NetworkService from "../../../mocks/network/service";
 import NotificationService from "../../../mocks/notification/service";
 import { MockApi, MockNotifications, StaticPlayer, fixtures } from "../../../storybook";
 
+// The fixtures' listing 36, a YouTube embed, muted: the embed autoplays.
+export const EMBED: PlayerSource = {
+  type: "embed",
+  service: "youtube",
+  id: "oEgZeTr3Vs4",
+  queryParams: new Map([["mute", "1"]]),
+  networkKey: fixtures.keyB64(fixtures.testNetworkKey),
+};
+
 // The node serves no HLS: the swarm player offers no Cast or AirPlay.
 export class HLSEgressService extends UnimplementedHLSEgressService {
   isSupported() {

@@ -13,14 +13,7 @@ import LayoutBody from "../../../../components/Layout/Body";
 import { useLayout } from "../../../../contexts/Layout";
 import { PlayerContext, PlayerMode, PlayerSource } from "../../../../contexts/Player";
 import { Story, StoryRouter, fixtures } from "../../../storybook";
-import { FollowLayout, LayoutState, ShellProviders } from "./shell";
-
-const EMBED: PlayerSource = {
-  type: "embed",
-  service: "youtube",
-  id: "oEgZeTr3Vs4",
-  networkKey: "cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE",
-};
+import { EMBED, FollowLayout, LayoutState, ShellProviders } from "./shell";
 
 const SWARM: PlayerSource = {
   type: "swarm",

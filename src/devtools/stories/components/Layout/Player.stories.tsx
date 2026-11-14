@@ -21,16 +21,15 @@ import {
   StoryRouter,
   fixtures,
 } from "../../../storybook";
-import { EgressService, HLSEgressService, LayoutState, ListingDirectoryService } from "./shell";
+import {
+  EMBED,
+  EgressService,
+  HLSEgressService,
+  LayoutState,
+  ListingDirectoryService,
+} from "./shell";
 
 const NETWORK_KEY = Base64.fromUint8Array(fixtures.testNetworkKey, true);
-
-const EMBED: PlayerSource = {
-  type: "embed",
-  service: "youtube",
-  id: "oEgZeTr3Vs4",
-  networkKey: NETWORK_KEY,
-};
 
 const SWARM: PlayerSource = {
   type: "swarm",

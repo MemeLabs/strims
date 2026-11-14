@@ -45,7 +45,16 @@ const stories: Story[] = [
   {
     name: "YouTube",
     component: () => (
-      <Embed service="youtube" id="oEgZeTr3Vs4" queryParams={new Map([["t", "90"]])} />
+      <Embed
+        service="youtube"
+        id="oEgZeTr3Vs4"
+        queryParams={
+          new Map([
+            ["t", "90"],
+            ["mute", "1"],
+          ])
+        }
+      />
     ),
   },
 ];

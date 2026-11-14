@@ -11,14 +11,7 @@ import DirectoryGrid from "../../../../components/Directory/Grid";
 import LayoutBody from "../../../../components/Layout/Body";
 import { PlayerMode, PlayerSource } from "../../../../contexts/Player";
 import { Story, StoryRouter, fixtures } from "../../../storybook";
-import { LayoutState, ShellProviders } from "./shell";
-
-const EMBED: PlayerSource = {
-  type: "embed",
-  service: "youtube",
-  id: "oEgZeTr3Vs4",
-  networkKey: "cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE",
-};
+import { EMBED, LayoutState, ShellProviders } from "./shell";
 
 interface BodyStoryProps {
   room?: boolean;
