@@ -23,8 +23,8 @@ scorecard, every metric and the default's. The reference's t table is the
 macros' (t975), and both score the METRICS both have (ref_metrics: those
 added since it, which it can't print, and those dropped since, which the
 macros can't, are left out), the reference reading those METRICS read
-otherwise as METRICS reads them (RESTATED), so the two differ by nothing
-but their code. The experiments are the latest N of each kind (--refs and
+otherwise as METRICS reads them (RESTATED), and its medians the macros'
+(TAUGHT), so the two differ by nothing but their code. The experiments are the latest N of each kind (--refs and
 --sets runs) with two arms or more; an experiment's base is its index's, else the arm the
 farm reused from an earlier run (an A/B's baseline), else its first.
 
@@ -56,7 +56,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "hack") not in sys.path:
     sys.path.insert(0, str(ROOT / "hack"))
-from simlab import catalog, scoring, store_host, suite as lab  # noqa: E402
+from simlab import catalog, scoring, sketch, store_host, suite as lab  # noqa: E402
 
 # The last suite.py that scored in Python.
 REFERENCE = "4eee6065"
@@ -77,6 +77,15 @@ RESTATED = {
     "defector_gain": lambda r: (lambda d, h: d / h if d and h else None)(
         r.get("lag_p99_ms_dishonest", r.get("lag_p99_ms_hostile")), r.get("lag_p99_ms_honest")),
 }
+# The reference's medians, taught the quantile method the macros take
+# (simlab.sketch: sketch_quantile's p50, the integer nearest rank read
+# through the log sketch): the scorecard's medians over the seeds, and
+# the lag ceiling's. Each is its source's once.
+TAUGHT = [
+    ("med = lambda xs: sorted(xs)[len(xs) // 2]", "med = lambda xs: _sketch.quantile(xs, 50)"),
+    ("ma = statistics.median(x for x, _ in lags)", "ma = _sketch.quantile([x for x, _ in lags], 50)"),
+    ("mb = statistics.median(y for _, y in lags)", "mb = _sketch.quantile([y for _, y in lags], 50)"),
+]
 # How many times an experiment is scored at one snapshot before a
 # snapshot gone from under it fails the check (compared_pinned).
 PIN_TRIES = 3
@@ -100,13 +109,24 @@ def suite():
     return _suite
 
 
+def taught(source):
+    """The reference's `source` with its medians the macros' (TAUGHT)."""
+    for old, new in TAUGHT:
+        if source.count(old) != 1:
+            sys.exit(f"golden: the reference has {source.count(old)} of {old!r}, not one")
+        source = source.replace(old, new)
+    return source
+
+
 def reference(rev):
-    """suite.py at `rev`, its t table the macros' (t975)."""
+    """suite.py at `rev`, its t table the macros' (t975) and its medians
+    theirs (taught)."""
     WORK.mkdir(parents=True, exist_ok=True)
     path = WORK / f"suite_{rev}.py"
-    path.write_text(subprocess.run(["git", "show", f"{rev}:hack/sim-suite/suite.py"], cwd=ROOT, check=True,
-                                   capture_output=True, text=True).stdout)
+    path.write_text(taught(subprocess.run(["git", "show", f"{rev}:hack/sim-suite/suite.py"], cwd=ROOT, check=True,
+                                          capture_output=True, text=True).stdout))
     ref = load(path, "suite_ref")
+    ref._sketch = sketch
     ref._simdb = suite().simdb()
     ref.T975 = {r["df"]: r["t"] for r in scoring.query(
         "SELECT df, t975_at(df) AS t FROM range(1, 1001) r(df) ORDER BY df;")}

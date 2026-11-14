@@ -37,7 +37,7 @@ WITH job AS (
     FROM job JOIN viewer_seconds v USING (k, src)
     WHERE v.lag_ms >= 0
 ), lag AS (
-    SELECT sec, quantile_cont(lag_ms, 0.5) AS p50, quantile_cont(lag_ms, 0.99) AS p99, max(lag_ms) AS max
+    SELECT sec, sketch_quantile(lag_ms, 50) AS p50, sketch_quantile(lag_ms, 99) AS p99, max(lag_ms) AS max
     FROM vs GROUP BY sec
 ), stall AS (
     -- The sims' own stalls at $delay, or for a run without a stalls table

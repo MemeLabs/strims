@@ -24,7 +24,6 @@ import argparse
 import importlib.util
 import io
 import json
-import math
 import os
 import shutil
 import subprocess
@@ -42,7 +41,7 @@ spec.loader.exec_module(simdb)
 # simlab.store's pulls too.
 sys.modules["simdb"] = simdb
 sys.path.insert(0, str(Path(__file__).parents[1]))
-from simlab import bootstrap, query, store, store_host, verdict  # noqa: E402
+from simlab import bootstrap, query, sketch, store, store_host, verdict  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("suite", Path(__file__).parents[1] / "sim-suite" / "suite.py")
 suite = importlib.util.module_from_spec(spec)
@@ -505,11 +504,8 @@ PRESENT = {"kp1": [1, 1, 2, 2, 2], "kp2": [1] * 5, "kd": [1] * 5, "ks1": [2] * 5
 
 
 def qc(xs, p):
-    """quantile_cont"""
-    xs = sorted(xs)
-    at = p * (len(xs) - 1)
-    i = math.floor(at)
-    return xs[i] + (xs[min(i + 1, len(xs) - 1)] - xs[i]) * (at - i)
+    """sketch_quantile's p-th percentile (simlab.sketch's)."""
+    return sketch.quantile(xs, p)
 
 
 class Queries(unittest.TestCase):
@@ -604,7 +600,7 @@ class Queries(unittest.TestCase):
                     for v, t, lag in READS[k]:
                         want.setdefault((cell, arm, g(k, v, t)), {}).setdefault(k, []).append(lag)
             want = {key: (len(runs), sum(map(len, runs.values())),
-                          sum(qc(x, 0.99) for x in runs.values()) / len(runs)) for key, runs in want.items()}
+                          sum(qc(x, 99) for x in runs.values()) / len(runs)) for key, runs in want.items()}
             got = {(r["cell"], r["arm"], r["g"]): (r["runs"], r["reads"], r["mean_run_p99"])
                    for r in self.run_cmd(simdb.cmd_pooled, by=by)}
             self.assertEqual(set(got), set(want), by)
@@ -616,9 +612,11 @@ class Queries(unittest.TestCase):
                 self.assertEqual(got[("c", "x", 1000)][0], 2)
 
     def test_aligned_per_node_on_each_nodes_own_event(self):
-        # every node of cell c reads its own lag from its own first read on
+        # every node of cell c reads its own lag from its own first read on:
+        # 100, 150, 200, 250 and 300, whose p10, p50 and p90 are the 1st,
+        # 3rd and 5th (the integer nearest rank)
         self.assertEqual(self.aligned("first_read", "lag_p50", "node"),
-                         {("c", 0): (5, 120.0, 200.0, 280.0), ("c", 1000): (5, 120.0, 200.0, 280.0)})
+                         {("c", 0): (5, 100.0, 200.0, 300.0), ("c", 1000): (5, 100.0, 200.0, 300.0)})
         # a run's first first read: kp1's second viewer reads after 2 s
         run = self.aligned("first_read", "lag_p50", "run")
         self.assertEqual({rel: n for (_, rel), (n, *_) in run.items()}, {0: 3, 1000: 3})
@@ -634,8 +632,10 @@ class Queries(unittest.TestCase):
         self.assertEqual(self.aligned("first_read", "frames", "node"),
                          {("c", -1000): (2, 0.0, 0.0, 0.0), ("c", 0): (2, 10.0, 10.0, 10.0),
                           ("c", 1000): (2, 10.0, 10.0, 10.0)})
+        # (two nodes, 100 and 300 ms: the p10 and p50 the first, the p90
+        # the second)
         self.assertEqual(self.aligned("first_read", "lag_ms", "node", after=1),
-                         {("c", 0): (2, 120.0, 200.0, 280.0)})
+                         {("c", 0): (2, 100.0, 100.0, 300.0)})
         # the seed's node reads nothing
         self.assertEqual(self.aligned("latency", "lag_p50", "node"), {})
 
@@ -661,10 +661,11 @@ class Queries(unittest.TestCase):
         self.assertEqual({kind for _, kind, _ in got}, set(simdb.DERIVED_KINDS))
         self.assertIn((5, "present_join", 2), got)
         self.assertIn((15, "present_leave", 1), got)
-        # a run's nth join is the sims' (kp1's node 2 again at 4 s), not the
+        # a run's nth join is the sims' (kp1's node 2 again at 4 s: ten
+        # reads of 100 and ten of 300 ms, whose p50 is the 10th), not the
         # viewers present rising (kp1 at 2 s)
         self.assertEqual(self.aligned("join", "lag_p50", "run", nth=3, before=0, after=1),
-                         {("c", 0): (1, 200.0, 200.0, 200.0)})
+                         {("c", 0): (1, 100.0, 100.0, 100.0)})
         self.assertEqual(self.aligned("present_join", "lag_p50", "run", before=0, after=1),
                          {("c", 0): (1, 100.0, 100.0, 100.0)})
         self.assertIn("present_join is run-wide", self.refused("present_join", "lag_p50", "node"))
@@ -706,12 +707,16 @@ class Queries(unittest.TestCase):
         # the 1 s after 2.5 s: viewer 0's ten reads and viewer 1's first
         # five; after 3.5 s, ten each
         self.assertEqual(self.aligned("depart", "reads", "run", before=0, after=1), {("c", 0): (1, 15.0, 15.0, 15.0)})
+        # of two (15 and 20), the p10 and p50 are the first, the p90 the
+        # second
         self.assertEqual(self.aligned("depart", "reads", "run", nth=0, before=0, after=1),
-                         {("c", 0): (2, 15.5, 17.5, 19.5)})
+                         {("c", 0): (2, 15.0, 15.0, 20.0)})
         self.assertEqual(self.aligned("depart", "lag_p50", "node", before=0, after=1),
-                         {("c", 0): (2, 120.0, 200.0, 280.0)})
+                         {("c", 0): (2, 100.0, 100.0, 300.0)})
+        # the run's reads after 3.5 s, ten of 100 and ten of 300 ms: the
+        # p50 is the 10th
         self.assertEqual(self.aligned("depart", "lag_p50", "run", before=0, after=1, detail="abrupt"),
-                         {("c", 0): (1, 200.0, 200.0, 200.0)})
+                         {("c", 0): (1, 100.0, 100.0, 100.0)})
 
     def test_aligned_takes_every_occurrence_and_picks_events(self):
         # cell c's first reads, a window each: kp1's at 1 s (its first
@@ -724,7 +729,7 @@ class Queries(unittest.TestCase):
         # --since and --until pick the events by time: a run's first from 2 s
         # on, and every one before 2 s
         self.assertEqual(self.aligned("first_read", "reads", "run", before=0, after=1, since=2),
-                         {("c", 0): (3, 12.0, 20.0, 20.0)})
+                         {("c", 0): (3, 10.0, 20.0, 20.0)})
         self.assertEqual(self.aligned("first_read", "reads", "run", nth=0, before=0, after=1, until=2),
                          {("c", 0): (2, 10.0, 10.0, 10.0)})
         # --detail by their detail (a glob): kp1's late one alone
@@ -753,13 +758,14 @@ class Queries(unittest.TestCase):
         # its samples count, their errors 50 and -120
         self.assertEqual(self.aligned("first_read", "forecast_n", "run", before=0, after=1),
                          {("c", 0): (1, 2.0, 2.0, 2.0)})
+        # of the two, the p50 is the first, -120
         self.assertEqual(self.aligned("first_read", "forecast_err_p50", "run", before=0, after=1),
-                         {("c", 0): (1, -35.0, -35.0, -35.0)})
+                         {("c", 0): (1, -120.0, -120.0, -120.0)})
         self.assertEqual(self.aligned("first_read", "forecast_abs_err_p90", "run", before=0, after=1)[("c", 0)][2],
-                         qc([50, 120], 0.9))
+                         qc([50, 120], 90))
         # per node, node 2's sample after its own first read counts too
         got = self.aligned("first_read", "forecast_n", "node", before=0, after=1)
-        self.assertEqual({k: (n, p50) for k, (n, _, p50, _) in got.items()}, {("c", 0): (2, 1.5)})
+        self.assertEqual({k: (n, p50) for k, (n, _, p50, _) in got.items()}, {("c", 0): (2, 1.0)})
         self.assertIn("no forecast", self.refused("first_read", "forecast_n", "run", src=[S]))
 
     def test_json_gives_numbers_as_numbers(self):

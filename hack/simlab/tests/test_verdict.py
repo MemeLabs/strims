@@ -30,7 +30,7 @@ from simlab import verdict, vocab  # noqa: E402
 # sim-suite's golden.py, the testbed's twin.py, scripts): its verdicts.
 NAMES = (
     "E2E_TARGET_MS", "E2E_MAX_MS", "PIPELINE_MS", "DELIVERY_TARGET_MS", "DELIVERY_MAX_MS", "TREES_SHARE",
-    "TREES_SMOOTH", "TREES_SECS", "DELIVERY_SHARE", "DELIVERY_SECS", "LAG_QUANTILE", "LAG_HIGH_MS", "LAG_HIGH_SECS",
+    "TREES_SMOOTH", "TREES_SECS", "DELIVERY_SHARE", "DELIVERY_SECS", "LAG_PERCENTILE", "LAG_HIGH_MS", "LAG_HIGH_SECS",
     "LAG_SLOPE", "LAG_SLOPE_SECS", "LAG_SLOPE_FLOOR_MS", "RECOVER_SECS", "ABSORB_SECS", "STARTUP_SECS",
     "COLLAPSED_SECS", "STEP_SECS", "OSC_ACF", "OSC_MIN_PERIOD", "OVERHEAD", "med", "quantile", "lags", "presence",
     "startup", "measures", "slope", "runs_of", "verdict", "run_startup", "collapsed", "steps", "timeline", "phases",
@@ -311,19 +311,19 @@ class Phases(unittest.TestCase):
         by = verdict.phase_lags(s)
         # Startup: viewers 0 and 1's seconds 0-24 (0-240 and 5-245) and
         # viewer 2's own 30-49 but 30, without a lag yet (3000, 4000, 5000
-        # and 300 x 16): 69 lags, whose p99 (index round(68 x 0.99) = 67)
-        # is the second largest, 4000.
+        # and 300 x 16): 69 lags, whose p99 (rank ceil(0.99 x 69) = 69) is
+        # the largest, 5000, read through the sketch as 4992.
         self.assertEqual(sorted(by["startup"]), sorted([10 * k for k in range(25)] + [10 * k + 5 for k in range(25)]
                                                        + [3000, 4000, 5000] + [300] * 16))
         # Steady: 0 and 1's 25-54 (250-540, 255-545) and 2's 50-54 (300 x
-        # 5): 65 lags, p99 index 63, 540. The latency's seconds are
-        # after_disruption's.
+        # 5): 65 lags, p99 rank 65, 545, read as 544. The latency's seconds
+        # are after_disruption's.
         self.assertEqual(sorted(by["steady"]), sorted([10 * k for k in range(25, 55)]
                                                       + [10 * k + 5 for k in range(25, 55)] + [300] * 5))
         self.assertEqual(sorted(by["after_disruption"]), sorted([10 * k for k in range(55, 60)]
                                                                 + [10 * k + 5 for k in range(55, 60)] + [300] * 5))
         m = verdict.run_metrics(s, verdict.verdict(s))
-        self.assertEqual((m["lag_p99_startup_ms"], m["lag_p99_steady_ms"]), (4000, 540))
+        self.assertEqual((m["lag_p99_startup_ms"], m["lag_p99_steady_ms"]), (4992, 544))
         # A run of its startup alone has no steady lag.
         m = verdict.run_metrics(run(20), verdict.verdict(run(20)))
         self.assertEqual((m["lag_p99_startup_ms"], m["lag_p99_steady_ms"]), (200, None))

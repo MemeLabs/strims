@@ -77,6 +77,7 @@ import random
 from pathlib import Path
 
 from . import vocab
+from .sketch import quantile
 from .store_host import q
 
 STARTUP = vocab.named("phases", "startup")
@@ -483,18 +484,6 @@ EVENT_AFTER_S = 20
 EVENT_KINDS = ("uplink_rate", "depart")
 
 
-def quantile(xs, p):
-    """The `p` quantile of `xs` (linear between order statistics), None
-    for none."""
-    if not xs:
-        return None
-    xs = sorted(xs)
-    i = p * (len(xs) - 1)
-    lo = int(math.floor(i))
-    hi = min(lo + 1, len(xs) - 1)
-    return xs[lo] + (xs[hi] - xs[lo]) * (i - lo)
-
-
 def rest(phase):
     return phase not in (None, STARTUP)
 
@@ -568,8 +557,8 @@ def dwell_table(model, seqs, paths):
     for (arm, cell, name), a in sorted(acc.items(), key=lambda x: (x[0][0], x[0][1], order(x[0][2]))):
         lens = a["lens"]
         out.append({"arm": arm, "cell": cell, "state": name, "runs": a["runs"],
-                    "censored": a["censored"] / a["runs"], "p50_s": quantile(lens, 0.5),
-                    "p90_s": quantile(lens, 0.9), "mean_s": sum(lens) / len(lens) if lens else None})
+                    "censored": a["censored"] / a["runs"], "p50_s": quantile(lens, 50),
+                    "p90_s": quantile(lens, 90), "mean_s": sum(lens) / len(lens) if lens else None})
     return out
 
 
@@ -700,7 +689,7 @@ def stability_table(model, halves, seqs, paths):
     seeds = []
     for (arm, cell, n), xs in sorted(spread.items(), key=lambda x: (x[0][0], x[0][1], order(x[0][2]))):
         seeds.append({"arm": arm, "cell": cell, "state": n, "seeds": len(xs), "min": min(xs),
-                      "p50": quantile(xs, 0.5), "max": max(xs)})
+                      "p50": quantile(xs, 50), "max": max(xs)})
     return out, seeds
 
 

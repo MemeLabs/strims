@@ -90,8 +90,10 @@ MACROS = Path(__file__).with_name("sql") / "macros.sql"
 TAIL = vocab.TAIL
 # scoring.sql's macros the views over the cache hold too (where they have
 # the tables each needs), so the lab's queries and the catalog's read one
-# definition.
-SCORING_MACROS = ("viewer_phases_of", "playback_of")
+# definition: the sketch's quantiles (every quantile the lab takes) among
+# them.
+SCORING_MACROS = ("sketch_exp", "sketch_lo", "sketch_floor", "sketch_quantile", "sketch_quantiles",
+                  "viewer_phases_of", "playback_of")
 # The retired kinds whose rows of a sim read as another kind by their
 # value, as vocab.toml's notes on the kind say: {(id, sim): (value, current
 # id)}, the row's value then none. strims-sim's parent_lost of -1, a
@@ -795,9 +797,9 @@ def pooled(sel, by="none", say=None):
         return v.run(f"""
 WITH x AS (SELECT r.cell, r.arm, {group} AS g, x.* FROM reads x JOIN runs r USING (k, src) {join}
            {"WHERE " + " AND ".join(where) if where else ""}),
-per AS (SELECT cell, arm, g, k, src, quantile_cont(lag_ms, 0.99) AS p99 FROM x GROUP BY ALL),
+per AS (SELECT cell, arm, g, k, src, sketch_quantile(lag_ms, 99) AS p99 FROM x GROUP BY ALL),
 runp AS (SELECT cell, arm, g, avg(p99) AS mean_run_p99, count(*) AS runs FROM per GROUP BY ALL),
-pool AS (SELECT cell, arm, g, count(*) AS reads, quantile_cont(lag_ms, [0.5, 0.9, 0.99]) AS q, max(lag_ms) AS lag_max
+pool AS (SELECT cell, arm, g, count(*) AS reads, sketch_quantiles(lag_ms, [50, 90, 99]) AS q, max(lag_ms) AS lag_max
          FROM x GROUP BY ALL)
 SELECT pool.cell, pool.arm, pool.g, runs, reads, q[1] AS lag_p50, q[2] AS lag_p90, q[3] AS lag_p99, lag_max,
        mean_run_p99
@@ -814,7 +816,7 @@ def pooled_text(rows, by="none"):
     return "\n".join(lines)
 
 
-READ_FIELDS = {"lag_p50": "quantile_cont(lag_ms, 0.5)", "lag_p99": "quantile_cont(lag_ms, 0.99)",
+READ_FIELDS = {"lag_p50": "sketch_quantile(lag_ms, 50)", "lag_p99": "sketch_quantile(lag_ms, 99)",
                "lag_max": "max(lag_ms)", "reads": "count(*)"}
 VERDICT_FIELDS = {"healthy": "avg(healthy::INT)", "lag_q": "avg(lag_q)", "hit_share": "avg(hit_share)",
                   "delivery": "avg(delivery)"}
@@ -838,17 +840,19 @@ FORECAST_LIVE = ("peer_honest AND live AND run = 0 AND coalesce(NOT first_sight,
 SPEC_JUDGED = "peer_honest AND live"
 LOG_FIELDS = {
     "forecast_n": ("forecast", f"count(*) FILTER (WHERE {FORECAST_LIVE})::DOUBLE"),
-    "forecast_err_p50": ("forecast", f"quantile_cont(held_ms - (seen_ms + mean_ms), 0.5) FILTER (WHERE {FORECAST_LIVE})"),
-    "forecast_err_p90": ("forecast", f"quantile_cont(held_ms - (seen_ms + mean_ms), 0.9) FILTER (WHERE {FORECAST_LIVE})"),
-    "forecast_abs_err_p50": ("forecast",
-                             f"quantile_cont(abs(held_ms - (seen_ms + mean_ms)), 0.5) FILTER (WHERE {FORECAST_LIVE})"),
-    "forecast_abs_err_p90": ("forecast",
-                             f"quantile_cont(abs(held_ms - (seen_ms + mean_ms)), 0.9) FILTER (WHERE {FORECAST_LIVE})"),
+    "forecast_err_p50": ("forecast",
+                         f"sketch_quantile(CASE WHEN {FORECAST_LIVE} THEN held_ms - (seen_ms + mean_ms) END, 50)"),
+    "forecast_err_p90": ("forecast",
+                         f"sketch_quantile(CASE WHEN {FORECAST_LIVE} THEN held_ms - (seen_ms + mean_ms) END, 90)"),
+    "forecast_abs_err_p50": (
+        "forecast", f"sketch_quantile(CASE WHEN {FORECAST_LIVE} THEN abs(held_ms - (seen_ms + mean_ms)) END, 50)"),
+    "forecast_abs_err_p90": (
+        "forecast", f"sketch_quantile(CASE WHEN {FORECAST_LIVE} THEN abs(held_ms - (seen_ms + mean_ms)) END, 90)"),
     "spec_n": ("spec_requests", "count(*) FILTER (WHERE honest)::DOUBLE"),
     **{f"spec_{o}": ("spec_requests", f"avg((outcome = '{o}')::INT) FILTER (WHERE honest)")
        for o in ("answered", "not_yet", "expired", "cancelled")},
-    "spec_err_p50": ("spec_requests", f"quantile_cont(err_ms, 0.5) FILTER (WHERE honest AND {SPEC_JUDGED})"),
-    "spec_err_p90": ("spec_requests", f"quantile_cont(err_ms, 0.9) FILTER (WHERE honest AND {SPEC_JUDGED})"),
+    "spec_err_p50": ("spec_requests", f"sketch_quantile(CASE WHEN honest AND {SPEC_JUDGED} THEN err_ms END, 50)"),
+    "spec_err_p90": ("spec_requests", f"sketch_quantile(CASE WHEN honest AND {SPEC_JUDGED} THEN err_ms END, 90)"),
     "spec_early": ("spec_requests", f"avg((err_ms > 0)::INT) FILTER (WHERE honest AND {SPEC_JUDGED})"),
     "spec_late": ("spec_requests", f"avg((err_ms <= 0)::INT) FILTER (WHERE honest AND {SPEC_JUDGED})"),
     "park_n": ("parks", "count(*) FILTER (WHERE honest)::DOUBLE"),
@@ -982,7 +986,7 @@ ORDER BY cell, rel_ms, arm;"""
         else:
             query += f"""
 per AS (SELECT * FROM (SELECT {keys}, eid, rel, {agg} AS v FROM x GROUP BY ALL) WHERE v IS NOT NULL),
-band AS (SELECT r.cell, r.arm, rel::BIGINT AS rel_ms, count(*) AS n, quantile_cont(v, [0.1, 0.5, 0.9]) AS q
+band AS (SELECT r.cell, r.arm, rel::BIGINT AS rel_ms, count(*) AS n, sketch_quantiles(v, [10, 50, 90]) AS q
          FROM per JOIN runs r USING (k, src) GROUP BY ALL)
 SELECT cell, arm, rel_ms, n, q[1] AS p10, q[2] AS p50, q[3] AS p90 FROM band ORDER BY cell, rel_ms, arm;"""
         out = v.run(query)
@@ -1024,12 +1028,15 @@ def events(sel, say=None):
         need(v.have, "verdicts")
         return v.run("""
 SELECT r.cell, r.arm, count(*) AS runs, sum(collapsed::INT)::BIGINT AS collapsed, sum(collapses)::BIGINT AS collapses,
-       median(onset_after_drop_s) AS onset_after_drop_s, sum(onset_after_drop_censored::INT)::BIGINT AS onset_censored,
+       sketch_quantile(onset_after_drop_s, 50) AS onset_after_drop_s,
+       sum(onset_after_drop_censored::INT)::BIGINT AS onset_censored,
        count(onset_after_drop_s) AS drops,
-       median(recover_after_rise_s) AS recover_after_rise_s, sum(recover_after_rise_censored::INT)::BIGINT AS recover_censored,
+       sketch_quantile(recover_after_rise_s, 50) AS recover_after_rise_s,
+       sum(recover_after_rise_censored::INT)::BIGINT AS recover_censored,
        count(recover_after_rise_s) AS rises,
-       median(excess_lag_area_ms_s) AS excess_area_p50, quantile_cont(excess_lag_area_ms_s, 0.9) AS excess_area_p90,
-       median(excess_lag_peak_ms) AS excess_peak_p50, median(flaps_per_min) AS flaps_per_min
+       sketch_quantile(excess_lag_area_ms_s, 50) AS excess_area_p50,
+       sketch_quantile(excess_lag_area_ms_s, 90) AS excess_area_p90,
+       sketch_quantile(excess_lag_peak_ms, 50) AS excess_peak_p50, sketch_quantile(flaps_per_min, 50) AS flaps_per_min
 FROM verdicts JOIN runs r USING (k, src) GROUP BY ALL ORDER BY ALL;""")
 
 
@@ -1054,16 +1061,17 @@ def osc(sel, say=None):
         return v.run("""
 WITH sp AS (SELECT r.cell, r.arm, e.kind, e.len FROM episodes e JOIN runs r USING (k, src)),
 d AS (SELECT cell, arm,
-             quantile_cont(len, 0.5) FILTER (WHERE kind = 'healthy') AS healthy_p50,
-             quantile_cont(len, 0.9) FILTER (WHERE kind = 'healthy') AS healthy_p90,
-             quantile_cont(len, 0.5) FILTER (WHERE kind = 'unhealthy') AS unhealthy_p50,
-             quantile_cont(len, 0.9) FILTER (WHERE kind = 'unhealthy') AS unhealthy_p90,
+             sketch_quantile(CASE WHEN kind = 'healthy' THEN len END, 50) AS healthy_p50,
+             sketch_quantile(CASE WHEN kind = 'healthy' THEN len END, 90) AS healthy_p90,
+             sketch_quantile(CASE WHEN kind = 'unhealthy' THEN len END, 50) AS unhealthy_p50,
+             sketch_quantile(CASE WHEN kind = 'unhealthy' THEN len END, 90) AS unhealthy_p90,
              count(*) FILTER (WHERE kind = 'unhealthy') AS unhealthy_spells
       FROM sp GROUP BY ALL),
-m AS (SELECT r.cell, r.arm, count(*) AS runs, median(flaps_per_min) AS flaps_per_min,
+m AS (SELECT r.cell, r.arm, count(*) AS runs, sketch_quantile(flaps_per_min, 50) AS flaps_per_min,
              max(collapses)::BIGINT AS max_collapses, count(osc_period_s) AS periodic,
-             median(osc_period_s) AS period_s, median(osc_acf) AS acf, median(osc_amp_ms) AS amp_ms,
-             quantile_cont(osc_amp_ms, 0.9) AS amp_p90_ms
+             sketch_quantile(osc_period_s, 50) AS period_s, sketch_quantile(osc_acf, 50) AS acf,
+             sketch_quantile(osc_amp_ms, 50) AS amp_ms,
+             sketch_quantile(osc_amp_ms, 90) AS amp_p90_ms
       FROM verdicts JOIN runs r USING (k, src) GROUP BY ALL)
 SELECT * FROM m JOIN d USING (cell, arm) ORDER BY ALL;""")
 
@@ -1113,15 +1121,15 @@ WITH f AS (SELECT r.sim, r.cell, r.arm, CASE WHEN lazy THEN 'lazy' ELSE 'prompt'
                   CASE WHEN peer_honest AND live THEN seen_ms + sample_ms - held_ms END AS late
            FROM {f} x JOIN runs r USING (k, src) WHERE {w})
 SELECT sim, cell, arm, pace, count(*) AS n,
-       quantile_cont(err, [0.1, 0.5, 0.9, 0.99]) AS err_q, avg(covered::INT) AS coverage,
-       count(truth_err) AS held, quantile_cont(truth_err, [0.1, 0.5, 0.9, 0.99]) AS truth_q,
-       quantile_cont(late, [0.1, 0.5, 0.9, 0.99]) AS late_q,
+       sketch_quantiles(err, [10, 50, 90, 99]) AS err_q, avg(covered::INT) AS coverage,
+       count(truth_err) AS held, sketch_quantiles(truth_err, [10, 50, 90, 99]) AS truth_q,
+       sketch_quantiles(late, [10, 50, 90, 99]) AS late_q,
        avg((held_ms IS NULL OR held_ms < 0)::INT) FILTER (WHERE peer_honest) AS censored,
        avg(backlog::INT) FILTER (WHERE peer_honest) AS backlog
 FROM f GROUP BY ALL ORDER BY ALL;""")
         if "prediction" in kinds:
             w = " AND ".join(["kind = 'prediction'", "run = 0", *time_filter(sel)])
-            q4s = "[0.1, 0.5, 0.9, 0.99]"
+            q4s = "[10, 50, 90, 99]"
             out.prediction = v.run(f"""
 WITH f AS (SELECT r.sim, r.cell, r.arm, held_ms, peer_honest,
                   peer_honest AND held_ms >= 0 AND held_ms < channel_open_ms AS backlog,
@@ -1131,8 +1139,8 @@ WITH f AS (SELECT r.sim, r.cell, r.arm, held_ms, peer_honest,
                   held_ms <= seen_ms + tail_ms AS in99
            FROM {f} x JOIN runs r USING (k, src) WHERE {w})
 SELECT sim, cell, arm, 'prediction' AS kind, count(*) AS n, count(*) FILTER (WHERE predicted) AS held,
-       quantile_cont(err50, {q4s}) FILTER (WHERE predicted) AS truth_q,
-       quantile_cont(err90, {q4s}) FILTER (WHERE predicted) AS truth90_q,
+       sketch_quantiles(CASE WHEN predicted THEN err50 END, {q4s}) AS truth_q,
+       sketch_quantiles(CASE WHEN predicted THEN err90 END, {q4s}) AS truth90_q,
        avg(in50::INT) FILTER (WHERE predicted) AS under_p50,
        avg(in90::INT) FILTER (WHERE predicted) AS under_p90,
        avg(in99::INT) FILTER (WHERE predicted) AS under_p99,
@@ -1215,13 +1223,13 @@ WITH x AS (SELECT r.sim, r.cell, r.arm, {phase} AS phase, x.*, x.t_outcome_ms - 
                   x.peer_honest AND x.live AS judged
            FROM {filled(v, "spec_requests")} x JOIN runs r USING (k, src) {join} WHERE {w})
 SELECT sim, cell, arm, predictor, phase, count(*) AS n, count(DISTINCT k) AS runs, {shares(SPEC_OUTCOMES)},
-       quantile_cont(after_ms, [0.5, 0.9, 0.99]) FILTER (WHERE outcome = 'answered') AS answer_q,
-       quantile_cont(grace_ms, [0.1, 0.5, 0.9]) AS grace_q,
+       sketch_quantiles(CASE WHEN outcome = 'answered' THEN after_ms END, [50, 90, 99]) AS answer_q,
+       sketch_quantiles(grace_ms, [10, 50, 90]) AS grace_q,
        count(err_ms) FILTER (WHERE judged) AS held,
-       quantile_cont(err_ms, [0.1, 0.5, 0.9, 0.99]) FILTER (WHERE judged) AS err_q,
+       sketch_quantiles(CASE WHEN judged THEN err_ms END, [10, 50, 90, 99]) AS err_q,
        avg((err_ms > 0)::INT) FILTER (WHERE judged) AS early,
-       quantile_cont(held_ms - predicted_ms, [0.1, 0.5, 0.9, 0.99])
-           FILTER (WHERE judged AND predicted_ms IS NOT NULL) AS pred_err_q,
+       sketch_quantiles(CASE WHEN judged AND predicted_ms IS NOT NULL THEN held_ms - predicted_ms END,
+                        [10, 50, 90, 99]) AS pred_err_q,
        avg((held_ms <= predicted_ms)::INT) FILTER (WHERE judged AND predicted_ms IS NOT NULL) AS under_p50,
        avg((held_ms <= predicted_p90_ms)::INT) FILTER (WHERE judged AND predicted_p90_ms IS NOT NULL) AS under_p90,
        avg((held_ms <= predicted_p99_ms)::INT) FILTER (WHERE judged AND predicted_p99_ms IS NOT NULL) AS under_p99,
@@ -1239,10 +1247,10 @@ SELECT sim, cell, arm, phase, count(*) AS n, count(DISTINCT k) AS runs, {shares(
        count(*) FILTER (WHERE outcome IN ('released', 'expired', 'cancelled', 'closed')) AS parked,
        avg((outcome = 'released')::INT) FILTER (WHERE outcome <> 'refused') AS parked_released,
        avg((outcome = 'expired')::INT) FILTER (WHERE outcome <> 'refused') AS parked_expired,
-       quantile_cont(grace_ms, [0.1, 0.5, 0.9]) FILTER (WHERE outcome <> 'refused') AS grace_q,
-       quantile_cont(wait_ms::DOUBLE / grace_ms, [0.1, 0.5, 0.9])
-           FILTER (WHERE outcome = 'released' AND grace_ms > 0) AS released_frac_q,
-       quantile_cont(wait_ms, [0.5, 0.9, 0.99]) FILTER (WHERE outcome = 'released') AS released_wait_q
+       sketch_quantiles(CASE WHEN outcome <> 'refused' THEN grace_ms END, [10, 50, 90]) AS grace_q,
+       sketch_quantiles(CASE WHEN outcome = 'released' AND grace_ms > 0 THEN wait_ms::DOUBLE / grace_ms END,
+                        [10, 50, 90]) AS released_frac_q,
+       sketch_quantiles(CASE WHEN outcome = 'released' THEN wait_ms END, [50, 90, 99]) AS released_wait_q
 FROM x GROUP BY sim, cell, arm, phase ORDER BY ALL;""")
         return out
 

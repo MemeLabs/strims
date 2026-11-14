@@ -166,7 +166,7 @@ sys.path.insert(0, str(REPO / "hack"))
 
 from simlab.verdict import (  # noqa: E402
     ABSORB_SECS, COLLAPSED_SECS, DELIVERY_MAX_MS, DELIVERY_SECS, DELIVERY_SHARE, DELIVERY_TARGET_MS, E2E_MAX_MS,
-    E2E_TARGET_MS, LAG_HIGH_MS, LAG_HIGH_SECS, LAG_QUANTILE, LAG_SLOPE, LAG_SLOPE_FLOOR_MS, LAG_SLOPE_SECS, OSC_ACF,
+    E2E_TARGET_MS, LAG_HIGH_MS, LAG_HIGH_SECS, LAG_PERCENTILE, LAG_SLOPE, LAG_SLOPE_FLOOR_MS, LAG_SLOPE_SECS, OSC_ACF,
     OSC_MIN_PERIOD, OVERHEAD, PIPELINE_MS, RECOVER_SECS, STARTUP_SECS, STEP_SECS, TREES_SECS, TREES_SHARE,
     TREES_SMOOTH, VERDICT_VERSION, acf, collapsed, episodes, events, feasible, lags, measures, med, phase_lags, phases,
     presence, quantile, run_metrics, run_startup, runs_of, slope, startup, steps, timeline, verdict, verdict_version,
@@ -779,7 +779,7 @@ def series(a):
                 tail = f"  {s['seed_ovh'][k] / 1000:12.1f} {f(per, '6.1f')}"
             print(
                 f"{k:5d} {s['present'][k]:7d} {f(smooth[k] if k < n else None, '6.2f')} {f(deliv[k] if k < n else None, '5.2f')}"
-                f" {f(quantile([v[k] for v in vl if v[k] is not None], LAG_QUANTILE), '8d')} {s['pruned'][k]:6d} {s['parents'][k]:7d}"
+                f" {f(quantile([v[k] for v in vl if v[k] is not None], LAG_PERCENTILE), '8d')} {s['pruned'][k]:6d} {s['parents'][k]:7d}"
                 f"  {s['capacity'][k] // 1000 if s['capacity'][k] >= 0 else '-':>12} {s['avail'][k] // 1000 if s['avail'][k] >= 0 else '-':>8}"
                 f" {s['busy'][k] / 10 if s['busy'][k] >= 0 else '-':>5} {s['copies'][k]:6d} {sent:4d} {100 * s['pushed'][k] // sent if sent else '-':>7}"
                 + tail
@@ -923,10 +923,10 @@ def track_run(s, row):
     firsts = [next((k for k, f in enumerate(frames) if f), None) for frames in s["frames"]]
     off = lambda f: row.get(f, [None])[0] if isinstance(row.get(f), list) else None
     return {
-        "ratio": (quantile(ratios, 0.1), quantile(ratios, 0.5), quantile(ratios, 0.9)),
+        "ratio": (quantile(ratios, 10), quantile(ratios, 50), quantile(ratios, 90)),
         "fall": falls, "climb": climbs, "used": used,
         "first": med([x for x in firsts if x is not None]),
-        "startup": quantile(phase_lags(s).get("startup", []), 0.5),
+        "startup": quantile(phase_lags(s).get("startup", []), 50),
         "off_drop": off("off_drop"), "off_rise": off("off_rise"),
     }
 

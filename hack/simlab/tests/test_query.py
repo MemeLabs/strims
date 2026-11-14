@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import catalog, query, store, store_host  # noqa: E402
+from simlab import catalog, query, sketch, store, store_host  # noqa: E402
 
 SUITE = query.Selection(src=["suite/**"])
 
@@ -180,14 +180,8 @@ class Commands(Fixture):
 
 
 def quantiles(xs, ps):
-    """quantile_cont's."""
-    xs = sorted(xs)
-    out = []
-    for p in ps:
-        at = p * (len(xs) - 1)
-        lo = int(at)
-        out.append(xs[lo] + (xs[min(lo + 1, len(xs) - 1)] - xs[lo]) * (at - lo))
-    return out
+    """sketch_quantiles' (simlab.sketch's)."""
+    return [sketch.quantile(xs, p) for p in ps]
 
 
 class Logs(Fixture):
@@ -247,7 +241,7 @@ class Logs(Fixture):
         self.assertIsNone(got.have)
         (r,) = got.prediction.records()
         self.assertEqual((r["kind"], r["n"], r["held"]), ("prediction", 4, 2))
-        ps = [0.1, 0.5, 0.9, 0.99]
+        ps = [10, 50, 90, 99]
         for k, want in (("truth_q", quantiles([50, 10], ps)), ("truth90_q", quantiles([20, -20], ps))):
             self.assertEqual(len(r[k]), 4)
             for a, b in zip(r[k], want):
@@ -274,7 +268,7 @@ class Logs(Fixture):
                          ("model", "all", 2, 1, 0.5, 0.5, 0.0))
         self.assertEqual((r["answer_q"], r["held"], r["early"], r["under_p50"], r["under_p90"], r["never_held"]),
                          ([40.0, 40.0, 40.0], 2, 1.0, 0.5, None, 0.0))
-        self.assertEqual(r["pred_err_q"], quantiles([10, -20], [0.1, 0.5, 0.9, 0.99]))
+        self.assertEqual(r["pred_err_q"], quantiles([10, -20], [10, 50, 90, 99]))
         (p,) = got.parks.records()
         self.assertEqual((p["n"], p["parked"], p["refused_full"], p["refused_had"], p["parked_released"],
                           p["released_frac_q"], p["released_wait_q"]),

@@ -389,9 +389,10 @@ def score_cols(row="a"):
        {cover(row, "p90")} AS cover_p90,
        {cover(row, "p99")} AS cover_p99,
        avg(({held} AND {row}.held_ms < {row}.t_ms)::INT) AS before_decision,
-       median({row}.held_ms - {row}.p50) AS err_p50_ms,
-       quantile_cont({row}.held_ms - {row}.p50, 0.9) AS err_p90_ms,
-       median({row}.p90 - {row}.p50) AS spread_p90_ms, median({row}.p99 - {row}.p50) AS spread_p99_ms,
+       sketch_quantile({row}.held_ms - {row}.p50, 50) AS err_p50_ms,
+       sketch_quantile({row}.held_ms - {row}.p50, 90) AS err_p90_ms,
+       sketch_quantile({row}.p90 - {row}.p50, 50) AS spread_p90_ms,
+       sketch_quantile({row}.p99 - {row}.p50, 50) AS spread_p99_ms,
        avg(({row}.p99 = {row}.p50)::INT) AS no_spread"""
 
 
@@ -419,7 +420,7 @@ WITH x AS (
 ), lv AS (
     SELECT arm, cell, round, factor, level, count(*) AS n, count(*) FILTER (WHERE fail) AS fails,
            count(*) FILTER (WHERE not_yet) AS not_yets, count(e) AS held, avg(e) AS mean_e,
-           sum(abs(e)) AS abs_e, median(held_ms - p50) AS err_p50_ms
+           sum(abs(e)) AS abs_e, sketch_quantile(held_ms - p50, 50) AS err_p50_ms
     FROM x GROUP BY ALL
 ), tot AS (
     SELECT arm, cell, round, factor, sum(n) AS n, sum(fails) AS fails, sum(abs_e) AS abs_e,
@@ -600,14 +601,14 @@ SELECT a.arm, a.cell, a.kind, (floor(a.off_ms / {ALIGN_BIN_S * 1000}) * {ALIGN_B
        count(*) AS n, avg(a.fail::INT) AS fail_rate, count(a.p50) AS predicted,
        {cover("a", "p50")} AS cover_p50,
        {cover("a", "p90")} AS cover_p90,
-       median(a.held_ms - a.p50) AS err_p50_ms,
+       sketch_quantile(a.held_ms - a.p50, 50) AS err_p50_ms,
        avg({wis(outcome_ms())}) FILTER (WHERE a.p50 IS NOT NULL) AS wis
 FROM x a GROUP BY ALL ORDER BY a.arm, a.cell, a.kind, off_s;
 """
 
 
 def baselines_sql():
-    taus = ", ".join(str(t) for _, t in QUANTILES)
+    ps = ", ".join(str(round(t * 100)) for _, t in QUANTILES)
     model_wis = " + ".join(f"2 * {pinball('b.held_ms', f'b.m{c[1:]}', t)}" for c, t in QUANTILES)
     return f"""
 WITH r AS (
@@ -625,11 +626,12 @@ WITH r AS (
     SELECT arm, cell, round, seed, t_ms, held_ms, p50, p90, p99, unnest(['persistence', 'cadence']) AS base,
            unnest([persistence, cadence]) AS point FROM r
 ), per_seed AS (
-    SELECT arm, cell, round, base, seed, quantile_cont(held_ms - point, [{taus}]) AS qs
+    SELECT arm, cell, round, base, seed, sketch_quantiles(held_ms - point, [{ps}]) AS qs
     FROM long GROUP BY ALL
 ), loso AS (
-    SELECT s.arm, s.cell, s.round, s.base, s.seed, median(o.qs[1]) AS q1, median(o.qs[2]) AS q2,
-           median(o.qs[3]) AS q3
+    SELECT s.arm, s.cell, s.round, s.base, s.seed, sketch_quantile(o.qs[1], 50) AS q1,
+           sketch_quantile(o.qs[2], 50) AS q2,
+           sketch_quantile(o.qs[3], 50) AS q3
     FROM per_seed s JOIN per_seed o ON o.arm = s.arm AND o.cell = s.cell AND o.round = s.round
          AND o.base = s.base AND o.seed <> s.seed
     GROUP BY ALL
@@ -645,7 +647,7 @@ WITH r AS (
            avg((held_ms <= p50)::INT) AS cover_p50, avg((held_ms <= p90)::INT) AS cover_p90,
            avg((held_ms <= p99)::INT) AS cover_p99,
            avg((held_ms <= m50)::INT) AS model_cover_p50, avg((held_ms <= m90)::INT) AS model_cover_p90,
-           median(held_ms - p50) AS err_p50_ms, median(held_ms - m50) AS model_err_p50_ms
+           sketch_quantile(held_ms - p50, 50) AS err_p50_ms, sketch_quantile(held_ms - m50, 50) AS model_err_p50_ms
     FROM b GROUP BY ALL
 )
 SELECT *, 1 - model_wis / nullif(wis, 0) AS skill, 1 - model_pinball_p50 / nullif(pinball_p50, 0) AS skill_p50
@@ -675,7 +677,7 @@ WITH pc AS (
     WHERE a.kept
 )
 SELECT a.arm, a.cell, a.round, a.axis, a.bucket, count(*) AS n, avg(a.fail::INT) AS fail_rate,
-       count(a.p50) AS predicted, median(a.held_ms - a.p50) AS err_p50_ms,
+       count(a.p50) AS predicted, sketch_quantile(a.held_ms - a.p50, 50) AS err_p50_ms,
        avg(abs(a.held_ms - a.p50)) AS abs_err_ms,
        {cover("a", "p50")} AS cover_p50,
        {cover("a", "p90")} AS cover_p90,
@@ -705,7 +707,7 @@ WITH r AS (
 )
 SELECT arm, cell, round, count(*) AS asks, avg(rivals) AS rivals, avg(pick_seed::INT) AS pick_seed,
        avg(e_pick) AS err_pick_ms, avg(e_rivals) AS err_rivals_ms,
-       median(e_pick) AS err_pick_p50_ms, median(e_rivals) AS err_rivals_p50_ms,
+       sketch_quantile(e_pick, 50) AS err_pick_p50_ms, sketch_quantile(e_rivals, 50) AS err_rivals_p50_ms,
        avg(e_pick - e_rivals) AS curse_ms, avg(pick_missed::INT) AS pick_missed,
        avg((pick_missed AND rival_held)::INT) AS regret, avg((pick_missed AND other_held)::INT) AS regret_peer,
        avg((pick_missed AND seed_held AND NOT other_held)::INT) AS regret_seed_only,
@@ -753,7 +755,7 @@ WITH per_seed AS (
 )
 SELECT * FROM ({haves}
     SELECT a.arm, a.cell, 'ask ' || a.round AS what, count(*) AS n,
-           quantile_cont(a.t_outcome_ms - a.t_ms, [0.5, 0.9, 0.99]) FILTER (WHERE a.outcome = 'answered') AS q_ms,
+           sketch_quantiles(CASE WHEN a.outcome = 'answered' THEN a.t_outcome_ms - a.t_ms END, [50, 90, 99]) AS q_ms,
            {shares}, avg(({failed})::INT) AS failed, any_value(s.lo) AS failed_seed_min,
            any_value(s.hi) AS failed_seed_max
     FROM fs_asks a JOIN spread s USING (arm, cell, round) WHERE a.kept GROUP BY ALL
@@ -772,7 +774,8 @@ WITH per AS (
     GROUP BY ALL
 )
 SELECT arm, cell, collapsed, count(*) AS runs, list(seed ORDER BY seed) AS seeds, sum(asks) AS asks,
-       quantile_cont(asks, [0, 0.5, 1]) AS asks_per_run, sum(fails) / nullif(sum(asks), 0) AS fail_rate,
+       CASE WHEN count(asks) > 0 THEN [min(asks), sketch_quantile(asks, 50), max(asks)] END AS asks_per_run,
+       sum(fails) / nullif(sum(asks), 0) AS fail_rate,
        sum(flight) / nullif(sum(asks), 0) AS flight_share, sum(seed_only) / nullif(sum(asks), 0) AS seed_only,
        sum(hole_behind) / nullif(sum(asks), 0) AS hole_behind
 FROM per GROUP BY ALL ORDER BY ALL;

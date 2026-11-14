@@ -24,10 +24,10 @@ WITH runs AS (
       ON p.k = v.k AND p.src = v.src AND p.viewer = v.viewer AND v.sec >= p.start AND v.sec < p.stop
     WHERE v.lag_ms >= 0
 ), arms AS (
-    SELECT arm, quantile_cont(lag_ms, 0.99) AS p99, count(*) AS n FROM secs GROUP BY arm
+    SELECT arm, sketch_quantile(lag_ms, 99) AS p99, count(*) AS n FROM secs GROUP BY arm
 ), phases AS (
     SELECT s.arm, s.phase, count(*) AS viewer_s, any_value(a.n) AS arm_n, any_value(a.p99) AS arm_p99,
-           quantile_cont(s.lag_ms, [0.5, 0.9, 0.99]) AS q, max(s.lag_ms) AS max_ms,
+           sketch_quantiles(s.lag_ms, [50, 90, 99]) AS q, max(s.lag_ms) AS max_ms,
            avg((s.lag_ms > 1250)::INT) AS over_1250, avg((s.lag_ms > 4250)::INT) AS over_4250,
            count(*) FILTER (WHERE s.lag_ms > a.p99) AS tail
     FROM secs s JOIN arms a USING (arm)

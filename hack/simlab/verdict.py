@@ -21,7 +21,9 @@ run's tail):
   reads as one there throughout.
 - A viewer's lag in a second is the p99 of the frames it read then; in a
   second it reads none, its lag from the last second grows by a second (it
-  falls behind live). The swarm's lag is the LAG_QUANTILE of its viewers'.
+  falls behind live). The swarm's lag is the LAG_PERCENTILE of its
+  viewers'. Every quantile here is the lab's (simlab.sketch: the integer
+  nearest rank, read through its log sketch), the sims' and the SQL's.
 - Trees fail when, for TREES_SECS or more in a row, under TREES_SHARE of
   the chunks the viewers needed arrive as pushes before their deadline
   (hits), averaged over TREES_SMOOTH seconds. Counting against the chunks
@@ -150,7 +152,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from . import store_host, vocab
+from . import sketch, store_host, vocab
 
 
 # The latency budget: Amazon IVS's low-latency figures, glass to glass
@@ -178,7 +180,7 @@ TREES_SMOOTH = 3
 TREES_SECS = 10
 DELIVERY_SHARE = 0.95
 DELIVERY_SECS = 10
-LAG_QUANTILE = 0.9
+LAG_PERCENTILE = 90
 LAG_HIGH_MS = DELIVERY_MAX_MS
 LAG_HIGH_SECS = 5
 LAG_SLOPE = 50
@@ -222,13 +224,14 @@ OVERHEAD = {1024: 0.34, 4096: 0.085}
 
 
 def med(v):
-    v = sorted(v)
-    return v[len(v) // 2] if v else None
+    """The median of v (quantile's p50); None for none."""
+    return quantile(v, 50)
 
 
-def quantile(v, q):
-    v = sorted(v)
-    return v[round((len(v) - 1) * q)] if v else None
+def quantile(v, p):
+    """The p-th percentile (an integer, 0 to 100) of v, read through the
+    sketch (simlab.sketch.quantile); None for none."""
+    return sketch.quantile(v, p)
 
 
 def lags(s):
@@ -526,7 +529,7 @@ def measures(s):
         deliv.append(med(d))
     vl = [[x if k < n and st[k] == COUNTS else None for k, x in enumerate(v)]
           for i, (v, st) in enumerate(zip(lags(s), stays)) if i not in hostile]
-    lag = [quantile([v[k] for v in vl if v[k] is not None], LAG_QUANTILE) for k in range(n)]
+    lag = [quantile([v[k] for v in vl if v[k] is not None], LAG_PERCENTILE) for k in range(n)]
     return n, smooth, deliv, lag
 
 
@@ -778,10 +781,10 @@ def run_metrics(s, v):
     out = {
         "collapses": len(spells("collapse")),
         "flaps_per_min": flaps * 60 / len(after) if after else None,
-        "healthy_dwell_p50_s": quantile(spells("healthy"), 0.5),
-        "healthy_dwell_p90_s": quantile(spells("healthy"), 0.9),
-        "unhealthy_dwell_p50_s": quantile(spells("unhealthy"), 0.5),
-        "unhealthy_dwell_p90_s": quantile(spells("unhealthy"), 0.9),
+        "healthy_dwell_p50_s": quantile(spells("healthy"), 50),
+        "healthy_dwell_p90_s": quantile(spells("healthy"), 90),
+        "unhealthy_dwell_p50_s": quantile(spells("unhealthy"), 50),
+        "unhealthy_dwell_p90_s": quantile(spells("unhealthy"), 90),
     }
     st = steps(s)
     down = next(((i, t) for i, (t, kind, _) in enumerate(st) if kind == "seed_down"), None)
@@ -807,7 +810,7 @@ def run_metrics(s, v):
     tail = [x for x in lag[first:] if x is not None]
     out["osc_amp_ms"] = out["osc_period_s"] = out["osc_acf"] = None
     if len(tail) >= 4 * OSC_MIN_PERIOD:
-        out["osc_amp_ms"] = (quantile(tail, 0.9) - quantile(tail, 0.1)) / 2
+        out["osc_amp_ms"] = (quantile(tail, 90) - quantile(tail, 10)) / 2
         best = None
         r = [acf(tail, p) for p in range(len(tail) // 2 + 2)]
         for p in range(OSC_MIN_PERIOD, len(tail) // 2 + 1):
@@ -818,8 +821,8 @@ def run_metrics(s, v):
         if best:
             out["osc_period_s"], out["osc_acf"] = best
     by = phase_lags(s)
-    out["lag_p99_startup_ms"] = quantile(by.get("startup", []), 0.99)
-    out["lag_p99_steady_ms"] = quantile(by.get("steady", []), 0.99)
+    out["lag_p99_startup_ms"] = quantile(by.get("startup", []), 99)
+    out["lag_p99_steady_ms"] = quantile(by.get("steady", []), 99)
     return out
 
 
@@ -829,12 +832,13 @@ def verdict_version():
     GONE) among it: a derived table made under another is stale."""
     parts = [inspect.getsource(f) for f in (lags, seconds, stay, viewer_nodes, gone, rule_events, windows, rank,
                                             holds, incarnations, timeline, presence, startup, measures, slope,
-                                            runs_of, quantile, med, verdict, feasible, run_startup, collapsed,
-                                            steps, phase_name, phases, phase_lags, events, episodes, acf,
-                                            run_metrics)]
-    parts.append(repr([TREES_SHARE, TREES_SMOOTH, TREES_SECS, DELIVERY_SHARE, DELIVERY_SECS, LAG_QUANTILE,
-                       LAG_HIGH_MS, LAG_HIGH_SECS, LAG_SLOPE, LAG_SLOPE_SECS, LAG_SLOPE_FLOOR_MS, RECOVER_SECS,
-                       ABSORB_SECS, STARTUP_SECS, COLLAPSED_SECS, STEP_SECS, OSC_ACF, OSC_MIN_PERIOD,
+                                            runs_of, quantile, med, sketch.rank, sketch._int_bounds,
+                                            sketch.floor, sketch.quantile, verdict, feasible, run_startup,
+                                            collapsed, steps, phase_name, phases, phase_lags, events, episodes,
+                                            acf, run_metrics)]
+    parts.append(repr([sketch.SUB_BITS, TREES_SHARE, TREES_SMOOTH, TREES_SECS, DELIVERY_SHARE, DELIVERY_SECS,
+                       LAG_PERCENTILE, LAG_HIGH_MS, LAG_HIGH_SECS, LAG_SLOPE, LAG_SLOPE_SECS, LAG_SLOPE_FLOOR_MS,
+                       RECOVER_SECS, ABSORB_SECS, STARTUP_SECS, COLLAPSED_SECS, STEP_SECS, OSC_ACF, OSC_MIN_PERIOD,
                        DELIVERY_TARGET_MS, OVERHEAD, GONE, [(kid, ANCHORS[kid], RANK[kid]) for kid in ANCHORS],
                        {kid: "peer" in VOCAB["kinds"][kid] for kid in ANCHORS}]))
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]

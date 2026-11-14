@@ -352,9 +352,12 @@ scoring.sql's viewer_phases_of((SELECT list({'k': k, 'src': src}) FROM
 runs)) ON (k, src, viewer) with start <= sec < stop, its phase (the
 verdict's, then tail past its seconds).
 runs' frames and bytes are its row's: beside viewer_seconds' frames, name
-them runs.frames and runs.bytes.
+them runs.frames and runs.bytes. A quantile is the lab's and the sims' one
+method, scoring.sql's sketch_quantile(x, p) (p an integer percentile, the
+integer nearest rank, read through the log sketch) and sketch_quantiles(x,
+[p, ...]).
 
-  simdb.py sql "SELECT r.cell, r.arm, w.up, quantile_cont(lag_ms, 0.99) AS p99
+  simdb.py sql "SELECT r.cell, r.arm, w.up, sketch_quantile(lag_ms, 99) AS p99
     FROM reads JOIN viewers w USING (k, src, viewer) JOIN runs r USING (k, src)
     GROUP BY ALL ORDER BY ALL"
 """

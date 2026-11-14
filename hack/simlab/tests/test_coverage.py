@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import catalog, coverage, forecast, query, store_host, verdict  # noqa: E402
+from simlab import catalog, coverage, forecast, query, sketch, store_host, verdict  # noqa: E402
 
 SRC = "suite/wt/cv"
 # (arm, seed): the run's shape (golden_cli's series).
@@ -267,11 +267,14 @@ class Fixture(unittest.TestCase):
 
 
 def p99(xs):
-    """quantile_cont's 0.99 of `xs`."""
-    xs = sorted(xs)
-    at = 0.99 * (len(xs) - 1)
-    i = int(at)
-    return xs[i] + (at - i) * (xs[min(i + 1, len(xs) - 1)] - xs[i])
+    """sketch_quantile's p99 of `xs` (simlab.sketch's)."""
+    return sketch.quantile(xs, 99)
+
+
+def spread(*xs):
+    """The runs' spread of `xs`, one a run: the least, the median (the
+    sketch's) and the most."""
+    return [min(xs), sketch.quantile(xs, 50), max(xs)]
 
 
 # Every run's steady late chunks but 100 (seed 1's never), with their
@@ -361,21 +364,22 @@ class Sections(Fixture):
         held += [40] * (175 - len(held))
         self.assertEqual((r["p50_ms"], r["p90_ms"], r["max_ms"]), (40.0, 40.0, 700))
         self.assertAlmostEqual(r["p99_ms"], p99(held))
-        self.assertAlmostEqual(r["p99_ms"], 626)
+        # The 174th of 175 (ceil(0.99 x 175)): 700.
+        self.assertAlmostEqual(r["p99_ms"], 700)
         # Each run's: seed 1 7 late of 88 and a never, seed 2 6 late; seed
         # 1 holds 87 (80 at 40 ms), seed 2 88.
-        self.close(r["late_runs"], [6 / 88, 6.5 / 88, 7 / 88])
-        self.close(r["never_runs"], [0.0, 0.5 / 88, 1 / 88])
+        self.close(r["late_runs"], spread(6 / 88, 7 / 88))
+        self.close(r["never_runs"], spread(0.0, 1 / 88))
         one = [100] + list(STEADY_LATE.values())
         lo, hi = p99(one + [40] * 81), p99(one + [40] * 80)
-        self.close(r["p99_runs"], [lo, (lo + hi) / 2, hi])
-        self.close(r["p99_runs"], [613, 613.5, 614])
+        self.close(r["p99_runs"], spread(lo, hi))
+        self.close(r["p99_runs"], [700, 700, 700])
         # The startup's: chunk 2 at 400 ms in both runs, chunk 1 at 1000 ms
         # at seed 2.
         s = self.one("latency", arm="decl", phase="startup")
         self.assertEqual((s["chunks"], s["censored"], s["late"], s["max_ms"]), (80, 0, 3, 1000))
         self.assertAlmostEqual(s["p99_ms"], p99([40] * 77 + [400, 400, 1000]))
-        self.close(s["late_runs"], [0.025, 0.0375, 0.05])
+        self.close(s["late_runs"], spread(0.025, 0.05))
 
     def test_a_pooled_row_of_two_phases_and_collapsed_runs_apart(self):
         # decl's chunks are startup and steady alone: no pooled row. main's
@@ -398,17 +402,18 @@ class Sections(Fixture):
         self.assertEqual((push["chunks"], push["late"], push["max_ms"]), (165, 4, 600))
         self.assertAlmostEqual(push["share"], 165 / 176)
         self.assertAlmostEqual(push["p99_ms"], p99([40] * 161 + [300, 300, 600, 600]))
-        self.close(push["share_runs"], [82 / 88, 82.5 / 88, 83 / 88])
-        self.assertEqual((answer["chunks"], answer["late"], answer["p50_ms"], answer["p99_ms"]), (8, 8, 400.0, 700.0))
+        self.close(push["share_runs"], spread(82 / 88, 83 / 88))
+        # Answers 260, 300, 500 and 700 ms twice: the p50 is the 4th, 300.
+        self.assertEqual((answer["chunks"], answer["late"], answer["p50_ms"], answer["p99_ms"]), (8, 8, 300.0, 700.0))
         other = got[("other", "unnamed")]
         self.assertEqual((other["chunks"], other["late"], other["p50_ms"]), (2, 0, 100.0))
         # The never-held chunk is seed 1's alone: seed 2's share is 0.
         never = got[("never", None)]
         self.assertEqual((never["chunks"], never["p50_ms"]), (1, None))
-        self.close(never["share_runs"], [0.0, 0.5 / 88, 1 / 88])
+        self.close(never["share_runs"], spread(0.0, 1 / 88))
         startup = self.one("routes", arm="decl", phase="startup", route="answer")
         self.assertEqual(startup["chunks"], 1)
-        self.close(startup["share_runs"], [0.0, 0.0125, 0.025])
+        self.close(startup["share_runs"], spread(0.0, 0.025))
 
     def test_invariants(self):
         # Steady, 25-39 s: two streams a run. Stream 1 has no seed child
@@ -425,7 +430,7 @@ class Sections(Fixture):
         s = self.one("invariants", arm="decl", phase="startup")
         self.assertEqual((s["stream_s"], s["uncovered_s"]), (40, 6.0))
         self.assertAlmostEqual(s["seed_children"], 34 / 40)
-        self.close(s["uncovered_runs"], [0.0, 0.15, 0.3])
+        self.close(s["uncovered_runs"], spread(0.0, 0.3))
         # Past startup the stream-seconds have two phases (golden_cli's
         # latency event at 5 s, 5-19 s): a row of phase NULL pools them.
         pooled = self.one("invariants", arm="decl", phase=None)
@@ -444,7 +449,7 @@ class Sections(Fixture):
                                      ("child_never", None), ("other", None)])
         late = 13
         want = {("no_seed_child", "prune"): (2, 0.0, 0, 300.0), ("released", None): (2, 1.0, 0, 500.0),
-                ("pushed_late", None): (4, 1.5, 0, 450.0), ("child_never", None): (3, 1.0, 1, 700.0),
+                ("pushed_late", None): (4, 1.5, 0, 300.0), ("child_never", None): (3, 1.0, 1, 700.0),
                 ("other", None): (2, 1.0, 0, 260.0)}
         for key, (n, children, never, p50) in want.items():
             r = got[key]
@@ -452,7 +457,7 @@ class Sections(Fixture):
             self.assertAlmostEqual(r["late_share"], n / late)
             self.assertAlmostEqual(r["share"], n / 176)
         # child_never: 106 in both runs, seed 1's never-held 100 too.
-        self.close(got[("child_never", None)]["share_runs"], [1 / 88, 1.5 / 88, 2 / 88])
+        self.close(got[("child_never", None)]["share_runs"], spread(1 / 88, 2 / 88))
         startup = {(r["class"], r["after"]): r["chunks"] for r in self.rows("late", arm="decl", phase="startup")}
         # Seed 2's chunk 1: its stream had no seed child before (after NULL).
         self.assertEqual(startup, {("no_seed_child", None): 1, ("pushed_late", None): 2})
@@ -491,7 +496,8 @@ class Grain(Fixture):
         r = self.one("latency", arm="pp", phase="steady")
         self.assertEqual((r["runs"], r["chunks"], r["censored"], r["late"], r["never"], r["anomalies"]),
                          (1, JUDGED_STEADY, PP_CHUNKS - 128, len(STEADY_LATE) + 1, 1, 1))
-        self.assertAlmostEqual(r["p99_ms"], 614)
+        # The 88th of 88: 700.
+        self.assertAlmostEqual(r["p99_ms"], 700)
         # Its parents are empty, as the ppspp sim writes them without hybrid
         # push: no I1, no classes.
         i = self.one("invariants", arm="pp", phase="steady")

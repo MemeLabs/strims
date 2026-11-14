@@ -34,8 +34,8 @@ WITH runs AS (
     HAVING sum(viewer_s) > 0
 ), startup AS (
     SELECT r.cell, r.arm,
-           quantile_cont(CASE WHEN $delay = 1250 THEN coalesce(w.startup_ms_1250_honest, w.startup_ms_1250)
-                              ELSE coalesce(w.startup_ms_4250_honest, w.startup_ms_4250) END, [0.5, 0.9]) AS q
+           sketch_quantiles(CASE WHEN $delay = 1250 THEN coalesce(w.startup_ms_1250_honest, w.startup_ms_1250)
+                              ELSE coalesce(w.startup_ms_4250_honest, w.startup_ms_4250) END, [50, 90]) AS q
     FROM runs r JOIN with_stalls USING (k, src) JOIN rows w USING (k, src)
     GROUP BY ALL
 ), cdf AS (

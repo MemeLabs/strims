@@ -14,7 +14,7 @@ WITH jobs2 AS (
     SELECT arm_label AS arm, k, src FROM experiment_jobs
     WHERE exp_id = $exp AND cell = $cell AND seed = $seed AND arm_label IN ($arm, $arm2)
 ), lag AS (
-    SELECT j.arm, v.sec, quantile_cont(v.lag_ms, 0.5) AS p50, quantile_cont(v.lag_ms, 0.99) AS p99,
+    SELECT j.arm, v.sec, sketch_quantile(v.lag_ms, 50) AS p50, sketch_quantile(v.lag_ms, 99) AS p99,
            max(v.lag_ms) AS max
     FROM jobs2 j JOIN viewer_seconds v USING (k, src)
     WHERE v.lag_ms >= 0

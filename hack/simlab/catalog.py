@@ -2449,7 +2449,7 @@ VERDICT_DOCS = {
     "deliv_bad": "the delivery share under DELIVERY_SHARE", "lag_high": "the lag q0.9 past LAG_HIGH_MS",
     "lag_rise": "the lag rising past LAG_SLOPE ms/s over LAG_SLOPE_SECS while past LAG_SLOPE_FLOOR_MS",
     "hit_share": "the honest viewers' hits over what they needed",
-    "lag_q": "the honest present viewers' nearest-rank q0.9 lag, ms",
+    "lag_q": "the honest present viewers' p90 lag (simlab.sketch's), ms",
     "verdict_version": "the verdicts' version (simdb.derived_version)",
     # derived_events (verdict.events)
     "derived_events.sec": "when the event came, s from the stream's start: an uplink step at its time, a collapse "

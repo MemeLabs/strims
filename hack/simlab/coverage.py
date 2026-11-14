@@ -71,7 +71,7 @@ had. A chunk at a time:
              after its join isn't the chunk's. A publication past the
              verdict's seconds is the vocabulary's tail (vocab.TAIL)
 
-Quantiles of latency are of the held chunks (quantile_cont): never is a
+Quantiles of latency are of the held chunks (sketch_quantile): never is a
 route of its own, apart, beside them, and the late share counts it.
 
 The 25 s edge is the phases': a chunk published at 25.000 s is in second
@@ -180,8 +180,9 @@ def phase_rank(col="phase"):
 
 
 def spread(col):
-    """SQL: the least, median and greatest of `col` over a group's runs."""
-    return f"quantile_cont({col}, [0, 0.5, 1])"
+    """SQL: the least, median (sketch_quantile's) and greatest of `col` over a group's runs, NULL
+    for none."""
+    return f"CASE WHEN count({col}) > 0 THEN [min({col}), sketch_quantile({col}, 50), max({col})] END"
 
 
 def runs_sql(sel):
@@ -300,7 +301,7 @@ def latency_sql(sel):
 WITH g AS {grouped(sel)},
 per AS (
     SELECT {GROUP}, k, any_value(interval_ms) AS interval_ms, avg(late::INT) AS late,
-           avg((route = 'never')::INT) AS never, quantile_cont(latency_ms, 0.99) AS p99
+           avg((route = 'never')::INT) AS never, sketch_quantile(latency_ms, 99) AS p99
     FROM g WHERE judged GROUP BY ALL
 ), s AS (
     SELECT {GROUP}, {spread('interval_ms')} AS interval_runs, {spread('late')} AS late_runs,
@@ -313,9 +314,9 @@ SELECT {SHOWN}, count(DISTINCT g.k) AS runs, list(DISTINCT g.seed ORDER BY g.see
        count(*) FILTER (WHERE judged AND route = 'never') AS never,
        avg((route = 'never')::INT) FILTER (WHERE judged) AS never_share,
        count(*) FILTER (WHERE judged AND late) AS late, avg(late::INT) FILTER (WHERE judged) AS late_share,
-       quantile_cont(latency_ms, 0.5) FILTER (WHERE judged) AS p50_ms,
-       quantile_cont(latency_ms, 0.9) FILTER (WHERE judged) AS p90_ms,
-       quantile_cont(latency_ms, 0.99) FILTER (WHERE judged) AS p99_ms,
+       sketch_quantile(CASE WHEN judged THEN latency_ms END, 50) AS p50_ms,
+       sketch_quantile(CASE WHEN judged THEN latency_ms END, 90) AS p90_ms,
+       sketch_quantile(CASE WHEN judged THEN latency_ms END, 99) AS p99_ms,
        max(latency_ms) FILTER (WHERE judged) AS max_ms,
        count(*) FILTER (WHERE judged AND source IN ('peer', 'unnamed')) AS anomalies,
        count(DISTINCT g.k) FILTER (WHERE g.streams_from IS NULL
@@ -342,7 +343,7 @@ shares AS (
 all_n AS (SELECT {GROUP}, sum(n) AS n FROM tot GROUP BY ALL)
 SELECT g.arm, g.cell, g.collapsed, nullif(g.phase, {q(POOLED)}) AS phase, g.route, g.source, count(*) AS chunks,
        count(*) / any_value(a.n) AS share, count(*) FILTER (WHERE g.late) AS late,
-       quantile_cont(g.latency_ms, 0.5) AS p50_ms, quantile_cont(g.latency_ms, 0.99) AS p99_ms,
+       sketch_quantile(g.latency_ms, 50) AS p50_ms, sketch_quantile(g.latency_ms, 99) AS p99_ms,
        max(g.latency_ms) AS max_ms, any_value(s.share_runs) AS share_runs
 FROM g JOIN all_n a ON a.arm = g.arm AND a.cell = g.cell AND a.collapsed = g.collapsed AND a.phase = g.phase
 JOIN s ON s.arm = g.arm AND s.cell = g.cell AND s.collapsed = g.collapsed AND s.phase = g.phase
@@ -400,7 +401,7 @@ shares AS (
 SELECT l.arm, l.cell, l.collapsed, nullif(l.phase, {q(POOLED)}) AS phase, l.class, l.after, count(*) AS chunks,
        count(*) / any_value(a.late_n) AS late_share, count(*) / any_value(a.n) AS share,
        avg(l.children) AS children, count(*) FILTER (WHERE l.route = 'never') AS never,
-       quantile_cont(l.latency_ms, 0.5) AS p50_ms, any_value(s.share_runs) AS share_runs
+       sketch_quantile(l.latency_ms, 50) AS p50_ms, any_value(s.share_runs) AS share_runs
 FROM l JOIN all_n a ON a.arm = l.arm AND a.cell = l.cell AND a.collapsed = l.collapsed AND a.phase = l.phase
 JOIN s ON s.arm = l.arm AND s.cell = l.cell AND s.collapsed = l.collapsed AND s.phase = l.phase
      AND s.class = l.class AND s.after IS NOT DISTINCT FROM l.after

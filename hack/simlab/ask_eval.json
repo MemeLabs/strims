@@ -14,8 +14,8 @@
       "reference_sql": [
         "SELECT count(*) FILTER (WHERE v.collapsed) AS collapsed, count(*) FILTER (WHERE v.collapsed AND e.cell IN (SELECT cell FROM structural('sa0755'))) AS structural FROM experiment_jobs e JOIN verdicts v USING (k, src) WHERE e.exp_id = 'sa0755' AND e.arm_label = 'main'"
       ],
-      "answer": "64 of its 71 collapsed runs, all in seed-starved and seed-restart; 7 collapse elsewhere.",
-      "checks": [{"number": 64, "tol": 0}, {"number": 71, "tol": 0}]
+      "answer": "64 of its 73 collapsed runs, all in seed-starved and seed-restart; 9 collapse elsewhere.",
+      "checks": [{"number": 64, "tol": 0}, {"number": 73, "tol": 0}]
     },
     {
       "id": "end_abrupt_seeds",
@@ -24,12 +24,12 @@
         "SELECT e.arm_label, count(*) FILTER (WHERE v.collapsed) AS collapsed, count(*) AS runs, list(e.seed ORDER BY e.seed) FILTER (WHERE v.collapsed) AS seeds FROM experiment_jobs e JOIN verdicts v USING (k, src) WHERE e.exp_id = 'sa0755' AND e.cell = 'star-15-10-end-abrupt' GROUP BY ALL ORDER BY ALL",
         "SELECT ka, kb, n, round(p, 2) AS p FROM collapse_test('sa0755', 'main', 'sa0755', 'aimd') WHERE cell = 'star-15-10-end-abrupt'"
       ],
-      "answer": "aimd 10 of 32 (2003, 2011, 2015, 2016, 2019, 2020, 2022, 2026, 2028, 2032), main 5 of 32 (2006, 2008, 2016, 2019, 2032); Fisher p = 0.24, not significant.",
+      "answer": "aimd 10 of 32 (2003, 2011, 2015, 2016, 2019, 2020, 2022, 2026, 2028, 2032), main 6 of 32 (2004, 2006, 2008, 2016, 2019, 2032); Fisher p = 0.39, not significant.",
       "checks": [
-        {"number": 10, "tol": 0}, {"number": 5, "tol": 0},
+        {"number": 10, "tol": 0}, {"number": 6, "tol": 0},
         {"number": 2003, "tol": 0}, {"number": 2011, "tol": 0}, {"number": 2028, "tol": 0},
         {"number": 2006, "tol": 0}, {"number": 2008, "tol": 0},
-        {"number": 0.24, "tol": 0.05},
+        {"number": 0.39, "tol": 0.05},
         {"any": ["not significant", "isn't significant", "is not significant", "not a significant", "no significant", "not statistically significant", "p > 0.05", "p ≥ 0.05", "above 0.05", "noise"]}
       ]
     },
@@ -49,9 +49,9 @@
         "SELECT collapsed, base_collapsed, round(p99, 3) AS p99 FROM arm_score('sa0755', 'main', 'sa0755', 'aimd')",
         "SELECT cell, ka, kb, round(p, 2) AS p FROM collapse_test('sa0755', 'main', 'sa0755', 'aimd') WHERE ka <> kb ORDER BY p, cell"
       ],
-      "answer": "aimd collapses 78 runs to main's 71 (14 to 7 outside the structural cells), but no cell's difference is significant: the largest is star-15-10-end-abrupt (10 vs 5, Fisher p = 0.24).",
+      "answer": "aimd collapses 78 runs to main's 73 (14 to 9 outside the structural cells), but no cell's difference is significant: the largest is star-15-10-end-abrupt (10 vs 6, Fisher p = 0.39).",
       "checks": [
-        {"number": 78, "tol": 0}, {"number": 71, "tol": 0}, {"text": "star-15-10-end-abrupt"},
+        {"number": 78, "tol": 0}, {"number": 73, "tol": 0}, {"text": "star-15-10-end-abrupt"},
         {"any": ["not significant", "no cell", "none of", "isn't significant", "is not significant", "no significant", "not statistically significant", "p < 0.05 in no", "none reach", "none is"]}
       ]
     },
@@ -116,9 +116,9 @@
       "reference_sql": [
         "SELECT e.cell, count(*) FILTER (WHERE v.collapsed) AS collapsed, count(*) AS runs FROM experiment_jobs e JOIN verdicts v USING (k, src) WHERE e.exp_id = 's7ae7e' AND e.cell NOT IN (SELECT cell FROM structural('s7ae7e')) GROUP BY ALL HAVING collapsed > 0 ORDER BY collapsed DESC, cell"
       ],
-      "answer": "16 runs in 5 cells: star-15-10-end-abrupt 11 of 32, halve-31-10 2, and one each in wan-residential-seed-step, wan-slow-viewer and wan-super-peer-varying.",
+      "answer": "18 runs in 5 cells: star-15-10-end-abrupt 13 of 32, halve-31-10 2, and one each in wan-residential-seed-step, wan-slow-viewer and wan-super-peer-varying.",
       "checks": [
-        {"text": "star-15-10-end-abrupt"}, {"number": 11, "tol": 0}, {"text": "halve-31-10"},
+        {"text": "star-15-10-end-abrupt"}, {"number": 13, "tol": 0}, {"text": "halve-31-10"},
         {"text": "wan-residential-seed-step"}, {"text": "wan-slow-viewer"}, {"text": "wan-super-peer-varying"}
       ]
     }

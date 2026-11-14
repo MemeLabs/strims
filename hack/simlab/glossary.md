@@ -115,5 +115,10 @@ them, so a change here changes that prompt too.
 ## Writing the SQL
 
 - DuckDB's dialect: `USING (k, src)`, `GROUP BY ALL`, `ORDER BY ALL`,
-  `FILTER (WHERE ...)`, `quantile_cont`, `list(...)`, `COLUMNS('regex')`,
-  `exp(avg(ln(x)))` for a geomean (only of x > 0).
+  `FILTER (WHERE ...)`, `list(...)`, `COLUMNS('regex')`, `exp(avg(ln(x)))`
+  for a geomean (only of x > 0). A quantile is the lab's and the sims' one
+  method, the catalog's `sketch_quantile(x, p)` and `sketch_quantiles(x,
+  [p, ...])`: p an integer percentile (99, not 0.99), the integer nearest
+  rank, read through a log sketch of 128 buckets a doubling (never above
+  the value, at most 1/129 under it). They are macros, so over a subset
+  `sketch_quantile(CASE WHEN ... THEN x END, p)`, not a FILTER.

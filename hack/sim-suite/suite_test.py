@@ -387,20 +387,25 @@ class Dynamics(unittest.TestCase):
         self.assertEqual([x for x in c if x.startswith("lag_p99_")],
                          ["lag_p99_startup_ms", "lag_p99_steady_ms", "lag_p99_after_ms"])
         # Startup: the runs' first 25 s and viewer 1's own 15-34 s (its
-        # 15-16 read nothing yet): 100 x49, 200 x17, 3000, 6000.
-        self.assertAlmostEqual(c["lag_p99_startup_ms"], 3000 + 0.33 * 3000, places=6)
-        # Steady: 100 x32, 200 x15, 2000, 3000 (carried), 5000.
-        self.assertAlmostEqual(c["lag_p99_steady_ms"], 3000 + 0.51 * 2000, places=6)
+        # 15-16 read nothing yet): 100 x49, 200 x17, 3000, 6000; the p99 is
+        # the 68th (ceil(0.99 x 68)), 6000, read through the sketch (32 ms
+        # buckets from 4096 ms) as 5984.
+        self.assertEqual(c["lag_p99_startup_ms"], 5984)
+        # Steady: 100 x32, 200 x15, 2000, 3000 (carried), 5000: the 50th,
+        # read as 4992.
+        self.assertEqual(c["lag_p99_steady_ms"], 4992)
         # After: k2's after_down (35-44 s) and after_departure (45-49 s)
-        # pooled: 100 x13, 3500, 4500.
-        self.assertAlmostEqual(c["lag_p99_after_ms"], 3500 + 0.86 * 1000, places=6)
+        # pooled: 100 x13, 3500, 4500: the 15th, read as 4480.
+        self.assertEqual(c["lag_p99_after_ms"], 4480)
         # k1 spikes past 1250 at 30-32 and past 4250 at 32, k2 at 40 and
         # past 1250 at 47.
         self.assertEqual((c["spike_s_1250"], c["spike_s_4250"]), (2.5, 1.0))
         self.assertEqual((c["stalls_per_min_1250"], c["stalls_per_min_4250"]), (3.0, 1.0))
         self.assertAlmostEqual(c["stalled_share_1250"], 0.02)
         self.assertEqual((c["startup_ms_1250"], c["startup_ms_4250"]), (1000.0, 4100.0))
-        self.assertEqual((c["unhealthy_max_s"], c["unhealthy_p50_s"]), (12, 8.5))
+        # The runs' longest unhealthy spells, 5 and 12 s: the median is the
+        # first (rank ceil(0.5 x 2)).
+        self.assertEqual((c["unhealthy_max_s"], c["unhealthy_p50_s"]), (12, 5))
         d = got["d"]
         self.assertEqual((d["runs"], d["collapsed"], d["spike_s_1250"], d["unhealthy_max_s"]), (2, 2, 0.0, 25))
 
@@ -422,8 +427,90 @@ class Dynamics(unittest.TestCase):
         self.assertAlmostEqual(c["startup"]["lag_p99_ms"], dyn["lag_p99_startup_ms"])
         self.assertAlmostEqual(c["steady"]["lag_p99_ms"], dyn["lag_p99_steady_ms"])
         self.assertEqual((c["after_down"]["lag_p50_ms"], c["after_down"]["lag_max_ms"]), (100, 4500))
-        self.assertAlmostEqual(c["after_departure"]["lag_p90_ms"], 100 + 0.6 * 3400)
+        # after_departure: 100 x4, 3500: the p90 is the 5th, 3500, read
+        # through the sketch (16 ms buckets from 2048 ms) as 3488.
+        self.assertEqual(c["after_departure"]["lag_p90_ms"], 3488)
         self.assertEqual(c["startup"]["lag_max_ms"], 6000)
+
+
+class PhaseLags(unittest.TestCase):
+    """dynamics_phases and dynamics against simlab.verdict over one
+    made-up run: a series of four viewers (the fourth hostile, the third
+    joining at 30.3 s, a latency step at 50 s), its lags spread over
+    0-6000 ms with seconds of no read; viewer_seconds, viewers and
+    viewer_phases (the verdict's own viewer_phases) made of it. Each
+    phase's lag quantiles in SQL are verdict.phase_lags' through
+    verdict.quantile, and dynamics' p99s run_metrics'."""
+
+    @classmethod
+    def setUpClass(cls):
+        from simlab import verdict
+
+        cls.verdict = verdict
+        secs, n = 60, 4
+        rnd, x = [], 7
+        for _ in range(secs * n):
+            x = (x * 1103515245 + 12345) % 2 ** 31
+            rnd.append(x)
+        lag = [[-1 if rnd[i * secs + k] % 9 == 0 else rnd[i * secs + k] % 6000 for k in range(secs)]
+               for i in range(n)]
+        lag[2][:31] = [-1] * 31
+        frames = [[0 if lag[i][k] < 0 else 1 + rnd[i * secs + k] % 10 for k in range(secs)] for i in range(n)]
+        s = {"secs": secs, "rate": 10 * 4096, "chunk": 4096, "frame": 4096, "viewer_up": 10 ** 9,
+             "seed_up": [[0, 10 ** 9]], "present": [n] * secs, "hits": [10 * n] * secs, "lag": lag, "frames": frames,
+             "node": list(range(1, n + 1)), "viewer": list(range(n)), "hostile": [3],
+             "events": [[30.3, "join", 3, None, None, None], [50, "latency", 0, None, 150, None]]}
+        cls.s, v = s, verdict.verdict(s)
+        cls.metrics = verdict.run_metrics(s, v)
+        lit = lambda x: "NULL" if x is None else repr(x)
+        vs = ", ".join(f"('k1', 's', {i}, {k}, {lit(lag[i][k] if frames[i][k] and lag[i][k] >= 0 else None)}, "
+                       f"{frames[i][k]})" for i in range(n) for k in range(secs))
+        spans = ", ".join(f"('k1', 's', {i}, '{p}', {a}, {b})" for i, p, a, b in verdict.viewer_phases(s, v))
+        sql = [
+            "CREATE TABLE jobs AS SELECT 'k1' AS k, 's' AS src, 'ppspp' AS sim, 't' AS trace, '' AS reads_hash;",
+            "CREATE TABLE experiment_jobs AS SELECT 'pl' AS exp_id, 'c' AS cell, 'x' AS arm_label, 1 AS seed, "
+            "'k1' AS k, 's' AS src, 's' AS flush, 'pl-00' AS matrix;",
+            "CREATE TABLE verdicts AS SELECT 'k1' AS k, 's' AS src, false AS collapsed;",
+            "CREATE TABLE rows AS SELECT 'k1' AS k, 's' AS src;",
+            "CREATE TABLE viewers AS SELECT * FROM (VALUES "
+            + ", ".join(f"('k1', 's', {i}, {i + 1}, {30300 if i == 2 else 'NULL'}, {str(i == 3).lower()})"
+                        for i in range(n)) + ") v(k, src, viewer, node, arrive_ms, hostile);",
+            f"CREATE TABLE viewer_seconds AS SELECT * FROM (VALUES {vs}) v(k, src, viewer, sec, lag_ms, frames);",
+            f"CREATE TABLE viewer_phases AS SELECT * FROM (VALUES {spans}) v(k, src, viewer, phase, start, stop);",
+            "CREATE TABLE verdict_seconds AS SELECT 'k1' AS k, 's' AS src, range AS sec, NULL::VARCHAR AS phase "
+            f"FROM range({verdict.seconds(s)});",
+        ]
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.db = Path(cls.tmp.name) / "phases.duckdb"
+        database(cls.db, "\n".join(sql))
+
+    @classmethod
+    def tearDownClass(cls):
+        scoring.SCORE_DB = None
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        scoring.SCORE_DB = self.db
+
+    def test_each_phases_lag_is_phase_lags(self):
+        by = self.verdict.phase_lags(self.s)
+        self.assertGreaterEqual(set(by), {"startup", "steady", "after_disruption"})
+        got = {r["phase"]: r for r in scored("SELECT * FROM dynamics_phases('pl');")}
+        self.assertEqual(set(got), set(by))
+        for phase, lags in by.items():
+            r = got[phase]
+            self.assertEqual(r["viewer_s"], len(lags), phase)
+            for p in (50, 90, 99):
+                self.assertEqual(r[f"lag_p{p}_ms"], self.verdict.quantile(lags, p), (phase, p))
+            self.assertEqual(r["lag_max_ms"], max(lags), phase)
+        self.assertGreaterEqual(len(by["steady"]), 40)
+
+    def test_dynamics_p99s_are_run_metrics(self):
+        (d,) = scoring.dynamics("pl")
+        self.assertEqual((d["lag_p99_startup_ms"], d["lag_p99_steady_ms"]),
+                         (self.metrics["lag_p99_startup_ms"], self.metrics["lag_p99_steady_ms"]))
+        self.assertEqual(d["lag_p99_after_ms"],
+                         self.verdict.quantile(self.verdict.phase_lags(self.s)["after_disruption"], 99))
 
 
 class LagSince(unittest.TestCase):
@@ -503,13 +590,14 @@ class LagSince(unittest.TestCase):
         self.assertEqual(sum(by[("uplink_rate", "anchor", r)]["viewer_s"] for r in range(-2, 3)), 20)
         one = by[("uplink_rate", "anchor", 1)]
         self.assertEqual(one["lag_p50_ms"], 200)
-        self.assertAlmostEqual(one["lag_p99_ms"], 200 + 0.97 * 920, places=6)
-        self.assertEqual(by[("uplink_rate", "anchor", -2)]["lag_p50_ms"], (120 + 200) / 2)
+        self.assertEqual(one["lag_p99_ms"], 1120)
+        # Of two, the median is the first (rank ceil(0.5 x 2)).
+        self.assertEqual(by[("uplink_rate", "anchor", -2)]["lag_p50_ms"], 120)
         # The start's: viewer 0's lag from 0 s (viewer 1 not there yet).
         self.assertEqual([by[("start", "anchor", r)]["lag_p50_ms"] for r in range(3)], [100, 101, 102])
         # The crash from its anchor (28-32 s) and from its end (31-35 s).
-        self.assertEqual(by[("crash", "anchor", -2)]["lag_p50_ms"], (128 + 200) / 2)
-        self.assertEqual(by[("crash", "end", 0)]["lag_p50_ms"], (133 + 200) / 2)
+        self.assertEqual(by[("crash", "anchor", -2)]["lag_p50_ms"], 128)
+        self.assertEqual(by[("crash", "end", 0)]["lag_p50_ms"], 133)
         # By default 10 s before to 120 s after, the run's 40 s bounding it.
         got = scored("SELECT kind, since, min(rel_s) AS lo, max(rel_s) AS hi FROM lag_since('since') "
                      "GROUP BY ALL ORDER BY ALL;")

@@ -149,7 +149,7 @@ def real_invocations(exp, kind, matrices, src):
         out += [("pooled", SIMDB, ["pooled", *src]), ("pooled-phase", SIMDB, ["pooled", "--by", "phase", *src]),
                 ("aligned-first-read", SIMDB, ["aligned", "first_read", "--per", "node", "--field", "lag_ms",
                                                "--after", "10", *src]),
-                ("reads", SIMDB, ["sql", "SELECT r.cell, r.arm, count(*) AS n, quantile_cont(lag_ms, 0.99) AS p99 "
+                ("reads", SIMDB, ["sql", "SELECT r.cell, r.arm, count(*) AS n, sketch_quantile(lag_ms, 99) AS p99 "
                                          "FROM reads JOIN runs r USING (k, src) GROUP BY ALL ORDER BY ALL", *src])]
     return out
 

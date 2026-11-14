@@ -24,9 +24,9 @@ WITH runs AS (
     WHERE a.t0 IS NOT NULL AND v.lag_q >= 0
 )
 SELECT t, count(*) AS seeds,
-       quantile_cont(lag_q, 0.1) AS p10, quantile_cont(lag_q, 0.25) AS p25,
-       quantile_cont(lag_q, 0.5) AS p50, quantile_cont(lag_q, 0.75) AS p75,
-       quantile_cont(lag_q, 0.9) AS p90, max(lag_q) AS max,
+       sketch_quantile(lag_q, 10) AS p10, sketch_quantile(lag_q, 25) AS p25,
+       sketch_quantile(lag_q, 50) AS p50, sketch_quantile(lag_q, 75) AS p75,
+       sketch_quantile(lag_q, 90) AS p90, max(lag_q) AS max,
        avg((NOT healthy)::INT) AS unhealthy_share,
        -- The seed whose lag is the most this second, for the tooltip.
        arg_max(seed, lag_q) AS worst_seed

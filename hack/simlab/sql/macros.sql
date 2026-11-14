@@ -10,14 +10,14 @@
 -- needs: reads
 CREATE OR REPLACE MACRO read_bins(bin_ms) AS TABLE
     SELECT k, src, viewer, t_ms // bin_ms * bin_ms AS t_ms, count(*) AS reads,
-           quantile_cont(lag_ms, 0.5) AS lag_p50, quantile_cont(lag_ms, 0.99) AS lag_p99, max(lag_ms) AS lag_max
+           sketch_quantile(lag_ms, 50) AS lag_p50, sketch_quantile(lag_ms, 99) AS lag_p99, max(lag_ms) AS lag_max
     FROM reads GROUP BY ALL;
 
 -- Read lag pooled across a run's viewers in bins of `bin_ms`.
 -- needs: reads
 CREATE OR REPLACE MACRO run_read_bins(bin_ms) AS TABLE
     SELECT k, src, t_ms // bin_ms * bin_ms AS t_ms, count(*) AS reads,
-           quantile_cont(lag_ms, 0.5) AS lag_p50, quantile_cont(lag_ms, 0.99) AS lag_p99, max(lag_ms) AS lag_max
+           sketch_quantile(lag_ms, 50) AS lag_p50, sketch_quantile(lag_ms, 99) AS lag_p99, max(lag_ms) AS lag_max
     FROM reads GROUP BY ALL;
 
 -- Each viewer's stalls at a playout delay of `delay_ms`, as the sims'

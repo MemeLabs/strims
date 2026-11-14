@@ -138,12 +138,12 @@ CREATE OR REPLACE MACRO pairs_of(a_jobs, b_jobs) AS TABLE
     HAVING count(*) FILTER (WHERE is_a) > 0 AND count(*) FILTER (WHERE NOT is_a) > 0;
 
 -- Each metric's paired effect of B against A in each cell of cell_list:
--- pairs (the seeds paired), a_median and b_median (each side's upper
--- median over them), n (the pairs it is over: a ratio's those with both
--- values above 0), effect (the geometric mean ratio, exp of the mean
--- ln(b/a), or the mean difference b - a), lo and hi (its 95 % t-interval;
--- one pair gives 0 or -inf to inf), mark (effect_mark; h for a host
--- metric that moved) and metric_defs' columns.
+-- pairs (the seeds paired), a_median and b_median (each side's median
+-- over them, sketch_quantile's p50), n (the pairs it is over: a ratio's
+-- those with both values above 0), effect (the geometric mean ratio, exp
+-- of the mean ln(b/a), or the mean difference b - a), lo and hi (its 95 %
+-- t-interval; one pair gives 0 or -inf to inf), mark (effect_mark; h for
+-- a host metric that moved) and metric_defs' columns.
 CREATE OR REPLACE MACRO effects_of(cell_list, a_jobs, b_jobs) AS TABLE
     WITH p AS (
         SELECT p.*, m.ord, m.kind, m.better, m.tie, m.host, m.shown,
@@ -155,8 +155,7 @@ CREATE OR REPLACE MACRO effects_of(cell_list, a_jobs, b_jobs) AS TABLE
     g AS (
         SELECT cell, metric, any_value(ord) AS ord, any_value(kind) AS kind, any_value(better) AS better,
                any_value(tie) AS tie, any_value(host) AS host, any_value(shown) AS shown, count(*) AS pairs,
-               list_sort(list(a_value))[count(*) // 2 + 1] AS a_median,
-               list_sort(list(b_value))[count(*) // 2 + 1] AS b_median,
+               sketch_quantile(a_value, 50) AS a_median, sketch_quantile(b_value, 50) AS b_median,
                list(x ORDER BY seed) FILTER (WHERE x IS NOT NULL) AS xs
         FROM p GROUP BY cell, metric),
     s AS (SELECT *, len(xs) AS n, list_reduce(xs, lambda acc, y: acc + y) / len(xs) AS mean FROM g),
@@ -217,7 +216,8 @@ CREATE OR REPLACE MACRO traces_of(a_jobs, b_jobs) AS TABLE
 -- (wire), and the guardrails it breaks there (breaks, in order):
 --   collapsed    more collapsed runs (kb > ka) with p < 0.05;
 --   lag_ceiling  ranked for overhead (overhead true), the base's median
---                lag p99 (a) under lag_ceiling and the arm's (b) not;
+--                lag p99 (a, sketch_quantile's p50) under lag_ceiling and
+--                the arm's (b) not;
 --   worse        a metric_defs guard 'worse' metric (delivery) marked -;
 --   guard        in a cell the base never collapsed, a guard 'lo' metric's
 --                ratio interval lying past guard_ratio (past lag_budget
@@ -233,14 +233,9 @@ CREATE OR REPLACE MACRO arm_cells_of(cell_list, a_jobs, b_jobs, overhead := fals
         SELECT e.*, m.guard, m.guard_ord FROM effects_of(cell_list, a_jobs, b_jobs) e
         JOIN metric_defs m ON m.name = e.metric
         WHERE m.guard IS NOT NULL OR e.metric IN ('lag_p99_ms', 'wire/useful')),
-    lags AS (
-        SELECT cell, list_sort(list(a_value)) AS av, list_sort(list(b_value)) AS bv
-        FROM pairs_of(a_jobs, b_jobs) WHERE metric = 'lag_p99_ms' AND list_contains(cell_list, cell) GROUP BY cell),
     mid AS (
-        SELECT cell,
-               CASE WHEN len(av) % 2 = 1 THEN av[len(av) // 2 + 1] ELSE (av[len(av) // 2] + av[len(av) // 2 + 1]) / 2 END AS a_mid,
-               CASE WHEN len(bv) % 2 = 1 THEN bv[len(bv) // 2 + 1] ELSE (bv[len(bv) // 2] + bv[len(bv) // 2 + 1]) / 2 END AS b_mid
-        FROM lags),
+        SELECT cell, sketch_quantile(a_value, 50) AS a_mid, sketch_quantile(b_value, 50) AS b_mid
+        FROM pairs_of(a_jobs, b_jobs) WHERE metric = 'lag_p99_ms' AND list_contains(cell_list, cell) GROUP BY cell),
     brk AS (
         SELECT cell, 0 AS o, 0 AS mo, {'cell': cell, 'kind': 'collapsed', 'metric': 'collapsed', 'x': p, 'a': NULL::DOUBLE,
                'b': NULL::DOUBLE, 'ka': ka, 'kb': kb, 'n': n} AS br
@@ -489,9 +484,9 @@ CREATE OR REPLACE MACRO dynamics(exp_name) AS TABLE
         WHERE p.phase <> @{tail}),
     lagq AS (
         SELECT e.cell, e.arm_label,
-               quantile_cont(p.lag_ms, 0.99) FILTER (WHERE p.phase = 'startup') AS lag_p99_startup_ms,
-               quantile_cont(p.lag_ms, 0.99) FILTER (WHERE p.phase = 'steady') AS lag_p99_steady_ms,
-               quantile_cont(p.lag_ms, 0.99) FILTER (WHERE starts_with(p.phase, 'after_')) AS lag_p99_after_ms
+               sketch_quantile(CASE WHEN p.phase = 'startup' THEN p.lag_ms END, 99) AS lag_p99_startup_ms,
+               sketch_quantile(CASE WHEN p.phase = 'steady' THEN p.lag_ms END, 99) AS lag_p99_steady_ms,
+               sketch_quantile(CASE WHEN starts_with(p.phase, 'after_') THEN p.lag_ms END, 99) AS lag_p99_after_ms
         FROM phased p JOIN ej e USING (k, src) GROUP BY ALL),
     spikes AS (
         SELECT k, src, count(DISTINCT sec) FILTER (WHERE lag_ms > @{delay_target_ms}) AS s1,
@@ -510,7 +505,8 @@ CREATE OR REPLACE MACRO dynamics(exp_name) AS TABLE
                avg(@{r.stalled_share_@{delay_max_ms}}) AS stalled_share_@{delay_max_ms},
                avg(@{r.startup_ms_@{delay_target_ms}}) AS startup_ms_@{delay_target_ms},
                avg(@{r.startup_ms_@{delay_max_ms}}) AS startup_ms_@{delay_max_ms},
-               coalesce(max(u.longest), 0) AS unhealthy_max_s, median(coalesce(u.longest, 0)) AS unhealthy_p50_s
+               coalesce(max(u.longest), 0) AS unhealthy_max_s,
+               sketch_quantile(coalesce(u.longest, 0), 50) AS unhealthy_p50_s
         FROM ej e JOIN verdicts v USING (k, src) JOIN rows r USING (k, src)
         LEFT JOIN spikes sp USING (k, src) LEFT JOIN spells u USING (k, src)
         GROUP BY ALL)
@@ -540,8 +536,8 @@ CREATE OR REPLACE MACRO dynamics_phases(exp_name) AS TABLE
         WHERE c.lag_ms IS NOT NULL AND p.phase <> @{tail}),
     q AS (
         SELECT e.cell, e.arm_label, any_value(e.matrix) AS matrix, p.phase, count(*) AS viewer_s,
-               quantile_cont(p.lag_ms, 0.5) AS lag_p50_ms, quantile_cont(p.lag_ms, 0.9) AS lag_p90_ms,
-               quantile_cont(p.lag_ms, 0.99) AS lag_p99_ms, max(p.lag_ms) AS lag_max_ms
+               sketch_quantile(p.lag_ms, 50) AS lag_p50_ms, sketch_quantile(p.lag_ms, 90) AS lag_p90_ms,
+               sketch_quantile(p.lag_ms, 99) AS lag_p99_ms, max(p.lag_ms) AS lag_max_ms
         FROM phased p JOIN ej e USING (k, src) GROUP BY e.cell, e.arm_label, p.phase)
     SELECT cell, arm_label, phase, viewer_s, viewer_s / sum(viewer_s) OVER (PARTITION BY cell, arm_label) AS share,
            lag_p50_ms, lag_p90_ms, lag_p99_ms, lag_max_ms
@@ -589,8 +585,8 @@ CREATE OR REPLACE MACRO lag_since(exp_name, before := 10, after := 120) AS TABLE
         SELECT s.w, s.k, s.src, s.kind, s.phase, s.since, floor(s.sec + 0.5 - s.t)::BIGINT AS rel_s, l.lag_ms
         FROM secs s JOIN lags l USING (k, src, viewer, sec) WHERE s.own)
     SELECT e.cell, e.arm_label, h.kind, h.phase, h.since, h.rel_s, count(DISTINCT h.w) AS windows,
-           count(h.lag_ms) AS viewer_s, quantile_cont(h.lag_ms, 0.5) AS lag_p50_ms,
-           quantile_cont(h.lag_ms, 0.9) AS lag_p90_ms, quantile_cont(h.lag_ms, 0.99) AS lag_p99_ms
+           count(h.lag_ms) AS viewer_s, sketch_quantile(h.lag_ms, 50) AS lag_p50_ms,
+           sketch_quantile(h.lag_ms, 90) AS lag_p90_ms, sketch_quantile(h.lag_ms, 99) AS lag_p99_ms
     FROM hits h JOIN ej e USING (k, src)
     GROUP BY e.cell, e.arm_label, h.kind, h.phase, h.since, h.rel_s
     ORDER BY min(e.matrix), e.cell, e.arm_label, h.kind, h.phase, h.since, h.rel_s;
@@ -660,7 +656,7 @@ CREATE OR REPLACE MACRO coverage_runs_of(jobs) AS TABLE
         FROM cv_own x JOIN cv_seed s ON s.k = x.k AND s.src = x.src AND s.node = x.node
         JOIN cv_streams t ON t.k = x.k AND t.src = x.src GROUP BY ALL),
     cv_gaps AS (
-        SELECT k, src, median(gap) AS interval_ms FROM (
+        SELECT k, src, sketch_quantile(gap, 50) AS interval_ms FROM (
             SELECT k, src, pub_ms - lag(pub_ms) OVER (PARTITION BY k, src, stream ORDER BY seq) AS gap FROM cv_pub)
         WHERE gap IS NOT NULL GROUP BY ALL),
     cv_secs AS (
