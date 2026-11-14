@@ -442,7 +442,10 @@ fn repeated_renewal_failures_notify_once() {
         settle().await;
         tokio::time::sleep((RENEW_RETRY * 3).to_std().unwrap()).await;
         let n = read_network(&member, 110).await;
-        assert_eq!(n.certificate_renewal_error, ErrorCode::CaNotPublished as i32);
+        assert_eq!(
+            n.certificate_renewal_error,
+            ErrorCode::CaNotPublished as i32
+        );
         let failed = read_notifications(&member).await;
         assert_eq!(failed.len(), 1, "{failed:?}");
         assert_eq!(failed[0].status, Status::Error as i32);
