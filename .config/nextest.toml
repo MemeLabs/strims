@@ -30,14 +30,13 @@ priority = 100
 
 # These spread their simulations over every core.
 [[profile.default.overrides]]
-filter = 'test(=controller_ab) | test(=seed_allocation_bounds) | test(=seed_allocation_ab) | (package(strims-vpn) & (test(=routing_sweep) | test(=announcement_sweep)))'
+filter = 'package(strims-vpn) & (test(=routing_sweep) | test(=announcement_sweep))'
 threads-required = "num-test-threads"
 priority = 90
 
-# The longest single-threaded simulations: the release tables, and the
-# longest test of a debug run.
+# The longest single-threaded simulations of a debug run.
 [[profile.default.overrides]]
-filter = 'package(strims-ppspp) & (test(=node_sim_sweep) | test(=push_pull_matrix) | test(=sim_adversaries_dont_stall_honest_peers) | test(=sim_wan_residential_seed_relays) | test(=sim_wan_adaptive_seed_spreads_whole_copies))'
+filter = 'package(strims-ppspp) & (test(=sim_adversaries_dont_stall_honest_peers) | test(=sim_wan_residential_seed_relays) | test(=sim_wan_seed_policies_deliver_16_streams))'
 priority = 80
 
 # The WAN sweeps stream at 2 Mbit/s to up to 16 viewers, several times the
@@ -54,12 +53,6 @@ priority = 85
 filter = 'package(strims-sim) & binary(scenarios)'
 threads-required = 3
 priority = 50
-
-# Two 51-node simulations of a 6 Mbit/s stream at once, and one.
-[[profile.default.overrides]]
-filter = 'package(strims-ppspp) & test(=wan_cable_seed)'
-threads-required = 2
-priority = 85
 
 [[profile.default.overrides]]
 filter = 'package(strims-ppspp) & test(=sim_job)'

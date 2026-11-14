@@ -102,14 +102,13 @@ main (SKILL.md's order of work).
    became of it (e18b801c, `asks` joined to `arrivals`).
 8. **Tests:**
    - the log's unit tests in the ppspp crate;
-   - a semantic test of every new table in each sim (strims-sim's
+   - a semantic test of every new table (strims-sim's
      `request_logs_say_what_they_are` in
-     `crates/strims-sim/tests/capture.rs`, the ppspp sim's
-     `sim_request_logs_say_what_they_are`), with departures where hosts
+     `crates/strims-sim/tests/capture.rs`), with departures where hosts
      leave (`a_departures_logs_keep_every_hold`): a departure behaviour
-     gets its test in each sim;
+     gets its test;
    - the knob turned on in `a_run_with_tables_keeps_its_trace`
-     (capture.rs) and `sim_tables_change_no_trace` (sim.rs), so that
+     (capture.rs), so that
      every nextest run checks the trace stays the same, with a scenario
      that takes the path the change touches (departures and crashes for
      what `NodeConfig::last_metrics` hands over).

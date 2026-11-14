@@ -1438,3 +1438,16 @@ const ASK_COLS: [cols::Asks; 25] = [
     cols::Asks::SinceMs,
     cols::Asks::PeerIncarnation,
 ];
+
+#[cfg(test)]
+mod tests {
+    use strims_ppspp::ParentWhy;
+    use strims_wan::vocab;
+
+    /// The `parents` table's reasons are the vocabulary's: [`ParentWhy`]'s
+    /// names, in its order, are [`vocab::REASONS`].
+    #[test]
+    fn parent_reasons_are_the_vocabularys() {
+        assert_eq!(ParentWhy::ALL.map(ParentWhy::name), vocab::REASONS);
+    }
+}
