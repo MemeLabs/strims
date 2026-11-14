@@ -18,6 +18,7 @@ use strims_dao::events::Record;
 use strims_dao::schema::vnic::VnicConfig;
 use strims_dao::{Recv, ReplicatedStore, Singleton, StoreEvent};
 use strims_kv::Kv;
+use strims_proto::auth::v1::errors::ErrorCode;
 use strims_proto::service::{Context, Error as RpcError};
 use strims_proto::vnic::v1::{
     Config, GetConfigRequest, GetConfigResponse, SetConfigRequest, SetConfigResponse,
@@ -25,7 +26,7 @@ use strims_proto::vnic::v1::{
 };
 use strims_rpc::Timer;
 
-use crate::rpc_error;
+use crate::{refuse, rpc_error};
 
 /// The driver's caps on the stored vnic config. `None`, or 0, leaves a
 /// field as stored.
@@ -167,7 +168,9 @@ impl<K: Kv, T: Timer> VnicFrontendService for VnicFrontend<K, T> {
         _: &Context,
         req: SetConfigRequest,
     ) -> Result<SetConfigResponse, RpcError> {
-        let config = req.config.ok_or_else(|| rpc_error("config required"))?;
+        let config = req
+            .config
+            .ok_or_else(|| refuse(ErrorCode::ConfigMissing, "config required"))?;
         let mut tx = self
             .store
             .write(self.timer.now())

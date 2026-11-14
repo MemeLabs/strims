@@ -6,6 +6,7 @@ use std::rc::Rc;
 use strims_dao::schema::profile::{Devices, Profile};
 use strims_dao::{Error, Singleton, Table};
 use strims_kv::Kv;
+use strims_proto::auth::v1::errors::ErrorCode;
 use strims_proto::notification::v1::register_notification_frontend_service;
 use strims_proto::profile::v1::{
     DeleteDeviceRequest, DeleteDeviceResponse, GetDeviceRequest, GetDeviceResponse,
@@ -20,8 +21,8 @@ use strims_rpc::{Router, Timer};
 
 use crate::manager::Session;
 use crate::notification::NotificationService;
-use crate::rpc_error;
 use crate::vnic::VnicFrontend;
+use crate::{refuse, rpc_error};
 
 /// Serves `strims.profile.v1.ProfileFrontend` for a session.
 pub struct ProfileService<K: Kv, T: Timer> {
@@ -49,7 +50,10 @@ impl<K: Kv, T: Timer> ProfileFrontendService for ProfileService<K, T> {
         req: DeleteDeviceRequest,
     ) -> Result<DeleteDeviceResponse, RpcError> {
         if req.id == self.session.store.replica_id() {
-            return Err(RpcError::new(0, "cannot delete the current device"));
+            return Err(refuse(
+                ErrorCode::CannotDeleteCurrentDevice,
+                "cannot delete the current device",
+            ));
         }
         let mut tx = self
             .session

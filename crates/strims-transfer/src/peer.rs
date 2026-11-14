@@ -7,6 +7,7 @@ use std::rc::Weak;
 
 use strims_kademlia::ID;
 use strims_proto::service::{Context, Error as RpcError};
+use strims_proto::transfer::v1::errors::ErrorCode;
 use strims_proto::transfer::v1::transfer_peer_announce_response::Body;
 use strims_proto::transfer::v1::{
     TransferPeerAnnounceRequest, TransferPeerAnnounceResponse, TransferPeerCloseRequest,
@@ -33,11 +34,12 @@ impl<H: Host, T: Timer> PeerService<H, T> {
 }
 
 fn parse_id(b: &[u8]) -> Result<TransferId, RpcError> {
-    TransferId::from_bytes(b).ok_or_else(|| RpcError::new(0, "transfer id length mismatch"))
+    TransferId::from_bytes(b)
+        .ok_or_else(|| RpcError::new(ErrorCode::InvalidTransferId, "transfer id length mismatch"))
 }
 
 fn stopped() -> RpcError {
-    RpcError::new(0, "transfers stopped")
+    RpcError::new(ErrorCode::TransfersStopped, "transfers stopped")
 }
 
 impl<H: Host, T: Timer> TransferPeerService for PeerService<H, T> {

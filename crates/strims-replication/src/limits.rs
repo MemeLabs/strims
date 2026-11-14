@@ -4,6 +4,8 @@
 //! Bounds on what a peer's requests can carry. A request over a bound is
 //! refused whole.
 
+use strims_proto::ErrorCoded;
+use strims_proto::replication::v1::errors::ErrorCode;
 use strims_proto::replication::v1::{EventLog, PeerBootstrapRequest, PeerSyncRequest};
 
 /// The most logs in one Sync.
@@ -23,6 +25,12 @@ pub const MAX_VERSION_ENTRIES: usize = strims_dao::replication::MAX_REPLICAS;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("request exceeds {0}")]
 pub struct OverLimit(pub &'static str);
+
+impl ErrorCoded for OverLimit {
+    fn code(&self) -> i32 {
+        ErrorCode::OverLimit.into()
+    }
+}
 
 fn check_log(l: &EventLog) -> Result<usize, OverLimit> {
     if l.events.len() > MAX_LOG_EVENTS {

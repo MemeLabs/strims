@@ -6,7 +6,6 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt;
 use std::future::{Future, poll_fn};
 use std::pin::pin;
 use std::rc::Rc;
@@ -26,6 +25,7 @@ use strims_directory::{DirectoryControl, DirectoryEvent, Host, ListingEvent, Lis
 use strims_kv::Kv;
 use strims_network::{NetworkControl, NetworkEvent};
 use strims_ppspp::SwarmId;
+use strims_proto::ErrorCoded;
 use strims_proto::debug::v1::Config as DebugConfigRecord;
 use strims_rpc::Timer;
 use strims_transfer::{TransferControl, TransferId};
@@ -182,10 +182,10 @@ impl<K: Kv, H: Host, T: Timer> Shared<K, H, T> {
     }
 
     /// Counts a failed node call, and the error it answers with.
-    pub(crate) fn host_failed(&self, what: &str, e: &impl fmt::Display) -> DebugError {
+    pub(crate) fn host_failed(&self, what: &str, e: &impl ErrorCoded) -> DebugError {
         self.metrics.borrow_mut().host_errors += 1;
         tracing::warn!(error = %e, "{what} failed");
-        DebugError::Host(e.to_string())
+        DebugError::Host(e.code(), e.to_string())
     }
 
     /// Removes `swarm` from the node. Remove its transfer first.

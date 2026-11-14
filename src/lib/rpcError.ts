@@ -3,12 +3,16 @@
 
 import { Error as RPCError } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 
+import { ErrorCode as AuthErrorCode } from "../apis/strims/auth/v1/errors/errors";
 import { ErrorCode as ChatErrorCode } from "../apis/strims/chat/v1/errors/errors";
 import { ErrorCode as DaoErrorCode } from "../apis/strims/dao/v1/errors/errors";
+import { ErrorCode as DebugErrorCode } from "../apis/strims/debug/v1/errors/errors";
 import { ErrorCode as DirectoryErrorCode } from "../apis/strims/network/v1/directory/errors/errors";
 import { ErrorCode as NetworkErrorCode } from "../apis/strims/network/v1/errors/errors";
 import { ErrorCode as NodeErrorCode } from "../apis/strims/node/errors/errors";
+import { ErrorCode as ReplicationErrorCode } from "../apis/strims/replication/v1/errors/errors";
 import { ErrorCode as RpcErrorCode } from "../apis/strims/rpc/errors/errors";
+import { ErrorCode as TransferErrorCode } from "../apis/strims/transfer/v1/errors/errors";
 import { ErrorCode as VideoErrorCode } from "../apis/strims/video/v1/errors/errors";
 
 // Every API's error-code enum. Each codes its errors in a range of its own
@@ -21,6 +25,10 @@ export const errorCodeEnums: readonly Record<number, string>[] = [
   DirectoryErrorCode,
   ChatErrorCode,
   VideoErrorCode,
+  AuthErrorCode,
+  TransferErrorCode,
+  ReplicationErrorCode,
+  DebugErrorCode,
 ];
 
 // The code of `e`, a call's rejection: its rpc.Error's code, or 0 (no

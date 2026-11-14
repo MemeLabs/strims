@@ -14,7 +14,9 @@ use strims_dao::replication::{
 use strims_dao::store::STORE_VERSION;
 use strims_dao::{ReplicatedStore, vv};
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
 use strims_proto::dao::v1::VersionVector;
+use strims_proto::replication::v1::errors::ErrorCode;
 use strims_proto::replication::v1::{
     Checkpoint, EventLog, PeerAllocateProfileIDsRequest, PeerAllocateProfileIDsResponse,
     PeerBootstrapRequest, PeerBootstrapResponse, PeerOpenRequest, PeerOpenResponse,
@@ -47,11 +49,24 @@ pub enum PeerError {
     Invalid,
 }
 
+impl ErrorCoded for PeerError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            PeerError::Call(e) => return e.code(),
+            PeerError::Store(e) => return e.code(),
+            PeerError::Incompatible(_) => ErrorCode::UnsupportedStoreVersion,
+            PeerError::Deleted(_) => ErrorCode::ReplicaDeleted,
+            PeerError::Invalid => ErrorCode::InvalidAnswer,
+        };
+        code.into()
+    }
+}
+
 /// The most ids one peer is given at a time.
 pub const MAX_ALLOCATION: u64 = 10_000;
 
-fn rpc_error(e: impl std::fmt::Display) -> RpcError {
-    RpcError::new(0, e.to_string())
+fn rpc_error(e: impl ErrorCoded) -> RpcError {
+    e.to_rpc()
 }
 
 /// Serves one peer's requests.
@@ -69,19 +84,28 @@ impl<K: Kv, T: Timer> PeerService<K, T> {
         let replica = self
             .opened
             .get()
-            .ok_or_else(|| rpc_error("replication not open"))?;
+            .ok_or_else(|| RpcError::new(ErrorCode::NotOpen, "replication not open"))?;
         let c = checkpoint(self.store.store(), replica)
             .await
             .map_err(rpc_error)?;
         if c.is_some_and(|c| c.deleted) {
-            return Err(rpc_error("replica is deleted"));
+            return Err(RpcError::new(
+                ErrorCode::ReplicaDeleted,
+                "replica is deleted",
+            ));
         }
         Ok(replica)
     }
 
-    fn refuse(&self, e: impl std::fmt::Display) -> RpcError {
+    fn refuse(&self, e: impl ErrorCoded) -> RpcError {
         self.metrics.borrow_mut().refused += 1;
         rpc_error(e)
+    }
+
+    /// A refusal of replication's own, counted.
+    fn refuse_with(&self, code: ErrorCode, message: impl Into<String>) -> RpcError {
+        self.metrics.borrow_mut().refused += 1;
+        RpcError::new(code, message)
     }
 }
 
@@ -89,19 +113,19 @@ impl<K: Kv, T: Timer> ReplicationPeerService for PeerService<K, T> {
     async fn open(&self, _: &Context, req: PeerOpenRequest) -> Result<PeerOpenResponse, RpcError> {
         let own = self.store.replica_id();
         if req.store_version != STORE_VERSION {
-            return Err(self.refuse(format!(
-                "store version {} is not supported",
-                req.store_version
-            )));
+            return Err(self.refuse_with(
+                ErrorCode::UnsupportedStoreVersion,
+                format!("store version {} is not supported", req.store_version),
+            ));
         }
         if req.replica_id == 0 || req.replica_id == own {
-            return Err(self.refuse("invalid replica id"));
+            return Err(self.refuse_with(ErrorCode::InvalidReplicaId, "invalid replica id"));
         }
         let c = checkpoint(self.store.store(), req.replica_id)
             .await
             .map_err(rpc_error)?;
         if c.is_some_and(|c| c.deleted) {
-            return Err(self.refuse("replica is deleted"));
+            return Err(self.refuse_with(ErrorCode::ReplicaDeleted, "replica is deleted"));
         }
         self.opened.set(Some(req.replica_id));
         let own_checkpoint = checkpoint(self.store.store(), own)

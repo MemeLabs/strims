@@ -58,4 +58,10 @@ enum ErrorCode {
   READ_STORE = 3019;
   // A rewind left the reader where it was.
   REWIND_REFUSED = 3020;
+  // Drawing the node's seed from entropy failed.
+  ENTROPY = 3021;
+  // The profile has no key to start its node with.
+  NO_PROFILE_KEY = 3022;
+  // The process runs another profile's node, and it runs one at a time.
+  PROFILE_RUNNING = 3023;
 }

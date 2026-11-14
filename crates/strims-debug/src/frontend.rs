@@ -30,6 +30,7 @@ use futures_util::stream::unfold;
 use strims_base::time::{Duration, Time};
 use strims_directory::Host;
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
 use strims_proto::debug::v1::{
     DebugMetrics, DebugService, GetConfigRequest, GetConfigResponse, ListMockStreamsRequest,
     ListMockStreamsResponse, Metrics, MockStream, MockStreamReader, ReadMetricsRequest,

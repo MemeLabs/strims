@@ -25,6 +25,9 @@ export enum ErrorCode {
   RESET = 3018,
   READ_STORE = 3019,
   REWIND_REFUSED = 3020,
+  ENTROPY = 3021,
+  NO_PROFILE_KEY = 3022,
+  PROFILE_RUNNING = 3023,
 }
 /* @internal */
 export const strims_node_errors_ErrorCode = ErrorCode;

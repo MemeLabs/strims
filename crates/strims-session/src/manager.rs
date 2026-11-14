@@ -3,10 +3,10 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::fmt::Display;
 use std::future::{Future, poll_fn};
 use std::rc::Rc;
 use std::task::{Poll, Waker};
+use strims_proto::ErrorCoded;
 
 use strims_base::rng::{DetRng, fork};
 use strims_base::time::Time;
@@ -33,7 +33,7 @@ pub trait SessionFactory<K: Kv>: 'static {
     type Runtime: 'static;
 
     /// Why a session didn't start: a store error, or the driver's own.
-    type Error: From<Error> + Display + 'static;
+    type Error: From<Error> + ErrorCoded + 'static;
 
     /// Starts a session's runtime.
     fn start(

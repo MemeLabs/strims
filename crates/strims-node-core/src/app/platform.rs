@@ -11,6 +11,8 @@ use futures_util::future::LocalBoxFuture;
 use strims_chat::WhisperConfig;
 use strims_directory::Fetch;
 use strims_network::psi::{InlinePsi, PsiEngine};
+use strims_proto::ErrorCoded;
+use strims_proto::node::errors::ErrorCode;
 use strims_proto::types::Key;
 use strims_rpc::Timer;
 use strims_session::VnicCeilings;
@@ -172,4 +174,17 @@ pub enum StartError {
     /// The listeners belong to another profile's node.
     #[error("this process runs another profile's node, and it runs one at a time")]
     ProfileRunning,
+}
+
+impl ErrorCoded for StartError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            StartError::Store(e) => return e.code(),
+            StartError::Node(e) => return e.code(),
+            StartError::Entropy(_) => ErrorCode::Entropy,
+            StartError::NoProfileKey => ErrorCode::NoProfileKey,
+            StartError::ProfileRunning => ErrorCode::ProfileRunning,
+        };
+        code.into()
+    }
 }

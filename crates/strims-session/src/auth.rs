@@ -6,6 +6,7 @@ use std::rc::Rc;
 use strims_dao::auth::{self, ProfileKey, SessionToken};
 use strims_dao::seal::StorageKey;
 use strims_kv::Kv;
+use strims_proto::auth::v1::errors::ErrorCode;
 use strims_proto::auth::v1::{
     AuthFrontendService, LinkedProfile, SignInRequest, SignInResponse, SignUpRequest,
     SignUpResponse, linked_profile, sign_in_request,
@@ -14,7 +15,7 @@ use strims_proto::service::{Context, Error as RpcError};
 use strims_rpc::{Router, Timer, WeakRouter};
 
 use crate::manager::{Manager, SessionFactory};
-use crate::rpc_error;
+use crate::{refuse, rpc_error};
 
 /// Serves `strims.auth.v1.AuthFrontend` on one frontend connection, and
 /// binds the signed-in profile's services on the connection's router.
@@ -78,7 +79,7 @@ impl<K: Kv + Clone, F: SessionFactory<K>, T: Timer> AuthService<K, F, T> {
         let router = self
             .router
             .upgrade()
-            .ok_or_else(|| RpcError::new(0, "connection closed".to_owned()))?;
+            .ok_or_else(|| refuse(ErrorCode::ConnectionClosed, "connection closed"))?;
         self.manager.factory().bind(&runtime, &session, &router);
         let linked = LinkedProfile {
             name: session.profile.name.clone(),
@@ -97,10 +98,9 @@ impl<K: Kv + Clone, F: SessionFactory<K>, T: Timer> AuthFrontendService for Auth
             Some(sign_in_request::Credentials::Password(p)) => {
                 let pk = match &p.pairing_token {
                     Some(token) => {
-                        let user = token
-                            .auth
-                            .as_ref()
-                            .ok_or_else(|| RpcError::new(0, "invalid pairing token"))?;
+                        let user = token.auth.as_ref().ok_or_else(|| {
+                            refuse(ErrorCode::InvalidPairingToken, "invalid pairing token")
+                        })?;
                         let pk = auth::open_user(user, &p.password).map_err(rpc_error)?;
                         let mut rng = self.manager.fork_rng();
                         auth::import_pairing_token(kv, token, &pk, &mut rng, now)
@@ -133,7 +133,7 @@ impl<K: Kv + Clone, F: SessionFactory<K>, T: Timer> AuthFrontendService for Auth
                 let pk = ProfileKey::from_parts(k.profile_id, &k.profile_key).map_err(rpc_error)?;
                 (pk, false)
             }
-            None => return Err(RpcError::new(0, "missing credentials")),
+            None => return Err(refuse(ErrorCode::MissingCredentials, "missing credentials")),
         };
         let credentials = match persist {
             true => Some(self.credentials(&pk).await.map_err(rpc_error)?),
@@ -148,7 +148,7 @@ impl<K: Kv + Clone, F: SessionFactory<K>, T: Timer> AuthFrontendService for Auth
 
     async fn sign_up(&self, _: &Context, req: SignUpRequest) -> Result<SignUpResponse, RpcError> {
         if req.name.trim().is_empty() {
-            return Err(RpcError::new(0, "a name is required"));
+            return Err(refuse(ErrorCode::NameRequired, "a name is required"));
         }
         let now = self.manager.timer().now();
         let mut rng = self.manager.fork_rng();

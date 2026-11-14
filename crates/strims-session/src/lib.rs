@@ -25,8 +25,8 @@ mod notification;
 mod profile;
 mod vnic;
 
-use std::fmt::Display;
-
+use strims_proto::ErrorCoded;
+use strims_proto::auth::v1::errors::ErrorCode;
 use strims_proto::service::Error as RpcError;
 
 pub use auth::AuthService;
@@ -38,6 +38,11 @@ pub use vnic::{
 };
 
 /// The RPC error a store or session start error answers with.
-pub(crate) fn rpc_error(e: impl Display) -> RpcError {
-    RpcError::new(0, e.to_string())
+pub(crate) fn rpc_error(e: impl ErrorCoded) -> RpcError {
+    e.to_rpc()
+}
+
+/// A refusal of the session's own, with its code.
+pub(crate) fn refuse(code: ErrorCode, message: impl Into<String>) -> RpcError {
+    RpcError::new(code, message)
 }

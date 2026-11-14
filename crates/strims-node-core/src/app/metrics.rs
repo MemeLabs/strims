@@ -19,6 +19,7 @@ use strims_ppspp::{
     ChannelMetrics, ChannelSchedulerStats, ChannelStats, MetricsSnapshot, PeerStats, PushMode,
     PushStats, SwarmSchedulerStats, TransferMetricsSnapshot,
 };
+use strims_proto::ErrorCoded;
 use strims_proto::debug::v1;
 use strims_proto::service::Error as RpcError;
 use strims_replication::ReplicationControl;
@@ -50,11 +51,7 @@ pub(crate) struct ProfileMetrics<K: Kv, T: Timer, V: VideoHost> {
 impl<K: Kv, T: Timer, V: VideoHost> MetricsSource for ProfileMetrics<K, T, V> {
     /// Fails when the node has stopped.
     async fn metrics(&self) -> Result<v1::Metrics, RpcError> {
-        let n = self
-            .node
-            .metrics()
-            .await
-            .map_err(|e| RpcError::new(0, e.to_string()))?;
+        let n = self.node.metrics().await.map_err(|e| e.to_rpc())?;
         Ok(v1::Metrics {
             memory: self.memory.map(|read| memory(read())),
             node: Some(node(n)),

@@ -1,0 +1,21 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+syntax = "proto3";
+
+package strims.transfer.v1.errors;
+
+option go_package = "github.com/MemeLabs/strims/pkg/apis/transfer/v1/errors;transferv1errors";
+option java_package = "gg.strims.transfer.v1.errors";
+option swift_prefix = "STXE";
+
+// Transfers' error codes, 8000-8999.
+enum ErrorCode {
+  // No code: the message alone says what failed.
+  UNDEFINED = 0;
+
+  // A transfer id isn't of the length transfer ids are.
+  INVALID_TRANSFER_ID = 8000;
+  // The node's transfers have stopped.
+  TRANSFERS_STOPPED = 8001;
+}

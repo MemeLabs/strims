@@ -3,10 +3,11 @@
 
 //! Why a debug control operation failed.
 
-use strims_proto::service::Error as RpcError;
+use strims_proto::ErrorCoded;
+use strims_proto::debug::v1::errors::ErrorCode;
 
-/// Why a debug control operation failed. A frontend answers with
-/// [`DebugError::to_rpc`]: code 0 and this error's message.
+/// Why a debug control operation failed. A frontend answers with its
+/// [`ErrorCoded::to_rpc`]: its code and message.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
 #[non_exhaustive]
 pub enum DebugError {
@@ -36,27 +37,38 @@ pub enum DebugError {
     /// The store failed.
     #[error(transparent)]
     Store(#[from] strims_dao::Error),
-    /// A node call failed.
-    #[error("node error: {0}")]
-    Host(String),
+    /// A node call failed: the node error's code, and its message.
+    #[error("node error: {1}")]
+    Host(i32, String),
 }
 
-impl DebugError {
-    /// The RPC error a frontend answers with; see the type docs.
-    pub fn to_rpc(&self) -> RpcError {
-        RpcError::new(0, self.to_string())
+impl ErrorCoded for DebugError {
+    fn code(&self) -> i32 {
+        let code = match self {
+            DebugError::TooManyMockStreams => ErrorCode::TooManyMockStreams,
+            DebugError::BitrateOutOfRange => ErrorCode::BitrateOutOfRange,
+            DebugError::IntervalOutOfRange => ErrorCode::IntervalOutOfRange,
+            DebugError::TimeoutOutOfRange => ErrorCode::TimeoutOutOfRange,
+            DebugError::SegmentTooLarge => ErrorCode::SegmentTooLarge,
+            DebugError::NetworkNotFound => ErrorCode::NetworkNotFound,
+            DebugError::Store(e) => return e.code(),
+            DebugError::Host(code, _) => return *code,
+        };
+        code.into()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use strims_proto::service::Error as RpcError;
+
     use super::*;
 
     #[test]
-    fn errors_answer_with_their_messages() {
+    fn errors_answer_with_their_codes_and_messages() {
         assert_eq!(
             DebugError::TooManyMockStreams.to_rpc(),
-            RpcError::new(0, "too many mock streams")
+            RpcError::new(ErrorCode::TooManyMockStreams, "too many mock streams")
         );
         assert_eq!(
             DebugError::Store(strims_dao::Error::NotFound)
@@ -65,8 +77,8 @@ mod tests {
             "record not found"
         );
         assert_eq!(
-            DebugError::Host("gone".into()).to_rpc().message,
-            "node error: gone"
+            DebugError::Host(3007, "gone".into()).to_rpc(),
+            RpcError::new(3007, "node error: gone")
         );
     }
 }

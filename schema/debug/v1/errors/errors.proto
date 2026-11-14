@@ -1,0 +1,29 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+syntax = "proto3";
+
+package strims.debug.v1.errors;
+
+option go_package = "github.com/MemeLabs/strims/pkg/apis/debug/v1/errors;debugv1errors";
+option java_package = "gg.strims.debug.v1.errors";
+option swift_prefix = "SDGE";
+
+// The debug service's error codes, 10000-10999.
+enum ErrorCode {
+  // No code: the message alone says what failed.
+  UNDEFINED = 0;
+
+  // The node writes as many mock streams as it may.
+  TOO_MANY_MOCK_STREAMS = 10000;
+  // A mock stream's bitrate is over its bound.
+  BITRATE_OUT_OF_RANGE = 10001;
+  // A mock stream's segment interval is outside its bounds.
+  INTERVAL_OUT_OF_RANGE = 10002;
+  // A mock stream's timeout is over its bound.
+  TIMEOUT_OUT_OF_RANGE = 10003;
+  // A mock stream's segments would encode to more than their bound.
+  SEGMENT_TOO_LARGE = 10004;
+  // The key names none of the profile's networks.
+  NETWORK_NOT_FOUND = 10005;
+}

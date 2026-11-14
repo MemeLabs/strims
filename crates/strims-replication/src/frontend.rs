@@ -9,6 +9,7 @@ use strims_dao::schema::network::{BootstrapClients, Networks};
 use strims_dao::schema::profile::{Devices, Profile, ProfileIds};
 use strims_dao::{ReplicatedStore, Singleton, Table, ids};
 use strims_kv::Kv;
+use strims_proto::ErrorCoded;
 use strims_proto::auth::v1::PairingToken;
 use strims_proto::network::v1::Network;
 use strims_proto::replication::v1::{
@@ -21,8 +22,8 @@ use strims_rpc::Timer;
 /// The ids a pairing token gives the new device.
 pub const PAIRING_IDS: u64 = 1000;
 
-fn rpc_error(e: impl std::fmt::Display) -> RpcError {
-    RpcError::new(0, e.to_string())
+fn rpc_error(e: impl ErrorCoded) -> RpcError {
+    e.to_rpc()
 }
 
 /// Serves `strims.replication.v1.ReplicationFrontend` for a profile.
