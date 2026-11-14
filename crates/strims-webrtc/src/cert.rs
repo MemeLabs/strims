@@ -49,7 +49,7 @@ const TAG_CONTEXT_1: u8 = 0xA1;
 /// Generates a certificate valid around `now`.
 pub(crate) fn generate(rng: &mut DetRng, now: Time) -> Identity {
     let key = signing_key(rng);
-    let point = key.verifying_key().to_encoded_point(false);
+    let point = key.verifying_key().to_sec1_point(false);
     let point = point.as_bytes();
 
     let mut serial = [0u8; 16];

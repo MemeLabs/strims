@@ -18,8 +18,8 @@ strims-video.workspace = true
 # strims-wasm's release, and the `=` pin must match the installed
 # wasm-bindgen-cli, which the web build checks.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "=0.2.129"
-js-sys = "=0.3.106"
+wasm-bindgen = "=0.2.130"
+js-sys = "=0.3.107"
 
 [dev-dependencies]
 strims-chunkstream.workspace = true
@@ -32,7 +32,7 @@ proptest.workspace = true
 # The bindings' tests run in a headless browser worker
 # (wasm-bindgen-test-runner, which .cargo/config.toml names as the runner).
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-wasm-bindgen-test = "=0.3.79"
+wasm-bindgen-test = "=0.3.80"
 
 [lints]
 workspace = true

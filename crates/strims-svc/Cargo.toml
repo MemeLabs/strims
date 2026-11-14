@@ -40,7 +40,7 @@ futures-util = { workspace = true, features = ["sink", "std"] }
 # `signal`: the binary stops on ctrl-c.
 tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util", "sync", "signal"] }
 tokio-tungstenite.workspace = true
-getrandom = "0.3"
+getrandom = "0.4"
 # the binary's allocator counts the heap
 cap.workspace = true
 stats_alloc.workspace = true

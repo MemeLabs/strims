@@ -46,10 +46,10 @@ tokio = { version = "1", default-features = false, features = ["sync", "macros"]
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 # The wasm-bindgen family comes from one release, and the `=` pin must match
 # the installed wasm-bindgen-cli, which the web build checks.
-wasm-bindgen = "=0.2.129"
-js-sys = "=0.3.106"
-wasm-bindgen-futures = "=0.4.79"
-web-sys = { version = "=0.3.106", features = [
+wasm-bindgen = "=0.2.130"
+js-sys = "=0.3.107"
+wasm-bindgen-futures = "=0.4.80"
+web-sys = { version = "=0.3.107", features = [
   # globals, timers and logging
   "WorkerGlobalScope",
   "DedicatedWorkerGlobalScope",
@@ -111,7 +111,7 @@ strims-crypto.workspace = true
 strims-kv = { workspace = true, features = ["conformance"] }
 # the feed test's capture media
 strims-video = { workspace = true, features = ["test-support"] }
-wasm-bindgen-test = "=0.3.79"
+wasm-bindgen-test = "=0.3.80"
 
 # The browser harness (`tests/support`) and the `--ignored` browser tests,
 # which run natively and drive headless Firefox.

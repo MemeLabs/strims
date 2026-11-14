@@ -92,7 +92,7 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
 
 # must match strims-wasm's wasm-bindgen pin
-ARG WASM_BINDGEN_VERSION=0.2.129
+ARG WASM_BINDGEN_VERSION=0.2.130
 
 RUN \
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \

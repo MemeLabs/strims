@@ -12,7 +12,8 @@
 //!   connection from the certificate's key ([`crate::cert::dtls_rng_seed`]).
 //!   ICE has already checked return routability, so the server cookie is
 //!   off.
-//! - **SHA1-HMAC** (STUN message integrity) and **SHA-256** (fingerprints).
+//! - **SHA1-HMAC** (STUN message integrity), and **SHA-256** and **SHA-1**
+//!   (certificate fingerprints; SHA-1 only for remote peers that send one).
 //! - **SRTP**: AES-128-CM-SHA1-80 and AEAD-AES-128/256-GCM. vnic sends no
 //!   media, but the ClientHello must carry `use_srtp`, so str0m negotiates a
 //!   profile and derives SRTP contexts that are never used.
@@ -26,11 +27,10 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use aes::cipher::consts::U16;
-use aes::cipher::{BlockEncrypt, BlockSizeUser, KeyIvInit, StreamCipher};
-use aes_gcm::aead::generic_array::GenericArray;
-use aes_gcm::aead::{Aead, KeyInit, Payload};
-use aes_gcm::{Aes128Gcm, Aes256Gcm, Nonce};
+use aes::cipher::consts::{U12, U16};
+use aes::cipher::{BlockCipherEncrypt, BlockSizeUser, KeyIvInit, StreamCipher};
+use aes_gcm::aead::{AeadCore, AeadInOut, KeyInit};
+use aes_gcm::{Aes128Gcm, Aes256Gcm, Nonce, Tag};
 use hmac::{Hmac, Mac};
 use str0m::config::CryptoProvider;
 use str0m::crypto::dtls::{
@@ -38,19 +38,21 @@ use str0m::crypto::dtls::{
 };
 use str0m::crypto::{
     AeadAes128Gcm, AeadAes128GcmCipher, AeadAes256Gcm, AeadAes256GcmCipher, Aes128CmSha1_80Cipher,
-    CryptoError, Sha1HmacProvider, Sha256Provider, SrtpProvider, SupportedAeadAes128Gcm,
-    SupportedAeadAes256Gcm, SupportedAes128CmSha1_80,
+    CryptoError, Sha1HmacProvider, Sha1Provider, Sha256Provider, SrtpProvider,
+    SupportedAeadAes128Gcm, SupportedAeadAes256Gcm, SupportedAes128CmSha1_80,
 };
 
 /// The provider every connection uses.
 pub(crate) fn provider() -> Arc<CryptoProvider> {
     static SRTP: Srtp = Srtp;
     static SHA1_HMAC: Sha1HmacImpl = Sha1HmacImpl;
+    static SHA1: Sha1Impl = Sha1Impl;
     static SHA256: Sha256Impl = Sha256Impl;
     static DTLS: Dtls = Dtls;
     Arc::new(CryptoProvider {
         srtp_provider: &SRTP,
         sha1_hmac_provider: &SHA1_HMAC,
+        sha1_provider: &SHA1,
         sha256_provider: &SHA256,
         dtls_provider: &DTLS,
     })
@@ -63,7 +65,7 @@ struct Sha1HmacImpl;
 
 impl Sha1HmacProvider for Sha1HmacImpl {
     fn sha1_hmac(&self, key: &[u8], payloads: &[&[u8]]) -> [u8; 20] {
-        let Ok(mut mac) = <Hmac<sha1::Sha1> as Mac>::new_from_slice(key) else {
+        let Ok(mut mac) = <Hmac<sha1::Sha1> as KeyInit>::new_from_slice(key) else {
             // HMAC takes keys of any length.
             return [0; 20];
         };
@@ -71,6 +73,17 @@ impl Sha1HmacProvider for Sha1HmacImpl {
             mac.update(p);
         }
         mac.finalize().into_bytes().into()
+    }
+}
+
+/// SHA-1 certificate fingerprints, which str0m accepts from remote peers.
+#[derive(Debug)]
+struct Sha1Impl;
+
+impl Sha1Provider for Sha1Impl {
+    fn sha1(&self, data: &[u8]) -> [u8; 20] {
+        use sha1::Digest;
+        sha1::Sha1::digest(data).into()
     }
 }
 
@@ -158,7 +171,7 @@ impl DtlsInstance for DtlsConn {
         self.0.handle_timeout(now)
     }
 
-    fn send_application_data(&mut self, data: &[u8]) -> Result<(), DtlsImplError> {
+    fn send_application_data(&mut self, data: &[u8]) -> Result<usize, DtlsImplError> {
         self.0.send_application_data(data)
     }
 
@@ -227,45 +240,61 @@ impl Aes128CmSha1_80Cipher for CmSha1Cipher {
     }
 }
 
-fn gcm_seal<C: Aead>(
+/// The AES-GCM ciphers str0m uses: a 12-byte nonce and a 16-byte tag.
+trait Gcm: AeadInOut + AeadCore<NonceSize = U12, TagSize = U16> {}
+impl<C: AeadInOut + AeadCore<NonceSize = U12, TagSize = U16>> Gcm for C {}
+
+const GCM_TAG_LEN: usize = 16;
+
+/// Writes `input` sealed, then its tag, to the front of `output`.
+fn gcm_seal<C: Gcm>(
     cipher: &C,
-    iv: &[u8],
+    iv: &[u8; 12],
     aad: &[u8],
     input: &[u8],
     output: &mut [u8],
 ) -> Result<(), CryptoError> {
-    let sealed = cipher
-        .encrypt(Nonce::from_slice(iv), Payload { msg: input, aad })
+    let (body, rest) = output
+        .split_at_mut_checked(input.len())
+        .ok_or_else(|| short("aes-gcm"))?;
+    let tag_out = rest
+        .get_mut(..GCM_TAG_LEN)
+        .ok_or_else(|| short("aes-gcm"))?;
+    body.copy_from_slice(input);
+    let tag = cipher
+        .encrypt_inout_detached(&Nonce::from(*iv), aad, body.into())
         .map_err(|_| CryptoError::Other("aes-gcm seal".into()))?;
-    output
-        .get_mut(..sealed.len())
-        .ok_or_else(|| short("aes-gcm"))?
-        .copy_from_slice(&sealed);
+    tag_out.copy_from_slice(&tag);
     Ok(())
 }
 
-fn gcm_open<C: Aead>(
+/// Writes the plaintext of `input` (sealed text, then its tag) to the front
+/// of `output` and returns its length.
+fn gcm_open<C: Gcm>(
     cipher: &C,
-    iv: &[u8],
+    iv: &[u8; 12],
     aads: &[&[u8]],
     input: &[u8],
     output: &mut [u8],
 ) -> Result<usize, CryptoError> {
+    let split = input
+        .len()
+        .checked_sub(GCM_TAG_LEN)
+        .ok_or_else(|| short("aes-gcm"))?;
+    let (sealed, tag) = input.split_at(split);
+    let tag = <[u8; GCM_TAG_LEN]>::try_from(tag).map_err(|_| short("aes-gcm"))?;
+    let body = output.get_mut(..split).ok_or_else(|| short("aes-gcm"))?;
+    body.copy_from_slice(sealed);
     let aad = aads.concat();
-    let opened = cipher
-        .decrypt(
-            Nonce::from_slice(iv),
-            Payload {
-                msg: input,
-                aad: &aad,
-            },
-        )
-        .map_err(|_| CryptoError::Other("aes-gcm open".into()))?;
-    output
-        .get_mut(..opened.len())
-        .ok_or_else(|| short("aes-gcm"))?
-        .copy_from_slice(&opened);
-    Ok(opened.len())
+    if cipher
+        .decrypt_inout_detached(&Nonce::from(*iv), &aad, body.into(), &Tag::from(tag))
+        .is_err()
+    {
+        // Leave no unauthenticated text behind.
+        body.fill(0);
+        return Err(CryptoError::Other("aes-gcm open".into()));
+    }
+    Ok(split)
 }
 
 struct Gcm128(Aes128Gcm);
@@ -342,13 +371,13 @@ impl SupportedAes128CmSha1_80 for CmSha1Factory {
 
 impl SupportedAeadAes128Gcm for Gcm128Factory {
     fn create_cipher(&self, key: [u8; 16], _encrypt: bool) -> Box<dyn AeadAes128GcmCipher> {
-        Box::new(Gcm128(Aes128Gcm::new(GenericArray::from_slice(&key))))
+        Box::new(Gcm128(Aes128Gcm::new(&key.into())))
     }
 }
 
 impl SupportedAeadAes256Gcm for Gcm256Factory {
     fn create_cipher(&self, key: [u8; 32], _encrypt: bool) -> Box<dyn AeadAes256GcmCipher> {
-        Box::new(Gcm256(Aes256Gcm::new(GenericArray::from_slice(&key))))
+        Box::new(Gcm256(Aes256Gcm::new(&key.into())))
     }
 }
 
@@ -358,7 +387,7 @@ struct Srtp;
 /// One AES-ECB round over a 16-byte block plus its PKCS#7 padding block,
 /// the 32 bytes str0m's SRTP key derivation expects. Wrong lengths (never
 /// produced by str0m) leave `output` unchanged.
-fn ecb_round<C: BlockEncrypt + BlockSizeUser<BlockSize = U16>>(
+fn ecb_round<C: BlockCipherEncrypt + BlockSizeUser<BlockSize = U16>>(
     cipher: &C,
     input: &[u8],
     output: &mut [u8],
@@ -367,10 +396,10 @@ fn ecb_round<C: BlockEncrypt + BlockSizeUser<BlockSize = U16>>(
         return;
     };
     let (first, second) = out.split_at_mut(16);
-    let mut b = GenericArray::from(block);
+    let mut b = aes::Block::from(block);
     cipher.encrypt_block(&mut b);
     first.copy_from_slice(&b);
-    let mut p = GenericArray::from([0x10u8; 16]);
+    let mut p = aes::Block::from([0x10u8; 16]);
     cipher.encrypt_block(&mut p);
     second.copy_from_slice(&p);
 }
@@ -421,6 +450,10 @@ mod tests {
         assert_eq!(
             hex::encode(p.sha256_provider.sha256(b"abc")),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(
+            hex::encode(p.sha1_provider.sha1(b"abc")),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
         );
     }
 

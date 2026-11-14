@@ -167,7 +167,7 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 rustls-webpki = { version = "0.103", default-features = false, features = ["alloc"] }
 webpki-roots = "1"
 rcgen = { version = "0.14", default-features = false, features = ["ring"] }
-str0m = "0.24"
+str0m = "0.25"
 
 # storage (native drivers only)
 redb = "4.4"

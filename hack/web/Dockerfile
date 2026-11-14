@@ -31,7 +31,7 @@ RUN \
       --target wasm32-unknown-unknown
 
 # must match strims-wasm's wasm-bindgen pin
-ARG WASM_BINDGEN_VERSION=0.2.129
+ARG WASM_BINDGEN_VERSION=0.2.130
 
 RUN cargo install wasm-bindgen-cli --version "${WASM_BINDGEN_VERSION}" --locked
 

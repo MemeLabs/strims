@@ -32,7 +32,7 @@ deployment tooling, which is written in Go.
 1. Install `wasm-bindgen-cli` at strims-wasm's `wasm-bindgen` pin:
 
    ```sh
-   $ cargo install wasm-bindgen-cli --version 0.2.129 --locked
+   $ cargo install wasm-bindgen-cli --version 0.2.130 --locked
    ```
 
 1. Install node.js, pnpm at package.json's `packageManager` version, and
