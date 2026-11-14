@@ -1,0 +1,80 @@
+name: Storybook
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  # Visual regression: hack/storybook/check.py --compare shoots the stories
+  # whose built inputs differ between the base and this commit, in both
+  # builds, in every mode, and diffs them. Changed stories are listed in the
+  # step summary and the report artifact, never failed: the job fails on a
+  # story that fails in this commit's build, on the checker's own errors,
+  # and on catalog gaps (--strict).
+  compare:
+    name: Storybook
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+    # The base commit's tree, which check.py builds in a worktree.
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    # pnpm at package.json's packageManager version, Node at .nvmrc's.
+    - uses: pnpm/action-setup@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+    # hack/pyproject.toml's Python, and uv for the console server's venv.
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.14"
+    - uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
+        cache-dependency-glob: hack/uv.lock
+    - name: Install
+      run: |
+        pnpm install --frozen-lockfile
+        uv sync --project hack --locked
+    # A push: the branch's tip before it (its parent when there's none, as
+    # on a new branch). A pull request: the base side of its merge commit.
+    - name: Base
+      id: base
+      env:
+        EVENT: ${{ github.event_name }}
+        BEFORE: ${{ github.event.before }}
+      run: |
+        if [ "$EVENT" = pull_request ]; then
+          base=$(git rev-parse HEAD^1)
+        elif git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+          base=$BEFORE
+        else
+          base=$(git rev-parse HEAD^)
+        fi
+        echo "base=$base" >> "$GITHUB_OUTPUT"
+    - name: Build
+      run: pnpm run console:build
+    - name: Checker tests
+      run: |
+        python3 hack/storybook/report_test.py
+        python3 hack/storybook/scope_test.py
+    # The runner's deb Chrome, whose AppArmor profile lets its sandbox start.
+    - name: Catalog
+      run: python3 hack/storybook/check.py --port 8701 --chromium google-chrome --list --strict
+    - name: Compare
+      env:
+        BASE: ${{ steps.base.outputs.base }}
+      run: >-
+        python3 hack/storybook/check.py --port 8701 --chromium google-chrome
+        --compare "$BASE" --all-modes --timeout 60 --fail-on-error
+        --report target/storybook/ci-report --summary "$GITHUB_STEP_SUMMARY"
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: storybook-report
+        path: target/storybook/ci-report
+        retention-days: 14
+        if-no-files-found: ignore
