@@ -95,9 +95,9 @@
 //!   each pass;
 //! - no hash map is iterated;
 //! - every rng forks from [`NodeConfig::rng_seed`]: vnic, vpn and the
-//!   runner in that order, then the WebRTC endpoint ([`RtcFactory`]), so
-//!   enabling WebRTC changes no other key ([`NodeConfig::host_key_seed`]
-//!   overrides vnic's);
+//!   runner in that order, then the WebRTC endpoint ([`RtcFactory`]) and
+//!   the adversary ([`NodeConfig::adversary`]), so enabling either changes
+//!   no other key ([`NodeConfig::host_key_seed`] overrides vnic's);
 //! - time comes from the driver ([`NodeIo::now`]).
 //!
 //! Read-only queries ([`Node::metrics`], [`Node::peers`]) are answered after
@@ -106,6 +106,7 @@
 //! is still a poll of its task, which can shift the order of later passes,
 //! so a simulation's sampling cadence is one of its inputs.
 
+pub mod adversary;
 pub mod app;
 pub mod config;
 pub mod driver;
@@ -118,9 +119,10 @@ pub mod rtc;
 mod state;
 pub mod vpn_port;
 
+pub use adversary::{Adversary, AdversaryFactory, AdversaryPeer};
 pub use config::{
-    BufferConfig, CaptureOpen, DEFAULT_NOTSENT_LOWAT, HostileEgress, MetricsSink, NetworkOptions,
-    NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture, StatsBins, TcpSocketConfig, VpnPortConfig,
+    BufferConfig, CaptureOpen, DEFAULT_NOTSENT_LOWAT, MetricsSink, NetworkOptions, NodeConfig,
+    ParentSink, PeerRpcConfig, PpsppCapture, StatsBins, TcpSocketConfig, VpnPortConfig,
     WebRtcConfig,
 };
 pub use driver::{

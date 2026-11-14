@@ -124,9 +124,11 @@ pub struct NodeConfig {
     /// Captures the ppspp runner's frames and decisions; `None` (the
     /// default) captures nothing.
     pub ppspp_capture: Option<PpsppCapture>,
-    /// Rewrites the ppspp frames the node sends; `None` (the default, and
-    /// every real node's) sends them as the runner wrote them.
-    pub hostile_egress: Option<HostileEgress>,
+    /// Hands the ppspp frames the node reads and sends through an
+    /// [`Adversary`](crate::adversary::Adversary), built at the node's
+    /// start; `None` (the default, and every real node's) passes them as
+    /// they are.
+    pub adversary: Option<crate::adversary::AdversaryFactory>,
     /// Reads the node's counters at every edge of bins `width` wide from
     /// `origin` (by the node's clock) and keeps them for the next
     /// `Node::metrics` (`NodeMetrics::bins`), for a simulation to see finer
@@ -189,24 +191,6 @@ impl fmt::Debug for MetricsSink {
 pub struct StatsBins {
     pub origin: Time,
     pub width: Duration,
-}
-
-/// What a hostile node does to each ppspp frame it sends, for adversarial
-/// simulations (strims-sim's hostile hosts): given the frame and the
-/// length the runner wrote, it rewrites the frame in place and returns its
-/// new length, at most the old one. The runner believes it sent what it
-/// wrote, so a hostile node's own counters of what it served are
-/// fictional; only its links' bytes are real.
-#[derive(Clone)]
-pub struct HostileEgress(pub Arc<FrameRewrite>);
-
-/// See [`HostileEgress`].
-pub type FrameRewrite = dyn Fn(&mut [u8], usize) -> usize + Send + Sync;
-
-impl fmt::Debug for HostileEgress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("HostileEgress")
-    }
 }
 
 /// Opens file `index` (from 0) of the capture of the node named `node`
@@ -339,7 +323,7 @@ impl NodeConfig {
             node_platform: String::new(),
             node_version: "dev".to_owned(),
             ppspp_capture: None,
-            hostile_egress: None,
+            adversary: None,
         }
     }
 

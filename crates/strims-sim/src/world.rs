@@ -489,7 +489,7 @@ impl World {
         if let crate::HostClass::Hostile(kind) = spec.class
             && let Some(s) = self.spec.swarms.first()
         {
-            c.hostile_egress = crate::hostile::egress(kind, &s.options);
+            c.adversary = crate::hostile::adversary(kind, &s.options);
         }
         if self.spec.exp.contains("index-sample") {
             c.vpn.peer_index_answers = strims_vpn::IndexAnswers::Sample;

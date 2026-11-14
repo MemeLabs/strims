@@ -126,7 +126,7 @@ mod transport;
 mod udp;
 pub mod video_host;
 
-pub use strims_node_core::{error, event, rpc, vpn_port};
+pub use strims_node_core::{adversary, error, event, rpc, vpn_port};
 
 /// Node configuration (`strims_node_core::config`), and OS entropy for its
 /// seed.

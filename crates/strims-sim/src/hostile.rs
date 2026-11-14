@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Hostile hosts ([`HostClass::Hostile`](crate::HostClass)): what each
-//! kind does, as a rewrite of the ppspp frames it sends
-//! (`NodeConfig::hostile_egress`). Each takes the stream like an honest
-//! viewer; what it sends back differs.
+//! kind does, as the node's adversary (`NodeConfig::adversary`), which
+//! rewrites the ppspp frames it reads and sends. Each takes the stream
+//! like an honest viewer; what it sends back differs.
 //!
 //! - `free-rider`: gives nothing back. Its frames carry no DATA, INTEGRITY
 //!   or HAVE, so no peer asks it for a chunk or grafts onto it.
@@ -18,41 +18,65 @@
 
 use std::sync::Arc;
 
-use strims_node::config::HostileEgress;
+use strims_base::rng::DetRng;
+use strims_base::time::Time;
+use strims_node::HostId;
+use strims_node::adversary::{Adversary, AdversaryFactory, AdversaryPeer};
 use strims_ppspp::SwarmOptions;
 use strims_ppspp::codec::{
     ChannelWriter, FrameReader, Message, MessageWriter, Reader, ReaderConfig,
 };
 
-/// The kinds a host can be ([`egress`]).
+/// The kinds a host can be ([`adversary`]).
 pub const KINDS: &[&str] = &["free-rider", "liar", "whitewasher", "hog"];
 
 /// How often a whitewasher rejoins.
 pub const REJOIN_EVERY: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// The frame rewrite of a host of `kind` in swarms of `options`; `None`
-/// for a kind it doesn't know.
-pub fn egress(kind: &str, options: &SwarmOptions) -> Option<HostileEgress> {
+/// The adversary of a host of `kind` in swarms of `options`; `None` for a
+/// kind it doesn't know.
+pub fn adversary(kind: &str, options: &SwarmOptions) -> Option<AdversaryFactory> {
     let drop_have = match kind {
         "free-rider" | "whitewasher" | "hog" => true,
         "liar" => false,
         _ => return None,
     };
+    let cfg = reader_config(options);
+    Some(AdversaryFactory(Arc::new(move |_: DetRng, _: HostId| {
+        Box::new(Withhold { cfg, drop_have })
+    })))
+}
+
+/// The reader settings of swarms of `options`.
+fn reader_config(options: &SwarmOptions) -> ReaderConfig {
     let o = &options.integrity;
-    let cfg = ReaderConfig {
+    ReaderConfig {
         chunk_size: options.chunk_size,
         integrity_hash_size: o.merkle_hash_tree_function.hash_size().unwrap_or(0),
         integrity_signature_size: o.live_signature_algorithm.signature_size().unwrap_or(0),
-    };
-    Some(HostileEgress(Arc::new(move |buf: &mut [u8], n: usize| {
-        rewrite(buf, n, cfg, drop_have)
-    })))
+    }
+}
+
+/// A free rider's or a liar's frames ([`withhold`]).
+struct Withhold {
+    cfg: ReaderConfig,
+    drop_have: bool,
+}
+
+impl Adversary for Withhold {
+    fn ingress(&mut self, _: AdversaryPeer<'_>, _: Time, _: &mut [u8], len: usize) -> usize {
+        len
+    }
+
+    fn egress(&mut self, _: AdversaryPeer<'_>, _: Time, frame: &mut [u8], len: usize) -> usize {
+        withhold(frame, len, self.cfg, self.drop_have)
+    }
 }
 
 /// The frame in `buf[..n]` without its DATA and INTEGRITY messages, and
 /// its HAVEs with `drop_have`. A frame it can't read (a handshake's)
 /// goes as it was.
-fn rewrite(buf: &mut [u8], n: usize, cfg: ReaderConfig, drop_have: bool) -> usize {
+fn withhold(buf: &mut [u8], n: usize, cfg: ReaderConfig, drop_have: bool) -> usize {
     let Some(frame) = buf.get(..n).map(<[u8]>::to_vec) else {
         return n;
     };

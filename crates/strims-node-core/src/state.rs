@@ -54,6 +54,7 @@ use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::CaptureSample;
+use crate::adversary::{self, AdversaryPeer};
 use crate::config::{
     MetricsSink, NetworkOptions, NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture, VpnPortConfig,
 };
@@ -409,8 +410,13 @@ pub(crate) struct State {
     rtc_draining: bool,
     /// The runner's capture, if the config asks for one.
     capture: Option<RunnerCapture>,
-    /// See [`NodeConfig::hostile_egress`].
-    hostile: Option<crate::config::HostileEgress>,
+    /// See [`NodeConfig::adversary`].
+    adversary: Option<adversary::Kept>,
+    /// With an adversary: the copy of an inbound ppspp frame it rewrites
+    /// (bound: one frame), and the peers it wants to send to after a read
+    /// (bound: the read's frames).
+    adversary_frame: Vec<u8>,
+    adversary_wants: Vec<LinkKey>,
     /// When the capture last flushed, and last sampled the links.
     capture_flushed: Time,
     capture_sampled: Time,
@@ -458,8 +464,8 @@ fn start_capture(
 impl State {
     /// Builds the hosts. Rngs are forked from `config.rng_seed` in a fixed
     /// order (vnic, vpn, runner), so a seed fixes every key and nonce.
-    /// The WebRTC endpoint's rng is forked last, so enabling WebRTC
-    /// changes no other key.
+    /// The WebRTC endpoint's rng is forked next and the adversary's last,
+    /// so enabling either changes no other key.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         config: &NodeConfig,
@@ -506,6 +512,10 @@ impl State {
                 config.webrtc.max_message.max(1),
             )
         });
+        let adversary = config
+            .adversary
+            .as_ref()
+            .map(|f| adversary::Kept((f.0)(fork(&mut rng), vnic.id())));
         Ok(State {
             vnic,
             vpn,
@@ -551,7 +561,9 @@ impl State {
             rtc,
             rtc_draining: false,
             capture,
-            hostile: config.hostile_egress.clone(),
+            adversary,
+            adversary_frame: Vec::new(),
+            adversary_wants: Vec::new(),
             capture_flushed: now,
             capture_sampled: Time::EPOCH,
         })
@@ -589,6 +601,7 @@ impl State {
             self.vpn.poll_timeout(),
             self.runner.poll_timeout(),
             self.rtc.as_ref().and_then(|r| r.ep.poll_timeout()),
+            self.adversary.as_ref().and_then(|a| a.0.poll_timeout()),
         ]
         .into_iter()
         .flatten()
@@ -621,6 +634,34 @@ impl State {
             && rtc.ep.poll_timeout().is_some_and(|t| t <= now)
         {
             rtc.ep.handle_timeout(now);
+        }
+        if let Some(a) = &mut self.adversary
+            && a.0.poll_timeout().is_some_and(|t| t <= now)
+        {
+            a.0.handle_timeout(now);
+            let a = &a.0;
+            self.adversary_wants.extend(
+                self.peers
+                    .iter()
+                    .filter(|(_, ps)| a.wants_transmit(&ps.host_id, now))
+                    .map(|(link, _)| link),
+            );
+            self.adversary_transmit();
+        }
+    }
+
+    /// Offers frames to the peers the adversary wants to send to.
+    fn adversary_transmit(&mut self) {
+        let State {
+            adversary_wants,
+            peers,
+            vnic,
+            ..
+        } = self;
+        for link in adversary_wants.drain(..) {
+            if let Some(w) = peers.get(link).and_then(|ps| ps.transfer) {
+                let _ = vnic.set_backlog(w);
+            }
         }
     }
 
@@ -681,6 +722,9 @@ impl State {
                 rpc_closed,
                 peer_rpc,
                 capture,
+                adversary,
+                adversary_frame,
+                adversary_wants,
                 ..
             } = self;
             let res =
@@ -694,9 +738,23 @@ impl State {
                         }
                     }
                     Tag::Ppspp(pp) => {
+                        let mut body = f.body;
+                        if let (Some(a), Some(ps)) = (adversary.as_mut(), peers.get(f.peer)) {
+                            let peer = AdversaryPeer {
+                                host_id: &ps.host_id,
+                                swarms: &ps.swarms,
+                            };
+                            adversary_frame.clear();
+                            adversary_frame.extend_from_slice(f.body);
+                            let n = a.0.ingress(peer, now, adversary_frame, f.body.len());
+                            body = adversary_frame.get(..n).unwrap_or_default();
+                            if a.0.wants_transmit(&ps.host_id, now) {
+                                adversary_wants.push(f.peer);
+                            }
+                        }
                         let res = match capture.as_mut() {
-                            Some(c) => c.handle_frame(runner, pp, now, f.body),
-                            None => runner.handle_frame(pp, now, f.body),
+                            Some(c) => c.handle_frame(runner, pp, now, body),
+                            None => runner.handle_frame(pp, now, body),
                         };
                         if let Err(e) = res
                             && !frame_errors.iter().any(|(p, _)| *p == pp)
@@ -728,6 +786,7 @@ impl State {
             };
             self.handle_frame_errors();
             self.handle_rpc_closed();
+            self.adversary_transmit();
             self.process_events(now);
             if n == 0 {
                 break;
@@ -824,7 +883,7 @@ impl State {
                 peers,
                 metrics,
                 capture,
-                hostile,
+                adversary,
                 ..
             } = self;
             vnic.poll_egress(now, &mut |f| match f.tag {
@@ -836,13 +895,16 @@ impl State {
                         Some(c) => c.poll_transmit(runner, pp, now, body),
                         None => runner.poll_transmit(pp, now, body),
                     };
-                    if let Some(h) = hostile {
-                        len = (h.0)(body, len).min(len);
+                    let mut more = runner.wants_transmit(pp);
+                    if let (Some(a), Some(ps)) = (adversary.as_mut(), peers.get(f.peer)) {
+                        let peer = AdversaryPeer {
+                            host_id: &ps.host_id,
+                            swarms: &ps.swarms,
+                        };
+                        len = a.0.egress(peer, now, f.body, len).min(f.body.len());
+                        more |= a.0.wants_transmit(&ps.host_id, now);
                     }
-                    Fill {
-                        len,
-                        more: runner.wants_transmit(pp),
-                    }
+                    Fill { len, more }
                 }
                 Tag::Rpc(peer, side) => {
                     let written = if side == RpcSide::Broker {
@@ -1092,6 +1154,9 @@ impl State {
                     }
                     self.runner.remove_peer(ps.pp);
                     self.ppspp_peers.remove(ps.pp);
+                    if let Some(a) = &mut self.adversary {
+                        a.0.forget_peer(&ps.host_id);
+                    }
                 }
                 self.emit(NodeEvent::PeerRemoved { host_id });
             }
