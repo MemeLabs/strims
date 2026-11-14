@@ -134,6 +134,29 @@ last, for the streams an early unit leaves without data for seconds. No
 effect: against `elide-c` at 32 seeds, lag p99 x0.999 (`sign-confirm`) and
 x1.006 (`sign-sens`).
 
+**Probing a candidate parent before grafting.** (`peer-probe` 62b773fc,
+2d032e59, against 574cb99f) A candidate was asked to open a stream only
+after it answered our pulls quickly. A parentless stream pulls every fresh
+chunk from its first announcer, the seed, so candidates seldom held a chunk
+it lacked: probes starved, grafts stalled and swarms collapsed (the ppspp
+sim's 100 viewers: lag p50 9.4 s). Probing with any stream the candidate
+leads concluded, and strims-sim's 31-viewer lock-in gained (chains in
+cycles 0.52 → 0.13), but each probing stream pulled from the seed (the
+ppspp sim: seed answer share +0.15–0.37, timeouts ×5); 73 of the suite's
+marks went worse, 19 better. It concerns `scheduler_push`'s graft.
+
+**Spreading each copy's streams over holders.** (`scarce` 8784f59f,
+`scarce-sp3` a7ddd706, against de5fac2e; strims-sim) As SplitStream's
+source feeds each stripe's root, the adaptive seed gave every asking
+neighbour a stream, with equal shares of streams per holder and holders per
+stream. Behind a scarce seed a whole copy on one connection lags behind the
+holder's own relaying, so the spread cured those stars (star-31-5 collapsed
+0–7 of 16 against 16) and the robust tier collapsed 115–122 against 145,
+but it spread where whole copies kept up too: robust's lag p99 ×1.01–1.11,
+its ample and WAN cells' ×1.2–4.6, the peers tier's (both sims)
+×1.20–1.22. Spilling (`scheduler_seed`) spreads only a single copy whose
+holder's link reads behind.
+
 ## Upload meter
 
 Relay readings other than the bound in `UploadInfo::relay_capacity`,
@@ -177,6 +200,14 @@ life cut p99 16 %, but only because no uplink in the sim changed.
 **Other queue-delay samples.** (branch `queue-delay-source`, recorded in
 bdd133a7) HAVE round trips and ACK one-way delays measured the queue no
 better than pings did on a real link.
+
+**A 16 KiB frame cap.** (`vnic-buf` edc45460's `STRIMS_EXP_FRAME`, against
+de5fac2e; strims-sim's robust tier, 16 seeds) node-core's `PPSPP_FRAME` at
+16 KiB in place of 8 collapsed 140 runs against 8 KiB's 127 and no cap's
+139, at much the same lag p99 (×0.859 against ×0.865); halve-31-20 went
+4 → 10, and 6 → 14 of 24 at more seeds. A frame below the runner can't be
+dropped at its deadline, and a falling uplink drains it before anything
+new.
 
 **The seed's budget on the relay bound.** (branch `repair`: eaf110fc
 against its parent 9755d210, on bde51268) The seed's budget took `relay_capacity` for the busy time's
@@ -258,6 +289,19 @@ a probe riding the HAVE frames sent with each munro waits behind its
 pushes, so one 32 KiB munro through a 10 Mbit/s uplink (26 ms) reads past
 `QUEUE_FORMED`, and such a seed holds one copy.
 
+**Other bounds on an adaptive seed's window and budget.**
+(`seed-headroom-exp` 396c689e and the knobs before it, against 53ca21bc;
+strims-sim) Behind a 10 Mbit/s seed of a 3 Mbit/s stream with four viewers
+in a full mesh, the window took a fourth copy while the busy time read
+idle. Halving the window once most holders' links delivered under 90 % of
+what was queued for them cured that case and collapsed 161 against 164 on
+the robust tier at 32 seeds, but one connection can't carry a whole copy
+of that stream, so the window swung between one copy and two and
+`collapse_slow_viewer` failed at 6 of 8 seeds. A budget of at most twice
+the most the seed wrote, ungated or gated on a 10 ms queue in the latest
+round trips, kept star-3-10 at one copy (lag p99 ×1.44); today's
+`UploadInfo::seed_capacity` allows four times until the window's first cut.
+
 **Admitting by count until the uplink saturates.** (`idle-count`,
 `idle-count-all`, against 5d81aaf6) An idle relay reads twenty times its
 control traffic, short of one subscriber. Until its meter had seen
@@ -269,6 +313,19 @@ decisions), and taking those children didn't help. At 32 fresh seeds the
 robust tier collapsed 176 → 182 (interior) and 178 (any), the peers tier
 67 → 71 and 77, and lag p99 stayed ×1.00. star-3-10, the cell it aimed
 at, went ×1.13 [1.00, 1.27] with the interior stream alone.
+
+**An idle relay admitting past its reading.** (`relay-probe-b`,
+`relay-clean` 6856940c, `relay-probe-c` 9f37a0f8; against de5fac2e, before
+the relay bound) Until a queue had stood below the runner, a node whose
+busy time read under `MIN_BUSY` and whose links showed no queue admitted up
+to twice what it carried and `UNMEASURED_FANOUT` more, for the viewers a
+seed sheds after its uplink halves. It took them (strims-sim's robust
+tier, 32 seeds: halve-7-20 collapsed 1 against 10, p=0.01), but relays took
+children the seed could serve too, a hop more: on any stream a viewer of
+`wan_super_peer_adaptive_uncapped_varying` missed 127 frames (seed 4) and
+`collapse_pull_lock_in` failed; on the interior stream alone the ppspp
+sim's `sim_push_full_mesh` p99 went 192 → 456 ms. `RELAY_FLOOR` now gives
+an idle relay its first children.
 
 **A slow link's data left out of the busy time by its round trips.**
 (`own-queue` 29c6001c, `own-queue-v1` 1ec374e7 without its gate; against
@@ -378,6 +435,19 @@ capacity, and with its uplink halved under that load its links' least
 excess can read no queue for seconds while none of the gate's signals
 fires: the remainder left unspent is the headroom that absorbs it.
 
+**Copies counted by their holders' stream subscriptions.** (`coverage`
+2a5132b6, against de5fac2e; strims-sim's robust tier) The adaptive seed
+counted its copies as its holders' subscribed streams over the stream
+count, pending holders included, in its grants, ramp, window and shedding,
+where `window_signals` counts each holder but a satellite as a whole copy.
+After a halving a holder kept some of its streams and the rest had no seed
+subscriber; counted by streams, the seed filled them and
+`collapse_halving_lock_in` turned healthy, but more, thinner holders lost
+the larger halvings: a tie at 16 seeds, then at 32 more halve-31-20
+collapsed 18 against 9 (p=0.04), halve-31-10's lag p99 ×1.33 [1.08, 1.64]
+and mesh6-15-5 11 against 4 (p=0.07). Released streams now cover a
+holder's cancelled streams.
+
 **Rarest-first requests.** (`TMP-rarest`, against 938a829b) A request
 round ordered its candidates by how few channels had announced each
 chunk, within the request group or across the round, the node's own
@@ -421,6 +491,33 @@ of 32 times (24 without), lag p99 ×1.03 [0.93,1.13]. The cell collapses on
 the acknowledgements that wait behind a relay's uploads, not on the
 answers' bursts.
 
+**Answers paced from a node's start, and each requester's backlog capped.**
+(`gate-suite` 6c9dd0a9, against 82981ba9; `peer-lab`'s `paced_startup`,
+c4fe4d13; strims-sim unless marked) Pacing a hybrid node's answers on its
+links' latest excess at all times (the answer gate's rule 2) cured 31
+viewers' pull lock-in behind a 5 Mbit/s seed (delivery 0.27 → 0.98) but
+throttled bursts of repairs elsewhere: WAN and mobile lag p99 ×1.2–2,
+timeouts ×2–5, star-15 collapsed 7 of 12. Pacing from the start in a
+doubling slow start cured it too, but star-15 collapsed 29 of 32 against 7
+and mobile-uncapped's lag p99 went ×1.32–1.41: before a queue forms, delay
+can't tell a first burst that will stand seconds below the runner from one
+the uplink absorbs, so `AnswerRate` engages on a standing queue. Capping
+each requester at 16 chunks and 1 s of age, shed with CHOKE (rule 3),
+stopped grabbers (the ppspp sim: the seed's answer share 0.69 → 0.11) but
+the slow viewer's cell collapsed 10 of 12: age chokes rotate honest
+pullers once their backlogs together pass 1 s. A channel's answers are
+held to one window now (`max_pending_requests`).
+
+**Hedged requests.** (`peer-hedge` ad191818, against 574cb99f; `peer-lab`'s
+`hedge`) A second request for a chunk already asked of another peer: to a
+faster one, or to time a channel whose answer time went stale. Requests are
+slow where upload is short, so a hedge adds load where there is none to
+spare: sent to the faster peer it doubled the bytes wasted and strims-sim's
+starved-seed cell's lag p50 went ×7; as exploration alone the ppspp sim's
+capped seed went p99 ×2.5 and collapsed 9–10 of 12 against 2, and no other
+collapse count or seed answer share moved. Routing by expected delivery
+(`route.rs`) landed without hedges.
+
 ## Sim model
 
 **Ethernet framing on TCP and UDP links.** (on `tcp-bench`, against
@@ -456,10 +553,18 @@ halve-15-10 at seeds 2001-2008 collapsed 6 of 8 at 64 KiB against 8 of 8
 (lag p99 4.3 -> 2.4 s), and before 8 KiB messages the tier went 191 -> 184
 collapsed of 512.
 
-**16 KiB messages.** (`browsers-exp`, against 7a90d302) Collapsed fewer
-than 8 KiB on the browsers tier (309 against 319 of 1024 at 32 seeds) but
-broke star-3-10's lag p99 (x2.46) and star-7-20's (x1.77) at both seed
-sets; 8 KiB landed.
+**Larger messages, and messages cut by bytes.** (`browsers-exp`, against
+7a90d302; `msg-exp` eba54865's knobs, against 8 KiB cut by bytes;
+strims-sim's browsers tier) A frame that shares a message waits for the
+rest of it, and one a cut spans waits for the next message. Cut by bytes,
+16 KiB collapsed fewer than 8 KiB (309 against 319 of 1024 at 32 seeds)
+but broke star-3-10's lag p99 (x2.46) and star-7-20's (x1.77) at both seed
+sets. Against 8 KiB's 167 and 165 at two seed sets, one frame a 4.5 KiB
+message, which landed (node-core's default), collapsed 128 and 142; the
+other arms lost to it: two frames a message (8.5 KiB) 184, 170 and 184 at
+three (jitter-15-10 2 -> 9 twice), whole frames in messages up to 16 KiB
+194, frames of two chunks 190, cuts by bytes at 4.5 KiB 162 and at 8.5 KiB
+166-175.
 
 **A larger channel pacer slack.** (`pacer-exp`, against the channel
 pacer) `SLACK` at 24, 32 and 48 KiB in place of 16 on the browsers tier
@@ -655,7 +760,11 @@ see non-neighbours relay, and the seed's invites, weren't built.
 its budget paid for 80 % of them (`COPY_KEEP`, against d9fe66b9, seeds
 3001-3032 and 3033-3064): the net tier 9 -> 6 but 7 -> 8, super-peer-varying
 3 -> 1 but 3 -> 5 (lag p99 x1.12), and robust's halve-7-20 lag p99 x1.70
-(a guardrail): copies kept past the uplink after it halved. Ranking the
+(a guardrail): copies kept past the uplink after it halved. Holding the
+budget at the largest capacity reading of the last 3 s (`pfd18` ead41a2e,
+on `pfd17`; strims-sim's robust tier, 32 seeds) lost the same way:
+halve-31-20 collapsed 15 against 9, the residential seed's step case 15
+against 6, and halve-7-20, the cell it aimed at, didn't gain. Ranking the
 holders a seed keeps by whether its pushes to them kept up, ahead of their
 reporters: super-peer-varying 1 -> 3 of 32 (local).
 
