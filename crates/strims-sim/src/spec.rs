@@ -433,11 +433,12 @@ pub struct Invariants {
     /// the last CTO, answered or not; ppspp stops requesting at one
     /// window, `max_pending_requests`).
     pub max_pending_requests: Option<usize>,
-    /// Honest nodes never send bad input, and every node in a scenario is
-    /// honest: no channel receives data or chunks that fail verification
-    /// or messages ppspp rejects as invalid (`ChannelMetrics::rejected`
-    /// stays 0), and no vpn frame is malformed, mismatched, unverifiable or
-    /// undecryptable.
+    /// Honest nodes never send bad input: no channel from an honest peer
+    /// receives data or chunks that fail verification or messages ppspp
+    /// rejects as invalid (`ChannelMetrics::rejected` stays 0), and no vpn
+    /// frame is malformed, mismatched, unverifiable or undecryptable. A
+    /// hostile peer's input ([`HostClass::Hostile`]) doesn't count: a kind
+    /// may send what an honest runner rejects (a grabber's requests).
     pub clean_input: bool,
 }
 

@@ -1962,6 +1962,7 @@ fn inbound_from(r: &Report, from: impl Fn(HostIx) -> bool) -> (PeerMessages, u64
             sum.haves_in += m.haves_in;
             sum.stream_opens_in += m.stream_opens_in;
             sum.announces_in += m.announces_in;
+            sum.rejected_in += m.rejected_in;
         }
     }
     (sum, links)
@@ -2030,6 +2031,36 @@ fn grabbers_ask_everyone_and_never_cancel() {
             if gl == 0 || gr <= or {
                 return Err(format!(
                     "grabbers sent {gr:.0} requests a link over {gl} links, honest viewers {or:.0}"
+                ));
+            }
+            Ok(())
+        },
+    );
+}
+
+/// A grabber asks for chunks a seed with a short live window no longer
+/// holds, which the honest runners reject; that input is a hostile peer's,
+/// so it leaves the clean-input invariant alone, which still holds for
+/// the honest peers' input.
+#[test]
+fn grabbers_rejected_input_leaves_clean_input_alone() {
+    sweep(
+        "grabbers_rejected_input_leaves_clean_input_alone",
+        |s| {
+            let mut sc = hostile_mesh(s, "grabber", 0.25);
+            for sw in &mut sc.swarms {
+                sw.options.live_window = 64;
+            }
+            sc
+        },
+        |r| {
+            sound(r)?;
+            let (g, links) = inbound_from(r, |h| of_kind(r, h, "grabber"));
+            let (o, _) = inbound_from(r, |h| honest(r, h));
+            if g.rejected_in == 0 || o.rejected_in > 0 {
+                return Err(format!(
+                    "rejected: {} messages from grabbers over {links} links, {} from honest peers",
+                    g.rejected_in, o.rejected_in
                 ));
             }
             Ok(())

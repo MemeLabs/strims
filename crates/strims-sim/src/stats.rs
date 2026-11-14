@@ -527,7 +527,7 @@ pub(crate) struct HostStats {
 }
 
 /// [`PeerMessages`]' counters, in its field order.
-const MESSAGE_COUNTERS: usize = 10;
+const MESSAGE_COUNTERS: usize = 11;
 
 /// The messages of one channel, a peer's on a scenario swarm, over a
 /// host's samples (`ChannelStats::inbound`, `outbound`), as its runner
@@ -547,6 +547,9 @@ pub struct PeerMessages {
     pub haves_in: u64,
     pub stream_opens_in: u64,
     pub announces_in: u64,
+    /// Messages of the peer's that the host's runner rejected as invalid
+    /// (`ChannelMetrics::rejected`).
+    pub rejected_in: u64,
     /// What the host sent the peer: REQUESTs and DATA.
     pub requests_out: u64,
     pub data_out: u64,
@@ -563,6 +566,7 @@ impl PeerMessages {
             haves_in,
             stream_opens_in,
             announces_in,
+            rejected_in,
             requests_out,
             data_out,
         ] = a;
@@ -575,6 +579,7 @@ impl PeerMessages {
             haves_in,
             stream_opens_in,
             announces_in,
+            rejected_in,
             requests_out,
             data_out,
         }
@@ -589,6 +594,7 @@ impl PeerMessages {
         self.haves_in += o.haves_in;
         self.stream_opens_in += o.stream_opens_in;
         self.announces_in += o.announces_in;
+        self.rejected_in += o.rejected_in;
         self.requests_out += o.requests_out;
         self.data_out += o.data_out;
     }
@@ -620,7 +626,9 @@ impl HostStats {
     /// Folds one sample of the current incarnation, taken at `t`, when the
     /// node's clock read `clock` (its own readings' times are by it).
     /// `swarms` maps the node's swarm keys to scenario swarm indexes, and
-    /// `live` says which scenario swarms stream at `t`.
+    /// `live` says which scenario swarms stream at `t`. The gauges'
+    /// invalid and rejected input leave out what peers `hostile` names
+    /// sent ([`Invariants::clean_input`](crate::Invariants::clean_input)).
     pub fn observe(
         &mut self,
         m: &NodeMetrics,
@@ -628,6 +636,7 @@ impl HostStats {
         live: &[bool],
         t: Duration,
         clock: Time,
+        hostile: impl Fn(&HostId) -> bool,
     ) -> SampleGauges {
         let index = |k: SwarmKey| swarms.iter().position(|s| *s == Some(k));
         let v = &m.host;
@@ -696,12 +705,15 @@ impl HostStats {
                             i.have,
                             i.stream_open,
                             i.announce,
+                            i.rejected,
                             o.request,
                             o.data,
                         ]);
                     let invalid = st.inbound.invalid_data + st.inbound.invalid_chunk;
-                    g.invalid += invalid;
-                    g.rejected += st.inbound.rejected;
+                    if !hostile(&peer.host_id) {
+                        g.invalid += invalid;
+                        g.rejected += st.inbound.rejected;
+                    }
                     c = [
                         ch.metrics.write.count,
                         ch.metrics.read.count,

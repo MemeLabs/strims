@@ -717,6 +717,14 @@ impl World {
         self.st.borrow().hosts.get(h).is_some_and(|s| s.down)
     }
 
+    /// Whether `h` is a hostile host ([`crate::HostClass::Hostile`]).
+    pub fn is_hostile(&self, h: HostIx) -> bool {
+        self.spec
+            .hosts
+            .get(h)
+            .is_some_and(|s| matches!(s.class, crate::HostClass::Hostile(_)))
+    }
+
     /// Whether `h` left for good ([`crate::Fault::Depart`]).
     pub fn departed(&self, h: HostIx) -> bool {
         self.st
@@ -1322,12 +1330,14 @@ impl World {
                 .map(|s| at >= s.start && at <= s.stop)
                 .collect();
             self.record(|st| {
+                let ids = &st.ids;
                 let Some(hs) = st.hosts.get_mut(h) else {
                     return;
                 };
                 let swarms = std::mem::take(&mut hs.swarms);
+                let hostile = |id: &HostId| ids.get(id).is_some_and(|&p| self.is_hostile(p));
                 hs.stats
-                    .observe(&m, &swarms, &live, at, self.clock_at(h, at));
+                    .observe(&m, &swarms, &live, at, self.clock_at(h, at), hostile);
                 hs.swarms = swarms;
             });
             self.store_metrics(h, m);
@@ -1364,6 +1374,7 @@ impl World {
         let inv = &self.spec.invariants;
         let mut found = Vec::new();
         self.record(|st| {
+            let ids = &st.ids;
             let Some(hs) = st.hosts.get_mut(h) else {
                 return;
             };
@@ -1375,9 +1386,10 @@ impl World {
                 .iter()
                 .map(|s| now >= s.start && now <= s.stop)
                 .collect();
+            let hostile = |id: &HostId| ids.get(id).is_some_and(|&p| self.is_hostile(p));
             let g = hs
                 .stats
-                .observe(m, &swarms, &live, now, self.clock_at(h, now));
+                .observe(m, &swarms, &live, now, self.clock_at(h, now), hostile);
             let linked = m.links.iter().filter_map(|l| l.host_id);
             let mut ns: Vec<HostIx> = linked.filter_map(|id| st.ids.get(&id).copied()).collect();
             ns.sort_unstable();
