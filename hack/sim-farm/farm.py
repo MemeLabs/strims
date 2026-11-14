@@ -49,8 +49,8 @@ hashes its environment and its table, not the values it takes: the job it
 waits on fixes those.
 
 An arm's source is the tree of what its binary is built from (Cargo.toml,
-Cargo.lock, rust-toolchain.toml and crates/ at its commit), so commits
-elsewhere change nothing. build checks an arm's commit out in a worktree
+Cargo.lock, rust-toolchain.toml, crates/ and the vendored crates of
+third_party/ at its commit), so commits elsewhere change nothing. build checks an arm's commit out in a worktree
 under target/sim-farm/src, builds the test's release binary there with
 CARGO_TARGET_DIR at target/sim-farm/cargo, which only farm builds use,
 and CARGO_INCREMENTAL=0, and keeps it as
@@ -668,7 +668,7 @@ ROW_KEYS_READ = FARM / "index-keys-read.json"
 SEED_KEYS = {"SIM_SEED", "STRIMS_SIM_SEED"}
 # What a test binary is built from: commits that change none of it share
 # a binary, and jobs.
-SOURCES = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates"]
+SOURCES = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "third_party"]
 # What a testbed arm's source always covers: run.sh and its images.
 TESTBED = "hack/testbed"
 TESTBED_COLUMNS = ["wall_s:mean,max", "steal_pct:mean,max", "load_max:max", "node_lines_min:min"]

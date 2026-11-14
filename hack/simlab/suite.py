@@ -603,7 +603,7 @@ def build(src, sim, dest, cargo=CARGO):
 
 
 # What the test binaries are built from.
-BUILD_PATHS = ["crates", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml"]
+BUILD_PATHS = ["crates", "third_party", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml"]
 
 
 def builds_into(path, sim):
@@ -688,8 +688,8 @@ def tree_binary(sim, base):
     if names:
         diff = subprocess.run(["git", "diff", "HEAD", "--", *names], cwd=ROOT, check=True,
                               capture_output=True).stdout
-    # New files under crates/ build too.
-    for f in git("ls-files", "--others", "--exclude-standard", "crates").splitlines():
+    # New files under crates/ and third_party/ build too.
+    for f in git("ls-files", "--others", "--exclude-standard", "crates", "third_party").splitlines():
         if builds_into(f, sim):
             diff += f.encode() + (ROOT / f).read_bytes()
     key = build_key("HEAD", sim)

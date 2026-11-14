@@ -29,8 +29,8 @@ tree (the checkout this script is in, changes and all) and from `--base`
 (default `main`, checked out in the suite's worktree,
 target/sim-suite/src/base), runs every cell of the tier at seeds 1..N under each,
 and prints a scorecard. Each sim's binary, and its rows, are kept by what
-it is built from: crates/ and the workspace's Cargo and toolchain files,
-less other packages' tests. A change to scripts, or to one sim's tests,
+it is built from: crates/, the vendored crates of third_party/ and the
+workspace's Cargo and toolchain files, less other packages' tests. A change to scripts, or to one sim's tests,
 reuses the rest; later runs against the same base run only the working
 tree, and a sim the working tree leaves as the base's isn't run twice.
 Rows are the sims' `ROW` objects with each run's wall time and peak
