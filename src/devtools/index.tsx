@@ -7,14 +7,6 @@ import "./storybook/host/preload";
 import "./styles/main.scss";
 import "../lib/i18n";
 
-import { Readable, Writable } from "stream";
-
-import React from "react";
-import { createRoot } from "react-dom/client";
-
-import { DevToolsClient } from "../apis/client";
-import { WSReadWriter } from "../lib/ws";
-import App from "./root/App";
 import { frameDocument } from "./storybook/host/preload";
 
 // (() => {
@@ -55,7 +47,8 @@ import { frameDocument } from "./storybook/host/preload";
   document.body.appendChild(root);
 
   // A storybook frame renders its story (or the story index) alone, without
-  // the devtools API.
+  // the devtools API. Each loads its own modules, so a frame never evaluates
+  // the app's (hack/storybook/check.py's scope counts what a frame loads).
   if (frameDocument) {
     void import("./storybook/host/Frame").then(({ renderFrame }) =>
       renderFrame(root, frameDocument)
@@ -63,7 +56,5 @@ import { frameDocument } from "./storybook/host/preload";
     return;
   }
 
-  const ws = new WSReadWriter(`wss://${location.host}/api`) as unknown as Readable & Writable;
-  const client = new DevToolsClient(ws, ws);
-  createRoot(root).render(<App client={client} />);
+  void import("./root/render").then(({ renderApp }) => renderApp(root));
 })();
