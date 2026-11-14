@@ -292,6 +292,8 @@ pub(crate) struct World {
     stopped_tx: mpsc::Sender<(HostIx, NodeMetrics)>,
     stopped_rx: mpsc::Receiver<(HostIx, NodeMetrics)>,
     pub st: RefCell<WorldState>,
+    /// The run's colluders ([`hostile::Group`](crate::hostile::Group)).
+    colluders: crate::hostile::Group,
 }
 
 impl World {
@@ -369,6 +371,7 @@ impl World {
             stopped_tx,
             stopped_rx,
             st: RefCell::new(st),
+            colluders: crate::hostile::Group::default(),
         }
     }
 
@@ -489,7 +492,8 @@ impl World {
         if let crate::HostClass::Hostile(kind) = spec.class
             && let Some(s) = self.spec.swarms.first()
         {
-            c.adversary = crate::hostile::adversary(kind, &s.options);
+            c.adversary = crate::hostile::adversary(kind, &s.options, &self.colluders);
+            c.echo_greed = crate::hostile::echo_greed(kind);
         }
         if self.spec.exp.contains("index-sample") {
             c.vpn.peer_index_answers = strims_vpn::IndexAnswers::Sample;

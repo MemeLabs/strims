@@ -1870,6 +1870,10 @@ fn honest_whole_stream(r: &Report) -> Result<(), String> {
     complete(r, &viewers, spec.start, spec.stop)
 }
 
+fn per_link(n: u64, links: u64) -> f64 {
+    n as f64 / links.max(1) as f64
+}
+
 /// Free riders and liars send no chunk to anyone, though liars announce
 /// what they hold.
 #[test]
@@ -1892,6 +1896,179 @@ fn free_riders_and_liars_serve_nothing() {
             },
         );
     }
+}
+
+/// Grabbers ask every peer that announces a chunk, more often a link than
+/// the honest viewers do, and never cancel.
+#[test]
+fn grabbers_ask_everyone_and_never_cancel() {
+    sweep(
+        "grabbers_ask_everyone_and_never_cancel",
+        |s| hostile_mesh(s, "grabber", 0.25),
+        |r| {
+            honest_whole_stream(r)?;
+            let seed = r.scenario.swarms[0].seed;
+            let (g, gl) = inbound_from(r, |h| of_kind(r, h, "grabber"));
+            let (o, ol) = inbound_from(r, |h| honest(r, h) && h != seed);
+            if g.cancels_in + g.stream_cancels_in > 0 {
+                return Err(format!(
+                    "grabbers cancelled {} requests and {} streams",
+                    g.cancels_in, g.stream_cancels_in
+                ));
+            }
+            let (gr, or) = (per_link(g.requests_in, gl), per_link(o.requests_in, ol));
+            if gl == 0 || gr <= or {
+                return Err(format!(
+                    "grabbers sent {gr:.0} requests a link over {gl} links, honest viewers {or:.0}"
+                ));
+            }
+            Ok(())
+        },
+    );
+}
+
+/// Withholders keep their children's subscriptions open (their
+/// STREAM_CLOSEs go out as STREAM_OPENs) and push nothing, so their
+/// children prune them for missed pushes, and by the end no honest viewer
+/// keeps one as a parent.
+#[test]
+fn withholders_keep_streams_open_and_get_pruned() {
+    sweep(
+        "withholders_keep_streams_open_and_get_pruned",
+        |s| {
+            let mut sc = hostile_mesh(s, "withholder", 0.25);
+            sc.transfer_samples = true;
+            sc
+        },
+        |r| {
+            honest_whole_stream(r)?;
+            let (w, wl) = inbound_from(r, |h| of_kind(r, h, "withholder"));
+            if w.stream_opens_in == 0 {
+                return Err(format!("no STREAM_OPEN from withholders over {wl} links"));
+            }
+            let mut pruned = 0;
+            for (h, host) in r.hosts.iter().enumerate() {
+                if !honest(r, h) {
+                    continue;
+                }
+                let Some((_, _, last)) = host.transfers.iter().rev().find(|(_, sw, _)| *sw == 0)
+                else {
+                    continue;
+                };
+                pruned += last.pruned;
+                if let Some(p) = last
+                    .parent_peers
+                    .iter()
+                    .flatten()
+                    .find(|&&p| of_kind(r, p, "withholder"))
+                {
+                    return Err(format!(
+                        "{} keeps the withholder {} as a parent",
+                        host.name, r.hosts[*p].name
+                    ));
+                }
+            }
+            if pruned == 0 {
+                return Err("no honest viewer pruned a parent".into());
+            }
+            Ok(())
+        },
+    );
+}
+
+/// Colluders' reports reach the seed that asked for them.
+#[test]
+fn colluders_report_to_the_seed() {
+    sweep(
+        "colluders_report_to_the_seed",
+        |s| {
+            let mut sc = striped(capped_seed(s, PushMode::Hybrid), STRIPES, ADAPTIVE);
+            sc.hostile("colluder", 0.25);
+            sc
+        },
+        |r| {
+            honest_whole_stream(r)?;
+            let seed = r.scenario.swarms[0].seed;
+            let colluders: Vec<HostIx> = (0..r.hosts.len())
+                .filter(|&h| of_kind(r, h, "colluder"))
+                .collect();
+            let reported = r.hosts[seed]
+                .messages
+                .iter()
+                .filter(|(p, sw, m)| {
+                    *sw == 0 && p.is_some_and(|p| colluders.contains(&p)) && m.announces_in > 0
+                })
+                .count();
+            if colluders.is_empty() || reported == 0 {
+                return Err(format!(
+                    "the seed had reports from {reported} of {} colluders",
+                    colluders.len()
+                ));
+            }
+            Ok(())
+        },
+    );
+}
+
+/// How long a `free-rider+echo` holds its echoes (`hostile::ECHO_HOLD`).
+const HELD_ECHO_MS: u64 = 300;
+
+/// A `free-rider+echo` holds each answer to its peers' path probes, and a
+/// `liar+echo`'s answers name probes its peers never sent.
+#[test]
+fn echo_greedy_hosts_hold_or_forge_their_echoes() {
+    sweep(
+        "echo_greedy_hosts_hold_or_forge_their_echoes",
+        |s| {
+            let mut m = streaming(
+                "echo_greed",
+                s,
+                16,
+                (2048 * KIB, 1024 * KIB),
+                PushMode::Hybrid,
+                (3, 33),
+            );
+            for (i, &v) in m.viewers.iter().enumerate() {
+                if i % 4 == 1 {
+                    let kind = if i % 8 == 1 {
+                        "free-rider+echo"
+                    } else {
+                        "liar+echo"
+                    };
+                    m.s.hosts[v].class = HostClass::Hostile(kind);
+                }
+            }
+            m.s
+        },
+        |r| {
+            honest_whole_stream(r)?;
+            // A held echo answers the newest probe read when it goes, so
+            // a holder's mean hold is under its hold but far over an
+            // honest host's, which answers at once.
+            for (h, host) in r.hosts.iter().enumerate() {
+                let e = host.echoes;
+                let holds = if of_kind(r, h, "free-rider+echo") {
+                    e.written > 0 && e.hold_ms * 2 >= HELD_ECHO_MS * e.written
+                } else {
+                    e.hold_ms * 10 < HELD_ECHO_MS * e.written.max(1)
+                };
+                if !holds {
+                    return Err(format!(
+                        "{} ({:?}): {e:?}",
+                        host.name, r.scenario.hosts[h].class
+                    ));
+                }
+            }
+            let unknown: u64 = (0..r.hosts.len())
+                .filter(|&h| honest(r, h))
+                .map(|h| r.hosts[h].echoes.unknown)
+                .sum();
+            if unknown == 0 {
+                return Err("no honest host read a forged echo".into());
+            }
+            Ok(())
+        },
+    );
 }
 
 // --- 9. ten minutes ---------------------------------------------------------

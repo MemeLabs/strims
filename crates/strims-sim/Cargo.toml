@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 strims-base.workspace = true
+strims-binmap.workspace = true
 strims-crypto.workspace = true
 strims-node = { workspace = true, features = ["turmoil"] }
 strims-ppspp.workspace = true
@@ -16,6 +17,7 @@ strims-proto.workspace = true
 strims-rpc.workspace = true
 strims-testbed.workspace = true
 strims-transfer.workspace = true
+strims-vnic.workspace = true
 strims-vpn.workspace = true
 strims-wan.workspace = true
 strims-webrtc.workspace = true
