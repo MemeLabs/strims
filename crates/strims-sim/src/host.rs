@@ -846,12 +846,12 @@ async fn media_writer_task(
 
 /// A media writer's state: the units, the chunk in progress (its sequence
 /// number and the stream offset where it starts), and the chunks not yet
-/// signed (index and first byte's time, ms).
+/// signed (index, sequence number and first byte's time, ms).
 struct MediaWriter {
     signer: Signer,
     chunk: u64,
     open: Option<(u64, u64)>,
-    pending: Vec<(u64, u64)>,
+    pending: Vec<(u64, u64, u64)>,
 }
 
 impl MediaWriter {
@@ -876,7 +876,7 @@ impl MediaWriter {
             if at == 0 {
                 let seq = w.media_chunk(s, now);
                 self.open = Some((seq, p));
-                self.pending.push((p / size, now));
+                self.pending.push((p / size, seq, now));
                 let h = media_header(seq, now);
                 let n = h.len().min(usize::try_from(end - p).unwrap_or(0));
                 buf.extend_from_slice(h.get(..n).unwrap_or_default());
@@ -895,18 +895,32 @@ impl MediaWriter {
         }
     }
 
-    /// The chunks before index `through` were signed now.
+    /// The chunks before index `through` were signed now: their waits, and
+    /// their signing times by sequence number ([`MediaLog::signed`]).
+    ///
+    /// [`MediaLog::signed`]: crate::report::MediaLog::signed
     fn signed(&mut self, w: &World, s: usize, through: u64) {
         let now = sim_now_ms();
-        let waits: Vec<u32> = self
+        let done: Vec<(u64, u32)> = self
             .pending
             .iter()
-            .filter(|&&(c, _)| c < through)
-            .map(|&(_, t)| u32::try_from(now.saturating_sub(t)).unwrap_or(u32::MAX))
+            .filter(|&&(c, _, _)| c < through)
+            .map(|&(_, seq, t)| {
+                let wait = u32::try_from(now.saturating_sub(t)).unwrap_or(u32::MAX);
+                (seq, wait)
+            })
             .collect();
-        if !waits.is_empty() {
-            self.pending.retain(|&(c, _)| c >= through);
-            w.media_log(s, |l| l.sign_waits.extend(waits));
+        if !done.is_empty() {
+            self.pending.retain(|&(c, _, _)| c >= through);
+            w.media_log(s, |l| {
+                for (seq, wait) in done {
+                    l.sign_waits.push(wait);
+                    let at = usize::try_from(seq).ok().and_then(|i| l.signed.get_mut(i));
+                    if let Some(at) = at {
+                        *at = Some(now);
+                    }
+                }
+            });
         }
     }
 

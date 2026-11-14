@@ -719,6 +719,26 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     SignWaitP99Ms,
+    /// In a media run, the median lag in ms of the media chunks the first
+    /// swarm's honest viewers read, the reads `lag_p50_ms_honest` counts, from
+    /// their unit's signing: read time less the time the writer signed the
+    /// chunk's unit; left out without media.
+    ///
+    /// strims-sim: Every chunk read, its read time its first byte's time plus
+    /// its lag (`MediaLog::signed`, `Report::signed_lag`).
+    ///
+    /// Unit: ms.
+    SignedLagP50Ms,
+    /// In a media run, the p99 lag in ms of the media chunks the first swarm's
+    /// honest viewers read, the reads `lag_p99_ms_honest` counts, from their
+    /// unit's signing: read time less the time the writer signed the chunk's
+    /// unit; left out without media.
+    ///
+    /// strims-sim: Every chunk read, its read time its first byte's time plus
+    /// its lag (`MediaLog::signed`, `Report::signed_lag`).
+    ///
+    /// Unit: ms.
+    SignedLagP99Ms,
     /// The p90 over the honest viewers of the ms from each one's arrival to its
     /// pool first resolving a swarm's source (pool-find); left out without any.
     ///
@@ -987,6 +1007,8 @@ impl RowInt {
             RowInt::ShedsSent => "sheds_sent",
             RowInt::SignWaitP50Ms => "sign_wait_p50_ms",
             RowInt::SignWaitP99Ms => "sign_wait_p99_ms",
+            RowInt::SignedLagP50Ms => "signed_lag_p50_ms",
+            RowInt::SignedLagP99Ms => "signed_lag_p99_ms",
             RowInt::SourceResolvedP90Ms => "source_resolved_p90_ms",
             RowInt::StaleBytes => "stale_bytes",
             RowInt::StartupMsDelayPop(i) => at(&ROWINT_STARTUP_MS_DELAY_POP, i),
@@ -1357,6 +1379,24 @@ pub(crate) enum RowNum {
     ///
     /// Unit: fraction.
     HaveLazyOutShare,
+    /// Of the intervals between consecutive samples after the first swarm's
+    /// startup at both of which an honest viewer held a whole copy from the
+    /// seed (every stream pushed to it by the seed), the share in which its
+    /// on-time pushes came to under 95 % of what it was owed in that time
+    /// (`HOLDER_WHOLE`).
+    ///
+    /// strims-sim: Each honest viewer's own transfer samples
+    /// (`STRIMS_SIM_SERIES` or `STRIMS_SIM_OUT`) from `STARTUP_SECS` after the
+    /// swarm's start to its stop (`Report::seed_meter_window`): it holds a
+    /// whole copy where the seed is every stream's open parent, and what it was
+    /// owed is the push deadlines that came due in the interval, each met (a
+    /// hit) or missed (a miss) once, so where the samples fall doesn't move the
+    /// share; an interval with none due, its counters fallen (a restart) or
+    /// longer than two stats periods is left out (`Report::holder_short`). Left
+    /// out with no such interval.
+    ///
+    /// Unit: fraction.
+    HolderShort,
     /// `lag_p99_ms_weak`: the lag p99 of the weakest quarter;
     ///
     /// Unit: ms.
@@ -1445,6 +1485,19 @@ pub(crate) enum RowNum {
     /// The share of the seeds' meter samples while a swarm streams that had a
     /// queueing delay (Report::queue_delay_deciles).
     QueueDelaySeedsHad,
+    /// Over the samples after the first swarm's startup, the share of its
+    /// honest viewers' samples at which the viewer had at least one push
+    /// subscriber.
+    ///
+    /// strims-sim: Each honest viewer's transfer samples (`STRIMS_SIM_SERIES`
+    /// or `STRIMS_SIM_OUT`, those `fanout_p{p}` reads) from `STARTUP_SECS`
+    /// after the swarm's start to its stop (`Report::seed_meter_window`,
+    /// `Report::relay_share`), by the viewer's own count of its subscribers,
+    /// which keeps one that left abruptly until the viewer notices; left out
+    /// without any.
+    ///
+    /// Unit: fraction.
+    RelayShare,
     /// Most samples of a push channel have nothing out, so the flight and the
     /// requests out also read over the samples with any (`*_busy_*`), with the
     /// share of samples with requests out (`reqs_out_share`).
@@ -1475,6 +1528,15 @@ pub(crate) enum RowNum {
     /// The seed's packets through its uplink per second of the run (WAN mode in
     /// strims-sim, left out outside it).
     SeedPps,
+    /// Of the chunks the first swarm's seed sent, the share that answered
+    /// requests: chunks sent less pushed, over chunks sent (its scheduler's
+    /// counters).
+    ///
+    /// strims-sim: Over every incarnation of the seed
+    /// (`Report::seed_pull_share`); left out when it sent none.
+    ///
+    /// Unit: fraction.
+    SeedPullShare,
     /// The seed's share of every byte the swarm's hosts wrote to their links:
     /// its over the seed's, the viewers' and the relays' together
     /// (`seed_chunk_share` is its share of the chunk data alone).
@@ -1643,6 +1705,7 @@ impl RowNum {
             RowNum::FrameBytesMean => "frame_bytes_mean",
             RowNum::HaveLazyInShare => "have_lazy_in_share",
             RowNum::HaveLazyOutShare => "have_lazy_out_share",
+            RowNum::HolderShort => "holder_short",
             RowNum::LagP99MsWeak => "lag_p99_ms_weak",
             RowNum::LinksDroppedPerHostMin => "links_dropped_per_host_min",
             RowNum::LinksFormedPerHostMin => "links_formed_per_host_min",
@@ -1661,12 +1724,14 @@ impl RowNum {
             RowNum::PpsP50 => "pps_p50",
             RowNum::PpsP90 => "pps_p90",
             RowNum::QueueDelaySeedsHad => "queue_delay_seeds_had",
+            RowNum::RelayShare => "relay_share",
             RowNum::ReqsOutShare => "reqs_out_share",
             RowNum::SeedBudgetChangesPerMin => "seed_budget_changes_per_min",
             RowNum::SeedCopiesChangesPerMin => "seed_copies_changes_per_min",
             RowNum::SeedNbrUpP50 => "seed_nbr_up_p50",
             RowNum::SeedOffersPerMin => "seed_offers_per_min",
             RowNum::SeedPps => "seed_pps",
+            RowNum::SeedPullShare => "seed_pull_share",
             RowNum::SeedUploadShare => "seed_upload_share",
             RowNum::SeedChunkShare => "seed_chunk_share",
             RowNum::SeedWirePerWritten => "seed_wire_per_written",

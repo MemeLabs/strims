@@ -74,6 +74,16 @@
 //!   honest neighbour (eclipsed: hostile and infrastructure hosts don't
 //!   count) and with no path to their swarm's seed through honest hosts
 //!   (cut off) ([`Report::eclipse`]).
+//! - **relays and holders**, over the first swarm's honest viewers' transfer
+//!   samples in the seed meter's window: the share of them at which the
+//!   viewer had a push subscriber ([`Report::relay_share`]), and of the
+//!   intervals between consecutive ones at both of which it held a whole
+//!   copy from the seed, the share in which its on-time pushes met under
+//!   `HOLDER_WHOLE` of the push deadlines that came due
+//!   ([`Report::holder_short`]). Beside them,
+//!   the share of the seed's chunks that answered requests
+//!   ([`Report::seed_pull_share`]), and a media swarm's lag from each
+//!   chunk's signing ([`Report::signed_lag`]).
 //! - **series** (`Report::series_data`): with transfer samples, a swarm's run
 //!   second by second from its stream's start to the run's end, which the
 //!   tables carry ([`Report::write_tables`]) for
@@ -106,11 +116,17 @@ use crate::stats::{MeterSample, WindowSamples};
 use crate::stream::CAUGHT_UP_MS;
 use crate::tables::ms_since;
 use strims_ppspp::ChannelMetrics;
+use strims_testbed::transfer::TransferSample;
 use strims_wan::playout::{self, DELAYS_MS, Totals};
 
 /// Tree depth counts from this long after a stream starts, or a viewer
 /// arrives.
 const DEPTH_WARM: Duration = Duration::from_secs(10);
+/// The share of the push deadlines that come due in an interval between
+/// samples that a viewer holding a whole copy from the seed must meet with
+/// on-time pushes to count as whole in it ([`Report::holder_short`]), the
+/// ppspp sim's bound.
+const HOLDER_WHOLE: f64 = 0.95;
 /// A swarm's joins ([`Report::joins`]): how many, and the ms each took to
 /// its first frame and to catch up, ascending, of those that did.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -323,6 +339,37 @@ impl Report {
                 .filter(|(seq, _)| range.contains(seq))
                 .map(|&(_, l)| l),
         )
+    }
+
+    /// The lag from their unit's signing of the media chunks of `swarm`
+    /// its honest viewers read, the reads the row's honest lag counts
+    /// (chunks written from the stream's start to its stop): each read's
+    /// time, its chunk's first byte's time plus its lag, less the chunk's
+    /// signing ([`MediaLog::signed`]), in ms. The row's `signed_lag_p50_ms`
+    /// and `signed_lag_p99_ms`; `None` without media or a signed chunk
+    /// read.
+    ///
+    /// [`MediaLog::signed`]: crate::report::MediaLog::signed
+    pub fn signed_lag(&self, swarm: usize) -> Option<Percentiles> {
+        let s = self.scenario.swarms.get(swarm)?;
+        let m = self.media.get(swarm)?.as_ref()?;
+        let honest = self.honest_viewers();
+        let range = self.frames_between(swarm, s.start, s.stop);
+        let lags: Vec<u32> = self
+            .viewers
+            .iter()
+            .filter(|v| v.swarm == swarm && honest.contains(&v.host))
+            .flat_map(|v| v.stats.lags.iter())
+            .filter(|(seq, _)| range.contains(seq))
+            .filter_map(|&(seq, lag)| {
+                let i = usize::try_from(seq).ok()?;
+                let first = *m.times.get(i)?;
+                let signed = (*m.signed.get(i)?)?;
+                let read = first.saturating_add(u64::from(lag));
+                Some(u32::try_from(read.saturating_sub(signed)).unwrap_or(u32::MAX))
+            })
+            .collect();
+        (!lags.is_empty()).then(|| Percentiles::of(lags))
     }
 
     /// The lag per [`bucket`](Report::buckets).
@@ -1261,7 +1308,9 @@ impl Report {
     /// viewers' playback at each delay `D` of [`DELAYS_MS`]
     /// (`stalls_per_min_D`, `stalled_share_D`, `startup_ms_D`: [`Totals`]
     /// of their playouts, and with hostile hosts the honest viewers' with
-    /// `_honest`) and the meter's measures (see the module docs). With
+    /// `_honest`), the meter's measures, and the relays, whole-copy holders
+    /// and seed's answers (`relay_share`, `holder_short`,
+    /// `seed_pull_share`; see the module docs). With
     /// arrivals or departures, in the ppspp sim's rows' names: their
     /// profiles (`arrivals`, `depart`), the viewers that arrived and
     /// departed (`arrived`, `departed`, each with `_honest`), the joins
@@ -1528,6 +1577,12 @@ impl Report {
                     j.int(RowInt::fanout_p_p(p), f as u64);
                 }
             }
+            if let Some(x) = self.relay_share(swarm) {
+                j.num(RowNum::RelayShare, x);
+            }
+            if let Some(x) = self.holder_short(swarm) {
+                j.num(RowNum::HolderShort, x);
+            }
             if let Some(d) = self.depths(swarm) {
                 for (name, v) in d {
                     j.num(name, v);
@@ -1558,6 +1613,9 @@ impl Report {
         // the seed's, and with hostile hosts theirs (`_dishonest`) below.
         let (timeouts, seed_timeouts, hostile_timeouts) = self.timeouts(swarm);
         let (chunks_read, wasted) = self.chunk_reads(swarm);
+        if let Some(x) = self.seed_pull_share(swarm) {
+            j.num(RowNum::SeedPullShare, x);
+        }
         j.num(RowNum::SeedChunkShare, self.data_share(swarm))
             .num(RowNum::SeedUploadShare, self.uploads(swarm).seed_share)
             .num(RowNum::Duplicates, self.duplicates(swarm))
@@ -2000,6 +2058,108 @@ impl Report {
         v.sort_unstable();
         v.dedup();
         v
+    }
+
+    /// Of the transfer samples of `swarm`'s honest viewers in its steady
+    /// window ([`Report::seed_meter_window`]), the share at which the
+    /// viewer had at least one push subscriber: the row's `relay_share`.
+    /// `None` without any (no transfer samples, or no window).
+    pub fn relay_share(&self, swarm: usize) -> Option<f64> {
+        let (from, to) = self.seed_meter_window(swarm)?;
+        let (mut relays, mut samples) = (0u64, 0u64);
+        for h in self.honest_in(swarm) {
+            for (_, _, x) in self.transfers_between(h, swarm, from, to) {
+                samples += 1;
+                relays += u64::from(x.children > 0);
+            }
+        }
+        (samples > 0).then(|| relays as f64 / samples as f64)
+    }
+
+    /// Of the intervals between consecutive transfer samples of `swarm`'s
+    /// honest viewers in its steady window ([`Report::seed_meter_window`])
+    /// at both of which the viewer held a whole copy from the seed (the
+    /// seed every stream's open parent), the share in which its on-time
+    /// pushes met under `HOLDER_WHOLE` of the push deadlines that came due
+    /// in it (the changes in its `hits` and `misses`): the row's
+    /// `holder_short`. Each chunk it is owed resolves once, as a hit or a
+    /// miss, so where the samples fall moves chunks between intervals but
+    /// not an interval's share of them, which a count of the chunks
+    /// published would have it cut through the bursts its pushes come in.
+    /// An interval with no deadline due, its counters fallen (its scheduler
+    /// restarted) or longer than two stats periods (its host was down) is
+    /// left out; `None` without any.
+    pub fn holder_short(&self, swarm: usize) -> Option<f64> {
+        let spec = self.scenario.swarms.get(swarm)?;
+        let (from, to) = self.seed_meter_window(swarm)?;
+        let streams = spec.options.stream_count.max(1);
+        let gap = self
+            .scenario
+            .stats_every
+            .unwrap_or(Duration::from_secs(1))
+            .saturating_mul(2);
+        let whole = |x: &TransferSample| {
+            x.parent_peers.len() == streams && x.parent_peers.iter().all(|&p| p == Some(spec.seed))
+        };
+        let (mut short, mut intervals) = (0u64, 0u64);
+        for h in self.honest_in(swarm) {
+            let samples: Vec<_> = self.transfers_between(h, swarm, from, to).collect();
+            for w in samples.windows(2) {
+                let [(ta, _, a), (tb, _, b)] = w else {
+                    continue;
+                };
+                let dt = tb.saturating_sub(*ta);
+                let fell = b.hits < a.hits || b.misses < a.misses;
+                if dt.is_zero() || dt > gap || fell || !whole(a) || !whole(b) {
+                    continue;
+                }
+                let hits = b.hits.saturating_sub(a.hits);
+                let due = hits + b.misses.saturating_sub(a.misses);
+                if due == 0 {
+                    continue;
+                }
+                intervals += 1;
+                short += u64::from((hits as f64) < HOLDER_WHOLE * due as f64);
+            }
+        }
+        (intervals > 0).then(|| short as f64 / intervals as f64)
+    }
+
+    /// Of the chunks `swarm`'s seed sent over its incarnations, the share
+    /// that answered requests (sent less pushed, over sent): the row's
+    /// `seed_pull_share`. `None` when it sent none.
+    pub fn seed_pull_share(&self, swarm: usize) -> Option<f64> {
+        let s = self.scenario.swarms.get(swarm)?;
+        let c = self.hosts.get(s.seed)?.runner.swarm(swarm);
+        (c.chunks_sent > 0)
+            .then(|| c.chunks_sent.saturating_sub(c.pushed_chunks) as f64 / c.chunks_sent as f64)
+    }
+
+    /// `swarm`'s viewers that are honest.
+    fn honest_in(&self, swarm: usize) -> Vec<HostIx> {
+        self.scenario.swarms.get(swarm).map_or(Vec::new(), |s| {
+            s.viewers
+                .iter()
+                .copied()
+                .filter(|&h| self.class(h) == HostClass::Honest)
+                .collect()
+        })
+    }
+
+    /// Host `h`'s transfer samples of `swarm` from `from` to `to` of run
+    /// time, in order.
+    fn transfers_between(
+        &self,
+        h: HostIx,
+        swarm: usize,
+        from: Duration,
+        to: Duration,
+    ) -> impl Iterator<Item = &(Duration, usize, TransferSample)> {
+        self.hosts
+            .get(h)
+            .into_iter()
+            .flat_map(|r| r.transfers.iter())
+            .filter(move |(t, s, _)| *s == swarm && *t >= from && *t <= to)
     }
 
     fn class(&self, h: HostIx) -> HostClass {
@@ -2700,8 +2860,9 @@ impl Report {
     /// A media swarm's columns ([`crate::MediaSpec`]): its encoder and
     /// policy, the chunks per unit, the media and stream rates, units
     /// signed a second (each peer's signature verifications), each media
-    /// chunk's wait to be signed, and every host's upload per media byte
-    /// per viewer.
+    /// chunk's wait to be signed, the honest viewers' lag from their
+    /// chunks' signing ([`Report::signed_lag`]), and every host's upload
+    /// per media byte per viewer.
     fn media_cols(&self, swarm: usize, j: &mut JsonRow) {
         let (Some(spec), Some(Some(m))) = (self.scenario.swarms.get(swarm), self.media.get(swarm))
         else {
@@ -2728,6 +2889,10 @@ impl Report {
                 RowNum::WirePerMedia,
                 uploaded as f64 / (m.media_bytes.max(1) as f64 * viewers),
             );
+        if let Some(lag) = self.signed_lag(swarm) {
+            j.int(RowInt::SignedLagP50Ms, u64::from(lag.p50))
+                .int(RowInt::SignedLagP99Ms, u64::from(lag.p99));
+        }
     }
 }
 
@@ -2977,6 +3142,157 @@ mod tests {
         // 60-64 and 66 of 60-99 read off the full rate.
         assert!(!t[1].drop);
         assert!((t[1].off - 0.15).abs() < 1e-9, "{}", t[1].off);
+    }
+
+    /// A seed (0), three honest viewers (1-3) and a hostile one (4) on a
+    /// stream of 16 KiB/s (16 1 KiB chunks a second) from 0 to `stop` s,
+    /// each host's transfer samples those `sample` gives (time in s, host).
+    fn five(stop: u64, sample: impl Fn(u64, HostIx) -> Option<TransferSample>) -> Report {
+        let mut s = Scenario::new("five");
+        let hosts: Vec<HostIx> = (0..5).map(|i| s.host(&format!("h{i}"), None)).collect();
+        s.hosts[4].class = HostClass::Hostile("test");
+        s.swarm(SwarmSpec::live(
+            hosts[0],
+            vec![1, 2, 3, 4],
+            16 * 1024,
+            Duration::ZERO,
+            Duration::from_secs(stop),
+        ));
+        let mut r = seed_reading(|_| 0);
+        r.scenario = s;
+        r.hosts = hosts
+            .iter()
+            .map(|&h| HostReport {
+                transfers: (0..=stop)
+                    .filter_map(|t| Some((Duration::from_secs(t), 0, sample(t, h)?)))
+                    .collect(),
+                ..HostReport::default()
+            })
+            .collect();
+        r
+    }
+
+    /// Over the window from 25 s (`STARTUP_SECS`) to the stream's 40 s end:
+    /// viewer 1 holds every stream from the seed, meets 8 of the 16
+    /// deadlines due from 30 s to 31 s and restarts at 35 s; viewer 3 holds
+    /// from the seed too, with a 4 s gap in its samples (29-31 s); viewer
+    /// 2's parent is viewer 1; the hostile viewer holds from the seed and
+    /// misses every deadline.
+    #[test]
+    fn relays_and_whole_copy_holders_read_the_honest_viewers_transfers() {
+        let r = five(40, |t, h| {
+            let after = |from: u64| 16 * t.saturating_sub(from);
+            let (parent, children, hits, misses) = match h {
+                0 => (None, 3, 0, 0),
+                1 => match t {
+                    31..=34 => (Some(0), 1, after(25) - 8, 8),
+                    35.. => (Some(0), 1, after(35), 0),
+                    _ => (Some(0), 1, after(25), 0),
+                },
+                // Outside the window it relays, which doesn't count.
+                2 => (Some(1), usize::from(t < 25), after(0), 0),
+                3 if (29..=31).contains(&t) => return None,
+                3 if t >= 32 => (Some(0), usize::from(t >= 35), after(25) - 64, 0),
+                3 => (Some(0), 0, after(25), 0),
+                _ => (Some(0), 5, 0, after(0)),
+            };
+            Some(TransferSample {
+                parent_peers: vec![parent],
+                children,
+                hits,
+                misses,
+                ..TransferSample::default()
+            })
+        });
+        // Viewer 3's hits stand still over its gap: 25-28 s and 32-40 s,
+        // the gap left out, are 11 intervals none short; viewer 1's 15 less
+        // the restart's, where its counters fall, are 14, one short.
+        let short = r.holder_short(0).unwrap();
+        assert!((short - 1.0 / 25.0).abs() < 1e-9, "{short}");
+        // Samples in the window: viewer 1's 16 all relaying, viewer 2's 16
+        // none, viewer 3's 13 with 6 from 35 s.
+        let relays = r.relay_share(0).unwrap();
+        assert!((relays - 22.0 / 45.0).abs() < 1e-9, "{relays}");
+        // No window on a stream no longer than its startup.
+        let r = five(20, |_, _| Some(TransferSample::default()));
+        assert_eq!(r.relay_share(0), None);
+        assert_eq!(r.holder_short(0), None);
+    }
+
+    /// A whole-copy holder whose on-time pushes swing between 12 and 20 an
+    /// interval around the stream's 16 a second, as samples cut through the
+    /// bursts they come in, with no deadline missed: never short, where a
+    /// count of the chunks published would have it short in every other
+    /// interval. Missing 4 of the 16 due from 30 s to 31 s makes it short in
+    /// that one alone.
+    #[test]
+    fn holders_are_short_only_where_their_deadlines_were_missed() {
+        let swing = |t: u64| {
+            (0..t)
+                .map(|k| if k % 2 == 0 { 12 } else { 20 })
+                .sum::<u64>()
+        };
+        let r = five(40, |t, h| {
+            (h == 1).then(|| TransferSample {
+                parent_peers: vec![Some(0)],
+                hits: swing(t),
+                ..TransferSample::default()
+            })
+        });
+        assert_eq!(r.holder_short(0), Some(0.0));
+        let r = five(40, |t, h| {
+            (h == 1).then(|| TransferSample {
+                parent_peers: vec![Some(0)],
+                hits: swing(t),
+                misses: if t >= 31 { 4 } else { 0 },
+                ..TransferSample::default()
+            })
+        });
+        let short = r.holder_short(0).unwrap();
+        assert!((short - 1.0 / 15.0).abs() < 1e-9, "{short}");
+    }
+
+    #[test]
+    fn the_seed_pull_share_is_its_answers_among_its_chunks() {
+        let mut r = five(40, |_, _| None);
+        assert_eq!(r.seed_pull_share(0), None);
+        r.hosts[0].runner.swarms = vec![crate::stats::SwarmCounters {
+            chunks_sent: 100,
+            pushed_chunks: 75,
+            ..Default::default()
+        }];
+        assert_eq!(r.seed_pull_share(0), Some(0.25));
+        assert_eq!(r.relay_share(0), None);
+    }
+
+    /// The honest viewer reads chunks 0, 1 and 3 (2 never signed) 500, 450
+    /// and 400 ms after their first bytes at 0, 100 and 300 ms, signed at
+    /// 300, 300 and 600 ms; the hostile viewer's read doesn't count.
+    #[test]
+    fn signed_lag_runs_from_each_chunks_signing() {
+        let mut r = five(10, |_, _| None);
+        assert_eq!(r.signed_lag(0), None);
+        r.media = vec![Some(crate::report::MediaLog {
+            times: vec![0, 100, 200, 300],
+            signed: vec![Some(300), Some(300), None, Some(600)],
+            ..Default::default()
+        })];
+        let viewer = |host: HostIx, lags: Vec<(u64, u32)>| {
+            let mut stats = crate::stream::ViewerStats::default();
+            stats.lags = lags;
+            crate::report::ViewerReport {
+                host,
+                name: format!("h{host}"),
+                swarm: 0,
+                stats,
+            }
+        };
+        r.viewers = vec![
+            viewer(1, vec![(0, 500), (1, 450), (2, 400), (3, 400)]),
+            viewer(4, vec![(0, 5000)]),
+        ];
+        let lag = r.signed_lag(0).unwrap();
+        assert_eq!((lag.n, lag.p50, lag.p99), (3, 200, 250));
     }
 
     #[test]

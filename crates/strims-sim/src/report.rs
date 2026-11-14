@@ -652,6 +652,10 @@ pub struct MediaLog {
     /// Per media chunk, by sequence number: its first byte's time, in ms of
     /// run time.
     pub times: Vec<u64>,
+    /// Per media chunk, by sequence number: when its unit was signed, in ms
+    /// of run time; `None` until then, and for good for a chunk its writer
+    /// reset before.
+    pub signed: Vec<Option<u64>>,
     /// Per media chunk signed: how long after its first byte (ms).
     pub sign_waits: Vec<u32>,
     /// Access unit bytes, stream bytes sent (records and chunk headers:
@@ -1158,7 +1162,8 @@ impl Report {
     /// Swarm `swarm`'s seed meter's window: from the end of its startup
     /// phase, [`STARTUP_SECS`](strims_wan::vocab::STARTUP_SECS) after its
     /// stream's first write, to its last; None for a stream no longer than
-    /// its startup.
+    /// its startup. The steady window [`Report::relay_share`] and
+    /// [`Report::holder_short`] read too.
     pub fn seed_meter_window(&self, swarm: usize) -> Option<(Duration, Duration)> {
         let s = self.scenario.swarms.get(swarm)?;
         let from = s.start + Duration::from_secs(strims_wan::vocab::STARTUP_SECS);

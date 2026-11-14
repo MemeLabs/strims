@@ -16,7 +16,7 @@
 use std::time::Duration;
 
 use strims_base::rng::{DetRng, det_rng};
-use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy};
+use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy, SendFate, SendHow};
 use strims_sim::topology::random_mesh;
 use strims_sim::{
     Arrivals, Binding, ClockSkew, Competing, Fault, HostIx, Invariants, NetworkSpec, ParentLoss,
@@ -295,6 +295,209 @@ fn media_signed_early_reaches_every_viewer() {
                 return Err(format!(
                     "{} units, {per:.2} stream bytes per media byte",
                     m.units
+                ));
+            }
+            Ok(())
+        },
+    );
+}
+
+/// The honest viewers read each chunk after its unit's signing, the
+/// signing its media log records (`MediaLog::signed`): every chunk read
+/// has a signing time, at or after its first byte and at or before the
+/// read, and the row's signed lag runs from it over the reads its honest
+/// lag counts, no longer than that lag.
+#[test]
+fn media_reads_follow_their_units_signing() {
+    const TEST: &str = "media_reads_follow_their_units_signing";
+    sweep(
+        TEST,
+        |s| media_mesh(s, "1500v", "u8,t200"),
+        |r| {
+            sound(r)?;
+            let m = r.media[0].as_ref().ok_or("no media log")?;
+            let honest = r.honest_viewers();
+            let mut reads = 0;
+            for v in r
+                .viewers
+                .iter()
+                .filter(|v| v.swarm == 0 && honest.contains(&v.host))
+            {
+                for &(seq, lag) in &v.stats.lags {
+                    let i = usize::try_from(seq).map_err(|e| e.to_string())?;
+                    let first = *m
+                        .times
+                        .get(i)
+                        .ok_or(format!("{}: chunk {seq} was never written", v.name))?;
+                    let signed = m
+                        .signed
+                        .get(i)
+                        .copied()
+                        .flatten()
+                        .ok_or(format!("{}: read chunk {seq}, never signed", v.name))?;
+                    let read = first + u64::from(lag);
+                    if signed < first || read < signed {
+                        return Err(format!(
+                            "{}: chunk {seq} first byte at {first} ms, signed at {signed} ms, read at {read} ms",
+                            v.name
+                        ));
+                    }
+                    reads += 1;
+                }
+            }
+            let spec = &r.scenario.swarms[0];
+            let lag = r.lag_of_between(0, &honest, spec.start, spec.stop);
+            let signed = r.signed_lag(0).ok_or("no signed lag")?;
+            if reads == 0 || signed.n != reads || signed.n != lag.n {
+                return Err(format!(
+                    "{} reads, signed lag over {}, honest lag over {}",
+                    reads, signed.n, lag.n
+                ));
+            }
+            if signed.p50 > lag.p50 || signed.p99 > lag.p99 {
+                return Err(format!(
+                    "signed lag p50/p99 {}/{} ms over the lag's {}/{} ms",
+                    signed.p50, signed.p99, lag.p50, lag.p99
+                ));
+            }
+            let row: serde_json::Value =
+                serde_json::from_str(&r.row(TEST, None)).map_err(|e| e.to_string())?;
+            if row["signed_lag_p50_ms"] != u64::from(signed.p50)
+                || row["signed_lag_p99_ms"] != u64::from(signed.p99)
+            {
+                return Err(format!(
+                    "row signed lag {}/{}, not {}/{}",
+                    row["signed_lag_p50_ms"], row["signed_lag_p99_ms"], signed.p50, signed.p99
+                ));
+            }
+            match row["seed_pull_share"].as_f64() {
+                Some(x) if (0.0..=1.0).contains(&x) => Ok(()),
+                x => Err(format!("row seed_pull_share {x:?}")),
+            }
+        },
+    );
+}
+
+// --- 1c. the seed's answers, relays and whole-copy holders -----------------
+
+/// The live mesh's 8 viewers streaming from 3 s to 38 s behind a seed that
+/// can send 8 copies, in push mode `push`, with transfer samples (the
+/// relays and holders) and the seed log on (the request logs, which the
+/// nodes hand over with their bins).
+fn shares_mesh(seed: u64, push: PushMode) -> Scenario {
+    let mut m = streaming(
+        &format!("shares_mesh {push:?}"),
+        seed,
+        8,
+        (8 * RATE, 4 * RATE),
+        push,
+        (3, 38),
+    );
+    m.s.transfer_samples = true;
+    m.s.request_logs = true;
+    m.s.wire_bins = Some(Duration::from_millis(100));
+    m.s
+}
+
+/// What holds of the seed's answers, the relays and the whole-copy holders
+/// under any schedule: the seed's chunks sent and pushed are its log's
+/// chunks written and pushes written, so `seed_pull_share` is the log's
+/// answers among them; `relay_share` and `holder_short` are shares, the
+/// row's as measured; and where no honest viewer missed a push deadline in
+/// the window, no whole-copy holder was short.
+#[test]
+fn seed_answers_relays_and_holders_hold_under_any_schedule() {
+    const TEST: &str = "seed_answers_relays_and_holders_hold_under_any_schedule";
+    sweep(
+        TEST,
+        |s| shares_mesh(s, PushMode::Hybrid),
+        |r| {
+            sound(r)?;
+            let row: serde_json::Value =
+                serde_json::from_str(&r.row(TEST, None)).map_err(|e| e.to_string())?;
+            let seed = &r.hosts[r.scenario.swarms[0].seed];
+            if seed.seed_log_lost > 0 {
+                return Err(format!("the seed log lost {} sends", seed.seed_log_lost));
+            }
+            let (sent, pushed) = seed
+                .seed_sends
+                .iter()
+                .filter(|s| s.record.fate == SendFate::Written)
+                .fold((0u64, 0u64), |(n, p), s| {
+                    (n + 1, p + u64::from(s.record.how == SendHow::Push))
+                });
+            let c = seed.runner.swarm(0);
+            if (c.chunks_sent, c.pushed_chunks) != (sent, pushed) || sent == 0 {
+                return Err(format!(
+                    "the seed sent {} chunks and pushed {}, its log wrote {sent} and pushed {pushed}",
+                    c.chunks_sent, c.pushed_chunks
+                ));
+            }
+            // The row prints its numbers to 16 significant digits.
+            let printed = |a: f64, b: f64| (a - b).abs() <= 1e-12;
+            let answers = (sent - pushed) as f64 / sent as f64;
+            let pull = r.seed_pull_share(0);
+            if pull != Some(answers)
+                || !row["seed_pull_share"]
+                    .as_f64()
+                    .is_some_and(|x| printed(x, answers))
+            {
+                return Err(format!(
+                    "seed_pull_share {pull:?}, row {}, the log's answers {answers}",
+                    row["seed_pull_share"]
+                ));
+            }
+            for (name, measured) in [
+                ("relay_share", r.relay_share(0)),
+                ("holder_short", r.holder_short(0)),
+            ] {
+                match (row[name].as_f64(), measured) {
+                    (Some(a), Some(b)) if printed(a, b) && (0.0..=1.0).contains(&b) => {}
+                    (None, None) if name == "holder_short" => {}
+                    got => return Err(format!("{name}: row and measure {got:?}")),
+                }
+            }
+            let (from, to) = r.seed_meter_window(0).ok_or("no steady window")?;
+            let missed = r.honest_viewers().iter().any(|&h| {
+                let misses: Vec<u64> = r.hosts[h]
+                    .transfers
+                    .iter()
+                    .filter(|(t, s, _)| *s == 0 && *t >= from && *t <= to)
+                    .map(|(_, _, x)| x.misses)
+                    .collect();
+                misses.windows(2).any(|w| w[1] > w[0])
+            });
+            match r.holder_short(0) {
+                Some(x) if !missed && x > 0.0 => Err(format!(
+                    "holder_short {x} with no push deadline missed in the window"
+                )),
+                _ => Ok(()),
+            }
+        },
+    );
+}
+
+/// A pull-only stream has no push subscriptions: under any schedule no
+/// viewer relays, none holds a copy from the seed, and every chunk the
+/// seed sent answered a request.
+#[test]
+fn a_pull_stream_has_no_relays_or_holders() {
+    const TEST: &str = "a_pull_stream_has_no_relays_or_holders";
+    sweep(
+        TEST,
+        |s| shares_mesh(s, PushMode::EagerHave),
+        |r| {
+            sound(r)?;
+            let row: serde_json::Value =
+                serde_json::from_str(&r.row(TEST, None)).map_err(|e| e.to_string())?;
+            let (relays, holders, answers) = (
+                &row["relay_share"],
+                &row["holder_short"],
+                &row["seed_pull_share"],
+            );
+            if relays.as_f64() != Some(0.0) || !holders.is_null() || answers.as_f64() != Some(1.0) {
+                return Err(format!(
+                    "relay_share {relays}, holder_short {holders}, seed_pull_share {answers}"
                 ));
             }
             Ok(())

@@ -953,13 +953,23 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     SignWaitP99Ms,
-    /// In a media run, the median lag in ms of the media chunks the honest
-    /// viewers read after their warm-ups, from their unit's signing.
+    /// In a media run, the median lag in ms of the media chunks the first
+    /// swarm's honest viewers read, the reads `lag_p50_ms_honest` counts, from
+    /// their unit's signing: read time less the time the writer signed the
+    /// chunk's unit; left out without media.
+    ///
+    /// ppspp: The chunks read after each viewer's warm-up (`Sim::steady`), as
+    /// its lag.
     ///
     /// Unit: ms.
     SignedLagP50Ms,
-    /// In a media run, the p99 lag in ms of the media chunks the honest viewers
-    /// read after their warm-ups, from their unit's signing.
+    /// In a media run, the p99 lag in ms of the media chunks the first swarm's
+    /// honest viewers read, the reads `lag_p99_ms_honest` counts, from their
+    /// unit's signing: read time less the time the writer signed the chunk's
+    /// unit; left out without media.
+    ///
+    /// ppspp: The chunks read after each viewer's warm-up (`Sim::steady`), as
+    /// its lag.
     ///
     /// Unit: ms.
     SignedLagP99Ms,
@@ -1730,9 +1740,20 @@ pub(crate) enum RowNum {
     /// holder in both, its median share of its copy got as on-time pushes
     /// (Sim::holder_copies).
     HolderCopy,
-    /// Per pair of consecutive samples after the warm-up and honest whole-copy
-    /// holder in both, the share of those intervals in which it got under
-    /// HOLDER_WHOLE of its copy as on-time pushes (Sim::holder_copies).
+    /// Of the intervals between consecutive samples after the first swarm's
+    /// startup at both of which an honest viewer held a whole copy from the
+    /// seed (every stream pushed to it by the seed), the share in which its
+    /// on-time pushes came to under 95 % of what it was owed in that time
+    /// (`HOLDER_WHOLE`).
+    ///
+    /// ppspp: The seed's allocation samples after the warm-up (`warm_secs`): a
+    /// whole-copy holder is a neighbour the seed pushes every stream to
+    /// (`Runner::seed_allocation`), its on-time pushes its `PushStats::hits`,
+    /// and what it was owed the chunks the stream published in the interval at
+    /// its mean chunk rate, a media stream's too (`Sim::holder_copies`,
+    /// `Sim::chunk_rate`); 0 with no such interval.
+    ///
+    /// Unit: fraction.
     HolderShort,
     /// Of the honest viewers' streams over the samples after the warm-up, the
     /// share whose parent is a liar.
@@ -1840,8 +1861,12 @@ pub(crate) enum RowNum {
     ///
     /// Unit: s.
     ReadsEndS,
-    /// Over the samples, the honest viewers with at least one push subscriber
-    /// over the honest viewers (Shape::relays, Shape::viewers).
+    /// Over the samples after the first swarm's startup, the share of its
+    /// honest viewers' samples at which the viewer had at least one push
+    /// subscriber.
+    ///
+    /// ppspp: Every honest viewer at each sample after the warm-up
+    /// (`warm_secs`): `Shape::relays` over `Shape::viewers`.
     ///
     /// Unit: fraction.
     RelayShare,
@@ -1859,8 +1884,11 @@ pub(crate) enum RowNum {
     /// The seed's packets through its uplink per second of the run (WAN mode in
     /// strims-sim, left out outside it).
     SeedPps,
-    /// Of the chunks the seed sent, the share that answered requests: chunks
-    /// sent less pushed, over chunks sent (its swarm stats).
+    /// Of the chunks the first swarm's seed sent, the share that answered
+    /// requests: chunks sent less pushed, over chunks sent (its scheduler's
+    /// counters).
+    ///
+    /// ppspp: 0 when it sent none.
     ///
     /// Unit: fraction.
     SeedPullShare,

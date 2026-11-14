@@ -872,6 +872,7 @@ impl World {
             };
             let seq = log.times.len() as u64;
             log.times.push(time_ms);
+            log.signed.push(None);
             if let Some(w) = st.written.get_mut(swarm) {
                 w.insert(seq);
             }
