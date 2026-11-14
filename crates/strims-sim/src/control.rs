@@ -96,6 +96,7 @@ async fn sample(w: &World, full: bool, last: bool) {
             w.store_metrics(h, m);
         }
     }
+    w.loops_round();
     if full {
         w.check_invariants();
     }

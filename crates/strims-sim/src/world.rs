@@ -20,8 +20,8 @@ use std::time::Duration;
 use strims_base::rng::{DetRng, det_rng};
 use strims_base::time::Time;
 use strims_crypto::key_from_seed;
-use strims_node::config::{MetricsSink, ParentSink};
-use strims_node::event::{ParentInfo, ParentLogEntry};
+use strims_node::config::{DecisionSink, MetricsSink, ParentSink};
+use strims_node::event::{DecisionInfo, DecisionLogEntry, ParentInfo, ParentLogEntry};
 use strims_node::{
     ExchangeOutcome, HostId, NetworkId, Node, NodeConfig, NodeMetrics, PpsppCapture, SwarmKey,
     WebRtcConfig,
@@ -198,6 +198,14 @@ impl HostState {
     }
 }
 
+/// Whether host `x`'s incarnation `inc` runs: it is the host's current
+/// one, up and not departed.
+fn live_incarnation(st: &WorldState, x: HostIx, inc: u32) -> bool {
+    st.hosts
+        .get(x)
+        .is_some_and(|hs| hs.incarnation == inc && hs.node.is_some() && hs.departed.is_none())
+}
+
 fn add_metrics(r: &mut HostReport, m: &NodeMetrics) {
     r.uploaded += m.driver.bytes_written;
     r.downloaded += m.driver.bytes_read;
@@ -258,6 +266,17 @@ pub(crate) struct WorldState {
     /// them ([`World::parent_changes`]): the host, its incarnation, the
     /// change.
     pub parents: Vec<(HostIx, u32, ParentInfo)>,
+    /// With [`Scenario::loops`], the loop analysis ([`crate::loops`]).
+    pub loops: Option<crate::loops::Loops>,
+}
+
+/// What a node's parent and decision logs hand the loop analysis
+/// ([`Scenario::loops`]).
+#[derive(Clone, Copy, Debug)]
+enum LoopEntry {
+    Parent(ParentInfo),
+    Decision(DecisionInfo),
+    Lost(u64),
 }
 
 /// One run.
@@ -294,6 +313,11 @@ pub(crate) struct World {
     /// goes, which [`World::observe_stopped`] takes.
     stopped_tx: mpsc::Sender<(HostIx, NodeMetrics)>,
     stopped_rx: mpsc::Receiver<(HostIx, NodeMetrics)>,
+    /// With [`Scenario::loops`], the nodes' parent and decision logs'
+    /// channel, in the order the nodes made the entries: the analysis
+    /// takes what came at each stats sample ([`World::take_loops`]).
+    loops_tx: mpsc::Sender<(HostIx, u32, LoopEntry)>,
+    loops_rx: mpsc::Receiver<(HostIx, u32, LoopEntry)>,
     pub st: RefCell<WorldState>,
     /// The run's colluders ([`hostile::Group`](crate::hostile::Group)).
     colluders: crate::hostile::Group,
@@ -355,10 +379,12 @@ impl World {
             wire_bins: Vec::new(),
             parent_losses: Vec::new(),
             parents: Vec::new(),
+            loops: spec.loops.then(crate::loops::Loops::default),
         };
         let send_buffers = spec.wan.and(spec.send_buffer).map(SendBuffers::new);
         let (parent_tx, parent_rx) = mpsc::channel();
         let (stopped_tx, stopped_rx) = mpsc::channel();
+        let (loops_tx, loops_rx) = mpsc::channel();
         World {
             seed,
             spec,
@@ -375,6 +401,8 @@ impl World {
             parent_rx,
             stopped_tx,
             stopped_rx,
+            loops_tx,
+            loops_rx,
             st: RefCell::new(st),
             colluders: crate::hostile::Group::default(),
         }
@@ -512,13 +540,35 @@ impl World {
             });
             c.forecast_log = self.spec.forecast_log;
             c.request_log = self.spec.request_logs;
-            let tx = self.parent_tx.clone();
-            c.parent_log = Some(ParentSink(Arc::new(move |p| {
-                let _ = tx.send((h, incarnation, p));
-            })));
             let tx = self.stopped_tx.clone();
             c.last_metrics = Some(MetricsSink(Arc::new(move |m| {
                 let _ = tx.send((h, m));
+            })));
+        }
+        let tables = self.spec.wire_bins.is_some() && !self.spec.swarms.is_empty();
+        if tables || self.spec.loops {
+            let records = tables.then(|| self.parent_tx.clone());
+            let loops = self.spec.loops.then(|| self.loops_tx.clone());
+            c.parent_log = Some(ParentSink(Arc::new(move |p| {
+                if let Some(tx) = &records {
+                    let _ = tx.send((h, incarnation, p));
+                }
+                if let (Some(tx), ParentLogEntry::Change(p)) = (&loops, p) {
+                    let _ = tx.send((h, incarnation, LoopEntry::Parent(p)));
+                }
+            })));
+        }
+        if self.spec.loops {
+            let tx = self.loops_tx.clone();
+            c.decision_log = Some(DecisionSink(Arc::new(move |e| {
+                let entry = match e {
+                    DecisionLogEntry::Decision(d) if crate::loops::Decision::kept(&d.kind) => {
+                        LoopEntry::Decision(d)
+                    }
+                    DecisionLogEntry::Lost(n) => LoopEntry::Lost(n),
+                    DecisionLogEntry::Decision(_) => return,
+                };
+                let _ = tx.send((h, incarnation, entry));
             })));
         }
         if let Some(dir) = &self.spec.capture {
@@ -1500,6 +1550,100 @@ impl World {
             self.log("invariant", &f);
             self.record(|st| st.violations.push((now, f)));
         }
+    }
+
+    /// Hands what the nodes' parent and decision logs sent to the loop
+    /// analysis ([`Scenario::loops`], [`crate::loops`]), in the order they
+    /// sent it: each entry of the incarnation's first swarm, its hosts
+    /// named by index and its times as run time; a host's entries count
+    /// as its current ones while its incarnation runs.
+    pub(crate) fn take_loops(&self) {
+        if !self.spec.loops {
+            return;
+        }
+        let entries: Vec<(HostIx, u32, LoopEntry)> = self.loops_rx.try_iter().collect();
+        let viewers = self.spec.swarms.first().map_or(&[][..], |s| &s.viewers);
+        self.record(|st| {
+            let Some(mut l) = st.loops.take() else {
+                return;
+            };
+            {
+                let st = &*st;
+                let live = |x: HostIx, inc: u32| live_incarnation(st, x, inc);
+                for (h, inc, e) in entries {
+                    let key = st.hosts.get(h).and_then(|hs| {
+                        hs.first_swarm
+                            .iter()
+                            .find(|&&(i, _)| i == inc)
+                            .and_then(|&(_, k)| k)
+                    });
+                    let named = |id: Option<HostId>| id.and_then(|id| st.ids.get(&id).copied());
+                    match e {
+                        LoopEntry::Parent(p) if key == Some(p.swarm) => {
+                            l.parent(h, inc, p.stream, named(p.parent));
+                        }
+                        LoopEntry::Decision(d) if key.is_some() && d.swarm == key => {
+                            let t = (d.at - self.clock_epoch(h)).to_std().unwrap_or_default();
+                            let honest = viewers.contains(&h) && !self.is_hostile(h);
+                            match crate::loops::Decision::of(&d.kind, named(d.peer)) {
+                                Some((stream, Some(dec))) => {
+                                    l.decision(h, stream, dec, t, honest, &live);
+                                }
+                                Some((_, None)) => l.unnamed(
+                                    honest,
+                                    matches!(
+                                        d.kind,
+                                        strims_ppspp::TapKind::ParentChoice { choice, .. }
+                                            if choice.action == strims_ppspp::ParentAction::Graft
+                                    ),
+                                ),
+                                None => {}
+                            }
+                        }
+                        LoopEntry::Lost(n) => l.lost(n),
+                        _ => {}
+                    }
+                }
+            }
+            st.loops = Some(l);
+        });
+    }
+
+    /// With [`Scenario::loops`], one stats round of the loop analysis
+    /// ([`crate::loops::Loops::round`]): from
+    /// [`LOOP_WARM`](crate::loops::LOOP_WARM) after the first swarm's
+    /// start, the loops its honest viewers' chains run into now.
+    pub(crate) fn loops_round(&self) {
+        if !self.spec.loops {
+            return;
+        }
+        self.take_loops();
+        let Some(sw) = self.spec.swarms.first() else {
+            return;
+        };
+        let now = sim_now();
+        if now < sw.start + crate::loops::LOOP_WARM {
+            return;
+        }
+        let streams = u16::try_from(sw.options.stream_count.max(1)).unwrap_or(u16::MAX);
+        let viewers: Vec<HostIx> = sw
+            .viewers
+            .iter()
+            .copied()
+            .filter(|&v| !self.is_hostile(v))
+            .collect();
+        self.record(|st| {
+            let Some(mut l) = st.loops.take() else {
+                return;
+            };
+            {
+                let st = &*st;
+                l.round(now, &viewers, streams, &|x, inc| {
+                    live_incarnation(st, x, inc)
+                });
+            }
+            st.loops = Some(l);
+        });
     }
 
     /// Moves what the nodes' parent sinks sent into the records: the

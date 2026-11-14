@@ -69,6 +69,7 @@
 //! | `wan` | WAN mode's link scheduler |
 //! | [`stream`] | the self-checking stream format and per-viewer accounting |
 //! | [`report`] | results and summaries |
+//! | [`loops`] | how push loops form, from the nodes' parent and decision logs |
 //! | [`seed_alloc`] | a seed's allocation over a run, and the reports' verdicts |
 //! | [`seed_pin`] | the first swarm's seed's allocation set from outside |
 //! | [`stats`] | the runner, link and network stats folded over a run |
@@ -135,6 +136,7 @@ mod fast_map;
 mod fields;
 mod host;
 mod hostile;
+pub mod loops;
 pub mod measures;
 pub mod memory;
 mod net;

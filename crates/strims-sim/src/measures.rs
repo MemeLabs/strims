@@ -1865,6 +1865,7 @@ impl Report {
         self.ledger_cols(&mut j);
         self.ack_cols(&mut j);
         self.seed_alloc_cols(swarm, &mut j);
+        self.loop_cols(&mut j);
         j.finish()
     }
 
@@ -3143,6 +3144,7 @@ mod tests {
             wire_bins: Vec::new(),
             parent_losses: Vec::new(),
             parent_changes: Vec::new(),
+            loops: None,
         }
     }
 

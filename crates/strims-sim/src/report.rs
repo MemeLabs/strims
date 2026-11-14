@@ -622,6 +622,9 @@ pub struct Report {
     /// end of the node's pass that made it, a pass's in the order the node
     /// made them.
     pub parent_changes: Vec<ParentRecord>,
+    /// With [`Scenario::loops`], how push loops formed and the grafts and
+    /// switches asked ([`crate::loops`]).
+    pub loops: Option<crate::loops::LoopReport>,
 }
 
 /// A change of `node`'s push parent of `stream` ([`Report::parent_changes`]):

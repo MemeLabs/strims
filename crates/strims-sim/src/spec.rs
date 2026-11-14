@@ -590,6 +590,13 @@ pub struct Scenario {
     /// the dishonest mix's draw, from the run's rng where it draws (see
     /// [Determinism](crate#determinism)). `None`: the scenario's own.
     pub seed_pin: Option<crate::seed_pin::SeedPin>,
+    /// Every node's parent and decision logs feed the loop analysis
+    /// (`STRIMS_SIM_LOOPS=1`, [`crate::loops`], [`Report::loops`]). The
+    /// logs change no decision, so no trace; a capture takes the tap the
+    /// decision log would, so the two don't mix.
+    ///
+    /// [`Report::loops`]: crate::Report::loops
+    pub loops: bool,
 }
 
 /// The experiment flags a scenario takes ([`Scenario::exp`]):
@@ -812,6 +819,7 @@ impl Scenario {
             mix: false,
             keep_honest: BTreeSet::new(),
             seed_pin: None,
+            loops: false,
         }
     }
 

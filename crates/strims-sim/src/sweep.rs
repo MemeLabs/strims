@@ -95,6 +95,10 @@
 //!   viewer it has no link with ([`Scenario::link_seed_to_viewers`]), the
 //!   topology a pin's bounds take: a pin names viewers the seed links to;
 //!   `off` keeps the scenario's links.
+//! - `STRIMS_SIM_LOOPS=1` feeds every node's parent and decision logs to
+//!   the loop analysis ([`Scenario::loops`]), which the row's `loops*`,
+//!   `grafts*` and `switches*` report; it takes the tap a capture would,
+//!   so it fails with `STRIMS_SIM_CAPTURE`. Changes no trace.
 //! - `STRIMS_SIM_EXP=<flag>,...` sets experiment flags
 //!   ([`Scenario::exp`]); `off` sets none.
 //! - `STRIMS_SIM_CLOCK_SKEW=<skew>` puts every host's clock off true time
@@ -552,6 +556,7 @@ fn sweep_seeds(
     let clock_skew = clock_skew_knob();
     let seed_pin = seed_pin_knob();
     let seed_links = seed_links_knob();
+    let loops = knob::<u32>("STRIMS_SIM_LOOPS") == Some(1);
     let with_capture = |seed: u64, replay: &str| {
         let mut spec = build(seed);
         if let Some(ms) = send_buffer
@@ -633,6 +638,17 @@ fn sweep_seeds(
         }
         if seed_links {
             spec.link_seed_to_viewers();
+        }
+        if loops {
+            if capture.is_some() {
+                fail(
+                    test,
+                    seed,
+                    "STRIMS_SIM_LOOPS takes the tap STRIMS_SIM_CAPTURE would",
+                    &[],
+                );
+            }
+            spec.loops = true;
         }
         if let Some(stacks) = &rtc {
             spec.over_webrtc(stacks);

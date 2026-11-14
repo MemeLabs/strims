@@ -23,6 +23,11 @@
 //!   viewers' report entries at the seed, every channel's.
 //! - **announces** ([`Report::announces`]): the ANNOUNCEs the seed read
 //!   and sent on the swarm's channels.
+//! - **asks of the seed** ([`Report::seed_asks`]): with the request logs,
+//!   the chunks the honest viewers asked the seed for, by how many of the
+//!   asker's other neighbours held them for [`HELD_FOR`] then, and of
+//!   those none held, the ones whose stream had no open parent at the
+//!   asker.
 //!
 //! Everything here reads the records alone: nothing is drawn or decided.
 
@@ -48,6 +53,13 @@ pub struct AllocSample {
     pub info: SeedAllocationInfo,
     pub hosts: Vec<Option<HostIx>>,
 }
+
+/// A host's open parent of a stream from a time on: `None` for none.
+type ParentAt = (Duration, Option<HostIx>);
+
+/// How long a neighbour must have held a chunk for its HAVE to have
+/// reached a viewer that asks the seed for it ([`Report::seed_asks`]).
+pub const HELD_FOR: Duration = Duration::from_millis(100);
 
 /// The hostile kinds that announce what they hold and serve none of it:
 /// the liars of [`Verdicts`].
@@ -407,6 +419,92 @@ impl Report {
             })
     }
 
+    /// With the request logs ([`Scenario::request_logs`] and the tables),
+    /// the chunks the first swarm's honest viewers asked its seed for
+    /// (their request logs' records naming it), by how many of the asker's
+    /// other neighbours (at its stats sample before the request) had held
+    /// them for [`HELD_FOR`] (their arrival logs' first holds): none, one
+    /// or two, three or more; and of those none held, the ones whose stream
+    /// had no open parent at the asker then (its parent log). `None`
+    /// without the logs.
+    ///
+    /// [`Scenario::request_logs`]: crate::Scenario::request_logs
+    pub fn seed_asks(&self) -> Option<[u64; 4]> {
+        if !self.scenario.request_logs || self.scenario.wire_bins.is_none() {
+            return None;
+        }
+        let sw = self.scenario.swarms.first()?;
+        let held: Vec<BTreeMap<u64, Duration>> = self
+            .hosts
+            .iter()
+            .map(|r| {
+                let mut m = BTreeMap::new();
+                for a in &r.arrivals {
+                    let at = m.entry(a.held.bin.base_offset()).or_insert(a.at);
+                    *at = (*at).min(a.at);
+                }
+                m
+            })
+            .collect();
+        let mut parents: BTreeMap<(HostIx, u16), Vec<ParentAt>> = BTreeMap::new();
+        for p in &self.parent_changes {
+            parents
+                .entry((p.node, p.stream))
+                .or_default()
+                .push((p.at, p.parent));
+        }
+        let parentless = |v: HostIx, stream: u16, t: Duration| {
+            parents.get(&(v, stream)).is_none_or(|c| {
+                c.iter()
+                    .take_while(|&&(at, _)| at <= t)
+                    .last()
+                    .is_none_or(|&(_, p)| p.is_none())
+            })
+        };
+        let mut out = [0u64; 4];
+        for &v in &sw.viewers {
+            if self.scenario.hosts.get(v).map(|x| x.class) != Some(HostClass::Honest) {
+                continue;
+            }
+            let Some(r) = self.hosts.get(v) else {
+                continue;
+            };
+            for q in r.requests.iter().filter(|q| q.peer == Some(sw.seed)) {
+                let t = (q.record.at - q.epoch).to_std().unwrap_or_default();
+                let around = r
+                    .neighbours
+                    .iter()
+                    .take_while(|(at, _)| *at <= t)
+                    .last()
+                    .map_or(&[][..], |(_, n)| n.as_slice());
+                let (mut chunk, last) = q.record.bin.base();
+                while chunk <= last {
+                    let c = chunk.base_offset();
+                    let n = around
+                        .iter()
+                        .filter(|&&x| x != sw.seed)
+                        .filter(|&&x| {
+                            held.get(x)
+                                .and_then(|m| m.get(&c))
+                                .is_some_and(|&at| at + HELD_FOR <= t)
+                        })
+                        .count();
+                    if let Some(k) = out.get_mut(n.min(3).div_ceil(2)) {
+                        *k += 1;
+                    }
+                    if n == 0
+                        && parentless(v, q.record.stream, t)
+                        && let Some(k) = out.get_mut(3)
+                    {
+                        *k += 1;
+                    }
+                    chunk += 2;
+                }
+            }
+        }
+        Some(out)
+    }
+
     /// The row's seed allocation fields (see the module docs), each left
     /// out where it has no value.
     pub(crate) fn seed_alloc_cols(&self, swarm: usize, j: &mut JsonRow) {
@@ -449,6 +547,15 @@ impl Report {
                 .int(RowInt::ReportsReporterSilent, c.reporter_silent)
                 .int(RowInt::ReportsTooEarly, c.too_early)
                 .int(RowInt::ReportsMissesUnseen, c.misses_unseen);
+        }
+        if let Some([none, few, many, parentless]) = self.seed_asks().filter(|_| swarm == 0) {
+            for (held, n) in RowInt::HELD_OF_SEED_ASKS_HELD
+                .into_iter()
+                .zip([none, few, many])
+            {
+                j.int(RowInt::seed_asks_held(held), n);
+            }
+            j.int(RowInt::SeedAsksHeldByNoneParentless, parentless);
         }
         let Some(spec) = self.scenario.swarms.get(swarm) else {
             return;
@@ -599,6 +706,7 @@ mod tests {
             wire_bins: Vec::new(),
             parent_losses: Vec::new(),
             parent_changes: Vec::new(),
+            loops: None,
         }
     }
 
@@ -656,6 +764,83 @@ mod tests {
             a.info.neighbours[0].barred = *t >= Duration::from_secs(28);
         }
         assert_eq!(r.verdicts(0).unwrap().0.barred_with_children, 1);
+    }
+
+    /// Viewer 1 asks the seed at 10 s for chunk 3, which neighbour 2 held
+    /// from 9.8 s and 4 from 9 s (3 got it 50 ms before, too late to count),
+    /// and for chunk 5, which no one held while stream 1 had no parent at
+    /// viewer 1; at 20 s for chunk 5 again, once 2 grafted it onto itself
+    /// and held it. The liar's request counts nothing, nor does a request
+    /// of another neighbour.
+    #[test]
+    fn asks_of_the_seed_count_the_neighbours_that_held_them() {
+        use strims_binmap::Bin;
+        use strims_ppspp::{Held, RequestChannel, RequestEnd, RequestRecord};
+
+        use crate::report::{ArrivalHostRecord, ParentRecord, RequestHostRecord};
+
+        let mut r = run();
+        r.scenario.request_logs = true;
+        r.scenario.wire_bins = Some(Duration::from_millis(100));
+        let t = |ms: u64| Duration::from_millis(ms);
+        let epoch = strims_base::time::Time::from_unix_millis(1_000);
+        let ask = |at: u64, chunk: u64, stream: u16, peer| RequestHostRecord {
+            epoch,
+            peer: Some(peer),
+            rivals: Vec::new(),
+            record: RequestRecord {
+                at: epoch + strims_base::time::Duration::from_millis(at as i64),
+                stream,
+                bin: Bin(2 * chunk),
+                timeout: ms(500),
+                released: None,
+                asked: RequestChannel {
+                    peer: strims_ppspp::PeerKey::default(),
+                    announced: None,
+                    predicted: None,
+                    rtt: ms(20),
+                    channel_open: epoch,
+                },
+                rivals: Vec::new(),
+                end: RequestEnd::Answered,
+                ended: epoch,
+            },
+        };
+        let held = |chunk: u64, at: u64| ArrivalHostRecord {
+            at: t(at),
+            expected: None,
+            released: None,
+            asked: None,
+            last_ask: None,
+            peer: None,
+            parent: None,
+            asked_peer: None,
+            held: Held {
+                bin: Bin(2 * chunk),
+                ..Held::default()
+            },
+        };
+        r.hosts[1].neighbours = vec![(t(5_000), vec![0, 2, 3, 4])];
+        r.hosts[1].requests = vec![
+            ask(10_000, 3, 0, 0),
+            ask(10_000, 5, 1, 0),
+            ask(20_000, 5, 1, 0),
+            ask(10_000, 7, 0, 2),
+        ];
+        r.hosts[4].requests = vec![ask(10_000, 3, 0, 0)];
+        r.hosts[2].arrivals = vec![held(3, 9_800), held(5, 15_000)];
+        r.hosts[3].arrivals = vec![held(3, 9_950)];
+        r.hosts[4].arrivals = vec![held(3, 9_000)];
+        r.parent_changes = vec![ParentRecord {
+            at: t(14_000),
+            node: 1,
+            stream: 1,
+            parent: Some(2),
+            why: strims_ppspp::ParentWhy::Open,
+        }];
+        assert_eq!(r.seed_asks(), Some([1, 2, 0, 1]));
+        r.scenario.request_logs = false;
+        assert_eq!(r.seed_asks(), None);
     }
 
     /// Each channel's last count, summed over its restarts, of the honest

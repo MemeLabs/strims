@@ -555,6 +555,21 @@ pub(crate) enum RowInt {
     /// strims-sim: Its hosts of hostile kind grabber (`hostile.rs`,
     /// `GRAB_ROOM`), set by STRIMS_SIM_HOSTILE's shares.
     Grabbers,
+    /// With STRIMS_SIM_LOOPS=1, the grafts the first swarm's honest viewers
+    /// asked: a parent check that, with no parent for a stream, asked a
+    /// candidate for it.
+    ///
+    /// strims-sim: Their decision logs' parent choices
+    /// (`TapKind::ParentChoice`, `ParentAction::Graft`; `Report::loops`), every
+    /// incarnation.
+    Grafts,
+    /// With STRIMS_SIM_LOOPS=1, the grafts that asked one of the asking
+    /// viewer's own descendants for the stream.
+    ///
+    /// strims-sim: The asked host's chain of open parents for the stream passes
+    /// through the asker, by every node's parent log as it stood at the
+    /// decision (`Report::loops`).
+    GraftsDown,
     /// The first swarm's dishonest viewers that hog links: free riders that,
     /// where hosts find their own links, link every host they find and keep
     /// every link, dialing again at once; 0 in a run without any.
@@ -637,6 +652,51 @@ pub(crate) enum RowInt {
     /// NET_WARM after their arrival on, while they were there
     /// (Report::link_counts).
     LinksP90,
+    /// With STRIMS_SIM_LOOPS=1, the median members of the push loops that
+    /// formed; left out without any.
+    ///
+    /// strims-sim: `Report::loops`.
+    LoopLenP50,
+    /// With STRIMS_SIM_LOOPS=1, the p50 and p90 in ms of the lifetimes of the
+    /// push loops that broke; left out without any.
+    ///
+    /// strims-sim: From the stats round a loop was first found at to the first
+    /// it wasn't (`Report::loops`).
+    ///
+    /// Unit: ms.
+    LoopLifePPMs(u16),
+    /// With STRIMS_SIM_LOOPS=1, the push loops (cycles of open parents) that
+    /// formed, found at each stats round from 10 s after the first swarm's
+    /// start.
+    ///
+    /// strims-sim: The cycles the first swarm's honest viewers' chains of open
+    /// parents run into, by stream and members, each found anew counted once
+    /// (`Report::loops`, `LOOP_WARM`): every node's parent log keeps the live
+    /// map of open parents, a host's entries its own while its incarnation
+    /// runs.
+    Loops,
+    /// With STRIMS_SIM_LOOPS=1, the push loops still there at the run's last
+    /// stats round.
+    ///
+    /// strims-sim: `Report::loops`.
+    LoopsAlive,
+    /// With STRIMS_SIM_LOOPS=1, the push loops that formed, by how their newest
+    /// edge formed: a switch, a graft after a silent prune, a lossy prune, a
+    /// shed or a decline, a graft after nothing logged, or unknown (no member's
+    /// log holds the graft or switch of its edge).
+    ///
+    /// strims-sim: Each member's latest decisions about the stream, 16 of them
+    /// (`LOOP_LOG`), from its decision log: grafts and switches
+    /// (`TapKind::ParentChoice`), prunes (`Pruned`, silent or lossy), sheds
+    /// (`ShedBy`), declines and open timeouts (`Declined`, `OpenTimeout`); the
+    /// newest edge is the latest graft or switch asking the member's parent in
+    /// the loop (`Loops::edge`). Every value is written, 0 for none.
+    LoopsByHow(u16),
+    /// With STRIMS_SIM_LOOPS=1, the decision tap's events its buffers dropped
+    /// between drains.
+    ///
+    /// strims-sim: The nodes' decision logs' `DecisionLogEntry::Lost`, summed.
+    LoopsTapLost,
     /// The first swarm's honest viewers (the seed aside) in each population
     /// (`meter_{pop}_p{p}`'s): `n_accepting`, `n_delivering`, `n_others`.
     ///
@@ -823,6 +883,22 @@ pub(crate) enum RowInt {
     /// The seed's answers its full queue refused
     /// (SwarmCounters::answers_refused).
     SeedAnswersRefused,
+    /// With the request logs, the chunks the first swarm's honest viewers asked
+    /// its seed for, by how many of the asker's other neighbours had held them
+    /// for 100 ms (HELD_FOR) when it asked: none (`held_by_none`), one or two
+    /// (`held_by_1_2`), three or more (`held_by_3_plus`).
+    ///
+    /// strims-sim: With STRIMS_SIM_SPEC=1 under STRIMS_SIM_OUT: each request
+    /// record naming the seed (`HostReport::requests`), the asker's neighbours
+    /// at its stats sample before it, and each neighbour's first hold of the
+    /// chunk (`HostReport::arrivals`) (`Report::seed_asks`).
+    SeedAsksHeld(u16),
+    /// With the request logs, of the chunks asked of the seed that no other
+    /// neighbour held, those whose stream had no open parent at the asker.
+    ///
+    /// strims-sim: The asker's parent log at the request
+    /// (`Report::parent_changes`, `Report::seed_asks`).
+    SeedAsksHeldByNoneParentless,
     /// An adaptive seed's budget in stream slots at its latest check, 0 until
     /// measured (PushStats::seed_budget).
     ///
@@ -980,6 +1056,21 @@ pub(crate) enum RowInt {
     /// Parents replaced: the first swarm's runner counters summed over every
     /// host (SwarmCounters::switched).
     Switched,
+    /// With STRIMS_SIM_LOOPS=1, the switches the first swarm's honest viewers
+    /// asked: a candidate that beat a stream's parent at enough checks in a
+    /// row, asked for it.
+    ///
+    /// strims-sim: Their decision logs' parent choices
+    /// (`TapKind::ParentChoice`, `ParentAction::Switch`; `Report::loops`),
+    /// every incarnation.
+    Switches,
+    /// With STRIMS_SIM_LOOPS=1, the switches that asked one of the asking
+    /// viewer's own descendants for the stream.
+    ///
+    /// strims-sim: The asked host's chain of open parents for the stream passes
+    /// through the asker, by every node's parent log as it stood at the
+    /// decision (`Report::loops`).
+    SwitchesDown,
     /// The honest viewers' requests that timed out unanswered, over every
     /// incarnation (SwarmCounters::timeouts): every host but the seed and the
     /// dishonest ones.
@@ -1217,6 +1308,10 @@ impl RowInt {
     /// loops over.
     pub(crate) const P_OF_FANOUT_P_P: [u8; 2] = [50, 90];
 
+    /// `loop_life_p{p}_ms`'s `p` values for strims-sim, which its code
+    /// loops over.
+    pub(crate) const P_OF_LOOP_LIFE_P_P_MS: [u8; 2] = [50, 90];
+
     /// `parent_lost_noticed_p{p}_ms`'s `p` values for strims-sim, which its code
     /// loops over.
     pub(crate) const P_OF_PARENT_LOST_NOTICED_P_P_MS: [u8; 2] = [50, 90];
@@ -1228,6 +1323,11 @@ impl RowInt {
     /// `seed_{queue}_wait_p{p}_ms`'s `p` values for strims-sim, which its code
     /// loops over.
     pub(crate) const P_OF_SEED_QUEUE_WAIT_P_P_MS: [u8; 2] = [50, 99];
+
+    /// `seed_asks_{held}`'s `held` values for strims-sim, which its code
+    /// loops over.
+    pub(crate) const HELD_OF_SEED_ASKS_HELD: [&str; 3] =
+        ["held_by_none", "held_by_1_2", "held_by_3_plus"];
 
     /// The name, as strims-sim writes it.
     pub(crate) fn name(self) -> &'static str {
@@ -1271,6 +1371,8 @@ impl RowInt {
             RowInt::FanoutPP(i) => at(&ROWINT_FANOUT_P_P, i),
             RowInt::FreeRiders => "free_riders",
             RowInt::Grabbers => "grabbers",
+            RowInt::Grafts => "grafts",
+            RowInt::GraftsDown => "grafts_down",
             RowInt::Hogs => "hogs",
             RowInt::HolderChanges => "holder_changes",
             RowInt::JoinUnread => "join_unread",
@@ -1282,6 +1384,12 @@ impl RowInt {
             RowInt::Liars => "liars",
             RowInt::LinksP50 => "links_p50",
             RowInt::LinksP90 => "links_p90",
+            RowInt::LoopLenP50 => "loop_len_p50",
+            RowInt::LoopLifePPMs(i) => at(&ROWINT_LOOP_LIFE_P_P_MS, i),
+            RowInt::Loops => "loops",
+            RowInt::LoopsAlive => "loops_alive",
+            RowInt::LoopsByHow(i) => at(&ROWINT_LOOPS_BY_HOW, i),
+            RowInt::LoopsTapLost => "loops_tap_lost",
             RowInt::NPop(i) => at(&ROWINT_N_POP, i),
             RowInt::NRole(i) => at(&ROWINT_N_ROLE, i),
             RowInt::OffChangeNRole(i) => at(&ROWINT_OFF_CHANGE_N_ROLE, i),
@@ -1314,6 +1422,8 @@ impl RowInt {
             RowInt::SeedAnswersDropped => "seed_answers_dropped",
             RowInt::SeedAnswersQueued => "seed_answers_queued",
             RowInt::SeedAnswersRefused => "seed_answers_refused",
+            RowInt::SeedAsksHeld(i) => at(&ROWINT_SEED_ASKS_HELD, i),
+            RowInt::SeedAsksHeldByNoneParentless => "seed_asks_held_by_none_parentless",
             RowInt::SeedBudget => "seed_budget",
             RowInt::SeedCopies => "seed_copies",
             RowInt::SeedDropP99Ms => "seed_drop_p99_ms",
@@ -1337,6 +1447,8 @@ impl RowInt {
             RowInt::StripeP90Ms => "stripe_p90_ms",
             RowInt::StripeP99Ms => "stripe_p99_ms",
             RowInt::Switched => "switched",
+            RowInt::Switches => "switches",
+            RowInt::SwitchesDown => "switches_down",
             RowInt::TimeoutsHonest => "timeouts_honest",
             RowInt::TimeoutsDishonest => "timeouts_dishonest",
             RowInt::Unit => "unit",
@@ -1422,6 +1534,21 @@ impl RowInt {
         RowInt::LagP99MsWho(of(&ROWINT_LAG_P99_MS_WHO, format_args!("lag_p99_ms_{who}")))
     }
 
+    /// `loop_life_p{p}_ms`'s name of `p`: a panic for values
+    /// `fields.toml` doesn't give strims-sim.
+    pub(crate) fn loop_life_p_p_ms(p: impl Display) -> RowInt {
+        RowInt::LoopLifePPMs(of(
+            &ROWINT_LOOP_LIFE_P_P_MS,
+            format_args!("loop_life_p{p}_ms"),
+        ))
+    }
+
+    /// `loops_by_{how}`'s name of `how`: a panic for values
+    /// `fields.toml` doesn't give strims-sim.
+    pub(crate) fn loops_by_how(how: impl Display) -> RowInt {
+        RowInt::LoopsByHow(of(&ROWINT_LOOPS_BY_HOW, format_args!("loops_by_{how}")))
+    }
+
     /// `n_{pop}`'s name of `pop`: a panic for values
     /// `fields.toml` doesn't give strims-sim.
     pub(crate) fn n_pop(pop: impl Display) -> RowInt {
@@ -1468,6 +1595,12 @@ impl RowInt {
             &ROWINT_SEED_QUEUE_WAIT_P_P_MS,
             format_args!("seed_{queue}_wait_p{p}_ms"),
         ))
+    }
+
+    /// `seed_asks_{held}`'s name of `held`: a panic for values
+    /// `fields.toml` doesn't give strims-sim.
+    pub(crate) fn seed_asks_held(held: impl Display) -> RowInt {
+        RowInt::SeedAsksHeld(of(&ROWINT_SEED_ASKS_HELD, format_args!("seed_asks_{held}")))
     }
 
     /// `startup_ms_{delay}{pop}`'s name of `delay`, `pop`: a panic for values
@@ -1530,6 +1663,20 @@ const ROWINT_LAG_P50_MS_WHO: [&str; 2] = ["lag_p50_ms_honest", "lag_p50_ms_disho
 /// `lag_p99_ms_{who}`'s names for strims-sim.
 const ROWINT_LAG_P99_MS_WHO: [&str; 2] = ["lag_p99_ms_honest", "lag_p99_ms_dishonest"];
 
+/// `loop_life_p{p}_ms`'s names for strims-sim.
+const ROWINT_LOOP_LIFE_P_P_MS: [&str; 2] = ["loop_life_p50_ms", "loop_life_p90_ms"];
+
+/// `loops_by_{how}`'s names for strims-sim.
+const ROWINT_LOOPS_BY_HOW: [&str; 7] = [
+    "loops_by_switch",
+    "loops_by_graft_after_silent_prune",
+    "loops_by_graft_after_lossy_prune",
+    "loops_by_graft_after_shed",
+    "loops_by_graft_after_decline",
+    "loops_by_graft_after_nothing_logged",
+    "loops_by_unknown",
+];
+
 /// `n_{pop}`'s names for strims-sim.
 const ROWINT_N_POP: [&str; 3] = ["n_accepting", "n_delivering", "n_others"];
 
@@ -1564,6 +1711,13 @@ const ROWINT_SEED_QUEUE_WAIT_P_P_MS: [&str; 4] = [
     "seed_push_wait_p99_ms",
     "seed_answer_wait_p50_ms",
     "seed_answer_wait_p99_ms",
+];
+
+/// `seed_asks_{held}`'s names for strims-sim.
+const ROWINT_SEED_ASKS_HELD: [&str; 3] = [
+    "seed_asks_held_by_none",
+    "seed_asks_held_by_1_2",
+    "seed_asks_held_by_3_plus",
 ];
 
 /// `startup_ms_{delay}{pop}`'s names for strims-sim.
@@ -4359,6 +4513,19 @@ mod tests {
             .concat(),
             ["lt_100ms", "lt_2s", "lt_15s", "le_10min",],
             "rows clock_{{class}}'s class"
+        );
+        assert_eq!(
+            [strings(crate::loops::HOWS)].concat(),
+            [
+                "switch",
+                "graft_after_silent_prune",
+                "graft_after_lossy_prune",
+                "graft_after_shed",
+                "graft_after_decline",
+                "graft_after_nothing_logged",
+                "unknown",
+            ],
+            "rows loops_by_{{how}}'s how"
         );
         assert_eq!(
             [strings(strims_wan::playout::DELAYS_MS)].concat(),

@@ -542,6 +542,63 @@ fn a_seeds_allocation_samples_are_its_own_snapshots() {
     );
 }
 
+/// The loop analysis's logs change no trace and no read: the live mesh's
+/// hybrid stream with its tables and without, the loop analysis off and
+/// on (without the tables, it alone turns the nodes' parent logs on). On,
+/// the viewers' grafts count, those asking a descendant among them, as do
+/// the switches; every loop that formed has a class and at least two
+/// members. The asks of the seed count each chunk the honest viewers'
+/// request records ask it for once, and the parentless among those no
+/// neighbour held.
+#[test]
+fn the_loop_analysis_changes_no_trace() {
+    for seed in [1, 2] {
+        let off = strims_sim::run(shares_mesh(seed, PushMode::Hybrid), seed).unwrap();
+        let mut s = shares_mesh(seed, PushMode::Hybrid);
+        s.loops = true;
+        let on = strims_sim::run(s, seed).unwrap();
+        assert_eq!(on.trace_hash, off.trace_hash, "seed {seed}");
+        assert_eq!(on.reads_hash(), off.reads_hash(), "seed {seed}");
+        assert!(off.loops.is_none());
+        let l = on.loops.clone().unwrap();
+        assert!(l.grafts > 0 && l.grafts_down <= l.grafts, "{l:?}");
+        assert!(l.switches_down <= l.switches, "{l:?}");
+        assert_eq!(l.by.iter().map(|&(_, n)| n).sum::<u64>(), l.loops, "{l:?}");
+        assert!(l.len_p50.is_none_or(|n| n >= 2), "{l:?}");
+        assert!(l.alive <= l.loops, "{l:?}");
+        let row: serde_json::Value =
+            serde_json::from_str(&on.row("the_loop_analysis_changes_no_trace", None)).unwrap();
+        assert_eq!(row["grafts"].as_u64(), Some(l.grafts));
+        assert_eq!(row["loops_by_unknown"].as_u64(), l.by.last().map(|x| x.1));
+        let quiet: serde_json::Value =
+            serde_json::from_str(&off.row("the_loop_analysis_changes_no_trace", None)).unwrap();
+        assert!(quiet.get("loops").is_none());
+
+        let sw = &on.scenario.swarms[0];
+        let asked: u64 = sw
+            .viewers
+            .iter()
+            .filter(|&&v| on.scenario.hosts[v].class == strims_sim::HostClass::Honest)
+            .flat_map(|&v| on.hosts[v].requests.iter())
+            .filter(|q| q.peer == Some(sw.seed))
+            .map(|q| q.record.bin.base_length())
+            .sum();
+        let [none, few, many, parentless] = on.seed_asks().unwrap();
+        assert_eq!(none + few + many, asked, "seed {seed}");
+        assert!(parentless <= none, "seed {seed}");
+        assert_eq!(row["seed_asks_held_by_none"].as_u64(), Some(none));
+
+        let bare = |loops| {
+            let mut s = shares_mesh(seed, PushMode::Hybrid);
+            (s.wire_bins, s.request_logs, s.loops) = (None, false, loops);
+            strims_sim::run(s, seed).unwrap()
+        };
+        let (off, on) = (bare(false), bare(true));
+        assert_eq!(on.trace_hash, off.trace_hash, "seed {seed}, no tables");
+        assert_eq!(on.loops.map(|l| l.grafts), Some(l.grafts), "seed {seed}");
+    }
+}
+
 /// A pull-only stream has no push subscriptions: under any schedule no
 /// viewer relays, none holds a copy from the seed, and every chunk the
 /// seed sent answered a request.

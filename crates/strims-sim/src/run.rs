@@ -395,6 +395,7 @@ fn report(
     let violations = std::mem::take(&mut st.violations);
     let wire_bins = std::mem::take(&mut st.wire_bins);
     let parent_losses = std::mem::take(&mut st.parent_losses);
+    let loops = st.loops.as_ref().map(crate::loops::Loops::report);
     drop(st);
     let parent_changes = w.parent_changes();
     if w.spec.probes.is_some() {
@@ -424,6 +425,7 @@ fn report(
         wire_bins,
         parent_losses,
         parent_changes,
+        loops,
     };
     r.scenario.faults.sort_by_key(|f| f.at);
     r

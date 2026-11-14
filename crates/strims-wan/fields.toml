@@ -569,16 +569,16 @@ description = "The first swarm's dishonest viewers that grab: they serve and ann
 notes.strims-sim = "Its hosts of hostile kind grabber (`hostile.rs`, `GRAB_ROOM`), set by STRIMS_SIM_HOSTILE's shares."
 
 [rows.grafts]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "With SIM_LOOPS=1, the grafts asked, on either side."
+description = "With STRIMS_SIM_LOOPS=1, the grafts the first swarm's honest viewers asked: a parent check that, with no parent for a stream, asked a candidate for it."
+notes.strims-sim = "Their decision logs' parent choices (`TapKind::ParentChoice`, `ParentAction::Graft`; `Report::loops`), every incarnation."
 
 [rows.grafts_down]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "With SIM_LOOPS=1, the grafts that asked one of the asking viewer's own descendants for the stream."
+description = "With STRIMS_SIM_LOOPS=1, the grafts that asked one of the asking viewer's own descendants for the stream."
+notes.strims-sim = "The asked host's chain of open parents for the stream passes through the asker, by every node's parent log as it stood at the decision (`Report::loops`)."
 
 [rows.greedy]
 sims = []
@@ -740,43 +740,45 @@ type = "int"
 description = "The p90 of the honest viewers' link counts over their stats samples from NET_WARM after their arrival on, while they were there (Report::link_counts)."
 
 [rows.loop_len_p50]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "With SIM_LOOPS=1, the median members of the push loops that formed."
+description = "With STRIMS_SIM_LOOPS=1, the median members of the push loops that formed; left out without any."
+notes.strims-sim = "`Report::loops`."
 
 [rows."loop_life_p{p}_ms"]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 unit = "ms"
 params = { p = ["50", "90"] }
-description = "With SIM_LOOPS=1, the p50 and p90 in ms of the lifetimes of the push loops that broke; left out without any."
+consts.strims-sim = ["p"]
+description = "With STRIMS_SIM_LOOPS=1, the p50 and p90 in ms of the lifetimes of the push loops that broke; left out without any."
+notes.strims-sim = "From the stats round a loop was first found at to the first it wasn't (`Report::loops`)."
 
 [rows.loops]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "With SIM_LOOPS=1, the push loops (cycles of open parents) that formed, found at each second's sample."
+description = "With STRIMS_SIM_LOOPS=1, the push loops (cycles of open parents) that formed, found at each stats round from 10 s after the first swarm's start."
+notes.strims-sim = "The cycles the first swarm's honest viewers' chains of open parents run into, by stream and members, each found anew counted once (`Report::loops`, `LOOP_WARM`): every node's parent log keeps the live map of open parents, a host's entries its own while its incarnation runs."
 
 [rows.loops_alive]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "With SIM_LOOPS=1, the push loops still there at the run's end."
+description = "With STRIMS_SIM_LOOPS=1, the push loops still there at the run's last stats round."
+notes.strims-sim = "`Report::loops`."
 
 [rows."loops_by_{how}"]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 params = { how = ["switch", "graft_after_silent_prune", "graft_after_lossy_prune", "graft_after_shed", "graft_after_decline", "graft_after_nothing_logged", "unknown"] }
-description = "With SIM_LOOPS=1, the push loops that formed, by how their newest edge formed: a switch, a graft after a silent prune, a lossy prune, a shed or a decline, a graft after nothing logged, or unknown (Loops::edge)."
+code.strims-sim = { how = ["crate::loops::HOWS"] }
+description = "With STRIMS_SIM_LOOPS=1, the push loops that formed, by how their newest edge formed: a switch, a graft after a silent prune, a lossy prune, a shed or a decline, a graft after nothing logged, or unknown (no member's log holds the graft or switch of its edge)."
+notes.strims-sim = "Each member's latest decisions about the stream, 16 of them (`LOOP_LOG`), from its decision log: grafts and switches (`TapKind::ParentChoice`), prunes (`Pruned`, silent or lossy), sheds (`ShedBy`), declines and open timeouts (`Declined`, `OpenTimeout`); the newest edge is the latest graft or switch asking the member's parent in the loop (`Loops::edge`). Every value is written, 0 for none."
 
 [rows.loops_tap_lost]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "With SIM_LOOPS=1, the decision tap's events dropped between drains."
+description = "With STRIMS_SIM_LOOPS=1, the decision tap's events its buffers dropped between drains."
+notes.strims-sim = "The nodes' decision logs' `DecisionLogEntry::Lost`, summed."
 
 [rows.media]
 sims = ["strims-sim"]
@@ -1147,17 +1149,18 @@ type = "int"
 description = "The seed's answers its full queue refused (SwarmCounters::answers_refused)."
 
 [rows."seed_asks_{held}"]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 params = { held = ["held_by_none", "held_by_1_2", "held_by_3_plus"] }
-description = "With SIM_LOOPS=1, the chunks honest viewers asked the seed for, by how many of the asker's other neighbours had held them for HELD_FOR: none (`held_by_none`), one or two (`held_by_1_2`), three or more (`held_by_3_plus`)."
+consts.strims-sim = ["held"]
+description = "With the request logs, the chunks the first swarm's honest viewers asked its seed for, by how many of the asker's other neighbours had held them for 100 ms (HELD_FOR) when it asked: none (`held_by_none`), one or two (`held_by_1_2`), three or more (`held_by_3_plus`)."
+notes.strims-sim = "With STRIMS_SIM_SPEC=1 under STRIMS_SIM_OUT: each request record naming the seed (`HostReport::requests`), the asker's neighbours at its stats sample before it, and each neighbour's first hold of the chunk (`HostReport::arrivals`) (`Report::seed_asks`)."
 
 [rows.seed_asks_held_by_none_parentless]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "With SIM_LOOPS=1, of the chunks asked of the seed that no other neighbour held, those whose stream had no open parent at the asker."
+description = "With the request logs, of the chunks asked of the seed that no other neighbour held, those whose stream had no open parent at the asker."
+notes.strims-sim = "The asker's parent log at the request (`Report::parent_changes`, `Report::seed_asks`)."
 
 [rows.seed_budget]
 sims = ["strims-sim"]
@@ -1461,16 +1464,16 @@ type = "int"
 description = "Parents replaced: the first swarm's runner counters summed over every host (SwarmCounters::switched)."
 
 [rows.switches]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "With SIM_LOOPS=1, the switches asked."
+description = "With STRIMS_SIM_LOOPS=1, the switches the first swarm's honest viewers asked: a candidate that beat a stream's parent at enough checks in a row, asked for it."
+notes.strims-sim = "Their decision logs' parent choices (`TapKind::ParentChoice`, `ParentAction::Switch`; `Report::loops`), every incarnation."
 
 [rows.switches_down]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "With SIM_LOOPS=1, the switches that asked one of the asking viewer's own descendants for the stream."
+description = "With STRIMS_SIM_LOOPS=1, the switches that asked one of the asking viewer's own descendants for the stream."
+notes.strims-sim = "The asked host's chain of open parents for the stream passes through the asker, by every node's parent log as it stood at the decision (`Report::loops`)."
 
 [rows.test]
 sims = ["strims-sim"]
