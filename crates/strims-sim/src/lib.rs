@@ -69,6 +69,7 @@
 //! | `wan` | WAN mode's link scheduler |
 //! | [`stream`] | the self-checking stream format and per-viewer accounting |
 //! | [`report`] | results and summaries |
+//! | [`seed_alloc`] | a seed's allocation over a run, and the reports' verdicts |
 //! | [`seed_pin`] | the first swarm's seed's allocation set from outside |
 //! | [`stats`] | the runner, link and network stats folded over a run |
 //! | [`skew`] | per-node clock skew |
@@ -140,6 +141,7 @@ mod net;
 mod pool;
 pub mod report;
 mod run;
+pub mod seed_alloc;
 pub mod seed_pin;
 pub mod skew;
 pub mod spec;

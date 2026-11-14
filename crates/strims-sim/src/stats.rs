@@ -527,7 +527,7 @@ pub(crate) struct HostStats {
 }
 
 /// [`PeerMessages`]' counters, in its field order.
-const MESSAGE_COUNTERS: usize = 11;
+const MESSAGE_COUNTERS: usize = 13;
 
 /// The messages of one channel, a peer's on a scenario swarm, over a
 /// host's samples (`ChannelStats::inbound`, `outbound`), as its runner
@@ -537,8 +537,8 @@ const MESSAGE_COUNTERS: usize = 11;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PeerMessages {
     /// What the peer sent: REQUESTs, CANCELs, STREAM_CANCELs, DATA
-    /// messages and the chunks they span, HAVEs, STREAM_OPENs and
-    /// ANNOUNCEs.
+    /// messages and the chunks they span, HAVEs, STREAM_OPENs, and
+    /// ANNOUNCEs and their bytes.
     pub requests_in: u64,
     pub cancels_in: u64,
     pub stream_cancels_in: u64,
@@ -547,12 +547,14 @@ pub struct PeerMessages {
     pub haves_in: u64,
     pub stream_opens_in: u64,
     pub announces_in: u64,
+    pub announce_bytes_in: u64,
     /// Messages of the peer's that the host's runner rejected as invalid
     /// (`ChannelMetrics::rejected`).
     pub rejected_in: u64,
-    /// What the host sent the peer: REQUESTs and DATA.
+    /// What the host sent the peer: REQUESTs, DATA and ANNOUNCEs.
     pub requests_out: u64,
     pub data_out: u64,
+    pub announces_out: u64,
 }
 
 impl PeerMessages {
@@ -566,9 +568,11 @@ impl PeerMessages {
             haves_in,
             stream_opens_in,
             announces_in,
+            announce_bytes_in,
             rejected_in,
             requests_out,
             data_out,
+            announces_out,
         ] = a;
         PeerMessages {
             requests_in,
@@ -579,9 +583,11 @@ impl PeerMessages {
             haves_in,
             stream_opens_in,
             announces_in,
+            announce_bytes_in,
             rejected_in,
             requests_out,
             data_out,
+            announces_out,
         }
     }
 
@@ -594,9 +600,11 @@ impl PeerMessages {
         self.haves_in += o.haves_in;
         self.stream_opens_in += o.stream_opens_in;
         self.announces_in += o.announces_in;
+        self.announce_bytes_in += o.announce_bytes_in;
         self.rejected_in += o.rejected_in;
         self.requests_out += o.requests_out;
         self.data_out += o.data_out;
+        self.announces_out += o.announces_out;
     }
 }
 
@@ -705,9 +713,11 @@ impl HostStats {
                             i.have,
                             i.stream_open,
                             i.announce,
+                            i.announce_bytes,
                             i.rejected,
                             o.request,
                             o.data,
+                            o.announce,
                         ]);
                     let invalid = st.inbound.invalid_data + st.inbound.invalid_chunk;
                     if !hostile(&peer.host_id) {

@@ -155,31 +155,31 @@ unit = "s"
 description = "The job's wall-clock seconds, as suite.py's local run timed it, to the hundredth: the host's number, not the sim's. The fold keeps it as the run's wall_s (job_runs), not as a column of rows."
 
 [rows.announce_bps]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "num"
 unit = "bytes/s"
-description = "The bytes of the ANNOUNCEs with entries that reached the seed per second of the stream (over stream_secs)."
+description = "The bytes of the ANNOUNCEs with entries that reached the first swarm's seed per second of its stream (`announce_bytes` over the stream's span)."
+notes.strims-sim = "`Report::announces`."
 
 [rows.announce_bytes]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
-description = "The bytes of the ANNOUNCEs with entries that reached the seed."
+description = "The bytes of the ANNOUNCEs with entries that reached the first swarm's seed on the swarm's channels, from every peer, over the run."
+notes.strims-sim = "The seed's inbound ANNOUNCE bytes on the first swarm's channels (`ChannelMetrics::announce_bytes`), every channel and incarnation, folded over its stats samples (`Report::announces`). Only a seed asks for reports, so every ANNOUNCE it reads carries entries or stream items."
 
 [rows.announce_share]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "num"
 unit = "fraction"
-description = "The bytes of the ANNOUNCEs with entries that reached the seed, as a share of what the viewers sent."
+description = "The bytes of the ANNOUNCEs with entries that reached the first swarm's seed, as a share of what the swarm's viewers sent."
+notes.strims-sim = "Over the bytes the first swarm's viewers, honest and hostile, wrote to their links (`HostReport::uploaded`, `Report::announces`)."
 
 [rows.announces]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "ANNOUNCEs with entries that reached the seed."
+description = "ANNOUNCEs with entries that reached the first swarm's seed on the swarm's channels, from every peer, over the run."
+notes.strims-sim = "The seed's inbound ANNOUNCE counts on the first swarm's channels (`ChannelMetrics::announce`), every channel and incarnation, folded over its stats samples (`Report::announces`). Only a seed asks for reports, so every ANNOUNCE it reads carries entries or stream items."
 
 [rows.arrivals]
 sims = ["strims-sim"]
@@ -199,10 +199,10 @@ aggregate = "count"
 description = "`arrived_honest`, `arrived_dishonest`: the honest and the dishonest viewers that arrived after the run's start (`HostSpec::arrive_at`), the dishonest with any; `departed_honest`, `departed_dishonest`, those that left for good;"
 
 [rows.asks]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "The ANNOUNCE messages the seed sent, over all its channels in the swarm, at the end (the channels' outbound announce counters). Not the asks table's requests."
+description = "The ANNOUNCE messages the first swarm's seed sent (its asks for reports), over all its channels in the swarm and the run. Not the asks table's requests."
+notes.strims-sim = "The seed's outbound ANNOUNCE counts on the first swarm's channels, every channel and incarnation, folded over its stats samples (`Report::announces`)."
 
 [rows.barred_honest]
 sims = []
@@ -612,16 +612,17 @@ description = "The first swarm's dishonest viewers that hog links: free riders t
 notes.strims-sim = "Its hosts of hostile kind hog (`hostile.rs`, `PoolConfig::greedy`), set by STRIMS_SIM_HOSTILE's shares; outside the organic mode (`STRIMS_SIM_DISCOVERY`) a hog is a free rider."
 
 [rows.holder_changes]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "The samples after the warm-up at which the seed's holders changed."
+description = "The samples of the first swarm's seed's allocation after the startup at which its holders changed from the sample before: an adaptive seed's holders of a copy, or where it has none the neighbours it pushes anything to."
+notes.strims-sim = "The seed's stats samples (`SeedAllocationInfo`), each against the one before, the later in the seed meter's window (`STARTUP_SECS` after the swarm's start to its stop, `Report::seed_meter_window`; `Report::holder_changes`). Left out without a sample."
 
 [rows.holder_copy]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "num"
-description = "Per pair of consecutive samples after the warm-up and honest whole-copy holder in both, its median share of its copy got as on-time pushes (Sim::holder_copies)."
+unit = "fraction"
+description = "Over the intervals `holder_short` counts (an honest viewer holding a whole copy from the seed at both ends), the median share of what the holder was owed in the interval that it got as on-time pushes."
+notes.strims-sim = "Each interval's hits over the push deadlines that came due in it, hits and misses (`Report::holder_copy`); left out with no such interval."
 
 [rows.holder_short]
 sims = ["strims-sim"]
@@ -1042,52 +1043,52 @@ description = "Over the samples after the first swarm's startup, the share of it
 notes.strims-sim = "Each honest viewer's transfer samples (`STRIMS_SIM_SERIES` or `STRIMS_SIM_OUT`, those `fanout_p{p}` reads) from `STARTUP_SECS` after the swarm's start to its stop (`Report::seed_meter_window`, `Report::relay_share`), by the viewer's own count of its subscribers, which keeps one that left abruptly until the viewer notices; left out without any."
 
 [rows.reports_invalid]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "The report entries from honest viewers that were invalid: the parent is the reporter, the stream is past the count, or the entry is past report_entry_limit (ReportCounters::invalid)."
+notes.strims-sim = "At the first swarm's seed, each honest neighbour's own counters (`SeedNeighbourInfo::reports`) at its last sample of each channel, every channel and incarnation summed (`Report::report_counts`)."
 
 [rows.reports_misses_unseen]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "The report entries from honest viewers with more misses than hits whose reporter's repairs don't come later than the hits (ReportCounters::misses_unseen)."
+notes.strims-sim = "At the first swarm's seed, each honest neighbour's own counters (`SeedNeighbourInfo::reports`) at its last sample of each channel, every channel and incarnation summed (`Report::report_counts`)."
 
 [rows.reports_reporter_fed]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "The report entries from honest viewers whose reporter takes the stream from the seed (ReportCounters::reporter_fed)."
+notes.strims-sim = "At the first swarm's seed, each honest neighbour's own counters (`SeedNeighbourInfo::reports`) at its last sample of each channel, every channel and incarnation summed (`Report::report_counts`)."
 
 [rows.reports_reporter_silent]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "The report entries from honest viewers whose reporter doesn't announce the stream (ReportCounters::reporter_silent)."
+notes.strims-sim = "At the first swarm's seed, each honest neighbour's own counters (`SeedNeighbourInfo::reports`) at its last sample of each channel, every channel and incarnation summed (`Report::report_counts`)."
 
 [rows.reports_subject_unfed]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "The report entries from honest viewers whose parent doesn't take the stream from the seed (ReportCounters::subject_unfed)."
+notes.strims-sim = "At the first swarm's seed, each honest neighbour's own counters (`SeedNeighbourInfo::reports`) at its last sample of each channel, every channel and incarnation summed (`Report::report_counts`)."
 
 [rows.reports_tallied]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "The entries of honest viewers' reports that the seed counted in its tally, at the end: none of ReportCounters' reasons to count an entry for nothing (unknown, invalid, reporter_fed, subject_unfed, reporter_silent, ...) applied (ReportCounters::tallied)."
+description = "The entries of honest viewers' reports that the seed counted in its tally, over the run: none of ReportCounters' reasons to count an entry for nothing (unknown, invalid, reporter_fed, subject_unfed, reporter_silent, ...) applied (ReportCounters::tallied)."
+notes.strims-sim = "At the first swarm's seed, each honest neighbour's own counters (`SeedNeighbourInfo::reports`) at its last sample of each channel, every channel and incarnation summed (`Report::report_counts`)."
 
 [rows.reports_too_early]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "The report entries from honest viewers whose reporter's first copies of the stream come well before its parent's hits (ReportCounters::too_early)."
+notes.strims-sim = "At the first swarm's seed, each honest neighbour's own counters (`SeedNeighbourInfo::reports`) at its last sample of each channel, every channel and incarnation summed (`Report::report_counts`)."
 
 [rows.reports_unknown]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "The report entries from honest viewers whose parent isn't a neighbour, or whose id two neighbours share (ReportCounters::unknown)."
+notes.strims-sim = "At the first swarm's seed, each honest neighbour's own counters (`SeedNeighbourInfo::reports`) at its last sample of each channel, every channel and incarnation summed (`Report::report_counts`)."
 
 [rows.reqs_out_max]
 sims = ["strims-sim"]
@@ -1204,11 +1205,11 @@ type = "num"
 description = "`seed_nbr_up_p50` and `depth1_up_p50`: the median uplink of the seed's neighbours, and of the viewers it pushes to, each second's median over the run;"
 
 [rows.seed_objective_ms]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 unit = "ms"
-description = "The seed's objective, median over the samples after the warm-up, in ms: the p90 over neighbours of the latest stream's mean one-way delay after publishing, as the neighbours' reports give it (AllocSample::objective)."
+description = "The first swarm's seed's objective, median over its allocation samples after the startup, in ms: the p90 over its neighbours of each one's worst stream's mean one-way delay of its first copies, as its reports give it; a stream it reported no copies of lately counts as 2 s."
+notes.strims-sim = "The seed's stats samples in the seed meter's window (`Report::seed_objective`, `STALE`). A neighbour's delays are its clock's readings against the seed's timestamps, so its clock's offset from the seed's (`Scenario::clock_skew`) comes off them. Left out without a sample."
 
 [rows.seed_offers_30s]
 sims = ["strims-sim"]
@@ -1247,10 +1248,10 @@ description = "The seed's share of every byte the swarm's hosts wrote to their l
 notes.strims-sim = "Each host's `uploaded`, the first swarm's seed, viewers and relays (UploadDistribution::seed_share)."
 
 [rows.seed_slots]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "num"
-description = "The seed's push subscriptions (stream slots), mean over the samples after the warm-up."
+description = "The first swarm's seed's push subscriptions (stream slots: one stream at one neighbour), mean over its allocation samples after the startup."
+notes.strims-sim = "The streams pushed to each neighbour at the seed's stats samples in the seed meter's window, summed (`Report::seed_slots`); left out without a sample."
 
 [rows.seed_timeouts]
 sims = ["strims-sim"]
@@ -1281,11 +1282,11 @@ type = "num"
 description = "A media swarm's stream rate: the bytes its seed sent of the stream over the stream's seconds, in kbit/s; left out without media."
 
 [rows.settled_s]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "num"
 unit = "s"
-description = "When the seed's holders (AllocSample::holders) last changed after the stream started, in s."
+description = "When the first swarm's seed's holders (`holder_changes`'s) last changed, in s after the stream's start; 0 if they never did."
+notes.strims-sim = "Over all of the seed's allocation samples (`Report::settled`); left out without one."
 
 [rows.shed]
 sims = ["strims-sim"]
@@ -1659,71 +1660,71 @@ unit = "bytes"
 description = "The bytes of the stream the honest viewers read: each one's frames received times the frame size (a media swarm's chunk size)."
 
 [rows.v_barred_with_children]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
-description = "Honest holders barred that had a real child at the sample before."
+description = "Honest neighbours the seed barred from holding a copy (barred at a sample after the startup and not at the one before) that held a copy with a real child at the sample before."
+notes.strims-sim = "`v_honest`'s samples and real children (`Report::verdicts`); left out without transfer samples."
 
 [rows.v_honest]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 aggregate = "count"
 description = "The reports' verdicts against the real subtrees: honest holder samples."
+notes.strims-sim = "Over the first swarm's seed's allocation samples in the seed meter's window (`Report::seed_meter_window`), a holder sample is a neighbour holding a copy; a holder's real children are the hosts whose open parent of a stream it was at their transfer samples nearest the seed's (within half a stats period); the honest are `HostClass::Honest`, the liars the kinds that announce and serve nothing (liar, liar+echo, colluder: `hostile.rs`), the other hostile kinds neither (`Report::verdicts`). The counts that read real children are left out without transfer samples (`STRIMS_SIM_SERIES` or `STRIMS_SIM_OUT`)."
 
 [rows.v_judged]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "Honest holder samples a quorum judged."
+notes.strims-sim = "`v_honest`'s samples whose `SeedNeighbourInfo::served` is set (`Report::verdicts`)."
 
 [rows.v_liars]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "Liar holder samples."
+notes.strims-sim = "`v_honest`'s samples of the kinds that announce and serve nothing: liar, liar+echo and colluder (`Report::verdicts`)."
 
 [rows.v_liars_judged]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "Liar holder samples a quorum judged."
+notes.strims-sim = "`v_liars`'s samples whose `SeedNeighbourInfo::served` is set (`Report::verdicts`)."
 
 [rows.v_liars_served]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "Liar holder samples a quorum saw serve."
+notes.strims-sim = "`v_liars`'s samples whose `SeedNeighbourInfo::served` is true (`Report::verdicts`)."
 
 [rows.v_not_kept]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "Honest holder samples at which the seed pushed to the holder and its pushes didn't keep up."
+notes.strims-sim = "`v_honest`'s samples with streams pushed and `SeedNeighbourInfo::kept_up` false (`Report::verdicts`)."
 
 [rows.v_served]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "Honest holder samples a quorum saw serve."
+notes.strims-sim = "`v_honest`'s samples whose `SeedNeighbourInfo::served` is true (`Report::verdicts`)."
 
 [rows.v_served_childless]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "Honest holder samples a quorum saw serve without a real child."
+notes.strims-sim = "`v_honest`'s samples and real children (`Report::verdicts`); left out without transfer samples."
 
 [rows.v_with_children]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "Honest holder samples with a real child."
+notes.strims-sim = "`v_honest`'s samples and real children (`Report::verdicts`); left out without transfer samples."
 
 [rows.v_with_reporters]
-sims = []
-lines = ["extras"]
+sims = ["strims-sim"]
 type = "int"
 description = "Honest holder samples with a real child among the seed's neighbours (one that can report)."
+notes.strims-sim = "`v_honest`'s samples and real children, the seed's neighbours those of its sample (`Report::verdicts`); left out without transfer samples."
 
 [rows."viewer_util_p{p}"]
 sims = ["strims-sim"]

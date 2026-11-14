@@ -121,6 +121,8 @@ pub(crate) struct HostState {
     /// Transfers per stats sample, every incarnation (see
     /// [`HostReport::transfers`]).
     pub transfers: Vec<(Duration, usize, TransferSample)>,
+    /// See [`HostReport::seed_allocs`].
+    pub seed_allocs: Vec<(Duration, usize, crate::seed_alloc::AllocSample)>,
     /// Runner invariants this host already broke (each is logged once).
     pub broken: BTreeSet<&'static str>,
     /// See [`HostReport::node_bins`] and [`HostReport::forecasts`].
@@ -163,6 +165,7 @@ impl HostState {
         }
         r.runner = self.stats.report();
         r.transfers = self.transfers.clone();
+        r.seed_allocs = self.seed_allocs.clone();
         r.neighbours = self.neighbours.clone();
         r.node_bins = self.node_bins.clone();
         r.forecasts = self.forecasts.clone();
@@ -1423,6 +1426,24 @@ impl World {
                         hs.transfers.push((sim_now(), s, t));
                     }
                 }
+            }
+            for (s, key) in swarms.iter().enumerate() {
+                let Some(info) = m
+                    .runner
+                    .swarms
+                    .iter()
+                    .find(|sw| Some(sw.swarm) == *key)
+                    .and_then(|sw| sw.seed_allocation.clone())
+                else {
+                    continue;
+                };
+                let hosts = info
+                    .neighbours
+                    .iter()
+                    .map(|n| st.ids.get(&n.host_id).copied())
+                    .collect();
+                hs.seed_allocs
+                    .push((now, s, crate::seed_alloc::AllocSample { info, hosts }));
             }
             hs.swarms = swarms;
             let mut check = |kind: &'static str, broken: bool, what: String| {

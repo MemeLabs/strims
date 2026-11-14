@@ -482,6 +482,66 @@ fn seed_answers_relays_and_holders_hold_under_any_schedule() {
     );
 }
 
+/// What holds of an adaptive seed's allocation samples under any
+/// schedule: at each, the streams pushed to its neighbours are the push
+/// subscriptions its own transfer sample of the same snapshot counts;
+/// the row's slots are their mean over the window, its holders' verdicts
+/// count no more judgements than holders, nor real children than holders;
+/// and the seed asks for reports and reads some.
+#[test]
+fn a_seeds_allocation_samples_are_its_own_snapshots() {
+    const TEST: &str = "a_seeds_allocation_samples_are_its_own_snapshots";
+    sweep(
+        TEST,
+        |s| shares_mesh(s, PushMode::Hybrid),
+        |r| {
+            sound(r)?;
+            let seed = r.scenario.swarms[0].seed;
+            let samples = r.seed_samples(0);
+            if samples.is_empty() {
+                return Err("no allocation samples".to_owned());
+            }
+            for (t, a) in &samples {
+                let slots: usize = a.info.neighbours.iter().map(|n| n.streams.len()).sum();
+                let own = r.hosts[seed]
+                    .transfers
+                    .iter()
+                    .find(|(at, sw, _)| at == t && *sw == 0)
+                    .ok_or(format!("no transfer sample of the seed at {t:?}"))?;
+                if own.2.children != slots {
+                    return Err(format!(
+                        "at {t:?} the seed pushes {slots} slots and serves {} subscriptions",
+                        own.2.children
+                    ));
+                }
+            }
+            let (v, kids) = r.verdicts(0).ok_or("no verdicts")?;
+            if !kids || v.judged > v.honest || v.served > v.judged || v.with_children > v.honest {
+                return Err(format!("verdicts {v:?}"));
+            }
+            let a = r.announces(0);
+            if a.sent == 0 || a.read == 0 || a.bytes < a.read {
+                return Err(format!("announces {a:?}"));
+            }
+            let row: serde_json::Value =
+                serde_json::from_str(&r.row(TEST, None)).map_err(|e| e.to_string())?;
+            let slots = r.seed_slots(0).ok_or("no slots")?;
+            if row["seed_slots"]
+                .as_f64()
+                .is_none_or(|x| (x - slots).abs() > 1e-9)
+                || row["asks"].as_u64() != Some(a.sent)
+                || row["v_honest"].as_u64() != Some(v.honest)
+            {
+                return Err(format!(
+                    "row seed_slots {} asks {} v_honest {}",
+                    row["seed_slots"], row["asks"], row["v_honest"]
+                ));
+            }
+            Ok(())
+        },
+    );
+}
+
 /// A pull-only stream has no push subscriptions: under any schedule no
 /// viewer relays, none holds a copy from the seed, and every chunk the
 /// seed sent answered a request.

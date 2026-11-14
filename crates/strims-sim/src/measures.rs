@@ -1864,6 +1864,7 @@ impl Report {
         self.media_cols(swarm, &mut j);
         self.ledger_cols(&mut j);
         self.ack_cols(&mut j);
+        self.seed_alloc_cols(swarm, &mut j);
         j.finish()
     }
 
@@ -2231,6 +2232,30 @@ impl Report {
     /// restarted) or longer than two stats periods (its host was down) is
     /// left out; `None` without any.
     pub fn holder_short(&self, swarm: usize) -> Option<f64> {
+        let intervals = self.holder_intervals(swarm)?;
+        let short = intervals
+            .iter()
+            .filter(|&&(hits, due)| (hits as f64) < HOLDER_WHOLE * due as f64)
+            .count();
+        Some(short as f64 / intervals.len() as f64)
+    }
+
+    /// The median over [`Report::holder_short`]'s intervals of each one's
+    /// hits over the push deadlines due in it: the row's `holder_copy`.
+    /// `None` without an interval.
+    pub fn holder_copy(&self, swarm: usize) -> Option<f64> {
+        let mut shares: Vec<f64> = self
+            .holder_intervals(swarm)?
+            .iter()
+            .map(|&(hits, due)| hits as f64 / due as f64)
+            .collect();
+        shares.sort_by(f64::total_cmp);
+        percentile(&shares, 50)
+    }
+
+    /// [`Report::holder_short`]'s intervals, each its hits and the push
+    /// deadlines due in it, in viewer and time order; `None` without one.
+    fn holder_intervals(&self, swarm: usize) -> Option<Vec<(u64, u64)>> {
         let spec = self.scenario.swarms.get(swarm)?;
         let (from, to) = self.seed_meter_window(swarm)?;
         let streams = spec.options.stream_count.max(1);
@@ -2242,7 +2267,7 @@ impl Report {
         let whole = |x: &TransferSample| {
             x.parent_peers.len() == streams && x.parent_peers.iter().all(|&p| p == Some(spec.seed))
         };
-        let (mut short, mut intervals) = (0u64, 0u64);
+        let mut shares = Vec::new();
         for h in self.honest_in(swarm) {
             let samples: Vec<_> = self.transfers_between(h, swarm, from, to).collect();
             for w in samples.windows(2) {
@@ -2259,11 +2284,10 @@ impl Report {
                 if due == 0 {
                     continue;
                 }
-                intervals += 1;
-                short += u64::from((hits as f64) < HOLDER_WHOLE * due as f64);
+                shares.push((hits, due));
             }
         }
-        (intervals > 0).then(|| short as f64 / intervals as f64)
+        (!shares.is_empty()).then_some(shares)
     }
 
     /// Of the chunks `swarm`'s seed sent over its incarnations, the share
@@ -3391,6 +3415,20 @@ mod tests {
         });
         let short = r.holder_short(0).unwrap();
         assert!((short - 1.0 / 15.0).abs() < 1e-9, "{short}");
+        // The short interval's share is 12 of 16, the median the others' 1.
+        assert_eq!(r.holder_copy(0), Some(1.0));
+        let r = five(40, |t, h| {
+            (h == 1).then(|| TransferSample {
+                parent_peers: vec![Some(0)],
+                hits: 12 * t,
+                misses: 4 * t,
+                ..TransferSample::default()
+            })
+        });
+        assert_eq!(
+            (r.holder_short(0), r.holder_copy(0)),
+            (Some(1.0), Some(0.75))
+        );
     }
 
     #[test]

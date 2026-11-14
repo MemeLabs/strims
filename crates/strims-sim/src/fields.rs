@@ -336,6 +336,25 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     EventPPMs(u16),
+    /// The bytes of the ANNOUNCEs with entries that reached the first swarm's
+    /// seed on the swarm's channels, from every peer, over the run.
+    ///
+    /// strims-sim: The seed's inbound ANNOUNCE bytes on the first swarm's
+    /// channels (`ChannelMetrics::announce_bytes`), every channel and
+    /// incarnation, folded over its stats samples (`Report::announces`). Only a
+    /// seed asks for reports, so every ANNOUNCE it reads carries entries or
+    /// stream items.
+    ///
+    /// Unit: bytes.
+    AnnounceBytes,
+    /// ANNOUNCEs with entries that reached the first swarm's seed on the
+    /// swarm's channels, from every peer, over the run.
+    ///
+    /// strims-sim: The seed's inbound ANNOUNCE counts on the first swarm's
+    /// channels (`ChannelMetrics::announce`), every channel and incarnation,
+    /// folded over its stats samples (`Report::announces`). Only a seed asks
+    /// for reports, so every ANNOUNCE it reads carries entries or stream items.
+    Announces,
     /// `arrived_honest`, `arrived_dishonest`: the honest and the dishonest
     /// viewers that arrived after the run's start (`HostSpec::arrive_at`), the
     /// dishonest with any; `departed_honest`, `departed_dishonest`, those that
@@ -346,6 +365,14 @@ pub(crate) enum RowInt {
     /// dishonest with any; `departed_honest`, `departed_dishonest`, those that
     /// left for good;
     ArrivedDishonest,
+    /// The ANNOUNCE messages the first swarm's seed sent (its asks for
+    /// reports), over all its channels in the swarm and the run. Not the asks
+    /// table's requests.
+    ///
+    /// strims-sim: The seed's outbound ANNOUNCE counts on the first swarm's
+    /// channels, every channel and incarnation, folded over its stats samples
+    /// (`Report::announces`).
+    Asks,
     /// Over the first swarm's honest viewers' first joins (each one's first
     /// incarnation's): the ms from the join to its first frame read
     /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
@@ -536,6 +563,17 @@ pub(crate) enum RowInt {
     /// `PoolConfig::greedy`), set by STRIMS_SIM_HOSTILE's shares; outside the
     /// organic mode (`STRIMS_SIM_DISCOVERY`) a hog is a free rider.
     Hogs,
+    /// The samples of the first swarm's seed's allocation after the startup at
+    /// which its holders changed from the sample before: an adaptive seed's
+    /// holders of a copy, or where it has none the neighbours it pushes
+    /// anything to.
+    ///
+    /// strims-sim: The seed's stats samples (`SeedAllocationInfo`), each
+    /// against the one before, the later in the seed meter's window
+    /// (`STARTUP_SECS` after the swarm's start to its stop,
+    /// `Report::seed_meter_window`; `Report::holder_changes`). Left out without
+    /// a sample.
+    HolderChanges,
     /// Over the first swarm's honest viewers' first joins (each one's first
     /// incarnation's): the ms from the join to its first frame read
     /// (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read
@@ -703,6 +741,67 @@ pub(crate) enum RowInt {
     /// strims-sim: The first swarm's honest viewers', every incarnation's
     /// (Report::honest_relay_counters).
     RelayRejected,
+    /// The report entries from honest viewers that were invalid: the parent is
+    /// the reporter, the stream is past the count, or the entry is past
+    /// report_entry_limit (ReportCounters::invalid).
+    ///
+    /// strims-sim: At the first swarm's seed, each honest neighbour's own
+    /// counters (`SeedNeighbourInfo::reports`) at its last sample of each
+    /// channel, every channel and incarnation summed (`Report::report_counts`).
+    ReportsInvalid,
+    /// The report entries from honest viewers with more misses than hits whose
+    /// reporter's repairs don't come later than the hits
+    /// (ReportCounters::misses_unseen).
+    ///
+    /// strims-sim: At the first swarm's seed, each honest neighbour's own
+    /// counters (`SeedNeighbourInfo::reports`) at its last sample of each
+    /// channel, every channel and incarnation summed (`Report::report_counts`).
+    ReportsMissesUnseen,
+    /// The report entries from honest viewers whose reporter takes the stream
+    /// from the seed (ReportCounters::reporter_fed).
+    ///
+    /// strims-sim: At the first swarm's seed, each honest neighbour's own
+    /// counters (`SeedNeighbourInfo::reports`) at its last sample of each
+    /// channel, every channel and incarnation summed (`Report::report_counts`).
+    ReportsReporterFed,
+    /// The report entries from honest viewers whose reporter doesn't announce
+    /// the stream (ReportCounters::reporter_silent).
+    ///
+    /// strims-sim: At the first swarm's seed, each honest neighbour's own
+    /// counters (`SeedNeighbourInfo::reports`) at its last sample of each
+    /// channel, every channel and incarnation summed (`Report::report_counts`).
+    ReportsReporterSilent,
+    /// The report entries from honest viewers whose parent doesn't take the
+    /// stream from the seed (ReportCounters::subject_unfed).
+    ///
+    /// strims-sim: At the first swarm's seed, each honest neighbour's own
+    /// counters (`SeedNeighbourInfo::reports`) at its last sample of each
+    /// channel, every channel and incarnation summed (`Report::report_counts`).
+    ReportsSubjectUnfed,
+    /// The entries of honest viewers' reports that the seed counted in its
+    /// tally, over the run: none of ReportCounters' reasons to count an entry
+    /// for nothing (unknown, invalid, reporter_fed, subject_unfed,
+    /// reporter_silent, ...) applied (ReportCounters::tallied).
+    ///
+    /// strims-sim: At the first swarm's seed, each honest neighbour's own
+    /// counters (`SeedNeighbourInfo::reports`) at its last sample of each
+    /// channel, every channel and incarnation summed (`Report::report_counts`).
+    ReportsTallied,
+    /// The report entries from honest viewers whose reporter's first copies of
+    /// the stream come well before its parent's hits
+    /// (ReportCounters::too_early).
+    ///
+    /// strims-sim: At the first swarm's seed, each honest neighbour's own
+    /// counters (`SeedNeighbourInfo::reports`) at its last sample of each
+    /// channel, every channel and incarnation summed (`Report::report_counts`).
+    ReportsTooEarly,
+    /// The report entries from honest viewers whose parent isn't a neighbour,
+    /// or whose id two neighbours share (ReportCounters::unknown).
+    ///
+    /// strims-sim: At the first swarm's seed, each honest neighbour's own
+    /// counters (`SeedNeighbourInfo::reports`) at its last sample of each
+    /// channel, every channel and incarnation summed (`Report::report_counts`).
+    ReportsUnknown,
     /// The most requests out on an honest host's open channel of the first
     /// swarm at any stats sample (WindowSamples); left out without samples.
     ReqsOutMax,
@@ -748,6 +847,19 @@ pub(crate) enum RowInt {
     /// The first wave's `seed_first_wave_capacity` is the budget's busy time's
     /// unbounded reading, neither of them.
     SeedFirstWaveCapacity,
+    /// The first swarm's seed's objective, median over its allocation samples
+    /// after the startup, in ms: the p90 over its neighbours of each one's
+    /// worst stream's mean one-way delay of its first copies, as its reports
+    /// give it; a stream it reported no copies of lately counts as 2 s.
+    ///
+    /// strims-sim: The seed's stats samples in the seed meter's window
+    /// (`Report::seed_objective`, `STALE`). A neighbour's delays are its
+    /// clock's readings against the seed's timestamps, so its clock's offset
+    /// from the seed's (`Scenario::clock_skew`) comes off them. Left out
+    /// without a sample.
+    ///
+    /// Unit: ms.
+    SeedObjectiveMs,
     /// Offers to link the first swarm's seed, answered or refused, in the run's
     /// first EARLY_OFFERS.
     SeedOffers30s,
@@ -993,6 +1105,73 @@ pub(crate) enum RowInt {
     ///
     /// Unit: bytes.
     UsefulBytes,
+    /// Honest neighbours the seed barred from holding a copy (barred at a
+    /// sample after the startup and not at the one before) that held a copy
+    /// with a real child at the sample before.
+    ///
+    /// strims-sim: `v_honest`'s samples and real children (`Report::verdicts`);
+    /// left out without transfer samples.
+    VBarredWithChildren,
+    /// The reports' verdicts against the real subtrees: honest holder samples.
+    ///
+    /// strims-sim: Over the first swarm's seed's allocation samples in the seed
+    /// meter's window (`Report::seed_meter_window`), a holder sample is a
+    /// neighbour holding a copy; a holder's real children are the hosts whose
+    /// open parent of a stream it was at their transfer samples nearest the
+    /// seed's (within half a stats period); the honest are `HostClass::Honest`,
+    /// the liars the kinds that announce and serve nothing (liar, liar+echo,
+    /// colluder: `hostile.rs`), the other hostile kinds neither
+    /// (`Report::verdicts`). The counts that read real children are left out
+    /// without transfer samples (`STRIMS_SIM_SERIES` or `STRIMS_SIM_OUT`).
+    VHonest,
+    /// Honest holder samples a quorum judged.
+    ///
+    /// strims-sim: `v_honest`'s samples whose `SeedNeighbourInfo::served` is
+    /// set (`Report::verdicts`).
+    VJudged,
+    /// Liar holder samples.
+    ///
+    /// strims-sim: `v_honest`'s samples of the kinds that announce and serve
+    /// nothing: liar, liar+echo and colluder (`Report::verdicts`).
+    VLiars,
+    /// Liar holder samples a quorum judged.
+    ///
+    /// strims-sim: `v_liars`'s samples whose `SeedNeighbourInfo::served` is set
+    /// (`Report::verdicts`).
+    VLiarsJudged,
+    /// Liar holder samples a quorum saw serve.
+    ///
+    /// strims-sim: `v_liars`'s samples whose `SeedNeighbourInfo::served` is
+    /// true (`Report::verdicts`).
+    VLiarsServed,
+    /// Honest holder samples at which the seed pushed to the holder and its
+    /// pushes didn't keep up.
+    ///
+    /// strims-sim: `v_honest`'s samples with streams pushed and
+    /// `SeedNeighbourInfo::kept_up` false (`Report::verdicts`).
+    VNotKept,
+    /// Honest holder samples a quorum saw serve.
+    ///
+    /// strims-sim: `v_honest`'s samples whose `SeedNeighbourInfo::served` is
+    /// true (`Report::verdicts`).
+    VServed,
+    /// Honest holder samples a quorum saw serve without a real child.
+    ///
+    /// strims-sim: `v_honest`'s samples and real children (`Report::verdicts`);
+    /// left out without transfer samples.
+    VServedChildless,
+    /// Honest holder samples with a real child.
+    ///
+    /// strims-sim: `v_honest`'s samples and real children (`Report::verdicts`);
+    /// left out without transfer samples.
+    VWithChildren,
+    /// Honest holder samples with a real child among the seed's neighbours (one
+    /// that can report).
+    ///
+    /// strims-sim: `v_honest`'s samples and real children, the seed's
+    /// neighbours those of its sample (`Report::verdicts`); left out without
+    /// transfer samples.
+    VWithReporters,
     /// Transport chunks the first swarm's honest viewers received that they
     /// already had (SwarmSchedulerStats::wasted_chunks), summed over them.
     ///
@@ -1056,8 +1235,11 @@ impl RowInt {
             RowInt::RoleAckWhy(i) => at(&ROWINT_ROLE_ACK_WHY, i),
             RowInt::RoleDelackP90Ms(i) => at(&ROWINT_ROLE_DELACK_P90_MS, i),
             RowInt::EventPPMs(i) => at(&ROWINT_EVENT_P_P_MS, i),
+            RowInt::AnnounceBytes => "announce_bytes",
+            RowInt::Announces => "announces",
             RowInt::ArrivedHonest => "arrived_honest",
             RowInt::ArrivedDishonest => "arrived_dishonest",
+            RowInt::Asks => "asks",
             RowInt::CaughtUpNever => "caught_up_never",
             RowInt::ChunksRead => "chunks_read",
             RowInt::ClockClass(i) => at(&ROWINT_CLOCK_CLASS, i),
@@ -1090,6 +1272,7 @@ impl RowInt {
             RowInt::FreeRiders => "free_riders",
             RowInt::Grabbers => "grabbers",
             RowInt::Hogs => "hogs",
+            RowInt::HolderChanges => "holder_changes",
             RowInt::JoinUnread => "join_unread",
             RowInt::KnownUplink => "known_uplink",
             RowInt::LagP50Ms => "lag_p50_ms",
@@ -1117,6 +1300,14 @@ impl RowInt {
             RowInt::RejoinUnread => "rejoin_unread",
             RowInt::RelayAccepted => "relay_accepted",
             RowInt::RelayRejected => "relay_rejected",
+            RowInt::ReportsInvalid => "reports_invalid",
+            RowInt::ReportsMissesUnseen => "reports_misses_unseen",
+            RowInt::ReportsReporterFed => "reports_reporter_fed",
+            RowInt::ReportsReporterSilent => "reports_reporter_silent",
+            RowInt::ReportsSubjectUnfed => "reports_subject_unfed",
+            RowInt::ReportsTallied => "reports_tallied",
+            RowInt::ReportsTooEarly => "reports_too_early",
+            RowInt::ReportsUnknown => "reports_unknown",
             RowInt::ReqsOutMax => "reqs_out_max",
             RowInt::Seed => "seed",
             RowInt::SeedQueueWaitPPMs(i) => at(&ROWINT_SEED_QUEUE_WAIT_P_P_MS, i),
@@ -1128,6 +1319,7 @@ impl RowInt {
             RowInt::SeedDropP99Ms => "seed_drop_p99_ms",
             RowInt::SeedFirstWave => "seed_first_wave",
             RowInt::SeedFirstWaveCapacity => "seed_first_wave_capacity",
+            RowInt::SeedObjectiveMs => "seed_objective_ms",
             RowInt::SeedOffers30s => "seed_offers_30s",
             RowInt::SeedRiseP99Ms => "seed_rise_p99_ms",
             RowInt::SeedTimeouts => "seed_timeouts",
@@ -1167,6 +1359,17 @@ impl RowInt {
             RowInt::UpVnic => "up_vnic",
             RowInt::UpWire => "up_wire",
             RowInt::UsefulBytes => "useful_bytes",
+            RowInt::VBarredWithChildren => "v_barred_with_children",
+            RowInt::VHonest => "v_honest",
+            RowInt::VJudged => "v_judged",
+            RowInt::VLiars => "v_liars",
+            RowInt::VLiarsJudged => "v_liars_judged",
+            RowInt::VLiarsServed => "v_liars_served",
+            RowInt::VNotKept => "v_not_kept",
+            RowInt::VServed => "v_served",
+            RowInt::VServedChildless => "v_served_childless",
+            RowInt::VWithChildren => "v_with_children",
+            RowInt::VWithReporters => "v_with_reporters",
             RowInt::Wasted => "wasted",
             RowInt::Whitewashers => "whitewashers",
             RowInt::Withholders => "withholders",
@@ -1415,6 +1618,22 @@ pub(crate) enum RowNum {
     /// requests out also read over the samples with any (`*_busy_*`), with the
     /// share of samples with requests out (`reqs_out_share`).
     WindowPP(u16),
+    /// The bytes of the ANNOUNCEs with entries that reached the first swarm's
+    /// seed per second of its stream (`announce_bytes` over the stream's span).
+    ///
+    /// strims-sim: `Report::announces`.
+    ///
+    /// Unit: bytes/s.
+    AnnounceBps,
+    /// The bytes of the ANNOUNCEs with entries that reached the first swarm's
+    /// seed, as a share of what the swarm's viewers sent.
+    ///
+    /// strims-sim: Over the bytes the first swarm's viewers, honest and
+    /// hostile, wrote to their links (`HostReport::uploaded`,
+    /// `Report::announces`).
+    ///
+    /// Unit: fraction.
+    AnnounceShare,
     /// The median busy fraction of the seeds' meters over their samples while a
     /// swarm streams (Report::busy_median).
     BusySeedsP50,
@@ -1523,6 +1742,16 @@ pub(crate) enum RowNum {
     ///
     /// Unit: fraction.
     HaveLazyOutShare,
+    /// Over the intervals `holder_short` counts (an honest viewer holding a
+    /// whole copy from the seed at both ends), the median share of what the
+    /// holder was owed in the interval that it got as on-time pushes.
+    ///
+    /// strims-sim: Each interval's hits over the push deadlines that came due
+    /// in it, hits and misses (`Report::holder_copy`); left out with no such
+    /// interval.
+    ///
+    /// Unit: fraction.
+    HolderCopy,
     /// Of the intervals between consecutive samples after the first swarm's
     /// startup at both of which an honest viewer held a whole copy from the
     /// seed (every stream pushed to it by the seed), the share in which its
@@ -1690,6 +1919,13 @@ pub(crate) enum RowNum {
     ///
     /// Unit: fraction.
     SeedUploadShare,
+    /// The first swarm's seed's push subscriptions (stream slots: one stream at
+    /// one neighbour), mean over its allocation samples after the startup.
+    ///
+    /// strims-sim: The streams pushed to each neighbour at the seed's stats
+    /// samples in the seed meter's window, summed (`Report::seed_slots`); left
+    /// out without a sample.
+    SeedSlots,
     /// The seed's share of the chunk data sent: its DATA bytes over every
     /// node's, with no vpn, handshake or protocol overhead (`seed_upload_share`
     /// is its share of every byte).
@@ -1705,6 +1941,14 @@ pub(crate) enum RowNum {
     /// A media swarm's stream rate: the bytes its seed sent of the stream over
     /// the stream's seconds, in kbit/s; left out without media.
     SentKbit,
+    /// When the first swarm's seed's holders (`holder_changes`'s) last changed,
+    /// in s after the stream's start; 0 if they never did.
+    ///
+    /// strims-sim: Over all of the seed's allocation samples
+    /// (`Report::settled`); left out without one.
+    ///
+    /// Unit: s.
+    SettledS,
     /// The run's simulated length in seconds: turmoil's elapsed time when the
     /// run ended, its scenario's duration and the controller's last sample
     /// after it.
@@ -1828,6 +2072,8 @@ impl RowNum {
             RowNum::ReadingFnRole(i) => at(&ROWNUM_READING_FN_ROLE, i),
             RowNum::ReadingFpRole(i) => at(&ROWNUM_READING_FP_ROLE, i),
             RowNum::WindowPP(i) => at(&ROWNUM_WINDOW_P_P, i),
+            RowNum::AnnounceBps => "announce_bps",
+            RowNum::AnnounceShare => "announce_share",
             RowNum::BusySeedsP50 => "busy_seeds_p50",
             RowNum::CapDepthRho => "cap_depth_rho",
             RowNum::CapDepthRhoStartup => "cap_depth_rho_startup",
@@ -1849,6 +2095,7 @@ impl RowNum {
             RowNum::FrameBytesMean => "frame_bytes_mean",
             RowNum::HaveLazyInShare => "have_lazy_in_share",
             RowNum::HaveLazyOutShare => "have_lazy_out_share",
+            RowNum::HolderCopy => "holder_copy",
             RowNum::HolderShort => "holder_short",
             RowNum::LagP99MsWeak => "lag_p99_ms_weak",
             RowNum::LinksDroppedPerHostMin => "links_dropped_per_host_min",
@@ -1877,9 +2124,11 @@ impl RowNum {
             RowNum::SeedPps => "seed_pps",
             RowNum::SeedPullShare => "seed_pull_share",
             RowNum::SeedUploadShare => "seed_upload_share",
+            RowNum::SeedSlots => "seed_slots",
             RowNum::SeedChunkShare => "seed_chunk_share",
             RowNum::SeedWirePerWritten => "seed_wire_per_written",
             RowNum::SentKbit => "sent_kbit",
+            RowNum::SettledS => "settled_s",
             RowNum::SimSecs => "sim_secs",
             RowNum::SmallPacketShare => "small_packet_share",
             RowNum::StalledShareDelayPop(i) => at(&ROWNUM_STALLED_SHARE_DELAY_POP, i),

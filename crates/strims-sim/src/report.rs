@@ -194,6 +194,9 @@ pub struct HostReport {
     pub messages: Vec<(Option<HostIx>, usize, crate::stats::PeerMessages)>,
     /// Its answers to its peers' path probes, and its reads of theirs.
     pub echoes: crate::stats::Echoes,
+    /// Where it seeds a hybrid swarm, its allocation at every stats sample,
+    /// every incarnation: (time since the start, scenario swarm, sample).
+    pub seed_allocs: Vec<(std::time::Duration, usize, crate::seed_alloc::AllocSample)>,
 }
 
 /// A decision of a seed's ([`HostReport::seed_decisions`]): when (true
