@@ -17,8 +17,9 @@ use common::{Node, Tag, now, pump};
 use strims_base::path::PathSample;
 use strims_base::time::{Duration, Time};
 use strims_vnic::control::{self, Record};
+use strims_vnic::host::FORGED_ECHO;
 use strims_vnic::{
-    Event, Fill, FrameDecoder, Host, LinkConfig, LinkKind, PeerKey, WriterId, ports,
+    EchoGreed, Event, Fill, FrameDecoder, Host, LinkConfig, LinkKind, PeerKey, WriterId, ports,
 };
 
 fn no_handlers(_: &mut Host<Tag>, _: PeerKey) {}
@@ -348,6 +349,75 @@ fn a_host_that_doesnt_probe_still_echoes() {
     let back = a.take_transmit(la);
     assert_eq!(records(&back), vec![Record::Echo(nonce)]);
     assert_eq!(a.host.metrics().probe_write_count, 0);
+}
+
+/// Two hosts linked at `now()` as [`linked`], B's link answering with
+/// `greed`.
+fn linked_greedy(greed: EchoGreed) -> (Node, PeerKey, Node, PeerKey) {
+    let mut a = Node::new(1, "a");
+    let mut b = Node::new(2, "b");
+    let la = a.host.add_link(now(), plain()).unwrap();
+    let config = LinkConfig {
+        echo_greed: greed,
+        ..plain()
+    };
+    let lb = b.host.add_link(now(), config).unwrap();
+    pump(&mut a, la, &mut b, lb, now(), usize::MAX, &mut no_handlers);
+    a.events.clear();
+    b.events.clear();
+    (a, la, b, lb)
+}
+
+#[test]
+fn a_holding_link_echoes_its_first_probe_read_a_hold_later() {
+    let hold = Duration::from_millis(300);
+    let (mut a, la, mut b, lb) = linked_greedy(EchoGreed {
+        hold: Some(hold),
+        forge: false,
+    });
+    b.host.set_probe_interval(None);
+    idle(&mut a, ms(0));
+    let mut wire = a.take_transmit(la);
+    b.input(lb, ms(20), &mut wire, &mut no_handlers).unwrap();
+    idle(&mut b, ms(20));
+    assert!(b.take_transmit(lb).is_empty());
+    // The release is one of B's deadlines, and nothing goes before it.
+    assert_eq!(b.host.poll_timeout(), Some(ms(320)));
+    idle(&mut b, ms(319));
+    assert!(b.take_transmit(lb).is_empty());
+    idle(&mut b, ms(320));
+    let mut back = b.take_transmit(lb);
+    let [Record::Echo(_)] = records(&back)[..] else {
+        panic!("one echo");
+    };
+    a.input(la, ms(340), &mut back, &mut no_handlers).unwrap();
+    let rtt = Duration::from_millis(340);
+    assert_eq!(samples(&mut a), vec![(la, PathSample { at: ms(340), rtt })]);
+    assert_eq!(b.host.metrics().echo_hold_ms, 300);
+    assert_eq!(b.host.poll_timeout(), Some(ms(10_000)));
+}
+
+#[test]
+fn a_forging_link_echoes_nonces_its_peer_never_sent() {
+    let (mut a, la, mut b, lb) = linked_greedy(EchoGreed {
+        hold: None,
+        forge: true,
+    });
+    idle(&mut a, ms(0));
+    let mut wire = a.take_transmit(la);
+    let [nonce] = probes(&wire)[..] else {
+        panic!("one probe");
+    };
+    b.input(lb, ms(20), &mut wire, &mut no_handlers).unwrap();
+    idle(&mut b, ms(20));
+    let mut back = b.take_transmit(lb);
+    assert_eq!(records(&back)[0], Record::Echo(nonce ^ FORGED_ECHO));
+    a.input(la, ms(40), &mut back, &mut no_handlers).unwrap();
+    assert!(samples(&mut a).is_empty());
+    let path = a.host.link_path(la, ms(40)).unwrap();
+    assert!(path.reading.is_none());
+    assert_eq!((path.unknown_echoes, path.unanswered), (1, 0));
+    assert_eq!(a.host.metrics().echo_unknown_count, 1);
 }
 
 #[test]

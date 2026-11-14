@@ -129,6 +129,11 @@ pub struct NodeConfig {
     /// start; `None` (the default, and every real node's) passes them as
     /// they are.
     pub adversary: Option<crate::adversary::AdversaryFactory>,
+    /// How every link answers its peer's path probes
+    /// (`strims_vnic::LinkConfig::echo_greed`), for adversarial
+    /// simulations; the default (every real node's) answers them as the
+    /// path measure needs.
+    pub echo_greed: strims_vnic::EchoGreed,
     /// Reads the node's counters at every edge of bins `width` wide from
     /// `origin` (by the node's clock) and keeps them for the next
     /// `Node::metrics` (`NodeMetrics::bins`), for a simulation to see finer
@@ -324,6 +329,7 @@ impl NodeConfig {
             node_version: "dev".to_owned(),
             ppspp_capture: None,
             adversary: None,
+            echo_greed: strims_vnic::EchoGreed::default(),
         }
     }
 

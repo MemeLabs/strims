@@ -80,8 +80,9 @@ pub use frame::{
 };
 pub use host::{
     AesLinkConfig, CloseReason, DEFAULT_HANDSHAKE_TIMEOUT, DEFAULT_KEEPALIVE_INTERVAL,
-    DEFAULT_MAX_PENDING_LINKS, DEFAULT_PROBE_INTERVAL, EgressFrame, Event, Fill, Host, HostConfig,
-    InboundFrame, LinkConfig, LinkKind, LinkPath, Peer, PeerInitError, PeerKey, WriterId, ports,
+    DEFAULT_MAX_PENDING_LINKS, DEFAULT_PROBE_INTERVAL, EchoGreed, EgressFrame, Event, Fill, Host,
+    HostConfig, InboundFrame, LinkConfig, LinkKind, LinkPath, Peer, PeerInitError, PeerKey,
+    WriterId, ports,
 };
 pub use interface::{
     CandidateError, CandidateErrors, DialTarget, LinkCandidate, LinkCandidatePool, LinkDescription,

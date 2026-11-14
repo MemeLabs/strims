@@ -88,7 +88,8 @@
 //!   before; after it otherwise); and as the keepalive of an idle link. Its
 //!   nonce is drawn from the host's rng.
 //! - The newest probe read from the peer is echoed at the start of the next
-//!   [`Host::poll_egress`], ahead of the owners' frames.
+//!   [`Host::poll_egress`], ahead of the owners' frames; a link's
+//!   [`EchoGreed`] (adversarial simulations) holds it or forges it.
 //! - Control frames need only their own length free in the link buffer, go
 //!   behind the bytes already in it, and bypass QoS and its rate limit.
 //!   One that doesn't fit waits for [`Host::advance_link_transmit`] to make
@@ -220,7 +221,28 @@ pub struct LinkConfig {
     pub tcp_mux_init: Option<[u8; 32]>,
     /// Run the AES link handshake (TCP).
     pub aes: Option<AesLinkConfig>,
+    /// How this host answers the peer's probes; the default answers them
+    /// as the path measure needs (see Path).
+    pub echo_greed: EchoGreed,
 }
+
+/// A host that answers its peer's probes other than as the path measure
+/// needs, for adversarial simulations; the default (every real link's)
+/// answers each as soon as it can.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct EchoGreed {
+    /// Holds each echo this long after the probe it answers was read, the
+    /// first probe since the last echo: newer probes read meanwhile ride
+    /// on its release.
+    pub hold: Option<Duration>,
+    /// Echoes nonces it never read: the peer's echo of a probe it sent,
+    /// with a bit flipped ([`FORGED_ECHO`]).
+    pub forge: bool,
+}
+
+/// What a forging host ([`EchoGreed::forge`]) flips in each nonce it
+/// echoes.
+pub const FORGED_ECHO: u32 = 0x8000_0000;
 
 impl LinkConfig {
     /// A plain link with a send buffer of two MTUs.
@@ -231,6 +253,7 @@ impl LinkConfig {
             send_buffer: mtu.saturating_mul(2),
             tcp_mux_init: None,
             aes: None,
+            echo_greed: EchoGreed::default(),
         }
     }
 
@@ -524,6 +547,10 @@ struct Link<T> {
     path: PathMeter,
     /// The echo owed to the peer's newest probe.
     echo: Echo,
+    /// [`LinkConfig::echo_greed`], and with a hold, when the echo owed may
+    /// go (its entry in [`Host`]'s `held_echoes`).
+    echo_greed: EchoGreed,
+    echo_release: Option<Time>,
 }
 
 impl<T> Link<T> {
@@ -580,6 +607,9 @@ pub struct Host<T: Copy = ()> {
     /// Established links owing an echo or a probe that hasn't fit their
     /// buffer yet. Bounded by `links`.
     control_due: BTreeSet<PeerKey>,
+    /// Echoes held by [`EchoGreed::hold`], by release time: they join
+    /// `control_due` then. At most one entry per link.
+    held_echoes: BTreeSet<(Time, PeerKey)>,
     /// The upload limit set ([`HostConfig::rate_limit`]), and with
     /// [`HostConfig::pace`] the pacer whose rate QoS takes under it.
     rate_limit: Option<u64>,
@@ -621,6 +651,7 @@ impl<T: Copy> Host<T> {
             max_pending_links: DEFAULT_MAX_PENDING_LINKS,
             probe_interval: Some(DEFAULT_PROBE_INTERVAL),
             control_due: BTreeSet::new(),
+            held_echoes: BTreeSet::new(),
             rate_limit: config.rate_limit,
             pacer,
         })
@@ -737,6 +768,8 @@ impl<T: Copy> Host<T> {
             timer: None,
             path: PathMeter::new(),
             echo: Echo::default(),
+            echo_greed: config.echo_greed,
+            echo_release: None,
         });
         if plain && let Err(e) = self.queue_peer_init(key, now) {
             self.links.remove(key);
@@ -870,7 +903,9 @@ impl<T: Copy> Host<T> {
                     let metrics = &mut self.metrics;
                     let events = &mut self.events;
                     let control_due = &mut self.control_due;
+                    let held_echoes = &mut self.held_echoes;
                     let (path, echo) = (&mut link.path, &mut link.echo);
+                    let (greed, release) = (link.echo_greed, &mut link.echo_release);
                     link.decoder.decode(rest, &mut |f| {
                         if f.port == ports::KEEPALIVE_PORT {
                             metrics.keepalive_read_count += 1;
@@ -879,8 +914,22 @@ impl<T: Copy> Host<T> {
                                 match r {
                                     Record::Probe(nonce) => {
                                         metrics.probe_read_count += 1;
+                                        let nonce = if greed.forge {
+                                            nonce ^ FORGED_ECHO
+                                        } else {
+                                            nonce
+                                        };
+                                        match greed.hold {
+                                            Some(hold) if release.is_none() => {
+                                                *release = Some(now + hold);
+                                                held_echoes.insert((now + hold, key));
+                                            }
+                                            Some(_) => {}
+                                            None => {
+                                                control_due.insert(key);
+                                            }
+                                        }
                                         echo.read(nonce, now);
-                                        control_due.insert(key);
                                     }
                                     Record::Echo(nonce) => match path.echo(nonce, now) {
                                         Ok(Some(sample)) => {
@@ -1080,6 +1129,9 @@ impl<T: Copy> Host<T> {
         };
         if let Some(t) = link.timer {
             self.timers.remove(&(t, key));
+        }
+        if let Some(t) = link.echo_release {
+            self.held_echoes.remove(&(t, key));
         }
         self.control_due.remove(&key);
         if let Stage::Established(peer) = link.stage {
@@ -1530,6 +1582,12 @@ impl<T: Copy> Host<T> {
         now: Time,
         fill: &mut impl FnMut(EgressFrame<'_, T>) -> Fill,
     ) -> usize {
+        while let Some(&(t, key)) = self.held_echoes.first()
+            && t <= now
+        {
+            self.held_echoes.pop_first();
+            self.control_due.insert(key);
+        }
         if self.timers.first().is_some_and(|&(t, _)| t <= now) {
             self.handle_timeout(now);
         }
@@ -1646,14 +1704,15 @@ impl<T: Copy> Host<T> {
 
     /// When to call [`Host::handle_timeout`] and [`Host::poll_egress`] next
     /// if nothing else happens: the earliest of the rate limit's release
-    /// time, a handshake deadline and a keepalive check. `None` when
-    /// nothing is waiting.
+    /// time, a handshake deadline, a keepalive check and a held echo's
+    /// release ([`EchoGreed::hold`]). `None` when nothing is waiting.
     pub fn poll_timeout(&self) -> Option<Time> {
         let link = self.timers.first().map(|&(t, _)| t);
-        match (self.qos.poll_timeout(), link) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
-        }
+        let echo = self.held_echoes.first().map(|&(t, _)| t);
+        [self.qos.poll_timeout(), link, echo]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     /// Runs the link deadlines due at `now`:
@@ -1877,24 +1936,33 @@ fn write_control<T>(
         aes,
         path,
         echo,
+        echo_release,
         ..
     } = link;
     let Some(out) = out.as_mut() else {
         return ControlWrite::Nothing;
     };
     let probe = probe && path.can_probe();
-    let len = control::frame_len(echo.is_pending(), probe);
+    // A held echo ([`EchoGreed::hold`]) waits for its release.
+    let echo_due = echo.is_pending() && echo_release.is_none_or(|t| t <= now);
+    let len = control::frame_len(echo_due, probe);
     if len == FRAME_HEADER_LEN || out.capacity() < len {
         return ControlWrite::Nothing;
     }
     let Some(slot) = out.slot(len) else {
         return ControlWrite::Deferred;
     };
-    let echoed = echo.take(now).map(|(nonce, hold)| {
-        metrics.echo_write_count += 1;
-        metrics.echo_hold_ms += u64::try_from(hold.as_millis()).unwrap_or(0);
-        nonce
-    });
+    let echoed = echo_due
+        .then(|| echo.take(now))
+        .flatten()
+        .map(|(nonce, hold)| {
+            metrics.echo_write_count += 1;
+            metrics.echo_hold_ms += u64::try_from(hold.as_millis()).unwrap_or(0);
+            nonce
+        });
+    if echoed.is_some() {
+        *echo_release = None;
+    }
     let nonce = probe.then(|| {
         loop {
             let n = rand_core::Rng::next_u32(rng);

@@ -379,6 +379,7 @@ impl State {
             vnic,
             links,
             metrics,
+            echo_greed,
             ..
         } = self;
         let Some(rtc) = rtc else {
@@ -388,7 +389,11 @@ impl State {
             return;
         };
         metrics.webrtc_opened += 1;
-        match vnic.add_link(now, LinkConfig::webrtc().with_mtu(mtu)) {
+        let config = LinkConfig {
+            echo_greed: *echo_greed,
+            ..LinkConfig::webrtc().with_mtu(mtu)
+        };
+        match vnic.add_link(now, config) {
             Ok(link) => {
                 rc.link = Some(link);
                 links.insert(

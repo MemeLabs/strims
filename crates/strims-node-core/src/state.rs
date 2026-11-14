@@ -417,6 +417,8 @@ pub(crate) struct State {
     /// (bound: the read's frames).
     adversary_frame: Vec<u8>,
     adversary_wants: Vec<LinkKey>,
+    /// See [`NodeConfig::echo_greed`]: every link's.
+    pub(crate) echo_greed: strims_vnic::EchoGreed,
     /// When the capture last flushed, and last sampled the links.
     capture_flushed: Time,
     capture_sampled: Time,
@@ -564,6 +566,7 @@ impl State {
             adversary,
             adversary_frame: Vec::new(),
             adversary_wants: Vec::new(),
+            echo_greed: config.echo_greed,
             capture_flushed: now,
             capture_sampled: Time::EPOCH,
         })

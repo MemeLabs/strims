@@ -704,6 +704,7 @@ impl<I: NodeIo> NodeTask<I> {
         if max_write < config.mtu {
             config.send_buffer = config.mtu.saturating_add(max_write);
         }
+        config.echo_greed = self.state.echo_greed;
         let link = match self.state.vnic.add_link(now, config) {
             Ok(l) => l,
             Err(e) => {
