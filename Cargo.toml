@@ -37,6 +37,8 @@ members = [
   "crates/strims-svc",
   "crates/strims-wasm",
 ]
+# Vendored crates build as dependencies only (third_party/README.md).
+exclude = ["third_party/turmoil"]
 
 [workspace.package]
 version = "0.1.0"
@@ -172,6 +174,10 @@ redb = "4.4"
 
 # testing
 proptest = "1"
+
+# Vendored crates, patched (third_party/README.md).
+[patch.crates-io]
+turmoil = { path = "third_party/turmoil" }
 
 # Optimize dependencies (not workspace crates) in dev builds. Unoptimized
 # ed25519 costs about 7.5 ms per verified vpn message, which dominates debug

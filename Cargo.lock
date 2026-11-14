@@ -3194,8 +3194,6 @@ dependencies = [
 [[package]]
 name = "turmoil"
 version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0061c28f1469e94771bb8aa626ce6b29265c2fb5034115046a170b0cba2e33d2"
 dependencies = [
  "bytes",
  "indexmap",
