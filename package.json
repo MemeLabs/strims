@@ -48,7 +48,7 @@
     "css-loader": "^7.1.5",
     "css-tree": "^3.2.1",
     "csstype": "^3.2.3",
-    "d3-format": "^3.1.0",
+    "d3-format": "^3.1.3",
     "date-and-time": "^4.7.1",
     "emojibase": "^18.0.0",
     "emojibase-data": "^18.0.0",
@@ -63,7 +63,7 @@
     "idb": "^8.0.4",
     "intl-messageformat": "^12.1.5",
     "js-base64": "^3.9.6",
-    "json5": "^2.2.2",
+    "json5": "^2.2.3",
     "lodash": "^4.18.1",
     "mini-css-extract-plugin": "^2.10.2",
     "mocha": "^12.0.3",
@@ -71,13 +71,13 @@
     "overlayscrollbars-react": "^0.5.7",
     "oxlint": "^1.93.0",
     "oxlint-tsgolint": "^7.0.2007",
-    "postcss": "^8.5.32",
+    "postcss": "^8.5.33",
     "postcss-loader": "^8.2.1",
     "prettier": "^3.10.1",
     "prismjs": "^1.30.0",
     "process": "^0.11.10",
     "qrcode": "^1.5.4",
-    "qs": "^6.11.0",
+    "qs": "^6.17.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-dropzone": "^20.2.0",
@@ -113,7 +113,7 @@
     "webpack": "^5.112.2",
     "webpack-cli": "^7.3.1",
     "webpack-dev-server": "^6.1.0",
-    "ws": "^8.22.2"
+    "ws": "^8.23.0"
   },
   "browserslist": [
     "defaults"
