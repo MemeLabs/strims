@@ -19,6 +19,11 @@ don't).
    `j.int(RowInt::Streams, n)`, `j.num`, `j.nums`, ..., a family's name
    by its constructor (`RowNum::delivery_who`), each key taking its
    declared type.
+   - A field only a research line writes is still declared on main
+     first, with `sims = []` and `lines = ["decl"]` (the lines that write
+     it). The line's branch adds its sim to `sims` when it starts writing
+     the field. A field a lab program adds to a sim's row (suite.py's
+     `_wall_s`) names that program in `writers` instead.
    - A per-second series field is a `seconds` column: declared under
      fields.toml's `columns.seconds` and written in
      `Report::series_data` (its doc table, and its `cols::Seconds`

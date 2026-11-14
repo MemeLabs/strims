@@ -22,6 +22,14 @@ and `simdb.py forecast-report`).
    - Vocabulary names (phases, kinds, reasons) come from the vocabulary
      (`simlab.vocab`) or `query.TAIL`, never literals in the Python or
      its SQL.
+   - Quantiles go through the lab's one method: `sketch_quantile(x, p)`
+     or `sketch_quantiles(x, ps)` in SQL, `simlab.sketch.quantile(xs, p)`
+     in Python, with p an integer percent. Never use DuckDB's quantile_cont,
+     `median` or `statistics.median`. Don't mix a bare `quantile_disc`
+     into a query that calls `sketch_quantile`: DuckDB merges them.
+   - Viewer-experience measures (lag, stalls, joins) count honest viewers
+     only (`viewers.hostile` left out, or the `_honest` fields), as the
+     verdict and `stall_rate_of` do.
    - It offers `SECTIONS`, `report(sel, sections)` and `report_text`,
      and its results are JSON-able, so the command's `--json` and the
      console can both take them.

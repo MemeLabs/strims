@@ -64,6 +64,14 @@ views'). The phase of a second outside the verdict's seconds
 that writes its own `coalesce(phase, ...)` gives a wrong meaning that
 test_views' vocabulary check can't see.
 
+The quantile has one method too: strims-base's log sketch (128 buckets
+per doubling, read at the bucket's lower bound, integer nearest rank).
+It is `simlab.sketch.quantile` in verdict.py and the reports, and
+`sketch_quantile`/`sketch_quantiles` in scoring.sql and the views; the
+sims' fields use `strims_base::stats::sketch`. A change to how a
+reference quantity is taken goes in sim-suite's `golden.TAUGHT`, so the
+scorecards set compares like with like.
+
 ## Checks
 
 - Tests: test_verdict; `hack/sim-db/simdb_test.py`'s `PerViewerVerdict`

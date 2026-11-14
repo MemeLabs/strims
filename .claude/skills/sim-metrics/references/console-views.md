@@ -18,7 +18,12 @@ vocabulary), 8959d6c8 (selections on the graphs, kept in the address).
      macro takes a `jobs` list (`viewer_lag_of`), never a copy of one;
    - a METRICS quantity read from the rows, `job_metrics` or
      `metric_defs`, never derived again in the view or claimed equal in
-     a comment.
+     a comment;
+   - quantiles through `sketch_quantile(x, p)` / `sketch_quantiles(x, ps)`
+     (an integer percent), never DuckDB's quantile_cont or median;
+   - viewer-experience measures over honest viewers only, through the
+     macros that already count them (`stall_rate_of`, `viewer_lag_of`)
+     or the `_honest` fields.
    A metric a report prints too is a scoring.sql macro both call
    (`derived.md`).
 2. **`NAME.json`:** its title, description and params, each param's
