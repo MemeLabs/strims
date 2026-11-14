@@ -160,6 +160,16 @@ pub struct NodeConfig {
     /// `None` (the default, and every real node's) keeps none. It changes
     /// no decision.
     pub parent_log: Option<ParentSink>,
+    /// Turns the ppspp runner's tap on (`Runner::set_tap` at
+    /// `TapLevel::All`: its decisions, and its peers', swarms' and
+    /// channels' comings and goings) and hands every event to the sink,
+    /// its peer named by host, and how many the tap's buffers left out: at
+    /// the end of the node's pass that made it, before the pass forgets
+    /// the peer it names; `None` (the default, and every real node's)
+    /// leaves the tap off. It changes no decision. A capture
+    /// (`ppspp_capture`) takes the same tap, so a node given both doesn't
+    /// start ([`NodeError::Config`]).
+    pub decision_log: Option<DecisionSink>,
     /// Hands a last `Node::metrics` snapshot, taken at the node's last pass,
     /// to the sink when the node task goes: a node that stops, or one
     /// dropped with its runtime (a simulated crash), whose counters and
@@ -176,6 +186,17 @@ pub struct ParentSink(pub Arc<dyn Fn(crate::event::ParentLogEntry) + Send + Sync
 impl fmt::Debug for ParentSink {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("ParentSink")
+    }
+}
+
+/// Where a node's tap events go ([`NodeConfig::decision_log`]), for a
+/// simulation's analyses.
+#[derive(Clone)]
+pub struct DecisionSink(pub Arc<dyn Fn(crate::event::DecisionLogEntry) + Send + Sync>);
+
+impl fmt::Debug for DecisionSink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("DecisionSink")
     }
 }
 
@@ -324,6 +345,7 @@ impl NodeConfig {
             forecast_log: false,
             request_log: false,
             parent_log: None,
+            decision_log: None,
             last_metrics: None,
             node_platform: String::new(),
             node_version: "dev".to_owned(),

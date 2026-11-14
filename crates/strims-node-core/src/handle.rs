@@ -640,6 +640,22 @@ impl Node {
             .await?
     }
 
+    /// Fixes the peers a hybrid seed pushes each stream of `swarm` to, one
+    /// list of hosts per stream, for an experiment's fixed allocation
+    /// (ppspp `Runner::pin_seed_allocation`): while pinned, the seed
+    /// accepts a stream's STREAM_REQUESTs from its listed peers only,
+    /// closes its other subscribers and sheds none. `None` lifts the pin.
+    /// The pin names the hosts that are peers when it's made: one that
+    /// links later is in a pin made again after its link.
+    pub async fn pin_seed_allocation(
+        &self,
+        swarm: SwarmKey,
+        pin: Option<Vec<Vec<ID>>>,
+    ) -> Result<(), NodeError> {
+        self.call(move |s, _| s.pin_seed_allocation(swarm, pin))
+            .await?
+    }
+
     /// Stops the swarm with a peer. Stopping a swarm that isn't running
     /// is not an error.
     pub async fn stop_swarm(&self, host_id: ID, swarm: SwarmKey) -> Result<(), NodeError> {

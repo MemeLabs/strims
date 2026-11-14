@@ -121,8 +121,8 @@ pub mod vpn_port;
 
 pub use adversary::{Adversary, AdversaryFactory, AdversaryPeer};
 pub use config::{
-    BufferConfig, CaptureOpen, DEFAULT_NOTSENT_LOWAT, MetricsSink, NetworkOptions, NodeConfig,
-    ParentSink, PeerRpcConfig, PpsppCapture, StatsBins, TcpSocketConfig, VpnPortConfig,
+    BufferConfig, CaptureOpen, DEFAULT_NOTSENT_LOWAT, DecisionSink, MetricsSink, NetworkOptions,
+    NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture, StatsBins, TcpSocketConfig, VpnPortConfig,
     WebRtcConfig,
 };
 pub use driver::{
@@ -131,9 +131,10 @@ pub use driver::{
 };
 pub use error::{NodeError, ReadError};
 pub use event::{
-    ChannelInfo, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo, LinkInfo, LogInfo, NetworkInfo,
-    NodeBin, NodeEvent, NodeMetrics, ParentInfo, ParentLogEntry, PeerInfo, RequestInfo,
-    RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
+    ChannelInfo, DecisionInfo, DecisionLogEntry, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo,
+    LinkInfo, LogInfo, NetworkInfo, NodeBin, NodeEvent, NodeMetrics, ParentInfo, ParentLogEntry,
+    PeerInfo, RequestInfo, RunnerMetrics, RunnerPeerInfo, SeedAllocationInfo, SeedNeighbourInfo,
+    StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
 };
 pub use handle::{
     HashTableGet, Node, NodeEvents, NodeInfo, PeerIndexSearch, SpawnNode, SwarmReader, SwarmWriter,

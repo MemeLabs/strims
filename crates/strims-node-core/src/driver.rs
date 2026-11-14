@@ -902,7 +902,11 @@ mod tests {
 
     /// A node without TCP, as a browser runs one.
     fn browser(i: u8) -> Side {
-        let config = NodeConfig::new(key_from_seed(&[i; 32]), u64::from(i));
+        browser_with(NodeConfig::new(key_from_seed(&[i; 32]), u64::from(i)))
+    }
+
+    /// [`browser`] with `config`.
+    fn browser_with(config: NodeConfig) -> Side {
         let (closed_tx, closed) = mpsc::unbounded_channel();
         let setup = NodeSetup {
             interfaces: Interfaces {
@@ -1231,6 +1235,76 @@ mod tests {
             first.get_or_insert(off);
             out.extend_from_slice(&reply.buf[..n]);
         }
+    }
+
+    /// A decision log and a capture both take the runner's tap, so a node
+    /// given both doesn't start. Given the log alone, the node hands it
+    /// the tap's events as its passes drain them, at the pass's time: a
+    /// swarm's channel opening, then the data the seed pushes, each of the
+    /// swarm and none naming a host for a peer the node has no link to.
+    #[test]
+    fn a_decision_log_gets_the_tap_a_capture_would() {
+        let (tx, entries) = std::sync::mpsc::channel();
+        let log = crate::config::DecisionSink(Arc::new(move |e| {
+            let _ = tx.send(e);
+        }));
+        let mut config = NodeConfig::new(key_from_seed(&[1; 32]), 1);
+        config.decision_log = Some(log);
+        config.ppspp_capture = Some(crate::config::PpsppCapture {
+            open: Arc::new(|_, _| Ok(Box::new(std::io::sink()))),
+            max_file_bytes: 0,
+            tap: false,
+        });
+        let setup = NodeSetup {
+            interfaces: Interfaces {
+                tcp: false,
+                wss: true,
+            },
+            tcp_addr: None,
+            ws_addr: None,
+            tcp_uri: None,
+            ws_uri: None,
+            webrtc_addrs: Vec::new(),
+            rtc: None,
+        };
+        assert!(matches!(
+            start(&config, setup, FakeIo::default()),
+            Err(NodeError::Config(_))
+        ));
+
+        config.ppspp_capture = None;
+        let mut a = browser_with(config);
+        let s = &mut a.task.state;
+        let mut seed = Remote::new(s);
+        let swarm = seed.node_swarm;
+        seed.write(2);
+        let start = seed.now;
+        for _ in 0..4 {
+            seed.tick(s, 50);
+        }
+        let decisions: Vec<_> = entries
+            .try_iter()
+            .filter_map(|e| match e {
+                crate::event::DecisionLogEntry::Decision(d) => Some(d),
+                crate::event::DecisionLogEntry::Lost(_) => None,
+            })
+            .collect();
+        assert!(
+            decisions
+                .iter()
+                .any(|d| matches!(d.kind, strims_ppspp::TapKind::ChannelOpened { .. })),
+            "{decisions:?}"
+        );
+        assert!(
+            decisions.iter().any(|d| matches!(
+                d.kind,
+                strims_ppspp::TapKind::PushHit { .. } | strims_ppspp::TapKind::RequestRound(_)
+            )),
+            "{decisions:?}"
+        );
+        assert!(decisions.iter().all(|d| d.peer.is_none()));
+        assert!(decisions.iter().all(|d| d.swarm.is_none_or(|k| k == swarm)));
+        assert!(decisions.iter().all(|d| d.at >= start && d.at <= seed.now));
     }
 
     /// A reader moves back two munros behind where it joined, waiting for

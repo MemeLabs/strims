@@ -668,7 +668,8 @@ impl Pool {
             .runner
             .swarms
             .iter()
-            .flat_map(|s| s.seed_neighbours.iter())
+            .filter_map(|s| s.seed_allocation.as_ref())
+            .flat_map(|a| a.neighbours.iter())
             .filter(|n| n.barred)
             .map(|n| n.host_id)
             .collect();

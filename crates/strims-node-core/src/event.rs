@@ -3,14 +3,14 @@
 
 //! Node events and metrics.
 
-use strims_base::time::Time;
+use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_kademlia::ID;
 use strims_ppspp::codec::Stream;
 use strims_ppspp::{
-    ChannelMetrics, ChannelStats, ChannelTotals, HaveRecord, LagForecast, MetricsSnapshot,
-    ParentWhy, PeerStats, PushStats, RequestRecord, SeedDecision, SeedSend, SwarmCounters, SwarmId,
-    SwarmKey, SwarmSchedulerStats,
+    AllocCounters, ChannelMetrics, ChannelStats, ChannelTotals, HaveRecord, LagForecast,
+    MetricsSnapshot, ParentWhy, PeerStats, PushStats, ReportCounters, RequestRecord, SeedDecision,
+    SeedSend, SwarmCounters, SwarmId, SwarmKey, SwarmSchedulerStats, TapKind,
 };
 use strims_vnic::{HostMetrics, LinkKind, LinkMetrics, LinkPath};
 use strims_vpn::{Delivery, ExchangeOutcome, NetworkId};
@@ -330,6 +330,31 @@ pub enum ParentLogEntry {
     Lost(u64),
 }
 
+/// An event of the ppspp runner's tap ([`crate::NodeConfig::decision_log`],
+/// ppspp's `TapEvent`): when, by the node's clock (the pass that made it),
+/// its swarm, the peer it is about by host (`None` for none, or one the
+/// node can't name), and what happened. The peer keys inside `kind` (a
+/// `ParentChoice`'s candidates, a `Switched`'s `from`) are the runner's
+/// own: only `peer` is named by host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DecisionInfo {
+    pub at: Time,
+    pub swarm: Option<SwarmKey>,
+    pub peer: Option<ID>,
+    pub kind: TapKind,
+}
+
+/// What a node's decision log hands its sink
+/// ([`crate::NodeConfig::decision_log`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DecisionLogEntry {
+    /// An event of the tap.
+    Decision(DecisionInfo),
+    /// Events the tap's buffers (ppspp's `TAP_CAP`) left out since the
+    /// last entry: what the sink lacks of the tap.
+    Lost(u64),
+}
+
 /// The ppspp runner's state.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RunnerMetrics {
@@ -360,9 +385,9 @@ pub struct SwarmInfo {
     pub push: Option<PushStats>,
     /// Per stream, the host of its open parent (`PushStats::parents`).
     pub parent_hosts: Vec<Option<ID>>,
-    /// An adaptive seed's view of its neighbours (ppspp
-    /// `Runner::seed_allocation`); empty elsewhere.
-    pub seed_neighbours: Vec<SeedNeighbourInfo>,
+    /// A hybrid seed's view of its neighbours and its allocation (ppspp
+    /// `Runner::seed_allocation`); `None` elsewhere.
+    pub seed_allocation: Option<SeedAllocationInfo>,
     /// Open [`crate::SwarmReader`]s, and those waiting for data.
     pub readers: usize,
     pub readers_waiting: usize,
@@ -370,15 +395,44 @@ pub struct SwarmInfo {
     pub publishers: usize,
 }
 
-/// An adaptive seed's neighbour: whether it holds a copy, whether the
-/// reports barred it from holding one, and its smallest link round trip
-/// lately (ppspp `SeedNeighbour`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A hybrid seed's view of a swarm (ppspp `SeedAllocationStats`): its
+/// neighbours, and an adaptive seed's latest check (zero otherwise): the
+/// budget in stream slots (zero until measured), the window and the
+/// copies in effect, and its counters.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SeedAllocationInfo {
+    /// The neighbours the node can name by host, in the runner's order.
+    pub neighbours: Vec<SeedNeighbourInfo>,
+    pub budget: usize,
+    pub window: usize,
+    pub copies: usize,
+    pub counters: AllocCounters,
+}
+
+/// A hybrid seed's neighbour, by host (ppspp `SeedNeighbour`): the streams
+/// pushed to it; per stream, the mean one-way delay of its first copies
+/// lately as its reports give them, by its clock (`None` without any); the
+/// channel's round trip and its smallest link round trip lately; whether
+/// it holds a copy, and whether the reports barred it from holding one; at
+/// an adaptive seed's latest check, the reporters that voted on it,
+/// whether most saw it serve (`None`: too few to tell), the median of
+/// their hits' mean one-way delay (each by its reporter's clock) and
+/// whether the seed's pushes to it kept up; and what became of its own
+/// report entries.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SeedNeighbourInfo {
     pub host_id: ID,
+    pub streams: Vec<Stream>,
+    pub lags: Vec<Option<Duration>>,
+    pub rtt: Duration,
+    pub min_rtt: Option<Duration>,
     pub holder: bool,
     pub barred: bool,
-    pub min_rtt: Option<strims_base::time::Duration>,
+    pub reporters: usize,
+    pub served: Option<bool>,
+    pub report_delay: Option<Duration>,
+    pub kept_up: bool,
+    pub reports: ReportCounters,
 }
 
 /// A swarm's chunk store (ppspp `store::Buffer`).

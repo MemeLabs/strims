@@ -38,7 +38,8 @@ use strims_base::time::{Duration, Time};
 use strims_kademlia::ID;
 use strims_ppspp::store::{self, BufferReader};
 use strims_ppspp::{
-    Rewind, RewindError, Runner, RunnerError, SwarmId, SwarmKey, SwarmOptions, WriterOptions,
+    Rewind, RewindError, Runner, RunnerError, SwarmId, SwarmKey, SwarmOptions, TapKind, TapLevel,
+    WriterOptions,
 };
 use strims_proto::types::{Cache, Key};
 use strims_qos::ClassId;
@@ -56,14 +57,16 @@ use tokio::sync::{mpsc, oneshot};
 use crate::CaptureSample;
 use crate::adversary::{self, AdversaryPeer};
 use crate::config::{
-    MetricsSink, NetworkOptions, NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture, VpnPortConfig,
+    DecisionSink, MetricsSink, NetworkOptions, NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture,
+    VpnPortConfig,
 };
 use crate::driver::{IdleOk, Interfaces, LinkProbe, TaskGuard};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
-    ChannelInfo, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo, LinkInfo, LogInfo, NetworkInfo,
-    NodeBin, NodeEvent, NodeMetrics, ParentInfo, ParentLogEntry, PeerInfo, RequestInfo,
-    RunnerMetrics, RunnerPeerInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
+    ChannelInfo, DecisionInfo, DecisionLogEntry, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo,
+    LinkInfo, LogInfo, NetworkInfo, NodeBin, NodeEvent, NodeMetrics, ParentInfo, ParentLogEntry,
+    PeerInfo, RequestInfo, RunnerMetrics, RunnerPeerInfo, SeedAllocationInfo, SeedNeighbourInfo,
+    StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
 };
 
 /// Bin edges [`NodeConfig::stats_bins`] keeps between snapshots; past it the
@@ -415,6 +418,8 @@ pub(crate) struct State {
     gone_peers: Vec<(PpsppPeer, ID)>,
     /// See [`NodeConfig::parent_log`].
     parent_sink: Option<ParentSink>,
+    /// See [`NodeConfig::decision_log`].
+    decision_sink: Option<DecisionSink>,
     /// See [`NodeConfig::last_metrics`]: the node task's drop hands it
     /// the last snapshot.
     pub(crate) last_metrics: Option<MetricsSink>,
@@ -522,6 +527,14 @@ impl State {
         runner.set_forecasts(config.forecast_log);
         runner.set_request_log(config.request_log);
         runner.set_parent_log(config.parent_log.is_some());
+        if config.decision_log.is_some() {
+            if config.ppspp_capture.is_some() {
+                return Err(NodeError::Config(
+                    "a decision log and a ppspp capture both take the runner's tap".to_owned(),
+                ));
+            }
+            runner.set_tap(TapLevel::All);
+        }
         let capture = config
             .ppspp_capture
             .as_ref()
@@ -576,6 +589,7 @@ impl State {
             removed_swarms: Vec::new(),
             gone_peers: Vec::new(),
             parent_sink: config.parent_log.clone(),
+            decision_sink: config.decision_log.clone(),
             last_metrics: config.last_metrics.clone(),
             scratch_links: Vec::new(),
             frame_errors: Vec::new(),
@@ -640,6 +654,7 @@ impl State {
             self.refresh_paths(now);
             self.runner.handle_timeout(now);
             self.drain_parents(now);
+            self.drain_decisions(now, None);
         }
         if let Some(c) = &mut self.capture
             && now - self.capture_flushed >= CAPTURE_FLUSH_INTERVAL
@@ -937,6 +952,7 @@ impl State {
             let moved = self.drain_transmit(now);
             let evented = self.process_events(now);
             self.drain_capture(now);
+            self.drain_decisions(now, None);
             if !moved && !evented && !self.vpn.needs_flush() {
                 return false;
             }
@@ -1154,6 +1170,7 @@ impl State {
             progress |= self.drain_rtc(now);
             if !progress {
                 self.drain_parents(now);
+                self.drain_decisions(now, None);
                 return any;
             }
             any = true;
@@ -1165,13 +1182,16 @@ impl State {
             strims_vnic::Event::PeerAdded { peer, host_id } => self.peer_added(peer, host_id, now),
             strims_vnic::Event::PeerRemoved { peer, host_id } => {
                 self.vpn.handle_peer_removed(peer);
-                // The changes so far may name the peer.
+                // The changes and decisions so far may name the peer.
                 self.drain_parents(now);
+                self.drain_decisions(now, None);
                 if let Some(ps) = self.peers.remove(peer) {
                     if self.forecast_log || self.request_log {
                         self.gone_peers.push((ps.pp, ps.host_id));
                     }
                     self.runner.remove_peer(ps.pp);
+                    // Its removal's events name it too.
+                    self.drain_decisions(now, Some((ps.pp, ps.host_id)));
                     self.ppspp_peers.remove(ps.pp);
                     if let Some(a) = &mut self.adversary {
                         a.0.forget_peer(&ps.host_id);
@@ -1731,6 +1751,38 @@ impl State {
         }
     }
 
+    /// Hands the runner's tap events since the last call to the sink
+    /// (`NodeConfig::decision_log`), each at `now` and its peer named by
+    /// host (`gone`: a peer just removed, which the node no longer
+    /// names), and how many its buffers left out.
+    fn drain_decisions(&mut self, now: Time, gone: Option<(PpsppPeer, ID)>) {
+        let State {
+            decision_sink: Some(sink),
+            runner,
+            ppspp_peers,
+            peers,
+            ..
+        } = self
+        else {
+            return;
+        };
+        runner.drain_tap(|e| {
+            let entry = match e.kind {
+                TapKind::Lost { count } => DecisionLogEntry::Lost(count),
+                kind => DecisionLogEntry::Decision(DecisionInfo {
+                    at: now,
+                    swarm: e.swarm,
+                    peer: e.peer.and_then(|pp| match gone {
+                        Some((g, host)) if g == pp => Some(host),
+                        _ => Some(peers.get(*ppspp_peers.get(pp)?)?.host_id),
+                    }),
+                    kind,
+                }),
+            };
+            (sink.0)(entry);
+        });
+    }
+
     /// The runner's forecast and request logs since the last call, peers
     /// named by host (a peer removed since the last call too, by
     /// `gone_peers`), with how many records their caps left out.
@@ -1870,22 +1922,34 @@ impl State {
                             .map(|k| k.and_then(|k| hosts.get(&k).copied()))
                             .collect()
                     }),
-                    seed_neighbours: self.runner.seed_allocation(key, now).map_or(
-                        Vec::new(),
-                        |a| {
-                            a.neighbours
-                                .iter()
+                    seed_allocation: self.runner.seed_allocation(key, now).map(|a| {
+                        SeedAllocationInfo {
+                            neighbours: a
+                                .neighbours
+                                .into_iter()
                                 .filter_map(|n| {
                                     Some(SeedNeighbourInfo {
                                         host_id: *hosts.get(&n.peer)?,
+                                        streams: n.streams,
+                                        lags: n.lags,
+                                        rtt: n.rtt,
+                                        min_rtt: n.min_rtt,
                                         holder: n.holder,
                                         barred: n.barred,
-                                        min_rtt: n.min_rtt,
+                                        reporters: n.reporters,
+                                        served: n.served,
+                                        report_delay: n.report_delay,
+                                        kept_up: n.kept_up,
+                                        reports: n.reports,
                                     })
                                 })
-                                .collect()
-                        },
-                    ),
+                                .collect(),
+                            budget: a.budget,
+                            window: a.window,
+                            copies: a.copies,
+                            counters: a.counters,
+                        }
+                    }),
                     readers: readers.clone().count(),
                     readers_waiting: readers.filter(|r| r.pending.is_some()).count(),
                     publishers: self.publishers.values().filter(|p| p.swarm == key).count(),
@@ -2250,6 +2314,30 @@ impl State {
                 peer_channel,
             },
         );
+        Ok(())
+    }
+
+    /// See [`crate::Node::pin_seed_allocation`].
+    pub(crate) fn pin_seed_allocation(
+        &mut self,
+        swarm: SwarmKey,
+        pin: Option<Vec<Vec<ID>>>,
+    ) -> Result<(), NodeError> {
+        let pin = pin.map(|streams| {
+            streams
+                .iter()
+                .map(|hosts| {
+                    hosts
+                        .iter()
+                        .filter_map(|h| {
+                            let link = self.vnic.get_peer(h)?;
+                            Some(self.peers.get(link)?.pp)
+                        })
+                        .collect()
+                })
+                .collect()
+        });
+        self.runner.pin_seed_allocation(swarm, pin)?;
         Ok(())
     }
 
