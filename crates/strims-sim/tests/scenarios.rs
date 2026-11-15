@@ -15,6 +15,7 @@
 
 use std::time::Duration;
 
+use strims_base::path::PROBE_INTERVAL;
 use strims_base::rng::{DetRng, det_rng};
 use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy, SendFate, SendHow};
 use strims_sim::topology::{random_graph, random_hub, random_mesh};
@@ -2296,22 +2297,33 @@ fn grabbers_rejected_input_leaves_clean_input_alone() {
 /// Withholders keep their children's subscriptions open (their
 /// STREAM_CLOSEs go out as STREAM_OPENs) and push nothing, so their
 /// children prune them for missed pushes, and by the end no honest viewer
-/// keeps one as a parent.
+/// keeps one as a parent. Whether any viewer grafts onto a withholder is
+/// the seed's draw, so a run where none did is checked for the stream
+/// alone, and the sweep for some run where one did. The withholders are
+/// the mesh's first four viewers, its best linked ([`random_mesh`] links
+/// each host to three earlier ones), which most runs' viewers graft onto.
 #[test]
 fn withholders_keep_streams_open_and_get_pruned() {
-    sweep(
+    let opens = |r: &Report| inbound_from(r, |h| of_kind(r, h, "withholder"));
+    let reports = sweep(
         "withholders_keep_streams_open_and_get_pruned",
         |s| {
-            let mut sc = hostile_mesh(s, "withholder", 0.25);
-            sc.transfer_samples = true;
-            sc
+            let mut m = streaming(
+                "withholders",
+                s,
+                16,
+                (2048 * KIB, 1024 * KIB),
+                PushMode::Hybrid,
+                (3, 33),
+            );
+            for &v in &m.viewers[..4] {
+                m.s.hosts[v].class = HostClass::Hostile("withholder");
+            }
+            m.s.transfer_samples = true;
+            m.s
         },
         |r| {
             honest_whole_stream(r)?;
-            let (w, wl) = inbound_from(r, |h| of_kind(r, h, "withholder"));
-            if w.stream_opens_in == 0 {
-                return Err(format!("no STREAM_OPEN from withholders over {wl} links"));
-            }
             let mut pruned = 0;
             for (h, host) in r.hosts.iter().enumerate() {
                 if !honest(r, h) {
@@ -2334,11 +2346,23 @@ fn withholders_keep_streams_open_and_get_pruned() {
                     ));
                 }
             }
-            if pruned == 0 {
-                return Err("no honest viewer pruned a parent".into());
+            let (w, wl) = opens(r);
+            if w.stream_opens_in > 0 && pruned == 0 {
+                return Err(format!(
+                    "{} STREAM_OPENs from withholders over {wl} links, and no honest viewer pruned a parent",
+                    w.stream_opens_in
+                ));
             }
             Ok(())
         },
+    );
+    let taken: Vec<(u64, u64)> = reports
+        .iter()
+        .map(|r| (r.seed, opens(r).0.stream_opens_in))
+        .collect();
+    assert!(
+        taken.iter().any(|&(_, n)| n > 0),
+        "no STREAM_OPEN from withholders at any seed (seed, opens): {taken:?}"
     );
 }
 
@@ -2408,13 +2432,18 @@ fn echo_greedy_hosts_hold_or_forge_their_echoes() {
         },
         |r| {
             honest_whole_stream(r)?;
-            // A held echo answers the newest probe read when it goes, so
-            // a holder's mean hold is under its hold but far over an
-            // honest host's, which answers at once.
+            // A held echo answers the newest probe read when it goes. A
+            // peer sending the holder data probes every probe interval, so
+            // its newest probe in a hold waits at most the hold less an
+            // interval; a peer sending little probes less often than the
+            // hold, so each of its probes waits the whole hold. A holder's
+            // peers mix the two, so its mean hold is over the former, and
+            // an honest host's, which answers at once, is about 0.
+            let busy_hold = HELD_ECHO_MS - PROBE_INTERVAL.as_millis().cast_unsigned();
             for (h, host) in r.hosts.iter().enumerate() {
                 let e = host.echoes;
                 let holds = if of_kind(r, h, "free-rider+echo") {
-                    e.written > 0 && e.hold_ms * 2 >= HELD_ECHO_MS * e.written
+                    e.written > 0 && e.hold_ms >= busy_hold * e.written
                 } else {
                     e.hold_ms * 10 < HELD_ECHO_MS * e.written.max(1)
                 };
