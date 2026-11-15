@@ -54,7 +54,7 @@ export const newResults = (
 
 export interface ViewParam {
   name: string;
-  /** Which picker sets it: exp, cell, arm, arm2, seed, number, text, choice. */
+  /** Which picker sets it: exp, cell, arm, arm2, seed, node, number, text, choice. */
   kind: string;
   default?: Param;
   label?: string;

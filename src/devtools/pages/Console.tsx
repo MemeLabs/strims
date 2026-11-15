@@ -32,6 +32,7 @@ const ORDER = [
   "run_overlay",
   "playback",
   "seed_bands",
+  "meter_error",
   "p99_sources",
   "overhead",
   "tree",
@@ -44,6 +45,7 @@ const PICKERS: { key: keyof Selection; label: string }[] = [
   { key: "arm", label: "arm" },
   { key: "arm2", label: "against" },
   { key: "seed", label: "seed" },
+  { key: "node", label: "node" },
   { key: "delay", label: "playout delay" },
   { key: "min_stall_ms", label: "stalls from (ms)" },
   { key: "align", label: "align on" },
@@ -146,7 +148,7 @@ const Pickers: React.FC<PickersProps> = ({ schema, sel, setSel, uses }) => {
               value={sel.exp}
               size={Math.max(8, Math.min(50, sel.exp.length + 2))}
               onChange={(e) =>
-                setSel({ exp: e.target.value, cell: "", arm: "", arm2: "", seed: "" })
+                setSel({ exp: e.target.value, cell: "", arm: "", arm2: "", seed: "", node: "" })
               }
             />
             <datalist id="console-experiments">
@@ -171,6 +173,14 @@ const Pickers: React.FC<PickersProps> = ({ schema, sel, setSel, uses }) => {
           options.seeds.map((s) => ({
             value: String(s.seed),
             label: `${s.seed}${s.collapsed ? " (collapsed)" : ""}`,
+          }))
+        );
+      case "node":
+        return select(
+          "node",
+          options.nodes.map((n) => ({
+            value: String(n.node),
+            label: `${n.node}${n.seed ? " (seed)" : ""}`,
           }))
         );
       case "delay":

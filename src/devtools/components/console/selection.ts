@@ -14,6 +14,7 @@ export interface Selection {
   arm: string;
   arm2: string;
   seed: string;
+  node: string;
   delay: string;
   min_stall_ms: string;
   align: string;
@@ -27,6 +28,7 @@ export const DEFAULTS: Selection = {
   arm: "",
   arm2: "",
   seed: "",
+  node: "",
   delay: "1250",
   min_stall_ms: "50",
   align: "start",
@@ -138,7 +140,7 @@ export const useSel = (): [string, (text: string | null) => void] => {
   return [params.get(SEL) ?? "", set];
 };
 
-const NUMBER_KINDS = new Set(["seed", "number"]);
+const NUMBER_KINDS = new Set(["seed", "node", "number"]);
 
 /**
  * A saved view's parameters from the selection: each by its name, else its kind (`exp`, `cell`,
@@ -171,18 +173,21 @@ export interface Options {
   arms: string[];
   /** The seeds of the selected cell and arm, with whether each collapsed. */
   seeds: { seed: number; collapsed: boolean | null }[];
+  /** The nodes of the selected cell and arm's meter samples, with whether each is the seed. */
+  nodes: { node: number; seed: boolean }[];
 }
 
 /**
  * The pickers' options for the selection's experiment, cell and arm.
  *
  * @param sel - the selection
- * @returns the cells, arms and seeds to pick from
+ * @returns the cells, arms, seeds and nodes to pick from
  */
 export const useOptions = (sel: Selection): Options => {
   const [cells, setCells] = useState<string[]>([]);
   const [arms, setArms] = useState<string[]>([]);
   const [seeds, setSeeds] = useState<Options["seeds"]>([]);
+  const [nodes, setNodes] = useState<Options["nodes"]>([]);
   useEffect(() => {
     if (!sel.exp) return;
     const params = { exp: sel.exp };
@@ -205,6 +210,7 @@ export const useOptions = (sel: Selection): Options => {
   useEffect(() => {
     if (!sel.exp || !sel.cell || !sel.arm) {
       setSeeds([]);
+      setNodes([]);
       return;
     }
     runSql(
@@ -216,6 +222,16 @@ export const useOptions = (sel: Selection): Options => {
         setSeeds(r.rows.map(([s, c]) => ({ seed: s as number, collapsed: c as boolean | null }))),
       () => setSeeds([])
     );
+    // The hosts the sims sampled the meter of (the meter_samples table), the seed by its role.
+    runSql(
+      "SELECT m.node, bool_or(m.role = 'seed') AS seed " +
+        "FROM experiment_jobs e JOIN meter_samples m USING (k, src) " +
+        "WHERE e.exp_id = $exp AND e.cell = $cell AND e.arm_label = $arm GROUP BY m.node ORDER BY m.node",
+      { exp: sel.exp, cell: sel.cell, arm: sel.arm }
+    ).then(
+      (r) => setNodes(r.rows.map(([n, s]) => ({ node: n as number, seed: s === true }))),
+      () => setNodes([])
+    );
   }, [sel.exp, sel.cell, sel.arm]);
-  return { cells, arms, seeds };
+  return { cells, arms, seeds, nodes };
 };

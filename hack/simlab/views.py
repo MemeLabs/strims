@@ -144,9 +144,9 @@ NAME = re.compile(r"[a-z][a-z0-9_-]{0,63}")
 WORKBENCH = "workbench"
 ROUTES = ("ask", WORKBENCH)
 PARAM = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-KINDS = ("exp", "cell", "arm", "arm2", "seed", "number", "text", "search", "align", "choice")
+KINDS = ("exp", "cell", "arm", "arm2", "seed", "node", "number", "text", "search", "align", "choice")
 # The kinds whose string value the UI sends as a number.
-NUMBER_KINDS = ("seed", "number")
+NUMBER_KINDS = ("seed", "node", "number")
 PARAM_KEYS = ("name", "kind", "default", "label", "options")
 
 
@@ -371,9 +371,9 @@ def run(pool, name, params=None, root=VIEWS, max_rows=10_000, timeout_s=30.0, te
 # The page's selection (src/devtools/components/console/selection.ts):
 # the keys useSelection reads from the address's query, in its order, and
 # the value each takes where the address leaves it out.
-KEYS = ("exp", "cell", "arm", "arm2", "seed", "delay", "min_stall_ms", "align", "t", "search")
-DEFAULTS = {"exp": "", "cell": "", "arm": "", "arm2": "", "seed": "", "delay": "1250", "min_stall_ms": "50",
-            "align": "start", "t": "30", "search": ""}
+KEYS = ("exp", "cell", "arm", "arm2", "seed", "node", "delay", "min_stall_ms", "align", "t", "search")
+DEFAULTS = {"exp": "", "cell": "", "arm": "", "arm2": "", "seed": "", "node": "", "delay": "1250",
+            "min_stall_ms": "50", "align": "start", "t": "30", "search": ""}
 BASE = "http://127.0.0.1:8086"
 PAGE = "/devtools.html#/console/"
 SEL = "sel"

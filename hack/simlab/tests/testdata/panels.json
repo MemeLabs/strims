@@ -28,6 +28,33 @@
     }
   ],
   "experiments": [],
+  "meter_error": [
+    {
+      "id": "The meter's reading ÷ the node's uplink across seeds (1 exact; colour the share of seeds in each 0.05 band)",
+      "path": "0",
+      "time": "t_s",
+      "x2": "t2_s",
+      "encoded": [
+        "t_s",
+        "t2_s",
+        "lo",
+        "hi",
+        "share"
+      ]
+    },
+    {
+      "id": "The node's uplink across seeds",
+      "path": "1",
+      "time": "t_s",
+      "x2": null,
+      "encoded": [
+        "t_s",
+        "p10",
+        "p90",
+        "p50"
+      ]
+    }
+  ],
   "overhead": [
     {
       "id": "Overhead bytes per useful byte, by kind",

@@ -1,0 +1,251 @@
+{
+  "hover": {
+    "x": "t_s"
+  },
+  "vconcat": [
+    {
+      "title": "The meter's reading ÷ the node's uplink across seeds (1 exact; colour the share of seeds in each 0.05 band)",
+      "width": "container",
+      "height": 280,
+      "hover": {},
+      "transform": [
+        {
+          "filter": "datum.track === 'error'"
+        }
+      ],
+      "layer": [
+        {
+          "mark": {
+            "type": "rect",
+            "tooltip": true
+          },
+          "encoding": {
+            "x": {
+              "field": "t_s",
+              "type": "quantitative",
+              "title": null,
+              "scale": {
+                "zero": false
+              }
+            },
+            "x2": {
+              "field": "t2_s"
+            },
+            "y": {
+              "field": "lo",
+              "type": "quantitative",
+              "title": "meter ÷ uplink",
+              "scale": {
+                "domain": [
+                  0,
+                  2.05
+                ],
+                "nice": false
+              },
+              "axis": {
+                "values": [
+                  0,
+                  0.5,
+                  1,
+                  1.5,
+                  2
+                ],
+                "labelExpr": "datum.value >= 2 ? '≥ 2' : datum.label"
+              }
+            },
+            "y2": {
+              "field": "hi"
+            },
+            "color": {
+              "field": "share",
+              "type": "quantitative",
+              "title": "share of seeds",
+              "scale": {
+                "scheme": "blues",
+                "domain": [
+                  0,
+                  1
+                ]
+              },
+              "legend": {
+                "format": ".0%"
+              }
+            },
+            "tooltip": [
+              {
+                "field": "t_s",
+                "title": "s"
+              },
+              {
+                "field": "error",
+                "title": "meter ÷ uplink"
+              },
+              {
+                "field": "seeds",
+                "title": "seeds"
+              },
+              {
+                "field": "seeds_read",
+                "title": "of seeds read"
+              },
+              {
+                "field": "share",
+                "format": ".0%"
+              }
+            ]
+          }
+        },
+        {
+          "data": {
+            "values": [
+              {
+                "r": 1
+              }
+            ]
+          },
+          "mark": {
+            "type": "rule",
+            "strokeDash": [
+              4,
+              3
+            ],
+            "color": "#898781"
+          },
+          "encoding": {
+            "y": {
+              "field": "r",
+              "type": "quantitative"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "The node's uplink across seeds",
+      "width": "container",
+      "height": 110,
+      "hover": {
+        "tooltip": [
+          {
+            "field": "t_s",
+            "title": "s"
+          },
+          {
+            "field": "seeds",
+            "title": "seeds"
+          },
+          {
+            "field": "p10",
+            "format": ".1f"
+          },
+          {
+            "field": "p50",
+            "format": ".1f"
+          },
+          {
+            "field": "p90",
+            "format": ".1f"
+          }
+        ]
+      },
+      "transform": [
+        {
+          "filter": "datum.track === 'uplink'"
+        }
+      ],
+      "layer": [
+        {
+          "mark": {
+            "type": "area",
+            "interpolate": "step-after"
+          },
+          "encoding": {
+            "x": {
+              "field": "t_s",
+              "type": "quantitative",
+              "title": "seconds from the stream's start",
+              "scale": {
+                "zero": false
+              }
+            },
+            "y": {
+              "field": "p10",
+              "type": "quantitative",
+              "title": "uplink (Mbit/s)"
+            },
+            "y2": {
+              "field": "p90"
+            },
+            "color": {
+              "datum": "p10–p90",
+              "type": "nominal",
+              "title": "uplink",
+              "scale": {
+                "domain": [
+                  "p10–p90",
+                  "p50"
+                ],
+                "range": [
+                  "#bae7d7",
+                  "#1baf7a"
+                ]
+              },
+              "legend": {
+                "encode": {
+                  "symbols": {
+                    "update": {
+                      "shape": {
+                        "signal": "datum.value === 'p50' ? 'stroke' : 'square'"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "line",
+            "interpolate": "step-after"
+          },
+          "encoding": {
+            "x": {
+              "field": "t_s",
+              "type": "quantitative",
+              "title": "seconds from the stream's start"
+            },
+            "y": {
+              "field": "p50",
+              "type": "quantitative"
+            },
+            "color": {
+              "datum": "p50",
+              "type": "nominal"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "resolve": {
+    "scale": {
+      "x": "shared",
+      "color": "independent"
+    },
+    "legend": {
+      "color": "independent"
+    }
+  },
+  "config": {
+    "legend": {
+      "orient": "top",
+      "direction": "horizontal",
+      "labelLimit": 200,
+      "titleLimit": 200
+    },
+    "axisY": {
+      "labelLimit": 120
+    }
+  }
+}
