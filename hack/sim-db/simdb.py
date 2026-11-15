@@ -256,13 +256,14 @@ route and source: the seed's push, an answer, other, never; from the
 seed, a dishonest viewer or neither), invariants (I1: stream-seconds
 with no seed child while an honest viewer watches, the seed's children
 and how their subscriptions ended; I2: chunks none of whose sends to
-the seed's children was written or cancelled; I3: requests the seed
-declined for a stream with no subscriber, by rule), late (each late
-chunk classed by the seed's children at its publication: none,
-released, pushed late, never held by them, other; with the dishonest
-viewers then subscribed to the seed on its stream), attribution (each
-late chunk's cause, the first of: uncovered, defectors only, not
-written, written late, delivered late, departed, other; each cause's
+the seed's children, pushes or answers, was written or cancelled; I3:
+requests the seed declined for a stream with no subscriber, by rule),
+late (each late chunk classed by the seed's children at its
+publication: none, released, pushed late, never held by them, other;
+with the dishonest viewers then subscribed to the seed on its stream),
+attribution (each late chunk's cause, the first of: uncovered,
+defectors only, not written (no push to a child written, whatever was
+answered), written late, delivered late, departed, other; each cause's
 share of the late chunks, its chunks split by the later causes they
 match too and the cause's details), every one by default. Runs without
 arrivals are left out, a selection of none with them refused; the

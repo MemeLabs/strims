@@ -276,13 +276,17 @@ def log_sends():
       100  stale, 500 ms after (not written)
       102  written 350 ms after (written late)
       104  cancelled at 255 ms, the CANCEL at 250, and an answer written
-           at 490 ms, its request at 300 (other: answered alone)
+           at 490 ms, its request at 300 (not written, the answer alone
+           written: I2 kept)
       106  cancelled at 715 ms, the CANCEL at 710, 10 ms after host 2's
            hold (not written; held at the cancel)
       108  written 10 ms after, and an answer at 240 ms (delivered late:
            host 1 holds it at 260)
       112  to host 4 alone, written 350 ms after (written late, and
            departed)
+      114  to host 4 written 3 ms after, 2 ms before host 1's (other:
+           the first written push, host 4's, never held, and host 1,
+           which holds it late, stays)
 
     and the answers to nodes no child: host 2's of 101 at 290 ms and of
     106 at 690, host 1's of 110 at 390 (110: pushed to host 4 alone,
@@ -294,7 +298,8 @@ def log_sends():
                (104, 1): [("push", "cancelled", 0, 255, 250), ("answer", "written", 300, 490, None)],
                (106, 1): [("push", "cancelled", 0, 715, 710)],
                (108, 1): [("push", "written", 0, 10, None), ("answer", "written", 200, 240, None)],
-               (112, DEPARTED): [("push", "written", 0, 350, None)]}
+               (112, DEPARTED): [("push", "written", 0, 350, None)],
+               (114, DEPARTED): [("push", "written", 0, 3, None)]}
     sends = [(q, peer, *s) for q in range(CHUNKS) for peer in log_children(q)
              for s in special.get((q, peer), [("push", "written", 0, 5, None)])]
     sends += [(q, peer, "answer", "written", queued, t, None) for q, peer, queued, t in
@@ -864,11 +869,13 @@ class SeedLog(Fixture):
             # Host 4 never holds a chunk.
             110: (1, 1, 1, 0, ["push written"], None, pub(110) + 5, 5, None, False),
             112: (1, 1, 1, 0, ["push written"], None, pub(112) + 350, 350, None, False),
-            # Both written at once: the first is host 1's, which holds it.
-            114: (2, 2, 2, 0, ["push written"], None, pub(114) + 5, 5, pub(114) + 300, False)})
+            # The first written is host 4's, which never holds it: host 1's,
+            # 2 ms later, it holds 300 ms after.
+            114: (2, 2, 2, 0, ["push written"], None, pub(114) + 3, 3, None, False)})
         # The judged chunks 0-127 (a run of 40 s, the last 4.25 s
         # censored), of which 97, 99, 101 and 103 have no child (stream 1,
-        # 32-33 s); 2 and 100 alone break I2 (106's push was cancelled).
+        # 32-33 s); 2 and 100 alone break I2 (106's push was cancelled,
+        # 104's child answered).
         self.assertEqual(sorted(self.writes), list(range(128)))
         self.assertEqual([q for q, w in self.writes.items() if w[0] == 0], [97, 99, 101, 103])
         self.assertEqual([q for q, w in self.writes.items() if w[-1]], [2, 100])
@@ -900,8 +907,9 @@ class SeedLog(Fixture):
         # 98's and 105's pushes; 108's 101's and 104's answers, 102's,
         # 105's, 107's and 109's pushes; 110's 108's answer and push too;
         # 112's 104's, 108's, 106's and 110's answers, 108's, 109's,
-        # 110's, 111's, 113's, 114's two and 115's pushes; 114's those
-        # answers, 107's, 108's, 109's, 110's, 111's and 113's pushes.
+        # 110's, 111's, 113's, 114's two and 115's pushes; 114's (host
+        # 4's at 3 ms) those answers, 107's, 108's, 109's, 110's, 111's and
+        # 113's pushes.
         nw, a = "not_written", ANSWER_BYTES
         self.assertEqual(self.causes, {
             2: (nw, [nw], None, None, None, None, [], None, None, None, None, None, None),
@@ -916,9 +924,10 @@ class SeedLog(Fixture):
                   2 * PUSH_BYTES, 2),
             103: ("defectors_only", ["defectors_only"], None, None, None, None, [], None, None, None, None, None,
                   None),
-            # Cancelled at 250 ms, before host 1's hold at 500.
-            104: ("other", ["other"], None, None, None, None, ["answer written", "push cancelled"], False, None, None,
-                  None, None, None),
+            # No push written (it was cancelled at 250 ms, before host 1's
+            # hold at 500), though answered.
+            104: (nw, [nw], None, None, None, None, ["answer written", "push cancelled"], False, None, None, None, None,
+                  None),
             # Cancelled 10 ms after host 2's hold.
             106: (nw, [nw], None, None, None, None, ["push cancelled"], True, None, None, None, None, None),
             108: ("delivered_late", ["delivered_late"], None, None, None, None, ["answer written", "push written"],
@@ -927,8 +936,9 @@ class SeedLog(Fixture):
                   5 * PUSH_BYTES, 5),
             112: ("written_late", ["written_late", "departed"], None, None, None, None, ["push written"], None, 350,
                   None, 4 * a, 8 * PUSH_BYTES, 8),
-            114: ("delivered_late", ["delivered_late"], None, None, None, None, ["push written"], None, 5, 295, 4 * a,
-                  6 * PUSH_BYTES, 6)})
+            # Its first written push host 4's, never held: no cause.
+            114: ("other", ["other"], None, None, None, None, ["push written"], None, 3, None, 4 * a, 6 * PUSH_BYTES,
+                  6)})
 
     def test_attribution(self):
         # Steady: 10 late of 80 judged chunks, a row each cause and each
@@ -939,12 +949,13 @@ class SeedLog(Fixture):
             ("uncovered", None, None, 1), ("uncovered", "last_end", "prune", 1),
             ("uncovered", "seed_end", "holder_left idle", 1), ("uncovered", "declined", "true", 1),
             ("defectors_only", None, None, 1),
-            ("not_written", None, None, 2), ("not_written", "fates", "push cancelled", 1),
-            ("not_written", "fates", "push stale", 1), ("not_written", "held_at_cancel", "true", 1),
+            ("not_written", None, None, 3), ("not_written", "fates", "answer written, push cancelled", 1),
+            ("not_written", "fates", "push cancelled", 1), ("not_written", "fates", "push stale", 1),
+            ("not_written", "held_at_cancel", "false", 1), ("not_written", "held_at_cancel", "true", 1),
             ("written_late", None, None, 2), ("written_late", "also", "departed", 1),
-            ("delivered_late", None, None, 2),
+            ("delivered_late", None, None, 1),
             ("departed", None, None, 1),
-            ("other", None, None, 1), ("other", "fates", "answer written, push cancelled", 1)])
+            ("other", None, None, 1), ("other", "fates", "push written", 1)])
         for r in self.logged("attribution", phase="steady"):
             self.assertAlmostEqual(r["late_share"], r["chunks"] / 10)
             self.assertAlmostEqual(r["share"], r["chunks"] / 80)
@@ -953,22 +964,25 @@ class SeedLog(Fixture):
             "attribution", phase="steady", cause=cause, breakdown=breakdown)[0]
         # The first written push's wait and its child's hold after it, and
         # the second's sends before it (test_the_causes): 102 and 112
-        # written late; 108 and 114 delivered late (114 with two
-        # children); 110 pushed to host 4, gone.
-        late, also, delivered, gone = (row("written_late"), row("written_late", "also"), row("delivered_late"),
-                                       row("departed"))
+        # written late; 108 delivered late; 110 pushed to host 4, gone;
+        # 114 pushed to host 4 first, which never holds it (two children).
+        late, also, delivered, gone, other = (row("written_late"), row("written_late", "also"),
+                                              row("delivered_late"), row("departed"), row("other"))
         self.assertEqual((late["children"], late["wait_ms"], late["delivery_ms"]),
                          (1.0, sketch.quantile([350, 350], 50), sketch.quantile([250], 50)))
         self.assertEqual((late["answer_bytes"], late["push_bytes"], late["pushes"]), (2.5 * ANSWER_BYTES, 5000.0, 5.0))
         self.assertEqual((also["wait_ms"], also["delivery_ms"], also["answer_bytes"], also["pushes"]),
                          (sketch.quantile([350], 50), None, 4.0 * ANSWER_BYTES, 8.0))
         self.assertEqual((delivered["children"], delivered["wait_ms"], delivered["delivery_ms"]),
-                         (1.5, sketch.quantile([10, 5], 50), sketch.quantile([250, 295], 50)))
+                         (1.0, sketch.quantile([10], 50), sketch.quantile([250], 50)))
         self.assertEqual((delivered["answer_bytes"], delivered["push_bytes"], delivered["pushes"]),
-                         (3.0 * ANSWER_BYTES, 5000.0, 5.0))
+                         (2.0 * ANSWER_BYTES, 4000.0, 4.0))
         self.assertEqual((gone["wait_ms"], gone["delivery_ms"], gone["answer_bytes"], gone["pushes"]),
                          (sketch.quantile([5], 50), None, 3.0 * ANSWER_BYTES, 5.0))
-        self.assertEqual([row(c)["wait_ms"] for c in ("uncovered", "not_written", "other")], [None] * 3)
+        self.assertEqual((other["children"], other["wait_ms"], other["delivery_ms"], other["answer_bytes"],
+                          other["push_bytes"], other["pushes"]),
+                         (2.0, sketch.quantile([3], 50), None, 4.0 * ANSWER_BYTES, 6000.0, 6.0))
+        self.assertEqual([row(c)["wait_ms"] for c in ("uncovered", "not_written")], [None] * 2)
         # Startup: chunk 2, never pushed. The pooled row (NULL) pools
         # steady and after_departure (no late chunk), 88 judged.
         self.assertEqual([(r["cause"], r["breakdown"], r["value"], r["chunks"])

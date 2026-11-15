@@ -158,8 +158,10 @@ greatest over the group's runs, `*_runs`):
              cancelled it (seed_writes_in): the judged chunks with
              children of the runs with parents rows and a seed log
              (child_chunks), those none of whose sends to the children
-             was written or cancelled (unwritten: a count, its share and
-             each run's spread), and the runs without a seed log
+             (pushes and answers) was written or cancelled (unwritten: a
+             count, its share and each run's spread; an answer keeps I2,
+             where the attribution's not_written reads pushes alone),
+             and the runs without a seed log
              (unlogged). I3, the invariant that the seed never declines a
              request for a stream with no subscriber (seed_declines_in):
              the requests it declined with none, of a peer no dishonest
@@ -188,8 +190,10 @@ greatest over the group's runs, `*_runs`):
              by its cause (coverage_causes_in): the first of uncovered (no
              seed child at its publication, nor a dishonest viewer
              subscribed), defectors_only (dishonest viewers alone
-             subscribed), not_written (children, but no send to them
-             written), written_late (the first written push waited in the
+             subscribed), not_written (children, but no push to them
+             written, whatever was answered: I2's unwritten reads every
+             send, so an answered chunk keeps I2 and counts here),
+             written_late (the first written push waited in the
              seed's queue past the run's interval), delivered_late
              (written within the interval, its child's hold past the
              interval after the publication), departed (every child left,

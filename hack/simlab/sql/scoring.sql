@@ -940,7 +940,10 @@ CREATE OR REPLACE MACRO seed_cover_of(jobs) AS TABLE
 -- child's earliest arrivals row of the chunk in the push's
 -- peer_incarnation; NULL for none); unwritten (I2 broken: a chunk with
 -- children none of whose sends to them was written or cancelled; NULL for
--- a chunk with no child, I1's).
+-- a chunk with no child, I1's). A send is a push or an answer here: a
+-- chunk whose push went stale or was cancelled and whose child was
+-- answered keeps I2, where coverage_causes_in's not_written, push-only,
+-- counts it.
 -- needs: arrivals arrivals.released_ms arrivals.incarnation parents seed_decisions seed_sends
 -- else none: k VARCHAR, src VARCHAR, seq BIGINT, stream BIGINT, pub_ms BIGINT, phase VARCHAR, first_ms BIGINT
 -- else none: interval_ms DOUBLE, late BOOLEAN, dishonest_children BIGINT, children BIGINT, sends BIGINT
@@ -1030,7 +1033,11 @@ CREATE OR REPLACE MACRO seed_declines_of(jobs) AS TABLE
 --   uncovered       no seed child of its stream at its publication, nor a
 --                   dishonest viewer subscribed to the seed on it
 --   defectors_only  no seed child, but a dishonest viewer subscribed
---   not_written     children, but no send of it to them written
+--   not_written     children, but no push of it to them written (its
+--                   first written push NULL), whatever was answered:
+--                   I2's unwritten (seed_writes_in's) reads every send,
+--                   so a chunk answered to a child keeps I2 and counts
+--                   here
 --   written_late    the first written push to a child waited in the
 --                   seed's queue (push_wait_ms) past the run's interval
 --   delivered_late  that push was written within the interval, but its
@@ -1119,7 +1126,7 @@ CREATE OR REPLACE MACRO coverage_causes_in(runs) AS TABLE
         SELECT w.k, w.src, w.seq, list_filter([
                    CASE WHEN w.children = 0 AND w.dishonest_children = 0 THEN 'uncovered' END,
                    CASE WHEN w.children = 0 AND w.dishonest_children > 0 THEN 'defectors_only' END,
-                   CASE WHEN w.children > 0 AND w.written = 0 THEN 'not_written' END,
+                   CASE WHEN w.children > 0 AND w.push_ms IS NULL THEN 'not_written' END,
                    CASE WHEN w.children > 0 AND w.push_wait_ms > w.interval_ms THEN 'written_late' END,
                    CASE WHEN w.children > 0 AND w.push_wait_ms <= w.interval_ms
                              AND w.push_held_ms > w.pub_ms + w.interval_ms THEN 'delivered_late' END,
