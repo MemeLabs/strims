@@ -192,6 +192,25 @@ fn wan_browsers() -> Scenario {
     s
 }
 
+/// `build`'s scenario with the seed's uplink trains on
+/// (`STRIMS_SIM_EXP=trains-seed`), whose reading its meter takes, and no
+/// rate limit at the seed: a node that knows its capacity sends no legs.
+fn with_trains(build: fn() -> Scenario) -> Scenario {
+    let mut s = build();
+    s.exp.insert("trains-seed");
+    let seed = s.swarms[0].seed;
+    s.hosts[seed].uplink = None;
+    s
+}
+
+fn wan_mesh_trains() -> Scenario {
+    with_trains(wan_mesh)
+}
+
+fn wan_browsers_trains() -> Scenario {
+    with_trains(wan_browsers)
+}
+
 #[test]
 fn a_run_with_tables_keeps_its_trace() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
@@ -200,7 +219,12 @@ fn a_run_with_tables_keeps_its_trace() {
     ));
     let _ = std::fs::remove_dir_all(&dir);
     let tcp = wan_mesh as fn() -> Scenario;
-    for (name, build) in [("tcp", tcp), ("browsers", wan_browsers)] {
+    for (name, build) in [
+        ("tcp", tcp),
+        ("browsers", wan_browsers),
+        ("tcp-trains", wan_mesh_trains),
+        ("browsers-trains", wan_browsers_trains),
+    ] {
         let mut spec = build();
         spec.transfer_samples = true;
         let plain = run(spec, 1).unwrap();
@@ -276,6 +300,9 @@ fn a_run_with_tables_keeps_its_trace() {
             // first edge and the last; with theirs before and after it, and
             // the relay's, they are the row's: every host's, the run through.
             let row: serde_json::Value = serde_json::from_str(&r.row(name, None)).unwrap();
+            // The seed's legs went out with the trains, and only then.
+            let filler = row["up_filler"].as_u64().unwrap();
+            assert_eq!(filler > 0, name.ends_with("trains"), "{name}: {filler}");
             let wan = r.wan.as_ref().unwrap();
             assert_eq!(wan.hosts.len(), r.scenario.hosts.len());
             let (first, last) = (r.wire_bins.first().unwrap(), r.wire_bins.last().unwrap());
@@ -314,7 +341,7 @@ fn a_run_with_tables_keeps_its_trace() {
             // TCP links carry pure ACKs alone, data channels SACKs too.
             assert!(both("up_ack_packets") > 0, "{name}: {ms} ms");
             assert!(sum("node_bins", "up_ack_bytes") > 0, "{name}: {ms} ms");
-            if name == "tcp" {
+            if name.starts_with("tcp") {
                 assert_eq!(both("up_sack_packets") + both("up_sack_bytes"), 0);
             } else {
                 assert!(both("up_sack_packets") > 0, "{name}: {ms} ms");
