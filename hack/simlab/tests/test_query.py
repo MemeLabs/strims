@@ -195,6 +195,15 @@ class Commands(Fixture):
         self.assertTrue(query.pull_text(p).startswith(f"{run}: would GET 1 files, 0.0 MB, for 2 jobs' "))
         with self.assertRaises(query.Refused):
             query.pull_run(run, dry_run=True)
+        # The suite farm run's id, the run including its matrices.
+        p = query.pull_run("sf0001", reads=True, dry_run=True)
+        self.assertEqual((p.run, p.jobs), (run, 2))
+        self.assertTrue(query.pull_text(p).startswith(
+            f"sf0001: matrices sf0001-00 to sf0001-01 (2) of farm run {run}\n{run}: would GET 1 files, "))
+        with self.assertRaises(query.Refused) as cm:
+            query.pull_run("sf0002", reads=True, dry_run=True)
+        self.assertTrue(str(cm.exception).startswith("sf0002: no farm run is or includes it: neither "))
+        self.assertIn(f"; the nearest: sf0001 (in {run}), ", str(cm.exception))
 
 
 def quantiles(xs, ps):

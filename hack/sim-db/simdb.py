@@ -82,16 +82,21 @@ the schema files, so a table gains the columns a later sim writes
 invocation's store into the cache, `<main checkout>/target/sim-db/cache/`
 (suite/<worktree>/<invocation>/), which every worktree shares; the farm
 puts its instances' flushes in S3, and `pull` copies a run's into the
-cache (farm/<run>/...). Its sample tables (sim-samples/) come with
-`--reads`: the whole run's, or with `--cell`, `--arm` and `--seed` only
-the flushes holding those jobs (the manifests' keys; a job held twice, a
-verify copy, from the fewest flushes), and the queries that read them
-(pooled, aligned on a read lag, forecast, and sql with `--reads`) pull
-their selection's that way when the cache lacks them, noting the size,
-at most `--pull-mb`. `--dry-run` lists what a pull would fetch, asking
-S3 nothing. What a pull costs S3 goes to the farm's S3 ledger (pull). Nothing in the cache is kept for
-long: a run is reproduced when it's wanted again, and `gc` deletes
-what's older than `--days` (7).
+cache (farm/<run>/...). `--run` names the run, or a matrix or a suite
+farm run's id (its matrices <id>-NN) that one run includes, as the
+farm's state lists them, and the pull then names the run; a pull that
+finds none of the run's flushes fails, saying where it looked and, for a
+name of no run, the names nearest it. Its sample tables (sim-samples/)
+come with `--reads`: the whole run's, or with `--cell`, `--arm` and
+`--seed` only the flushes holding those jobs (the manifests' keys; a job
+held twice, a verify copy, from the fewest flushes), and the queries
+that read them (pooled, aligned on a read lag, forecast, and sql with
+`--reads`) pull their selection's that way when the cache lacks them,
+noting the size, at most `--pull-mb`. `--dry-run` lists what a pull
+would fetch, asking S3 nothing. What a pull costs S3 goes to the farm's
+S3 ledger (pull). Nothing in the cache is kept for long: a run is
+reproduced when it's wanted again, and `gc` deletes what's older than
+`--days` (7).
 
 The queries read the cache's tables and, made from them and kept under
 derived/<table>/v=<derived_version>/ (a hash of analyze.py's
@@ -602,7 +607,8 @@ def main():
     e.add_argument("db")
     e.add_argument("dest")
     p = sub.add_parser("pull")
-    p.add_argument("--run", required=True)
+    p.add_argument("--run", required=True, help="the farm run, or a matrix or a suite farm run's id that one run "
+                   "includes")
     p.add_argument("--reads", action="store_true",
                    help=f"the sample tables too ({SAMPLES_TEXT}; sim-samples/)")
     p.add_argument("--cell", action="append", help="only these cells' reads, globs")

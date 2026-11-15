@@ -869,6 +869,8 @@ class SamplesPull(unittest.TestCase):
         self.calls.append(args)
         if args[:2] == ["s3", "sync"]:
             prefix, dest, out = self.s3 / args[2].removeprefix("s3://bkt/"), Path(args[3]), []
+            # As the CLI does, for a prefix holding nothing too.
+            dest.mkdir(parents=True, exist_ok=True)
             for f in sorted(prefix.rglob("*")):
                 to = dest / f.relative_to(prefix)
                 if f.is_file() and not to.exists():
@@ -995,6 +997,79 @@ class SamplesPull(unittest.TestCase):
         self.assertEqual(self.ledger()[-1]["down"],
                          {"internet": sum(self.size(i, "reads") for i in ("i-1", "i-2", "i-3"))
                           + self.size("i-2", "forecast")})
+
+    def refused(self, *argv):
+        """The message `pull ARGV` fails with (a SystemExit's, exit 1)."""
+        with self.assertRaises(SystemExit) as cm:
+            self.cli("pull", *argv)
+        self.assertIsInstance(cm.exception.code, str)
+        return cm.exception.code
+
+    def test_a_matrix_or_a_suite_id_pulls_the_run_including_it(self):
+        dest = simdb.cache_root() / "cache" / "farm" / RUN
+        out, _ = self.cli("pull", "--run", RUN)
+        self.assertEqual(out, f"{RUN}: 4 sources in {dest}\n")
+        # A matrix's own state (target/sim-farm/<matrix>/) isn't a run's:
+        # its name, and the suite farm run's id its matrices are named by,
+        # name the one run including them, which the pull names.
+        for name, what in ((C0, "a matrix"), ("sz0001", f"matrices {C0} to {C1} (2)")):
+            self.calls.clear()
+            out, _ = self.cli("pull", "--run", name)
+            self.assertEqual(out, f"{name}: {what} of farm run {RUN}\n{RUN}: 4 sources in {dest}\n")
+            self.assertEqual([a[2] for a in self.calls], [f"s3://bkt/sim-data/{RUN}/"])
+        self.calls.clear()
+        out, _ = self.cli("pull", "--run", C1, "--reads", "--dry-run")
+        self.assertTrue(out.startswith(f"{C1}: a matrix of farm run {RUN}\n{RUN}: would GET 4 files, "), out)
+        self.assertEqual(self.calls, [])
+        # Without the run's state, the cache's flushes name it, its
+        # matrices those its name joins.
+        (simdb.main_checkout() / "target" / "sim-farm" / RUN / "matrices").unlink()
+        self.assertEqual(store.farm_runs(), {RUN: [C0]})
+        self.assertEqual(store.farm_run("sz0001"), store.Named(RUN, "sz0001", [C0]))
+
+    def test_a_name_several_runs_include_is_refused(self):
+        other = f"sy0001-00+{C1}"
+        (simdb.main_checkout() / "target" / "sim-farm" / other).mkdir()
+        (simdb.main_checkout() / "target" / "sim-farm" / other / "matrices").write_text(f"sy0001-00\n{C1}\n")
+        self.assertEqual(self.refused("--run", "sz0001"), f"sz0001: 2 farm runs include it; pull --run one of them:\n"
+                                                          f"  {other}: matrix {C1}\n"
+                                                          f"  {RUN}: matrices {C0} to {C1} (2)")
+        self.assertEqual(self.refused("--run", C1, "--reads", "--cell", C1).splitlines()[0],
+                         f"{C1}: 2 farm runs include it; pull --run one of them:")
+        self.assertEqual(self.calls, [])
+        out, _ = self.cli("pull", "--run", C0)
+        self.assertTrue(out.startswith(f"{C0}: a matrix of farm run {RUN}\n"), out)
+
+    def test_a_name_of_no_run_fails(self):
+        # A suite farm run's id no run includes, and a name of nothing: S3
+        # holds nothing of either, and the pull fails, saying where it
+        # looked and the names nearest it, leaving the cache as it was.
+        state = simdb.main_checkout() / "target" / "sim-farm"
+        for name, near in (("sz0002", f"; the nearest: sz0001 (in {RUN}), {C1} (in {RUN}), {C0} (in {RUN})"),
+                           ("nothing", "")):
+            self.calls.clear()
+            looked = (f"neither {state} nor the cache knows a run or matrix of that name, or matrices {name}-NN of "
+                      f"a suite farm run{near}")
+            self.assertEqual(self.refused("--run", name), f"{name}: no farm run is or includes it: S3 holds nothing "
+                                                          f"under sim-data/{name}/, and {looked}")
+            self.assertEqual([a[2] for a in self.calls], [f"s3://bkt/sim-data/{name}/"])
+            self.assertFalse((simdb.cache_root() / "cache" / "farm" / name).exists())
+            self.assertEqual(self.refused("--run", name, "--reads", "--cell", C0).splitlines(),
+                             [f"{name}: no farm run is or includes it: S3 holds nothing under sim-data/{name}/, and "
+                              f"{looked}"])
+            # A dry run asks S3 nothing.
+            self.calls.clear()
+            self.assertEqual(self.refused("--run", name, "--reads", "--dry-run"),
+                             f"{name}: no farm run is or includes it: {looked}")
+            self.assertEqual(self.calls, [])
+        # A run S3 no longer holds, the cache none of it.
+        shutil.rmtree(self.s3 / "sim-data" / RUN)
+        self.assertEqual(self.refused("--run", "sz0001"),
+                         f"sz0001: matrices {C0} to {C1} (2) of farm run {RUN}; S3 holds nothing under "
+                         f"sim-data/{RUN}/ (expired, or never landed), and the cache none of its flushes")
+        self.assertEqual(self.refused("--run", RUN),
+                         f"{RUN}: S3 holds nothing under sim-data/{RUN}/ (expired, or never landed), and the cache "
+                         "none of its flushes")
 
 
 def audience(secs, stays, sim="ppspp", tree_secs=3, stay_info=True):

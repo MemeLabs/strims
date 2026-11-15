@@ -1335,9 +1335,11 @@ class Pulled:
     selection's samples pulled (`fetched`), or the samples' `files` a pull
     would GET ((url, bytes, jobs)) for `jobs` jobs; `lost` jobs S3 holds
     none for; `tables` the sample tables the run's flushes hold, which its
-    lines name (store.listed_samples)."""
+    lines name (store.listed_samples); `named` the run the name given
+    names (store.farm_run), whose line says so where it named matrices."""
     run: str
     dry_run: bool = False
+    named: store.Named = None
     dest: Path = None
     sources: int = 0
     fetched: bool = False
@@ -1348,23 +1350,35 @@ class Pulled:
 
 
 def pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False, say=None):
-    """simdb.py pull: farm run `run`'s flushes copied into the cache, with
-    `reads` their samples (the whole run's, or the jobs `cell`, `arm` and
-    `seed` select), or with `dry_run` the samples' files a pull would GET,
-    asking S3 nothing."""
+    """simdb.py pull: the flushes of the farm run that `run` names
+    (store.farm_run: the run, or a matrix or a suite farm run's id that one
+    run includes) copied into the cache, with `reads` their samples (the
+    whole run's, or the jobs `cell`, `arm` and `seed` select), or with
+    `dry_run` the samples' files a pull would GET, asking S3 nothing.
+    Refused where the pull finds none of its flushes, saying where it
+    looked (store.unpulled)."""
     picked = cell or arm or seed
     if (picked or dry_run) and not reads:
         raise Refused("--cell, --arm, --seed and --dry-run are of a pull's reads: give --reads")
-    out = Pulled(run, dry_run)
+    named = store.farm_run(run)
+    run = named.run
+    out = Pulled(run, dry_run, named=named)
     if not dry_run and not picked:
         out.dest = store.pull(run, reads).dest
         out.sources = len(sources([f"farm/{run}"]))
+        if not out.sources:
+            raise Refused(store.unpulled(named))
         return out
     srcs = sources([f"farm/{run}"])
     if not srcs:
+        if dry_run and not named.known:
+            raise Refused(store.unknown(run))
         if dry_run:
-            raise Refused(f"the cache lacks farm/{run}: pull --run {run} copies the tables that name its jobs")
+            raise Refused((f"{named.text()}; " if named.matrices else "")
+                          + f"the cache lacks farm/{run}: pull --run {run} copies the tables that name its jobs")
         store.pull(run)
+        if not sources([f"farm/{run}"]):
+            raise Refused(store.unpulled(named))
     if picked:
         sel = Selection(src=[f"farm/{run}"], cell=cell, arm=arm, seed=seed)
         v = views(sel, derived=False, fetch=not dry_run, say=say)
@@ -1394,14 +1408,17 @@ def pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False, sa
 
 
 def pull_text(p):
-    if not p.dry_run and p.dest is not None:
-        return f"{p.run}: {p.sources} sources in {p.dest}"
-    if not p.dry_run:
-        return f"{p.run}: the selection's {' and '.join(p.tables)} in {store_host.cache_root() / 'cache' / 'farm'}"
+    lines = [p.named.text()] if p.named and p.named.matrices else []
     gone = f"; S3 holds none for {p.lost} jobs (expired, or never landed)" if p.lost else ""
-    if not p.files:
-        return f"{p.run}: nothing to pull: the cache holds what S3 has of the jobs' samples{gone}"
-    lines = [f"{p.run}: would GET {len(p.files)} files, {sum(b for _, b, _ in p.files) / 1e6:.1f} MB, for "
-             f"{p.jobs} jobs' {' and '.join(p.tables)}{gone}"]
-    lines += [f"  {url}  {b / 1e6:.1f} MB  {n} jobs" for url, b, n in p.files]
+    if not p.dry_run and p.dest is not None:
+        lines.append(f"{p.run}: {p.sources} sources in {p.dest}")
+    elif not p.dry_run:
+        lines.append(f"{p.run}: the selection's {' and '.join(p.tables)} in "
+                     f"{store_host.cache_root() / 'cache' / 'farm'}")
+    elif not p.files:
+        lines.append(f"{p.run}: nothing to pull: the cache holds what S3 has of the jobs' samples{gone}")
+    else:
+        lines.append(f"{p.run}: would GET {len(p.files)} files, {sum(b for _, b, _ in p.files) / 1e6:.1f} MB, for "
+                     f"{p.jobs} jobs' {' and '.join(p.tables)}{gone}")
+        lines += [f"  {url}  {b / 1e6:.1f} MB  {n} jobs" for url, b, n in p.files]
     return "\n".join(lines)

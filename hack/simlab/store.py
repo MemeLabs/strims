@@ -55,12 +55,34 @@ manifest.json (store_host.export's):
 A farm run's flushes are in the farm's bucket (hack/sim-farm/config.toml's
 s3_bucket, s3_region and aws_profile), each under
 sim-data/<run>/<instance>/<seq>/ and, its bulky tables (store_host's
-SAMPLE_TABLES), sim-samples/<run>/<instance>/<seq>/:
+SAMPLE_TABLES), sim-samples/<run>/<instance>/<seq>/. A run is named for
+its matrices (farm.py's run_name: their names joined with "+", past EC2's
+tag limit the first's, "+<n>more-" and a hash), and a suite farm run's
+matrices for its id (suite.py's write_matrices: <id>-NN):
 
+  farm_runs() -> {run: [matrix]}
+                 the runs the farm's state lists the matrices of
+                 (target/sim-farm/<run>/matrices), and those the cache
+                 holds flushes of, their matrices the ones their names join
+  farm_run(name, runs=None) -> Named
+                 the run `name` names: the run of that name, else the one
+                 run including a matrix of that name or a suite run's
+                 matrices of that id, else `name` itself, unknown (S3 may
+                 hold it all the same); Refused, naming them, where
+                 several runs include it
+  unknown(name, s3=False, runs=None) -> str
+                 that no run the state or the cache knows is or includes
+                 `name` (nor, with `s3`, does S3 hold one of that name),
+                 with the names nearest it
+  unpulled(named, runs=None) -> str
+                 why a pull of `named` found nothing: S3 holds nothing
+                 under the run's sim-data/, and the cache none of it (for
+                 an unknown name, unknown's)
   pull(run, reads=False) -> Pull
                  `aws s3 sync` of the run's sim-data (and sim-samples with
                  `reads`) into the cache's farm/<run>/, its LISTs, GETs
-                 and bytes a line of the farm's S3 ledger
+                 and bytes a line of the farm's S3 ledger; a sync that
+                 wrote nothing leaves no directory
   pull_sources(srcs) -> ([Pull], gone)
                  the pulls of the farm runs of the sources `srcs` the
                  cache lacks, less their samples, and the sources still
@@ -108,10 +130,12 @@ console's server) catches it.
 import collections
 import contextlib
 import dataclasses
+import difflib
 import fcntl
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -315,6 +339,130 @@ def aws(args, region, profile):
                            *(["--profile", profile] if profile else [])], capture_output=True, text=True)
 
 
+def farm_state():
+    """The farm's state: the main checkout's target/sim-farm (farm.py's
+    FARM)."""
+    return store_host.main_checkout() / "target" / "sim-farm"
+
+
+# The part of a run's name standing for the matrices past EC2's tag limit
+# (farm.py's run_name).
+MORE = re.compile(r"\d+more-\w+")
+
+
+def farm_runs():
+    """{run: [matrix]}: the runs whose state lists their matrices
+    (farm_state()/<run>/matrices, which a run writes as it starts), and
+    those the cache holds flushes of (farm/<run>/<instance>/<seq>/) that
+    the state doesn't list, their matrices those their names join."""
+    runs = {}
+    with contextlib.suppress(OSError), os.scandir(farm_state()) as it:
+        for e in it:
+            with contextlib.suppress(OSError):
+                runs[e.name] = (Path(e.path) / "matrices").read_text().split()
+    with contextlib.suppress(OSError), os.scandir(store_host.cache_root() / "cache" / "farm") as it:
+        for e in it:
+            if e.name not in runs and next(Path(e.path).glob("*/*/runs.parquet"), None):
+                runs[e.name] = [m for m in e.name.split("+") if not MORE.fullmatch(m)]
+    return runs
+
+
+def suite_id(matrix):
+    """The id of the suite farm run that matrix `matrix` is one of
+    (suite.py's write_matrices: <id>-NN), else None."""
+    stem, _, n = matrix.rpartition("-")
+    return stem if stem and len(n) >= 2 and n.isdigit() else None
+
+
+def includes(name, matrices):
+    """Those of `matrices` that `name` names, sorted: the matrix of that
+    name, or the matrices of the suite farm run of that id."""
+    return sorted(m for m in matrices if name in (m, suite_id(m)))
+
+
+def span(matrices):
+    """Matrices `matrices` (includes'), as the lines name them."""
+    if len(matrices) == 1:
+        return f"matrix {matrices[0]}"
+    return f"matrices {matrices[0]} to {matrices[-1]} ({len(matrices)})"
+
+
+@dataclasses.dataclass
+class Named:
+    """The farm run `run` that the name `asked` names (farm_run); the
+    run's `matrices` it names, where it names matrices rather than the
+    run; whether the farm's state or the cache knows the run (`known`)."""
+    run: str
+    asked: str
+    matrices: list = dataclasses.field(default_factory=list)
+    known: bool = True
+
+    def text(self):
+        """The line saying which run the name names, where it names
+        matrices; else None."""
+        if not self.matrices:
+            return None
+        what = "a matrix" if self.matrices == [self.asked] else span(self.matrices)
+        return f"{self.asked}: {what} of farm run {self.run}"
+
+
+def farm_run(name, runs=None):
+    """The farm run `name` names, among `runs` (farm_runs' by default): the
+    run of that name, else the one run that includes the matrix of that
+    name or the matrices of the suite farm run of that id, else `name`
+    itself, which S3 may hold all the same (unknown). Refused, naming
+    them, where several runs include it."""
+    runs = farm_runs() if runs is None else runs
+    if name in runs:
+        return Named(name, name)
+    hits = {r: got for r, ms in sorted(runs.items()) if (got := includes(name, ms))}
+    if len(hits) > 1:
+        raise Refused(f"{name}: {len(hits)} farm runs include it; pull --run one of them:\n"
+                      + "\n".join(f"  {r}: {span(ms)}" for r, ms in hits.items()))
+    if hits:
+        ((run, ms),) = hits.items()
+        return Named(run, name, ms)
+    return Named(name, name, known=False)
+
+
+def nearest(name, runs, n=3):
+    """The `n` names nearest `name` (difflib's, nearest first) among the
+    names of `runs` (farm_runs'), of their matrices and of the suite farm
+    runs those are of, each with the runs it names: [(name, [run])]."""
+    names = collections.defaultdict(set)
+    for r, ms in runs.items():
+        names[r].add(r)
+        for m in ms:
+            names[m].add(r)
+            if suite_id(m):
+                names[suite_id(m)].add(r)
+    return [(x, sorted(names[x])) for x in difflib.get_close_matches(name, list(names), n, 0.6)]
+
+
+def unknown(name, s3=False, runs=None):
+    """That no run the farm's state or the cache knows (`runs`, farm_runs'
+    by default) is or includes `name`, nor (with `s3`) does S3 hold a run
+    of that name, with the names nearest it."""
+    near = ", ".join(x if rs == [x] else f"{x} (in {', '.join(rs)})"
+                     for x, rs in nearest(name, farm_runs() if runs is None else runs))
+    return (f"{name}: no farm run is or includes it: "
+            + (f"S3 holds nothing under sim-data/{name}/, and " if s3 else "")
+            + f"neither {farm_state()} nor the cache knows a run or matrix of that name, or matrices {name}-NN of a "
+            "suite farm run" + (f"; the nearest: {near}" if near else ""))
+
+
+def unpulled(named, runs=None):
+    """Why a pull of `named` (farm_run's) found nothing: S3 holds nothing
+    under its run's sim-data/<run>/ (it expired, or never landed), and the
+    cache none of it; for a name of no run the farm's state or the cache
+    knows, unknown's."""
+    if not named.known:
+        return unknown(named.asked, True, runs)
+    head = f"{named.text()}; " if named.matrices else f"{named.run}: "
+    return (head + f"S3 holds nothing under sim-data/{named.run}/ (expired, or never landed), and the cache none of "
+            "its flushes")
+
+
 def pull(run, reads=False):
     """Copies farm run `run`'s flushes from S3 into the cache
     (farm/<run>/<instance>/<seq>/), and with `reads` their samples too.
@@ -341,6 +489,9 @@ def pull(run, reads=False):
         keys = sum(1 for f in dest.glob("**/*")
                    if f.is_file() and (f.stem in store_host.SAMPLE_TABLES) == (prefix == "sim-samples"))
         lists += max(1, math.ceil(keys / 1000))
+    # The CLI makes `dest` for a prefix S3 holds nothing under.
+    if dest.is_dir() and not any(dest.iterdir()):
+        dest.rmdir()
     use = {"region": region or "", "tier1": {"pull_list": lists}, "tier2": {"pull_get": gets}, "up": {},
            "down": {"internet": got}, "stored": 0}
     farm_ledger(run, use)
@@ -360,7 +511,7 @@ def pull_sources(srcs):
 def farm_ledger(run, use):
     """A pull's line of the farm's S3 ledger, appended under its lock as
     farm.py appends (append_jsonl)."""
-    path = store_host.main_checkout() / "target" / "sim-farm" / "s3.jsonl"
+    path = farm_state() / "s3.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     rec = {"run": run, "at": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()), "source": "pull", **use}
     with open(path, "ab+") as f:
@@ -379,7 +530,7 @@ def unlanded(srcs):
     """The farm flushes among `srcs` whose samples never landed in S3, as
     their runs' matrices' indexes say (a line's `reads` false; a run's
     matrices its state's list)."""
-    farm = store_host.main_checkout() / "target" / "sim-farm"
+    farm = farm_state()
     names = set()
     for run in {s.split("/")[1] for s in srcs if s.startswith("farm/")}:
         with contextlib.suppress(OSError):
