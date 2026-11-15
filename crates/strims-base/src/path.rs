@@ -110,8 +110,12 @@ pub const TRAIN_LEGS: usize = MIN_PATHS;
 /// How long a leg counts toward [`UplinkTrains::rate`], and how long one
 /// may wait for its echo.
 pub const TRAIN_SPAN: Duration = Duration::from_secs(10);
-/// Legs an [`UplinkTrains`] keeps.
-const TRAINS: usize = 32;
+/// How far back a link's legs that agree pool into its reading
+/// ([`UplinkTrains`]).
+pub const TRAIN_POOL: Duration = Duration::from_secs(60);
+/// Legs an [`UplinkTrains`] keeps: a [`TRAIN_POOL`] of them a few times
+/// a second.
+const TRAINS: usize = 256;
 
 /// One round trip, from a probe to its echo.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -780,6 +784,16 @@ pub fn aggregate(scratch: &mut [Duration]) -> Option<Duration> {
 /// legs fell among them, and over the latest [`TRAIN_LEGS`] links, which
 /// follows the uplink.
 ///
+/// A read is timed to a [`TRAIN_TICK`], so one leg's gap is off by up to a
+/// tick either way, a large share of a leg that drains in a few (a data
+/// channel's, on a wide uplink), and the fastest third of such legs are
+/// those it rounded down. A link's reading is therefore its legs of the
+/// last [`TRAIN_POOL`] pooled, their bytes over their gaps, newest first
+/// while each agrees with those after it within its own tick (two against
+/// one leg alone): the ticks average out over them, and a leg that
+/// disagrees (the uplink, the path or the receiver changed) starts the
+/// link's pool again. A link's pool is still one reading among the links'.
+///
 /// A leg slower than the uplink by more than two [`TRAIN_TICK`]s of its gap
 /// (its own and its reading's) asks for the next as soon as it is measured
 /// ([`UplinkTrains::falls`]), so a fall of the uplink shows within as many
@@ -804,7 +818,6 @@ pub struct UplinkTrains {
 struct Leg {
     at: Time,
     link: u64,
-    rate: u64,
     bytes: u64,
     gap: Duration,
 }
@@ -850,8 +863,9 @@ impl UplinkTrains {
         Duration::from_nanos(self.staleness.as_nanos() / TRAIN_LEGS as i64).max(TRAIN_DRAIN)
     }
 
-    /// The latest leg's rate on each link measured in the last
-    /// [`TRAIN_SPAN`], newest first, at most `most`.
+    /// The reading of each link with a leg measured in the last
+    /// [`TRAIN_SPAN`] ([`UplinkTrains::pooled`]), the links newest first,
+    /// at most `most`.
     fn latest(&self, now: Time, most: usize) -> Vec<u64> {
         let mut links: Vec<u64> = Vec::new();
         let mut rates: Vec<u64> = Vec::new();
@@ -861,26 +875,52 @@ impl UplinkTrains {
             }
             if !links.contains(&l.link) {
                 links.push(l.link);
-                rates.push(l.rate);
+                rates.push(self.pooled(l.link, now));
             }
         }
         rates
+    }
+
+    /// `link`'s reading: its legs of the last [`TRAIN_POOL`], newest
+    /// first while each agrees with those after it, their bytes over their
+    /// gaps (see the type's docs). `0` without a leg.
+    fn pooled(&self, link: u64, now: Time) -> u64 {
+        let (mut bytes, mut gap, mut n) = (0u64, Duration::ZERO, 0i64);
+        for l in self.legs.iter().rev().filter(|l| l.link == link) {
+            if now - l.at > TRAIN_POOL {
+                break;
+            }
+            if let Some(rate) = rate_over(bytes, gap) {
+                // The gap the pool's rate drains the leg's bytes in.
+                let want = Duration::from_nanos(
+                    i64::try_from(u128::from(l.bytes) * 1_000_000_000 / u128::from(rate.max(1)))
+                        .unwrap_or(i64::MAX),
+                );
+                let ticks = if n == 1 { 2 } else { 1 };
+                if (l.gap - want).abs() > TRAIN_TICK * ticks {
+                    break;
+                }
+            }
+            bytes += l.bytes;
+            gap += l.gap;
+            n += 1;
+        }
+        rate_over(bytes, gap).unwrap_or(0)
     }
 
     /// A leg on `link` (any number the owner tells its links apart by), as
     /// its [`PathMeter::take_train`] timed it.
     pub fn measured(&mut self, link: u64, leg: &LegSample, now: Time) {
         let gap = leg.gap.max(TRAIN_TICK);
-        let Some(rate) = rate_over(leg.bytes, gap) else {
+        if rate_over(leg.bytes, gap).is_none() {
             return;
-        };
+        }
         if self.legs.len() == TRAINS {
             self.legs.pop_front();
         }
         self.legs.push_back(Leg {
             at: now,
             link,
-            rate,
             bytes: leg.bytes,
             gap,
         });
@@ -1330,6 +1370,24 @@ mod tests {
             bytes: 10_000,
             gap: ms(gap),
         }
+    }
+
+    #[test]
+    fn a_links_agreeing_legs_pool_and_one_that_disagrees_starts_again() {
+        let mut t = UplinkTrains::default();
+        // 10 kB in 6.5 ticks, read as 6 or 7: one leg reads 1.67 or 1.43 MB/s.
+        for (i, g) in [6, 7, 6, 7].into_iter().enumerate() {
+            t.measured(1, &gap_leg(g), at(100 + i as i64));
+        }
+        assert_eq!(t.rate(at(120)), Some(1_538_461));
+        // A leg more than a tick off the pool's rate: the uplink fell.
+        t.measured(1, &gap_leg(13), at(110));
+        assert_eq!(t.rate(at(120)), Some(769_230));
+        // Legs older than TRAIN_POOL leave the pool.
+        let mut old = UplinkTrains::default();
+        old.measured(1, &gap_leg(6), at(100));
+        old.measured(1, &gap_leg(7), at(100) + TRAIN_POOL + ms(1));
+        assert_eq!(old.rate(at(100) + TRAIN_POOL + ms(2)), Some(1_428_571));
     }
 
     #[test]
