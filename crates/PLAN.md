@@ -252,11 +252,15 @@ and dropped are in `TRIED.md`.
      error against true holds (`simdb.py forecast-report`), and fit the
      requests to the one-window answer cap (`max_pending_requests`).
      Tune the collapse cures (first waves, repair stalls) only after.
-   - Without a known capacity the upload meter still trails a known
-     uplink. Measure the gap on the robust tier by role
-     (`STRIMS_SIM_KNOWN_UPLINK=seed` and `=viewers`) before choosing the
-     next meter change, which reads the uplink whatever the node sends,
-     never by probes timed behind its own bursts.
+   - Make the seed's uplink trains (`STRIMS_SIM_EXP=trains-seed`) the
+     default once the seed's allocation stops cutting its copies at once
+     at a fall (the halvings, thin relays). Settle what a seed should read
+     under cross traffic, where the trains read nearly the whole link
+     while a competitor sends: whether that over-reads takes a truth row,
+     planned first. Choose the relays' meter change after measuring the
+     viewers' gap to a known uplink (`STRIMS_SIM_KNOWN_UPLINK=viewers`). A
+     meter reads the uplink whatever the node sends, never by probes timed
+     behind its own bursts.
    - Rescreen on strims-sim's measuring tiers the relay meter changes
      dropped on the ppspp sim's results, which have no queue below the
      runner: a relay reading bounded by a smaller multiple of its peak

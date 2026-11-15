@@ -357,6 +357,22 @@ holding their data, browsers read p50 0.52; the halvings' falls the legs
 read anyway. Without it those read 0.61, 0.77 and 0.98, and collapses went
 21 → 19 (robust) and 37 → 29 (browsers).
 
+**The seed's own pushes as packet trains.** (`meter-greenfield-e-ytf`, kept
+as `meter-ytf-rebase` at efeeae09 on 2f2ffd6a, whose TRIED commits hold its
+variants) A hybrid receiver ACKed the first and last DATA of each write
+burst it read with their one-way delays, and a PONG carried its PING's, so
+the seed read each burst as a train (its bytes over the time between the
+two reads) and its links' trains together as a held reading whose peak it
+kept; that fed its budget alone, its meter staying the busy time. Against
+vnic's uplink trains (`trains-seed`), over the robust and browsers tiers'
+35 cells whose seed isn't told its capacity, at 32 fresh seeds under the
+hostile mix, the budget's error (|log2| of reading over uplink at p10, p50
+and p90, averaged) was 0.33 and 0.31 against 0.165 and 0.198 (main 0.74 and
+0.77), the trains less it -0.17 and -0.11 paired over the cells, each 95 %
+interval below 0; lag p99 and wire were alike, collapses mixed (robust 34
+against 46, browsers 65 against 62). The larger of the two budgets in each
+100 ms bin moved the trains' error over the bins by -0.011 to +0.019.
+
 **Admitting by count until the uplink saturates.** (`idle-count`,
 `idle-count-all`, against 5d81aaf6) An idle relay reads twenty times its
 control traffic, short of one subscriber. Until its meter had seen
