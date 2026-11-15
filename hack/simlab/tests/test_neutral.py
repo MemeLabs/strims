@@ -13,6 +13,7 @@ the working tree's snapshot) in a scratch repository:
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -350,6 +351,16 @@ class Check(unittest.TestCase):
         self.assertEqual((j["exit"], j["unexpected"], j["suggested_expect"]), (0, 0, ["asks.rtt_ms"]))
         self.assertEqual(j["pairs"][0]["runs"][1]["moves"][0]["detail"]["sample"][0]["row"], 5)
         json.dumps(j)
+
+    def test_inherited_settings(self):
+        """A run under STRIMS_SIM_* settings from the environment, which
+        every run takes, is another run than the one kept without them,
+        and its record holds them."""
+        self.check(["asks.rtt_ms"])
+        with mock.patch.dict(os.environ, {"STRIMS_SIM_EXP": "x"}):
+            r = self.check(["asks.rtt_ms"])
+        self.assertEqual(sorted(self.runs("a" * 40)), ["1", "1", "2", "2"])
+        self.assertEqual(r.pairs[0].runs[0].base.record["env"]["STRIMS_SIM_EXP"], "x")
 
     def test_renamed(self):
         """The head writes the base's row field `timeouts` as

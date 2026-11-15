@@ -403,8 +403,17 @@ def manifest(d):
     return out
 
 
+def run_env(c):
+    """The settings cell `c`'s runs take: the environment's STRIMS_SIM_*
+    (which suite.run_jobs hands every run), under the cell's own."""
+    inherited = {k: v for k, v in os.environ.items() if k.startswith("STRIMS_SIM_")}
+    return {**inherited, **c["env"]}
+
+
 def env_key(c):
-    return hashlib.sha1(json.dumps([c["sim"], c["test"], sorted(c["env"].items())]).encode()).hexdigest()[:10]
+    """A run's key by its settings (run_env): runs under other settings,
+    the environment's included, are other runs."""
+    return hashlib.sha1(json.dumps([c["sim"], c["test"], sorted(run_env(c).items())]).encode()).hexdigest()[:10]
 
 
 def run_dir(sha, c, seed):
@@ -461,7 +470,7 @@ def run(bins, cells, seeds, slots=None, mem_gib=None, log=None):
                 shutil.rmtree(tmp, ignore_errors=True)
                 log(f"run {done}/{len(jobs)}: {name} FAILED: {err}")
                 continue
-            rec = {"sha": sha, "cell": c["name"], "seed": s, "sim": c["sim"], "test": c["test"], "env": c["env"],
+            rec = {"sha": sha, "cell": c["name"], "seed": s, "sim": c["sim"], "test": c["test"], "env": run_env(c),
                    "row": row, "wall_s": row.get("_wall_s"), "rss_mb": row.get("_rss_mb"),
                    "files": manifest(tmp / "tables")}
             (tmp / "run.json").write_text(json.dumps(rec, sort_keys=True) + "\n")
