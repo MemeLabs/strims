@@ -257,6 +257,13 @@ and dropped are in `TRIED.md`.
      (`STRIMS_SIM_KNOWN_UPLINK=seed` and `=viewers`) before choosing the
      next meter change, which reads the uplink whatever the node sends,
      never by probes timed behind its own bursts.
+   - Rescreen on strims-sim's measuring tiers the relay meter changes
+     dropped on the ppspp sim's results, which have no queue below the
+     runner: a relay reading bounded by a smaller multiple of its peak
+     write rate than `RELAY_GROWTH` (`thin`'s `peak2`); shedding while its
+     links' latest round trips show a queue as well as on busy time
+     (`thin`'s `shedq`); and an idle relay admitting past its reading on
+     its interior stream alone (`relay-probe-c`).
    - A relay with few links reads a standing queue once each backs up a
      window, so its drained reading is what those links deliver, not its
      uplink: star-3-10's viewers (20 Mbit/s uplinks) read about 550 KB/s

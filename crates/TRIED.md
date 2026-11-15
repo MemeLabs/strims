@@ -162,16 +162,10 @@ holder's link reads behind.
 Relay readings other than the bound in `UploadInfo::relay_capacity`,
 measured against 91ded310 (branch `thin`, switches in `STRIMS_X_METER`):
 
-- **2× the peak write rate:** heals thin relays (thin-15-10 collapsed
-  16 → 2 of 16), but where busy time is accurate, as in the ppspp sim,
-  relays then read 0.03–0.3 of their uplinks: lag p99 ×1.4–3.5 in ten of
-  the eleven ppspp cells, and ×1.13–1.23 in five WAN cells.
 - **A bound only once a queue shows:** thin-15-10 still collapsed on 4 of 8
   seeds, against 2 with the bound from the start; relays take children
   for twice their uplinks before any queue shows. **Time with a queue
   below the runner counted as busy:** 8 of 8.
-- **Shedding on a 50 ms queue as well as on busy time:** thin-15-10
-  collapsed 16 → 8 where the bound alone gave 2, and wan-mobile ×1.29.
 - **Clamping on the least latest excess across a relay's links**, to ignore
   per-connection window backlog and peers' queues: it loses the thin
   relay's own queue, and `collapse_thin_relays`, `collapse_pull_lock_in`
@@ -314,18 +308,17 @@ robust tier collapsed 176 → 182 (interior) and 178 (any), the peers tier
 67 → 71 and 77, and lag p99 stayed ×1.00. star-3-10, the cell it aimed
 at, went ×1.13 [1.00, 1.27] with the interior stream alone.
 
-**An idle relay admitting past its reading.** (`relay-probe-b`,
-`relay-clean` 6856940c, `relay-probe-c` 9f37a0f8; against de5fac2e, before
-the relay bound) Until a queue had stood below the runner, a node whose
-busy time read under `MIN_BUSY` and whose links showed no queue admitted up
-to twice what it carried and `UNMEASURED_FANOUT` more, for the viewers a
-seed sheds after its uplink halves. It took them (strims-sim's robust
-tier, 32 seeds: halve-7-20 collapsed 1 against 10, p=0.01), but relays took
-children the seed could serve too, a hop more: on any stream a viewer of
+**An idle relay admitting past its reading, on any stream.**
+(`relay-probe-b`, `relay-clean` 6856940c; against de5fac2e, before the
+relay bound) Until a queue had stood below the runner, a node whose busy
+time read under `MIN_BUSY` and whose links showed no queue admitted up to
+twice what it carried and `UNMEASURED_FANOUT` more, for the viewers a seed
+sheds after its uplink halves. It took them (strims-sim's robust tier, 32
+seeds: halve-7-20 collapsed 1 against 10, p=0.01), but relays took
+children the seed could serve too, a hop more: a viewer of
 `wan_super_peer_adaptive_uncapped_varying` missed 127 frames (seed 4) and
-`collapse_pull_lock_in` failed; on the interior stream alone the ppspp
-sim's `sim_push_full_mesh` p99 went 192 → 456 ms. `RELAY_FLOOR` now gives
-an idle relay its first children.
+`collapse_pull_lock_in` failed. `RELAY_FLOOR` now gives an idle relay its
+first children.
 
 **A slow link's data left out of the busy time by its round trips.**
 (`own-queue` 29c6001c, `own-queue-v1` 1ec374e7 without its gate; against
