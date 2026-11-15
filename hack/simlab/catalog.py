@@ -193,7 +193,7 @@ skipped_names'):
                     env (and the knobs promoted to columns), the source
                     its tables come from (`src`)
   commits           the commits the jobs and experiments name, from git
-  costs, s3         the farm's cost lines and its S3 ledger, priced
+  costs, s3         the farm's cost lines and its S3 ledger's uses, priced
   availability      what the catalog holds of each job, table by table,
                     and what S3 still could give it (`fetch`)
   rows              each job's row, a column a field
@@ -731,6 +731,22 @@ def load_index(path):
     return list(by.values())
 
 
+def load_ledger(path):
+    """The farm's S3 ledger's lines, each with its place in the file
+    (`line`: farm.py's s3_uses takes the later of a host's equal running
+    totals); a torn line skipped."""
+    out = []
+    with contextlib.suppress(OSError):
+        for n, line in enumerate(Path(path).read_text(errors="replace").splitlines()):
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(r, dict):
+                out.append({**r, "line": n})
+    return out
+
+
 FARM_INDEX_COLS = {
     "matrix": "VARCHAR", "path": "VARCHAR", "line": "BIGINT", "id": "VARCHAR", "k": "VARCHAR", "arm": "VARCHAR",
     "commit": "VARCHAR", "binary_sha256": "VARCHAR", "test": "VARCHAR", "env": "MAP(VARCHAR, VARCHAR)",
@@ -752,7 +768,7 @@ COST_COLS = {
 S3_COLS = {
     "run": "VARCHAR", "at": "VARCHAR", "source": "VARCHAR", "host": "VARCHAR", "region": "VARCHAR",
     "tier1": "MAP(VARCHAR, BIGINT)", "tier2": "MAP(VARCHAR, BIGINT)", "up": "MAP(VARCHAR, BIGINT)",
-    "down": "MAP(VARCHAR, BIGINT)", "stored": "BIGINT"}
+    "down": "MAP(VARCHAR, BIGINT)", "stored": "BIGINT", "line": "BIGINT"}
 
 
 @contextlib.contextmanager
@@ -1381,8 +1397,8 @@ class Indexed:
 @dataclasses.dataclass
 class Fetched:
     """What a fetch did: the flushes it pulled, those gone from S3 (to
-    regenerate), and what S3 charged (`ledger_lines` lines of
-    target/sim-farm/s3.jsonl, priced as farm.py prices them)."""
+    regenerate), and what S3 charged for its pulls (their `ledger_lines`
+    lines of target/sim-farm/s3.jsonl, priced as farm.py prices them)."""
     exp: str
     s3_usd: float = 0.0
     ledger_lines: int = 0
@@ -1791,13 +1807,17 @@ def metadata_sql(ins, changed, kind_of, cols, tmp):
     moved = {kind_of.get(p) for p in changed}
 
     def table(name, spec):
-        if name not in cols:
+        """Makes raw.`name`, or adds the columns of `spec` it lacks:
+        whether it did either."""
+        made = name not in cols
+        if made:
             out.append(f"CREATE TABLE raw.{name} ({', '.join(f'{ident(n)} {ty}' for n, ty in spec.items())});")
             cols[name] = dict(spec)
-        for n, ty in spec.items():
-            if n not in cols[name]:
-                out.append(f"ALTER TABLE raw.{name} ADD COLUMN {ident(n)} {ty};")
-                cols[name][n] = ty
+        added = [n for n in spec if n not in cols[name]]
+        for n in added:
+            out.append(f"ALTER TABLE raw.{name} ADD COLUMN {ident(n)} {spec[n]};")
+            cols[name][n] = spec[n]
+        return made or bool(added)
 
     table("farm_index", FARM_INDEX_COLS)
     redo = sorted(p for p in changed if kind_of.get(p) == "farm_index")
@@ -1817,9 +1837,10 @@ def metadata_sql(ins, changed, kind_of, cols, tmp):
     specs = {"suite_runs": SUITE_RUN_COLS, "suite_cells": SUITE_CELL_COLS, "matrices": MATRIX_COLS,
              "costs": COST_COLS, "s3_ledger": S3_COLS, "bin_hashes": {"name": "VARCHAR", "sha256": "VARCHAR"}}
     for kind, names in whole.items():
-        for n in names:
-            table(n, specs[n])
-        if kind not in moved:
+        # A table that gained a column is filled again: its rows would
+        # hold the column NULL until its file next changed.
+        grown = [table(n, specs[n]) for n in names]
+        if kind not in moved and not any(grown):
             continue
         for n in names:
             out.append(f"DELETE FROM raw.{n};")
@@ -1834,9 +1855,14 @@ def metadata_sql(ins, changed, kind_of, cols, tmp):
             if got:
                 out.append(f"INSERT INTO raw.matrices BY NAME SELECT * FROM "
                            f"{read_jsonl(jsonl(tmp / 'matrices.jsonl', got), MATRIX_COLS)};")
-        elif kind in ("costs", "s3"):
+        elif kind == "costs":
             for p in kinds[kind]:
-                out.append(f"INSERT INTO raw.{names[0]} BY NAME SELECT * FROM {read_jsonl(p, specs[names[0]])};")
+                out.append(f"INSERT INTO raw.costs BY NAME SELECT * FROM {read_jsonl(p, COST_COLS)};")
+        elif kind == "s3":
+            got = [r for p in kinds[kind] for r in load_ledger(p)]
+            if got:
+                out.append(f"INSERT INTO raw.s3_ledger BY NAME SELECT * FROM "
+                           f"{read_jsonl(jsonl(tmp / 's3_ledger.jsonl', got), S3_COLS)};")
         elif kind == "bin_hashes":
             for p in kinds[kind]:
                 with contextlib.suppress(OSError, ValueError):
@@ -2035,7 +2061,10 @@ SELECT run AS farm_run, TRY_CAST("at" AS TIMESTAMPTZ) AS logged_at, source, host
                                              lambda e: e.value)), 0)) / {GB} * {S3_INTER_REGION_GB}
        + coalesce(down['internet'], 0) / {GB} * {S3_INTERNET_GB}
        + coalesce(stored, 0) / {GB} * {S3_STORAGE_GB_MONTH} * {S3_KEPT_DAYS} / 30 AS cost_usd
-FROM raw.s3_ledger;
+FROM raw.s3_ledger
+QUALIFY source IS DISTINCT FROM 'host' OR row_number() OVER (
+    PARTITION BY run, source, coalesce(host, '')
+    ORDER BY coalesce(list_sum(map_values(tier1)), 0) + coalesce(list_sum(map_values(up)), 0) DESC, line DESC) = 1;
 """
 
 AVAILABILITY_SQL = """
@@ -2411,8 +2440,8 @@ TABLE_DOCS = {
         "and arm_labels (experiment_jobs' arms); base: the arm the others are scored against, where its index names "
         "it (a --sets run's first set else); question "
         "(suite.py farm --question); pending: its index still waits for the farm to start it; farm_runs: the farm "
-        "runs that ran its matrices; cost_usd and s3_usd: those runs' costs and S3 ledger lines, each shared out "
-        "by the jobs its matrices ran of the run's."),
+        "runs that ran its matrices; cost_usd and s3_usd: those runs' costs and S3 uses (s3's rows), each shared "
+        "out by the jobs its matrices ran of the run's."),
     "experiment_cells": (
         "table", "an experiment's cell", "exp_id, cell", "experiments USING (exp_id); experiment_jobs USING (exp_id, cell)",
         "A cell as the experiment ran it: sim, test, why, env (its settings), mem_gib (the farm slot's), and the "
@@ -2453,9 +2482,12 @@ TABLE_DOCS = {
         "The farm's cost of each run (target/sim-farm/costs.jsonl): cost_usd (boot, busy and idle), its jobs, "
         "wall time, instances, the S3 cost when it ended and the estimate's cost."),
     "s3": (
-        "view", "an S3 ledger line", "farm_run", "costs USING (farm_run)",
-        "The farm's S3 ledger (target/sim-farm/s3.jsonl): each host's, the farm's and each pull's requests and "
-        "bytes (source 'host', 'run', 'pull', ...), priced as farm.py prices them (cost_usd)."),
+        "view", "a farm run's S3 use", "farm_run", "costs USING (farm_run)",
+        "The farm's S3 ledger (target/sim-farm/s3.jsonl) as farm.py reads it (s3_uses), a row a use, its "
+        "requests and bytes priced as farm.py prices them (cost_usd), so a run's rows sum to its S3 cost: each "
+        "controller line, pull line (source 'controller', 'pull') or other as it is, and of each host's lines "
+        "(source 'host'), every one its running total of the run so far, the largest (PUT/POST/LIST requests "
+        "plus bytes in; the later line on a tie)."),
     "availability": (
         "table", "a job's table", "k, tbl", "jobs USING (k, src)",
         "Where each job's tables are: state 'local' (the catalog holds tbl of the job's source), 's3' (a farm flush "
@@ -3620,9 +3652,11 @@ def owed(say):
 # --- fetch ------------------------------------------------------------------------
 
 
-def s3_spent(before):
-    """What the farm's S3 ledger's lines past byte `before` cost, as farm.py
-    prices them, and how many."""
+def s3_spent(before, runs):
+    """What the pulls of the farm runs `runs` the farm's S3 ledger logs past
+    byte `before` cost, as farm.py prices them, and how many lines: a
+    fetch's own, not the running totals and requests a live farm run's
+    hosts and controller log meanwhile."""
     path = simdb().main_checkout() / "target" / "sim-farm" / "s3.jsonl"
     p = s3_prices()
     total = n = 0
@@ -3632,6 +3666,8 @@ def s3_spent(before):
             for line in f.read().decode(errors="replace").splitlines():
                 with contextlib.suppress(ValueError):
                     r = json.loads(line)
+                    if not isinstance(r, dict) or r.get("source") != "pull" or r.get("run") not in runs:
+                        continue
                     region = r.get("region", "")
                     cross = (sum(v for k, v in (r.get("up") or {}).items() if k not in ("here", region))
                              + sum(v for k, v in (r.get("down") or {}).items() if k not in ("internet", region)))
@@ -3684,6 +3720,8 @@ def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, pr
         jsonl(tmp / "keys.jsonl", [{"k": k} for k in keys])
         holders = lake(f"SELECT DISTINCT f.src FROM raw.farm_index f SEMI JOIN {read_jsonl(tmp / 'keys.jsonl', {'k': 'VARCHAR'})} w "
                        "USING (k) WHERE f.src LIKE 'farm/%';")
+        # The farm runs its pulls can be of.
+        runs = {r["src"].split("/")[1] for r in holders}
         lack = [r["src"] for r in holders if not store.have_src(r["src"])]
         if lack:
             say("pull", f"{exp}: pulling the farm runs of {len(lack)} flushes the cache lacks", 0, len(lack))
@@ -3696,12 +3734,13 @@ def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, pr
                           {r["src"] for r in lake(f"SELECT DISTINCT src FROM raw.runs SEMI JOIN "
                                                   f"{read_jsonl(tmp / 'keys.jsonl', {'k': 'VARCHAR'})} w USING (k);")
                            if store.have_src(r["src"])})
+            runs |= {s.split("/")[1] for s in srcs if s.startswith("farm/")}
             v = (f"CREATE VIEW runs_all AS SELECT k, src FROM read_parquet({verdict.plist(verdict.files(srcs, 'runs'))}, "
                  f"union_by_name=true);\nCREATE VIEW runs AS SELECT k FROM "
                  f"{read_jsonl(tmp / 'keys.jsonl', {'k': 'VARCHAR'})};")
             store.pull_samples(v, tuple(tables), limit_mb=limit_mb, say=lambda m: say("pull", m))
     index(workers, progress)
-    out.s3_usd, out.ledger_lines = s3_spent(before)
+    out.s3_usd, out.ledger_lines = s3_spent(before, runs)
     return out
 
 

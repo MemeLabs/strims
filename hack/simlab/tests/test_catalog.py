@@ -47,7 +47,14 @@ simlab.verdict's derive pool:
                it; a kind the runs hold that it lacks, or lacks for that
                sim, flagged and warned of; the table docs' kinds and phases
   Fetch        the flushes a fetch pulls (store.pull_sources stood in) and
-               what the S3 ledger's new lines cost; its refusals
+               what its pulls' new ledger lines cost, not a farm run's
+               host and controller lines logged meanwhile nor another
+               run's pull; its refusals
+  S3           the S3 ledger as farm.py reads it (its s3_uses' uses): a
+               controller's and a pull's line each a use, and of a host's
+               running totals the largest, the later line on a tie, its
+               other runs' apart; experiments' s3_usd their sum, and a
+               catalog's ledger lacking line numbers read again
   Tiers        an experiment's tiers from its cells' names, tests and env,
                its index recording none
   Tables       a sim's tables the catalog has no code for (spec_requests,
@@ -133,6 +140,7 @@ import concurrent.futures as cf
 import contextlib
 import copy
 import dataclasses
+import importlib.util
 import io
 import json
 import multiprocessing
@@ -926,22 +934,36 @@ class Kinds(Fixture):
 
 
 class Fetch(Fixture):
-    def test_a_fetch_pulls_the_flushes_the_cache_lacks_and_prices_its_ledger_lines(self):
+    def test_a_fetch_pulls_the_flushes_the_cache_lacks_and_prices_its_pulls_ledger_lines(self):
         self.index()
         lost = f"{golden_cli.FARM}/i-2/3"
         dest = store_host.cache_root() / "cache" / lost
         kept = self.root / "kept-flush"
         shutil.move(dest, kept)
         ledger = self.root / "target" / "sim-farm" / "s3.jsonl"
+        run = golden_cli.FARM.split("/")[1]
         calls = []
+
+        def logged(rec):
+            with open(ledger, "a") as f:
+                f.write(json.dumps({"at": "2026-11-01T12:00:00+00:00", "region": "r", "tier1": {}, "tier2": {},
+                                    "up": {}, "down": {}, "stored": 0, **rec}) + "\n")
 
         def pull_sources(srcs):
             calls.append(sorted(srcs))
             shutil.move(kept, dest)
+            # The run's farm still flushing as the fetch pulls: a host's
+            # running total, the controller's requests, and another
+            # process's pull of another run.
+            logged({"run": run, "source": "host", "host": "i-1", "tier1": {"post": 500}, "up": {"a": 1 << 30},
+                    "stored": 1 << 30})
             use = {"region": "r", "tier1": {}, "tier2": {"pull_get": 1000}, "up": {}, "down": {"internet": 1 << 30},
                    "stored": 0}
-            store.farm_ledger(golden_cli.FARM.split("/")[1], use)
-            return [store.Pull(golden_cli.FARM.split("/")[1], dest.parents[1], [lost], use)], []
+            store.farm_ledger(run, use)
+            logged({"run": run, "source": "controller", "tier1": {"bin_put": 3}, "up": {"here": 1 << 30}})
+            logged({"run": "se0001-00+0more-cccc", "source": "pull", "tier2": {"pull_get": 10},
+                    "down": {"internet": 1 << 30}})
+            return [store.Pull(run, dest.parents[1], [lost], use)], []
 
         events = []
         with mock.patch.object(store, "pull_sources", pull_sources):
@@ -951,7 +973,9 @@ class Fetch(Fixture):
         self.assertAlmostEqual(got.s3_usd, 1000 * 0.0044 / 10000 + 0.09, places=9)
         self.assertEqual(events[0], catalog.Progress(
             "pull", "sf0001: pulling the farm runs of 1 flushes the cache lacks", 0, 1))
-        self.assertTrue(json.loads(ledger.read_text().splitlines()[-1])["tier2"])
+        lines = [json.loads(line) for line in ledger.read_text().splitlines()]
+        self.assertEqual([r["tier2"] for r in lines if r["source"] == "pull" and r["run"] == run][-1],
+                         {"pull_get": 1000})
         self.assertEqual(events[-1].kind, "done")
 
     def test_what_a_fetch_refuses(self):
@@ -960,6 +984,95 @@ class Fetch(Fixture):
             catalog.fetch("sf0001", tables=["bins"])
         with self.assertRaisesRegex(SystemExit, "experiment nope has no jobs"):
             catalog.fetch("nope")
+
+
+def farm_py():
+    """This checkout's hack/sim-farm/farm.py as a module of its own (it
+    imports worker beside it): the authority on how the S3 ledger reads."""
+    if str(HACK / "sim-farm") not in sys.path:
+        sys.path.insert(0, str(HACK / "sim-farm"))
+    spec = importlib.util.spec_from_file_location("sim_farm_farm_catalog", HACK / "sim-farm" / "farm.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class S3(Fixture):
+    """The farm run's S3 ledger: a controller line, the running totals of
+    host i-a (interleaved with the others', one of another run) and the
+    one line of host i-b, and a pull."""
+
+    RUN, OTHER = golden_cli.FARM.split("/")[1], "sf0002-00+0more-bbbb"
+    GIB = 1 << 30
+
+    def setUp(self):
+        super().setUp()
+        g = self.GIB
+
+        def line(source, minute, run=self.RUN, **use):
+            return {"run": run, "at": f"2026-11-01T12:{minute:02d}:00+00:00", "source": source, "region": "r",
+                    "tier1": {}, "tier2": {}, "up": {}, "down": {}, "stored": 0, **use}
+
+        self.ledger = self.root / "target" / "sim-farm" / "s3.jsonl"
+        self.ledger.write_text("".join(json.dumps(r) + "\n" for r in [
+            line("controller", 0, tier1={"bin_put": 100}, tier2={"bin_head": 1000}, up={"here": g},
+                 down={"a": 2 * g}),
+            line("host", 1, host="i-a", tier1={"post": 1000}, up={"a": g}, stored=g),
+            line("host", 1, host="i-b", tier1={"post": 2000}, up={"r": 2 * g}, stored=2 * g),
+            line("host", 2, host="i-a", tier1={"post": 2000}, up={"a": 2 * g}, stored=2 * g),
+            line("host", 2, run=self.OTHER, host="i-a", tier1={"post": 9000}, up={"a": 9 * g}, stored=9 * g),
+            # Sent, then stored: the same size, the later line counting,
+            # though logged the same second.
+            line("host", 3, host="i-a", tier1={"post": 3000}, up={"a": 3 * g}, stored=g),
+            line("host", 3, host="i-a", tier1={"post": 3000}, up={"a": 3 * g}, stored=3 * g),
+            # A later total that is smaller: the largest counts.
+            line("host", 4, host="i-a", tier1={"post": 10}, up={"a": g}, stored=g),
+            line("pull", 5, tier1={"pull_list": 2}, tier2={"pull_get": 10000}, down={"internet": g}),
+        ]))
+        # farm.py's prices (the fixture's): Tier1 and Tier2 requests, a GiB
+        # between regions, to the internet, and kept its week.
+        t1, t2, cross, out, kept = 0.0055 / 1000, 0.0044 / 10000, 0.02, 0.09, 0.026 * 7 / 30
+        self.want = {("controller", None): 100 * t1 + 1000 * t2 + 2 * cross,
+                     ("host", "i-a"): 3000 * t1 + 3 * cross + 3 * kept,
+                     ("host", "i-b"): 2000 * t1 + 2 * kept,
+                     ("pull", None): 2 * t1 + 10000 * t2 + out}
+
+    def uses(self, run):
+        return catalog.lake(f"SELECT source, host, region, tier1, tier2, up, down, stored, cost_usd FROM s3 "
+                            f"WHERE farm_run = {catalog.q(run)};")
+
+    def test_a_hosts_use_is_its_largest_running_total(self):
+        catalog.index(workers=0)
+        got = {(r["source"], r["host"]): r for r in self.uses(self.RUN)}
+        self.assertEqual(sorted(got, key=str), sorted(self.want, key=str))
+        for key, usd in self.want.items():
+            self.assertAlmostEqual(got[key]["cost_usd"], usd, places=12, msg=key)
+        self.assertEqual(got[("host", "i-a")]["stored"], 3 * self.GIB)
+        self.assertEqual([r["stored"] for r in self.uses(self.OTHER)], [9 * self.GIB])
+        # The uses farm.py's s3_uses reads of the run.
+        farm = farm_py()
+        with mock.patch.object(farm, "S3_LEDGER", self.ledger):
+            theirs = [u.rec() for _, u in farm.s3_uses()[self.RUN]]
+        canon = lambda recs: sorted(json.dumps(r, sort_keys=True) for r in recs)  # noqa: E731
+        self.assertEqual(canon({k: r[k] for k in ("region", "tier1", "tier2", "up", "down", "stored")}
+                               for r in got.values()), canon(theirs))
+        # The run's only experiment takes the whole of it.
+        e = catalog.lake("SELECT s3_usd FROM experiments WHERE exp_id = 'sf0001';")
+        self.assertAlmostEqual(e[0]["s3_usd"], sum(self.want.values()), places=12)
+
+    def test_a_ledger_indexed_without_line_numbers_is_read_again(self):
+        # A catalog whose raw.s3_ledger predates its line column: the next
+        # index (code changed, the ledger not) fills it again.
+        catalog.index(workers=0)
+        catalog.lake("ALTER TABLE raw.s3_ledger DROP COLUMN line;", write=True, out=None)
+        stand_in = self.root / "hack" / "sim-farm" / "farm.py"
+        st = stand_in.stat()
+        os.utime(stand_in, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+        catalog.index(workers=0)
+        lines = catalog.lake("SELECT line FROM raw.s3_ledger ORDER BY line;")
+        self.assertEqual([r["line"] for r in lines], list(range(9)))
+        got = {(r["source"], r["host"]): r["stored"] for r in self.uses(self.RUN)}
+        self.assertEqual(got[("host", "i-a")], 3 * self.GIB)
 
 
 class Tiers(Fixture):
