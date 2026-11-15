@@ -52,7 +52,7 @@ func releaseWGIPLease(lesseeType string, lesseeID int64) error {
 	return nil
 }
 
-func ExampleBackend_leaseWGIP() {
+func Example_leaseWGIP() {
 	nodeIP, err := leaseWGIP("node", 1234)
 	log.Println(nodeIP, err)
 
