@@ -334,6 +334,29 @@ the runner's data waited (halve-15-10 504 → 871 ms), every latest leg slow
 (halve-7-10 262 → 365), or a held, pooled or spread-gated reading (485-617
 ms under that jitter).
 
+**Uplink train falls read behind a queue the probes met.**
+(`meter-iterate-c52` d66b6283 and f7f39a26, against 2726ce8c) A latest
+leg read below the links' legs only once its first probe's round trip
+(then its receiver-stamped one-way delay, a sixth control record) stood
+25 ms past its path's base, and alone while the links' latest probes
+showed such a queue. It cut the false falls jitter made, but it times
+probes behind the node's own bursts, which PLAN's meter rule excludes. On
+df5641fa without it the seed's legs read the robust tier's halvings at
+p10 0.89-0.98 and its lag matched the seed oracle's (honest, 8 seeds:
+×0.99 over the tier, halve-* ×0.88-1.29, every interval across 1).
+
+**The uplink trains' reading bounded while the runner waits.**
+(`meter-iterate-c52` 2726ce8c, dropped in `meter-c52-rebase` fa76024f, on
+df5641fa) While data waited in the runner (its last 300 ms busy at
+`SATURATED_BUSY`), the seed's reading was at most what its links delivered
+or it wrote, to catch a fall between legs. The wait is as often for one
+link holding its own data back: behind wan-slow-viewer's slow receiver
+the seed read p10 0.41 of its uplink (robust, honest, 8 seeds) and 0.31
+on browsers, and with star-15-10-end-abrupt's departed viewers' links
+holding their data, browsers read p50 0.52; the halvings' falls the legs
+read anyway. Without it those read 0.61, 0.77 and 0.98, and collapses went
+21 → 19 (robust) and 37 → 29 (browsers).
+
 **Admitting by count until the uplink saturates.** (`idle-count`,
 `idle-count-all`, against 5d81aaf6) An idle relay reads twenty times its
 control traffic, short of one subscriber. Until its meter had seen
