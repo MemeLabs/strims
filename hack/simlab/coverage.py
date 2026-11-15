@@ -55,9 +55,13 @@ catalog's indexer had. A chunk at a time:
              name, else its `asks`', else one); the report warns of
              every run whose count it inferred, and the latency section
              counts them (inferred_streams)
-  interval   the run's chunk interval: the median of every gap between
-             consecutive publications within a stream (the signing
-             cadence: 250 ms in the suite cells), taken from the data
+  interval   the run's publication interval: the median of every gap
+             between a stream's consecutive publications, a publication
+             being the stream's chunks the seed publishes at one ms (a
+             signed unit's: one chunk of each stream, or several of each
+             where a unit holds more chunks than there are streams),
+             taken from the data: the signing cadence, 250 ms in the
+             suite cells
   first      the earliest `arrivals` row of a node but the seed and the
              dishonest viewers (ties by node), any incarnation: first_ms,
              its route (`push` or `answer` as arrivals' how names them,
@@ -78,8 +82,9 @@ catalog's indexer had. A chunk at a time:
              it would come within the budget is unknown, and leaving out
              only the never-held ones of them would bias the late share
              down
-  late       a judged chunk held later than its run's interval after its
-             publication, or never
+  late       a judged chunk held more than its run's interval (one
+             publication interval of its stream) after its publication,
+             or never
   phase      the run's phase of its publication second (verdict_seconds,
              the run's own windows: startup is the run's first 25 s, its
              seconds 0-24, so a chunk published at exactly 25 s is

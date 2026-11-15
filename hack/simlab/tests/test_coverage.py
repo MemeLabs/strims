@@ -15,12 +15,13 @@ and exported by simdb.py into a local suite invocation's source, and a
 second invocation's source that labels two of them again (decl's seed 1
 in a cell of its own, star-5b; its seed 2 in star-5, as the first has
 it), a third invocation's (MIX) with arm mix's run, decl's seed 1
-with host 3 a dishonest viewer, and a fourth's (LOG) with arm log's,
+with host 3 a dishonest viewer, a fourth's (LOG) with arm log's,
 mix's run with a seed log (seed_decisions, seed_sends), a few holds
-and push parents changed and a viewer's departure, indexed by the
-catalog. Every run publishes the same chunks: two streams, a chunk of
-each every 250 ms from 20 s to 39.75 s of a 40 s run, so the last 4 s
-are censored.
+and push parents changed and a viewer's departure, and a fifth's (UNIT)
+with arm unit's, decl's seed 1 with its chunks published several of a
+stream at once, indexed by the catalog. Every run but unit's publishes
+the same chunks: two streams, a chunk of each every 250 ms from 20 s to
+39.75 s of a 40 s run, so the last 4 s are censored.
 
   Prepare      the measure's per-run facts: the seed, the streams, the
                interval, the run's end, the phases, the censored chunks,
@@ -50,7 +51,10 @@ are censored.
                of each) and the attribution section's rows; runs without a
                seed log, and a catalog without its tables, leave I2, I3
                and the attribution empty, with a warning
-  Cli          simdb.py coverage-report's tables and JSON, as a caller runs
+  Units        arm unit's run, worked by hand: its interval the gap
+               between a stream's publications, not between its chunks,
+               and the late chunks and the latency section by it
+  Cli         simdb.py coverage-report's tables and JSON, as a caller runs
                it, the seed log's sections among them, and a section the
                catalog can't answer yet
 
@@ -107,6 +111,10 @@ LOG = "suite/wt/cv-log"
 LOG_SEL = forecast.Selection(exp=[LOG], names={"strims-sim-log": "log"}, phases="all")
 DEPARTED = 4
 DEPART_MS = 34600
+# The source of arm unit's run, apart from the others: decl's seed 1 with
+# its chunks published four at one ms (unit_pub) and unit_arrivals' holds.
+UNIT = "suite/wt/cv-unit"
+UNIT_SEL = forecast.Selection(exp=[UNIT], names={"strims-sim-unit": "unit"}, phases="all")
 # The bytes of a written push and of a written answer in the seed log.
 PUSH_BYTES, ANSWER_BYTES = 1000, 1500
 # The warning of runs without a seed log, their count left to format.
@@ -312,6 +320,31 @@ def log_sends():
             for n, (t, peer, how, q, queued, fate, cancel) in enumerate(rows)]
 
 
+def unit_pub(q):
+    """Chunk q's publication in arm unit's run: two streams (q mod 2), two
+    chunks of each, four at one ms, every 500 ms from 20 s."""
+    return 20000 + 500 * (q // 4)
+
+
+def unit_arrivals():
+    """Arm unit's holds: the seed (0) publishes chunks 0-159 (unit_pub);
+    host 1, the seed's child, holds each 40 ms after by its push, and host
+    2, host 1's child, 80 ms after. But, of the publication at 30 s
+    (steady), host 1 alone holds them, by the seed's push:
+
+      80  no host holds it (never)
+      81  300 ms after (on time: within its stream's 500 ms)
+      82  500 ms after (on time: late is more than the interval)
+      83  501 ms after (pushed late)
+    """
+    special = {80: [], 81: [(1, 300)], 82: [(1, 500)], 83: [(1, 501)]}
+    rows = [(unit_pub(q), SEED, -1, q, "own", -1, -1, None, 0) for q in range(CHUNKS)]
+    for q in range(CHUNKS):
+        for node, after in special.get(q, [(1, 40), (2, 80)]):
+            rows.append((unit_pub(q) + after, node, node - 1, q, "push", node - 1, node - 1, None, 0))
+    return rows
+
+
 ASK_COLS = [("t_ms", "BIGINT"), ("node", "BIGINT"), ("honest", "BOOLEAN"), ("ask", "BIGINT"), ("round", "VARCHAR"),
             ("peer", "BIGINT"), ("peer_honest", "BOOLEAN"), ("picked", "BOOLEAN"), ("stream", "BIGINT"),
             ("seq", "BIGINT")]
@@ -384,6 +417,18 @@ def build(root):
         sm.fold(db, [rec], src)
         sm.export(db, root / "target" / "sim-db" / "cache" / src)
         db.unlink()
+    # Arm unit's run: decl's seed 1 with unit_arrivals' holds, its
+    # series_meta recording its seed and stream count.
+    d = root / "jobs" / "unit-1"
+    rec = golden_cli.job_dir(d, (UNIT, "strims-sim-unit:star-5:1", "strims-sim", "calibration_star", "star-5",
+                                 "strims-sim-unit", 1, golden_cli.SS_ENV, golden_cli.T0, None))
+    golden_cli.write_table(d, "arrivals", ARRIVAL_COLS, unit_arrivals())
+    golden_cli.write_table(d, "parents", PARENT_COLS, parents(1))
+    meta = json.loads((d / "series_meta.json").read_text())
+    (d / "series_meta.json").write_text(json.dumps(meta | {"seed": SEED, "streams": 2}))
+    sm.fold(db, [rec], UNIT)
+    sm.export(db, root / "target" / "sim-db" / "cache" / UNIT)
+    db.unlink()
     label = "strims-sim-decl"
     golden_cli.relabel(root, RELABEL, [
         (f"{label}:star-5:{seed}", "strims-sim", "calibration_star", cell, label, seed, golden_cli.SS_ENV)
@@ -719,8 +764,8 @@ class Grain(Fixture):
 
     def test_a_catalog_without_asks(self):
         # bare's run then has no source of its count: one stream, said so,
-        # and the report still runs: with one stream, half its publications
-        # come 0 ms after another, and its interval is 0.
+        # and the report still runs: with one stream, its chunks are
+        # published two at one ms, and its interval is still 250 ms.
         real = catalog.scoring_cols
 
         def without(columns, have=None):
@@ -731,7 +776,7 @@ class Grain(Fixture):
             got = coverage.report(SEL, ["latency"], warn=warned.append)
         self.assertIn("(3 from parents, 1 with one assumed)", warned[-1])
         bare = [r for r in got["latency"].records() if r["arm"] == "bare" and r["phase"] == "steady"]
-        self.assertEqual([r["interval_runs"] for r in bare], [[0.0] * 3])
+        self.assertEqual([r["interval_runs"] for r in bare], [[250.0] * 3])
 
 
 class Dishonest(Fixture):
@@ -1019,6 +1064,61 @@ class SeedLog(Fixture):
         self.assertEqual([(r["unlogged"], r["child_chunks"], r["unwritten"], r["declined"]) for r in steady],
                          [(1, 0, None, None)])
         self.assertEqual(got["attribution"].records(), [])
+
+
+class Units(Fixture):
+    """Arm unit's run (UNIT's source): decl's seed 1 with two chunks of
+    each stream published at one ms, every 500 ms."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with cls.patched(cls):
+            cls.unit_warned = []
+            cls.unit = {s: r.records() for s, r in coverage.report(UNIT_SEL, ["latency", "late"],
+                                                                   warn=cls.unit_warned.append).items()}
+
+    def united(self, section, **want):
+        got = [r for r in self.unit[section] if all(r.get(k) == v for k, v in want.items())]
+        self.assertEqual(len(got), 1, f"{section} {want}: {got}")
+        return got[0]
+
+    def test_the_interval_and_the_chunks(self):
+        with forecast.connected() as c:
+            coverage.prepare(c, UNIT_SEL)
+            jobs = c.execute("SELECT streams, streams_from, interval_ms FROM cv_jobs").fetchall()
+            chunks = c.execute("SELECT seq, pub_ms, latency_ms, late, children, class FROM cv_chunks "
+                               "WHERE seq BETWEEN 80 AND 83 ORDER BY seq").fetchall()
+        # Each stream's 80 chunks are 40 publications of two, 500 ms apart:
+        # half its consecutive chunks come 0 ms apart, its publications 500
+        # ms, its interval.
+        self.assertEqual(jobs, [(2, "series_meta", 500.0)])
+        # Late is held more than 500 ms after: 80 never, 83 at 501 ms, each
+        # with host 1 the seed's child of its stream at 30 s.
+        self.assertEqual(chunks, [(80, 30000, None, True, 1, "child_never"),
+                                  (81, 30000, 300, False, None, None),
+                                  (82, 30000, 500, False, None, None),
+                                  (83, 30000, 501, True, 1, "pushed_late")])
+
+    def test_latency_and_late(self):
+        # Steady: 22 publications of four judged (25-35.5 s), 88 chunks, and
+        # 8 censored (36-39.5 s), 32; 80 never held, 80 and 83 late, the
+        # other 84 held 40 ms after.
+        r = self.united("latency", phase="steady")
+        self.assertEqual((r["runs"], r["chunks"], r["censored"], r["held"], r["never"], r["late"],
+                          r["interval_runs"]), (1, JUDGED_STEADY, 32, 87, 1, 2, [500.0] * 3))
+        self.assertAlmostEqual(r["late_share"], 2 / JUDGED_STEADY)
+        self.assertEqual((r["p50_ms"], r["max_ms"]), (40.0, 501))
+        self.assertAlmostEqual(r["p99_ms"], p99([40] * 84 + [300, 500, 501]))
+        # The startup's 10 publications (20-24.5 s), each chunk held 40 ms
+        # after: none late.
+        s = self.united("latency", phase="startup")
+        self.assertEqual((s["chunks"], s["censored"], s["late"], s["max_ms"]), (40, 0, 0, 40))
+        got = {(x["phase"], x["class"]): x["chunks"] for x in self.unit["late"]}
+        self.assertEqual(got, {("steady", "child_never"): 1, ("steady", "pushed_late"): 1})
+        # Its stream count is recorded, it has parents, and neither section
+        # reads the seed log: no warning.
+        self.assertEqual(self.unit_warned, [])
 
 
 class Cli(Fixture):

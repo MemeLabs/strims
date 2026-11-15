@@ -695,7 +695,7 @@ description = "The two-sided Fisher exact p of two counts out of two totals, as 
 
 [lake.coverage_runs]
 macro = "coverage_runs_of"
-description = "Each run's seed coverage frame: its streams, chunk interval, end and the arrivals and parents rows it has."
+description = "Each run's seed coverage frame: its streams, publication interval, end and the arrivals and parents rows it has."
 
 [lake.seed_children]
 macro = "seed_children_of"

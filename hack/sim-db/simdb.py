@@ -250,8 +250,8 @@ seed_sends), over the jobs forecast-report's flags pick, each phase kept
 (`--phases`: all by default, of the chunk's publication or the
 stream-second; a row of phase NULL pools those past startup) and each
 verdict apart, by `--section`: latency (the judged chunks' latency
-quantiles, their shares held late past the run's chunk interval and
-never held, censored ones counted apart), routes (each first copy's
+quantiles, their shares held late past the run's publication interval
+and never held, censored ones counted apart), routes (each first copy's
 route and source: the seed's push, an answer, other, never; from the
 seed, a dishonest viewer or neither), invariants (I1: stream-seconds
 with no seed child while an honest viewer watches, the seed's children

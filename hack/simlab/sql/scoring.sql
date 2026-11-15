@@ -616,9 +616,10 @@ CREATE OR REPLACE MACRO lag_since(exp_name, before := 10, after := 120) AS TABLE
 -- series_meta's `streams` or the row's `streams`:
 -- `series_meta`, `row`; else inferred, one more than the greatest stream
 -- its parents name, `parents`, else its asks', `asks`, else one, NULL;
--- a chunk's stream is its seq mod streams), interval_ms (the run's chunk
--- interval: the median gap between consecutive publications within a
--- stream, the seed's own rows), end_ms (the end of its last second in
+-- a chunk's stream is its seq mod streams), interval_ms (the run's
+-- publication interval: the median gap between a stream's consecutive
+-- publications, a publication being the stream's chunks at one ms of the
+-- seed's own rows, one or several), end_ms (the end of its last second in
 -- `seconds`, or its last hold if that is later: strims-sim runs on past
 -- its stream), arrivals_rows and parents_rows (the run's rows of each the
 -- catalog holds: without arrivals a run has no chunks, without parents
@@ -671,7 +672,8 @@ CREATE OR REPLACE MACRO coverage_runs_of(jobs) AS TABLE
         JOIN cv_streams t ON t.k = x.k AND t.src = x.src GROUP BY ALL),
     cv_gaps AS (
         SELECT k, src, sketch_quantile(gap, 50) AS interval_ms FROM (
-            SELECT k, src, pub_ms - lag(pub_ms) OVER (PARTITION BY k, src, stream ORDER BY seq) AS gap FROM cv_pub)
+            SELECT k, src, pub_ms - lag(pub_ms) OVER (PARTITION BY k, src, stream ORDER BY pub_ms) AS gap
+            FROM (SELECT DISTINCT k, src, stream, pub_ms FROM cv_pub))
         WHERE gap IS NOT NULL GROUP BY ALL),
     cv_secs AS (
         SELECT k, src, (max(sec) + 1) * 1000 AS end_ms FROM seconds SEMI JOIN cv_job_keys USING (k, src)
@@ -790,11 +792,12 @@ CREATE OR REPLACE MACRO seed_children_of(jobs) AS TABLE
 -- run's), judged (published at least @{delay_max_ms} ms, the latency
 -- budget's most, before its run's end: every other chunk, held or not,
 -- is censored), late (never held, or held more than its run's interval
--- after its publication) and, for a judged late chunk of a run with
--- parents rows (NULL for the others), the seed's children of its stream
--- at its publication (seed_children_in's, no dishonest viewer): children
--- (how many), dishonest_children (how many dishonest viewers were
--- subscribed to the seed on its stream then, seed_subscriptions_in's),
+-- (one publication interval of its stream) after its publication) and,
+-- for a judged late chunk of a run with parents rows (NULL for the
+-- others), the seed's children of its stream at its publication
+-- (seed_children_in's, no dishonest viewer): children (how many),
+-- dishonest_children (how many dishonest viewers were subscribed to the
+-- seed on its stream then, seed_subscriptions_in's),
 -- class (the first that holds: no_seed_child; released, a child's hold
 -- names a release to pull, arrivals' released_ms; pushed_late, a child
 -- holds it by the seed's push; child_never, no child ever held it;
