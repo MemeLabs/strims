@@ -72,6 +72,11 @@ sims' fields use `strims_base::stats::sketch`. A change to how a
 reference quantity is taken goes in sim-suite's `golden.TAUGHT`, so the
 scorecards set compares like with like.
 
+A sum of floats in the scoring is scoring.sql's `compensated_sum`, which
+adds as Python's sum() does, not a `list_reduce` fold: a fold strays by
+last bits, and a mean on a tie at the printed places then prints
+otherwise than the Python scoring's.
+
 ## Checks
 
 - Tests: test_verdict; `hack/sim-db/simdb_test.py`'s `PerViewerVerdict`

@@ -81,6 +81,25 @@ CREATE OR REPLACE MACRO t975_at(df_) AS
              @{t975_z} + @{t975_g1} / df_ + @{t975_g2} / pow(df_, 2) + @{t975_g3} / pow(df_, 3)
              + @{t975_g4} / pow(df_, 4));
 
+-- The sum of the DOUBLEs xs in their order as Python's sum() adds floats
+-- (3.12 on): Neumaier's compensated summation, each addition's rounding
+-- error carried apart and added to the sum once at the end, where it is
+-- finite and not zero. The scoring's every sum is one, so its means, spreads
+-- and geometric means are the Python scoring's bit for bit (golden.py's
+-- reference): a left fold strays from it by last bits, which a value on a
+-- tie at the places a scorecard prints shows. 0 for an empty list, NULL for
+-- NULL or a NULL among xs.
+CREATE OR REPLACE MACRO compensated_sum(xs) AS
+    list_transform([list_reduce(list_transform(xs, lambda cs_x: {'s': cs_x::DOUBLE, 'c': 0.0::DOUBLE}),
+                                lambda cs_acc, cs_y: {'s': cs_acc.s + cs_y.s,
+                                                      'c': cs_acc.c + CASE WHEN abs(cs_acc.s) >= abs(cs_y.s)
+                                                                           THEN (cs_acc.s - (cs_acc.s + cs_y.s)) + cs_y.s
+                                                                           ELSE (cs_y.s - (cs_acc.s + cs_y.s)) + cs_acc.s
+                                                                           END},
+                                {'s': 0.0::DOUBLE, 'c': 0.0::DOUBLE})],
+                   lambda cs_acc: CASE WHEN cs_acc.c <> 0 AND isfinite(cs_acc.c) THEN cs_acc.s + cs_acc.c
+                                       ELSE cs_acc.s END)[1];
+
 -- The hypergeometric probability of x of hits_ in the first n_ of n_ + n2_.
 CREATE OR REPLACE MACRO hypergeom_p(x_, n_, n2_, hits_) AS
     exp(lgamma(n_ + 1) - lgamma(x_ + 1) - lgamma(n_ - x_ + 1)
@@ -90,10 +109,10 @@ CREATE OR REPLACE MACRO hypergeom_p(x_, n_, n2_, hits_) AS
 -- The two-sided Fisher exact p of k_ in n_ against m_ in n2_: the
 -- probabilities, in order, of every split no likelier than the one seen.
 CREATE OR REPLACE MACRO fisher_p(k_, n_, m_, n2_) AS
-    least(1.0::DOUBLE, list_reduce(list_filter(
+    least(1.0::DOUBLE, compensated_sum(list_filter(
         list_transform(range(greatest(0, k_ + m_ - n2_), least(n_, k_ + m_) + 1),
                        lambda x: hypergeom_p(x, n_, n2_, k_ + m_)),
-        lambda pr: pr <= hypergeom_p(k_, n_, n2_, k_ + m_) * (1 + 1e-9)), lambda acc, pr: acc + pr));
+        lambda pr: pr <= hypergeom_p(k_, n_, n2_, k_ + m_) * (1 + 1e-9))));
 
 -- A paired effect's mark: + better, - worse, ~ moved where no direction is
 -- better, ' ' a tie. It moved when its interval excludes no change (1 for
@@ -141,9 +160,10 @@ CREATE OR REPLACE MACRO pairs_of(a_jobs, b_jobs) AS TABLE
 -- pairs (the seeds paired), a_median and b_median (each side's median
 -- over them, sketch_quantile's p50), n (the pairs it is over: a ratio's
 -- those with both values above 0), effect (the geometric mean ratio, exp
--- of the mean ln(b/a), or the mean difference b - a), lo and hi (its 95 %
--- t-interval; one pair gives 0 or -inf to inf), mark (effect_mark; h for
--- a host metric that moved) and metric_defs' columns.
+-- of the mean ln(b/a), or the mean difference b - a, over the seeds in
+-- order), lo and hi (its 95 % t-interval; one pair gives 0 or -inf to inf),
+-- their sums compensated_sum's, mark (effect_mark; h for a host metric that
+-- moved) and metric_defs' columns.
 CREATE OR REPLACE MACRO effects_of(cell_list, a_jobs, b_jobs) AS TABLE
     WITH p AS (
         SELECT p.*, m.ord, m.kind, m.better, m.tie, m.host, m.shown,
@@ -158,11 +178,11 @@ CREATE OR REPLACE MACRO effects_of(cell_list, a_jobs, b_jobs) AS TABLE
                sketch_quantile(a_value, 50) AS a_median, sketch_quantile(b_value, 50) AS b_median,
                list(x ORDER BY seed) FILTER (WHERE x IS NOT NULL) AS xs
         FROM p GROUP BY cell, metric),
-    s AS (SELECT *, len(xs) AS n, list_reduce(xs, lambda acc, y: acc + y) / len(xs) AS mean FROM g),
+    s AS (SELECT *, len(xs) AS n, compensated_sum(xs) / len(xs) AS mean FROM g),
     h AS (
         SELECT *, CASE WHEN n >= 2 THEN t975_at(n - 1)
-                       * sqrt(list_reduce(list_transform(xs, lambda y: (y - mean) ** 2), lambda acc, y: acc + y)
-                              / (n - 1)) / sqrt(n) END AS half
+                       * sqrt(compensated_sum(list_transform(xs, lambda y: (y - mean) ** 2)) / (n - 1)) / sqrt(n)
+                  END AS half
         FROM s),
     e AS (
         SELECT *,
@@ -276,10 +296,9 @@ CREATE OR REPLACE MACRO arm_score_of(cell_list, a_jobs, b_jobs, overhead := fals
                                  lag_budget := lag_budget, guard_ratio := guard_ratio)),
     t AS (
         SELECT coalesce(sum(kb), 0) AS collapsed, coalesce(sum(ka), 0) AS base_collapsed,
-               exp(list_reduce(list(ln(lag) ORDER BY cell_ord) FILTER (WHERE lag IS NOT NULL), lambda acc, y: acc + y)
-                   / count(lag)) AS p99,
-               exp(list_reduce(list(ln(wire) ORDER BY cell_ord) FILTER (WHERE wire IS NOT NULL), lambda acc, y: acc + y)
-                   / count(wire)) AS wire,
+               exp(compensated_sum(list(ln(lag) ORDER BY cell_ord) FILTER (WHERE lag IS NOT NULL)) / count(lag)) AS p99,
+               exp(compensated_sum(list(ln(wire) ORDER BY cell_ord) FILTER (WHERE wire IS NOT NULL)) / count(wire))
+                   AS wire,
                coalesce(flatten(list(breaks ORDER BY cell_ord)), []) AS breaks
         FROM c)
     SELECT collapsed, base_collapsed, p99, wire, breaks, len(breaks) > 0 AS broken, overhead::BOOLEAN AS overhead,

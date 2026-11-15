@@ -23,8 +23,10 @@ scorecard, every metric and the default's. The reference's t table is the
 macros' (t975), and both score the METRICS both have (ref_metrics: those
 added since it, which it can't print, and those dropped since, which the
 macros can't, are left out), the reference reading those METRICS read
-otherwise as METRICS reads them (RESTATED), and its medians the macros'
-(TAUGHT), so the two differ by nothing but their code. The experiments are the latest N of each kind (--refs and
+otherwise as METRICS reads them (RESTATED), and its medians and its arm
+score's order of seeds the macros' (TAUGHT), so the two differ by nothing
+but their code. Both sum as Python's sum() does (scoring.sql's
+compensated_sum), so their effects are each other's bit for bit. The experiments are the latest N of each kind (--refs and
 --sets runs) with two arms or more; an experiment's base is its index's, else the arm the
 farm reused from an earlier run (an A/B's baseline), else its first.
 
@@ -76,15 +78,26 @@ RESTATED = {
     "hostile_delivery": lambda r: r.get("delivery_dishonest", r.get("delivery_hostile")),
     "defector_gain": lambda r: (lambda d, h: d / h if d and h else None)(
         r.get("lag_p99_ms_dishonest", r.get("lag_p99_ms_hostile")), r.get("lag_p99_ms_honest")),
+    # The depth shares added as METRICS' SQL adds them, depth_1 to depth_6
+    # in order and a missing one as 0, where the reference's sum() of the
+    # ones it has lands a last bit off.
+    "depth_mean": lambda r: (lambda d: (1 * d[0] + 2 * d[1] + 3 * d[2] + 4 * d[3] + 5 * d[4] + 6 * d[5])
+                             / (d[0] + d[1] + d[2] + d[3] + d[4] + d[5])
+                             if d[0] + d[1] + d[2] + d[3] + d[4] + d[5] != 0 else None)(
+        [r.get(f"depth_{k}") or 0 for k in range(1, 7)]),
 }
-# The reference's medians, taught the quantile method the macros take
-# (simlab.sketch: sketch_quantile's p50, the integer nearest rank read
-# through the log sketch): the scorecard's medians over the seeds, and
-# the lag ceiling's. Each is its source's once.
+# The reference taught the macros' arithmetic where it took another. Its
+# medians, the quantile method the macros take (simlab.sketch:
+# sketch_quantile's p50, the integer nearest rank read through the log
+# sketch): the scorecard's medians over the seeds, and the lag ceiling's.
+# Its arm score's pairs in seed order, as its scorecard's and effects_of's
+# are, where it took its rows' order (the farm index's), which a sum can
+# round otherwise. Each is its source's once.
 TAUGHT = [
     ("med = lambda xs: sorted(xs)[len(xs) // 2]", "med = lambda xs: _sketch.quantile(xs, 50)"),
     ("ma = statistics.median(x for x, _ in lags)", "ma = _sketch.quantile([x for x, _ in lags], 50)"),
     ("mb = statistics.median(y for _, y in lags)", "mb = _sketch.quantile([y for _, y in lags], 50)"),
+    ("for (cell, seed), ra in base_rows.items():", "for (cell, seed), ra in sorted(base_rows.items()):"),
 ]
 # How many times an experiment is scored at one snapshot before a
 # snapshot gone from under it fails the check (compared_pinned).
@@ -110,7 +123,8 @@ def suite():
 
 
 def taught(source):
-    """The reference's `source` with its medians the macros' (TAUGHT)."""
+    """The reference's `source` with its medians and its arm score's order
+    of seeds the macros' (TAUGHT)."""
     for old, new in TAUGHT:
         if source.count(old) != 1:
             sys.exit(f"golden: the reference has {source.count(old)} of {old!r}, not one")
@@ -119,8 +133,8 @@ def taught(source):
 
 
 def reference(rev):
-    """suite.py at `rev`, its t table the macros' (t975) and its medians
-    theirs (taught)."""
+    """suite.py at `rev`, its t table the macros' (t975), and its medians
+    and its arm score's order of seeds theirs (taught)."""
     WORK.mkdir(parents=True, exist_ok=True)
     path = WORK / f"suite_{rev}.py"
     path.write_text(taught(subprocess.run(["git", "show", f"{rev}:hack/sim-suite/suite.py"], cwd=ROOT, check=True,
@@ -223,9 +237,9 @@ def ref_texts(ref, cells, base_rows, arm_rows, exp, base, arm):
 
 
 def unsigned_zeros(text):
-    """`text` with each printed -0.000 as +0.000. The reference sums in
-    Python and the macros in DuckDB, so an effect within a last bit of zero
-    can fall either side of it; the reference, suite.py at REFERENCE,
+    """`text` with each printed -0.000 as +0.000. Both sum as Python's sum()
+    does (scoring.sql's compensated_sum), yet an effect that should be zero
+    can land a last bit under it; the reference, suite.py at REFERENCE,
     prints that sign, and simlab.scoring.signed doesn't."""
     return re.sub(r"(?<![\d.])-0\.000(?!\d)", "+0.000", text)
 

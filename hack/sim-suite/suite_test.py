@@ -12,8 +12,10 @@ fixtures:
               from arm_side's, and scoring an experiment's arms by name
               (score, arm_scores), whose JSON holds what the text shows.
               Zeros compare without their sign, as in golden.compare.
-  Arithmetic  fisher_p against the exact hypergeometric sum, t975_at
-              against Student's t, effect_mark.
+  Arithmetic  compensated_sum against Python's sum(), a mean difference
+              on a printed tie against the reference's, fisher_p against
+              the exact hypergeometric sum, t975_at against Student's t,
+              effect_mark.
   Dynamics    structural, dynamics and dynamics_phases over a made-up
               experiment.
   LagSince    lag_since over a made-up run's phase windows.
@@ -25,6 +27,7 @@ import gzip
 import importlib.util
 import json
 import math
+import random
 import re
 import tempfile
 import unittest
@@ -196,6 +199,68 @@ class Arithmetic(unittest.TestCase):
 
     def setUp(self):
         scoring.SCORE_DB = self.db
+
+    def test_sums(self):
+        """compensated_sum adds a list in its order as Python's sum() adds
+        floats, bit for bit (signed zeros, the infinities and NaN too), where
+        a left fold strays by last bits: over tenths, logs, values far apart
+        in magnitude and edge values."""
+        rng = random.Random(2935)
+        edges = [0.0, -0.0, 1e-300, -1e-300, 5e-324, 1.0, -1.0, 2.0 ** 53, -(2.0 ** 53), 0.1, 1e308, -1e308]
+        lists = [[0.0], [-0.0], [-0.0, -0.0], [math.inf], [-math.inf, 1.0], [math.inf, -math.inf], [math.nan, 1.0],
+                 [1.0, math.nan], [1e308, 1e308, -1e308], [1e16, 1.0, -1e16], [0.1] * 10]
+        for i in range(2000):
+            n = rng.randint(1, 20)
+            lists.append([[round(rng.uniform(-2000, 2000), 1) for _ in range(n)],
+                          [math.log(rng.uniform(0.01, 100)) for _ in range(n)],
+                          [rng.uniform(-1, 1) * 10 ** rng.randint(-20, 20) for _ in range(n)],
+                          [rng.choice(edges) for _ in range(n)]][i % 4])
+        lit = lambda xs: "[" + ", ".join(f"'{x!r}'::DOUBLE" for x in xs) + "]"
+        values = ", ".join(f"({i}, {lit(xs)})" for i, xs in enumerate(lists))
+        got = scored(f"SELECT i, compensated_sum(xs) AS s, list_reduce(xs, lambda a, y: a + y) AS fold "
+                     f"FROM (VALUES {values}) v(i, xs) ORDER BY i;")
+        same = lambda a, b: math.isnan(a) and math.isnan(b) or a == b and math.copysign(1, a) == math.copysign(1, b)
+        self.assertEqual([i for i, r in enumerate(got) if not same(r["s"], float(sum(lists[i])))], [])
+        self.assertGreater(sum(1 for i, r in enumerate(got) if not same(r["fold"], float(sum(lists[i])))), 100)
+        self.assertEqual(scored("SELECT compensated_sum([]::DOUBLE[]) AS e, compensated_sum(NULL::DOUBLE[]) AS n, "
+                                "compensated_sum([1.0, NULL]) AS h;"), [{"e": 0.0, "n": None, "h": None}])
+
+    def test_a_mean_on_a_printed_tie(self):
+        """A difference's effect and interval are the reference's (golden.py:
+        suite.py at REFERENCE, its t_interval, sum() over the pairs'
+        differences in seed order), bit for bit. A farm run's rss_mb in
+        tenths over 8 seeds (sb2935's halve-15-10, decl against main) differ
+        by -371.8875 on the mean, a tie at the three places a scorecard
+        prints: sum() lands under it, -371.887, and a left fold a last bit
+        past it, -371.888."""
+        a = [543.8, 500.1, 528.5, 518.2, 531.9, 551.1, 546.2, 547.9]
+        b = [176.5, 154.7, 155.2, 157.9, 179.3, 157.4, 157.3, 154.3]
+        runs = [(f"{arm}{seed}", arm, seed, v) for arm, vs in (("a", a), ("b", b)) for seed, v in enumerate(vs, 1)]
+        db = Path(self.tmp.name) / "tie.duckdb"
+        database(db, "CREATE SCHEMA raw; CREATE TABLE raw.runs (k VARCHAR, src VARCHAR, cell VARCHAR, arm VARCHAR, "
+                     "seed BIGINT, trace VARCHAR, wall_s DOUBLE, rss_mb DOUBLE, \"at\" VARCHAR); "
+                     "INSERT INTO raw.runs VALUES "
+                     + ", ".join(f"('{k}', 's', 'c', '{arm}', {seed}, NULL, NULL, '{v!r}'::DOUBLE, NULL)"
+                                 for k, arm, seed, v in runs)
+                     + "; CREATE TABLE rows AS SELECT k, src FROM raw.runs; "
+                     "CREATE TABLE jobs AS SELECT k, src, trace, NULL::VARCHAR AS reads_hash FROM raw.runs;")
+        side = lambda arm: {("c", seed): (k, "s") for k, arm_, seed, _ in runs if arm_ == arm}
+        try:
+            card = scoring.scorecard([{"name": "c", "why": "a tie"}], side("a"), side("b"), "a", "b")
+            t = scored("SELECT t975_at(7) AS t;")[0]["t"]
+        finally:
+            scoring.SCORE_DB = self.db
+        [e] = [e for e in card.cells[0]["effects"] if e["metric"] == "rss_mb"]
+        v = [y - x for x, y in zip(a, b)]
+        mean = sum(v) / len(v)
+        half = t * math.sqrt(sum((x - mean) ** 2 for x in v) / (len(v) - 1)) / math.sqrt(len(v))
+        self.assertEqual((e["n"], e["effect"], e["lo"], e["hi"]), (8, mean, mean - half, mean + half))
+        self.assertEqual(scoring.effect_text(e), f"{mean:+.3f} [{mean - half:+.3f},{mean + half:+.3f}]")
+        self.assertEqual(f"{mean:+.3f}", "-371.887")
+        fold = 0.0
+        for x in v:
+            fold += x
+        self.assertEqual(f"{fold / len(v):+.3f}", "-371.888")
 
     def test_fisher(self):
         """fisher_p is the exact two-sided sum, near enough that no p
