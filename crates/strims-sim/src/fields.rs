@@ -3918,6 +3918,70 @@ pub(crate) mod cols {
         "up_sack_bytes",
     ];
 
+    /// The `meter_samples` table's columns: a row per node and meter sample.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum MeterSamples {
+        /// The sample, in ms from the stream's start.
+        ///
+        /// Unit: ms.
+        TMs,
+        /// The sampled host, as `events` numbers hosts.
+        Node,
+        /// The host's part in the first swarm: `seed`, its seed (series_meta's
+        /// `seed`, the publisher); `honest`, an honest viewer; `hostile`, a
+        /// hostile host.
+        Role,
+        /// The upload meter's capacity at the sample, the relay busy-time
+        /// reading admission and shedding take (`MeterSample::capacity`,
+        /// `PushStats::upload_capacity`); empty before the host sent anything,
+        /// when it reads 0.
+        ///
+        /// Unit: bytes/s. None is written as an empty field.
+        CapacityBps,
+        /// What the host could upload at the sample (`Report::upload_cap_at`):
+        /// its uplink's rate then less what its competing uploads sent in the
+        /// second before, within its rate limit; empty with neither a site nor
+        /// a limit.
+        ///
+        /// Unit: bytes/s. None is written as an empty field.
+        AvailBps,
+    }
+
+    impl MeterSamples {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                MeterSamples::TMs => "t_ms",
+                MeterSamples::Node => "node",
+                MeterSamples::Role => "role",
+                MeterSamples::CapacityBps => "capacity_bps",
+                MeterSamples::AvailBps => "avail_bps",
+            }
+        }
+    }
+
+    impl sealed::Sealed for MeterSamples {}
+
+    impl Key for MeterSamples {
+        fn name(self) -> &'static str {
+            MeterSamples::name(self)
+        }
+    }
+
+    impl Column for MeterSamples {
+        const TABLE: &'static str = "meter_samples";
+
+        fn ty(self) -> Ty {
+            match self {
+                MeterSamples::TMs
+                | MeterSamples::Node
+                | MeterSamples::CapacityBps
+                | MeterSamples::AvailBps => Ty::Int,
+                MeterSamples::Role => Ty::Text,
+            }
+        }
+    }
+
     /// The `forecast` table's columns: a row per sample of a node's forecast
     /// log (`strims_ppspp::LagForecast`): a HAVE's announcement lag.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]

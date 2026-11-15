@@ -3,8 +3,9 @@
 
 //! A run's tables (`STRIMS_SIM_OUT=<dir>`, [`Report::write_tables`]): its
 //! first swarm second by second, every read and its viewers' stalls, its
-//! push trees' changes, finer bins, its timed events and its forecast
-//! logs, as CSV files each with a `<table>.schema.json` of its columns'
+//! push trees' changes, finer bins, its hosts' upload meter samples beside
+//! their uplinks, its timed events and its forecast logs, as CSV files
+//! each with a `<table>.schema.json` of its columns'
 //! names and types, for `hack/sim-db` to load without guessing them. Times
 //! are true time, in ms (µs for `events`) from the swarm's stream start.
 //!
@@ -578,12 +579,14 @@ impl Report {
             .filter(|(_, v)| !hostile(v.host))
             .map(|(i, v)| (v.host, i))
             .collect();
+        let mut hosts = vec![spec.seed];
+        hosts.extend(viewers.iter().map(|v| v.host));
         if nodes {
-            let mut hosts = vec![spec.seed];
-            hosts.extend(viewers.iter().map(|v| v.host));
             self.node_bins_table(dir, &hosts, &number, width)?
                 .finish()?;
         }
+        self.meter_samples_table(dir, &hosts, spec.seed, start)?
+            .finish()?;
         let mut t = Table::new(
             dir,
             &[
@@ -819,6 +822,54 @@ impl Report {
                 row.push(self.wire_delta(h, ku, uc("rtos")));
                 row.extend(ACK_COLS.iter().map(|c| self.wire_delta(h, ku, uc(c))));
                 t.opt_ints(&row);
+            }
+        }
+        Ok(t)
+    }
+
+    /// The `meter_samples` table of `hosts`, `seed` the first swarm's:
+    /// each host's meter samples from the stream's `start`, in order, its
+    /// meter's capacity at each beside what it could upload then
+    /// ([`Report::upload_cap_at`]), the readings and the truth the row's
+    /// `meter_seed_p*` and `meter_{pop}_p*` take ([`Report::meter_series`]).
+    fn meter_samples_table(
+        &self,
+        dir: &Path,
+        hosts: &[HostIx],
+        seed: HostIx,
+        start: Duration,
+    ) -> io::Result<Table> {
+        let mut t = Table::new(
+            dir,
+            &[
+                cols::MeterSamples::TMs,
+                cols::MeterSamples::Node,
+                cols::MeterSamples::Role,
+                cols::MeterSamples::CapacityBps,
+                cols::MeterSamples::AvailBps,
+            ],
+        )?;
+        for &h in hosts {
+            let Some(host) = self.hosts.get(h) else {
+                continue;
+            };
+            let role = match self.scenario.hosts.get(h).map(|x| x.class) {
+                _ if h == seed => "seed",
+                Some(HostClass::Hostile(_)) => "hostile",
+                _ => "honest",
+            };
+            for m in host.runner.meter.iter().filter(|m| m.t >= start) {
+                t.fields(&[
+                    ms_since(m.t, start).to_string(),
+                    h.to_string(),
+                    role.to_owned(),
+                    // Nothing sent yet: no reading.
+                    Some(m.capacity)
+                        .filter(|&c| c > 0)
+                        .map_or(String::new(), |c| c.to_string()),
+                    self.upload_cap_at(h, m.t)
+                        .map_or(String::new(), |c| c.to_string()),
+                ]);
             }
         }
         Ok(t)

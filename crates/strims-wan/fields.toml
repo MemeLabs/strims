@@ -2714,6 +2714,46 @@ sims = ["strims-sim"]
 type = "int"
 description = "The window model's retransmission timeouts on the node's links in the bin."
 
+[tables.meter_samples]
+sims = ["strims-sim"]
+grain = "node and meter sample"
+keys = "k, node, t_ms"
+joins = "viewers USING (k, src, node)"
+sample = false
+zstd = false
+description = "Each host's upload meter at each of its meter samples, beside what the host could upload then: the readings and the truth the row's `meter_seed_p*` and `meter_{pop}_p*` score, from the stream's start to the run's end, of the first swarm's seed and its viewers, hostile ones in."
+notes.strims-sim = "A host's samples are its stats ticks' (`HostStats::observe`, each `Scenario::stats_every`), its incarnations' in order, and only a runner with a hybrid swarm takes them: a pull run has none (`Report::write_tables`)."
+
+[columns.meter_samples.t_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The sample, in ms from the stream's start."
+
+[columns.meter_samples.node]
+sims = ["strims-sim"]
+type = "int"
+description = "The sampled host, as `events` numbers hosts."
+
+[columns.meter_samples.role]
+sims = ["strims-sim"]
+type = "text"
+description = "The host's part in the first swarm: `seed`, its seed (series_meta's `seed`, the publisher); `honest`, an honest viewer; `hostile`, a hostile host."
+
+[columns.meter_samples.capacity_bps]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes/s"
+none = "empty"
+description = "The upload meter's capacity at the sample, the relay busy-time reading admission and shedding take (`MeterSample::capacity`, `PushStats::upload_capacity`); empty before the host sent anything, when it reads 0."
+
+[columns.meter_samples.avail_bps]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes/s"
+none = "empty"
+description = "What the host could upload at the sample (`Report::upload_cap_at`): its uplink's rate then less what its competing uploads sent in the second before, within its rate limit; empty with neither a site nor a limit."
+
 [tables.forecast]
 sims = ["strims-sim"]
 grain = "sample of a node's forecast log (`strims_ppspp::LagForecast`): a HAVE's announcement lag"

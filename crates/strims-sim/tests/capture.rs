@@ -6,7 +6,8 @@
 //! ([`strims_sim::tables`]): the same trace at any bin width, over TCP and
 //! as browsers, seconds that are the series', bins that add up to the
 //! row's totals, events that are the scenario's and the report's, stalls
-//! that are the reads' playout and parents that are the trees' changes;
+//! that are the reads' playout, parents that are the trees' changes and
+//! meter samples that are the meter readings the row scores;
 //! and the same trace with viewers departing, gracefully and abruptly, whose
 //! nodes hand over what they logged as they go.
 
@@ -324,6 +325,7 @@ fn a_run_with_tables_keeps_its_trace() {
             assert!(lines("events") > 3, "{name}: {ms} ms: a join per viewer");
             assert!(lines("forecast") > 1, "{name}: {ms} ms");
             budget_reading_is_the_budgets(&r, &d);
+            meter_samples_say_what_they_are(&r, &d);
             held_truth_meets_the_reads(&r, &d);
             request_logs_say_what_they_are(&r, &d);
             stalls_say_how_playout_went(&d);
@@ -616,6 +618,9 @@ fn starved_wan() -> Scenario {
 /// seed starved for 3 s ([`starved_wan`]), say how their playout went and
 /// how the trees changed ([`stalls_say_how_playout_went`],
 /// [`parents_say_how_the_trees_changed`]): stalls at the shorter delay.
+/// And its `meter_samples` say what the seed could upload at each sample
+/// ([`meter_samples_say_what_they_are`]): its site's rate, half the
+/// stream's while starved.
 #[test]
 fn a_starved_runs_stalls_are_its_reads_playout() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
@@ -637,6 +642,19 @@ fn a_starved_runs_stalls_are_its_reads_playout() {
         "{stalls} stalls, {short} at the shorter delay"
     );
     parents_say_how_the_trees_changed(&r, &dir);
+    // What the seed could upload is its cap (its rate limit, under its
+    // site's rate) but for the 3 s its site was starved, under the limit.
+    let seed = r.scenario.swarms[0].seed;
+    let up = r.upload_cap(seed).unwrap() as i64;
+    assert!(up > 32 * 1024);
+    let mut starved_samples = 0;
+    for (t, row) in meter_samples_say_what_they_are(&r, &dir) {
+        let starved = t >= Duration::from_secs(4) && t < Duration::from_secs(7);
+        let want = if starved { 32 * 1024 } else { up };
+        assert_eq!(int(&row, "avail_bps"), Some(want), "at {t:?}");
+        starved_samples += usize::from(starved);
+    }
+    assert!(starved_samples > 0, "a sample while starved");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -851,6 +869,63 @@ fn seed_tables_say_what_the_seed_did(r: &strims_sim::Report, d: &Path) {
     for kind in ["window", "check", "holder_joined"] {
         assert!(decisions.iter().any(|x| x["kind"] == kind), "{kind}");
     }
+}
+
+/// The `meter_samples` table against the run (one swarm's): a row for
+/// each of the seed's and the viewers' meter samples from the stream's
+/// start, in order, with the host's role and the meter's capacity, empty
+/// before it read any; and while the stream is live each host's capacity
+/// ÷ its uplink (`avail_bps`) are the readings the row's `meter_seed_p*`
+/// and `meter_{pop}_p*` take over their window
+/// ([`strims_sim::Report::meter_series`]). Returns the seed's rows, each
+/// with its sample's time.
+fn meter_samples_say_what_they_are(
+    r: &strims_sim::Report,
+    d: &Path,
+) -> Vec<(Duration, BTreeMap<String, String>)> {
+    let swarm = &r.scenario.swarms[0];
+    let mut rows = table_rows(d, "meter_samples").into_iter();
+    let hosts = std::iter::once(swarm.seed)
+        .chain(r.viewers.iter().filter(|v| v.swarm == 0).map(|v| v.host));
+    let mut seed = Vec::new();
+    for h in hosts {
+        let mut readings = Vec::new();
+        for m in r.hosts[h]
+            .runner
+            .meter
+            .iter()
+            .filter(|m| m.t >= swarm.start)
+        {
+            let row = rows.next().expect("a row for every sample");
+            let at = format!("host {h} at {:?}", m.t);
+            assert_eq!(int(&row, "node"), Some(h as i64), "{at}");
+            let ms = (m.t - swarm.start).as_millis() as i64;
+            assert_eq!(int(&row, "t_ms"), Some(ms), "{at}");
+            let role = if h == swarm.seed { "seed" } else { "honest" };
+            assert_eq!(row["role"], role, "{at}");
+            let capacity = (m.capacity > 0).then_some(m.capacity as i64);
+            assert_eq!(int(&row, "capacity_bps"), capacity, "{at}");
+            if m.t <= swarm.stop
+                && let (Some(c), Some(a)) = (int(&row, "capacity_bps"), int(&row, "avail_bps"))
+            {
+                readings.push((m.t, c as f64 / a as f64));
+            }
+            if h == swarm.seed {
+                seed.push((m.t, row));
+            }
+        }
+        let want: Vec<_> = r
+            .meter_series(h)
+            .into_iter()
+            .map(|(t, c, _)| (t, c))
+            .collect();
+        assert_eq!(readings, want, "host {h}");
+        if h == swarm.seed {
+            assert!(!want.is_empty(), "the seed's meter read");
+        }
+    }
+    assert!(rows.next().is_none(), "a row for no sample");
+    seed
 }
 
 /// A table's rows, each by column name.
