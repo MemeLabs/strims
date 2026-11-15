@@ -33,6 +33,10 @@ and code blocks:
               the branch building it) are skipped by the checks above and
               must still be missing: once one lands this fails, and its
               entry goes
+  Examples    EXAMPLES' entries (made-up names a skill gives to show a
+              pattern, by skill) are skipped by Paths and Names, and
+              must still be in the skill: once one isn't this fails,
+              and its entry goes
   Checks      each check, over text made for it, finds what's missing and
               passes what's there
 
@@ -52,6 +56,12 @@ SKILLS = ROOT / ".claude" / "skills"
 # What a skill names before it is on main: a path, or `SCRIPT SUB`, with
 # the branch that adds it.
 PENDING: dict[str, str] = {}
+# Made-up names a skill gives as placeholders to show a pattern, by
+# skill: Paths and Names skip an item that is one.
+EXAMPLES: dict[str, set[str]] = {
+    "proto-bindings": {".pb.ts", "foo.pb.ts", "foo_rpc.pb.ts", "Outer_Inner", "Outer_IInner",
+                       "M_Body", "M_BodyCase", "M_IBody", "M_TBody"},
+}
 SOURCE_EXTS = (".rs", ".py", ".sql", ".ts", ".tsx", ".toml", ".sh", ".js", ".scss")
 # A name alone with one of these is a file, never module.NAME.
 FILE_EXTS = {"py", "rs", "md", "sql", "toml", "json", "ts", "tsx", "scss", "csv", "zst", "gz", "txt", "sh", "html",
@@ -153,6 +163,15 @@ def every_item():
     for path in skill_files():
         for line, text, kind in items(path):
             yield path, f"{path.relative_to(ROOT)}:{line}", text, kind
+
+
+def skill_of(path):
+    return path.relative_to(SKILLS).parts[0]
+
+
+def example(path, text):
+    """Whether item `text` of skill file `path` is one of its skill's EXAMPLES."""
+    return text in EXAMPLES.get(skill_of(path), ())
 
 
 # --- the checks -----------------------------------------------------------------------------------
@@ -374,6 +393,8 @@ class Skills(unittest.TestCase):
 
     def test_paths(self):
         def check(path, text, kind):
+            if example(path, text):
+                return []
             skill_dir = path.parent if path.name == "SKILL.md" else path.parent.parent
             return [p for t in tokens(text) if (p := path_problem(t, skill_dir, path.parent))]
         self.assertEqual(self.failures(check), [])
@@ -391,7 +412,8 @@ class Skills(unittest.TestCase):
 
     def test_names(self):
         def check(path, text, kind):
-            if kind != "inline" or not re.fullmatch(r"[A-Za-z_<{*][\w<>{}*]*", text) or text in FILE_EXTS:
+            if (kind != "inline" or not re.fullmatch(r"[A-Za-z_<{*][\w<>{}*]*", text) or text in FILE_EXTS
+                    or example(path, text)):
                 return []
             g = glob_of(text)
             if g is None:
@@ -424,6 +446,14 @@ class Skills(unittest.TestCase):
                 else:
                     landed = (ROOT / key).exists()
                 self.assertFalse(landed, f"{key} has landed ({branch}): remove it from test_skills' PENDING")
+
+    def test_examples(self):
+        named = {(skill_of(path), text) for path, _, text, _ in every_item()}
+        for skill, names in EXAMPLES.items():
+            for name in sorted(names):
+                with self.subTest(skill=skill, name=name):
+                    self.assertTrue((skill, name) in named,
+                                    f"{skill} no longer names {name}: remove it from test_skills' EXAMPLES")
 
 
 class Checks(unittest.TestCase):
