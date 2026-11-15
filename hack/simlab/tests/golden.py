@@ -25,6 +25,12 @@ The sets, in order (check runs them all, and exits 1 if any fails):
                 the Python scoring at its REFERENCE, over the catalog (about
                 6 minutes)
 
+A set run as a script (suite_test, simdb_test, engine, scorecards) prints
+its last line. One that fails also prints the lines that name its
+failures (FAILURE: each failing test's, each experiment scored
+otherwise), else its last TAIL lines, and writes its whole output to
+target/simlab/golden/check/<set>.log, whose path it prints.
+
 `capture` rewrites the goldens of cli and matrices from today's code, for
 a change meant to move what they print (say why in its commit).
 
@@ -43,6 +49,7 @@ experiments' jobs) and need no reads (the farm keeps them in S3).
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -61,17 +68,43 @@ sys.path.insert(0, str(HACK))
 from simlab import bootstrap  # noqa: E402
 
 UV = [bootstrap.uv() or "uv", "run", "--project", str(HACK), "--locked", "--quiet", "python"]
+# Where a failing set's whole output goes, <set>.log.
+LOGS = REPO / "target" / "simlab" / "golden" / "check"
+# The lines of a set's output that name a failure: unittest's header of a
+# test that failed or erred, and hack/sim-suite/golden.py's line of an
+# experiment's arm (or a local invocation) scored otherwise than the
+# reference.
+FAILURE = re.compile(r"^(?:FAIL|ERROR): |: DIFFERENT; ")
+# A failing set's lines printed when none names a failure (a crash).
+TAIL = 40
+
+
+def failures(lines):
+    """The lines among `lines` that name a failure (FAILURE), in order."""
+    return [line for line in lines if FAILURE.search(line)]
 
 
 def script(args, label):
-    """Whether a command exits 0; its output's last line, either way."""
+    """Whether a command exits 0; its output's last line, either way. A
+    failing one's whole output, stderr where it came, goes to
+    LOGS/<label>.log, its path printed after the lines that name its
+    failures, else its last TAIL lines."""
     t0 = time.time()
-    p = subprocess.run(args, cwd=REPO, stdin=subprocess.DEVNULL, capture_output=True, text=True)
-    tail = (p.stdout + p.stderr).strip().splitlines()[-1:] or [""]
-    print(f"{label}: {'ok' if p.returncode == 0 else 'FAILED'} ({time.time() - t0:.0f} s): {tail[0]}")
-    if p.returncode:
-        print(p.stdout[-4000:] + p.stderr[-4000:])
-    return p.returncode == 0
+    p = subprocess.run(args, cwd=REPO, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                       text=True, env={**os.environ, "PYTHONUNBUFFERED": "1"})
+    lines = p.stdout.rstrip().splitlines()
+    print(f"{label}: {'ok' if p.returncode == 0 else 'FAILED'} ({time.time() - t0:.0f} s): {(lines or [''])[-1]}")
+    log = LOGS / f"{label}.log"
+    if p.returncode == 0:
+        log.unlink(missing_ok=True)
+        return True
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(p.stdout)
+    named = failures(lines)
+    print("".join(f"  {line}\n" for line in named or lines[-TAIL:]), end="")
+    told = f"{len(named)} failures named" if named else f"no failure named: its last {min(TAIL, len(lines))} lines"
+    print(f"  {label}: {told}; all {len(lines)} lines in {log}")
+    return False
 
 
 def run_set(name):
