@@ -100,8 +100,12 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use slotmap::Key as _;
 use slotmap::SlotMap;
-use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter, PathReading, PathSample};
+use strims_base::path::{
+    Echo, MAX_PROBES, PROBE_INTERVAL, PathMeter, PathReading, PathSample, TRAIN_DRAIN, TRAIN_LEG,
+    TRAIN_LEG_CHANNEL, TRAIN_LEGS, UplinkTrains,
+};
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
@@ -614,6 +618,21 @@ pub struct Host<T: Copy = ()> {
     /// [`HostConfig::pace`] the pacer whose rate QoS takes under it.
     rate_limit: Option<u64>,
     pacer: Option<EgressPacer>,
+    /// How stale the uplink train legs' reading may get
+    /// ([`Host::set_train_interval`]); `None` sends none.
+    train_interval: Option<Duration>,
+    /// When the next leg may start, and the legs started at once since the
+    /// last that was due (at most [`TRAIN_LEGS`] less one) ...
+    next_train: Time,
+    chained: usize,
+    /// ... whether the next is a retry of one no link took, which keeps the
+    /// count ...
+    retry: bool,
+    /// ... the open leg's link, whose filler and closing probe are still to
+    /// be written (at most one).
+    train: Vec<PeerKey>,
+    /// ... and the legs measured.
+    trains: UplinkTrains,
 }
 
 impl<T: Copy> Host<T> {
@@ -654,6 +673,12 @@ impl<T: Copy> Host<T> {
             held_echoes: BTreeSet::new(),
             rate_limit: config.rate_limit,
             pacer,
+            train_interval: None,
+            next_train: Time::NIL,
+            chained: 0,
+            retry: false,
+            train: Vec::new(),
+            trains: UplinkTrains::default(),
         })
     }
 
@@ -904,16 +929,19 @@ impl<T: Copy> Host<T> {
                     let events = &mut self.events;
                     let control_due = &mut self.control_due;
                     let held_echoes = &mut self.held_echoes;
+                    let trains = &mut self.trains;
                     let (path, echo) = (&mut link.path, &mut link.echo);
                     let (greed, release) = (link.echo_greed, &mut link.echo_release);
                     link.decoder.decode(rest, &mut |f| {
                         if f.port == ports::KEEPALIVE_PORT {
                             metrics.keepalive_read_count += 1;
                             peer.sends_keepalives = true;
-                            for r in control::records(f.body) {
+                            let mut records = control::records(f.body).peekable();
+                            while let Some(r) = records.next() {
                                 match r {
-                                    Record::Probe(nonce) => {
+                                    Record::Probe(nonce) | Record::TimedProbe(nonce) => {
                                         metrics.probe_read_count += 1;
+                                        let timed = matches!(r, Record::TimedProbe(_));
                                         let nonce = if greed.forge {
                                             nonce ^ FORGED_ECHO
                                         } else {
@@ -929,20 +957,42 @@ impl<T: Copy> Host<T> {
                                                 control_due.insert(key);
                                             }
                                         }
-                                        echo.read(nonce, now);
+                                        if timed {
+                                            echo.read_timed(nonce, now);
+                                        } else {
+                                            echo.read(nonce, now);
+                                        }
                                     }
-                                    Record::Echo(nonce) => match path.echo(nonce, now) {
-                                        Ok(Some(sample)) => {
-                                            metrics.echo_read_count += 1;
-                                            events
-                                                .push_back(Event::PathSample { peer: key, sample });
+                                    Record::Gap(_) => {}
+                                    Record::Echo(nonce) => {
+                                        let negative = path.negative_rtts();
+                                        let gap = records.next_if(|r| matches!(r, Record::Gap(_)));
+                                        let gap = gap.and_then(|r| match r {
+                                            Record::Gap(us) => {
+                                                Some(Duration::from_micros(i64::from(us)))
+                                            }
+                                            _ => None,
+                                        });
+                                        match path.echo_gap(nonce, gap, now) {
+                                            Ok(Some(sample)) => {
+                                                metrics.echo_read_count += 1;
+                                                events.push_back(Event::PathSample {
+                                                    peer: key,
+                                                    sample,
+                                                });
+                                            }
+                                            Ok(None) => {
+                                                metrics.echo_read_count += 1;
+                                                if path.negative_rtts() > negative {
+                                                    metrics.path_negative_rtt_count += 1;
+                                                }
+                                                if let Some(l) = path.take_train() {
+                                                    trains.measured(key.data().as_ffi(), &l, now);
+                                                }
+                                            }
+                                            Err(_) => metrics.echo_unknown_count += 1,
                                         }
-                                        Ok(None) => {
-                                            metrics.echo_read_count += 1;
-                                            metrics.path_negative_rtt_count += 1;
-                                        }
-                                        Err(_) => metrics.echo_unknown_count += 1,
-                                    },
+                                    }
                                 }
                             }
                             return;
@@ -1699,17 +1749,120 @@ impl<T: Copy> Host<T> {
             frames += 1;
             update_link_blocked(links, writers, qos, peer);
         }
+        self.run_train(now);
         frames
+    }
+
+    /// Moves the uplink train on ([`UplinkTrains`]): writes its legs'
+    /// filler as their links' buffers have room, each once its first probe
+    /// went to the transport alone, then each leg's closing probe; starts
+    /// the next when due.
+    fn run_train(&mut self, now: Time) {
+        let mut open = std::mem::take(&mut self.train);
+        open.retain(|&key| {
+            let Some(link) = self.links.get_mut(key) else {
+                return false;
+            };
+            let more = fill_leg(link, &mut self.rng, now, &mut self.metrics);
+            update_link_blocked(&mut self.links, &self.writers, &mut self.qos, key);
+            more
+        });
+        self.train = open;
+        if self.train.is_empty() {
+            self.start_train(now);
+        }
+    }
+
+    /// Starts an uplink train's leg when one is due: on a link drawn at
+    /// random among the established ones with an empty buffer, a base round
+    /// trip and room for two probes, of the bytes the uplink measured drains
+    /// in [`TRAIN_DRAIN`] (at most [`TRAIN_LEG`], [`TRAIN_LEG_CHANNEL`] on a
+    /// data channel, and that before a reading), its first probe now. The
+    /// next is due about [`UplinkTrains::spacing`] on, at a random time, so
+    /// that legs meet the owners' traffic at every phase, or at once after a
+    /// leg slower than the uplink ([`UplinkTrains::falls`]).
+    fn start_train(&mut self, now: Time) {
+        if self.train_interval.is_none() {
+            return;
+        }
+        if now >= self.next_train {
+            if !std::mem::take(&mut self.retry) {
+                self.chained = 0;
+            }
+        } else if self.chained + 1 < TRAIN_LEGS && self.trains.falls(now) {
+            self.chained += 1;
+        } else {
+            return;
+        }
+        let jitter = f64::from(rand_core::Rng::next_u32(&mut self.rng)) / f64::from(u32::MAX);
+        let spacing = self.trains.spacing().as_secs_f64();
+        self.next_train = now + Duration::from_secs_f64(spacing * (0.5 + jitter));
+        let pick: Vec<PeerKey> = self
+            .links
+            .iter()
+            .filter(|(_, l)| {
+                l.established()
+                    && l.out.as_ref().is_some_and(|o| o.len() == 0)
+                    && l.path.unanswered_probes() + 2 <= MAX_PROBES
+                    && !l.path.train_open(now)
+                    && l.path.reading(now).is_some_and(|r| r.base.is_some())
+            })
+            .map(|(k, _)| k)
+            .collect();
+        if pick.is_empty() {
+            // No link takes a leg now: try again once one could have drained.
+            self.next_train = now + TRAIN_DRAIN;
+            self.retry = true;
+            return;
+        }
+        let i = (u64::from(rand_core::Rng::next_u32(&mut self.rng)) % pick.len() as u64) as usize;
+        let Some(&key) = pick.get(i) else {
+            return;
+        };
+        let want = self.trains.rate(now).map(|r| {
+            u64::try_from(
+                u128::from(r) * TRAIN_DRAIN.as_nanos().unsigned_abs() as u128 / 1_000_000_000,
+            )
+            .unwrap_or(u64::MAX)
+        });
+        let Some(link) = self.links.get_mut(key) else {
+            return;
+        };
+        let cap = match link.kind {
+            LinkKind::WebRtc => TRAIN_LEG_CHANNEL,
+            _ => TRAIN_LEG,
+        };
+        let len = want.map_or(cap, |w| w.min(cap));
+        if write_control(link, &mut self.rng, now, true, &mut self.metrics) == ControlWrite::Written
+        {
+            link.path.start_train(len, now);
+            self.train.push(key);
+            self.trains.started(now);
+            self.metrics.train_count += 1;
+        }
+        update_link_blocked(&mut self.links, &self.writers, &mut self.qos, key);
+    }
+
+    /// The uplink as the latest train legs show it, in bytes per second
+    /// ([`UplinkTrains::rate`]); `None` without a leg in the last
+    /// [`TRAIN_SPAN`](strims_base::path::TRAIN_SPAN).
+    pub fn uplink_rate(&self, now: Time) -> Option<u64> {
+        self.trains.rate(now)
     }
 
     /// When to call [`Host::handle_timeout`] and [`Host::poll_egress`] next
     /// if nothing else happens: the earliest of the rate limit's release
-    /// time, a handshake deadline, a keepalive check and a held echo's
-    /// release ([`EchoGreed::hold`]). `None` when nothing is waiting.
+    /// time, a handshake deadline, a keepalive check, a held echo's
+    /// release ([`EchoGreed::hold`]) and the next train leg's start
+    /// ([`Host::set_train_interval`]). `None` when nothing is waiting.
     pub fn poll_timeout(&self) -> Option<Time> {
         let link = self.timers.first().map(|&(t, _)| t);
         let echo = self.held_echoes.first().map(|&(t, _)| t);
-        [self.qos.poll_timeout(), link, echo]
+        let train = self
+            .train_interval
+            .filter(|_| !self.peers.is_empty() && self.train.is_empty())
+            .map(|_| self.next_train);
+        [self.qos.poll_timeout(), link, echo, train]
             .into_iter()
             .flatten()
             .min()
@@ -1839,6 +1992,17 @@ impl<T: Copy> Host<T> {
         self.probe_interval
     }
 
+    /// Sets how stale the uplink train legs' reading may get while the uplink
+    /// holds ([`UplinkTrains::set_staleness`]): each leg on a link, a probe,
+    /// filler on [`ports::KEEPALIVE_PORT`] behind it and a timed closing
+    /// probe, whose echo shows how fast the uplink drained the leg
+    /// ([`Host::uplink_rate`]). `None` (the default) sends none.
+    pub fn set_train_interval(&mut self, interval: Option<Duration>) {
+        self.train_interval = interval.filter(|i| *i > Duration::ZERO);
+        self.trains
+            .set_staleness(self.train_interval.unwrap_or(Duration::ZERO));
+    }
+
     /// Sets how often a link that sends data probes its path (see Path in
     /// the module docs); `None` (or a duration that isn't positive) stops
     /// probing, and keepalives go out empty. Probes from the peer are
@@ -1931,6 +2095,19 @@ fn write_control<T>(
     probe: bool,
     metrics: &mut HostMetrics,
 ) -> ControlWrite {
+    write_control_timed(link, rng, now, probe, false, metrics)
+}
+
+/// [`write_control`], its probe a timed one if `timed`
+/// ([`Record::TimedProbe`]). An echo of a timed probe carries its gap.
+fn write_control_timed<T>(
+    link: &mut Link<T>,
+    rng: &mut DetRng,
+    now: Time,
+    probe: bool,
+    timed: bool,
+    metrics: &mut HostMetrics,
+) -> ControlWrite {
     let Link {
         out,
         aes,
@@ -1943,9 +2120,15 @@ fn write_control<T>(
         return ControlWrite::Nothing;
     };
     let probe = probe && path.can_probe();
-    // A held echo ([`EchoGreed::hold`]) waits for its release.
+    // A held echo ([`EchoGreed::hold`]) waits for its release, its gap
+    // with it.
     let echo_due = echo.is_pending() && echo_release.is_none_or(|t| t <= now);
-    let len = control::frame_len(echo_due, probe);
+    let gap = echo
+        .gap()
+        .filter(|_| echo_due)
+        .map(|g| Record::Gap(u32::try_from(g.as_micros().max(0)).unwrap_or(u32::MAX)));
+    let len =
+        control::frame_len(echo_due, probe) + control::RECORD_LEN * usize::from(gap.is_some());
     if len == FRAME_HEADER_LEN || out.capacity() < len {
         return ControlWrite::Nothing;
     }
@@ -1971,7 +2154,14 @@ fn write_control<T>(
             }
         }
     });
-    let Some(n) = control::encode(echoed, nonce, slot) else {
+    let probed = nonce.map(|n| {
+        if timed {
+            Record::TimedProbe(n)
+        } else {
+            Record::Probe(n)
+        }
+    });
+    let Some(n) = control::encode_records(&[echoed.map(Record::Echo), gap, probed], slot) else {
         return ControlWrite::Nothing;
     };
     if let (Some(aes), Some(frame)) = (aes.as_mut(), slot.get_mut(..n)) {
@@ -1986,6 +2176,58 @@ fn write_control<T>(
         metrics.probe_write_count += 1;
     }
     ControlWrite::Written
+}
+
+/// Writes a train leg's filler, once its first probe went to the transport
+/// alone (so that the receiver reads it as it arrives, not with the bytes it
+/// would share a packet or segment with), as much as the link's buffer has
+/// room for up to what the leg needs, then its closing probe. Whether the
+/// leg still needs writes.
+fn fill_leg<T>(link: &mut Link<T>, rng: &mut DetRng, now: Time, metrics: &mut HostMetrics) -> bool {
+    if !link.path.train_open(now) {
+        return false;
+    }
+    if link.path.train_unstarted() && link.out.as_ref().is_some_and(|o| o.len() > 0) {
+        return true;
+    }
+    loop {
+        let Some(left) = link.path.train_left() else {
+            return false;
+        };
+        if left == 0 {
+            return match write_control_timed(link, rng, now, true, true, metrics) {
+                ControlWrite::Written => {
+                    link.path.close_train();
+                    false
+                }
+                ControlWrite::Deferred => true,
+                ControlWrite::Nothing => false,
+            };
+        }
+        let Some(out) = link.out.as_mut() else {
+            return false;
+        };
+        let room = out.free().min(link.mtu);
+        let need = usize::try_from(left).unwrap_or(usize::MAX);
+        let len = room.min(need.max(FRAME_HEADER_LEN + 1));
+        if len < FRAME_HEADER_LEN + 1 {
+            return true;
+        }
+        let Some(slot) = out.slot(len) else {
+            return true;
+        };
+        let Some(n) = control::encode_filler(len, slot) else {
+            return false;
+        };
+        if let (Some(aes), Some(frame)) = (link.aes.as_mut(), slot.get_mut(..n)) {
+            aes.encrypt(frame);
+        }
+        out.commit(n);
+        link.path.wrote(n as u64, false);
+        metrics.keepalive_write_count += 1;
+        metrics.keepalive_write_bytes += n as u64;
+        metrics.filler_write_bytes += n as u64;
+    }
 }
 
 /// Sets QoS's rate: the pacer's where it is under the upload limit, with a

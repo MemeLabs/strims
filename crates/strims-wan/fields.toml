@@ -1566,7 +1566,7 @@ description = "The honest hosts' outbound HAVE message bytes (ChannelMetrics::ha
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
-description = "The uplinks' bytes by layer over every host (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
+description = "The uplinks' bytes by layer over every host (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes, less `up_filler`, the filler of the seeds' uplink train legs; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
 
 [rows.up_integrity]
 sims = ["strims-sim"]
@@ -1590,7 +1590,7 @@ description = "The honest hosts' outbound PING and PONG message bytes (ChannelMe
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
-description = "The uplinks' bytes by layer over every host (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
+description = "The uplinks' bytes by layer over every host (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes, less `up_filler`, the filler of the seeds' uplink train legs; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
 
 [rows.up_request]
 sims = ["strims-sim"]
@@ -1627,19 +1627,19 @@ description = "The honest hosts' outbound STREAM_REQUEST, STREAM_CANCEL, STREAM_
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
-description = "The uplinks' bytes by layer over every host (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
+description = "The uplinks' bytes by layer over every host (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes, less `up_filler`, the filler of the seeds' uplink train legs; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
 
 [rows.up_vnic]
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
-description = "The uplinks' bytes by layer over every host (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
+description = "The uplinks' bytes by layer over every host (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes, less `up_filler`, the filler of the seeds' uplink train legs; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
 
 [rows.up_wire]
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
-description = "The uplinks' bytes by layer over every host (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
+description = "The uplinks' bytes by layer over every host (`up_*`, adding up to `up_wire`): the ppspp layers from the honest hosts' runners; `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link handshakes, less `up_filler`, the filler of the seeds' uplink train legs; and in WAN mode `up_transport`, the transports' framing and resends, and `up_acks`, pure ACKs and SACKs alone."
 
 [rows.upq_ms_max]
 sims = ["strims-sim"]
@@ -1808,11 +1808,10 @@ unit = "ms"
 description = "The lag p50 and p99 in ms (`startup_p50_ms`, `startup_p99_ms`) of the frames the first swarm's viewers read that were written in their own startup, each frame read counted: for a viewer there from the stream's start the swarm's first 30 s, for one that arrived later its first 10 s from its arrival; and of those written in their steady state after it, to their departure (`steady_p50_ms`, `steady_p99_ms`). The verdict's run metrics `lag_p99_startup_ms` and `lag_p99_steady_ms` split a run by its phases instead (`viewer_phases`), counting each honest viewer-second once."
 
 [rows.up_filler]
-sims = []
-retired = ["strims-sim"]
+sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
-description = "With vnic's uplink trains (`STRIMS_SIM_EXP=trains`, `trains-seed` or `trains-slow`, a meter line's), the bytes of their filler records every host wrote on its keepalive port behind a train's probes, a part of `up_wire` that `up_vnic` left out."
+description = "With vnic's uplink trains (`STRIMS_SIM_EXP=trains-seed`), the bytes of the filler frames the seeds wrote on their keepalive port between each train leg's probes, headers included: a part of `up_wire` that `up_vnic` leaves out; 0 without trains."
 
 [rows.meter_budget_seeds]
 sims = []

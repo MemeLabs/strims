@@ -65,8 +65,8 @@ fn probes(wire: &[u8]) -> Vec<u32> {
     records(wire)
         .into_iter()
         .filter_map(|r| match r {
-            Record::Probe(n) => Some(n),
-            Record::Echo(_) => None,
+            Record::Probe(n) | Record::TimedProbe(n) => Some(n),
+            Record::Echo(_) | Record::Gap(_) => None,
         })
         .collect()
 }

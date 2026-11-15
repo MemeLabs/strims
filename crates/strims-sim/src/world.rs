@@ -213,6 +213,7 @@ fn add_metrics(r: &mut HostReport, m: &NodeMetrics) {
     r.frames_written += m.host.frame_write_count;
     r.frame_bytes += m.host.frame_write_bytes;
     r.control_bytes += m.host.keepalive_write_bytes;
+    r.filler_bytes += m.host.filler_write_bytes;
     r.transfer_errors += m.driver.transfer_errors;
     r.vpn_frame_errors += m.driver.vpn_frame_errors;
     r.events_dropped += m.driver.events_dropped;
@@ -527,6 +528,9 @@ impl World {
         {
             c.adversary = crate::hostile::adversary(kind, &s.options, &self.colluders);
             c.echo_greed = crate::hostile::echo_greed(kind);
+        }
+        if self.spec.exp.contains("trains-seed") && self.spec.swarms.iter().any(|s| s.seed == h) {
+            c.train_interval = Some(strims_base::time::Duration::from_millis(1500));
         }
         if self.spec.exp.contains("index-sample") {
             c.vpn.peer_index_answers = strims_vpn::IndexAnswers::Sample;

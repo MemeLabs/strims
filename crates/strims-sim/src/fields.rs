@@ -1124,7 +1124,8 @@ pub(crate) enum RowInt {
     /// `up_wire`): the ppspp layers from the honest hosts' runners;
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
-    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
+    /// handshakes, less `up_filler`, the filler of the seeds' uplink train
+    /// legs; and in WAN mode `up_transport`, the transports' framing and
     /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
@@ -1148,7 +1149,8 @@ pub(crate) enum RowInt {
     /// `up_wire`): the ppspp layers from the honest hosts' runners;
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
-    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
+    /// handshakes, less `up_filler`, the filler of the seeds' uplink train
+    /// legs; and in WAN mode `up_transport`, the transports' framing and
     /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
@@ -1177,7 +1179,8 @@ pub(crate) enum RowInt {
     /// `up_wire`): the ppspp layers from the honest hosts' runners;
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
-    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
+    /// handshakes, less `up_filler`, the filler of the seeds' uplink train
+    /// legs; and in WAN mode `up_transport`, the transports' framing and
     /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
@@ -1186,7 +1189,8 @@ pub(crate) enum RowInt {
     /// `up_wire`): the ppspp layers from the honest hosts' runners;
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
-    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
+    /// handshakes, less `up_filler`, the filler of the seeds' uplink train
+    /// legs; and in WAN mode `up_transport`, the transports' framing and
     /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
@@ -1195,7 +1199,8 @@ pub(crate) enum RowInt {
     /// `up_wire`): the ppspp layers from the honest hosts' runners;
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
-    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
+    /// handshakes, less `up_filler`, the filler of the seeds' uplink train
+    /// legs; and in WAN mode `up_transport`, the transports' framing and
     /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
@@ -1306,6 +1311,13 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     WorstRegionP99Ms,
+    /// With vnic's uplink trains (`STRIMS_SIM_EXP=trains-seed`), the bytes of
+    /// the filler frames the seeds wrote on their keepalive port between each
+    /// train leg's probes, headers included: a part of `up_wire` that `up_vnic`
+    /// leaves out; 0 without trains.
+    ///
+    /// Unit: bytes.
+    UpFiller,
 }
 
 impl RowInt {
@@ -1495,6 +1507,7 @@ impl RowInt {
             RowInt::Whitewashers => "whitewashers",
             RowInt::Withholders => "withholders",
             RowInt::WorstRegionP99Ms => "worst_region_p99_ms",
+            RowInt::UpFiller => "up_filler",
         }
     }
 

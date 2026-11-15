@@ -518,6 +518,7 @@ impl State {
             vnic_rng,
         )?;
         vnic.set_max_peers(config.max_peers);
+        vnic.set_train_interval(config.train_interval);
         let vpn = VpnHost::new(&mut vnic, config.vpn.clone(), fork(&mut rng))?;
         let transfer_class = vnic.add_qos_class(vnic.qos_root(), TRANSFER_QOS_WEIGHT)?;
         let rpc_class = vnic.add_qos_class(vnic.qos_root(), rpc::PEER_RPC_QOS_WEIGHT)?;
@@ -972,6 +973,7 @@ impl State {
             let reading = vnic.link_path(link, now).and_then(|p| p.reading);
             runner.set_peer_path(ps.pp, reading);
         }
+        runner.set_uplink(vnic.uplink_rate(now));
     }
 
     /// Whether the runner is captured.

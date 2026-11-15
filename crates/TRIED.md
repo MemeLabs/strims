@@ -296,6 +296,44 @@ the most the seed wrote, ungated or gated on a 10 ms queue in the latest
 round trips, kept star-3-10 at one copy (lag p99 ×1.44); today's
 `UploadInfo::seed_capacity` allows four times until the window's first cut.
 
+**Uplink trains, other shapes.** (`meter-iterate`, against 2536e259) Legs
+of filler on vnic's keepalive port, each between two probes:
+- *Timed by the sender* (the closing probe's round trip less the base, or
+  the span between the two probes' round trips, `5080b31c`): an idle link
+  restarts from TCP's ten-packet window, so a 32 KiB leg spanned an extra
+  round trip (star-15-10's seed read 0.56 of its uplink); behind
+  thin-15-10's full 3 Mbit/s child uplinks the echoes drain between a
+  leg's two, so a 12 KiB leg read in about 1 ms (the seed's p90 4-9.8× its
+  uplink; at 32 seeds thin-15-10 collapsed 0 → 11).
+- *Four legs at once*: 48 KiB held every push 40-79 ms (halve-7-10's lag
+  p99 216 → 268 ms with the seed oracle's reading), and a viewer that
+  arrived while the seed streamed took its base from probes queued behind
+  it (1.5×).
+- *Anchored* (`cbbc65de`: one link's probe pair brackets filler on
+  others): the closing probe overtook filler unsent behind another link's
+  window (the meter bench's thin class e50 +2.36 log2; compete 17 copies).
+- *Every node's legs* (relays' at 1.5 s or 4 s, on 0fc9ffec): filler took
+  4-9.5 % of star-15-5's wire (wire/useful 1.16 → 1.20-1.28) and
+  thin-15-10's lag p99 went 1731 → 2005-2153 ms.
+- *Spacing that adapts to the legs' agreement* (`7abfc125`): jitter kept
+  legs disagreeing; at 32 seeds robust collapsed 160 against main's 75
+  (star-31-5 0 → 32).
+- *A leg at the onset of the runner's data wait*, or *only while every link
+  buffer is empty*: legs under a standing queue read their own flow's share
+  (halve-31-10's lag p99 2314 → 2428 and 3556 ms).
+
+**Uplink train falls, other rules.** (`meter-iterate-c22` 9fda68de, `-c26`
+7f854dbc, `-c37` 398c7922 and their park4 twins, against 2726ce8c) Falls
+read on the latest legs cut copies under jitter (TMP-park-4's cable
+star-15-10: 8-24 copy changes a minute, lag p99 482 ms against the seed
+oracle's 217); every gate tried kept those or lost the halvings: falls
+judged per link (robust 79 → 86 collapsed at 32 seeds), only where the
+fall leaves the seed less than its transports took (halve-7-10 ×1.49
+against the live seed oracle, TMP-park-4's halve-15-10 6 → 17), only while
+the runner's data waited (halve-15-10 504 → 871 ms), every latest leg slow
+(halve-7-10 262 → 365), or a held, pooled or spread-gated reading (485-617
+ms under that jitter).
+
 **Admitting by count until the uplink saturates.** (`idle-count`,
 `idle-count-all`, against 5d81aaf6) An idle relay reads twenty times its
 control traffic, short of one subscriber. Until its meter had seen

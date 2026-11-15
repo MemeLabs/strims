@@ -153,6 +153,8 @@ fn host(m: HostMetrics) -> v1::HostMetrics {
         echo_read_count: _,
         echo_unknown_count: _,
         path_negative_rtt_count: _,
+        train_count: _,
+        filler_write_bytes: _,
         handshake_timeout_count,
         handshake_evict_count,
     } = m;

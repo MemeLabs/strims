@@ -802,6 +802,9 @@ impl Window {
 #[derive(Debug)]
 pub(crate) struct Allocator {
     next_check: Time,
+    /// The measured uplink ([`UploadInfo::uplink`]) at the last check: one
+    /// that falls past [`OVER_BUDGET`] since checks at once.
+    checked_uplink: Option<f64>,
     /// When the store rate was first seen (`NIL` before).
     measuring_since: Time,
     /// Once measured, the budget in stream slots.
@@ -861,6 +864,7 @@ impl Allocator {
         let window = Window::new(now);
         Allocator {
             next_check: now,
+            checked_uplink: None,
             measuring_since: Time::NIL,
             measured: false,
             budget: 0,
@@ -1491,7 +1495,8 @@ impl PeerSwarmScheduler {
                 ((cap * ALLOC_UTILIZATION - p.upload.others).max(0.0) / rate) as usize / streams;
             // The reading holds only once the uplink was busy: without a
             // known capacity, and before, the wave ramps.
-            let unknown = budget.hint.is_none() && budget.busy < SATURATED_BUSY;
+            let unknown =
+                budget.hint.is_none() && budget.uplink.is_none() && budget.busy < SATURATED_BUSY;
             if unknown && !a.ramping && a.first_wave == 0 {
                 a.ramping = true;
                 a.ramped = true;
@@ -1716,10 +1721,15 @@ impl PeerSwarmScheduler {
         };
         let upload = p.upload;
         let a = p.alloc.get_or_insert_with(|| Allocator::new(now));
-        if now < a.next_check {
+        let fell = upload
+            .uplink
+            .zip(a.checked_uplink)
+            .is_some_and(|(u, c)| u < c * (1.0 - OVER_BUDGET));
+        if now < a.next_check && !fell {
             return;
         }
         a.next_check = now + ALLOC_CHECK_INTERVAL;
+        a.checked_uplink = upload.uplink;
         if let Some(l) = self.s.seed_log.as_mut() {
             l.check_begin();
         }

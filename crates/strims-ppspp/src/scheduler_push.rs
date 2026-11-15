@@ -437,8 +437,13 @@ pub(crate) struct UploadInfo {
     /// pushes were queued.
     pub(crate) busy_recent: f64,
     pub(crate) push_busy_recent: f64,
-    /// The capacity the driver knows, in bytes per second.
+    /// The capacity the driver knows, in bytes per second ...
     pub(crate) hint: Option<u64>,
+    /// ... and the uplink it measures (vnic's uplink trains), which stands
+    /// for the hint while it knows none: no less than what the links
+    /// deliver, and no more under a standing queue (an uplink that fell
+    /// since the trains read it).
+    pub(crate) uplink: Option<f64>,
     /// The push rate the node's other swarms commit (their subscriptions
     /// at their stream rates), in bytes per second: this swarm's
     /// admission, shedding and seed budget leave it room.
@@ -556,6 +561,21 @@ impl UploadInfo {
         match (measured, self.hint.map(|h| h as f64)) {
             (Some(m), Some(h)) if self.busy >= SATURATED_BUSY => Some(m.min(h)),
             (_, Some(h)) => Some(h),
+            // The uplink carries at least what its links deliver: a leg
+            // behind a window its link's acknowledgements hold back, or
+            // behind a loss, reads low where the uplink runs near full.
+            // Data that waits in the runner shows the uplink full: what the
+            // links deliver then is what it carries, which an uplink that
+            // fell since the trains read it is (a train after the fall
+            // reads it too, a few seconds on).
+            (_, None) if let Some(u) = self.uplink => {
+                let u = u.max(self.delivered);
+                Some(if self.busy_recent >= SATURATED_BUSY {
+                    u.min(self.delivered.max(self.rate as f64))
+                } else {
+                    u
+                })
+            }
             // Below the runner the data waits unseen by the busy time, which
             // reads many times the uplink while buffers take writes at once,
             // and next to nothing while the transport stalls. Under a
@@ -3217,6 +3237,29 @@ mod tests {
         };
         assert_eq!(idle.capacity(), Some(1000.0 / MIN_BUSY));
         assert_eq!(UploadInfo::default().capacity(), None);
+    }
+
+    #[test]
+    fn the_measured_uplink_is_at_least_what_the_links_deliver() {
+        let u = UploadInfo {
+            rate: 900,
+            uplink: Some(300.0),
+            delivered: 800.0,
+            ..Default::default()
+        };
+        assert_eq!(u.capacity(), Some(800.0));
+        // Under a standing queue, no more either.
+        let busy = UploadInfo {
+            busy_recent: SATURATED_BUSY,
+            uplink: Some(2000.0),
+            ..u
+        };
+        assert_eq!(busy.capacity(), Some(900.0));
+        let idle = UploadInfo {
+            uplink: Some(2000.0),
+            ..u
+        };
+        assert_eq!(idle.capacity(), Some(2000.0));
     }
 
     #[test]
