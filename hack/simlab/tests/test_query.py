@@ -542,6 +542,22 @@ class Haves(unittest.TestCase):
         self.assertIn("h.incarnation = a.peer_incarnation", sql)
 
 
+class MeterSamples(unittest.TestCase):
+    """The meter samples: kept as a table, not a sample (a row per host per
+    stats tick), written with every run's tables (no knob to name), with
+    its keys and joins; its view reads no -1, the sim writing none empty."""
+
+    def test_the_table_is_kept_with_its_keys(self):
+        t = "meter_samples"
+        self.assertIn(t, store_host.TABLES)
+        self.assertNotIn(t, store_host.SAMPLE_TABLES)
+        self.assertNotIn(t, query.TABLE_KNOBS)
+        self.assertEqual(catalog.STANDARD_KEYS[t], "k, node, t_ms")
+        self.assertEqual(catalog.STANDARD_JOINS[t], "viewers USING (k, src, node)")
+        cols = {"k": "VARCHAR", "src": "VARCHAR", "t_ms": "BIGINT", "capacity_bps": "BIGINT", "role": "VARCHAR"}
+        self.assertNotIn("nullif", catalog.view_sql(t, cols, t, {}))
+
+
 class SeedLog(unittest.TestCase):
     """The seed log's tables: kept as tables, not samples (a few thousand
     rows a run), with their notes, keys, joins and knob; both views read an

@@ -138,8 +138,9 @@ class Execute(Scratch):
 class FoldExport(Scratch):
     def jobs(self):
         """golden_cli's jobs, written as the sim writes them, with the
-        speculative requests', parks', arrivals', asks', haves' and the seed
-        log's tables golden_cli's don't write: the suite's, then the farm's
+        meter samples', speculative requests', parks', arrivals', asks',
+        haves' and the seed log's tables golden_cli's don't write: the
+        suite's, then the farm's
         (whose reads, asks and haves are zstd-compressed, `<table>.csv.zst`,
         as the sim writes its large tables, and the seed log's too, so the
         fold takes the tables registered last in either form), then a job
@@ -147,6 +148,10 @@ class FoldExport(Scratch):
         jobs = [golden_cli.job_dir(self.dir / "jobs" / f"{i:02d}", j) for i, j in enumerate(golden_cli.JOBS)]
         for n, j in enumerate(jobs):
             d = Path(j["dir"])
+            # The seed's meter reading and a viewer's not read yet.
+            golden_cli.write_table(d, "meter_samples", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("role", "VARCHAR"),
+                                                        ("capacity_bps", "BIGINT"), ("avail_bps", "BIGINT")],
+                                   [(1000 + n, 0, "seed", 1_200_000, 1_250_000), (1000 + n, 1, "honest", None, 375_000)])
             golden_cli.write_table(d, "spec_requests", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
                                                         ("held_ms", "BIGINT"), ("held_by_p90", "BOOLEAN")],
                                    [(900 + n, 1, 5, None, None), (950, 2, 6, 1150 + n, True)])

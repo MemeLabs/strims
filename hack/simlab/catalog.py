@@ -245,9 +245,9 @@ are `experiment_jobs e JOIN reads USING (k, src) WHERE e.exp_id = ...`.
 `JOIN experiment_jobs USING (k, src)` gives a job's experiments, cells,
 arms and seeds. Beside them the tables join on their own columns: reads,
 viewer_seconds and stalls to viewers USING (k, src, viewer); events,
-node_bins, parents, forecast, arrivals, spec_requests and parks to
-viewers USING (k, src, node); bins to node_bins USING (k, src, bin);
-seconds to verdict_seconds USING (k, src, sec); a viewer's second
+node_bins, meter_samples, parents, forecast, arrivals, spec_requests and
+parks to viewers USING (k, src, node); bins to node_bins USING (k, src,
+bin); seconds to verdict_seconds USING (k, src, sec); a viewer's second
 (viewer_seconds, a read's or a stall's t_ms // 1000) to
 viewer_phases_of(runs) ON (k, src, viewer) with start <= sec < stop, its
 phase (viewer_phases', then tail past the verdict's seconds); the request

@@ -1167,6 +1167,10 @@ class Tables(Fixture):
                                [(900, 1, 5, None, None), (950, 1, 6, 1150, True)])
         golden_cli.write_table(d, "parks", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("seq", "BIGINT"),
                                             ("outcome", "VARCHAR")], [(800, 1, 5, "sent")])
+        # The seed's meter reading, and node 1's (viewer 0's) before it read any.
+        golden_cli.write_table(d, "meter_samples", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("role", "VARCHAR"),
+                                                    ("capacity_bps", "BIGINT"), ("avail_bps", "BIGINT")],
+                               [(1000, 0, "seed", 1_200_000, 1_250_000), (1000, 1, "honest", None, 375_000)])
         # Node 1's answer from node 2, and the seed's own publish: no source,
         # parent or request, and no viewer.
         if arrivals:
@@ -1250,7 +1254,16 @@ class Tables(Fixture):
         self.assertEqual(f[(lazy, 5)], {"k": lazy, "seq": 5, "tail_ms": None, "extrapolated": None,
                                         "first_sight": False, "lazy": True, "held_ms": None})
         names = {r["name"] for r in catalog.lake("SELECT name FROM table_catalog;")}
-        self.assertTrue({"spec_requests", "parks", "arrivals", "asks"} <= names)
+        self.assertTrue({"spec_requests", "parks", "arrivals", "asks", "meter_samples"} <= names)
+        # The meter samples: a reading not taken yet is NULL, and a viewer's
+        # sample meets its viewer by node, as table_catalog's joins say.
+        got = catalog.lake("SELECT m.node, m.role, m.capacity_bps, m.avail_bps, v.viewer FROM meter_samples m "
+                           f"LEFT JOIN viewers v USING (k, src, node) WHERE m.k = {catalog.q(tail)} ORDER BY m.node;")
+        self.assertEqual(got, [{"node": 0, "role": "seed", "capacity_bps": 1_200_000, "avail_bps": 1_250_000,
+                                "viewer": None},
+                               {"node": 1, "role": "honest", "capacity_bps": None, "avail_bps": 375_000, "viewer": 0}])
+        got = catalog.lake("SELECT keys, joins FROM table_catalog WHERE name = 'meter_samples';")
+        self.assertEqual(got, [{"keys": "k, node, t_ms", "joins": "viewers USING (k, src, node)"}])
         # Parents: each node's changes in order, n, and n NULL where a
         # run's table has none.
         parents = catalog.lake("SELECT k, node, n, parent FROM parents WHERE k IN "

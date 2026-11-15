@@ -346,8 +346,8 @@ cell (a key the farm reused counts in each of its cells). USING (k) joins
 the same rows but keeps both `src` columns, to name as runs.src. Beside
 (k, src) the views join on their own columns: reads and viewer_seconds to
 viewers USING (k, src, viewer), as stalls does; events, parents, node_bins,
-forecast, arrivals, spec_requests, parks, asks and haves to viewers USING (k, src,
-node) (`node`, the viewers' `host`),
+meter_samples, forecast, arrivals, spec_requests, parks, asks and haves to viewers
+USING (k, src, node) (`node`, the viewers' `host`),
 and asks and haves to arrivals on the peer's holds (arrivals.node =
 asks.peer, seq, arrivals.incarnation = asks.peer_incarnation, as haves':
 the views' truth); seed_decisions and seed_sends (the seed's, node the
