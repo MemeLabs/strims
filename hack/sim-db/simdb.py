@@ -242,18 +242,21 @@ docs say why each definition is what it is; the definitions are
 scoring.sql's macros coverage_runs_of, seed_children_of,
 coverage_chunks_of and seed_cover_of, which `describe macros` lists):
 seed coverage, how soon each chunk the seed publishes reaches a node but
-the seed (arrivals), by which route, and the seed's children of its
-stream (parents), over the jobs forecast-report's flags pick, each phase
-kept (`--phases`: all by default, of the chunk's publication or the
+the seed and the dishonest viewers (arrivals; viewers.hostile), by which
+route, and the seed's children of its stream but the dishonest viewers
+(parents), over the jobs forecast-report's flags pick, each phase kept
+(`--phases`: all by default, of the chunk's publication or the
 stream-second; a row of phase NULL pools those past startup) and each
 verdict apart, by `--section`: latency (the judged chunks' latency
 quantiles, their shares held late past the run's chunk interval and
 never held, censored ones counted apart), routes (each first copy's
-route and source: the seed's push, an answer, other, never), invariants
-(I1: stream-seconds with no seed child while a viewer watches, the seed's
-children and how their subscriptions ended), late (each late chunk
-classed by the seed's children at its publication: none, released,
-pushed late, never held by them, other), every one by default. Runs
+route and source: the seed's push, an answer, other, never; from the
+seed, a dishonest viewer or neither), invariants (I1: stream-seconds
+with no seed child while an honest viewer watches, the seed's children
+and how their subscriptions ended), late (each late chunk classed by the
+seed's children at its publication: none, released, pushed late, never
+held by them, other; with the dishonest viewers then subscribed to the
+seed on its stream), every one by default. Runs
 without arrivals are left out, a selection of none with them refused;
 the warnings (those runs, runs without push parents, an inferred stream
 count) go to stderr, and `--json` gives them as `warnings` beside the
@@ -572,8 +575,8 @@ def main():
     fr.add_argument("--decode-sample", type=int, default=2, help="regimes: streams a run it describes")
     fr.add_argument("--iters", type=int, default=12, help="regimes: EM iterations")
     fr.add_argument("--json", action="store_true")
-    cr = sub.add_parser("coverage-report", help="seed coverage: how soon each chunk reaches a node but the seed, "
-                        "by which route, and the seed's children (simlab's coverage)")
+    cr = sub.add_parser("coverage-report", help="seed coverage: how soon each chunk reaches a node but the seed and "
+                        "the dishonest viewers, by which route, and the seed's children (simlab's coverage)")
     report_flags(cr, "the phases kept, a chunk's publication's or a stream-second's (the run's): all, rest (all but "
                  "startup), or phases, comma-separated; each kept phase reports apart, and a row of phase NULL "
                  "pools the kept ones past startup where a group has two or more", "all")

@@ -699,15 +699,15 @@ description = "Each run's seed coverage frame: its streams, chunk interval, end 
 
 [lake.seed_children]
 macro = "seed_children_of"
-description = "The seed's push children over the runs, from parents."
+description = "The seed's push children over the runs, the dishonest viewers left out, from parents."
 
 [lake.coverage_chunks]
 macro = "coverage_chunks_of"
-description = "Each chunk the runs published, with its first holds by the seed's children and others, from arrivals and parents."
+description = "Each chunk the runs published, with its first hold by a node but the seed and the dishonest viewers and, for a late one, the seed's children of its stream, from arrivals and parents."
 
 [lake.seed_cover]
 macro = "seed_cover_of"
-description = "The runs' seed coverage: how soon a non-seed host first held each chunk the seed published."
+description = "The runs' I1: each stream-second an honest viewer watched, with the time in it that the stream had a seed child (the dishonest viewers left out)."
 
 [dimensions.sim]
 description = "The sim a job ran: strims-sim (the real stack)."

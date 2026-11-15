@@ -14,9 +14,10 @@ parents the measure reads, folded
 and exported by simdb.py into a local suite invocation's source, and a
 second invocation's source that labels two of them again (decl's seed 1
 in a cell of its own, star-5b; its seed 2 in star-5, as the first has
-it), indexed by the catalog. Every run publishes the same chunks: two
-streams, a chunk of each every 250 ms from 20 s to 39.75 s of a 40 s run,
-so the last 4 s are censored.
+it), and a third invocation's (MIX) with arm mix's run, decl's seed 1
+with host 3 a dishonest viewer, indexed by the catalog. Every run
+publishes the same chunks: two streams, a chunk of each every 250 ms
+from 20 s to 39.75 s of a 40 s run, so the last 4 s are censored.
 
   Prepare      the measure's per-run facts: the seed, the streams, the
                interval, the run's end, the phases, the censored chunks,
@@ -34,6 +35,12 @@ so the last 4 s are censored.
                none failing where the catalog has no asks; a run without
                arrivals left out with a warning, and a selection of none
                with them refused
+  Dishonest    arm mix's run, worked by hand: a chunk's first hold the
+               earliest of a node but the seed and the dishonest viewers
+               (its source a dishonest viewer's copy where it is one), the
+               seed's children no dishonest viewer, a late chunk's
+               dishonest viewers subscribed to the seed counted apart; the
+               runs without dishonest viewers have none of either
   Cli          simdb.py coverage-report's tables and JSON, as a caller runs
                it, and a section the catalog can't answer yet
 
@@ -77,6 +84,11 @@ END_MS = golden_cli.SECS * 1000
 CHUNKS = 160
 # The ppspp job's: its last published at 39 s, a second before its end.
 PP_CHUNKS = 154
+# The source of arm mix's run, apart from SRC's: decl's seed 1 with a
+# dishonest viewer, host 3 (viewer 2).
+MIX = "suite/wt/cv-mix"
+DISHONEST = 3
+MIX_SEL = forecast.Selection(exp=[MIX], names={"strims-sim-mix": "mix"}, phases="all")
 
 
 def pub(q):
@@ -158,6 +170,19 @@ def parents(seed):
     return rows
 
 
+def mix_arrivals():
+    """Arm mix's holds: decl's seed-1 holds, where host 3 (DISHONEST) is
+    still 103's only holder, and 112's first, 20 ms after by the seed's
+    push; host 1 holds 112 400 ms after by host 3's answer, host 2 440 ms
+    after by host 1's push. Host 3's rows name no viewer, as strims-sim
+    writes a hostile host's."""
+    rows = [r for r in arrivals(1) if r[3] != 112 or r[1] == SEED]
+    rows += [(pub(112) + after, node, node - 1, 112, how, peer, peer, None, 0)
+             for node, after, how, peer in ((DISHONEST, 20, "push", SEED), (1, 400, "answer", DISHONEST),
+                                            (2, 440, "push", 1))]
+    return [(r[0], r[1], -1 if r[1] == DISHONEST else r[2], *r[3:]) for r in rows]
+
+
 ASK_COLS = [("t_ms", "BIGINT"), ("node", "BIGINT"), ("honest", "BOOLEAN"), ("ask", "BIGINT"), ("round", "VARCHAR"),
             ("peer", "BIGINT"), ("peer_honest", "BOOLEAN"), ("picked", "BOOLEAN"), ("stream", "BIGINT"),
             ("seq", "BIGINT")]
@@ -199,6 +224,25 @@ def build(root):
     db = root / "store.duckdb"
     sm.fold(db, jobs, SRC)
     sm.export(db, root / "target" / "sim-db" / "cache" / SRC)
+    db.unlink()
+    # Arm mix's run: decl's seed 1 with host 3 hostile in its viewers and
+    # its series_meta, which records its seed and stream count.
+    d = root / "jobs" / "mix-1"
+    rec = golden_cli.job_dir(d, (MIX, "strims-sim-mix:star-5:1", "strims-sim", "calibration_star", "star-5",
+                                 "strims-sim-mix", 1, golden_cli.SS_ENV, golden_cli.T0, None))
+    golden_cli.write_table(d, "arrivals", ARRIVAL_COLS, mix_arrivals())
+    golden_cli.write_table(d, "parents", PARENT_COLS, parents(1))
+    head, *lines = (d / "viewers.csv").read_text().splitlines()
+    cols = head.split(",")
+    viewers = [line.split(",") for line in lines]
+    for v in viewers:
+        if v[cols.index("host")] == str(DISHONEST):
+            v[cols.index("hostile")] = "true"
+    (d / "viewers.csv").write_text("\n".join([head, *(",".join(v) for v in viewers)]) + "\n")
+    meta = json.loads((d / "series_meta.json").read_text())
+    (d / "series_meta.json").write_text(json.dumps(meta | {"seed": SEED, "streams": 2, "hostile": [DISHONEST - 1]}))
+    sm.fold(db, [rec], MIX)
+    sm.export(db, root / "target" / "sim-db" / "cache" / MIX)
     db.unlink()
     label = "strims-sim-decl"
     golden_cli.relabel(root, RELABEL, [
@@ -336,7 +380,7 @@ class Prepare(Fixture):
     def test_the_definitions_are_the_catalogs_macros(self):
         # Each with its comment and parameters, as describe gives them.
         got = {r["name"]: r for r in catalog.scoring_docs()}
-        want = {"coverage_runs_of": "(jobs)", "coverage_ask_streams_of": "(jobs)"}
+        want = {"coverage_runs_of": "(jobs)", "coverage_ask_streams_of": "(jobs)", "seed_subscriptions_in": "(runs)"}
         for name in ("seed_children", "coverage_chunks", "seed_cover"):
             want |= {f"{name}_in": "(runs)", f"{name}_of": "(jobs)"}
         for name, params in want.items():
@@ -346,7 +390,8 @@ class Prepare(Fixture):
                       got["coverage_chunks_in"]["description"])
         # The vocabulary's names, filled in; the fallback's columns line
         # isn't its doc.
-        self.assertIn("a 'switch' first, an 'open' after", got["seed_children_in"]["description"])
+        self.assertIn("a 'switch' first, an 'open' after", got["seed_subscriptions_in"]["description"])
+        self.assertIn("every node but the dishonest viewers", got["seed_children_in"]["description"])
         self.assertNotIn("else none", got["coverage_ask_streams_of"]["description"])
         self.assertIn("I1, the invariant that every stream a viewer watches", got["seed_cover_in"]["description"])
 
@@ -538,6 +583,100 @@ class Grain(Fixture):
         self.assertIn("(3 from parents, 1 with one assumed)", warned[-1])
         bare = [r for r in got["latency"].records() if r["arm"] == "bare" and r["phase"] == "steady"]
         self.assertEqual([r["interval_runs"] for r in bare], [[0.0] * 3])
+
+
+class Dishonest(Fixture):
+    """Arm mix's run (MIX's source): decl's seed 1 with host 3 a dishonest
+    viewer, 103's only holder and 112's first, and the seed's child of
+    stream 0 from 34 s to 35 s."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with cls.patched(cls):
+            cls.mix_warned = []
+            cls.mix = {s: r.records() for s, r in coverage.report(MIX_SEL, warn=cls.mix_warned.append).items()}
+
+    def mixed(self, section, **want):
+        got = [r for r in self.mix[section] if all(r.get(k) == v for k, v in want.items())]
+        self.assertEqual(len(got), 1, f"{section} {want}: {got}")
+        return got[0]
+
+    def test_the_chunks_and_the_subscriptions(self):
+        with forecast.connected() as c:
+            coverage.prepare(c, MIX_SEL)
+            chunks = c.execute("SELECT seq, first_node, latency_ms, route, source, late, children, dishonest_children, "
+                               "class, after FROM cv_chunks WHERE seq IN (103, 110, 112, 114) ORDER BY seq").fetchall()
+            subs = c.execute("SELECT node, stream, open_ms, close_ms, end_reason FROM cv_subs ORDER BY ALL").fetchall()
+            every = c.execute("SELECT node, stream, open_ms, close_ms, end_reason, dishonest "
+                              "FROM seed_subscriptions_in((SELECT list(r) FROM cv_runs r)) ORDER BY ALL").fetchall()
+        self.assertEqual(chunks, [
+            # Host 3 held it alone: never held, so late; stream 1 had no
+            # seed child at 32.75 s (host 1's prune), nor a dishonest one.
+            (103, None, None, "never", None, True, 0, 0, "no_seed_child", "prune"),
+            # Held as in decl's runs.
+            (110, 1, 40, "push", "seed", False, None, None, None, None),
+            # Host 1's hold by host 3's answer, late: host 1 the seed's child
+            # of stream 0 then, host 3 (from 34 s) the dishonest one.
+            (112, 1, 400, "answer", "dishonest", True, 1, 1, "other", None),
+            # Pushed late, with one seed child (decl's two but host 3).
+            (114, 1, 300, "push", "seed", True, 1, 1, "pushed_late", None)])
+        # decl's seed-1 subscriptions but host 3's, the dishonest one.
+        self.assertEqual(subs, [(1, 0, 0, END_MS, None), (1, 1, 0, 32000, "prune"), (1, 1, 33000, END_MS, None),
+                                (5, 1, 37000, END_MS, None)])
+        self.assertEqual(every, [(1, 0, 0, END_MS, None, False), (1, 1, 0, 32000, "prune", False),
+                                 (1, 1, 33000, END_MS, None, False), (3, 0, 34000, 35000, "lost", True),
+                                 (5, 1, 37000, END_MS, None, False)])
+
+    def test_latency_and_routes(self):
+        # decl's seed 1 (7 late of 88, 100 never held, 103 its anomaly)
+        # but 103 never held and 112 held 400 ms after: 86 held, 79 of
+        # them 40 ms after.
+        r = self.mixed("latency", phase="steady")
+        self.assertEqual((r["runs"], r["chunks"], r["censored"], r["held"], r["never"], r["late"], r["anomalies"]),
+                         (1, JUDGED_STEADY, 32, 86, 2, 9, 0))
+        self.assertAlmostEqual(r["late_share"], 9 / JUDGED_STEADY)
+        self.assertAlmostEqual(r["never_share"], 2 / JUDGED_STEADY)
+        held = [40] * 79 + list(STEADY_LATE.values()) + [400]
+        self.assertEqual((r["p50_ms"], r["p90_ms"], r["max_ms"]), (40.0, 40.0, 700))
+        self.assertAlmostEqual(r["p99_ms"], p99(held))
+        # decl's seed 1 pushes 82 and answers 4 (101, 104, 106 and 108);
+        # 112's answer is host 3's.
+        got = {(x["route"], x["source"]): (x["chunks"], x["late"], x["p50_ms"])
+               for x in self.mix["routes"] if x["phase"] == "steady"}
+        self.assertEqual(got, {("push", "seed"): (81, 2, 40.0), ("answer", "seed"): (4, 4, 300.0),
+                               ("answer", "dishonest"): (1, 1, 400.0), ("never", None): (2, 2, None)})
+
+    def test_invariants(self):
+        # Steady: stream 1 uncovered from 32 s to 33 s, as in decl's seed
+        # 1; the seed's children 15 + 14 + 3 s, host 3's second on stream 0
+        # not among them, nor its loss among the ends.
+        r = self.mixed("invariants", phase="steady")
+        self.assertEqual((r["runs"], r["stream_s"], r["uncovered_s"], r["touched_s"]), (1, 30, 1.0, 1))
+        self.assertAlmostEqual(r["seed_children"], (15 + 14 + 3) / 30)
+        self.assertEqual((r["ends_prune"], r["ends_lost"]), (1, 0))
+
+    def test_late(self):
+        got = {(x["class"], x["after"]): x for x in self.mix["late"] if x["phase"] == "steady"}
+        # (chunks, children, dishonest_children, never, p50): 101 and 103
+        # with no seed child; 104 released; 102 and 114 pushed late; 100
+        # and 106 never held by host 1; 108 and 112 held otherwise.
+        want = {("no_seed_child", "prune"): (2, 0.0, 0.0, 1, 300.0), ("released", None): (1, 1.0, 0.0, 0, 500.0),
+                ("pushed_late", None): (2, 1.0, 0.5, 0, 300.0), ("child_never", None): (2, 1.0, 0.0, 1, 700.0),
+                ("other", None): (2, 1.0, 0.5, 0, 260.0)}
+        self.assertEqual(list(got), list(want))
+        for key, w in want.items():
+            x = got[key]
+            self.assertEqual((x["chunks"], x["children"], x["dishonest_children"], x["never"], x["p50_ms"]), w, key)
+            self.assertAlmostEqual(x["late_share"], w[0] / 9)
+            self.assertAlmostEqual(x["share"], w[0] / JUDGED_STEADY)
+
+    def test_runs_without_dishonest_viewers(self):
+        # SEL's runs have none: no first copy is a dishonest viewer's, and
+        # no late chunk has one subscribed to the seed.
+        self.assertNotIn("dishonest", {x["source"] for x in self.results["routes"]})
+        self.assertEqual({x["dishonest_children"] for x in self.results["late"]}, {0.0})
+        self.assertEqual(self.mix_warned, [])
 
 
 class Cli(Fixture):

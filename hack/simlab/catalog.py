@@ -2994,8 +2994,8 @@ def scoring_consts(suite=None):
             "t975_df": T975_DF, "t975_z": double(z),
             # The vocabulary's phases, in its order (dynamics_phases'), and
             # the one past the verdict's seconds (viewer_phases_of's and
-            # coverage_chunks_in's); the parents reasons seed_children_in
-            # orders a millisecond's rows by.
+            # coverage_chunks_in's); the parents reasons
+            # seed_subscriptions_in orders a millisecond's rows by.
             "phases": "[" + ", ".join(q(p) for p in a.VOCAB["phases"]) + "]",
             "tail": q(query.TAIL),
             "reason_switch": q(vocab.named("reasons", "switch")), "reason_open": q(vocab.named("reasons", "open")),

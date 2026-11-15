@@ -5,8 +5,8 @@ measure that judges the work on the HAVE removal's seed. A descriptive
 report over the catalog's truth tables, read through simlab.engine: the
 holds (`arrivals`: every node's first hold of every chunk, its route and
 source), the push trees (`parents`: every node's push parent of every
-stream, as it changed), the viewers' phases (`viewer_phases`) and the
-run's (`verdict_seconds`).
+stream, as it changed), the viewers (`viewers`: which are dishonest),
+the viewers' phases (`viewer_phases`) and the run's (`verdict_seconds`).
 
   Selection      simlab.forecast's: experiments, cells and arm labels
                  (globs), seeds, arm names by label glob (`names`), the
@@ -25,15 +25,22 @@ hack/sim-db/simdb.py coverage-report prints the report.
 The measure's definitions are the catalog's macros (hack/simlab/sql/
 scoring.sql), one definition for this report and any view of the
 console's, which this module's sections group: coverage_runs_of(jobs) a
-run's facts, and over a list of its rows seed_children_in(runs) the
-seed's child subscriptions, coverage_chunks_in(runs) a chunk's measure (a
-late one's class among it) and seed_cover_in(runs) I1's stream-seconds
-(each `_in` with its `_of(jobs)` form). prepare loads this checkout's
-macros into the session (scoring.load), whatever the catalog's indexer
-had. A chunk at a time:
+run's facts, and over a list of its rows seed_subscriptions_in(runs)
+every node's subscription to the seed, seed_children_in(runs) the
+seed's child subscriptions (those of no dishonest viewer),
+coverage_chunks_in(runs) a chunk's measure (a late one's class among it)
+and seed_cover_in(runs) I1's stream-seconds (each `_in` but
+seed_subscriptions_in with its `_of(jobs)` form). prepare loads this
+checkout's macros into the session (scoring.load), whatever the
+catalog's indexer had. A chunk at a time:
 
   seed       the seed series_meta records (`seed`), else the node that
              published the most (arrivals' `own` rows)
+  dishonest  a viewer the viewers table marks hostile (viewers.hostile),
+             by its host (viewers.node, the node arrivals and parents
+             name): the dishonest mix's free riders and liars
+             (STRIMS_SIM_HOSTILE=mix), a hostile cell's kinds. A node no
+             viewers row names (the seed, a relay) is none
   pub_ms     the seed's own-store `arrivals` row (how `own`)
   stream     seq mod the run's stream count: the one the sim records
              (series_meta's `streams`, else the row's), else
@@ -44,15 +51,17 @@ had. A chunk at a time:
   interval   the run's chunk interval: the median of every gap between
              consecutive publications within a stream (the signing
              cadence: 250 ms in the suite cells), taken from the data
-  first      the earliest `arrivals` row of any node but the seed (ties
-             by node), any incarnation: first_ms, its route (`push` or
-             `answer` as arrivals' how names them, anything else
-             `other`) and its source (arrivals' peer: `seed`, else
-             `peer` or `unnamed` when no source is named: both an
-             anomaly, a first copy the seed didn't send; NULL for a
-             chunk never held)
+  first      the earliest `arrivals` row of a node but the seed and the
+             dishonest viewers (ties by node), any incarnation: first_ms,
+             its route (`push` or `answer` as arrivals' how names them,
+             anything else `other`) and its source (arrivals' peer:
+             `seed`; `dishonest`, a dishonest viewer, which held it
+             first; else `peer`, or `unnamed` when no source is named:
+             both an anomaly, a first copy neither the seed nor a
+             dishonest viewer sent; NULL for a chunk never held)
   latency    first_ms - pub_ms
-  never      no node but the seed held it by the run's end
+  never      no node but the seed and the dishonest viewers held it by
+             the run's end
   end        the run's end: the end of its last second in `seconds`
              (strims-sim runs on 10 s past its stream's end, and holds
              come in then), or its last hold if that is later
@@ -111,33 +120,37 @@ greatest over the group's runs, `*_runs`):
   invariants I1, the invariant that every stream a viewer watches has a
              seed child: stream-seconds with no seed child while an honest
              viewer watches (a viewer_phases second of any honest viewer;
-             every viewer wants every stream), from `parents`: a node is
-             the seed's child of a stream from a row naming the seed its
-             parent to the node's next row of the stream, or the run's
-             end. Watched stream-seconds of the runs with parents rows,
-             the time in them with no seed child (uncovered_s, ms exact),
-             its share, the stream-seconds with any of it, the mean seed
-             children of a stream (time weighted), the runs without
-             parents rows (unparented), and how the seed's child
-             subscriptions ended in the phase (ends_<reason>, the next
-             row's reason: the vocabulary's parents reasons)
+             every viewer wants every stream), from `parents`: a node but
+             a dishonest viewer is the seed's child of a stream from a
+             row naming the seed its parent to the node's next row of the
+             stream, or the run's end. Watched stream-seconds of the runs
+             with parents rows, the time in them with no seed child
+             (uncovered_s, ms exact), its share, the stream-seconds with
+             any of it, the mean seed children of a stream (time
+             weighted), the runs without parents rows (unparented), and
+             how the seed's child subscriptions ended in the phase
+             (ends_<reason>, the next row's reason: the vocabulary's
+             parents reasons)
   late       each late chunk of a run with parents rows, classed by the
-             seed's children of its stream at publication (first match):
-             no_seed_child (with `after`, how the stream's last seed
-             child before it ended, a parents reason, NULL for a stream
-             that never had one), released (a child's hold names a
-             release to pull, arrivals' released_ms: push's deadline or
-             the parent's going gave up the seed's push; a CANCEL with it
-             on the HAVE removal), pushed_late (a child holds it by the
-             seed's push), child_never (no child at publication ever held
-             it), other (a child holds it otherwise, by an answer without
-             a release); chunks, their share of the late and of the
-             judged, the children at publication, latency p50 of the held
+             seed's children (no dishonest viewer) of its stream at
+             publication (first match): no_seed_child (with `after`, how
+             the stream's last seed child before it ended, a parents
+             reason, NULL for a stream that never had one), released (a
+             child's hold names a release to pull, arrivals'
+             released_ms: push's deadline or the parent's going gave up
+             the seed's push; a CANCEL with it on the HAVE removal),
+             pushed_late (a child holds it by the seed's push),
+             child_never (no child at publication ever held it), other
+             (a child holds it otherwise, by an answer without a
+             release); chunks, their share of the late and of the
+             judged, the children at publication and the dishonest
+             viewers then subscribed to the seed on its stream
+             (dishonest_children; both means), latency p50 of the held
 
 Rows of `parents` at one ms of one node and stream are ordered as they
-can have happened (seed_children_in): a `switch` first, an `open` after
-an end if the node had a parent before that ms (an open needs none) and
-before it if not, the ends between.
+can have happened (seed_subscriptions_in): a `switch` first, an `open`
+after an end if the node had a parent before that ms (an open needs
+none) and before it if not, the ends between.
 """
 
 import sys
@@ -206,7 +219,8 @@ def tables_sql(sel):
                   job's own
       cv_late     a row a judged late chunk of a run with parents rows,
                   in every phase: k, src, seq, stream, pub_ms and its
-                  class (cv_chunks' children, class, after), a job's own
+                  class (cv_chunks' children, dishonest_children, class,
+                  after), a job's own
       cv_cover    I1's watched stream-seconds (seed_cover_in), a row each
                   label
       cv_phase    k, src, sec, phase: the run's (verdict_seconds)
@@ -222,7 +236,8 @@ SELECT {labels}, r.streams_from, r.parents_rows > 0 AS parented, c.* FROM covera
 JOIN cv_sel j USING (k, src) JOIN cv_runs r USING (k, src);
 CREATE OR REPLACE TEMP TABLE cv_subs AS FROM seed_children_in({runs});
 CREATE OR REPLACE TEMP TABLE cv_late AS
-SELECT DISTINCT k, src, seq, stream, pub_ms, children, class, after FROM cv_chunks WHERE class IS NOT NULL;
+SELECT DISTINCT k, src, seq, stream, pub_ms, children, dishonest_children, class, after FROM cv_chunks
+WHERE class IS NOT NULL;
 CREATE OR REPLACE TEMP TABLE cv_cover AS
 SELECT {labels}, c.* FROM seed_cover_in({runs}) c JOIN cv_sel j USING (k, src);
 CREATE OR REPLACE TEMP TABLE cv_phase AS
@@ -399,7 +414,8 @@ shares AS (
 ), s AS (SELECT {GROUP}, class, after, {spread('share')} AS share_runs FROM shares GROUP BY ALL)
 SELECT l.arm, l.cell, l.collapsed, nullif(l.phase, {q(POOLED)}) AS phase, l.class, l.after, count(*) AS chunks,
        count(*) / any_value(a.late_n) AS late_share, count(*) / any_value(a.n) AS share,
-       avg(l.children) AS children, count(*) FILTER (WHERE l.route = 'never') AS never,
+       avg(l.children) AS children, avg(l.dishonest_children) AS dishonest_children,
+       count(*) FILTER (WHERE l.route = 'never') AS never,
        sketch_quantile(l.latency_ms, 50) AS p50_ms, any_value(s.share_runs) AS share_runs
 FROM l JOIN all_n a ON a.arm = l.arm AND a.cell = l.cell AND a.collapsed = l.collapsed AND a.phase = l.phase
 JOIN s ON s.arm = l.arm AND s.cell = l.cell AND s.collapsed = l.collapsed AND s.phase = l.phase
