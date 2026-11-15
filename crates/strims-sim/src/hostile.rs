@@ -38,6 +38,10 @@
 //!   answers to the peer's path probes [`ECHO_HOLD`], and a liar whose
 //!   links answer with nonces they never read, so their paths read
 //!   farther than they are, or go unmeasured.
+//! - `liar+gap`: a liar whose links echo each timed probe's gap divided by
+//!   [`GAP_SHRINK`], so a train sender's legs to it read that many times
+//!   faster: it claims the sender's uplink is wider than it is. Opt-in:
+//!   no tier's mix holds it.
 //!
 //! A scenario makes shares of its first swarm's viewers hostile by kind
 //! ([`Scenario::hostile`]), or takes the dishonest mix
@@ -78,6 +82,7 @@ pub const KINDS: &[&str] = &[
     "colluder",
     "free-rider+echo",
     "liar+echo",
+    "liar+gap",
 ];
 
 /// The row field that counts a run's hosts of `kind` (`Report::row`).
@@ -92,6 +97,7 @@ pub fn count_field(kind: &str) -> Option<RowInt> {
         "colluder" => Some(RowInt::Colluders),
         "free-rider+echo" => Some(RowInt::EchoFreeRiders),
         "liar+echo" => Some(RowInt::EchoLiars),
+        "liar+gap" => Some(RowInt::GapLiars),
         _ => None,
     }
 }
@@ -115,6 +121,9 @@ pub const REPORT_EVERY: Duration = Duration::from_secs(1);
 
 /// How long a `free-rider+echo`'s links hold each echo.
 pub const ECHO_HOLD: Duration = Duration::from_millis(300);
+
+/// What a `liar+gap`'s links divide each gap they echo by.
+pub const GAP_SHRINK: u32 = 4;
 
 /// The hits (and their mean delay) and misses of a colluder's entry for a
 /// member of its group, and the misses of one for any other peer: a
@@ -207,7 +216,7 @@ pub fn adversary(kind: &str, options: &SwarmOptions, group: &Group) -> Option<Ad
     };
     Some(match kind {
         "free-rider" | "whitewasher" | "hog" | "free-rider+echo" => withhold(true),
-        "liar" | "liar+echo" => withhold(false),
+        "liar" | "liar+echo" | "liar+gap" => withhold(false),
         "grabber" => AdversaryFactory(Arc::new(move |_: DetRng, _: HostId| {
             Box::new(Grab {
                 cfg,
@@ -246,11 +255,15 @@ pub fn echo_greed(kind: &str) -> EchoGreed {
     match kind {
         "free-rider+echo" => EchoGreed {
             hold: Some(ECHO_HOLD),
-            forge: false,
+            ..EchoGreed::default()
         },
         "liar+echo" => EchoGreed {
-            hold: None,
             forge: true,
+            ..EchoGreed::default()
+        },
+        "liar+gap" => EchoGreed {
+            shrink_gaps: Some(GAP_SHRINK),
+            ..EchoGreed::default()
         },
         _ => EchoGreed::default(),
     }

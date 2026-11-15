@@ -483,6 +483,12 @@ type = "int"
 description = "The first swarm's dishonest viewers that lie and forge their answers to path probes: liars whose links echo nonces they never read, so their paths go unmeasured; 0 in a run without any."
 notes.strims-sim = "Its hosts of hostile kind liar+echo (`hostile.rs`), set by STRIMS_SIM_HOSTILE's shares; `liars` doesn't count them."
 
+[rows.gap_liars]
+sims = ["strims-sim"]
+type = "int"
+description = "The first swarm's dishonest viewers that lie and shorten the gaps they echo to uplink train legs: liars whose links echo each timed probe's gap divided, so a train sender's legs to them read its uplink wider than it is; 0 in a run without any."
+notes.strims-sim = "Its hosts of hostile kind liar+gap (`hostile.rs`, `GAP_SHRINK`), set by STRIMS_SIM_HOSTILE's shares; `liars` doesn't count them."
+
 [rows.eclipsed_share]
 sims = ["strims-sim"]
 type = "num"
@@ -1672,7 +1678,7 @@ sims = ["strims-sim"]
 type = "int"
 aggregate = "count"
 description = "The reports' verdicts against the real subtrees: honest holder samples."
-notes.strims-sim = "Over the first swarm's seed's allocation samples in the seed meter's window (`Report::seed_meter_window`), a holder sample is a neighbour holding a copy; a holder's real children are the hosts whose open parent of a stream it was at their transfer samples nearest the seed's (within half a stats period); the honest are `HostClass::Honest`, the liars the kinds that announce and serve nothing (liar, liar+echo, colluder: `hostile.rs`), the other hostile kinds neither (`Report::verdicts`). The counts that read real children are left out without transfer samples (`STRIMS_SIM_SERIES` or `STRIMS_SIM_OUT`)."
+notes.strims-sim = "Over the first swarm's seed's allocation samples in the seed meter's window (`Report::seed_meter_window`), a holder sample is a neighbour holding a copy; a holder's real children are the hosts whose open parent of a stream it was at their transfer samples nearest the seed's (within half a stats period); the honest are `HostClass::Honest`, the liars the kinds that announce and serve nothing (liar, liar+echo, liar+gap, colluder: `hostile.rs`), the other hostile kinds neither (`Report::verdicts`). The counts that read real children are left out without transfer samples (`STRIMS_SIM_SERIES` or `STRIMS_SIM_OUT`)."
 
 [rows.v_judged]
 sims = ["strims-sim"]
@@ -1684,7 +1690,7 @@ notes.strims-sim = "`v_honest`'s samples whose `SeedNeighbourInfo::served` is se
 sims = ["strims-sim"]
 type = "int"
 description = "Liar holder samples."
-notes.strims-sim = "`v_honest`'s samples of the kinds that announce and serve nothing: liar, liar+echo and colluder (`Report::verdicts`)."
+notes.strims-sim = "`v_honest`'s samples of the kinds that announce and serve nothing: liar, liar+echo, liar+gap and colluder (`Report::verdicts`)."
 
 [rows.v_liars_judged]
 sims = ["strims-sim"]

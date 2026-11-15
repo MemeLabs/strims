@@ -518,6 +518,15 @@ pub(crate) enum RowInt {
     /// strims-sim: Its hosts of hostile kind liar+echo (`hostile.rs`), set by
     /// STRIMS_SIM_HOSTILE's shares; `liars` doesn't count them.
     EchoLiars,
+    /// The first swarm's dishonest viewers that lie and shorten the gaps they
+    /// echo to uplink train legs: liars whose links echo each timed probe's gap
+    /// divided, so a train sender's legs to them read its uplink wider than it
+    /// is; 0 in a run without any.
+    ///
+    /// strims-sim: Its hosts of hostile kind liar+gap (`hostile.rs`,
+    /// `GAP_SHRINK`), set by STRIMS_SIM_HOSTILE's shares; `liars` doesn't count
+    /// them.
+    GapLiars,
     /// The honest viewers' peer exchanges that ended Answered
     /// (ExchangeOutcome).
     ExchAnswered,
@@ -1225,7 +1234,7 @@ pub(crate) enum RowInt {
     /// open parent of a stream it was at their transfer samples nearest the
     /// seed's (within half a stats period); the honest are `HostClass::Honest`,
     /// the liars the kinds that announce and serve nothing (liar, liar+echo,
-    /// colluder: `hostile.rs`), the other hostile kinds neither
+    /// liar+gap, colluder: `hostile.rs`), the other hostile kinds neither
     /// (`Report::verdicts`). The counts that read real children are left out
     /// without transfer samples (`STRIMS_SIM_SERIES` or `STRIMS_SIM_OUT`).
     VHonest,
@@ -1237,7 +1246,7 @@ pub(crate) enum RowInt {
     /// Liar holder samples.
     ///
     /// strims-sim: `v_honest`'s samples of the kinds that announce and serve
-    /// nothing: liar, liar+echo and colluder (`Report::verdicts`).
+    /// nothing: liar, liar+echo, liar+gap and colluder (`Report::verdicts`).
     VLiars,
     /// Liar holder samples a quorum judged.
     ///
@@ -1382,6 +1391,7 @@ impl RowInt {
             RowInt::DupBytes => "dup_bytes",
             RowInt::EchoFreeRiders => "echo_free_riders",
             RowInt::EchoLiars => "echo_liars",
+            RowInt::GapLiars => "gap_liars",
             RowInt::ExchAnswered => "exch_answered",
             RowInt::ExchConnected => "exch_connected",
             RowInt::ExchFailed => "exch_failed",

@@ -644,7 +644,7 @@ fn kinds_of(r: &Report) -> Vec<Option<&'static str>> {
 
 /// The row counts the run's hosts of each kind (`free_riders`, `liars`,
 /// `whitewashers`, `hogs`, `grabbers`, `withholders`, `colluders`,
-/// `echo_free_riders`, `echo_liars`).
+/// `echo_free_riders`, `echo_liars`, `gap_liars`).
 fn row_counts_kinds(r: &Report, test: &str) -> Result<(), String> {
     let row: serde_json::Value =
         serde_json::from_str(&r.row(test, None)).map_err(|e| e.to_string())?;
@@ -659,6 +659,7 @@ fn row_counts_kinds(r: &Report, test: &str) -> Result<(), String> {
         ("colluder", "colluders"),
         ("free-rider+echo", "echo_free_riders"),
         ("liar+echo", "echo_liars"),
+        ("liar+gap", "gap_liars"),
     ] {
         let n = kinds.iter().filter(|k| **k == Some(kind)).count() as u64;
         if row[field].as_u64() != Some(n) {

@@ -242,6 +242,11 @@ pub struct EchoGreed {
     /// Echoes nonces it never read: the peer's echo of a probe it sent,
     /// with a bit flipped ([`FORGED_ECHO`]).
     pub forge: bool,
+    /// Echoes each timed probe's gap divided by this ([`Record::Gap`]), so
+    /// the peer's uplink train legs on the link read that many times
+    /// faster ([`strims_base::path::UplinkTrains`]); `None` or 1 echoes
+    /// the gap read.
+    pub shrink_gaps: Option<u32>,
 }
 
 /// What a forging host ([`EchoGreed::forge`]) flips in each nonce it
@@ -2114,6 +2119,7 @@ fn write_control_timed<T>(
         path,
         echo,
         echo_release,
+        echo_greed,
         ..
     } = link;
     let Some(out) = out.as_mut() else {
@@ -2123,9 +2129,11 @@ fn write_control_timed<T>(
     // A held echo ([`EchoGreed::hold`]) waits for its release, its gap
     // with it.
     let echo_due = echo.is_pending() && echo_release.is_none_or(|t| t <= now);
+    let shrink = i64::from(echo_greed.shrink_gaps.unwrap_or(1).max(1));
     let gap = echo
         .gap()
         .filter(|_| echo_due)
+        .map(|g| g / shrink)
         .map(|g| Record::Gap(u32::try_from(g.as_micros().max(0)).unwrap_or(u32::MAX)));
     let len =
         control::frame_len(echo_due, probe) + control::RECORD_LEN * usize::from(gap.is_some());

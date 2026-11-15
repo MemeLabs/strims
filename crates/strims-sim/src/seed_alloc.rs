@@ -63,7 +63,7 @@ pub const HELD_FOR: Duration = Duration::from_millis(100);
 
 /// The hostile kinds that announce what they hold and serve none of it:
 /// the liars of [`Verdicts`].
-const LIARS: [&str; 3] = ["liar", "liar+echo", "colluder"];
+const LIARS: [&str; 4] = ["liar", "liar+echo", "liar+gap", "colluder"];
 
 /// The reports' verdicts against the real subtrees ([`Report::verdicts`]):
 /// counts of holder samples (a neighbour holding a copy at a sample).
