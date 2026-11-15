@@ -12,57 +12,60 @@ import { answeredRejection } from "./host/recorder";
 import {
   AuthFrontendService,
   registerAuthFrontendService,
-} from "../../apis/strims/auth/v1/auth_rpc";
+} from "../../apis/strims/auth/v1/auth_rpc.pb";
 import {
   AutoseedFrontendService,
   registerAutoseedFrontendService,
-} from "../../apis/strims/autoseed/v1/autoseed_rpc";
+} from "../../apis/strims/autoseed/v1/autoseed_rpc.pb";
 import {
   ChatFrontendService,
   ChatServerFrontendService,
   registerChatFrontendService,
   registerChatServerFrontendService,
-} from "../../apis/strims/chat/v1/chat_rpc";
-import { DebugService, registerDebugService } from "../../apis/strims/debug/v1/debug_rpc";
+} from "../../apis/strims/chat/v1/chat_rpc.pb";
+import { DebugService, registerDebugService } from "../../apis/strims/debug/v1/debug_rpc.pb";
 import {
   BootstrapFrontendService,
   registerBootstrapFrontendService,
-} from "../../apis/strims/network/v1/bootstrap/bootstrap_rpc";
+} from "../../apis/strims/network/v1/bootstrap/bootstrap_rpc.pb";
 import {
   DirectoryFrontendService,
   registerDirectoryFrontendService,
-} from "../../apis/strims/network/v1/directory/directory_rpc";
+} from "../../apis/strims/network/v1/directory/directory_rpc.pb";
 import {
   NetworkFrontendService,
   registerNetworkFrontendService,
-} from "../../apis/strims/network/v1/network_rpc";
+} from "../../apis/strims/network/v1/network_rpc.pb";
 import {
   NotificationFrontendService,
   registerNotificationFrontendService,
-} from "../../apis/strims/notification/v1/notification_rpc";
+} from "../../apis/strims/notification/v1/notification_rpc.pb";
 import {
   ProfileFrontendService,
   registerProfileFrontendService,
-} from "../../apis/strims/profile/v1/profile_rpc";
+} from "../../apis/strims/profile/v1/profile_rpc.pb";
 import {
   ReplicationFrontendService,
   registerReplicationFrontendService,
-} from "../../apis/strims/replication/v1/replication_rpc";
-import { CaptureService, registerCaptureService } from "../../apis/strims/video/v1/capture_rpc";
+} from "../../apis/strims/replication/v1/replication_rpc.pb";
+import { CaptureService, registerCaptureService } from "../../apis/strims/video/v1/capture_rpc.pb";
 import {
   VideoChannelFrontendService,
   registerVideoChannelFrontendService,
-} from "../../apis/strims/video/v1/channel_rpc";
-import { EgressService, registerEgressService } from "../../apis/strims/video/v1/egress_rpc";
+} from "../../apis/strims/video/v1/channel_rpc.pb";
+import { EgressService, registerEgressService } from "../../apis/strims/video/v1/egress_rpc.pb";
 import {
   HLSEgressService,
   registerHLSEgressService,
-} from "../../apis/strims/video/v1/hls_egress_rpc";
+} from "../../apis/strims/video/v1/hls_egress_rpc.pb";
 import {
   VideoIngressService,
   registerVideoIngressService,
-} from "../../apis/strims/video/v1/ingress_rpc";
-import { VNICFrontendService, registerVNICFrontendService } from "../../apis/strims/vnic/v1/vnic_rpc";
+} from "../../apis/strims/video/v1/ingress_rpc.pb";
+import {
+  VNICFrontendService,
+  registerVNICFrontendService,
+} from "../../apis/strims/vnic/v1/vnic_rpc.pb";
 import { Provider as ApiProvider } from "../../contexts/FrontendApi";
 import { AsyncPassThrough } from "../../lib/stream";
 

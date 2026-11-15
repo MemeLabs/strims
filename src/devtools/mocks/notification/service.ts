@@ -5,8 +5,8 @@ import { PassThrough } from "stream";
 
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 
-import * as notificationv1 from "../../../apis/strims/notification/v1/notification";
-import { NotificationFrontendService } from "../../../apis/strims/notification/v1/notification_rpc";
+import * as notificationv1 from "../../../apis/strims/notification/v1/notification.pb";
+import { NotificationFrontendService } from "../../../apis/strims/notification/v1/notification_rpc.pb";
 
 export default class NotificationService implements NotificationFrontendService {
   events: Readable<notificationv1.Event>;
@@ -35,7 +35,7 @@ export default class NotificationService implements NotificationFrontendService 
     for (const id of req.ids) {
       this.events.push(
         new notificationv1.Event({
-          body: new notificationv1.Event.Body({ dismiss: id }),
+          body: new notificationv1.Event_Body({ dismiss: id }),
         })
       );
     }

@@ -5,9 +5,9 @@ import assert from "assert";
 import { readdirSync } from "fs";
 import { join } from "path";
 
-import { Error as RPCError } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
+import { Error as RPCError } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc.pb";
 
-import { ErrorCode as RpcErrorCode } from "../apis/strims/rpc/errors/errors";
+import { ErrorCode as RpcErrorCode } from "../apis/strims/rpc/errors/errors.pb";
 import { errorCode, errorCodeEnums, errorCodeName, formatError } from "./rpcError";
 
 const timeout = new RPCError({ code: RpcErrorCode.TIMEOUT, message: "call timed out" });
@@ -38,7 +38,7 @@ describe("rpcError", () => {
   it("registers every generated error-code enum, whose codes are disjoint", async () => {
     const apis = join(__dirname, "../apis");
     const files = (readdirSync(apis, { recursive: true }) as string[]).filter((f) =>
-      /(^|\/)errors\/errors\.ts$/.test(f)
+      /(^|\/)errors\/errors\.pb\.ts$/.test(f)
     );
     assert.ok(files.length >= 4);
     for (const f of files) {

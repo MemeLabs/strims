@@ -3,7 +3,7 @@
 
 import { Base64 } from "js-base64";
 
-import { Network as DirectoryNetwork } from "../../../apis/strims/network/v1/directory/directory";
+import { Network as DirectoryNetwork } from "../../../apis/strims/network/v1/directory/directory.pb";
 import {
   AliasReservation,
   Invitation,
@@ -11,9 +11,9 @@ import {
   Network,
   Peer,
   ServerConfig,
-} from "../../../apis/strims/network/v1/network";
-import { Certificate, CertificateBody, KeyUsage } from "../../../apis/strims/type/certificate";
-import { Key, KeyType } from "../../../apis/strims/type/key";
+} from "../../../apis/strims/network/v1/network.pb";
+import { Certificate, CertificateBody, KeyUsage } from "../../../apis/strims/type/certificate.pb";
+import { Key, KeyType } from "../../../apis/strims/type/key.pb";
 import { bytes, fixtureTime, key } from "./ids";
 import { profileKey } from "./profile";
 

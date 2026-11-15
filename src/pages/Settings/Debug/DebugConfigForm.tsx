@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useTitle } from "react-use";
 
-import { Config } from "../../../apis/strims/debug/v1/debug";
+import { Config } from "../../../apis/strims/debug/v1/debug.pb";
 import {
   Button,
   ButtonSet,

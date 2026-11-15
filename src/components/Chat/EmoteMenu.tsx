@@ -24,7 +24,7 @@ import {
 import { MdClose, MdFastfood } from "react-icons/md";
 import { useDebounce } from "react-use";
 
-import * as chatv1 from "../../apis/strims/chat/v1/chat";
+import * as chatv1 from "../../apis/strims/chat/v1/chat.pb";
 import { useChat, useRoom } from "../../contexts/Chat";
 import useSize from "../../hooks/useSize";
 import { useStableCallback } from "../../hooks/useStableCallback";

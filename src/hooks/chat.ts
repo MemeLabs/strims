@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { FrontendWatchListingUsersResponse } from "../apis/strims/network/v1/directory/directory";
+import { FrontendWatchListingUsersResponse_UserEventType } from "../apis/strims/network/v1/directory/directory.pb";
 import { useClient } from "../contexts/FrontendApi";
 
 // TODO: move to directory hooks
@@ -21,13 +21,13 @@ export const useUserList = (networkKey: Uint8Array, serverKey: Uint8Array) => {
       setUsers((prev) => {
         const users = new Map(prev);
         switch (e.type) {
-          case FrontendWatchListingUsersResponse.UserEventType.USER_EVENT_TYPE_JOIN:
-          case FrontendWatchListingUsersResponse.UserEventType.USER_EVENT_TYPE_RENAME:
+          case FrontendWatchListingUsersResponse_UserEventType.USER_EVENT_TYPE_JOIN:
+          case FrontendWatchListingUsersResponse_UserEventType.USER_EVENT_TYPE_RENAME:
             for (const u of e.users) {
               users.set(u.id, u.alias);
             }
             break;
-          case FrontendWatchListingUsersResponse.UserEventType.USER_EVENT_TYPE_PART:
+          case FrontendWatchListingUsersResponse_UserEventType.USER_EVENT_TYPE_PART:
             for (const u of e.users) {
               users.delete(u.id);
             }

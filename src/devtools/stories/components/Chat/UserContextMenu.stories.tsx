@@ -5,7 +5,10 @@ import "./chat.stories.scss";
 
 import React, { ReactNode, useEffect, useMemo, useRef } from "react";
 
-import { Message } from "../../../../apis/strims/chat/v1/chat";
+import {
+  Message_DirectoryRef,
+  Message_IDirectoryRef,
+} from "../../../../apis/strims/chat/v1/chat.pb";
 import { useUserContextMenu } from "../../../../components/Chat/UserContextMenu";
 import Toast from "../../../../components/Notification/Toast";
 import { MockChat, RoomProvider, RoomStyles } from "../../../contexts/Chat";
@@ -17,14 +20,14 @@ import { MockNotifications, Story, fixtures } from "../../../storybook";
 interface AuthorProps {
   nick: string;
   peerKey: Uint8Array;
-  viewedListing?: Message.IDirectoryRef;
+  viewedListing?: Message_IDirectoryRef;
 }
 
 // An author's name, its menu opened beside it on mount as a right-click does.
 const Author: React.FC<AuthorProps> = ({ nick, peerKey, viewedListing }) => {
   const ref = useRef<HTMLSpanElement>(null);
   const listing = useMemo(
-    () => viewedListing && new Message.DirectoryRef(viewedListing),
+    () => viewedListing && new Message_DirectoryRef(viewedListing),
     [viewedListing]
   );
   const { UserContextMenu, openUserContextMenu, disabled } = useUserContextMenu({

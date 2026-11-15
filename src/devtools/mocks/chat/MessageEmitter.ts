@@ -3,7 +3,7 @@
 
 import { PassThrough } from "stream";
 
-import { Message } from "../../../apis/strims/chat/v1/chat";
+import { Message, Message_Entities, Message_IEntities } from "../../../apis/strims/chat/v1/chat.pb";
 
 const history = [
   'MSG {"nick":"soadsoap","features":[],"timestamp":1653089095563,"data":"Idk about the others","entities":{}}',
@@ -246,7 +246,7 @@ type LegacyMessage = {
   nick: string;
   timestamp: number;
   data: string;
-  entities: Message.IEntities;
+  entities: Message_IEntities;
 };
 
 // A nick's peer key in the mocks: its UTF-8 bytes.
@@ -261,7 +261,7 @@ const historyMessages = history
         peerKey: peerKey(nick),
         serverTime: BigInt(timestamp),
         body: data,
-        entities: new Message.Entities({
+        entities: new Message_Entities({
           ...entities,
           nicks: entities.nicks?.map((nick) => ({
             ...nick,

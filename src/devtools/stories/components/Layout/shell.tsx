@@ -7,7 +7,7 @@ import { PassThrough } from "stream";
 
 import React, { ReactNode, useEffect, useLayoutEffect, useMemo, useState } from "react";
 
-import { LinkedProfile } from "../../../../apis/strims/auth/v1/auth";
+import { LinkedProfile } from "../../../../apis/strims/auth/v1/auth.pb";
 import {
   AssetBundle,
   FrontendWatchListingsRequest,
@@ -15,15 +15,16 @@ import {
   IListingSnippet,
   INetworkListingsItem,
   Listing,
-} from "../../../../apis/strims/network/v1/directory/directory";
-import { Network } from "../../../../apis/strims/network/v1/network";
-import { ImageType } from "../../../../apis/strims/type/image";
-import { UnimplementedEgressService } from "../../../../apis/strims/video/v1/egress_rpc";
+  Listing_ContentCase,
+} from "../../../../apis/strims/network/v1/directory/directory.pb";
+import { Network } from "../../../../apis/strims/network/v1/network.pb";
+import { ImageType } from "../../../../apis/strims/type/image.pb";
+import { UnimplementedEgressService } from "../../../../apis/strims/video/v1/egress_rpc.pb";
 import {
   HLSEgressGetConfigResponse,
   HLSEgressIsSupportedResponse,
-} from "../../../../apis/strims/video/v1/hls_egress";
-import { UnimplementedHLSEgressService } from "../../../../apis/strims/video/v1/hls_egress_rpc";
+} from "../../../../apis/strims/video/v1/hls_egress.pb";
+import { UnimplementedHLSEgressService } from "../../../../apis/strims/video/v1/hls_egress_rpc.pb";
 import { Provider as ChatProvider, useChat } from "../../../../contexts/Chat";
 import { LayoutContextProps, useLayout } from "../../../../contexts/Layout";
 import { Provider as NetworkProvider } from "../../../../contexts/Network";
@@ -74,7 +75,7 @@ export class EgressService extends UnimplementedEgressService {
 // The chat mock's room's key (listing 2's chat server, in network 1).
 const roomKey = (): Uint8Array => {
   const { content } = new Listing(fixtures.listingItem(BigInt(2)).listing);
-  return content.case === Listing.ContentCase.CHAT ? content.chat.key : null;
+  return content.case === Listing_ContentCase.CHAT ? content.chat.key : null;
 };
 
 // Opens the chat mock's room in the main chat, as picking it in the room

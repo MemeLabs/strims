@@ -4,7 +4,7 @@
 import { Base64 } from "js-base64";
 import { invert } from "lodash";
 
-import { Image, ImageType } from "../apis/strims/type/image";
+import { Image, ImageType } from "../apis/strims/type/image.pb";
 import { ImageValue } from "../components/Form";
 
 const imageTypeToFileType: { [imageType: number]: string } = {

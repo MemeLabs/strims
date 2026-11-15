@@ -3,7 +3,7 @@
 
 import React from "react";
 
-import * as bootstrapv1 from "../../../../../apis/strims/network/v1/bootstrap/bootstrap";
+import * as bootstrapv1 from "../../../../../apis/strims/network/v1/bootstrap/bootstrap.pb";
 import BootstrapService from "../../../../mocks/bootstrap/service";
 import { Catalog, Story } from "../../../../storybook";
 import { SettingsStory, click, slow, submit, waitFor } from "../Network/harness";

@@ -8,28 +8,31 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 import { FiAlertCircle, FiAlertOctagon, FiAlertTriangle, FiCheckCircle } from "react-icons/fi";
 
-import { Notification } from "../../apis/strims/notification/v1/notification";
+import {
+  Notification,
+  Notification_Status,
+} from "../../apis/strims/notification/v1/notification.pb";
 import { useLayout } from "../../contexts/Layout";
 import { useNotification } from "../../contexts/Notification";
 
 interface ToastItemIconProps {
-  status: Notification.Status;
+  status: Notification_Status;
 }
 
 const ToastItemIcon: React.FC<ToastItemIconProps> = ({ status }) => {
   const className = clsx(
     "notification_toast__item__icon",
-    `notification_toast__item__icon--${Notification.Status[status].toLowerCase()}`
+    `notification_toast__item__icon--${Notification_Status[status].toLowerCase()}`
   );
 
   switch (status) {
-    case Notification.Status.STATUS_INFO:
+    case Notification_Status.STATUS_INFO:
       return <FiAlertCircle className={className} />;
-    case Notification.Status.STATUS_SUCCESS:
+    case Notification_Status.STATUS_SUCCESS:
       return <FiCheckCircle className={className} />;
-    case Notification.Status.STATUS_WARNING:
+    case Notification_Status.STATUS_WARNING:
       return <FiAlertTriangle className={className} />;
-    case Notification.Status.STATUS_ERROR:
+    case Notification_Status.STATUS_ERROR:
       return <FiAlertOctagon className={className} />;
   }
 };
@@ -54,7 +57,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ closing, notification, onClick })
       ref={ref}
       className={clsx(
         "notification_toast__item",
-        `notification_toast__item--${Notification.Status[notification.status].toLowerCase()}`,
+        `notification_toast__item--${Notification_Status[notification.status].toLowerCase()}`,
         { "notification_toast__item--closing": closing }
       )}
       onClick={onClick}

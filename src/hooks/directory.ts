@@ -4,7 +4,7 @@
 import { useCallback, useContext, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
-import * as directoryv1 from "../apis/strims/network/v1/directory/directory";
+import * as directoryv1 from "../apis/strims/network/v1/directory/directory.pb";
 import { useClient } from "../contexts/FrontendApi";
 import { useLayout } from "../contexts/Layout";
 import { PlayerContext, PlayerMode } from "../contexts/Player";

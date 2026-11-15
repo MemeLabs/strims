@@ -6,7 +6,10 @@ import "../../../watch/watch.scss";
 
 import React, { ReactNode } from "react";
 
-import { Listing, NetworkListingsItem } from "../../../apis/strims/network/v1/directory/directory";
+import {
+  Listing_ContentCase,
+  NetworkListingsItem,
+} from "../../../apis/strims/network/v1/directory/directory.pb";
 import { NetworkListingsMap } from "../../../lib/listings";
 import { fixtures } from "../../storybook";
 
@@ -28,7 +31,7 @@ export const mediaListings = (count: number, networks = 2): NetworkListingsMap =
     map.set(network.id, { network, listings: new Map() });
   }
   fixtures.listingItems
-    .filter((e) => e.listing?.content?.case === Listing.ContentCase.EMBED)
+    .filter((e) => e.listing?.content?.case === Listing_ContentCase.EMBED)
     .slice(0, count)
     .forEach((e, i) => {
       map.get(BigInt((i % networks) + 1)).listings.set(

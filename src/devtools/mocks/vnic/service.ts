@@ -1,12 +1,12 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import * as vnicv1 from "../../../apis/strims/vnic/v1/vnic";
-import { Config } from "../../../apis/strims/vnic/v1/vnic";
+import * as vnicv1 from "../../../apis/strims/vnic/v1/vnic.pb";
+import { Config } from "../../../apis/strims/vnic/v1/vnic.pb";
 import {
   UnimplementedVNICFrontendService,
   VNICFrontendService,
-} from "../../../apis/strims/vnic/v1/vnic_rpc";
+} from "../../../apis/strims/vnic/v1/vnic_rpc.pb";
 
 // 50 Mbit/s and 25 peers.
 export const defaultConfig = (): Config =>

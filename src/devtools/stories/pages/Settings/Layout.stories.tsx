@@ -3,8 +3,8 @@
 
 import React from "react";
 
-import * as hlsv1 from "../../../../apis/strims/video/v1/hls_egress";
-import * as ingressv1 from "../../../../apis/strims/video/v1/ingress";
+import * as hlsv1 from "../../../../apis/strims/video/v1/hls_egress.pb";
+import * as ingressv1 from "../../../../apis/strims/video/v1/ingress.pb";
 import HLSEgressService from "../../../mocks/hlsegress/service";
 import VideoIngressService from "../../../mocks/videoingress/service";
 import { Story } from "../../../storybook";

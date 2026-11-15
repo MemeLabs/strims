@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useInterval, useTitle } from "react-use";
 
-import { MockStream } from "../../../apis/strims/debug/v1/metrics";
+import { MockStream } from "../../../apis/strims/debug/v1/metrics.pb";
 import {
   Button,
   ButtonSet,

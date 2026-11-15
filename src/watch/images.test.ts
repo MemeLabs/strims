@@ -5,9 +5,11 @@ import assert from "assert";
 
 import {
   FrontendWatchListingsResponse,
+  FrontendWatchListingsResponse_Event,
+  FrontendWatchListingsResponse_Event_EventCase,
   IListingSnippetImage,
-  ListingSnippetImage,
-} from "../apis/strims/network/v1/directory/directory";
+  ListingSnippetImage_SourceOneofCase,
+} from "../apis/strims/network/v1/directory/directory.pb";
 import { resolveImages } from "./images";
 
 const BASE = "https://node.example:8443";
@@ -32,12 +34,12 @@ const snippetEvents = (
     ],
   }).events;
 
-const shown = (events: FrontendWatchListingsResponse.Event[]) =>
+const shown = (events: FrontendWatchListingsResponse_Event[]) =>
   events.flatMap(({ event }) =>
-    event.case === FrontendWatchListingsResponse.Event.EventCase.CHANGE
+    event.case === FrontendWatchListingsResponse_Event_EventCase.CHANGE
       ? event.change.listings.listings.map(({ snippet }) =>
           [snippet.thumbnail, snippet.channelLogo].map((i) =>
-            i?.sourceOneof.case === ListingSnippetImage.SourceOneofCase.URL
+            i?.sourceOneof.case === ListingSnippetImage_SourceOneofCase.URL
               ? i.sourceOneof.url
               : i
                 ? "inline"

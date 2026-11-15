@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState } from "react";
 
-import * as vnicv1 from "../../../../apis/strims/vnic/v1/vnic";
+import * as vnicv1 from "../../../../apis/strims/vnic/v1/vnic.pb";
 import VNICService from "../../../mocks/vnic/service";
 import { Story } from "../../../storybook";
 import { SettingsStory, fill, slow, submit, waitFor } from "./Network/harness";

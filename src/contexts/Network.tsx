@@ -3,8 +3,8 @@
 
 import React, { ReactNode, createContext, useCallback, useEffect, useMemo, useState } from "react";
 
-import { AssetBundle } from "../apis/strims/network/v1/directory/directory";
-import { Network, NetworkEvent, UIConfig } from "../apis/strims/network/v1/network";
+import { AssetBundle } from "../apis/strims/network/v1/directory/directory.pb";
+import { Network, NetworkEvent_BodyCase, UIConfig } from "../apis/strims/network/v1/network.pb";
 import { useClient } from "./FrontendApi";
 
 interface Value {
@@ -69,21 +69,21 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
     const events = client.network.watch();
     events.on("data", ({ event: { body } }) => {
       switch (body.case) {
-        case NetworkEvent.BodyCase.NETWORK_START:
+        case NetworkEvent_BodyCase.NETWORK_START:
           removeItem(body.networkStart.network.id);
           addItem(body.networkStart);
           break;
-        case NetworkEvent.BodyCase.NETWORK_STOP:
+        case NetworkEvent_BodyCase.NETWORK_STOP:
           removeItem(body.networkStop.networkId);
           removeAssetBundle(body.networkStop.networkId);
           break;
-        case NetworkEvent.BodyCase.NETWORK_PEER_COUNT_UPDATE:
+        case NetworkEvent_BodyCase.NETWORK_PEER_COUNT_UPDATE:
           setPeerCount(
             body.networkPeerCountUpdate.networkId,
             body.networkPeerCountUpdate.peerCount
           );
           break;
-        case NetworkEvent.BodyCase.UI_CONFIG_UPDATE:
+        case NetworkEvent_BodyCase.UI_CONFIG_UPDATE:
           setConfig(body.uiConfigUpdate);
       }
     });

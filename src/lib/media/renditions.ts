@@ -1,7 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { ListingRendition } from "../../apis/strims/network/v1/directory/directory";
+import type { ListingRendition } from "../../apis/strims/network/v1/directory/directory.pb";
 import { UNITS_MIME_TYPE, mimeEssence } from "./mime";
 import { PlayerKind } from "./players";
 

@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import * as chatv1 from "../../../apis/strims/chat/v1/chat";
+import * as chatv1 from "../../../apis/strims/chat/v1/chat.pb";
 import imgBONK from "./emotes/animated/BONK.png";
 import imgCinnabunny from "./emotes/animated/Cinnabunny.png";
 import imgComfyMoobers from "./emotes/animated/ComfyMoobers.png";

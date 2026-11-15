@@ -6,10 +6,10 @@ import "./harness.stories.scss";
 import React, { ReactElement, ReactNode, useEffect, useRef, useState } from "react";
 import { Route } from "react-router";
 
-import { HLSEgressIsSupportedResponse } from "../../../../../apis/strims/video/v1/hls_egress";
-import { UnimplementedHLSEgressService } from "../../../../../apis/strims/video/v1/hls_egress_rpc";
-import { VideoIngressIsSupportedResponse } from "../../../../../apis/strims/video/v1/ingress";
-import { UnimplementedVideoIngressService } from "../../../../../apis/strims/video/v1/ingress_rpc";
+import { HLSEgressIsSupportedResponse } from "../../../../../apis/strims/video/v1/hls_egress.pb";
+import { UnimplementedHLSEgressService } from "../../../../../apis/strims/video/v1/hls_egress_rpc.pb";
+import { VideoIngressIsSupportedResponse } from "../../../../../apis/strims/video/v1/ingress.pb";
+import { UnimplementedVideoIngressService } from "../../../../../apis/strims/video/v1/ingress_rpc.pb";
 import SettingsLayout from "../../../../../pages/Settings/Layout";
 import { createSettingsRoutes } from "../../../../../root/MainRouter";
 import ChatServerService from "../../../../mocks/chatserver/service";

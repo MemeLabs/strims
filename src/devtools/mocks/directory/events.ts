@@ -3,7 +3,7 @@
 
 import { Base64 } from "js-base64";
 
-import { INetworkListingsItem } from "../../../apis/strims/network/v1/directory/directory";
+import { INetworkListingsItem } from "../../../apis/strims/network/v1/directory/directory.pb";
 import img00 from "./images/00.jpg";
 import img01 from "./images/01.png";
 import img02 from "./images/02.jpg";

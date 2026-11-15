@@ -8,7 +8,11 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { useTitle } from "react-use";
 
-import { Listing, ListingSnippet } from "../apis/strims/network/v1/directory/directory";
+import {
+  ListingSnippet,
+  Listing_ContentCase,
+  Listing_Media,
+} from "../apis/strims/network/v1/directory/directory.pb";
 import { DirectoryListing, DirectoryTile } from "../components/Directory/Grid";
 import { NetworkListingsMap } from "../lib/listings";
 import Status from "./Status";
@@ -17,7 +21,7 @@ import { useBootstrapListings } from "./listings";
 const EMPTY_SNIPPET = new ListingSnippet();
 
 /** The watch page's path to a media listing's player. */
-export const playerPath = (networkKey: Uint8Array, media: Listing.Media): string =>
+export const playerPath = (networkKey: Uint8Array, media: Listing_Media): string =>
   `/${Base64.fromUint8Array(networkKey, true)}?${qs.stringify({
     mimeType: media.mimeType,
     swarmUri: media.swarmUri,
@@ -28,7 +32,7 @@ export const mediaTiles = (networkListings: NetworkListingsMap): DirectoryListin
   const tiles: DirectoryListing[] = [];
   for (const { network, listings } of networkListings.values()) {
     for (const l of listings.values()) {
-      if (l.listing?.content?.case !== Listing.ContentCase.MEDIA) continue;
+      if (l.listing?.content?.case !== Listing_ContentCase.MEDIA) continue;
       tiles.push({
         id: l.id,
         listing: l.listing,
@@ -63,7 +67,7 @@ const Tiles: React.FC = () => {
             key={`${tile.network.id}:${tile.id}`}
             {...tile}
             onOpen={() =>
-              tile.listing.content.case === Listing.ContentCase.MEDIA &&
+              tile.listing.content.case === Listing_ContentCase.MEDIA &&
               navigate(playerPath(tile.network.key, tile.listing.content.media))
             }
           />

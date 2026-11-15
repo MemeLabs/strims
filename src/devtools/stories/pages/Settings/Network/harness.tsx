@@ -18,7 +18,7 @@ import React, {
 } from "react";
 import { Route } from "react-router";
 
-import { Image, ImageType } from "../../../../../apis/strims/type/image";
+import { Image, ImageType } from "../../../../../apis/strims/type/image.pb";
 import Toast from "../../../../../components/Notification/Toast";
 import BootstrapRoutes from "../../../../../pages/Settings/Bootstrap";
 import SettingsLayout from "../../../../../pages/Settings/Layout";

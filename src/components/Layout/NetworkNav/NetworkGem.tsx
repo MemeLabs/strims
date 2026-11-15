@@ -4,8 +4,8 @@
 import clsx from "clsx";
 import React from "react";
 
-import { Network } from "../../../apis/strims/network/v1/network";
-import { Image } from "../../../apis/strims/type/image";
+import { Network } from "../../../apis/strims/network/v1/network.pb";
+import { Image } from "../../../apis/strims/type/image.pb";
 import { useImage } from "../../../hooks/useImage";
 import { certificateRoot } from "../../../lib/certificate";
 import Badge from "../../Badge";

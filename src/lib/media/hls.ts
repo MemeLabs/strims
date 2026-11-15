@@ -1,7 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { HLSEgressClient } from "../../apis/strims/video/v1/hls_egress_rpc";
+import type { HLSEgressClient } from "../../apis/strims/video/v1/hls_egress_rpc.pb";
 
 /**
  * Milliseconds between the opens that keep an HLS stream from going idle

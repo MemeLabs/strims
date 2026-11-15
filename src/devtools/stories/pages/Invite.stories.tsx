@@ -4,9 +4,9 @@
 import React from "react";
 import { Route } from "react-router";
 
-import { GetInvitationResponse } from "../../../apis/strims/network/v1/invite/invite";
-import { UnimplementedInviteLinkService } from "../../../apis/strims/network/v1/invite/invite_rpc";
-import { Network } from "../../../apis/strims/network/v1/network";
+import { GetInvitationResponse } from "../../../apis/strims/network/v1/invite/invite.pb";
+import { UnimplementedInviteLinkService } from "../../../apis/strims/network/v1/invite/invite_rpc.pb";
+import { Network } from "../../../apis/strims/network/v1/network.pb";
 import Invite from "../../../pages/Invite";
 import NetworkService from "../../mocks/network/service";
 import { MockApi, MockServices, Story, StoryRouter, fixtures } from "../../storybook";

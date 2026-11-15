@@ -3,13 +3,13 @@
 
 import { isEqual } from "lodash";
 
-import { ErrorCode } from "../apis/strims/network/v1/errors/errors";
+import { ErrorCode } from "../apis/strims/network/v1/errors/errors.pb";
 import {
   ICreateNetworkFromInvitationRequest,
   IListNetworksRequest,
   ListNetworksResponse,
   Network,
-} from "../apis/strims/network/v1/network";
+} from "../apis/strims/network/v1/network.pb";
 import { certificateChain } from "../lib/certificate";
 import { networkKey } from "../lib/network";
 

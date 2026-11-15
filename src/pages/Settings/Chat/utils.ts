@@ -3,7 +3,12 @@
 
 import { Base64 } from "js-base64";
 
-import { EmoteFileType, EmoteScale, IEmote, IEmoteEffect } from "../../../apis/strims/chat/v1/chat";
+import {
+  EmoteFileType,
+  EmoteScale,
+  IEmote,
+  IEmoteEffect,
+} from "../../../apis/strims/chat/v1/chat.pb";
 import { fromStyleSheetFormValue } from "../../../components/Settings/ChatStyleSheet";
 import { ChatEmoteFormData } from "./ChatEmoteForm";
 

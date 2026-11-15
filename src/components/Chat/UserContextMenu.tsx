@@ -10,7 +10,7 @@ import { FiX } from "react-icons/fi";
 import { HiOutlineUser } from "react-icons/hi";
 
 import monkey from "../../../assets/directory/monkey.png";
-import { Message } from "../../apis/strims/chat/v1/chat";
+import { Message_DirectoryRef } from "../../apis/strims/chat/v1/chat.pb";
 import { useChat, useRoom } from "../../contexts/Chat";
 import { useCall, useClient } from "../../contexts/FrontendApi";
 import { useErrorToast } from "../../contexts/Notification";
@@ -25,7 +25,7 @@ import SnippetImage from "../Directory/SnippetImage";
 interface UserContextMenuItemsProps {
   nick: string;
   peerKey: Uint8Array;
-  viewedListing: Message.DirectoryRef;
+  viewedListing: Message_DirectoryRef;
   onClose: () => void;
 }
 
@@ -87,7 +87,7 @@ const UserContextMenuItems: React.FC<UserContextMenuItemsProps> = ({
 };
 
 interface ListingMenuItemProps {
-  viewedListing: Message.DirectoryRef;
+  viewedListing: Message_DirectoryRef;
   onClick: () => void;
 }
 
@@ -199,7 +199,7 @@ const TagMenuItem: React.FC<TagMenuItemProps> = ({ nick, peerKey, onClick }) => 
 interface UseUserContextMenuOptions {
   nick: string;
   peerKey: Uint8Array;
-  viewedListing: Message.DirectoryRef;
+  viewedListing: Message_DirectoryRef;
 }
 
 export const useUserContextMenu = ({ nick, peerKey, viewedListing }: UseUserContextMenuOptions) => {

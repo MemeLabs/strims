@@ -6,7 +6,10 @@ import "./UserPresenceIndicator.scss";
 import clsx from "clsx";
 import React from "react";
 
-import { Message, UIConfig } from "../../apis/strims/chat/v1/chat";
+import {
+  Message_DirectoryRef,
+  UIConfig_UserPresenceIndicator,
+} from "../../apis/strims/chat/v1/chat.pb";
 import { getDirectoryRefColor } from "../../lib/chat";
 import { createListingRng } from "../../lib/directory";
 
@@ -14,8 +17,8 @@ const imageClassName = (style: string) =>
   clsx("chat__viewer_state_indicator", `chat__viewer_state_indicator--${style}`);
 
 export interface UserPresenceIndicatorProps {
-  style: UIConfig.UserPresenceIndicator;
-  directoryRef: Message.DirectoryRef;
+  style: UIConfig_UserPresenceIndicator;
+  directoryRef: Message_DirectoryRef;
 }
 
 export const UserPresenceIndicator: React.FC<UserPresenceIndicatorProps> = ({
@@ -23,19 +26,19 @@ export const UserPresenceIndicator: React.FC<UserPresenceIndicatorProps> = ({
   directoryRef,
 }) => {
   switch (style) {
-    case UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DISABLED:
+    case UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_DISABLED:
       return null;
-    case UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR:
+    case UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR:
       return <BarImage directoryRef={directoryRef} />;
-    case UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DOT:
+    case UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_DOT:
       return <DotImage directoryRef={directoryRef} />;
-    case UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_ARRAY:
+    case UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_ARRAY:
       return <ArrayImage directoryRef={directoryRef} />;
   }
 };
 
 interface ImageProps {
-  directoryRef: Message.DirectoryRef;
+  directoryRef: Message_DirectoryRef;
 }
 
 const BarImage: React.FC<ImageProps> = ({ directoryRef }) => (

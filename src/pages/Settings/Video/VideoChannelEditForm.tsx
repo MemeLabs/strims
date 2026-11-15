@@ -7,8 +7,8 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
-import { ListingSnippetImage } from "../../../apis/strims/network/v1/directory/directory";
-import { VideoChannel } from "../../../apis/strims/video/v1/channel";
+import { ListingSnippetImage_SourceOneofCase } from "../../../apis/strims/network/v1/directory/directory.pb";
+import { VideoChannel_OwnerCase } from "../../../apis/strims/video/v1/channel.pb";
 import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
@@ -75,7 +75,7 @@ const VideoChannelEditForm: React.FC = () => {
   const { channel } = value;
   const snippet = channel.directoryListingSnippet;
   const logo =
-    snippet.channelLogo?.sourceOneof?.case === ListingSnippetImage.SourceOneofCase.IMAGE
+    snippet.channelLogo?.sourceOneof?.case === ListingSnippetImage_SourceOneofCase.IMAGE
       ? snippet.channelLogo.sourceOneof.image
       : null;
   const data: VideoChannelFormData = {
@@ -96,12 +96,12 @@ const VideoChannelEditForm: React.FC = () => {
   };
 
   switch (channel.owner.case) {
-    case VideoChannel.OwnerCase.LOCAL:
+    case VideoChannel_OwnerCase.LOCAL:
       data.networkKey = Base64.fromUint8Array(channel.owner.local.networkKey);
       break;
-    case VideoChannel.OwnerCase.LOCAL_SHARE:
+    case VideoChannel_OwnerCase.LOCAL_SHARE:
       break;
-    case VideoChannel.OwnerCase.REMOTE_SHARE:
+    case VideoChannel_OwnerCase.REMOTE_SHARE:
       break;
   }
 

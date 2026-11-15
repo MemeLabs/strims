@@ -12,8 +12,8 @@ import { isEqual } from "lodash";
 import React, { ReactNode, useEffect, useRef } from "react";
 import { Route } from "react-router";
 
-import { Message, MessageState } from "../../apis/strims/chat/v1/chat";
-import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
+import { Message, MessageState } from "../../apis/strims/chat/v1/chat.pb";
+import * as directoryv1 from "../../apis/strims/network/v1/directory/directory.pb";
 import ChatMessage from "../../components/Chat/Message";
 import StyleSheet from "../../components/Chat/StyleSheet";
 import {
@@ -63,7 +63,7 @@ export class ChatDirectoryService extends DirectoryService {
     const ch = new PassThrough({ objectMode: true });
     ch.push(
       new directoryv1.FrontendWatchListingUsersResponse({
-        type: directoryv1.FrontendWatchListingUsersResponse.UserEventType.USER_EVENT_TYPE_JOIN,
+        type: directoryv1.FrontendWatchListingUsersResponse_UserEventType.USER_EVENT_TYPE_JOIN,
         users: this.users.map((alias, i) => ({
           id: BigInt(i + 1),
           alias,

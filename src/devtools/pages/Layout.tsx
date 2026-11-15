@@ -7,10 +7,10 @@ import React from "react";
 import { Route, Routes } from "react-router";
 
 import { FrontendClient } from "../../apis/client";
-import { registerChatFrontendService } from "../../apis/strims/chat/v1/chat_rpc";
-import { registerDirectoryFrontendService } from "../../apis/strims/network/v1/directory/directory_rpc";
-import { registerNetworkFrontendService } from "../../apis/strims/network/v1/network_rpc";
-import { registerNotificationFrontendService } from "../../apis/strims/notification/v1/notification_rpc";
+import { registerChatFrontendService } from "../../apis/strims/chat/v1/chat_rpc.pb";
+import { registerDirectoryFrontendService } from "../../apis/strims/network/v1/directory/directory_rpc.pb";
+import { registerNetworkFrontendService } from "../../apis/strims/network/v1/network_rpc.pb";
+import { registerNotificationFrontendService } from "../../apis/strims/notification/v1/notification_rpc.pb";
 import LayoutPage from "../../components/Layout";
 import LayoutBody from "../../components/Layout/Body";
 import { Provider as ChatProvider } from "../../contexts/Chat";

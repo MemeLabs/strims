@@ -5,7 +5,7 @@ import "./chat.stories.scss";
 
 import React, { useEffect, useRef, useState } from "react";
 
-import { IUIConfig } from "../../../../apis/strims/chat/v1/chat";
+import { IUIConfig } from "../../../../apis/strims/chat/v1/chat.pb";
 import EmoteMenu from "../../../../components/Chat/EmoteMenu";
 import { useChat } from "../../../../contexts/Chat";
 import { MockChat, RoomProvider, RoomStyles, typeInto } from "../../../contexts/Chat";

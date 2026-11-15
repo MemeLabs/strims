@@ -3,7 +3,7 @@
 
 import React from "react";
 
-import { Peer } from "../../../../../apis/strims/network/v1/network";
+import { Peer } from "../../../../../apis/strims/network/v1/network.pb";
 import NetworkService from "../../../../mocks/network/service";
 import { Story, fixtures } from "../../../../storybook";
 import { SettingsStory, click, waitFor } from "./harness";

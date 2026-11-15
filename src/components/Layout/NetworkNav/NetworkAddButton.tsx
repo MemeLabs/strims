@@ -5,7 +5,7 @@ import { Base64 } from "js-base64";
 import React, { useCallback, useState } from "react";
 import { useNavigate } from "react-router";
 
-import { CreateServerResponse } from "../../../apis/strims/network/v1/network";
+import { CreateServerResponse } from "../../../apis/strims/network/v1/network.pb";
 import { useLayout } from "../../../contexts/Layout";
 import usePortal from "../../../hooks/usePortal";
 import { certificateRoot } from "../../../lib/certificate";

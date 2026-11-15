@@ -8,9 +8,9 @@ import { Route } from "react-router";
 
 import {
   IListingSnippet,
-  Listing,
   ListingSnippet,
-} from "../../../../apis/strims/network/v1/directory/directory";
+  Listing_ContentCase,
+} from "../../../../apis/strims/network/v1/directory/directory.pb";
 import DirectoryGrid, {
   DirectoryListing,
   DirectoryTile,
@@ -31,7 +31,7 @@ const Context: React.FC<{ children: ReactNode }> = ({ children }) => (
 const embedListings = (): DirectoryListing[] =>
   fixtures
     .directoryListings()
-    .filter(({ listing }) => listing.content.case !== Listing.ContentCase.CHAT);
+    .filter(({ listing }) => listing.content.case !== Listing_ContentCase.CHAT);
 
 const withSnippet = (
   listings: DirectoryListing[],

@@ -3,7 +3,7 @@
 
 import React from "react";
 
-import { Device } from "../../../../../apis/strims/profile/v1/profile";
+import { Device } from "../../../../../apis/strims/profile/v1/profile.pb";
 import ProfileService, { devices } from "../../../../mocks/profile/service";
 import ReplicationService from "../../../../mocks/replication/service";
 import { Story } from "../../../../storybook";

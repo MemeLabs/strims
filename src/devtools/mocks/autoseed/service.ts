@@ -1,11 +1,11 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import * as autoseedv1 from "../../../apis/strims/autoseed/v1/autoseed";
+import * as autoseedv1 from "../../../apis/strims/autoseed/v1/autoseed.pb";
 import {
   AutoseedFrontendService,
   UnimplementedAutoseedFrontendService,
-} from "../../../apis/strims/autoseed/v1/autoseed_rpc";
+} from "../../../apis/strims/autoseed/v1/autoseed_rpc.pb";
 import { bytes } from "../../storybook/fixtures/ids";
 import { networkKey } from "../../storybook/fixtures/networks";
 

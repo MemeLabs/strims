@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Link, Navigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
-import { Tag } from "../../../apis/strims/chat/v1/chat";
+import { Tag } from "../../../apis/strims/chat/v1/chat.pb";
 import { InputError } from "../../../components/Form";
 import {
   MenuCell,

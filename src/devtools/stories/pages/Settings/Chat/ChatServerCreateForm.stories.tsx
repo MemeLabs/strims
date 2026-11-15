@@ -3,7 +3,7 @@
 
 import React from "react";
 
-import * as chatv1 from "../../../../../apis/strims/chat/v1/chat";
+import * as chatv1 from "../../../../../apis/strims/chat/v1/chat.pb";
 import ChatServerService from "../../../../mocks/chatserver/service";
 import { Story } from "../../../../storybook";
 import { Act, ChatSettings, fill, select, submit } from "./harness";

@@ -4,14 +4,14 @@
 import {
   IListingSnippet,
   ListingSnippetImage,
-} from "../../../apis/strims/network/v1/directory/directory";
-import { ImageType } from "../../../apis/strims/type/image";
-import { Key, KeyType } from "../../../apis/strims/type/key";
-import * as channelv1 from "../../../apis/strims/video/v1/channel";
+} from "../../../apis/strims/network/v1/directory/directory.pb";
+import { ImageType } from "../../../apis/strims/type/image.pb";
+import { Key, KeyType } from "../../../apis/strims/type/key.pb";
+import * as channelv1 from "../../../apis/strims/video/v1/channel.pb";
 import {
   UnimplementedVideoChannelFrontendService,
   VideoChannelFrontendService,
-} from "../../../apis/strims/video/v1/channel_rpc";
+} from "../../../apis/strims/video/v1/channel_rpc.pb";
 import { bytes, key } from "../../storybook/fixtures/ids";
 import { iconUrls, imageData } from "../../storybook/fixtures/images";
 import { networkKey } from "../../storybook/fixtures/networks";
@@ -148,7 +148,7 @@ export default class VideoChannelService
   update(req: channelv1.VideoChannelUpdateRequest): channelv1.VideoChannelUpdateResponse {
     const prev = this.find(req.id);
     const authKey =
-      prev.owner.case === channelv1.VideoChannel.OwnerCase.LOCAL
+      prev.owner.case === channelv1.VideoChannel_OwnerCase.LOCAL
         ? prev.owner.local.authKey
         : bytes(`channel:${req.id}:auth`, 32);
     const channel = new channelv1.VideoChannel({

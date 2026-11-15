@@ -3,7 +3,7 @@
 
 import { Base64 } from "js-base64";
 
-import { LinkedProfile } from "../apis/strims/auth/v1/auth";
+import { LinkedProfile, LinkedProfile_CredentialsCase } from "../apis/strims/auth/v1/auth.pb";
 import type { Ops } from "../contexts/Session";
 
 /** The local storage key of the linked profile the watch page signs in with. */
@@ -66,7 +66,7 @@ export const signInCandidates = (
   rememberedId: string | null
 ): LinkedProfile[] =>
   profiles
-    .filter((p) => !p.serverAddress && p.credentials.case === LinkedProfile.CredentialsCase.KEY)
+    .filter((p) => !p.serverAddress && p.credentials.case === LinkedProfile_CredentialsCase.KEY)
     .sort((a, b) => {
       const ra = a.id.toString() === rememberedId;
       const rb = b.id.toString() === rememberedId;
@@ -97,7 +97,7 @@ export const startAnonymousSession = (
   lock(async () => {
     const stored = await loadLinkedProfiles();
     for (const p of signInCandidates(stored, rememberedProfileId())) {
-      if (p.credentials.case !== LinkedProfile.CredentialsCase.KEY) continue;
+      if (p.credentials.case !== LinkedProfile_CredentialsCase.KEY) continue;
       if (await signIn("", { credentials: { key: p.credentials.key } })) {
         rememberProfileId(p.id);
         return;

@@ -7,7 +7,7 @@ import React from "react";
 import { useForm } from "react-hook-form";
 import { MdClose } from "react-icons/md";
 
-import { CreateServerResponse } from "../apis/strims/network/v1/network";
+import { CreateServerResponse } from "../apis/strims/network/v1/network.pb";
 import { Button, ImageInput, ImageValue, InputError, TextInput } from "../components/Form";
 import { useLazyCall } from "../contexts/FrontendApi";
 import { useSession } from "../contexts/Session";

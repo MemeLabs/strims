@@ -3,8 +3,11 @@
 
 import React, { useEffect, useRef, useState } from "react";
 
-import { CreateServerRequest, CreateServerResponse } from "../../../apis/strims/network/v1/network";
-import { UnimplementedNetworkFrontendService } from "../../../apis/strims/network/v1/network_rpc";
+import {
+  CreateServerRequest,
+  CreateServerResponse,
+} from "../../../apis/strims/network/v1/network.pb";
+import { UnimplementedNetworkFrontendService } from "../../../apis/strims/network/v1/network_rpc.pb";
 import AddNetworkModal from "../../../components/AddNetworkModal";
 import NetworkService from "../../mocks/network/service";
 import { MockApi, Story } from "../../storybook";

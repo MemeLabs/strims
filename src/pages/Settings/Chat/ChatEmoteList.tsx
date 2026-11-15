@@ -17,7 +17,7 @@ import { BsDot, BsThreeDots } from "react-icons/bs";
 import { Link, Navigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
-import { Emote, ListEmotesRequest } from "../../../apis/strims/chat/v1/chat";
+import { Emote, ListEmotesRequest_Part } from "../../../apis/strims/chat/v1/chat.pb";
 import { InputError } from "../../../components/Form";
 import Label from "../../../components/Settings/Label";
 import Search from "../../../components/Settings/Search";
@@ -128,7 +128,7 @@ const ChatEmoteList: React.FC = () => {
     args: [
       {
         serverId: BigInt(serverId),
-        parts: [ListEmotesRequest.Part.PART_META],
+        parts: [ListEmotesRequest_Part.PART_META],
       },
     ],
   });

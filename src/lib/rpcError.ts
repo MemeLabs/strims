@@ -1,19 +1,19 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { Error as RPCError } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
+import { Error as RPCError } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc.pb";
 
-import { ErrorCode as AuthErrorCode } from "../apis/strims/auth/v1/errors/errors";
-import { ErrorCode as ChatErrorCode } from "../apis/strims/chat/v1/errors/errors";
-import { ErrorCode as DaoErrorCode } from "../apis/strims/dao/v1/errors/errors";
-import { ErrorCode as DebugErrorCode } from "../apis/strims/debug/v1/errors/errors";
-import { ErrorCode as DirectoryErrorCode } from "../apis/strims/network/v1/directory/errors/errors";
-import { ErrorCode as NetworkErrorCode } from "../apis/strims/network/v1/errors/errors";
-import { ErrorCode as NodeErrorCode } from "../apis/strims/node/errors/errors";
-import { ErrorCode as ReplicationErrorCode } from "../apis/strims/replication/v1/errors/errors";
-import { ErrorCode as RpcErrorCode } from "../apis/strims/rpc/errors/errors";
-import { ErrorCode as TransferErrorCode } from "../apis/strims/transfer/v1/errors/errors";
-import { ErrorCode as VideoErrorCode } from "../apis/strims/video/v1/errors/errors";
+import { ErrorCode as AuthErrorCode } from "../apis/strims/auth/v1/errors/errors.pb";
+import { ErrorCode as ChatErrorCode } from "../apis/strims/chat/v1/errors/errors.pb";
+import { ErrorCode as DaoErrorCode } from "../apis/strims/dao/v1/errors/errors.pb";
+import { ErrorCode as DebugErrorCode } from "../apis/strims/debug/v1/errors/errors.pb";
+import { ErrorCode as DirectoryErrorCode } from "../apis/strims/network/v1/directory/errors/errors.pb";
+import { ErrorCode as NetworkErrorCode } from "../apis/strims/network/v1/errors/errors.pb";
+import { ErrorCode as NodeErrorCode } from "../apis/strims/node/errors/errors.pb";
+import { ErrorCode as ReplicationErrorCode } from "../apis/strims/replication/v1/errors/errors.pb";
+import { ErrorCode as RpcErrorCode } from "../apis/strims/rpc/errors/errors.pb";
+import { ErrorCode as TransferErrorCode } from "../apis/strims/transfer/v1/errors/errors.pb";
+import { ErrorCode as VideoErrorCode } from "../apis/strims/video/v1/errors/errors.pb";
 
 // Every API's error-code enum. Each codes its errors in a range of its own
 // (strims-proto's build/errors.rs), so a code is in at most one of them.

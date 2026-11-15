@@ -6,7 +6,7 @@ import "./Layout/Layout.stories.scss";
 
 import React from "react";
 
-import { IListingSnippet } from "../../../apis/strims/network/v1/directory/directory";
+import { IListingSnippet } from "../../../apis/strims/network/v1/directory/directory.pb";
 import VideoMeta from "../../../components/VideoMeta";
 import { PlayerMode } from "../../../contexts/Player";
 import { Catalog, MockApi, StaticPlayer, Story, fixtures } from "../../storybook";

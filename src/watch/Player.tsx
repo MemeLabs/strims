@@ -7,7 +7,10 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { useTitle } from "react-use";
 
-import { Listing, ListingContentType } from "../apis/strims/network/v1/directory/directory";
+import {
+  ListingContentType,
+  Listing_ContentCase,
+} from "../apis/strims/network/v1/directory/directory.pb";
 import VideoPlayer from "../components/VideoPlayer";
 import { useClient } from "../contexts/FrontendApi";
 import { PlayerContext, Provider as PlayerProvider } from "../contexts/Player";
@@ -129,7 +132,7 @@ const StreamPlayer: React.FC<Stream & { onClose: () => void }> = ({
     for (const { listings } of networkListings.values()) {
       for (const l of listings.values()) {
         const { content } = l.listing ?? {};
-        if (content?.case === Listing.ContentCase.MEDIA && swarmId(content.media.swarmUri) === id) {
+        if (content?.case === Listing_ContentCase.MEDIA && swarmId(content.media.swarmUri) === id) {
           return l;
         }
       }
@@ -149,7 +152,7 @@ const StreamPlayer: React.FC<Stream & { onClose: () => void }> = ({
     for (const { listings } of bootstrap.networkListings.values()) {
       for (const l of listings.values()) {
         const { content } = l.listing ?? {};
-        if (content?.case === Listing.ContentCase.MEDIA && swarmId(content.media.swarmUri) === id) {
+        if (content?.case === Listing_ContentCase.MEDIA && swarmId(content.media.swarmUri) === id) {
           return l.snippet?.title ?? "";
         }
       }

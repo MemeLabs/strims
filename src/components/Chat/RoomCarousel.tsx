@@ -12,7 +12,7 @@ import React, { MouseEventHandler, ReactNode, useCallback, useRef } from "react"
 import { FreeMode, Mousewheel } from "swiper/modules";
 import { Swiper, SwiperSlide } from "swiper/react";
 
-import { Image } from "../../apis/strims/type/image";
+import { Image } from "../../apis/strims/type/image.pb";
 import { ThreadProviderProps, ThreadState, Topic, useChat } from "../../contexts/Chat";
 import { useImage } from "../../hooks/useImage";
 import useSize from "../../hooks/useSize";

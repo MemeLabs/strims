@@ -1,7 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import * as directoryv1 from "../apis/strims/network/v1/directory/directory";
+import * as directoryv1 from "../apis/strims/network/v1/directory/directory.pb";
 
 /** A directory watch's listings by network id, then listing id. */
 export type NetworkListingsMap = Map<
@@ -12,7 +12,7 @@ export type NetworkListingsMap = Map<
   }
 >;
 
-const { EventCase } = directoryv1.FrontendWatchListingsResponse.Event;
+const EventCase = directoryv1.FrontendWatchListingsResponse_Event_EventCase;
 
 /**
  * The listings after a watch's `events`, in order: a change adds or
@@ -21,7 +21,7 @@ const { EventCase } = directoryv1.FrontendWatchListingsResponse.Event;
  */
 export const foldListingEvents = (
   prev: NetworkListingsMap,
-  events: directoryv1.FrontendWatchListingsResponse.Event[]
+  events: directoryv1.FrontendWatchListingsResponse_Event[]
 ): NetworkListingsMap => {
   const networkListings = new Map(prev);
   for (const { event } of events) {

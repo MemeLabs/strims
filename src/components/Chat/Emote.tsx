@@ -6,7 +6,7 @@ import "./Emote.scss";
 import clsx from "clsx";
 import React, { ComponentProps } from "react";
 
-import { Modifier } from "../../apis/strims/chat/v1/chat";
+import { Modifier } from "../../apis/strims/chat/v1/chat.pb";
 import { useRoom } from "../../contexts/Chat";
 
 export interface EmoteProps extends ComponentProps<"span"> {

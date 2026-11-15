@@ -105,7 +105,8 @@ impl Config {
     }
 
     /// The defaults for the UI's connection to its node, which carries
-    /// larger messages (up to 10 MiB).
+    /// larger messages (up to 10 MiB). The UI's Hosts take the same limit
+    /// (src/apis/client.ts).
     pub fn frontend() -> Config {
         Config {
             max_message_bytes: 10 * 1024 * 1024,

@@ -3,7 +3,10 @@
 
 import { MutableRefObject, useContext, useEffect, useMemo, useState } from "react";
 
-import { Listing, ListingSnippet } from "../../apis/strims/network/v1/directory/directory";
+import {
+  ListingSnippet,
+  Listing_ContentCase,
+} from "../../apis/strims/network/v1/directory/directory.pb";
 import { PlayerContext } from "../../contexts/Player";
 import { useListing } from "../../hooks/directory";
 import { PlayerKind } from "../../lib/media/players";
@@ -146,7 +149,7 @@ export const useRendition = ({
   const { networkKey: listingNetwork, listingId } = useContext(PlayerContext);
   const { listing } = useListing(listingNetwork, listingId);
   const media =
-    listing?.listing?.content?.case === Listing.ContentCase.MEDIA
+    listing?.listing?.content?.case === Listing_ContentCase.MEDIA
       ? listing.listing.content.media
       : null;
   const listed =

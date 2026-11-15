@@ -3,10 +3,10 @@
 
 import assert from "assert";
 
-import { Error as RPCError } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
+import { Error as RPCError } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc.pb";
 
-import { ErrorCode } from "../apis/strims/network/v1/directory/errors/errors";
-import { ErrorCode as RpcErrorCode } from "../apis/strims/rpc/errors/errors";
+import { ErrorCode } from "../apis/strims/network/v1/directory/errors/errors.pb";
+import { ErrorCode as RpcErrorCode } from "../apis/strims/rpc/errors/errors.pb";
 import { isAlreadyLeft } from "./directory";
 
 const refusal = (code: number, message: string) => new RPCError({ code, message });

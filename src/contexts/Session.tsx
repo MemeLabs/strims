@@ -7,8 +7,13 @@ import { DBSchema, IDBPDatabase, openDB } from "idb";
 import React, { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { FrontendClient } from "../apis/client";
-import { ISignInRequest, ISignUpRequest, LinkedProfile } from "../apis/strims/auth/v1/auth";
-import { Profile } from "../apis/strims/profile/v1/profile";
+import {
+  ISignInRequest,
+  ISignUpRequest,
+  LinkedProfile,
+  LinkedProfile_CredentialsCase,
+} from "../apis/strims/auth/v1/auth.pb";
+import { Profile } from "../apis/strims/profile/v1/profile.pb";
 import { Provider as ApiProvider } from "../contexts/FrontendApi";
 import { useStableCallbacks } from "../hooks/useStableCallback";
 import type { FeedOpener } from "../lib/media/feed";
@@ -206,7 +211,7 @@ export const Provider: React.FC<ProviderProps> = ({ apiDialer, children }) => {
       (p) => p.name === res.linkedProfile.name && p.serverAddress === serverAddress
     );
 
-    if (!prev || res.linkedProfile.credentials.case !== LinkedProfile.CredentialsCase.NOT_SET) {
+    if (!prev || res.linkedProfile.credentials.case !== LinkedProfile_CredentialsCase.NOT_SET) {
       const profile = new LinkedProfile({
         ...res.linkedProfile,
         id: prev ? prev.id : await db.nextId(),

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { useTitle } from "react-use";
 
-import { Peer } from "../../../apis/strims/network/v1/network";
+import { Peer } from "../../../apis/strims/network/v1/network.pb";
 import { InputError } from "../../../components/Form";
 import {
   MenuCell,

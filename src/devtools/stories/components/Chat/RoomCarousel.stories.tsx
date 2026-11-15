@@ -6,8 +6,8 @@ import "./chat.stories.scss";
 import { Base64 } from "js-base64";
 import React, { useEffect, useRef } from "react";
 
-import { IAssetBundle } from "../../../../apis/strims/chat/v1/chat";
-import { ImageType } from "../../../../apis/strims/type/image";
+import { IAssetBundle } from "../../../../apis/strims/chat/v1/chat.pb";
+import { ImageType } from "../../../../apis/strims/type/image.pb";
 import RoomCarousel from "../../../../components/Chat/RoomCarousel";
 import { useChat } from "../../../../contexts/Chat";
 import {

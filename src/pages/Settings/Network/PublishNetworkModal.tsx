@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useTitle } from "react-use";
 
-import { Network } from "../../../apis/strims/network/v1/network";
+import { Network } from "../../../apis/strims/network/v1/network.pb";
 import { InputError, SelectInput } from "../../../components/Form";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import { useLayout } from "../../../contexts/Layout";

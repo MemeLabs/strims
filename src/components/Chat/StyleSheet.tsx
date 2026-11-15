@@ -6,7 +6,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
   Emote,
-  EmoteEffect,
+  EmoteEffect_EffectCase,
   EmoteFileType,
   EmoteScale,
   Modifier,
@@ -14,7 +14,7 @@ import {
   UIConfigHighlight,
   UIConfigIgnore,
   UIConfigTag,
-} from "../../apis/strims/chat/v1/chat";
+} from "../../apis/strims/chat/v1/chat.pb";
 import { ChatStyles } from "../../contexts/Chat";
 import { createImageObjectURL } from "../../lib/image";
 
@@ -45,7 +45,7 @@ export const computeEmoteWidth = (e: Emote) => {
 
   for (const { effect } of e.effects) {
     switch (effect.case) {
-      case EmoteEffect.EffectCase.SPRITE_ANIMATION:
+      case EmoteEffect_EffectCase.SPRITE_ANIMATION:
         width = width / effect.spriteAnimation.frameCount;
     }
   }
@@ -161,9 +161,9 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
 
         for (const { effect } of e.effects) {
           switch (effect.case) {
-            case EmoteEffect.EffectCase.CUSTOM_CSS:
+            case EmoteEffect_EffectCase.CUSTOM_CSS:
               break;
-            case EmoteEffect.EffectCase.SPRITE_ANIMATION:
+            case EmoteEffect_EffectCase.SPRITE_ANIMATION:
               {
                 const {
                   frameCount,

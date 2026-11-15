@@ -1,7 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { CaptureConfig, ICaptureAppendRequest } from "../../apis/strims/video/v1/capture";
+import { CaptureConfig_Codec, ICaptureAppendRequest } from "../../apis/strims/video/v1/capture.pb";
 import { CaptureItem, CaptureSink, ConfigItem, UnitItem, VIDEO_TRACK } from "./sink";
 
 /** Units one append carries, below the node's bound of 512. */
@@ -13,8 +13,8 @@ const MAX_QUEUED_BYTES = 8 * 1024 * 1024;
 const MAX_QUEUED_US = 3_000_000;
 
 const CODECS = {
-  h264: CaptureConfig.Codec.CODEC_H264,
-  opus: CaptureConfig.Codec.CODEC_OPUS,
+  h264: CaptureConfig_Codec.CODEC_H264,
+  opus: CaptureConfig_Codec.CODEC_OPUS,
 };
 
 /**

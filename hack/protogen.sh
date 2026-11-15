@@ -34,6 +34,11 @@ PATH="${pwd}:$PATH" require protoc "$PROTOC_VERSION" \
 PATH="${pwd}:$PATH" require protoc-gen-go "$PROTOC_GEN_GO_VERSION" \
   "PROTOC_GEN_GO_VERSION, go.mod's google.golang.org/protobuf"
 
+# Every generated file ends .pb.ts or .pb.go and no hand-written one does
+# (src/apis/client.ts, pkg/apis/client.go), so clearing them first leaves no
+# bindings behind for a removed or renamed proto.
+find ../src/apis ../pkg/apis \( -name '*.pb.ts' -o -name '*.pb.go' \) -delete
+
 SOURCES="$(find ../schema -iname *.proto)"
 PATH="${pwd}:$PATH" protoc \
   --proto_path=../schema \

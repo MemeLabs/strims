@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
-import { EmoteScale } from "../../../apis/strims/chat/v1/chat";
+import { EmoteScale } from "../../../apis/strims/chat/v1/chat.pb";
 import {
   Button,
   ButtonSet,

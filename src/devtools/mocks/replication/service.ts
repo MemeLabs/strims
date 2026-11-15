@@ -1,17 +1,17 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { PairingToken } from "../../../apis/strims/auth/v1/auth";
-import { VersionVector } from "../../../apis/strims/dao/v1/dao";
-import { BootstrapClient } from "../../../apis/strims/network/v1/bootstrap/bootstrap";
-import { Network } from "../../../apis/strims/network/v1/network";
-import { Device, Profile } from "../../../apis/strims/profile/v1/profile";
-import * as replicationv1 from "../../../apis/strims/replication/v1/replication";
-import { Checkpoint } from "../../../apis/strims/replication/v1/replication";
+import { PairingToken } from "../../../apis/strims/auth/v1/auth.pb";
+import { VersionVector } from "../../../apis/strims/dao/v1/dao.pb";
+import { BootstrapClient } from "../../../apis/strims/network/v1/bootstrap/bootstrap.pb";
+import { Network } from "../../../apis/strims/network/v1/network.pb";
+import { Device, Profile } from "../../../apis/strims/profile/v1/profile.pb";
+import * as replicationv1 from "../../../apis/strims/replication/v1/replication.pb";
+import { Checkpoint } from "../../../apis/strims/replication/v1/replication.pb";
 import {
   ReplicationFrontendService,
   UnimplementedReplicationFrontendService,
-} from "../../../apis/strims/replication/v1/replication_rpc";
+} from "../../../apis/strims/replication/v1/replication_rpc.pb";
 import { fixtureTime } from "../../storybook/fixtures/ids";
 import { network } from "../../storybook/fixtures/networks";
 import { profile as fixtureProfile } from "../../storybook/fixtures/profile";

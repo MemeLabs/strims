@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
 import { useTitle } from "react-use";
 
-import { ListingContentType } from "../apis/strims/network/v1/directory/directory";
+import { ListingContentType } from "../apis/strims/network/v1/directory/directory.pb";
 import DirectoryGrid, { DirectoryListing } from "../components/Directory/Grid";
 import { useClient } from "../contexts/FrontendApi";
 import { useListings } from "../hooks/directory";

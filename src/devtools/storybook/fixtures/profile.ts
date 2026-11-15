@@ -3,8 +3,8 @@
 
 import { Base64 } from "js-base64";
 
-import { Profile } from "../../../apis/strims/profile/v1/profile";
-import { Key, KeyType } from "../../../apis/strims/type/key";
+import { Profile } from "../../../apis/strims/profile/v1/profile.pb";
+import { Key, KeyType } from "../../../apis/strims/type/key.pb";
 import { bytes } from "./ids";
 
 /** The profile's public key: the key its network certificates carry. */

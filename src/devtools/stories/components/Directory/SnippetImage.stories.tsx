@@ -5,8 +5,8 @@ import "./Directory.stories.scss";
 
 import React, { useEffect, useState } from "react";
 
-import { ListingSnippetImage } from "../../../../apis/strims/network/v1/directory/directory";
-import { ImageType } from "../../../../apis/strims/type/image";
+import { ListingSnippetImage } from "../../../../apis/strims/network/v1/directory/directory.pb";
+import { ImageType } from "../../../../apis/strims/type/image.pb";
 import SnippetImage from "../../../../components/Directory/SnippetImage";
 import { Story, fixtures } from "../../../storybook";
 

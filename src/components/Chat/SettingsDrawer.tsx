@@ -9,7 +9,11 @@ import React, { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { Trans, useTranslation } from "react-i18next";
 
-import { UIConfig } from "../../apis/strims/chat/v1/chat";
+import {
+  UIConfig_ShowRemoved,
+  UIConfig_SoundFile,
+  UIConfig_UserPresenceIndicator,
+} from "../../apis/strims/chat/v1/chat.pb";
 import { SelectInput, TextAreaInput, TextInput, ToggleInput } from "../../components/Form";
 import { useChat } from "../../contexts/Chat";
 import Scrollbars from "../Scrollbars";
@@ -29,7 +33,7 @@ interface SettingsFormData {
   highlight: boolean;
   customHighlight: string;
   showRemoved: {
-    value: UIConfig.ShowRemoved;
+    value: UIConfig_ShowRemoved;
     label: string;
   };
   showWhispersInChat: boolean;
@@ -50,7 +54,7 @@ interface SettingsFormData {
   compactEmoteSpacing: boolean;
   normalizeAliasCase: boolean;
   userPresenceIndicator: {
-    value: UIConfig.UserPresenceIndicator;
+    value: UIConfig_UserPresenceIndicator;
     label: string;
   };
   replicate: boolean;
@@ -90,34 +94,34 @@ const SettingsDrawer: React.FC = () => {
 
   const userPresenceIndicatorOptions = [
     {
-      value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DISABLED,
+      value: UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_DISABLED,
       label: t("chat.settings.indicatorDisabled"),
     },
     {
-      value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
+      value: UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
       label: t("chat.settings.indicatorBar"),
     },
     {
-      value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DOT,
+      value: UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_DOT,
       label: t("chat.settings.indicatorDot"),
     },
     {
-      value: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_ARRAY,
+      value: UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_ARRAY,
       label: t("chat.settings.indicatorArray"),
     },
   ];
 
   const showRemovedOptions = [
     {
-      value: UIConfig.ShowRemoved.SHOW_REMOVED_REMOVE,
+      value: UIConfig_ShowRemoved.SHOW_REMOVED_REMOVE,
       label: t("chat.settings.bannedRemove"),
     },
     {
-      value: UIConfig.ShowRemoved.SHOW_REMOVED_CENSOR,
+      value: UIConfig_ShowRemoved.SHOW_REMOVED_CENSOR,
       label: t("chat.settings.bannedCensor"),
     },
     {
-      value: UIConfig.ShowRemoved.SHOW_REMOVED_DO_NOTHING,
+      value: UIConfig_ShowRemoved.SHOW_REMOVED_DO_NOTHING,
       label: t("chat.settings.bannedDoNothing"),
     },
   ];
@@ -164,7 +168,7 @@ const SettingsDrawer: React.FC = () => {
       showRemoved,
       userPresenceIndicator,
       notificationSoundFile: notificationSoundFile
-        ? new UIConfig.SoundFile({
+        ? new UIConfig_SoundFile({
             fileType: notificationSoundFile.fileType,
             data: Base64.toUint8Array(notificationSoundFile.data),
           })

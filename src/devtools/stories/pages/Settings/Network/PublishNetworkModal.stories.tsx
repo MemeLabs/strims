@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState } from "react";
 
-import { PublishNetworkToBootstrapPeerRequest } from "../../../../../apis/strims/network/v1/bootstrap/bootstrap";
+import { PublishNetworkToBootstrapPeerRequest } from "../../../../../apis/strims/network/v1/bootstrap/bootstrap.pb";
 import PublishNetworkModal from "../../../../../pages/Settings/Network/PublishNetworkModal";
 import BootstrapService, { bootstrapPeers } from "../../../../mocks/bootstrap/service";
 import { Story, fixtures } from "../../../../storybook";

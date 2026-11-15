@@ -3,9 +3,9 @@
 
 import { PassThrough } from "stream";
 
-import { WatchMetricsResponse } from "../../../../apis/strims/debug/v1/debug";
-import { UnimplementedDebugService } from "../../../../apis/strims/debug/v1/debug_rpc";
-import { LinkKind, Metrics } from "../../../../apis/strims/debug/v1/metrics";
+import { WatchMetricsResponse } from "../../../../apis/strims/debug/v1/debug.pb";
+import { UnimplementedDebugService } from "../../../../apis/strims/debug/v1/debug_rpc.pb";
+import { LinkKind, Metrics } from "../../../../apis/strims/debug/v1/metrics.pb";
 import { fixtures } from "../../../storybook";
 
 // The Debugger stories' metrics: a node's snapshots a second apart, every

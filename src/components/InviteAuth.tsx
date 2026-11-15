@@ -12,10 +12,13 @@ import { Navigate, useNavigate } from "react-router";
 import { useAsync } from "react-use";
 
 import { InviteClient } from "../apis/client";
-import { BootstrapClient } from "../apis/strims/network/v1/bootstrap/bootstrap";
-import { Invitation, InvitationV0 } from "../apis/strims/network/v1/network";
-import { Profile } from "../apis/strims/profile/v1/profile";
-import { CertificateBody } from "../apis/strims/type/certificate";
+import {
+  BootstrapClient,
+  BootstrapClient_ClientOptionsCase,
+} from "../apis/strims/network/v1/bootstrap/bootstrap.pb";
+import { Invitation, InvitationV0 } from "../apis/strims/network/v1/network.pb";
+import { Profile } from "../apis/strims/profile/v1/profile.pb";
+import { CertificateBody } from "../apis/strims/type/certificate.pb";
 import { useCall, useLazyCall } from "../contexts/FrontendApi";
 import { useSession } from "../contexts/Session";
 import { suppressClickAway } from "../hooks/useClickAway";
@@ -203,7 +206,7 @@ const BootstrapClientCheckbox: React.FC<BootstrapClientCheckboxProps> = ({
   control,
 }) => {
   switch (client.clientOptions.case) {
-    case BootstrapClient.ClientOptionsCase.WEBSOCKET_OPTIONS: {
+    case BootstrapClient_ClientOptionsCase.WEBSOCKET_OPTIONS: {
       return (
         <ToggleInput
           control={control}

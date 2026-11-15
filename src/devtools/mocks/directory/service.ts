@@ -3,12 +3,12 @@
 
 import { PassThrough } from "stream";
 
-import * as directoryv1 from "../../../apis/strims/network/v1/directory/directory";
+import * as directoryv1 from "../../../apis/strims/network/v1/directory/directory.pb";
 import {
   DirectoryFrontendService,
   UnimplementedDirectoryFrontendService,
-} from "../../../apis/strims/network/v1/directory/directory_rpc";
-import { ImageType } from "../../../apis/strims/type/image";
+} from "../../../apis/strims/network/v1/directory/directory_rpc.pb";
+import { ImageType } from "../../../apis/strims/type/image.pb";
 import { listingItem, listingsNetwork } from "../../storybook/fixtures/listings";
 import images from "../images";
 import events from "./events";
@@ -65,7 +65,7 @@ export default class DirectoryService
   getListing(req: directoryv1.FrontendGetListingRequest) {
     const query = req.query?.query;
     const item =
-      (query?.case === directoryv1.ListingQuery.QueryCase.ID && listingItem(query.id)) ||
+      (query?.case === directoryv1.ListingQuery_QueryCase.ID && listingItem(query.id)) ||
       events[0];
     return new directoryv1.FrontendGetListingResponse({
       ...item,

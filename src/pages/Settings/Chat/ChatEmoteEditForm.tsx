@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
-import { EmoteEffect } from "../../../apis/strims/chat/v1/chat";
+import { EmoteEffect_EffectCase } from "../../../apis/strims/chat/v1/chat.pb";
 import { InputError } from "../../../components/Form";
 import { toStyleSheetFormValue } from "../../../components/Settings/ChatStyleSheet";
 import { TableTitleBar } from "../../../components/Settings/Table";
@@ -85,12 +85,12 @@ const ChatEmoteEditFormPage: React.FC = () => {
 
   emote.effects.forEach(({ effect }) => {
     switch (effect.case) {
-      case EmoteEffect.EffectCase.CUSTOM_CSS:
+      case EmoteEffect_EffectCase.CUSTOM_CSS:
         Object.assign(data, toStyleSheetFormValue(effect.customCss.styleSheet));
         data.extraWrapCount = effect.customCss.extraWrapCount;
         data.wrapAdjacent = effect.customCss.wrapAdjacent;
         break;
-      case EmoteEffect.EffectCase.SPRITE_ANIMATION:
+      case EmoteEffect_EffectCase.SPRITE_ANIMATION:
         data.animated = true;
         data.animationFrameCount = effect.spriteAnimation.frameCount;
         data.animationDuration = effect.spriteAnimation.durationMs;
@@ -99,7 +99,7 @@ const ChatEmoteEditFormPage: React.FC = () => {
         data.animationLoopForever = effect.spriteAnimation.loopForever;
         data.animationAlternateDirection = effect.spriteAnimation.alternateDirection;
         break;
-      case EmoteEffect.EffectCase.DEFAULT_MODIFIERS:
+      case EmoteEffect_EffectCase.DEFAULT_MODIFIERS:
         data.defaultModifiers = effect.defaultModifiers.modifiers.map((m) => ({
           label: m,
           value: m,

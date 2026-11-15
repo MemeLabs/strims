@@ -1,7 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { Error as RPCError } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
+import { Error as RPCError } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc.pb";
 import React from "react";
 
 import { toFormImageValue } from "../../../../../lib/image";

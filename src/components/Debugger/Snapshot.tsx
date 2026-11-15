@@ -3,8 +3,8 @@
 
 import React, { useState } from "react";
 
-import { Int64Value, UInt32Value, UInt64Value } from "../../apis/google/protobuf/wrappers";
-import { Metrics } from "../../apis/strims/debug/v1/metrics";
+import { Int64Value, UInt32Value, UInt64Value } from "../../apis/google/protobuf/wrappers.pb";
+import { Metrics } from "../../apis/strims/debug/v1/metrics.pb";
 import { hex, jsonReplacer } from "./series";
 
 const BYTES_SHOWN = 8;

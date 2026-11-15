@@ -3,27 +3,31 @@
 
 import { Readable, Writable } from "stream";
 
-import Host from "@memelabs/protobuf/lib/rpc/host";
+import Host, { type HostOptions } from "@memelabs/protobuf/lib/rpc/host";
 
-import { AuthFrontendClient } from "./strims/auth/v1/auth_rpc";
-import { AutoseedFrontendClient } from "./strims/autoseed/v1/autoseed_rpc";
-import { ChatFrontendClient, ChatServerFrontendClient } from "./strims/chat/v1/chat_rpc";
-import { DebugClient } from "./strims/debug/v1/debug_rpc";
-import { DevToolsClient as DevToolsServiceClient } from "./strims/devtools/v1/devtools_rpc";
-import { CapConnClient } from "./strims/devtools/v1/ppspp/capconn_rpc";
-import { BootstrapFrontendClient } from "./strims/network/v1/bootstrap/bootstrap_rpc";
-import { DirectoryFrontendClient } from "./strims/network/v1/directory/directory_rpc";
-import { InviteLinkClient } from "./strims/network/v1/invite/invite_rpc";
-import { NetworkFrontendClient } from "./strims/network/v1/network_rpc";
-import { NotificationFrontendClient } from "./strims/notification/v1/notification_rpc";
-import { ProfileFrontendClient } from "./strims/profile/v1/profile_rpc";
-import { ReplicationFrontendClient } from "./strims/replication/v1/replication_rpc";
-import { CaptureClient as VideoCaptureClient } from "./strims/video/v1/capture_rpc";
-import { VideoChannelFrontendClient } from "./strims/video/v1/channel_rpc";
-import { EgressClient as VideoEgressClient } from "./strims/video/v1/egress_rpc";
-import { HLSEgressClient } from "./strims/video/v1/hls_egress_rpc";
-import { VideoIngressClient } from "./strims/video/v1/ingress_rpc";
-import { VNICFrontendClient } from "./strims/vnic/v1/vnic_rpc";
+import { AuthFrontendClient } from "./strims/auth/v1/auth_rpc.pb";
+import { AutoseedFrontendClient } from "./strims/autoseed/v1/autoseed_rpc.pb";
+import { ChatFrontendClient, ChatServerFrontendClient } from "./strims/chat/v1/chat_rpc.pb";
+import { DebugClient } from "./strims/debug/v1/debug_rpc.pb";
+import { DevToolsClient as DevToolsServiceClient } from "./strims/devtools/v1/devtools_rpc.pb";
+import { CapConnClient } from "./strims/devtools/v1/ppspp/capconn_rpc.pb";
+import { BootstrapFrontendClient } from "./strims/network/v1/bootstrap/bootstrap_rpc.pb";
+import { DirectoryFrontendClient } from "./strims/network/v1/directory/directory_rpc.pb";
+import { InviteLinkClient } from "./strims/network/v1/invite/invite_rpc.pb";
+import { NetworkFrontendClient } from "./strims/network/v1/network_rpc.pb";
+import { NotificationFrontendClient } from "./strims/notification/v1/notification_rpc.pb";
+import { ProfileFrontendClient } from "./strims/profile/v1/profile_rpc.pb";
+import { ReplicationFrontendClient } from "./strims/replication/v1/replication_rpc.pb";
+import { CaptureClient as VideoCaptureClient } from "./strims/video/v1/capture_rpc.pb";
+import { VideoChannelFrontendClient } from "./strims/video/v1/channel_rpc.pb";
+import { EgressClient as VideoEgressClient } from "./strims/video/v1/egress_rpc.pb";
+import { HLSEgressClient } from "./strims/video/v1/hls_egress_rpc.pb";
+import { VideoIngressClient } from "./strims/video/v1/ingress_rpc.pb";
+import { VNICFrontendClient } from "./strims/vnic/v1/vnic_rpc.pb";
+
+// The node serves the UI's connection with strims-rpc's Config::frontend(),
+// whose Calls run to 10 MiB, past Host's 512 KiB default.
+const frontendHostOptions: HostOptions = { maxMessageBytes: 10 * 1024 * 1024 };
 
 export class FrontendClient {
   public auth: AuthFrontendClient;
@@ -45,7 +49,7 @@ export class FrontendClient {
   public vnic: VNICFrontendClient;
 
   constructor(w: Writable, r: Readable) {
-    const host = new Host(w, r);
+    const host = new Host(w, r, undefined, frontendHostOptions);
     this.auth = new AuthFrontendClient(host);
     this.autoseed = new AutoseedFrontendClient(host);
     this.bootstrap = new BootstrapFrontendClient(host);
@@ -71,7 +75,7 @@ export class DevToolsClient {
   public ppsppCapConn: CapConnClient;
 
   constructor(w: Writable, r: Readable) {
-    const host = new Host(w, r);
+    const host = new Host(w, r, undefined, frontendHostOptions);
     this.devTools = new DevToolsServiceClient(host);
     this.ppsppCapConn = new CapConnClient(host);
   }

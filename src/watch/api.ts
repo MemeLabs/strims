@@ -3,7 +3,7 @@
 
 import { Base64 } from "js-base64";
 
-import { Invitation } from "../apis/strims/network/v1/network";
+import { Invitation } from "../apis/strims/network/v1/network.pb";
 
 /** The origin of the native node's bootstrap API: the build's, else this page's. */
 export const apiOrigin = (): string => WATCH_API_URL || window.location.origin;

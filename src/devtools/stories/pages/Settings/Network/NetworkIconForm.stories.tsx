@@ -1,7 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
+import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc.pb";
 import React, { useEffect, useState } from "react";
 
 import { ImageValue } from "../../../../../components/Form";

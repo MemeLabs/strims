@@ -1,16 +1,16 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import * as bootstrapv1 from "../../../apis/strims/network/v1/bootstrap/bootstrap";
+import * as bootstrapv1 from "../../../apis/strims/network/v1/bootstrap/bootstrap.pb";
 import {
   BootstrapClient,
   BootstrapPeer,
   Config,
-} from "../../../apis/strims/network/v1/bootstrap/bootstrap";
+} from "../../../apis/strims/network/v1/bootstrap/bootstrap.pb";
 import {
   BootstrapFrontendService,
   UnimplementedBootstrapFrontendService,
-} from "../../../apis/strims/network/v1/bootstrap/bootstrap_rpc";
+} from "../../../apis/strims/network/v1/bootstrap/bootstrap_rpc.pb";
 
 const urls = [
   "wss://strims.gg/_bootstrap",
@@ -89,8 +89,8 @@ export default class BootstrapService
 
   private websocketOptions(
     options:
-      | bootstrapv1.CreateBootstrapClientRequest.TClientOptions
-      | bootstrapv1.UpdateBootstrapClientRequest.TClientOptions
+      | bootstrapv1.CreateBootstrapClientRequest_TClientOptions
+      | bootstrapv1.UpdateBootstrapClientRequest_TClientOptions
   ): bootstrapv1.IBootstrapClient["clientOptions"] {
     if (!("websocketOptions" in options)) {
       throw new Error("bootstrap client options missing");

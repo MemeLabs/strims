@@ -8,12 +8,12 @@ import { PassThrough } from "stream";
 import { Base64 } from "js-base64";
 import React, { useEffect } from "react";
 
-import { UnimplementedEgressService } from "../../../../apis/strims/video/v1/egress_rpc";
+import { UnimplementedEgressService } from "../../../../apis/strims/video/v1/egress_rpc.pb";
 import {
   HLSEgressGetConfigResponse,
   HLSEgressIsSupportedResponse,
-} from "../../../../apis/strims/video/v1/hls_egress";
-import { UnimplementedHLSEgressService } from "../../../../apis/strims/video/v1/hls_egress_rpc";
+} from "../../../../apis/strims/video/v1/hls_egress.pb";
+import { UnimplementedHLSEgressService } from "../../../../apis/strims/video/v1/hls_egress_rpc.pb";
 import VideoPlayer from "../../../../components/VideoPlayer";
 import { useLayout } from "../../../../contexts/Layout";
 import {

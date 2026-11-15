@@ -5,9 +5,9 @@ import { PassThrough } from "stream";
 
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 
-import * as networkv1 from "../../../apis/strims/network/v1/network";
-import { Network, NetworkEvent, UIConfig } from "../../../apis/strims/network/v1/network";
-import { NetworkFrontendService } from "../../../apis/strims/network/v1/network_rpc";
+import * as networkv1 from "../../../apis/strims/network/v1/network.pb";
+import { Network, NetworkEvent, UIConfig } from "../../../apis/strims/network/v1/network.pb";
+import { NetworkFrontendService } from "../../../apis/strims/network/v1/network_rpc.pb";
 import {
   aliasReservations as fixtureAliasReservations,
   invitation,
@@ -61,7 +61,7 @@ export default class NetworkService implements NetworkFrontendService {
     return network;
   }
 
-  private emit(body: networkv1.NetworkEvent.IBody): void {
+  private emit(body: networkv1.NetworkEvent_IBody): void {
     for (const ch of this.watchers) {
       ch.push(new networkv1.WatchNetworksResponse({ event: new NetworkEvent({ body }) }));
     }

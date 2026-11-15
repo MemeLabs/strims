@@ -4,7 +4,7 @@
 import assert from "assert";
 import vm from "vm";
 
-import { ICaptureAppendRequest } from "../../apis/strims/video/v1/capture";
+import { ICaptureAppendRequest } from "../../apis/strims/video/v1/capture.pb";
 import { Slew, TrackClock } from "./clock";
 import {
   PROFILES,

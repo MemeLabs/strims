@@ -11,8 +11,20 @@ import React, { ReactNode, useCallback, useEffect, useMemo, useRef, useState } f
 import { FiExternalLink } from "react-icons/fi";
 import { Link } from "react-router";
 
-import { MessageState, UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
-import { Listing } from "../../apis/strims/network/v1/directory/directory";
+import {
+  MessageState,
+  UIConfig,
+  Message as chatv1_Message,
+  Message_Entities_CodeBlock as chatv1_Message_Entities_CodeBlock,
+  Message_Entities_Emoji as chatv1_Message_Entities_Emoji,
+  Message_Entities_Emote as chatv1_Message_Entities_Emote,
+  Message_Entities_GenericEntity as chatv1_Message_Entities_GenericEntity,
+  Message_Entities_Link as chatv1_Message_Entities_Link,
+  Message_Entities_Nick as chatv1_Message_Entities_Nick,
+  Message_Entities_Spoiler as chatv1_Message_Entities_Spoiler,
+  Message_Entities_Tag as chatv1_Message_Entities_Tag,
+} from "../../apis/strims/chat/v1/chat.pb";
+import { Listing } from "../../apis/strims/network/v1/directory/directory.pb";
 import { useRoom } from "../../contexts/Chat";
 import { useSession } from "../../contexts/Session";
 import { useOpenListing } from "../../hooks/directory";
@@ -31,7 +43,7 @@ const LINK_SHORTEN_THRESHOLD = 75;
 const LINK_SHORTEN_AFFIX_LENGTH = 35;
 
 interface MessageLinkProps {
-  entity: chatv1_Message.Entities.Link;
+  entity: chatv1_Message_Entities_Link;
   shouldShorten: boolean;
   children: ReactNode;
 }
@@ -91,7 +103,7 @@ const MessageLink: React.FC<MessageLinkProps> = ({ children, entity, shouldShort
 };
 
 interface MessageEmoteProps {
-  entity: chatv1_Message.Entities.Emote;
+  entity: chatv1_Message_Entities_Emote;
   shouldAnimateForever?: boolean;
   shouldShowModifiers?: boolean;
   compactSpacing?: boolean;
@@ -140,7 +152,7 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({
 };
 
 interface MessageEmojiProps {
-  entity: chatv1_Message.Entities.Emoji;
+  entity: chatv1_Message_Entities_Emoji;
   children: ReactNode[];
 }
 
@@ -148,10 +160,10 @@ interface MessageEmojiProps {
 const MessageEmoji: React.FC<MessageEmojiProps> = ({ children }) => <Emoji>{children}</Emoji>;
 
 interface MessageNickProps {
-  entity: chatv1_Message.Entities.Nick;
+  entity: chatv1_Message_Entities_Nick;
   normalizeCase: boolean;
   children: ReactNode[];
-  onClick: (e: React.MouseEvent, entity: chatv1_Message.Entities.Nick) => void;
+  onClick: (e: React.MouseEvent, entity: chatv1_Message_Entities_Nick) => void;
 }
 
 const MessageNick: React.FC<MessageNickProps> = ({ children, entity, normalizeCase, onClick }) => {
@@ -173,7 +185,7 @@ const MessageNick: React.FC<MessageNickProps> = ({ children, entity, normalizeCa
 };
 
 interface MessageTagProps {
-  entity: chatv1_Message.Entities.Tag;
+  entity: chatv1_Message_Entities_Tag;
   children: ReactNode[];
 }
 
@@ -198,7 +210,7 @@ const trimChildren = (children: ReactNode, prefix: RegExp, suffix: RegExp) => {
 };
 
 interface MessageSpoilerProps {
-  entity: chatv1_Message.Entities.Spoiler;
+  entity: chatv1_Message_Entities_Spoiler;
   children: ReactNode[];
 }
 
@@ -220,7 +232,7 @@ const MessageSpoiler: React.FC<MessageSpoilerProps> = ({ children }) => {
 };
 
 interface MessageCodeBlockProps {
-  entity: chatv1_Message.Entities.CodeBlock;
+  entity: chatv1_Message_Entities_CodeBlock;
   children: ReactNode[];
 }
 
@@ -229,7 +241,7 @@ const MessageCodeBlock: React.FC<MessageCodeBlockProps> = ({ children }) => (
 );
 
 interface MessageGreenTextProps {
-  entity: chatv1_Message.Entities.GenericEntity;
+  entity: chatv1_Message_Entities_GenericEntity;
   children: ReactNode[];
 }
 
@@ -238,7 +250,7 @@ const MessageGreenText: React.FC<MessageGreenTextProps> = ({ children }) => (
 );
 
 interface MessageSelfProps {
-  entity: chatv1_Message.Entities.GenericEntity;
+  entity: chatv1_Message_Entities_GenericEntity;
   children: ReactNode[];
 }
 
@@ -247,14 +259,14 @@ const MessageSelf: React.FC<MessageSelfProps> = ({ children }) => (
 );
 
 type Entity =
-  | chatv1_Message.Entities.Link
-  | chatv1_Message.Entities.Emote
-  | chatv1_Message.Entities.Emoji
-  | chatv1_Message.Entities.Nick
-  | chatv1_Message.Entities.Tag
-  | chatv1_Message.Entities.Spoiler
-  | chatv1_Message.Entities.CodeBlock
-  | chatv1_Message.Entities.GenericEntity;
+  | chatv1_Message_Entities_Link
+  | chatv1_Message_Entities_Emote
+  | chatv1_Message_Entities_Emoji
+  | chatv1_Message_Entities_Nick
+  | chatv1_Message_Entities_Tag
+  | chatv1_Message_Entities_Spoiler
+  | chatv1_Message_Entities_CodeBlock
+  | chatv1_Message_Entities_GenericEntity;
 
 class MessageFormatter {
   private bounds: number[];
@@ -442,7 +454,7 @@ const StandardMessage: React.FC<MessageImplProps> = ({
   const [{ profile }] = useSession();
 
   const handleNickClick = useStableCallback(
-    (e: React.MouseEvent, entity: chatv1_Message.Entities.Nick) => {
+    (e: React.MouseEvent, entity: chatv1_Message_Entities_Nick) => {
       e.stopPropagation();
       toggleSelectedPeer(entity.peerKey);
       toggleSelectedPeer(peerKey, true);

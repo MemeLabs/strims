@@ -10,7 +10,7 @@ import {
   ISwarmInfo,
   LinkKind,
   Metrics,
-} from "../../apis/strims/debug/v1/metrics";
+} from "../../apis/strims/debug/v1/metrics.pb";
 import {
   gauge,
   jsonReplacer,

@@ -11,7 +11,13 @@ import React, {
   useState,
 } from "react";
 
-import { Event, INotification, Notification } from "../apis/strims/notification/v1/notification";
+import {
+  Event,
+  Event_BodyCase,
+  INotification,
+  Notification,
+  Notification_Status,
+} from "../apis/strims/notification/v1/notification.pb";
 import { useStableCallback } from "../hooks/useStableCallback";
 import { formatError } from "../lib/rpcError";
 import { useClient } from "./FrontendApi";
@@ -37,12 +43,12 @@ const NotificationContext = createContext<NotificationContextValue>(null);
 
 const reduceState = (prev: State, { body }: Event): State => {
   switch (body.case) {
-    case Event.BodyCase.NOTIFICATION:
+    case Event_BodyCase.NOTIFICATION:
       return {
         ...prev,
         notifications: [...prev.notifications, body.notification],
       };
-    case Event.BodyCase.DISMISS:
+    case Event_BodyCase.DISMISS:
       return {
         ...prev,
         notifications: prev.notifications.filter(({ id }) => id !== body.dismiss),
@@ -76,7 +82,7 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
         ...prev.notifications,
         new Notification({
           createdAt: BigInt(Date.now()),
-          status: Notification.Status.STATUS_INFO,
+          status: Notification_Status.STATUS_INFO,
           ...notification,
           id,
         }),
@@ -120,7 +126,7 @@ export const useErrorToast = (): ((title: string) => (error: Error) => void) => 
   const notification = useNotification();
   return useStableCallback((title: string) => (error: Error) => {
     notification?.pushTransientNotification({
-      status: Notification.Status.STATUS_ERROR,
+      status: Notification_Status.STATUS_ERROR,
       title,
       message: formatError(error),
     });

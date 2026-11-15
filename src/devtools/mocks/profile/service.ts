@@ -1,12 +1,12 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import * as profilev1 from "../../../apis/strims/profile/v1/profile";
-import { Device, Profile } from "../../../apis/strims/profile/v1/profile";
+import * as profilev1 from "../../../apis/strims/profile/v1/profile.pb";
+import { Device, Profile } from "../../../apis/strims/profile/v1/profile.pb";
 import {
   ProfileFrontendService,
   UnimplementedProfileFrontendService,
-} from "../../../apis/strims/profile/v1/profile_rpc";
+} from "../../../apis/strims/profile/v1/profile_rpc.pb";
 import { fixtureTime } from "../../storybook/fixtures/ids";
 import { profile as fixtureProfile } from "../../storybook/fixtures/profile";
 

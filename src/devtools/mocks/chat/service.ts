@@ -7,13 +7,13 @@ import { PassThrough } from "stream";
 import { Readable } from "@memelabs/protobuf/lib/rpc/stream";
 import { Base64 } from "js-base64";
 
-import * as chatv1 from "../../../apis/strims/chat/v1/chat";
+import * as chatv1 from "../../../apis/strims/chat/v1/chat.pb";
 import {
   ChatFrontendService,
   ChatServerFrontendService,
   UnimplementedChatFrontendService,
   UnimplementedChatServerFrontendService,
-} from "../../../apis/strims/chat/v1/chat_rpc";
+} from "../../../apis/strims/chat/v1/chat_rpc.pb";
 import MessageEmitter, { peerKey } from "../../mocks/chat/MessageEmitter";
 import assetBundle, { modifiers } from "../../mocks/chat/assetBundle";
 import { profileKey } from "../../storybook/fixtures/profile";
@@ -29,7 +29,7 @@ export const defaultUIConfig: chatv1.IUIConfig = {
   notificationHighlight: true,
   soundNotificationHighlight: false,
   highlight: true,
-  showRemoved: chatv1.UIConfig.ShowRemoved.SHOW_REMOVED_REMOVE,
+  showRemoved: chatv1.UIConfig_ShowRemoved.SHOW_REMOVED_REMOVE,
   showWhispersInChat: true,
   focusMentioned: false,
   notificationTimeout: true,
@@ -47,7 +47,7 @@ export const defaultUIConfig: chatv1.IUIConfig = {
   shortenLinks: true,
   compactEmoteSpacing: false,
   normalizeAliasCase: true,
-  userPresenceIndicator: chatv1.UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
+  userPresenceIndicator: chatv1.UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
   emojiSkinTone: "",
   replicate: true,
 };
@@ -196,7 +196,7 @@ class ChatService {
         peerKey: profileKey,
         serverTime: BigInt(Date.now()),
         body: req.body,
-        entities: new chatv1.Message.Entities(),
+        entities: new chatv1.Message_Entities(),
       }),
     ]);
     return new chatv1.ClientSendMessageResponse();

@@ -6,7 +6,7 @@ import {
   Listing,
   ListingSnippet,
   Network as DirectoryNetwork,
-} from "../../../apis/strims/network/v1/directory/directory";
+} from "../../../apis/strims/network/v1/directory/directory.pb";
 import type { DirectoryListing } from "../../../components/Directory/Grid";
 import events from "../../mocks/directory/events";
 import { directoryNetwork, network } from "./networks";

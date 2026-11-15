@@ -5,7 +5,7 @@ import { Base64 } from "js-base64";
 import React, { ReactNode, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 
-import { PairingToken } from "../../../../apis/strims/auth/v1/auth";
+import { PairingToken } from "../../../../apis/strims/auth/v1/auth.pb";
 import PairingTokenInput from "../../../../components/Landing/PairingTokenInput";
 import { ProfileFormValues } from "../../../../components/Landing/ProfileForm";
 import LandingPageLayout from "../../../../components/LandingPageLayout";

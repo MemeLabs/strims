@@ -4,7 +4,7 @@
 import { Base64 } from "js-base64";
 import React from "react";
 
-import { Invitation } from "../../../../../apis/strims/network/v1/network";
+import { Invitation } from "../../../../../apis/strims/network/v1/network.pb";
 import NetworkService from "../../../../mocks/network/service";
 import { Story, fixtures } from "../../../../storybook";
 import { SettingsStory, fill, submit, waitFor } from "./harness";

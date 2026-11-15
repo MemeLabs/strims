@@ -3,8 +3,8 @@
 
 import React, { ReactNode, useCallback, useMemo, useState } from "react";
 
-import { AssetBundle } from "../../apis/strims/network/v1/directory/directory";
-import { Network, UIConfig } from "../../apis/strims/network/v1/network";
+import { AssetBundle } from "../../apis/strims/network/v1/directory/directory.pb";
+import { Network, UIConfig } from "../../apis/strims/network/v1/network.pb";
 import { NetworkContext } from "../../contexts/Network";
 import { Provider as NotificationProvider } from "../../contexts/Notification";
 import { PlayerContext, PlayerMode } from "../../contexts/Player";

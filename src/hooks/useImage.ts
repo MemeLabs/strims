@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { Image } from "../apis/strims/type/image";
+import { Image } from "../apis/strims/type/image.pb";
 import useObjectURL from "../hooks/useObjectURL";
 import { toFileType } from "../lib/image";
 

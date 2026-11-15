@@ -3,7 +3,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 
-import { ImageType } from "../apis/strims/type/image";
+import { ImageType } from "../apis/strims/type/image.pb";
 import { useClient } from "../contexts/FrontendApi";
 import {
   Capture,

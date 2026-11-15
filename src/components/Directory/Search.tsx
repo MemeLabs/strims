@@ -18,8 +18,10 @@ import imgYouTube from "../../../assets/directory/youtube.png";
 import {
   Listing,
   ListingContentType,
+  Listing_Embed_Service,
+  Listing_IEmbed,
   NetworkListingsItem,
-} from "../../apis/strims/network/v1/directory/directory";
+} from "../../apis/strims/network/v1/directory/directory.pb";
 import { useLazyCall } from "../../contexts/FrontendApi";
 import { useOpenListing } from "../../hooks/directory";
 import useClickAway from "../../hooks/useClickAway";
@@ -29,7 +31,7 @@ import SnippetImage from "../Directory/SnippetImage";
 import Scrollbars from "../Scrollbars";
 
 interface EmbedMenuItemProps {
-  embed: Listing.IEmbed;
+  embed: Listing_IEmbed;
   selected: boolean;
   onMouseEnter: () => void;
   onSelect: () => void;
@@ -45,22 +47,22 @@ const EmbedMenuItem: React.FC<EmbedMenuItemProps> = ({
 
   const label = (() => {
     switch (embed.service) {
-      case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP:
+      case Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP:
         return {
           logo: imgAngelThump,
           name: t("directory.embedType.angelThump"),
         };
-      case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM:
+      case Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM:
         return {
           logo: imgTwitch,
           name: t("directory.embedType.twitch"),
         };
-      case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD:
+      case Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD:
         return {
           logo: imgTwitch,
           name: t("directory.embedType.twitchVod"),
         };
-      case Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE:
+      case Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE:
         return {
           logo: imgYouTube,
           name: t("directory.embedType.youTube"),
@@ -126,7 +128,7 @@ const ListingMenuItem: React.FC<ListingMenuItemProps> = ({
 type SearchResult =
   | {
       type: "EMBED";
-      embed: Listing.IEmbed;
+      embed: Listing_IEmbed;
       onSelect: () => void;
     }
   | {
@@ -293,7 +295,7 @@ const Search: React.FC<SearchProps> = ({
     });
   });
 
-  const selectEmbed = (embed: Listing.IEmbed) => {
+  const selectEmbed = (embed: Listing_IEmbed) => {
     // TODO: this blows up if there are no directories loaded... select input? checkboxes?
     //       update the directories in all networks?
     const [{ network }] = getListingsRes.value.listings;

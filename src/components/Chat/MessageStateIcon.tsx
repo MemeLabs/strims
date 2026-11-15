@@ -7,7 +7,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { BiMessageSquareError } from "react-icons/bi";
 
-import { MessageState } from "../../apis/strims/chat/v1/chat";
+import { MessageState } from "../../apis/strims/chat/v1/chat.pb";
 
 interface MessageStateIconProps {
   messageState: MessageState;

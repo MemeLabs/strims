@@ -7,7 +7,7 @@ import React, { MouseEvent, ReactNode, useCallback } from "react";
 import { Control, useFormContext } from "react-hook-form";
 import { Logger, compileString } from "sass";
 
-import { IStyleSheet, StyleSheet } from "../../apis/strims/chat/v1/chat";
+import { IStyleSheet, StyleSheet, StyleSheet_IAsset } from "../../apis/strims/chat/v1/chat.pb";
 import { fromFormImageValue, toFormImageValue } from "../../lib/image";
 import {
   Button,
@@ -140,7 +140,7 @@ export const fromStyleSheetFormValue = async (
 ): Promise<IStyleSheet> => {
   const { css } = await postcss([autoprefixer]).process(compileSCSS(data.scss));
 
-  const assets: StyleSheet.IAsset[] = [];
+  const assets: StyleSheet_IAsset[] = [];
   for (let i = 0 as AssetIndex; i < data.assetCount; i++) {
     assets.push({
       name: data[`asset_${i}_name`],

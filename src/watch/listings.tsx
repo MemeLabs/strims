@@ -4,7 +4,7 @@
 import React, { ReactNode, createContext, useContext, useEffect, useState } from "react";
 import { useMatch } from "react-router";
 
-import { FrontendWatchListingsResponse } from "../apis/strims/network/v1/directory/directory";
+import { FrontendWatchListingsResponse } from "../apis/strims/network/v1/directory/directory.pb";
 import { readDelimited } from "../lib/delimited";
 import { NetworkListingsMap, foldListingEvents } from "../lib/listings";
 import { apiOrigin, eventsUrl } from "./api";

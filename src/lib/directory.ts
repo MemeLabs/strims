@@ -3,8 +3,13 @@
 
 import qs from "qs";
 
-import { Listing } from "../apis/strims/network/v1/directory/directory";
-import { ErrorCode } from "../apis/strims/network/v1/directory/errors/errors";
+import {
+  Listing,
+  Listing_ContentCase,
+  Listing_Embed,
+  Listing_Embed_Service,
+} from "../apis/strims/network/v1/directory/directory.pb";
+import { ErrorCode } from "../apis/strims/network/v1/directory/errors/errors.pb";
 import { PlayerSource } from "../contexts/Player";
 import { errorCode } from "./rpcError";
 
@@ -24,29 +29,29 @@ export const isAlreadyLeft = (e: unknown): boolean => alreadyLeft.has(errorCode(
 
 export type ServiceSlug = "angelthump" | "twitch" | "twitch-vod" | "youtube";
 
-const serviceSlugs: [ServiceSlug, Listing.Embed.Service][] = [
-  ["angelthump", Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP],
-  ["twitch", Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM],
-  ["twitch-vod", Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD],
-  ["youtube", Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE],
+const serviceSlugs: [ServiceSlug, Listing_Embed_Service][] = [
+  ["angelthump", Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP],
+  ["twitch", Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM],
+  ["twitch-vod", Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD],
+  ["youtube", Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE],
 ];
 
-export const serviceToSlug = (t: Listing.Embed.Service): ServiceSlug =>
+export const serviceToSlug = (t: Listing_Embed_Service): ServiceSlug =>
   serviceSlugs.find(([, k]) => k === t)[0];
 
-export const slugToService = (t: ServiceSlug): Listing.Embed.Service =>
+export const slugToService = (t: ServiceSlug): Listing_Embed_Service =>
   serviceSlugs.find(([k]) => k === t)[1];
 
 export const formatUri = (networkKey: string, { content }: Listing): string => {
   switch (content.case) {
-    case Listing.ContentCase.EMBED: {
+    case Listing_ContentCase.EMBED: {
       const search = qs.stringify({
         k: networkKey,
         ...Object.fromEntries(content.embed.queryParams),
       });
       return `/embed/${serviceToSlug(content.embed.service)}/${content.embed.id}?${search}`;
     }
-    case Listing.ContentCase.MEDIA: {
+    case Listing_ContentCase.MEDIA: {
       const { mimeType, swarmUri } = content.media;
       return `/player/${networkKey}?${qs.stringify({ mimeType, swarmUri })}`;
     }
@@ -57,7 +62,7 @@ export const formatUri = (networkKey: string, { content }: Listing): string => {
 
 export const getListingPlayerSource = (networkKey: string, { content }: Listing): PlayerSource => {
   switch (content.case) {
-    case Listing.ContentCase.EMBED:
+    case Listing_ContentCase.EMBED:
       return {
         type: "embed",
         service: serviceToSlug(content.embed.service),
@@ -65,7 +70,7 @@ export const getListingPlayerSource = (networkKey: string, { content }: Listing)
         queryParams: content.embed.queryParams,
         networkKey,
       };
-    case Listing.ContentCase.MEDIA:
+    case Listing_ContentCase.MEDIA:
       return {
         type: "swarm",
         mimeType: content.media.mimeType,
@@ -82,7 +87,7 @@ const EMBED_URLS = [
   {
     pattern: new RegExp(`twitch\\.tv/videos/${EMBED_ID}(?:.*&t=([^&$]+))`),
     embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD,
+      service: Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD,
       id: v[1],
       queryParams: v[2] ? { t: v[2] } : {},
     }),
@@ -90,28 +95,28 @@ const EMBED_URLS = [
   {
     pattern: new RegExp(`twitch\\.tv/${EMBED_ID}/?$`),
     embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM,
+      service: Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM,
       id: v[1],
     }),
   },
   {
     pattern: new RegExp(`angelthump\\.com/(?:embed/)?${EMBED_ID}$`),
     embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
+      service: Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
       id: v[1],
     }),
   },
   {
     pattern: new RegExp(`player\\.angelthump\\.com/.*?[&?]channel=${EMBED_ID}`),
     embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
+      service: Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
       id: v[1],
     }),
   },
   {
     pattern: new RegExp(`youtube\\.com/watch.*?[&?]v=${EMBED_ID}(?:.*&t=([^&$]+))?`),
     embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
+      service: Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
       id: v[1],
       queryParams: v[2] ? { t: v[2] } : {},
     }),
@@ -119,7 +124,7 @@ const EMBED_URLS = [
   {
     pattern: new RegExp(`youtu\\.be/${EMBED_ID}(?:.*[?&]t=([^&$]+))?`),
     embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
+      service: Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
       id: v[1],
       queryParams: v[2] ? { t: v[2] } : {},
     }),
@@ -127,18 +132,18 @@ const EMBED_URLS = [
   {
     pattern: new RegExp(`youtube\\.com/embed/${EMBED_ID}(?:.*[?&]t=([^&$]+))?`),
     embed: (v: RegExpExecArray) => ({
-      service: Listing.Embed.Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
+      service: Listing_Embed_Service.DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
       id: v[1],
       queryParams: v[2] ? { t: v[2] } : {},
     }),
   },
 ];
 
-export const createEmbedFromURL = (url: string): Listing.Embed => {
+export const createEmbedFromURL = (url: string): Listing_Embed => {
   for (const { pattern, embed } of EMBED_URLS) {
     const match = pattern.exec(url);
     if (match) {
-      return new Listing.Embed(embed(match));
+      return new Listing_Embed(embed(match));
     }
   }
 };
@@ -166,7 +171,7 @@ const generateColor = (rng: () => number) => {
 
 export const createListingRng = (listing: Listing) => {
   switch (listing?.content.case) {
-    case Listing.ContentCase.MEDIA: {
+    case Listing_ContentCase.MEDIA: {
       let seed: string;
       try {
         const url = new URL(listing.content.media.swarmUri);
@@ -176,7 +181,7 @@ export const createListingRng = (listing: Listing) => {
       }
       return createRng(seed);
     }
-    case Listing.ContentCase.EMBED: {
+    case Listing_ContentCase.EMBED: {
       const { id, service } = listing.content.embed;
       return createRng(`${id}:${service}`);
     }

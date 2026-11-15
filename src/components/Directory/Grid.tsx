@@ -9,7 +9,12 @@ import React, { useCallback, useEffect, useState } from "react";
 import { HiOutlineUser } from "react-icons/hi";
 
 import monkey from "../../../assets/directory/monkey.png";
-import { Listing, ListingSnippet, Network } from "../../apis/strims/network/v1/directory/directory";
+import {
+  Listing,
+  ListingSnippet,
+  Listing_ContentCase,
+  Network,
+} from "../../apis/strims/network/v1/directory/directory.pb";
 import SnippetImage from "../../components/Directory/SnippetImage";
 import { useLayout } from "../../contexts/Layout";
 import { useOpenListing } from "../../hooks/directory";
@@ -116,8 +121,8 @@ export const DirectoryGrid: React.FC<DirectoryGridProps> = ({ listings }) => (
     {listings
       .filter(
         ({ listing }) =>
-          listing?.content?.case === Listing.ContentCase.EMBED ||
-          listing?.content?.case === Listing.ContentCase.MEDIA
+          listing?.content?.case === Listing_ContentCase.EMBED ||
+          listing?.content?.case === Listing_ContentCase.MEDIA
       )
       .map((listing) => (
         <DirectoryGridItem key={listing.id.toString()} {...listing} />

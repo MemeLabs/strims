@@ -5,7 +5,7 @@ import "./chat.stories.scss";
 
 import React, { useEffect, useRef, useState } from "react";
 
-import { IUIConfig } from "../../../../apis/strims/chat/v1/chat";
+import { IUIConfig } from "../../../../apis/strims/chat/v1/chat.pb";
 import Composer from "../../../../components/Chat/Composer";
 import { useChat, useRoom } from "../../../../contexts/Chat";
 import { MockChat, RoomProvider, RoomStyles } from "../../../contexts/Chat";

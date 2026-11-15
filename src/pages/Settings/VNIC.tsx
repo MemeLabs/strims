@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useTitle } from "react-use";
 
-import { Config, SetConfigResponse } from "../../apis/strims/vnic/v1/vnic";
+import { Config, SetConfigResponse } from "../../apis/strims/vnic/v1/vnic.pb";
 import { Button, ButtonSet, InputError, TextInput } from "../../components/Form";
 import { TableTitleBar } from "../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../contexts/FrontendApi";

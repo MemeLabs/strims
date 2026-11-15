@@ -16,7 +16,7 @@ import {
   FrontendWatchListingsRequest,
   FrontendWatchListingsResponse,
   INetworkListingsItem,
-} from "../../../apis/strims/network/v1/directory/directory";
+} from "../../../apis/strims/network/v1/directory/directory.pb";
 import DirectoryService from "../../mocks/directory/service";
 import { MockApi, StaticPlayer, StoryRouter, fixtures } from "../../storybook";
 

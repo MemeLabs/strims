@@ -19,26 +19,32 @@ import { FrontendClient } from "../apis/client";
 import {
   AssetBundle,
   Emote,
-  EmoteEffect,
+  EmoteEffect_EffectCase,
   IUIConfig,
   Message,
   MessageState,
   Modifier,
   OpenClientResponse,
+  OpenClientResponse_BodyCase,
   Room,
   ServerEvent,
+  ServerEvent_BodyCase,
   Tag,
   UIConfig,
   UIConfigHighlight,
   UIConfigIgnore,
   UIConfigTag,
+  UIConfig_ShowRemoved,
+  UIConfig_UserPresenceIndicator,
   WatchUIConfigResponse,
+  WatchUIConfigResponse_ConfigCase,
   WatchWhispersResponse,
+  WatchWhispersResponse_BodyCase,
   WhisperRecord,
   WhisperThread,
-} from "../apis/strims/chat/v1/chat";
-import { FrontendJoinResponse } from "../apis/strims/network/v1/directory/directory";
-import { Image } from "../apis/strims/type/image";
+} from "../apis/strims/chat/v1/chat.pb";
+import { FrontendJoinResponse } from "../apis/strims/network/v1/directory/directory.pb";
+import { Image } from "../apis/strims/type/image.pb";
 import { useUserList } from "../hooks/chat";
 import { useStableCallback } from "../hooks/useStableCallback";
 import MessageSizeCache from "../lib/MessageSizeCache";
@@ -184,7 +190,7 @@ const initialState: State = {
     notificationHighlight: true,
     soundNotificationHighlight: false,
     highlight: true,
-    showRemoved: UIConfig.ShowRemoved.SHOW_REMOVED_REMOVE,
+    showRemoved: UIConfig_ShowRemoved.SHOW_REMOVED_REMOVE,
     showWhispersInChat: true,
     focusMentioned: false,
     notificationTimeout: true,
@@ -202,7 +208,7 @@ const initialState: State = {
     shortenLinks: true,
     compactEmoteSpacing: false,
     normalizeAliasCase: true,
-    userPresenceIndicator: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
+    userPresenceIndicator: UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_BAR,
     emojiSkinTone: "",
     replicate: true,
   }),
@@ -546,7 +552,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     }
 
     switch (res.config.case) {
-      case WatchUIConfigResponse.ConfigCase.UI_CONFIG:
+      case WatchUIConfigResponse_ConfigCase.UI_CONFIG:
         return {
           ...state,
           uiConfig: res.config.uiConfig,
@@ -555,27 +561,27 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
             messageGCThreshold: res.config.uiConfig.maxLines,
           },
         };
-      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_HIGHLIGHT: {
+      case WatchUIConfigResponse_ConfigCase.UI_CONFIG_HIGHLIGHT: {
         const key = formatKey(res.config.uiConfigHighlight.peerKey);
         return setInStateMap(state, "uiConfigHighlights", key, res.config.uiConfigHighlight);
       }
-      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_HIGHLIGHT_DELETE: {
+      case WatchUIConfigResponse_ConfigCase.UI_CONFIG_HIGHLIGHT_DELETE: {
         const key = formatKey(res.config.uiConfigHighlightDelete.peerKey);
         return deleteFromStateMap(state, "uiConfigHighlights", key);
       }
-      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_TAG: {
+      case WatchUIConfigResponse_ConfigCase.UI_CONFIG_TAG: {
         const key = formatKey(res.config.uiConfigTag.peerKey);
         return setInStateMap(state, "uiConfigTags", key, res.config.uiConfigTag);
       }
-      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_TAG_DELETE: {
+      case WatchUIConfigResponse_ConfigCase.UI_CONFIG_TAG_DELETE: {
         const key = formatKey(res.config.uiConfigTagDelete.peerKey);
         return deleteFromStateMap(state, "uiConfigTags", key);
       }
-      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_IGNORE: {
+      case WatchUIConfigResponse_ConfigCase.UI_CONFIG_IGNORE: {
         const key = formatKey(res.config.uiConfigIgnore.peerKey);
         return setInStateMap(state, "uiConfigIgnores", key, res.config.uiConfigIgnore);
       }
-      case WatchUIConfigResponse.ConfigCase.UI_CONFIG_IGNORE_DELETE: {
+      case WatchUIConfigResponse_ConfigCase.UI_CONFIG_IGNORE_DELETE: {
         const key = formatKey(res.config.uiConfigIgnoreDelete.peerKey);
         return deleteFromStateMap(state, "uiConfigIgnores", key);
       }
@@ -588,7 +594,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
     res: WatchWhispersResponse
   ): WhisperThreadState => {
     switch (res.body.case) {
-      case WatchWhispersResponse.BodyCase.THREAD_UPDATE:
+      case WatchWhispersResponse_BodyCase.THREAD_UPDATE:
         return {
           ...thread,
           thread: res.body.threadUpdate,
@@ -596,9 +602,9 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           unreadCount: res.body.threadUpdate.unreadCount,
           state: ThreadInitState.OPEN,
         };
-      case WatchWhispersResponse.BodyCase.THREAD_DELETE:
+      case WatchWhispersResponse_BodyCase.THREAD_DELETE:
         return undefined;
-      case WatchWhispersResponse.BodyCase.WHISPER_UPDATE: {
+      case WatchWhispersResponse_BodyCase.WHISPER_UPDATE: {
         if (thread.visible) {
           void client.chat.markWhispersRead({ peerKey: thread.thread.peerKey });
         }
@@ -620,7 +626,7 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
           ...next,
         };
       }
-      case WatchWhispersResponse.BodyCase.WHISPER_DELETE: {
+      case WatchWhispersResponse_BodyCase.WHISPER_DELETE: {
         const { recordId } = res.body.whisperDelete;
         const prev = thread.records.get(recordId);
         if (!prev) {
@@ -645,9 +651,9 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
   const handleWhisperEvent = (state: State, res: WatchWhispersResponse) => {
     const key = formatKey(res.peerKey);
 
-    if (res.body.case === WatchWhispersResponse.BodyCase.THREAD_UPDATE) {
+    if (res.body.case === WatchWhispersResponse_BodyCase.THREAD_UPDATE) {
       state = setInStateMap(state, "whisperThreads", key, res.body.threadUpdate);
-    } else if (res.body.case === WatchWhispersResponse.BodyCase.THREAD_DELETE) {
+    } else if (res.body.case === WatchWhispersResponse_BodyCase.THREAD_DELETE) {
       state = deleteFromStateMap(state, "whisperThreads", key);
       state = closeTopic(state, {
         type: "WHISPER",
@@ -808,7 +814,7 @@ const createRoomActions = (
   ): RoomThreadState => {
     for (const event of events) {
       switch (event.body.case) {
-        case ServerEvent.BodyCase.MESSAGE:
+        case ServerEvent_BodyCase.MESSAGE:
           room = reduceMessage(room, state, event.body.message);
       }
     }
@@ -849,7 +855,7 @@ const createRoomActions = (
         };
         effects.forEach((e) => {
           switch (e.effect.case) {
-            case EmoteEffect.EffectCase.CUSTOM_CSS: {
+            case EmoteEffect_EffectCase.CUSTOM_CSS: {
               const modifier = new Modifier({
                 id,
                 name: `css_${id}`,
@@ -862,10 +868,10 @@ const createRoomActions = (
               style.modifiers.push(modifier.name);
               break;
             }
-            case EmoteEffect.EffectCase.SPRITE_ANIMATION:
+            case EmoteEffect_EffectCase.SPRITE_ANIMATION:
               style.animated = true;
               break;
-            case EmoteEffect.EffectCase.DEFAULT_MODIFIERS:
+            case EmoteEffect_EffectCase.DEFAULT_MODIFIERS:
               style.modifiers.push(...e.effect.defaultModifiers.modifiers);
               break;
           }
@@ -898,14 +904,14 @@ const createRoomActions = (
   const handleClientData = (state: State, event: OpenClientResponse) =>
     applyRoomAction(state, (room) => {
       switch (event.body.case) {
-        case OpenClientResponse.BodyCase.OPEN:
+        case OpenClientResponse_BodyCase.OPEN:
           return {
             ...room,
             state: ThreadInitState.OPEN,
           };
-        case OpenClientResponse.BodyCase.SERVER_EVENTS:
+        case OpenClientResponse_BodyCase.SERVER_EVENTS:
           return reduceServerEvent(state, room, event.body.serverEvents.events);
-        case OpenClientResponse.BodyCase.ASSET_BUNDLE:
+        case OpenClientResponse_BodyCase.ASSET_BUNDLE:
           return reduceAssetBundle(room, event.body.assetBundle);
         default:
           return room;

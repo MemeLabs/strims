@@ -6,7 +6,7 @@ import assert from "assert";
 import {
   FrontendWatchListingsResponse,
   IFrontendWatchListingsResponse,
-} from "../apis/strims/network/v1/directory/directory";
+} from "../apis/strims/network/v1/directory/directory.pb";
 import { NetworkListingsMap, foldListingEvents } from "./listings";
 
 const network = (id: number) => ({ id: BigInt(id), name: `n${id}`, key: new Uint8Array([id]) });

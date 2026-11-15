@@ -10,7 +10,7 @@ import React, { ReactNode, useLayoutEffect } from "react";
 import {
   InviteLinkService,
   registerInviteLinkService,
-} from "../../../apis/strims/network/v1/invite/invite_rpc";
+} from "../../../apis/strims/network/v1/invite/invite_rpc.pb";
 
 /** An answer for a fetch the stub takes, or null to let it through. */
 export type FetchRoute = (url: URL, init?: RequestInit) => Promise<Response> | null;

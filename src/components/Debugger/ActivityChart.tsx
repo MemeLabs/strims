@@ -7,7 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Result, VisualizationSpec } from "vega-embed";
 import type { TopLevelSpec } from "vega-lite";
 
-import { Metrics } from "../../apis/strims/debug/v1/metrics";
+import { Metrics } from "../../apis/strims/debug/v1/metrics.pb";
 import { usePortletSize } from "./Portlet";
 import {
   Point,

@@ -11,8 +11,8 @@ import { BsArrowBarRight } from "react-icons/bs";
 import { FiSettings } from "react-icons/fi";
 import { HiOutlineChatAlt2, HiOutlineUser, HiOutlineUsers } from "react-icons/hi";
 
-import { WhisperThread } from "../../apis/strims/chat/v1/chat";
-import * as directoryv1 from "../../apis/strims/network/v1/directory/directory";
+import { WhisperThread } from "../../apis/strims/chat/v1/chat.pb";
+import * as directoryv1 from "../../apis/strims/network/v1/directory/directory.pb";
 import { Topic, useChat } from "../../contexts/Chat";
 import { useCall, useClient } from "../../contexts/FrontendApi";
 import { NetworkContext } from "../../contexts/Network";
@@ -173,7 +173,7 @@ const RoomsList: React.FC<RoomMenuPropsBase> = ({ onChange }) => {
   for (const { network, listings } of networkListings.values()) {
     const rooms: ReactNode[] = [];
     for (const { id, listing, userCount } of listings.values()) {
-      if (listing.content.case === directoryv1.Listing.ContentCase.CHAT) {
+      if (listing.content.case === directoryv1.Listing_ContentCase.CHAT) {
         rooms.push(
           <RoomsListItem
             key={id.toString()}
@@ -298,7 +298,7 @@ const WhispersListItem: React.FC<WhispersListItemProps> = ({ onChange, thread, o
 };
 
 interface UsersListItemProps extends RoomMenuPropsBase {
-  user: directoryv1.FrontendGetUsersResponse.User;
+  user: directoryv1.FrontendGetUsersResponse_User;
   networks: Map<bigint, directoryv1.Network>;
 }
 

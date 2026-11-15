@@ -7,7 +7,7 @@ import { Base64 } from "js-base64";
 import React, { useState } from "react";
 
 import { FrontendClient } from "../../apis/client";
-import { registerChatFrontendService } from "../../apis/strims/chat/v1/chat_rpc";
+import { registerChatFrontendService } from "../../apis/strims/chat/v1/chat_rpc.pb";
 import ChatShell from "../../components/Chat/Shell";
 import { Provider as ChatProvider } from "../../contexts/Chat";
 import { Provider as ApiProvider } from "../../contexts/FrontendApi";

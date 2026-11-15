@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
 import { useTitle } from "react-use";
 
-import { BootstrapClient } from "../../../apis/strims/network/v1/bootstrap/bootstrap";
+import { BootstrapClient_ClientOptionsCase } from "../../../apis/strims/network/v1/bootstrap/bootstrap.pb";
 import { InputError } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
@@ -56,7 +56,7 @@ const BootstrapEditForm: React.FC = () => {
 
   let data: BootstrapFormData;
   switch (value.bootstrapClient.clientOptions.case) {
-    case BootstrapClient.ClientOptionsCase.WEBSOCKET_OPTIONS: {
+    case BootstrapClient_ClientOptionsCase.WEBSOCKET_OPTIONS: {
       data = value.bootstrapClient.clientOptions.websocketOptions;
       break;
     }

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { useTitle } from "react-use";
 
-import { Network } from "../../../apis/strims/network/v1/network";
+import { Network } from "../../../apis/strims/network/v1/network.pb";
 import { InputError } from "../../../components/Form";
 import {
   MenuCell,

@@ -3,7 +3,7 @@
 
 import React, { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
-import { LinkedProfile } from "../../../apis/strims/auth/v1/auth";
+import { LinkedProfile } from "../../../apis/strims/auth/v1/auth.pb";
 import { Ops, SessionContext, State } from "../../../contexts/Session";
 import { fixtures } from "../../storybook";
 

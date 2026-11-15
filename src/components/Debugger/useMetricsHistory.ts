@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Metrics } from "../../apis/strims/debug/v1/metrics";
+import { Metrics } from "../../apis/strims/debug/v1/metrics.pb";
 import { useClient } from "../../contexts/FrontendApi";
 
 export const HISTORY_LENGTH = 240;

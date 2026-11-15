@@ -3,7 +3,7 @@
 
 import React, { ReactNode } from "react";
 
-import { Profile } from "../apis/strims/profile/v1/profile";
+import { Profile } from "../apis/strims/profile/v1/profile.pb";
 import { useCall } from "./FrontendApi";
 
 export interface UseProfileState {

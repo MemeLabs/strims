@@ -7,17 +7,19 @@ import { useWindowSize } from "react-use";
 
 import {
   CapConnLoadLogResponse,
-  CapConnLog,
+  CapConnLog_PeerLog_Event_Code,
+  CapConnLog_PeerLog_Event_MessageType,
   CapConnWatchLogsResponse,
-} from "../../apis/strims/devtools/v1/ppspp/capconn";
+  CapConnWatchLogsResponse_Op,
+} from "../../apis/strims/devtools/v1/ppspp/capconn.pb";
 import Nav from "../components/Nav";
 import { useClient } from "../contexts/DevToolsApi";
 
 const reduceLogs = (logs: string[], event: CapConnWatchLogsResponse): string[] => {
   switch (event.op) {
-    case CapConnWatchLogsResponse.Op.CREATE:
+    case CapConnWatchLogsResponse_Op.CREATE:
       return [...logs, event.name].sort();
-    case CapConnWatchLogsResponse.Op.REMOVE:
+    case CapConnWatchLogsResponse_Op.REMOVE:
       return logs.filter((n) => n !== event.name);
   }
 };
@@ -138,8 +140,8 @@ interface TimelineProps {
 }
 
 interface TimelineFormData {
-  eventCode: CapConnLog.PeerLog.Event.Code;
-  messageType: CapConnLog.PeerLog.Event.MessageType;
+  eventCode: CapConnLog_PeerLog_Event_Code;
+  messageType: CapConnLog_PeerLog_Event_MessageType;
 }
 
 const Timeline = ({
@@ -151,8 +153,8 @@ const Timeline = ({
   const { register, watch } = useForm<TimelineFormData>({
     mode: "onChange",
     defaultValues: {
-      eventCode: CapConnLog.PeerLog.Event.Code.EVENT_CODE_READ,
-      messageType: CapConnLog.PeerLog.Event.MessageType.MESSAGE_TYPE_DATA,
+      eventCode: CapConnLog_PeerLog_Event_Code.EVENT_CODE_READ,
+      messageType: CapConnLog_PeerLog_Event_MessageType.MESSAGE_TYPE_DATA,
     },
   });
   const { eventCode, messageType } = watch();
@@ -214,11 +216,11 @@ const Timeline = ({
     <div className="network_timeline">
       <form className="network_timeline__controls">
         <select {...register("eventCode")}>
-          <option value={CapConnLog.PeerLog.Event.Code.EVENT_CODE_READ}>READ</option>
-          <option value={CapConnLog.PeerLog.Event.Code.EVENT_CODE_FLUSH}>WRITE</option>
+          <option value={CapConnLog_PeerLog_Event_Code.EVENT_CODE_READ}>READ</option>
+          <option value={CapConnLog_PeerLog_Event_Code.EVENT_CODE_FLUSH}>WRITE</option>
         </select>
         <select {...register("messageType")}>
-          {Object.entries(CapConnLog.PeerLog.Event.MessageType)
+          {Object.entries(CapConnLog_PeerLog_Event_MessageType)
             .filter(([, id]) => typeof id === "number")
             .map(([label, id]) => (
               <option key={id} value={id}>

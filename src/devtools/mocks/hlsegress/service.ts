@@ -1,11 +1,11 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import * as hlsv1 from "../../../apis/strims/video/v1/hls_egress";
+import * as hlsv1 from "../../../apis/strims/video/v1/hls_egress.pb";
 import {
   HLSEgressService as HLSEgressServiceInterface,
   UnimplementedHLSEgressService,
-} from "../../../apis/strims/video/v1/hls_egress_rpc";
+} from "../../../apis/strims/video/v1/hls_egress_rpc.pb";
 
 export interface HLSEgressServiceOptions {
   /** What isSupported answers; default true. */

@@ -3,7 +3,7 @@
 
 import assert from "assert";
 
-import { LinkedProfile } from "../apis/strims/auth/v1/auth";
+import { LinkedProfile } from "../apis/strims/auth/v1/auth.pb";
 import { validNamePattern } from "../lib/validation";
 import { SessionOps, signInCandidates, startAnonymousSession, viewerName } from "./profiles";
 

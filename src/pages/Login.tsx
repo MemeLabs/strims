@@ -9,7 +9,11 @@ import { FiUser } from "react-icons/fi";
 import { Navigate } from "react-router";
 import { useTitle } from "react-use";
 
-import { LinkedProfile, PairingToken } from "../apis/strims/auth/v1/auth";
+import {
+  LinkedProfile,
+  LinkedProfile_CredentialsCase,
+  PairingToken,
+} from "../apis/strims/auth/v1/auth.pb";
 import { ButtonSet } from "../components/Form";
 import InternalLink from "../components/InternalLink";
 import ProfileForm, { ProfileFormValues } from "../components/Landing/ProfileForm";
@@ -64,18 +68,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ newLogin }) => {
   useReady(() => {
     const { credentials } = selectedProfile;
     switch (credentials.case) {
-      case LinkedProfile.CredentialsCase.UNENCRYPTED:
+      case LinkedProfile_CredentialsCase.UNENCRYPTED:
         // TODO
         break;
-      case LinkedProfile.CredentialsCase.PASSWORD:
+      case LinkedProfile_CredentialsCase.PASSWORD:
         // TODO
         break;
-      case LinkedProfile.CredentialsCase.TOKEN:
+      case LinkedProfile_CredentialsCase.TOKEN:
         void sessionOps.signIn(selectedProfile.serverAddress, {
           credentials: { token: credentials.token },
         });
         break;
-      case LinkedProfile.CredentialsCase.KEY:
+      case LinkedProfile_CredentialsCase.KEY:
         void sessionOps.signIn(selectedProfile.serverAddress, {
           credentials: { key: credentials.key },
         });

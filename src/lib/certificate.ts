@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { Certificate, CertificateBody } from "../apis/strims/type/certificate";
+import { Certificate, CertificateBody } from "../apis/strims/type/certificate.pb";
 
 // A certificate's signed body: its key, subject, validity and serial number.
 export const certificateBody = (cert: Certificate): CertificateBody =>

@@ -4,7 +4,7 @@
 import { Base64 } from "js-base64";
 import React, { MutableRefObject, useEffect, useRef, useState } from "react";
 
-import { EgressOpenStreamResponse } from "../../apis/strims/video/v1/egress";
+import { EgressOpenStreamResponse_BodyCase } from "../../apis/strims/video/v1/egress.pb";
 import { useClient } from "../../contexts/FrontendApi";
 import { useSession } from "../../contexts/Session";
 import { VideoControls } from "../../hooks/useVideo";
@@ -122,10 +122,10 @@ export const UnitsMedia: React.FC<SwarmMediaProps> = ({
     const stream = client.videoEgress.openStream(request);
     stream.on("data", ({ body }) => {
       switch (body.case) {
-        case EgressOpenStreamResponse.BodyCase.DATA:
+        case EgressOpenStreamResponse_BodyCase.DATA:
           player.push(body.data.data, body.data.segmentEnd, body.data.discontinuity);
           return;
-        case EgressOpenStreamResponse.BodyCase.ERROR:
+        case EgressOpenStreamResponse_BodyCase.ERROR:
           ended(body.error.message);
           end();
           return;

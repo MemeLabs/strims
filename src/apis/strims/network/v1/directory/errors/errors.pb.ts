@@ -1,0 +1,73 @@
+// Copyright 2026 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+
+/**
+ * The directory's error codes, 4000-4999: the directory server's refusals,
+ * which a node relays to its UI as the server sent them, and the node's own
+ * failures to reach the server.
+ */
+export enum ErrorCode {
+  /** No code: the message alone says what failed. */
+  UNDEFINED = 0,
+  /** The directory, or the node's view of it, holds no such listing. */
+  LISTING_NOT_FOUND = 4000,
+  /** The caller has no session on the directory. */
+  SESSION_NOT_FOUND = 4001,
+  /** Publishing from the caller's account is disabled. */
+  PUBLISH_DISABLED = 4002,
+  /** Joining from the caller's account is disabled. */
+  JOIN_DISABLED = 4003,
+  /** The embed's service isn't one the directory lists. */
+  UNSUPPORTED_EMBED = 4004,
+  /** An embed's id isn't of its service's form. */
+  INVALID_EMBED_ID = 4005,
+  /** A swarm uri didn't parse. */
+  INVALID_SWARM_URI = 4006,
+  /** The listing's content type isn't one the directory lists. */
+  UNSUPPORTED_CONTENT = 4007,
+  /** The listing is banned. */
+  LISTING_BANNED = 4008,
+  /** The caller publishes as many listings as it may. */
+  PUBLISH_QUOTA = 4009,
+  /** The caller views as many listings as it may. */
+  VIEW_QUOTA = 4010,
+  /** The caller doesn't publish the listing. */
+  NOT_PUBLISHING = 4011,
+  /** The caller doesn't view the listing. */
+  NOT_VIEWING = 4012,
+  /** The caller may not make the request. */
+  PERMISSION_DENIED = 4013,
+  /** The server holds as many listings, users or sessions as it may. */
+  FULL = 4014,
+  /** A field of the request is over its bound. */
+  TOO_LARGE = 4015,
+  /** The node doesn't run the network, or the profile has no such network. */
+  NETWORK_NOT_FOUND = 4016,
+  /**
+   * The node hasn't joined the network, or its membership isn't trusted
+   * yet.
+   */
+  NOT_JOINED = 4017,
+  /** The network's hash table has no directory server address. */
+  SERVER_NOT_FOUND = 4018,
+  /** A call came without the caller's certificate. */
+  NO_CALLER_CERTIFICATE = 4019,
+  /** The publisher holds as many snippets as it may. */
+  TOO_MANY_SNIPPETS = 4020,
+  /** A snippet or one of its parts is over its bound. */
+  SNIPPET_TOO_LARGE = 4021,
+  /** A snippet's signature doesn't verify against its swarm's key. */
+  INVALID_SNIPPET_SIGNATURE = 4022,
+  /** A snippet doesn't decode, or names images wrongly. */
+  MALFORMED_SNIPPET = 4023,
+  /** A snippet names an image that isn't on hand. */
+  SNIPPET_IMAGE_MISSING = 4024,
+  /** The node holds no snippet for the swarm. */
+  SNIPPET_NOT_FOUND = 4025,
+  /** The snippet has as many subscribers as it may. */
+  TOO_MANY_SNIPPET_SUBSCRIBERS = 4026,
+  /** A certificate didn't decode. */
+  INVALID_CERTIFICATE = 4027,
+}
+

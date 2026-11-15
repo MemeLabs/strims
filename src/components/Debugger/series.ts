@@ -1,7 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { LinkInfo, LinkKind, Metrics, SwarmInfo } from "../../apis/strims/debug/v1/metrics";
+import { LinkInfo, LinkKind, Metrics, SwarmInfo } from "../../apis/strims/debug/v1/metrics.pb";
 
 // A point on a chart, x in Unix seconds.
 export interface Point {

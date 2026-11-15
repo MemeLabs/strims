@@ -4,7 +4,7 @@
 import React from "react";
 import { Route } from "react-router";
 
-import { LinkedProfile } from "../../../apis/strims/auth/v1/auth";
+import { LinkedProfile } from "../../../apis/strims/auth/v1/auth.pb";
 import { State } from "../../../contexts/Session";
 import Login from "../../../pages/Login";
 import { Story, StoryRouter, fixtures } from "../../storybook";

@@ -7,7 +7,7 @@ import { PassThrough } from "stream";
 
 import React, { ReactNode, useEffect, useRef, useState } from "react";
 
-import * as directoryv1 from "../../../../apis/strims/network/v1/directory/directory";
+import * as directoryv1 from "../../../../apis/strims/network/v1/directory/directory.pb";
 import { RoomButtons } from "../../../../components/Chat/RoomMenu";
 import Toast from "../../../../components/Notification/Toast";
 import { Topic } from "../../../../contexts/Chat";

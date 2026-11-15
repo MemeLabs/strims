@@ -1,6 +1,5 @@
-src/apis/google/** linguist-generated
-src/apis/strims/** linguist-generated
-pkg/apis/** linguist-generated
+*.pb.go linguist-generated
+*.pb.ts linguist-generated
 vendor linguist-vendored
 go.sum linguist-generated
 pnpm-lock.yaml linguist-generated

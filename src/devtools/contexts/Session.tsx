@@ -3,9 +3,9 @@
 
 import React, { ReactNode, useMemo } from "react";
 
-import { ISignInRequest, ISignUpRequest } from "../../apis/strims/auth/v1/auth";
-import { Profile } from "../../apis/strims/profile/v1/profile";
-import { Key } from "../../apis/strims/type/key";
+import { ISignInRequest, ISignUpRequest } from "../../apis/strims/auth/v1/auth.pb";
+import { Profile } from "../../apis/strims/profile/v1/profile.pb";
+import { Key } from "../../apis/strims/type/key.pb";
 import { Ops, SessionContext, State } from "../../contexts/Session";
 
 export interface SessionProviderProps {

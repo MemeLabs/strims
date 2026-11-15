@@ -3,7 +3,7 @@
 
 import React from "react";
 
-import { VideoChannel } from "../../../../../apis/strims/video/v1/channel";
+import { VideoChannel } from "../../../../../apis/strims/video/v1/channel.pb";
 import VideoChannelService, { videoChannel } from "../../../../mocks/videochannel/service";
 import { Story, fixtures } from "../../../../storybook";
 import { SettingsStory } from "../Layout.harness";

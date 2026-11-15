@@ -7,8 +7,8 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useTitle } from "react-use";
 
-import { PairingToken } from "../../../apis/strims/auth/v1/auth";
-import { Notification } from "../../../apis/strims/notification/v1/notification";
+import { PairingToken } from "../../../apis/strims/auth/v1/auth.pb";
+import { Notification_Status } from "../../../apis/strims/notification/v1/notification.pb";
 import { InputError, InputLabel } from "../../../components/Form";
 import { TableTitleBar } from "../../../components/Settings/Table";
 import { useCall } from "../../../contexts/FrontendApi";
@@ -41,7 +41,7 @@ const ProfilePairingToken = () => {
     void navigator.clipboard.writeText(code);
 
     pushTransientNotification({
-      status: Notification.Status.STATUS_SUCCESS,
+      status: Notification_Status.STATUS_SUCCESS,
       message: "Token copied to clipboard",
     });
   };

@@ -1,0 +1,67 @@
+// Copyright 2022 Strims contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
+import type { default as strims_rpc_Host, UnaryCallOptions as strims_rpc_UnaryCallOptions } from "@memelabs/protobuf/lib/rpc/host";
+import type strims_rpc_Service from "@memelabs/protobuf/lib/rpc/service";
+import type { Call as strims_rpc_Call } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc.pb";
+
+import {
+  type IPeerOpenRequest as strims_replication_v1_IPeerOpenRequest,
+  PeerOpenRequest as strims_replication_v1_PeerOpenRequest,
+  PeerOpenResponse as strims_replication_v1_PeerOpenResponse,
+  type IPeerBootstrapRequest as strims_replication_v1_IPeerBootstrapRequest,
+  PeerBootstrapRequest as strims_replication_v1_PeerBootstrapRequest,
+  PeerBootstrapResponse as strims_replication_v1_PeerBootstrapResponse,
+  type IPeerSyncRequest as strims_replication_v1_IPeerSyncRequest,
+  PeerSyncRequest as strims_replication_v1_PeerSyncRequest,
+  PeerSyncResponse as strims_replication_v1_PeerSyncResponse,
+  type IPeerAllocateProfileIDsRequest as strims_replication_v1_IPeerAllocateProfileIDsRequest,
+  PeerAllocateProfileIDsRequest as strims_replication_v1_PeerAllocateProfileIDsRequest,
+  PeerAllocateProfileIDsResponse as strims_replication_v1_PeerAllocateProfileIDsResponse,
+} from "./peer.pb";
+
+export interface ReplicationPeerService {
+  open(req: strims_replication_v1_PeerOpenRequest, call: strims_rpc_Call): Promise<strims_replication_v1_PeerOpenResponse> | strims_replication_v1_PeerOpenResponse;
+  bootstrap(req: strims_replication_v1_PeerBootstrapRequest, call: strims_rpc_Call): Promise<strims_replication_v1_PeerBootstrapResponse> | strims_replication_v1_PeerBootstrapResponse;
+  sync(req: strims_replication_v1_PeerSyncRequest, call: strims_rpc_Call): Promise<strims_replication_v1_PeerSyncResponse> | strims_replication_v1_PeerSyncResponse;
+  allocateProfileIDs(req: strims_replication_v1_PeerAllocateProfileIDsRequest, call: strims_rpc_Call): Promise<strims_replication_v1_PeerAllocateProfileIDsResponse> | strims_replication_v1_PeerAllocateProfileIDsResponse;
+}
+
+export class UnimplementedReplicationPeerService implements ReplicationPeerService {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  open(req: strims_replication_v1_PeerOpenRequest, call: strims_rpc_Call): Promise<strims_replication_v1_PeerOpenResponse> | strims_replication_v1_PeerOpenResponse { throw new Error("not implemented"); }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  bootstrap(req: strims_replication_v1_PeerBootstrapRequest, call: strims_rpc_Call): Promise<strims_replication_v1_PeerBootstrapResponse> | strims_replication_v1_PeerBootstrapResponse { throw new Error("not implemented"); }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  sync(req: strims_replication_v1_PeerSyncRequest, call: strims_rpc_Call): Promise<strims_replication_v1_PeerSyncResponse> | strims_replication_v1_PeerSyncResponse { throw new Error("not implemented"); }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  allocateProfileIDs(req: strims_replication_v1_PeerAllocateProfileIDsRequest, call: strims_rpc_Call): Promise<strims_replication_v1_PeerAllocateProfileIDsResponse> | strims_replication_v1_PeerAllocateProfileIDsResponse { throw new Error("not implemented"); }
+}
+
+export const registerReplicationPeerService = (host: strims_rpc_Service, service: ReplicationPeerService): void => {
+  host.registerMethod<strims_replication_v1_PeerOpenRequest, strims_replication_v1_PeerOpenResponse>("strims.replication.v1.ReplicationPeer.Open", (req, call) => service.open(req, call), strims_replication_v1_PeerOpenRequest);
+  host.registerMethod<strims_replication_v1_PeerBootstrapRequest, strims_replication_v1_PeerBootstrapResponse>("strims.replication.v1.ReplicationPeer.Bootstrap", (req, call) => service.bootstrap(req, call), strims_replication_v1_PeerBootstrapRequest);
+  host.registerMethod<strims_replication_v1_PeerSyncRequest, strims_replication_v1_PeerSyncResponse>("strims.replication.v1.ReplicationPeer.Sync", (req, call) => service.sync(req, call), strims_replication_v1_PeerSyncRequest);
+  host.registerMethod<strims_replication_v1_PeerAllocateProfileIDsRequest, strims_replication_v1_PeerAllocateProfileIDsResponse>("strims.replication.v1.ReplicationPeer.AllocateProfileIDs", (req, call) => service.allocateProfileIDs(req, call), strims_replication_v1_PeerAllocateProfileIDsRequest);
+}
+
+export class ReplicationPeerClient {
+  constructor(private readonly host: strims_rpc_Host) {}
+
+  public open(req?: strims_replication_v1_IPeerOpenRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_replication_v1_PeerOpenResponse> {
+    return this.host.expectOne(this.host.call("strims.replication.v1.ReplicationPeer.Open", new strims_replication_v1_PeerOpenRequest(req)), strims_replication_v1_PeerOpenResponse, opts);
+  }
+
+  public bootstrap(req?: strims_replication_v1_IPeerBootstrapRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_replication_v1_PeerBootstrapResponse> {
+    return this.host.expectOne(this.host.call("strims.replication.v1.ReplicationPeer.Bootstrap", new strims_replication_v1_PeerBootstrapRequest(req)), strims_replication_v1_PeerBootstrapResponse, opts);
+  }
+
+  public sync(req?: strims_replication_v1_IPeerSyncRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_replication_v1_PeerSyncResponse> {
+    return this.host.expectOne(this.host.call("strims.replication.v1.ReplicationPeer.Sync", new strims_replication_v1_PeerSyncRequest(req)), strims_replication_v1_PeerSyncResponse, opts);
+  }
+
+  public allocateProfileIDs(req?: strims_replication_v1_IPeerAllocateProfileIDsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<strims_replication_v1_PeerAllocateProfileIDsResponse> {
+    return this.host.expectOne(this.host.call("strims.replication.v1.ReplicationPeer.AllocateProfileIDs", new strims_replication_v1_PeerAllocateProfileIDsRequest(req)), strims_replication_v1_PeerAllocateProfileIDsResponse, opts);
+  }
+}
+

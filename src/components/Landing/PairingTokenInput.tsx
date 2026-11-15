@@ -10,7 +10,7 @@ import { Control, useController } from "react-hook-form";
 import { BsExclamationCircleFill } from "react-icons/bs";
 import { MdCheckCircle, MdClose } from "react-icons/md";
 
-import { PairingToken } from "../../apis/strims/auth/v1/auth";
+import { PairingToken } from "../../apis/strims/auth/v1/auth.pb";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { qrDecoder } from "../../lib/qr";
 import { Button, ButtonSet, InputLabel } from "../Form";

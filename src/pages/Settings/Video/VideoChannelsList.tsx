@@ -1,13 +1,13 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
+import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc.pb";
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Navigate } from "react-router";
 import { useTitle } from "react-use";
 
-import { VideoChannel } from "../../../apis/strims/video/v1/channel";
+import { VideoChannel } from "../../../apis/strims/video/v1/channel.pb";
 import { InputError } from "../../../components/Form";
 import {
   MenuCell,

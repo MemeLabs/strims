@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState } from "react";
 
-import { Image } from "../../../../../apis/strims/type/image";
+import { Image } from "../../../../../apis/strims/type/image.pb";
 import NetworkService from "../../../../mocks/network/service";
 import { Story, fixtures } from "../../../../storybook";
 import { SettingsStory, Step, pngImage, submit, waitFor } from "./harness";

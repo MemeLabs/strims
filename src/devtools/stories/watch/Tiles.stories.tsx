@@ -4,7 +4,7 @@
 import React from "react";
 import { Route } from "react-router";
 
-import { NetworkListingsItem } from "../../../apis/strims/network/v1/directory/directory";
+import { NetworkListingsItem } from "../../../apis/strims/network/v1/directory/directory.pb";
 import { NetworkListingsMap } from "../../../lib/listings";
 import Tiles from "../../../watch/Tiles";
 import { BootstrapListings, BootstrapListingsContext } from "../../../watch/listings";

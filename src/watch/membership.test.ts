@@ -3,13 +3,13 @@
 
 import assert from "assert";
 
-import { ErrorCode } from "../apis/strims/network/v1/errors/errors";
+import { ErrorCode } from "../apis/strims/network/v1/errors/errors.pb";
 import {
   ICreateNetworkFromInvitationRequest,
   ListNetworksResponse,
   Network,
-} from "../apis/strims/network/v1/network";
-import { Certificate, CertificateBody } from "../apis/strims/type/certificate";
+} from "../apis/strims/network/v1/network.pb";
+import { Certificate, CertificateBody } from "../apis/strims/type/certificate.pb";
 import {
   MAX_RENAMES,
   NetworkApi,

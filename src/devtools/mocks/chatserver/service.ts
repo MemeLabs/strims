@@ -1,9 +1,9 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import * as chatv1 from "../../../apis/strims/chat/v1/chat";
-import { Emote, Modifier, Server, ServerIcon, Tag } from "../../../apis/strims/chat/v1/chat";
-import { UnimplementedChatServerFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
+import * as chatv1 from "../../../apis/strims/chat/v1/chat.pb";
+import { Emote, Modifier, Server, ServerIcon, Tag } from "../../../apis/strims/chat/v1/chat.pb";
+import { UnimplementedChatServerFrontendService } from "../../../apis/strims/chat/v1/chat_rpc.pb";
 import {
   ModifierRecord,
   emote,
@@ -202,7 +202,7 @@ export default class ChatServerService extends UnimplementedChatServerFrontendSe
 
   async listEmotes(req: chatv1.ListEmotesRequest): Promise<chatv1.ListEmotesResponse> {
     const records = this.ofServer(this.emotes, req.serverId, (r) => r.emote.serverId);
-    const assets = req.parts.includes(chatv1.ListEmotesRequest.Part.PART_ASSETS);
+    const assets = req.parts.includes(chatv1.ListEmotesRequest_Part.PART_ASSETS);
     const emotes = await Promise.all(
       records.map(async (r) => {
         const e = assets ? await this.loadEmote(r) : r.emote;

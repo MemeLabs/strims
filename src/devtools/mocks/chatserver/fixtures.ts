@@ -15,9 +15,9 @@ import {
   ServerIcon,
   StyleSheet,
   Tag,
-} from "../../../apis/strims/chat/v1/chat";
-import { Image, ImageType } from "../../../apis/strims/type/image";
-import { Key, KeyType } from "../../../apis/strims/type/key";
+} from "../../../apis/strims/chat/v1/chat.pb";
+import { Image, ImageType } from "../../../apis/strims/type/image.pb";
+import { Key, KeyType } from "../../../apis/strims/type/key.pb";
 import {
   iconUrls,
   imageData,

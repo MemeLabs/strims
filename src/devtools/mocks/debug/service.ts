@@ -3,12 +3,12 @@
 
 import { Base64 } from "js-base64";
 
-import * as debugv1 from "../../../apis/strims/debug/v1/debug";
+import * as debugv1 from "../../../apis/strims/debug/v1/debug.pb";
 import {
   DebugService as DebugServiceInterface,
   UnimplementedDebugService,
-} from "../../../apis/strims/debug/v1/debug_rpc";
-import { IMockStream, MockStream } from "../../../apis/strims/debug/v1/metrics";
+} from "../../../apis/strims/debug/v1/debug_rpc.pb";
+import { IMockStream, MockStream } from "../../../apis/strims/debug/v1/metrics.pb";
 import { bytes, fixtureTime } from "../../storybook/fixtures/ids";
 import { networkKey } from "../../storybook/fixtures/networks";
 

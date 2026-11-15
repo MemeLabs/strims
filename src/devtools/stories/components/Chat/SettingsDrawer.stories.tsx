@@ -5,7 +5,11 @@ import "./chat.stories.scss";
 
 import React from "react";
 
-import { IUIConfig, UIConfig } from "../../../../apis/strims/chat/v1/chat";
+import {
+  IUIConfig,
+  UIConfig_ShowRemoved,
+  UIConfig_UserPresenceIndicator,
+} from "../../../../apis/strims/chat/v1/chat.pb";
 import SettingsDrawer from "../../../../components/Chat/SettingsDrawer";
 import { MockChat } from "../../../contexts/Chat";
 import { replay } from "../../../mocks/chat/MessageEmitter";
@@ -37,8 +41,8 @@ const stories: Story[] = [
           showTime: true,
           compactEmoteSpacing: true,
           maxLines: 250,
-          userPresenceIndicator: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DOT,
-          showRemoved: UIConfig.ShowRemoved.SHOW_REMOVED_CENSOR,
+          userPresenceIndicator: UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_DOT,
+          showRemoved: UIConfig_ShowRemoved.SHOW_REMOVED_CENSOR,
           customHighlight: ["strims", "ppspp", "test_user"],
           taggedVisibility: true,
           hideNsfw: true,
@@ -52,8 +56,8 @@ const stories: Story[] = [
       <Settings
         uiConfig={{
           ...allOff,
-          userPresenceIndicator: UIConfig.UserPresenceIndicator.USER_PRESENCE_INDICATOR_DISABLED,
-          showRemoved: UIConfig.ShowRemoved.SHOW_REMOVED_DO_NOTHING,
+          userPresenceIndicator: UIConfig_UserPresenceIndicator.USER_PRESENCE_INDICATOR_DISABLED,
+          showRemoved: UIConfig_ShowRemoved.SHOW_REMOVED_DO_NOTHING,
         }}
       />
     ),

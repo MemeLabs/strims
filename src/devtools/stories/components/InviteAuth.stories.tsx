@@ -8,19 +8,19 @@ import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import React, { ReactNode, useEffect, useRef, useState } from "react";
 import { Route } from "react-router";
 
-import { GetInvitationResponse } from "../../../apis/strims/network/v1/invite/invite";
+import { GetInvitationResponse } from "../../../apis/strims/network/v1/invite/invite.pb";
 import {
   UnimplementedInviteLinkService,
   registerInviteLinkService,
-} from "../../../apis/strims/network/v1/invite/invite_rpc";
+} from "../../../apis/strims/network/v1/invite/invite_rpc.pb";
 import {
   CreateNetworkFromInvitationRequest,
   CreateNetworkFromInvitationResponse,
   Invitation,
   InvitationV0,
   ListNetworksResponse,
-} from "../../../apis/strims/network/v1/network";
-import { UnimplementedNetworkFrontendService } from "../../../apis/strims/network/v1/network_rpc";
+} from "../../../apis/strims/network/v1/network.pb";
+import { UnimplementedNetworkFrontendService } from "../../../apis/strims/network/v1/network_rpc.pb";
 import InviteAuth from "../../../components/InviteAuth";
 import NetworkService from "../../mocks/network/service";
 import { MockApi, Story, StoryRouter, fixtures } from "../../storybook";

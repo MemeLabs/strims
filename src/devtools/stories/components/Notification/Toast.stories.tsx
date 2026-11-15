@@ -6,14 +6,12 @@ import React, { useEffect } from "react";
 import {
   Event,
   INotification,
-  Notification,
-} from "../../../../apis/strims/notification/v1/notification";
+  Notification_Status as Status,
+} from "../../../../apis/strims/notification/v1/notification.pb";
 import Toast from "../../../../components/Notification/Toast";
 import { useNotification } from "../../../../contexts/Notification";
 import NotificationService from "../../../mocks/notification/service";
 import { MockNotifications, Story, useMockService } from "../../../storybook";
-
-const { Status } = Notification;
 
 // Long enough that the toasts are still up when the story is looked at.
 const TIMEOUT_MS = 10 * 60 * 1000;

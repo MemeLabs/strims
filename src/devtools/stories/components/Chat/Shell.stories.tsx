@@ -5,7 +5,7 @@ import "./chat.stories.scss";
 
 import React from "react";
 
-import { MessageState } from "../../../../apis/strims/chat/v1/chat";
+import { MessageState } from "../../../../apis/strims/chat/v1/chat.pb";
 import SettingsDrawer from "../../../../components/Chat/SettingsDrawer";
 import Shell from "../../../../components/Chat/Shell";
 import { MockChat, RoomProvider, WhisperProvider } from "../../../contexts/Chat";

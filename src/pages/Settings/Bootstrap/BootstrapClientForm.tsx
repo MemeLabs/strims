@@ -1,7 +1,7 @@
 // Copyright 2022 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
+import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc.pb";
 import React from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
 import createUrlRegExp from "url-regex-safe";

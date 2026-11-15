@@ -3,11 +3,11 @@
 
 import { Base64 } from "js-base64";
 
-import * as ingressv1 from "../../../apis/strims/video/v1/ingress";
+import * as ingressv1 from "../../../apis/strims/video/v1/ingress.pb";
 import {
   UnimplementedVideoIngressService,
   VideoIngressService as VideoIngressServiceInterface,
-} from "../../../apis/strims/video/v1/ingress_rpc";
+} from "../../../apis/strims/video/v1/ingress_rpc.pb";
 import { bytes } from "../../storybook/fixtures/ids";
 
 export interface VideoIngressServiceOptions {

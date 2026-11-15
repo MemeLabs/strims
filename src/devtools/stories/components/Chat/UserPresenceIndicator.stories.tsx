@@ -8,25 +8,28 @@ import "./chat.stories.scss";
 
 import React from "react";
 
-import { Message, UIConfig } from "../../../../apis/strims/chat/v1/chat";
+import {
+  Message_DirectoryRef,
+  UIConfig_UserPresenceIndicator,
+} from "../../../../apis/strims/chat/v1/chat.pb";
 import { UserPresenceIndicator } from "../../../../components/Chat/UserPresenceIndicator";
 import { directoryRef } from "../../../mocks/chat/messages";
 import { Story } from "../../../storybook";
 
-const Style = UIConfig.UserPresenceIndicator;
+const Style = UIConfig_UserPresenceIndicator;
 
-const refs: [string, Message.DirectoryRef | undefined][] = [
-  ["eastmancolor (AngelThump)", new Message.DirectoryRef(directoryRef(37))],
-  ["TastelessTV (Twitch)", new Message.DirectoryRef(directoryRef(31))],
-  ["Destiny (Twitch)", new Message.DirectoryRef(directoryRef(28))],
-  ["a YouTube video", new Message.DirectoryRef(directoryRef(36))],
-  ["theme colour #22aa55", new Message.DirectoryRef(directoryRef(28, 0x22aa55))],
+const refs: [string, Message_DirectoryRef | undefined][] = [
+  ["eastmancolor (AngelThump)", new Message_DirectoryRef(directoryRef(37))],
+  ["TastelessTV (Twitch)", new Message_DirectoryRef(directoryRef(31))],
+  ["Destiny (Twitch)", new Message_DirectoryRef(directoryRef(28))],
+  ["a YouTube video", new Message_DirectoryRef(directoryRef(36))],
+  ["theme colour #22aa55", new Message_DirectoryRef(directoryRef(28, 0x22aa55))],
   ["watching nothing", undefined],
 ];
 
 // The indicator for each viewed listing beside an author's name, as a
 // message's author shows it.
-const Indicators: React.FC<{ style: UIConfig.UserPresenceIndicator }> = ({ style }) => (
+const Indicators: React.FC<{ style: UIConfig_UserPresenceIndicator }> = ({ style }) => (
   <div className="chat chat_story_grid chat_story_grid--wide">
     {refs.map(([label, ref]) => (
       <div key={label} className="chat_story_grid__cell">
