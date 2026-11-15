@@ -12,7 +12,8 @@
                                [--local [--slots N] [--imds-url URL]]
   hack/sim-farm/farm.py estimate MATRIX... [--json] [run's options]
   hack/sim-farm/farm.py status [MATRIX] [--regions R,...]
-  hack/sim-farm/farm.py down   [MATRIX] [--regions R,...]
+  hack/sim-farm/farm.py stop   TARGET [--no-wait] [--regions R,...]
+  hack/sim-farm/farm.py down   [MATRIX | --run RUN] [--regions R,...]
   hack/sim-farm/farm.py report MATRIX [--where KEY=VALUE ...] [--group KEY,...]
   hack/sim-farm/farm.py spend  [--csv DIR]
 
@@ -203,8 +204,9 @@ speed. A run logs the speeds before its best pools.
   --hours (6), and its worker powers it off after --idle-minutes (15) with
   nothing to do and no word from the controller, so a controller that
   dies costs little. `down` terminates them; `status` and `down` given a
-  matrix act on every run that includes it. Both look in every region the
-  run could have used (AWS, below).
+  matrix act on every run that includes it, and `down --run RUN` on the
+  run of that name alone. Both look in every region the run could have
+  used (AWS, below).
 - An instance boots on a thread of its own from its launch, waiting on
   no sync: it polls for its address until it's running, then for SSH,
   uploads the worker and the binaries, starts the worker, and a new
@@ -274,6 +276,29 @@ speed. A run logs the speeds before its best pools.
   cleanup short. With --keep an interrupted run leaves its instances; a
   rerun of the same matrices, in any order, finds them by tag in those
   regions and adopts their jobs.
+
+A run's process holds the run's lock, an exclusive flock of
+target/sim-farm/live/<run>.pid, from before its builds until it exits, and
+writes there its PID, its start time (/proc's, which a later process given
+the PID doesn't share), its command line and checkout: a second run of the
+same matrices exits naming the first before it builds anything. The lock
+is apart from the run's state, whose dirs appear only once its builds are
+done (simlab.suite.farm_started reads one as the run started). A
+run is live while a process holds its lock, tried without waiting: a file
+no process holds is a run that ended, whatever PID it names. status lists
+the live runs (given a matrix, those that include it). stop TARGET sends
+one SIGINT to the one live run that is TARGET (a run's name) or includes
+it (a matrix), once its lock's PID is alive, started when the file says,
+and runs farm.py run; when several live runs include TARGET it lists them
+and signals none. It then prints the run's log until the lock is let go
+(--no-wait returns at once), and lists the instances still tagged with the
+run's name, which `down --run RUN` terminates: stop terminates none, the
+run's cleanup does. A run takes SIGINT from its start, though started
+where it's ignored (a non-interactive shell's background job). A signal
+before the run starts a host (its builds, its canary) stops it at once,
+with nothing to clean up; one once its setup starts a host (--local's
+worker, the instances it adopts) waits for the setup to end, then stops
+the run through its cleanup, as one in its loop does.
 
 --local runs the jobs here instead, --slots at a time (default half the
 cores), with no AWS: for small matrices and for measuring one job. Its
@@ -3924,7 +3949,7 @@ class Run:
         for r, got in in_regions(lambda r: farm_instances(r, self.name), self.sweep).items():
             if isinstance(got, BaseException):
                 log(f"{r}: CAN'T LIST the run's instances ({got}); "
-                    f"`farm.py down {self.name}` terminates any left")
+                    f"`farm.py down --run {self.name}` terminates any left")
                 continue
             left = [
                 i["InstanceId"] for i in got
@@ -3992,6 +4017,9 @@ class Run:
             sp = specs(r, self.slot_mem_gib, types=types, testbed=self.testbed)
             return [(i, sp.get(i["InstanceType"])) for i in found]
 
+        # From here a signal waits for the setup's end, then stops the run
+        # through its cleanup (run): instances it adopts are the run's.
+        self.holding = True
         for r, found in in_regions_or_exit(adoptable, self.sweep).items():
             for i, spec in found:
                 if spec is None:
@@ -4097,6 +4125,9 @@ class Run:
             slots = self.args.slots or max(1, (os.cpu_count() or 2) // 2)
         self.local_slots = slots
         self.local_hosts = 0
+        # From here a signal waits for the setup's end, then stops the run
+        # through its cleanup (run), which stops the worker.
+        self.holding = True
         self.replace_local()
 
     def replace_local(self) -> None:
@@ -4239,10 +4270,6 @@ class Run:
         self.share_rows()
         for jid in [j for j in self.waiting if j in self.rows]:
             self.release(jid)
-        if self.local:
-            self.setup_local()
-        else:
-            self.setup_aws()
         interrupted = False
         crashed: Exception | None = None
         last_progress = 0.0
@@ -4259,9 +4286,22 @@ class Run:
                 return
             raise KeyboardInterrupt
 
+        # A signal in the setup stops the run at once until the setup starts
+        # a host (setup_local's worker, setup_aws's adopted instances); from
+        # then it's held (self.holding) until the setup ends, and stops the
+        # run below, through its cleanup.
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             signal.signal(sig, interrupt)
+        if self.local:
+            self.setup_local()
+        else:
+            self.setup_aws()
         try:
+            self.holding = False
+            if self.deferred:
+                self.deferred = False
+                log("a signal came as the run set up its hosts; stopping")
+                raise KeyboardInterrupt
             last_tick = None
             while not self.finished():
                 self.wake.clear()
@@ -4327,7 +4367,7 @@ class Run:
                 kept = collections.Counter(h.region for h in self.hosts if h.state != "lost")
                 if kept:
                     log("keeping " + ", ".join(f"{n} in {r}" for r, n in sorted(kept.items()))
-                        + f"; `farm.py down {self.name}` terminates them")
+                        + f"; `farm.py down --run {self.name}` terminates them")
             self.pool.shutdown(wait=False, cancel_futures=True)
             self.booter.shutdown(wait=False, cancel_futures=True)
             self.progress(time.time())
@@ -4733,6 +4773,272 @@ def spend(farm: Path, csv_dir: Path | None) -> int:
     return 0
 
 
+# --- live runs and stop -------------------------------------------------
+
+# The runs' locks, FARM/live/<run>.pid, apart from their state: `run` holds
+# its run's for its process's life and writes who holds it there
+# (hold_run), so a run's state dirs appear only once its builds are done,
+# as simlab.suite.farm_started reads them.
+LIVE = "live"
+# How long a run waits on its held lock before it refuses: a probe (held)
+# takes the lock for an instant, as does a holder's first write.
+LOCK_WAIT_S = 1.0
+STOP_POLL_S = 0.5
+LOG_RECLAIM = re.compile(r"leaving \d+ interrupted instances for AWS to reclaim: (.+)$")
+
+
+def proc_start(pid: int) -> int | None:
+    """When process `pid` started, in clock ticks after boot (/proc's stat,
+    its 22nd field): a later process given the same PID has another."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return None
+    # The command's name, the 2nd field, is in parentheses and may hold any
+    # character.
+    return int(stat[stat.rindex(")") + 2:].split()[19])
+
+
+def proc_argv(pid: int) -> list[str]:
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return []
+    return raw.decode(errors="replace").split("\0")[:-1]
+
+
+def is_farm_run(argv: list[str]) -> bool:
+    """Whether a command line is a farm.py run's, whichever python runs it
+    (a venv's is `python`)."""
+    return any(Path(a).name == "farm.py" and argv[i + 1:i + 2] == ["run"] for i, a in enumerate(argv))
+
+
+def lock_path(name: str) -> Path:
+    return FARM / LIVE / f"{name}.pid"
+
+
+def hold_run(name: str, matrices: list[str]) -> int:
+    """Takes run `name`'s lock, an exclusive flock of FARM/live/<run>.pid,
+    for the life of this process (the fd it returns stays open), and writes
+    there who holds it: the run, its matrices, this process's PID, start
+    time, command line and checkout, and when. Children don't inherit the fd
+    (os.open's aren't inheritable), so a worker or an SSH master left behind
+    doesn't keep a run live. The file is written in place, never replaced: a
+    lock is an inode's. Exits naming the holder when another process holds
+    the lock."""
+    path = lock_path(name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    deadline = time.monotonic() + LOCK_WAIT_S
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                os.close(fd)
+                sys.exit(f"{name} is live, and runs once at a time: {holder(path).line()}")
+            time.sleep(0.05)
+    pid = os.getpid()
+    rec = {"run": name, "matrices": matrices, "pid": pid, "start": proc_start(pid),
+           "started": time.strftime("%Y-%m-%d %H:%M:%S %Z"), "argv": proc_argv(pid) or [sys.executable, *sys.argv],
+           "checkout": str(ROOT)}
+    os.ftruncate(fd, 0)
+    os.pwrite(fd, (json.dumps(rec) + "\n").encode(), 0)
+    os.fsync(fd)
+    return fd
+
+
+def held(path: Path) -> bool:
+    """Whether a process holds the lock at `path`: tried without waiting,
+    and let go at once when free. The probe's lock is shared, so probes
+    leave one another be."""
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    finally:
+        os.close(fd)
+    return False
+
+
+@dataclasses.dataclass
+class Live:
+    """A live run: a process holds its lock, and its lock file says which."""
+    name: str
+    lock: Path
+    pid: int | None
+    start: int | None
+    started: str
+    argv: list[str]
+    checkout: str
+    matrices: list[str]
+
+    def mismatch(self) -> str | None:
+        """Why the file's PID isn't the farm.py run that took the lock, or
+        None when it is: alive, started when the file says, and running
+        farm.py run."""
+        if not isinstance(self.pid, int):
+            return "its lock file names no process"
+        start = proc_start(self.pid)
+        if start is None:
+            return f"PID {self.pid} isn't running"
+        if start != self.start:
+            return f"PID {self.pid} started at another time than the run's process: another process, given its PID"
+        argv = proc_argv(self.pid)
+        if not is_farm_run(argv):
+            return f"PID {self.pid} isn't a farm.py run: {shlex.join(argv)}"
+        return None
+
+    def line(self) -> str:
+        why = self.mismatch()
+        return f"{self.name}  pid {self.pid}  started {self.started}  from {self.checkout}" + (
+            f"  ({why})" if why else "")
+
+
+def holder(path: Path) -> Live:
+    """Who holds the lock at `path`, as its file says. A holder writes the
+    file once it has the lock: one empty or partial is read again, for
+    LOCK_WAIT_S at most."""
+    deadline = time.monotonic() + LOCK_WAIT_S
+    while True:
+        try:
+            rec = json.loads(path.read_text())
+            if isinstance(rec, dict):
+                break
+        except (OSError, ValueError):
+            pass
+        if time.monotonic() >= deadline:
+            rec = {}
+            break
+        time.sleep(0.05)
+    name = rec.get("run") or path.name.removesuffix(".pid")
+    return Live(name, path, rec.get("pid"), rec.get("start"), rec.get("started", "?"), rec.get("argv", []),
+                rec.get("checkout", "?"), rec.get("matrices") or run_matrices(name) or name.split("+"))
+
+
+def live_runs() -> list[Live]:
+    """The runs whose lock a process holds, by name. A lock file no process
+    holds is a run that ended, whatever PID it names."""
+    return [holder(p) for p in sorted((FARM / LIVE).glob("*.pid")) if held(p)]
+
+
+def live_of(target: str, runs: list[Live]) -> list[Live]:
+    """The runs that are `target`, a run's name, or include it, a matrix
+    (its path or its name)."""
+    name = Path(target).stem if target.endswith(".toml") or "/" in target else target
+    return [r for r in runs if name == r.name or name in r.matrices]
+
+
+def say_live(runs: list[Live], of: str | None = None) -> None:
+    if not runs:
+        print("no live runs" if of is None else f"no live run includes {of}")
+        return
+    print("live runs:" if of is None else f"live runs that include {of}:")
+    for r in runs:
+        print(f"  {r.line()}")
+
+
+def stop(target: str, regions, wait: bool = True) -> int:
+    """`stop`: sends the one live run that is `target` or includes it one
+    SIGINT, then (with `wait`) prints its log until its lock is let go, and
+    lists the instances still tagged with its name (left_over). Signals
+    nothing when no live run matches (1) or several do (2), or when the
+    lock's PID isn't the run that took it (1). `regions()` gives the regions
+    to look in besides every region the farm has launched in."""
+    runs = live_of(target, live_runs())
+    if not runs:
+        print(f"no live run is or includes {target}")
+        return 1
+    if len(runs) > 1:
+        print(f"{len(runs)} live runs include {target}; stopping none. Name the run to stop:")
+        for r in runs:
+            print(f"  {r.line()}")
+        return 2
+    r = runs[0]
+    why = r.mismatch()
+    if why:
+        print(f"{r.name}: not signalled: {why}")
+        return 1
+    log_file = FARM / r.matrices[0] / "farm.log"
+    seen = log_file.stat().st_size if log_file.exists() else 0
+    os.kill(r.pid, signal.SIGINT)
+    print(f"{r.name}: sent SIGINT to farm.py run {r.pid} (started {r.started}, from {r.checkout})", flush=True)
+    if not wait:
+        print(f"{r.name}: not waiting; its cleanup goes on, and `farm.py status` lists it while it's live")
+        return 0
+    print(f"{r.name}: waiting while it cleans up; its log ({log_file}):", flush=True)
+    lines: list[str] = []
+    part = b""
+
+    def follow(end: bool = False) -> None:
+        nonlocal seen, part
+        try:
+            with log_file.open("rb") as f:
+                f.seek(seen)
+                got = f.read()
+        except OSError:
+            got = b""
+        seen += len(got)
+        *done, part = (part + got).split(b"\n")
+        if end and part:
+            done, part = [*done, part], b""
+        for line in done:
+            lines.append(line.decode(errors="replace"))
+            print(lines[-1], flush=True)
+
+    try:
+        while held(r.lock):
+            follow()
+            time.sleep(STOP_POLL_S)
+    except KeyboardInterrupt:
+        print(f"\n{r.name}: no longer waiting; its cleanup goes on")
+        return 130
+    follow(end=True)
+    print(f"{r.name}: exited")
+    return left_over(r, lines, regions)
+
+
+def left_over(r: Live, lines: list[str], regions) -> int:
+    """After run `r` exited: the instances still tagged with its exact name,
+    and the command that terminates them (3), those its log left for AWS to
+    reclaim marked."""
+    if "--local" in r.argv:
+        print("a --local run launches no instances")
+        return 0
+    cmd = f"python3 hack/sim-farm/farm.py down --run {shlex.quote(r.name)}"
+    reclaiming = {i.strip() for m in map(LOG_RECLAIM.search, lines) if m for i in m.group(1).split(",")}
+    up, failed = [], False
+    for reg, got in in_regions(lambda reg: farm_instances(reg, r.name), sweep_regions(regions())).items():
+        if isinstance(got, BaseException):
+            print(f"{reg}: CAN'T LIST instances: {got}")
+            failed = True
+            continue
+        up += [(reg, i) for i in got if tag_of(i, TAG) == r.name and i["State"]["Name"] != "shutting-down"]
+    for reg, i in up:
+        print(f"  {i['InstanceId']}  {reg}  {i['State']['Name']}"
+              + ("  interrupted: AWS reclaims it" if i["InstanceId"] in reclaiming else ""))
+    others = [i for _, i in up if i["InstanceId"] not in reclaiming]
+    if others:
+        kept = " (kept by --keep for a rerun to adopt)" if "--keep" in r.argv else ""
+        print(f"{len(others)} instances tagged {r.name} are left{kept}: `{cmd}` terminates them"
+              + (", the interrupted ones too" if len(others) < len(up) else ""))
+        return 3
+    if up:
+        print(f"AWS reclaims them (unbilled in their first hour); `{cmd}` terminates any still up in "
+              f"{RECLAIM_GRACE // 60} minutes")
+    if failed:
+        print(f"`{cmd}` terminates any left where they couldn't be listed")
+        return 3
+    if not up:
+        print(f"no instance tagged {r.name} is left")
+    return 0
+
+
 # --- status and down ----------------------------------------------------
 
 
@@ -4749,6 +5055,8 @@ def sweep_regions(regions: list[str]) -> list[str]:
 
 def status(arg: str | None, regions: list[str]) -> int:
     m = matrix_at(arg) if arg else None
+    runs = live_runs()
+    say_live(live_of(m.name, runs) if m else runs, m.name if m else None)
     now = time.time()
     failed = 0
     for r, got in in_regions(lambda r: farm_instances(r, None), sweep_regions(regions)).items():
@@ -4775,11 +5083,14 @@ def status(arg: str | None, regions: list[str]) -> int:
     return 1 if failed else 0
 
 
-def down(name: str | None, regions: list[str]) -> int:
+def down(name: str | None, regions: list[str], exact: bool = False) -> int:
+    """Terminates the farm's instances: every run's, those of every run that
+    includes matrix `name`, or (exact) those of the run named `name`."""
     def one(r: str) -> int:
         ids = [
-            i["InstanceId"] for i in farm_instances(r, None)
-            if i["State"]["Name"] != "shutting-down" and (name is None or in_run(i, name))
+            i["InstanceId"] for i in farm_instances(r, name if exact else None)
+            if i["State"]["Name"] != "shutting-down"
+            and (name is None or (tag_of(i, TAG) == name if exact else in_run(i, name)))
         ]
         terminate(r, ids)
         return len(ids)
@@ -4875,11 +5186,30 @@ def main() -> int:
         if cmd == "estimate":
             r.add_argument("--json", action="store_true",
                            help="print the estimate as JSON, its text and log on stderr")
-    s = sub.add_parser("status")
+    s = sub.add_parser("status", description="The farm's instances in every region, and the live runs; given a "
+                       "matrix, those of the runs that include it, and its jobs with rows.")
     s.add_argument("matrix", nargs="?")
     s.add_argument("--regions")
-    d = sub.add_parser("down")
+    st = sub.add_parser(
+        "stop", formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Stops one live run: sends its farm.py run one SIGINT, and the run's own cleanup\n"
+                    "flushes and terminates its instances. A run is live while its process holds its\n"
+                    "lock, target/sim-farm/live/<run>.pid.",
+        epilog="TARGET is a run's name, or a matrix (a path or a name) that one live run includes.\n"
+               "stop signals nothing when no live run is or includes TARGET (exit 1), when several\n"
+               "include it (exit 2; they're listed: name the run), or when the lock's PID isn't the\n"
+               "farm.py run that took it (exit 1: a process given its PID since). It then prints the\n"
+               "run's log until the run exits, and lists the instances still tagged with the run's\n"
+               "name and the command that terminates them (exit 3 when any are left, else 0).",
+    )
+    st.add_argument("target", metavar="TARGET")
+    st.add_argument("--no-wait", action="store_true", help="return once the signal is sent")
+    st.add_argument("--regions", help="R1,R2,...: where to look for the run's instances, besides every region "
+                    "the farm has launched in")
+    d = sub.add_parser("down", description="Terminates the farm's instances: every run's, those of every run "
+                       "that includes MATRIX, or with --run those of that run alone.")
     d.add_argument("matrix", nargs="?")
+    d.add_argument("--run", help="the run's name: its instances alone, by their tag")
     d.add_argument("--regions")
     rp = sub.add_parser("report")
     rp.add_argument("matrix")
@@ -4912,15 +5242,28 @@ def main() -> int:
             if args.json:
                 print(json.dumps(est), file=out)
             return 0
-        if not args.local:
-            args.regions = regions_of(args.regions, cfg)
-        for m in ms:
-            build(m)
-        return Run(ms, args).run()
+        hold_run(run_name(ms), [m.name for m in ms])  # held until the process exits
+        # stop's SIGINT stops a run in its builds too, though the run started
+        # where SIGINT is ignored (a non-interactive shell's background job),
+        # which Python leaves be; Run.run installs its own before its setup.
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+        try:
+            if not args.local:
+                args.regions = regions_of(args.regions, cfg)
+            for m in ms:
+                build(m)
+            return Run(ms, args).run()
+        except KeyboardInterrupt:
+            print("interrupted before the run started a host: nothing to clean up", file=sys.stderr)
+            return 130
     elif args.cmd == "status":
         return status(args.matrix, regions_of(args.regions, cfg))
+    elif args.cmd == "stop":
+        return stop(args.target, lambda: regions_of(args.regions, cfg), not args.no_wait)
     elif args.cmd == "down":
-        return down(name(args.matrix), regions_of(args.regions, cfg))
+        if args.matrix and args.run:
+            sys.exit("down takes a matrix or --run, not both")
+        return down(args.run or name(args.matrix), regions_of(args.regions, cfg), exact=bool(args.run))
     elif args.cmd == "report":
         report(Matrix(args.matrix), args.where, args.group)
     elif args.cmd == "spend":

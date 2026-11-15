@@ -22,14 +22,15 @@ private `sim-farm-aws` memory. Never write them into the repo.
     python3 hack/sim-farm/farm.py run MATRIX.toml... [--job-timeout MIN] [--max-vcpus N] [--keep]
     python3 hack/sim-farm/farm.py run MATRIX.toml --local [--slots N]
     python3 hack/sim-farm/farm.py status [MATRIX.toml]
-    python3 hack/sim-farm/farm.py down [MATRIX.toml]
+    python3 hack/sim-farm/farm.py stop RUN|MATRIX [--no-wait]
+    python3 hack/sim-farm/farm.py down [MATRIX.toml | --run RUN]
     python3 hack/sim-farm/farm.py report MATRIX.toml [--group KEY,...]
     python3 hack/sim-farm/farm.py spend [--csv DIR]
 
 `estimate` builds and launches nothing, and `--local` runs the jobs
-here without AWS. `status` lists the instances in every region, plus a
-matrix's jobs with rows when given one. `spend` reports estimates by
-local day; AWS bills by UTC day.
+here without AWS. `status` lists the live runs and the instances in
+every region, plus a matrix's jobs with rows when given one. `spend`
+reports estimates by local day; AWS bills by UTC day.
 
 ## Before a run
 
@@ -82,12 +83,28 @@ local day; AWS bills by UTC day.
 
 ## Stopping a run
 
-1. Signal the farm.py process itself, not suite.py or a `timeout`
-   wrapper: `pgrep -a python3 | grep 'farm.py run'`, then `kill -INT PID`.
-2. Let it wind down: it flushes (2 minutes at most), then terminates
-   every instance. A second signal doesn't cut the cleanup short.
-3. Check that `farm.py status` lists none, and run `farm.py down` if any
-   remain.
+A run is live while its farm.py holds the run's lock
+(target/sim-farm/live/RUN.pid); a second `farm.py run` of it refuses to
+start. Runs from other sessions may be live: stop only your own.
+
+1. `farm.py stop RUN` (the run's name, or a matrix only it includes)
+   sends its farm.py one SIGINT. Never signal suite.py or a `timeout`
+   wrapper: suite.py kills farm.py 0.25 s after a ^C, before its
+   cleanup. Never kill what pgrep matches: it may be another session's
+   run.
+2. stop refuses a matrix that several live runs include, listing them,
+   since suite.py names runs by their inputs and two sessions' runs can
+   share a matrix: name the run then. It refuses a PID that isn't the
+   run's farm.py, which a reused PID would be.
+3. stop waits while the run winds down, printing its log: it flushes (2
+   minutes at most), then terminates its instances, leaving interrupted
+   ones for AWS to reclaim. A run stopped in its builds exits at once;
+   one whose setup has started a host finishes the setup, then cleans up.
+   `--no-wait` returns at once.
+4. stop then lists the instances still tagged with the run's name. Run
+   the `python3 hack/sim-farm/farm.py down --run RUN` it prints, never a
+   bare `down` or `down MATRIX`: those terminate other runs' instances
+   too.
 
 With `--keep`, a stopped run leaves its instances for a rerun to adopt.
 
@@ -123,13 +140,14 @@ With `--keep`, a stopped run leaves its instances for a rerun to adopt.
   from disk, and boots ship its worker.py, s3sign.py and store_host.py.
   A worktree's own `farm.py run` runs its own code on main's state.
 - Develop in a worktree and test with `farm.py run --local` of
-  `scenarios-smoke.toml`. Land in one commit once no run is live
-  (`pgrep -a python3 | grep -E 'farm.py|suite.py'`, `farm.py status`).
-  Keep every save of the main checkout's copy runnable.
+  `scenarios-smoke.toml`. Land in one commit once `farm.py status` says
+  `no live runs` and `pgrep -a python | grep 'farm.py run'` finds no run
+  it misses: a farm.py from a checkout without the lock holds none. Keep
+  every save of the main checkout's copy runnable.
 - `pgrep -f` waits and guards match their own `bash -c` line. Use
-  `pgrep -a python3 | grep`, give a guard an `else echo` branch, and wait
-  on a PID (`while kill -0 PID`). Kill hung sims by PID, never with
-  `pkill -f`.
+  `pgrep -a python | grep` (a venv's farm.py runs as `python`), give a
+  guard an `else echo` branch, and wait on a PID (`while kill -0 PID`).
+  Kill hung sims by PID, never with `pkill -f`.
 
 ## Reading results
 
