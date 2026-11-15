@@ -18,8 +18,8 @@
 #                 writing it: suite (hack/simlab/suite.py's local runs);
 #                 its name starts with an underscore, a sim's never does
 #   lines         the lines that write it and main doesn't: decl (the
-#                 HAVE removal's declared-summary line, seed-cover), p4tf
-#                 (its park4 line, seed-cover-p4tf), attackers (strims-sim's
+#                 HAVE removal's declared-summary line, seed-cover-2), p4tf
+#                 (its park4 line, seed-cover-p4tf-2), attackers (strims-sim's
 #                 behavioural attackers and dishonest mix); a family's
 #                 values a line adds to main's are keyed by the line in its
 #                 params
@@ -1258,7 +1258,7 @@ notes.strims-sim = "The streams pushed to each neighbour at the seed's stats sam
 [rows.seed_timeouts]
 sims = ["strims-sim"]
 type = "int"
-description = "The seed's requests that timed out unanswered (Report::timeouts)."
+description = "The seed's requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts), and the speculative ones that expired or that their holder answered NOT_YET (SwarmCounters::spec_expired, spec_not_yet, which main's sims never send) (Report::timeouts)."
 
 [rows.seed_chunk_share]
 sims = ["strims-sim"]
@@ -1387,7 +1387,7 @@ lines = ["decl", "p4tf"]
 type = "int"
 unit = "ms"
 params = { p = ["50", "99"] }
-description = "The p50 and p99 in ms of the answered speculative requests' delays, over every host's runner; left out without any."
+description = "The p50 and p99 in ms of the answered speculative requests' delays, over every host's runner, of their WaitHistogram, quarter-octave buckets read at their lower bound, to the ms below: never above the delay, at most a sixth under it below 46 s; left out without any."
 
 [rows.stale_bytes]
 sims = ["strims-sim"]
@@ -1483,25 +1483,25 @@ description = "The sweep test the job ran (strims-sim's tests/scenarios.rs name)
 sims = ["strims-sim"]
 type = "int"
 aggregate = "count"
-description = "The honest viewers' requests that timed out unanswered, over every incarnation (SwarmCounters::timeouts): every host but the seed and the dishonest ones."
+description = "The honest viewers' requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts), and the speculative ones that expired or that their holder answered NOT_YET (SwarmCounters::spec_expired, spec_not_yet, which main's sims never send): every host but the seed and the dishonest ones."
 
 [rows.timeouts_dishonest]
 sims = ["strims-sim"]
 type = "int"
 aggregate = "count"
-description = "With dishonest peers, their requests that timed out unanswered (the hostile hosts'); left out without any."
+description = "With dishonest peers, their requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts), and the speculative ones that expired or that their holder answered NOT_YET (SwarmCounters::spec_expired, spec_not_yet, which main's sims never send) (the hostile hosts'); left out without any."
 
 [rows.timeouts_spec_expired]
 sims = []
 lines = ["decl", "p4tf"]
 type = "int"
-description = "The requests of swarm `swarm` that ended without data, every incarnation's: those that timed out unanswered (`crate::stats::SwarmCounters::timeouts`) and the speculative ones that expired or that their holder answered NOT_YET (the row's `timeouts_spec_expired`, `timeouts_spec_not_yet`); of the honest viewers (every host but the seed and the hostile ones), the seed's, and the hostile hosts'."
+description = "The honest viewers' speculative requests that expired without data, over every incarnation (SwarmCounters::spec_expired): every host but the seed and the dishonest ones."
 
 [rows.timeouts_spec_not_yet]
 sims = []
 lines = ["decl", "p4tf"]
 type = "int"
-description = "The requests of swarm `swarm` that ended without data, every incarnation's: those that timed out unanswered (`crate::stats::SwarmCounters::timeouts`) and the speculative ones that expired or that their holder answered NOT_YET (the row's `timeouts_spec_expired`, `timeouts_spec_not_yet`); of the honest viewers (every host but the seed and the hostile ones), the seed's, and the hostile hosts'."
+description = "The honest viewers' speculative requests their holder answered NOT_YET, over every incarnation (SwarmCounters::spec_not_yet): every host but the seed and the dishonest ones."
 
 [rows.top_seed_link_s]
 sims = ["strims-sim"]
@@ -2098,7 +2098,7 @@ description = "With it too, the seed log's decisions and sends its caps left out
 sims = []
 lines = ["decl", "p4tf"]
 type = "int"
-description = "With the request logs on, the park and event logs' records their caps left out."
+description = "The park and event logs' records the nodes' caps left out, every host's, summed."
 
 [tables.seconds]
 sims = ["strims-sim"]
@@ -2851,7 +2851,7 @@ keys = "k, node, peer, seq, t_ms"
 joins = "viewers USING (k, src, node) (the requester); asks USING (k, src, t_ms, node, peer, seq) for round 'spec' AND picked (the decision; its rivals by ask); parks ON (k, src) and parks.node = peer, parks.peer = node, seq, parks.t_ms between t_ms and t_outcome_ms (the holder's park or refusal); arrivals ON (k, src) and arrivals.node = peer, seq, arrivals.t_ms = held_ms (the holder's hold)"
 knobs = ["SPEC"]
 sample = false
-zstd = false
+zstd = true
 description = "A HAVE-removal line's speculative requests (the decl and p4tf lines'); main's sims don't write it."
 
 [columns.spec_requests.t_ms]
@@ -3038,7 +3038,7 @@ keys = "k, node, peer, seq, t_ms"
 joins = "viewers USING (k, src, node) (the holder); spec_requests ON (k, src) and spec_requests.node = parks.peer, spec_requests.peer = parks.node, seq, parks.t_ms between their t_ms and t_outcome_ms (the request as its requester logged it), asks the same with picked (either round's); arrivals ON (k, src, node, seq) and arrivals.t_ms = parks.held_ms (the holder's hold)"
 knobs = ["SPEC"]
 sample = false
-zstd = false
+zstd = true
 description = "A HAVE-removal line's park log (the decl and p4tf lines'); main's sims don't write it."
 
 [columns.parks.t_ms]

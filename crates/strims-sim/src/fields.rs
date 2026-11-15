@@ -945,7 +945,11 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     SeedRiseP99Ms,
-    /// The seed's requests that timed out unanswered (Report::timeouts).
+    /// The seed's requests that ended without data, over every incarnation:
+    /// those that timed out unanswered (SwarmCounters::timeouts), and the
+    /// speculative ones that expired or that their holder answered NOT_YET
+    /// (SwarmCounters::spec_expired, spec_not_yet, which main's sims never
+    /// send) (Report::timeouts).
     SeedTimeouts,
     /// The scenario's send buffer's uplink queue, in ms
     /// (STRIMS_SIM_SEND_BUFFER, WAN mode); 0 without one.
@@ -1071,12 +1075,17 @@ pub(crate) enum RowInt {
     /// through the asker, by every node's parent log as it stood at the
     /// decision (`Report::loops`).
     SwitchesDown,
-    /// The honest viewers' requests that timed out unanswered, over every
-    /// incarnation (SwarmCounters::timeouts): every host but the seed and the
-    /// dishonest ones.
+    /// The honest viewers' requests that ended without data, over every
+    /// incarnation: those that timed out unanswered (SwarmCounters::timeouts),
+    /// and the speculative ones that expired or that their holder answered
+    /// NOT_YET (SwarmCounters::spec_expired, spec_not_yet, which main's sims
+    /// never send): every host but the seed and the dishonest ones.
     TimeoutsHonest,
-    /// With dishonest peers, their requests that timed out unanswered (the
-    /// hostile hosts'); left out without any.
+    /// With dishonest peers, their requests that ended without data, over every
+    /// incarnation: those that timed out unanswered (SwarmCounters::timeouts),
+    /// and the speculative ones that expired or that their holder answered
+    /// NOT_YET (SwarmCounters::spec_expired, spec_not_yet, which main's sims
+    /// never send) (the hostile hosts'); left out without any.
     TimeoutsDishonest,
     /// A media swarm's chunks per unit; left out without media.
     Unit,
