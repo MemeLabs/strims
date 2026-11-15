@@ -12,6 +12,8 @@ fixtures:
               from arm_side's, and scoring an experiment's arms by name
               (score, arm_scores), whose JSON holds what the text shows.
               Zeros compare without their sign, as in golden.compare.
+  Reference   golden.py's reference reads a farm run's host numbers as
+              the macros do: its copy's in its flush.
   Arithmetic  compensated_sum against Python's sum(), a mean difference
               on a printed tie against the reference's, fisher_p against
               the exact hypergeometric sum, t975_at against Student's t,
@@ -30,8 +32,10 @@ import math
 import random
 import re
 import tempfile
+import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 FIXTURES = HERE / "testdata" / "golden"
@@ -176,6 +180,40 @@ class Golden(unittest.TestCase):
         self.assertRegex(text, r"guardrails (?!ok)")
         self.assertIn(" [0.00,inf]", text)
         self.assertIn("[-inf,+inf]", text)
+
+
+class Reference(unittest.TestCase):
+    def test_a_farm_runs_host_numbers_are_its_flush_copys(self):
+        """The reference (golden.reference) reads a farm run's wall_s and
+        rss_mb as METRICS does (job_runs'): its copy's in its flush, which
+        simdb.rows gives, not its index line's. A key that ran twice into
+        one flush, a job and its verify copy on one host, has a line of
+        each in its matrix's index and one copy in the flush
+        (store_host.fold keeps its batch's last), whose numbers needn't be
+        the line's that load_rows keeps (an id's last): s2e215's
+        halve-15-10 off at seed 2005, 113.0 MB in its flush and 113.5 on
+        its kept line."""
+        with tempfile.TemporaryDirectory() as tmp:
+            database(Path(tmp) / "empty.duckdb", "")
+            try:
+                ref = golden.reference(golden.REFERENCE)
+            finally:
+                scoring.SCORE_DB = None
+            src = "farm/r/i-0/0"
+            index = Path(tmp) / "target" / "sim-farm" / "sx-00" / "index.jsonl"
+            index.parent.mkdir(parents=True)
+            index.write_text("".join(json.dumps(
+                {"id": "j", "key": "k", "arm": "x", "test": "t", "env": {"STRIMS_SIM_SEED": "2005"}, "copy": copy,
+                 "src": src, "max_rss_mb": rss, "wall_s": wall, "row": {}}) + "\n"
+                for copy, rss, wall in (("v", 113.0, 8.996), ("", 113.5, 9.193))))
+            flush = {(src, "k"): {"trace": "t1", "_rss_mb": 113.0, "_wall_s": 8.996}}
+            simdb = types.SimpleNamespace(pull_sources=lambda srcs: [],
+                                          rows=lambda pairs: {p: dict(flush[p]) for p in pairs if p in flush},
+                                          arm_label=lambda knob, sim, arm, env: arm)
+            with mock.patch.object(ref, "farm_root", lambda: Path(tmp)), mock.patch.object(ref, "_simdb", simdb):
+                got = ref.farm_rows("sx", [{"name": "halve-15-10", "sim": "strims-sim", "test": "t"}], None)
+        self.assertEqual({at: (r["_rss_mb"], r["_wall_s"]) for at, r in got["x"].items()},
+                         {("halve-15-10", 2005): (113.0, 8.996)})
 
 
 class Arithmetic(unittest.TestCase):

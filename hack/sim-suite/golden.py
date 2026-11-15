@@ -23,9 +23,9 @@ scorecard, every metric and the default's. The reference's t table is the
 macros' (t975), and both score the METRICS both have (ref_metrics: those
 added since it, which it can't print, and those dropped since, which the
 macros can't, are left out), the reference reading those METRICS read
-otherwise as METRICS reads them (RESTATED), and its medians and its arm
-score's order of seeds the macros' (TAUGHT), so the two differ by nothing
-but their code. Both sum as Python's sum() does (scoring.sql's
+otherwise as METRICS reads them (RESTATED), and its medians, its arm
+score's order of seeds and its farm runs' host numbers the macros'
+(TAUGHT), so the two differ by nothing but their code. Both sum as Python's sum() does (scoring.sql's
 compensated_sum), so their effects are each other's bit for bit. The experiments are the latest N of each kind (--refs and
 --sets runs) with two arms or more; an experiment's base is its index's, else the arm the
 farm reused from an earlier run (an A/B's baseline), else its first.
@@ -86,18 +86,26 @@ RESTATED = {
                              if d[0] + d[1] + d[2] + d[3] + d[4] + d[5] != 0 else None)(
         [r.get(f"depth_{k}") or 0 for k in range(1, 7)]),
 }
-# The reference taught the macros' arithmetic where it took another. Its
-# medians, the quantile method the macros take (simlab.sketch:
-# sketch_quantile's p50, the integer nearest rank read through the log
-# sketch): the scorecard's medians over the seeds, and the lag ceiling's.
-# Its arm score's pairs in seed order, as its scorecard's and effects_of's
-# are, where it took its rows' order (the farm index's), which a sum can
-# round otherwise. Each is its source's once.
+# The reference taught the macros' arithmetic, and their reading of a farm
+# run's host numbers, where it took others. Its medians, the quantile
+# method the macros take (simlab.sketch: sketch_quantile's p50, the integer
+# nearest rank read through the log sketch): the scorecard's medians over
+# the seeds, and the lag ceiling's. Its arm score's pairs in seed order, as
+# its scorecard's and effects_of's are, where it took its rows' order (the
+# farm index's), which a sum can round otherwise. Its farm runs' wall_s
+# and rss_mb their copy's in their flush (simdb.rows' `_wall_s` and
+# `_rss_mb`, the runs table's), which METRICS reads (job_runs), where it
+# took their index lines': a key that ran twice into one flush (a job and
+# its verify copy on one host) has a line of each and one copy in the
+# flush (store_host.fold keeps its batch's last), whose numbers needn't be
+# the line's that load_rows keeps (an id's last). Each is its source's
+# once.
 TAUGHT = [
     ("med = lambda xs: sorted(xs)[len(xs) // 2]", "med = lambda xs: _sketch.quantile(xs, 50)"),
     ("ma = statistics.median(x for x, _ in lags)", "ma = _sketch.quantile([x for x, _ in lags], 50)"),
     ("mb = statistics.median(y for _, y in lags)", "mb = _sketch.quantile([y for _, y in lags], 50)"),
     ("for (cell, seed), ra in base_rows.items():", "for (cell, seed), ra in sorted(base_rows.items()):"),
+    ('{**row, "_rss_mb": rec.get("max_rss_mb"), "_wall_s": rec.get("wall_s")}', "row"),
 ]
 # How many times an experiment is scored at one snapshot before a
 # snapshot gone from under it fails the check (compared_pinned).
@@ -123,8 +131,8 @@ def suite():
 
 
 def taught(source):
-    """The reference's `source` with its medians and its arm score's order
-    of seeds the macros' (TAUGHT)."""
+    """The reference's `source` with its medians, its arm score's order of
+    seeds and its farm runs' host numbers the macros' (TAUGHT)."""
     for old, new in TAUGHT:
         if source.count(old) != 1:
             sys.exit(f"golden: the reference has {source.count(old)} of {old!r}, not one")
@@ -133,8 +141,9 @@ def taught(source):
 
 
 def reference(rev):
-    """suite.py at `rev`, its t table the macros' (t975), and its medians
-    and its arm score's order of seeds theirs (taught)."""
+    """suite.py at `rev`, its t table the macros' (t975), and its medians,
+    its arm score's order of seeds and its farm runs' host numbers theirs
+    (taught)."""
     WORK.mkdir(parents=True, exist_ok=True)
     path = WORK / f"suite_{rev}.py"
     path.write_text(taught(subprocess.run(["git", "show", f"{rev}:hack/sim-suite/suite.py"], cwd=ROOT, check=True,
