@@ -412,7 +412,8 @@ REPORTS = ("The studies' reports over the catalog (hack/simlab), each with its o
            "--arm, --seed, --name, --phases, --collapsed) and --section: `simdb.py forecast-report`, the arrival "
            "forecast study over the decision logs (forecast.py, regimes.py), and `simdb.py coverage-report`, seed "
            "coverage: how soon each chunk reaches a node but the seed and the dishonest viewers, by which route, the "
-           "seed's children of its stream and why late chunks were late (coverage.py). Each one's --help says more.")
+           "seed's children of its stream, the seed's invariants and why late chunks were late, cause by cause "
+           "(coverage.py). Each one's --help says more.")
 TOPIC_DOCS = {
     "glossary": "the sims' terms: sims, cells, arms, experiments, the oracle, the verdict and collapses, phases, "
                 "lag and playout delays, structural cells, comparing arms, collapse counts, startup tails and "

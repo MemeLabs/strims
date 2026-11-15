@@ -6,7 +6,11 @@ report over the catalog's truth tables, read through simlab.engine: the
 holds (`arrivals`: every node's first hold of every chunk, its route and
 source), the push trees (`parents`: every node's push parent of every
 stream, as it changed), the viewers (`viewers`: which are dishonest),
-the viewers' phases (`viewer_phases`) and the run's (`verdict_seconds`).
+the viewers' phases (`viewer_phases`) and the run's (`verdict_seconds`),
+the departures (`events`' depart and crash), and the seed log
+(`seed_decisions`: the seed's requests answered, removals and CANCELs;
+`seed_sends`: every chunk it pushed or answered, its fate, and the
+peer's hold of it).
 
   Selection      simlab.forecast's: experiments, cells and arm labels
                  (globs), seeds, arm names by label glob (`names`), the
@@ -16,9 +20,10 @@ the viewers' phases (`viewer_phases`) and the run's (`verdict_seconds`).
   report(sel, sections=SECTIONS, conn=None, say=None, warn=None)
                  -> {section: Result}
   report_text(results) -> str
-  prepare(conn, sel) -> [warning]
+  prepare(conn, sel, sections=SECTIONS) -> [warning]
                  the measure's tables on a connection (runs_sql,
-                 tables_sql)
+                 tables_sql), the seed log's for the sections that read
+                 it
 
 hack/sim-db/simdb.py coverage-report prints the report.
 
@@ -28,10 +33,12 @@ console's, which this module's sections group: coverage_runs_of(jobs) a
 run's facts, and over a list of its rows seed_subscriptions_in(runs)
 every node's subscription to the seed, seed_children_in(runs) the
 seed's child subscriptions (those of no dishonest viewer),
-coverage_chunks_in(runs) a chunk's measure (a late one's class among it)
-and seed_cover_in(runs) I1's stream-seconds (each `_in` but
-seed_subscriptions_in with its `_of(jobs)` form). prepare loads this
-checkout's macros into the session (scoring.load), whatever the
+coverage_chunks_in(runs) a chunk's measure (a late one's class among it),
+seed_cover_in(runs) I1's stream-seconds, seed_writes_in(runs) I2's
+chunks (the seed's sends of each to its children), seed_declines_in(runs)
+I3's declines and coverage_causes_in(runs) a late chunk's causes (each
+`_in` but seed_subscriptions_in with its `_of(jobs)` form). prepare loads
+this checkout's macros into the session (scoring.load), whatever the
 catalog's indexer had. A chunk at a time:
 
   seed       the seed series_meta records (`seed`), else the node that
@@ -78,7 +85,18 @@ catalog's indexer had. A chunk at a time:
              seconds 0-24, so a chunk published at exactly 25 s is
              steady); a chunk is the swarm's, so a viewer's own startup
              after its join isn't the chunk's. A publication past the
-             verdict's seconds is the vocabulary's tail (vocab.TAIL)
+             verdict's seconds is the vocabulary's tail (vocab.TAIL), as
+             is a seed decision's
+  children   the seed's children of its stream at its publication: the
+             nodes but the dishonest viewers whose parents rows make the
+             seed their parent of the stream then (seed_children_in)
+  seed log   the seed's seed_decisions and seed_sends rows (strims-sim's
+             STRIMS_SIM_SPEC=1 writes them); a run with neither has none
+  sends      the seed's seed_sends rows of a chunk to its children:
+             pushes and answers, each with its fate (written, stale,
+             cancelled, suppressed, refused, dropped, closed), its wait
+             in the seed's queue (t_ms - queued_ms) and its child's hold
+             (held_ms); the first written push is the earliest written
 
 Quantiles of latency are of the held chunks (sketch_quantile): never is a
 route of its own, apart, beside them, and the late share counts it.
@@ -98,10 +116,15 @@ A run whose arrivals the catalog lacks (it wrote none, or they weren't
 fetched) has no chunks: it is left out of every section, with a warning,
 and a selection of no run with arrivals is refused (query.need). A run
 without parents rows (no push trees: a pull stream)
-has no seed children to count: its I1 and its late chunks' classes are
-NULL, it is left out of the late section, and the report warns of it.
-The warnings go to `warn`: simdb.py prints them on stderr, and its
-`--json` carries them as `warnings`.
+has no seed children to count: its I1, I2 and its late chunks' classes
+and causes are NULL, it is left out of the late and attribution
+sections, and the report warns of it. A run without a seed log (it
+wrote none, or the catalog lacks the seed log's tables) has its I2, I3
+and its late chunks' causes NULL: the invariants section leaves them
+empty for a group of no run with one, the attribution section leaves the
+run out, and for those sections the report warns of it. The warnings go
+to `warn`: simdb.py prints them on stderr, and its `--json` carries them
+as `warnings`.
 
 The sections (SECTIONS), each grouped by arm, cell, collapsed (the run's
 verdict: collapsed runs apart) and phase, a row each phase kept, and a
@@ -130,7 +153,21 @@ greatest over the group's runs, `*_runs`):
              weighted), the runs without parents rows (unparented), and
              how the seed's child subscriptions ended in the phase
              (ends_<reason>, the next row's reason: the vocabulary's
-             parents reasons)
+             parents reasons). I2, the invariant that the seed writes
+             every chunk to a holder of its stream unless that holder
+             cancelled it (seed_writes_in): the judged chunks with
+             children of the runs with parents rows and a seed log
+             (child_chunks), those none of whose sends to the children
+             was written or cancelled (unwritten: a count, its share and
+             each run's spread), and the runs without a seed log
+             (unlogged). I3, the invariant that the seed never declines a
+             request for a stream with no subscriber (seed_declines_in):
+             the requests it declined with none, of a peer no dishonest
+             viewer (declined, and its rule's counts, declined_rules) and
+             of a dishonest one (declined_dishonest), each in the phase
+             of its second; NULL for a group of no run with a seed log.
+             A phase that I2's chunks or I3's declines have and I1's
+             stream-seconds don't (the tail) has a row of its own
   late       each late chunk of a run with parents rows, classed by the
              seed's children (no dishonest viewer) of its stream at
              publication (first match): no_seed_child (with `after`, how
@@ -146,6 +183,40 @@ greatest over the group's runs, `*_runs`):
              judged, the children at publication and the dishonest
              viewers then subscribed to the seed on its stream
              (dishonest_children; both means), latency p50 of the held
+  attribution
+             each late chunk of a run with parents rows and a seed log,
+             by its cause (coverage_causes_in): the first of uncovered (no
+             seed child at its publication, nor a dishonest viewer
+             subscribed), defectors_only (dishonest viewers alone
+             subscribed), not_written (children, but no send to them
+             written), written_late (the first written push waited in the
+             seed's queue past the run's interval), delivered_late
+             (written within the interval, its child's hold past the
+             interval after the publication), departed (every child left,
+             a depart or crash event, before holding it) and other. A
+             cause's row (breakdown NULL) gives its chunks, its share of
+             the late chunks (late_share) and of the judged (share), and
+             each run's spread of its late share (late_share_runs); the
+             rows after it split its chunks by a breakdown, each such row
+             a part of the cause's with the same numbers: also (the later
+             causes its chunks match too, joined by '+': with the cause's
+             rows, the full cross-tab of every match), and an uncovered
+             chunk's last_end (how the stream's last subscription to the
+             seed before it ended, a parents reason; NULL for a stream
+             that had none), seed_end (the seed log's removal of that
+             subscriber, its kind and why: a `closed` row of the stream,
+             a `holder_left` or a `barred`; NULL for none) and declined
+             (the seed declined an honest request for the stream since
+             that end: I3's), a not_written or other chunk's fates (its
+             sends' distinct how and fate, 'none' for no send queued),
+             and a not_written chunk's held_at_cancel (for one with a
+             cancelled send: a node but the seed and the dishonest
+             viewers held it by the cancel). Each row gives the mean
+             children, the p50 of the first written push's wait (wait_ms)
+             and of its child's hold after the write (delivery_ms), and
+             the means of the seed's answer and push bytes and written
+             pushes in the second before that write (answer_bytes,
+             push_bytes, pushes)
 
 Rows of `parents` at one ms of one node and stream are ordered as they
 can have happened (seed_subscriptions_in): a `switch` first, an `open`
@@ -159,9 +230,26 @@ from . import engine, forecast, vocab
 from .forecast import REST, Selection, connected  # noqa: F401
 from .store_host import q
 
-SECTIONS = ("latency", "routes", "invariants", "late")
+SECTIONS = ("latency", "routes", "invariants", "late", "attribution")
+# The sections that read the seed log (seed_writes_in, seed_declines_in,
+# coverage_causes_in).
+LOGGED = ("invariants", "attribution")
 # The late classes, coverage_chunks_in's, in the order a report gives them.
 LATE_CLASSES = ("no_seed_child", "released", "pushed_late", "child_never", "other")
+# The late chunks' causes, coverage_causes_in's tree in its order.
+CAUSES = ("uncovered", "defectors_only", "not_written", "written_late", "delivered_late", "departed", "other")
+# The attribution section's breakdowns: each one's value, over
+# coverage_causes_in's row, and the chunks it splits (where); `also` splits
+# every cause's chunks that match a later cause too.
+BREAKDOWNS = {
+    "also": ("array_to_string(matches[2:], '+')", "len(matches) > 1"),
+    "last_end": ("last_end", "cause = 'uncovered'"),
+    "seed_end": ("CASE WHEN seed_end IS NOT NULL THEN concat_ws(' ', seed_end, seed_why) END", "cause = 'uncovered'"),
+    "declined": ("declined::VARCHAR", "cause = 'uncovered'"),
+    "fates": ("CASE WHEN len(fates) = 0 THEN 'none' ELSE array_to_string(fates, ', ') END",
+              "cause IN ('not_written', 'other')"),
+    "held_at_cancel": ("held_at_cancel::VARCHAR", "cause = 'not_written' AND held_at_cancel IS NOT NULL"),
+}
 # How a seed child's subscription ended (parents' reasons): the
 # invariants' ends_<reason> columns.
 ENDS = tuple(vocab.reasons())
@@ -206,7 +294,12 @@ CREATE OR REPLACE TEMP TABLE cv_runs AS FROM coverage_runs_of((SELECT list({{'k'
 """
 
 
-def tables_sql(sel):
+# SQL over a cv_runs row r: the run has a seed log (coverage_runs_of's
+# docs).
+LOGGED_RUN = "r.seed_decisions_rows + r.seed_sends_rows > 0"
+
+
+def tables_sql(sel, sections=SECTIONS):
     """The statements making the measure's other tables over the runs
     cv_sel and cv_runs keep, each from scoring.sql's macro of its
     definition:
@@ -214,7 +307,8 @@ def tables_sql(sel):
       cv_jobs     cv_sel's columns and cv_runs', a row a job and label
       cv_chunks   a row a published chunk and label (coverage_chunks_in),
                   with the label (arm, cell, seed, sim, collapsed), the
-                  run's streams_from and parented (it has parents rows)
+                  run's streams_from, parented (it has parents rows) and
+                  logged (it has a seed log)
       cv_subs     the seed's child subscriptions (seed_children_in), a
                   job's own
       cv_late     a row a judged late chunk of a run with parents rows,
@@ -222,27 +316,46 @@ def tables_sql(sel):
                   class (cv_chunks' children, dishonest_children, class,
                   after), a job's own
       cv_cover    I1's watched stream-seconds (seed_cover_in), a row each
-                  label
+                  label, with logged
       cv_phase    k, src, sec, phase: the run's (verdict_seconds)
       cv_pools    the groups whose chunks report a pooled row (pools_sql)
+
+    and for the `sections` that read the seed log (LOGGED), each a row a
+    label:
+
+      cv_writes   I2's judged chunks (seed_writes_in): invariants'
+      cv_declines I3's declines (seed_declines_in): invariants'
+      cv_causes   the late chunks' causes (coverage_causes_in):
+                  attribution's
     """
     runs = "(SELECT list(r) FROM cv_runs r)"
     labels = "j.arm, j.cell, j.seed, j.sim, j.collapsed"
+    # Each macro's rows are made before the labels join them: a join
+    # pushed into its body plans it far slower.
+    logged = [f"""
+CREATE OR REPLACE TEMP TABLE cv_{name} AS
+WITH x AS MATERIALIZED (FROM {macro}({runs})) SELECT {labels}, x.* FROM x JOIN cv_sel j USING (k, src);"""
+              for name, macro, section in (("writes", "seed_writes_in", "invariants"),
+                                           ("declines", "seed_declines_in", "invariants"),
+                                           ("causes", "coverage_causes_in", "attribution"))
+              if section in sections]
     return f"""
 CREATE OR REPLACE TEMP TABLE cv_jobs AS
 SELECT j.*, r.* EXCLUDE (k, src) FROM cv_sel j JOIN cv_runs r USING (k, src);
 CREATE OR REPLACE TEMP TABLE cv_chunks AS
-SELECT {labels}, r.streams_from, r.parents_rows > 0 AS parented, c.* FROM coverage_chunks_in({runs}) c
-JOIN cv_sel j USING (k, src) JOIN cv_runs r USING (k, src);
+SELECT {labels}, r.streams_from, r.parents_rows > 0 AS parented, {LOGGED_RUN} AS logged, c.*
+FROM coverage_chunks_in({runs}) c JOIN cv_sel j USING (k, src) JOIN cv_runs r USING (k, src);
 CREATE OR REPLACE TEMP TABLE cv_subs AS FROM seed_children_in({runs});
 CREATE OR REPLACE TEMP TABLE cv_late AS
 SELECT DISTINCT k, src, seq, stream, pub_ms, children, dishonest_children, class, after FROM cv_chunks
 WHERE class IS NOT NULL;
 CREATE OR REPLACE TEMP TABLE cv_cover AS
-SELECT {labels}, c.* FROM seed_cover_in({runs}) c JOIN cv_sel j USING (k, src);
+SELECT {labels}, {LOGGED_RUN} AS logged, c.* FROM seed_cover_in({runs}) c JOIN cv_sel j USING (k, src)
+JOIN cv_runs r USING (k, src);
 CREATE OR REPLACE TEMP TABLE cv_phase AS
 SELECT v.k, v.src, v.sec, v.phase FROM verdict_seconds v SEMI JOIN cv_sel USING (k, src);
 CREATE OR REPLACE TEMP TABLE cv_pools AS {pools_sql(sel)};
+{"".join(logged)}
 """
 
 
@@ -254,12 +367,13 @@ def pools_sql(sel, rows="cv_chunks"):
             "GROUP BY ALL HAVING count(DISTINCT phase) > 1")
 
 
-def prepare(conn, sel):
-    """Makes the measure's tables for `sel` on `conn` (runs_sql, then
-    tables_sql), with this checkout's scoring macros in its session
-    (scoring.load), and returns the report's warnings. A run without
-    arrivals has no chunks: it is left out of every section, and the
-    selection refused (query.Refused) when no run of it has them."""
+def prepare(conn, sel, sections=SECTIONS):
+    """Makes the measure's tables for `sel` and `sections` on `conn`
+    (runs_sql, then tables_sql), with this checkout's scoring macros in
+    its session (scoring.load), and returns the report's warnings. A run
+    without arrivals has no chunks: it is left out of every section, and
+    the selection refused (query.Refused) when no run of it has them. A
+    run without a seed log is warned of where `sections` read it."""
     from . import query, scoring
 
     scoring.load(conn)
@@ -282,12 +396,16 @@ def prepare(conn, sel):
         conn.execute("DELETE FROM cv_runs WHERE arrivals_rows = 0")
         if had == sum(bare):
             query.need(set(), "arrivals")
-    for s in conn.extract_statements(tables_sql(sel)):
+    for s in conn.extract_statements(tables_sql(sel, sections)):
         conn.execute(s)
     unparented = conn.execute("SELECT count(*) FROM cv_runs WHERE parents_rows = 0").fetchone()[0]
     if unparented:
-        said.append(f"coverage: {unparented} runs have no parents rows (no push trees): their I1 and their late "
-                    "chunks' classes are NULL")
+        said.append(f"coverage: {unparented} runs have no parents rows (no push trees): their I1, I2 and their late "
+                    "chunks' classes and causes are NULL")
+    unlogged = conn.execute(f"SELECT count(*) FROM cv_runs r WHERE NOT ({LOGGED_RUN})").fetchone()[0]
+    if unlogged and any(s in LOGGED for s in sections):
+        said.append(f"coverage: {unlogged} runs have no seed log (seed_decisions, seed_sends: "
+                    f"{query.knobs_text('seed_sends')} writes them): their I2, I3 and late chunks' causes are NULL")
     got = conn.execute(f"SELECT streams_from, count(*) FROM cv_runs WHERE streams_from IS NULL OR streams_from NOT IN "
                        f"({', '.join(q(x) for x in RECORDED)}) GROUP BY ALL ORDER BY streams_from NULLS LAST"
                        ).fetchall()
@@ -298,10 +416,10 @@ def prepare(conn, sel):
     return said
 
 
-def grouped(sel):
-    """SQL: cv_chunks' rows `sel` keeps by their phase, each in its phase
-    groups."""
-    return (f"(SELECT c.* EXCLUDE (phase), {phase_groups('c.phase', 'c')} AS phase FROM cv_chunks c "
+def grouped(sel, rows="cv_chunks", pools="cv_pools"):
+    """SQL: the rows of `rows` (cv_chunks' by default) `sel` keeps by
+    their phase, each in its phase groups (`pools`' pooled ones)."""
+    return (f"(SELECT c.* EXCLUDE (phase), {phase_groups('c.phase', 'c', pools)} AS phase FROM {rows} c "
             f"WHERE {forecast.phase_filter(sel, 'c.phase')})")
 
 
@@ -384,17 +502,42 @@ e AS (
         JOIN cv_phase ph ON ph.k = u.k AND ph.src = u.src AND ph.sec = u.close_ms // 1000
         WHERE u.end_reason IS NOT NULL AND {forecast.phase_filter(sel, 'ph.phase')}
     ) GROUP BY ALL
+), i1 AS (
+    SELECT {GROUP}, count(DISTINCT x.k) AS runs, list(DISTINCT x.seed ORDER BY x.seed) AS seeds,
+           count(DISTINCT x.k) FILTER (WHERE covered_ms IS NULL) AS unparented,
+           count(covered_ms) AS stream_s, (count(covered_ms) * 1000 - sum(covered_ms)) / 1000 AS uncovered_s,
+           1 - sum(covered_ms) / nullif(count(covered_ms) * 1000, 0) AS uncovered,
+           count(*) FILTER (WHERE covered_ms < 1000) AS touched_s,
+           sum(child_ms) / nullif(count(covered_ms) * 1000, 0) AS seed_children,
+           any_value(s.uncovered_runs) AS uncovered_runs,
+           {", ".join(f"coalesce(any_value(e.ends_{x}), 0) AS ends_{x}" for x in ENDS)},
+           count(DISTINCT x.k) FILTER (WHERE NOT x.logged) AS unlogged,
+           count(DISTINCT x.k) FILTER (WHERE x.logged) AS logged
+    FROM x LEFT JOIN s USING (arm, cell, collapsed, phase) LEFT JOIN e USING (arm, cell, collapsed, phase)
+    GROUP BY ALL
+), w AS (
+    SELECT * FROM {grouped(sel, "cv_writes", "pools")} WHERE children > 0
+), w_per AS (
+    SELECT {GROUP}, k, avg(unwritten::INT) AS unwritten FROM w GROUP BY ALL
+), i2 AS (
+    SELECT {GROUP}, count(*) AS child_chunks, sum(unwritten::INT) AS unwritten,
+           avg(unwritten::INT) AS unwritten_share, any_value(r.unwritten_runs) AS unwritten_runs
+    FROM w LEFT JOIN (SELECT {GROUP}, {spread('unwritten')} AS unwritten_runs FROM w_per GROUP BY ALL) r
+        USING (arm, cell, collapsed, phase)
+    GROUP BY ALL
+), i3 AS (
+    SELECT {GROUP}, count(*) FILTER (WHERE NOT dishonest) AS declined,
+           histogram(why) FILTER (WHERE NOT dishonest) AS declined_rules,
+           count(*) FILTER (WHERE dishonest) AS declined_dishonest
+    FROM {grouped(sel, "cv_declines", "pools")} GROUP BY ALL
 )
-SELECT {SHOWN}, count(DISTINCT x.k) AS runs, list(DISTINCT x.seed ORDER BY x.seed) AS seeds,
-       count(DISTINCT x.k) FILTER (WHERE covered_ms IS NULL) AS unparented,
-       count(covered_ms) AS stream_s, (count(covered_ms) * 1000 - sum(covered_ms)) / 1000 AS uncovered_s,
-       1 - sum(covered_ms) / nullif(count(covered_ms) * 1000, 0) AS uncovered,
-       count(*) FILTER (WHERE covered_ms < 1000) AS touched_s,
-       sum(child_ms) / nullif(count(covered_ms) * 1000, 0) AS seed_children,
-       any_value(s.uncovered_runs) AS uncovered_runs,
-       {", ".join(f"coalesce(any_value(e.ends_{x}), 0) AS ends_{x}" for x in ENDS)}
-FROM x LEFT JOIN s USING (arm, cell, collapsed, phase) LEFT JOIN e USING (arm, cell, collapsed, phase)
-GROUP BY {GROUP} ORDER BY arm, cell, collapsed, {phase_rank()};
+SELECT {SHOWN}, runs, seeds, unparented, coalesce(stream_s, 0) AS stream_s, uncovered_s, uncovered, touched_s,
+       seed_children, uncovered_runs, {", ".join(f"ends_{x}" for x in ENDS)}, unlogged,
+       coalesce(child_chunks, 0) AS child_chunks, unwritten, unwritten_share, unwritten_runs,
+       coalesce(declined, CASE WHEN logged > 0 THEN 0 END) AS declined, declined_rules,
+       coalesce(declined_dishonest, CASE WHEN logged > 0 THEN 0 END) AS declined_dishonest
+FROM i1 FULL JOIN i2 USING (arm, cell, collapsed, phase) FULL JOIN i3 USING (arm, cell, collapsed, phase)
+ORDER BY arm, cell, collapsed, {phase_rank()};
 """
 
 
@@ -426,7 +569,41 @@ ORDER BY l.arm, l.cell, l.collapsed, {phase_rank('l.phase')}, list_position({lis
 """
 
 
-SECTION_SQL = {"latency": latency_sql, "routes": routes_sql, "invariants": invariants_sql, "late": late_sql}
+def attribution_sql(sel):
+    split = " UNION ALL ".join(f"SELECT *, {q(name)} AS breakdown, {value} AS value FROM c WHERE {where}"
+                               for name, (value, where) in BREAKDOWNS.items())
+    same = ("{x}.arm = {y}.arm AND {x}.cell = {y}.cell AND {x}.collapsed = {y}.collapsed AND {x}.phase = {y}.phase "
+            "AND {x}.cause = {y}.cause AND {x}.breakdown IS NOT DISTINCT FROM {y}.breakdown "
+            "AND {x}.value IS NOT DISTINCT FROM {y}.value")
+    return f"""
+WITH g AS (SELECT * FROM {grouped(sel)} WHERE judged AND parented AND logged),
+c AS {grouped(sel, "cv_causes")},
+b AS (SELECT *, NULL::VARCHAR AS breakdown, NULL::VARCHAR AS value FROM c UNION ALL {split}),
+tot AS (SELECT {GROUP}, k, count(*) AS n, count(*) FILTER (WHERE late) AS late_n FROM g GROUP BY ALL),
+all_n AS (SELECT {GROUP}, sum(n) AS n, sum(late_n) AS late_n FROM tot GROUP BY ALL),
+per AS (SELECT {GROUP}, cause, breakdown, value, k, count(*) AS n FROM b GROUP BY ALL),
+combos AS (SELECT DISTINCT {GROUP}, cause, breakdown, value FROM per),
+shares AS (
+    SELECT o.*, t.k, coalesce(p.n, 0) / t.late_n AS share
+    FROM combos o JOIN tot t USING (arm, cell, collapsed, phase)
+    LEFT JOIN per p ON {same.format(x="p", y="o")} AND p.k = t.k
+    WHERE t.late_n > 0
+), s AS (SELECT {GROUP}, cause, breakdown, value, {spread('share')} AS late_share_runs FROM shares GROUP BY ALL)
+SELECT b.arm, b.cell, b.collapsed, nullif(b.phase, {q(POOLED)}) AS phase, b.cause, b.breakdown, b.value,
+       count(*) AS chunks, count(*) / any_value(a.late_n) AS late_share, count(*) / any_value(a.n) AS share,
+       any_value(s.late_share_runs) AS late_share_runs, avg(b.children) AS children,
+       sketch_quantile(b.push_wait_ms, 50) AS wait_ms, sketch_quantile(b.delivery_ms, 50) AS delivery_ms,
+       avg(b.answer_bytes) AS answer_bytes, avg(b.push_bytes) AS push_bytes, avg(b.pushes) AS pushes
+FROM b JOIN all_n a ON a.arm = b.arm AND a.cell = b.cell AND a.collapsed = b.collapsed AND a.phase = b.phase
+JOIN s ON {same.format(x="s", y="b")}
+GROUP BY b.arm, b.cell, b.collapsed, b.phase, b.cause, b.breakdown, b.value
+ORDER BY b.arm, b.cell, b.collapsed, {phase_rank('b.phase')}, list_position({list(CAUSES)!r}, b.cause),
+         list_position({list(BREAKDOWNS)!r}, b.breakdown) NULLS FIRST, chunks DESC, b.value;
+"""
+
+
+SECTION_SQL = {"latency": latency_sql, "routes": routes_sql, "invariants": invariants_sql, "late": late_sql,
+               "attribution": attribution_sql}
 
 
 def report(sel, sections=SECTIONS, conn=None, say=None, warn=None):
@@ -438,7 +615,7 @@ def report(sel, sections=SECTIONS, conn=None, say=None, warn=None):
         raise ValueError(f"no section {', '.join(map(repr, unknown))}: the sections are {', '.join(SECTIONS)}")
     out = {}
     with connected(conn) as c:
-        for w in prepare(c, sel):
+        for w in prepare(c, sel, sections):
             (warn or (lambda m: print(m, file=sys.stderr)))(w)
         for s in sections:
             if say:
@@ -447,6 +624,18 @@ def report(sel, sections=SECTIONS, conn=None, say=None, warn=None):
     return out
 
 
+def text(v):
+    """A report value as text: forecast.fmt's, a map's entries as key=value."""
+    if isinstance(v, dict):
+        return " ".join(f"{k}={forecast.fmt(x)}" for k, x in v.items())
+    return forecast.fmt(v)
+
+
 def report_text(results):
     """The report's text: each section's table."""
-    return forecast.report_text(results)
+    out = []
+    for name, r in results.items():
+        out.append(f"## {name}\n")
+        out.append(engine.render_table(r.names, [[text(v) for v in row] for row in r.values()]))
+        out.append("\n")
+    return "".join(out)

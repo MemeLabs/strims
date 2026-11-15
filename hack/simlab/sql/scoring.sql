@@ -11,8 +11,8 @@
 -- the tables (or table.column) it reads that a catalog indexed by older
 -- code may lack: a session's own objects over such a catalog make it one
 -- that fails saying so (catalog.needed). A table macro read as a fallback
--- gives instead, with an `-- else none:` line of its columns, those
--- columns and no rows.
+-- gives instead, with `-- else none:` lines of its columns, those columns
+-- and no rows.
 --
 -- A side is one arm's runs, a list of {'cell', 'seed', 'k', 'src'}
 -- structs: the job k is that arm's run of the cell at the seed, and src
@@ -620,9 +620,13 @@ CREATE OR REPLACE MACRO lag_since(exp_name, before := 10, after := 120) AS TABLE
 -- interval: the median gap between consecutive publications within a
 -- stream, the seed's own rows), end_ms (the end of its last second in
 -- `seconds`, or its last hold if that is later: strims-sim runs on past
--- its stream), and arrivals_rows and parents_rows (the run's rows of
--- each the catalog holds: without arrivals a run has no chunks, without
--- parents its I1 and its late chunks' classes are NULL).
+-- its stream), arrivals_rows and parents_rows (the run's rows of each the
+-- catalog holds: without arrivals a run has no chunks, without parents
+-- its I1, I2 and its late chunks' classes and causes are NULL), and
+-- seed_decisions_rows and seed_sends_rows (its seed log's rows,
+-- coverage_seed_logs_of's, 0 where the catalog has none: a run with
+-- neither has no seed log, and its I2, I3 and late chunks' causes are
+-- NULL).
 -- needs: arrivals parents
 CREATE OR REPLACE MACRO coverage_runs_of(jobs) AS TABLE
     WITH cv_job_keys AS (
@@ -674,13 +678,16 @@ CREATE OR REPLACE MACRO coverage_runs_of(jobs) AS TABLE
         GROUP BY ALL),
     cv_holds AS (
         SELECT k, src, max(t_ms) AS end_ms, count(*) AS rows_n FROM arrivals SEMI JOIN cv_job_keys USING (k, src)
-        GROUP BY ALL)
+        GROUP BY ALL),
+    cv_logs AS (
+        FROM coverage_seed_logs_of(jobs))
     SELECT j.k, j.src, s.node AS seed_node, s.seed_from, t.streams, t.streams_from, g.interval_ms,
            greatest(e.end_ms, h.end_ms) AS end_ms, coalesce(h.rows_n, 0) AS arrivals_rows,
-           coalesce(p.rows_n, 0) AS parents_rows
+           coalesce(p.rows_n, 0) AS parents_rows, coalesce(l.decisions, 0) AS seed_decisions_rows,
+           coalesce(l.sends, 0) AS seed_sends_rows
     FROM cv_job_keys j LEFT JOIN cv_seed s USING (k, src) LEFT JOIN cv_streams t USING (k, src)
     LEFT JOIN cv_gaps g USING (k, src) LEFT JOIN cv_secs e USING (k, src) LEFT JOIN cv_holds h USING (k, src)
-    LEFT JOIN cv_parent_streams p USING (k, src);
+    LEFT JOIN cv_parent_streams p USING (k, src) LEFT JOIN cv_logs l USING (k, src);
 
 -- coverage_runs_of's last fallback for a run's stream count: one more
 -- than the greatest stream the asks of the runs `jobs` name, a row a run
@@ -694,6 +701,23 @@ CREATE OR REPLACE MACRO coverage_ask_streams_of(jobs) AS TABLE
     SEMI JOIN (SELECT DISTINCT b.k, b.src FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k)
         USING (k, src)
     GROUP BY ALL;
+
+-- coverage_runs_of's count of each run's seed log, a row a run of the runs
+-- `jobs` that has one: k, src, decisions and sends (its rows of
+-- raw.seed_decisions and raw.seed_sends, the tables as the sim wrote
+-- them; the seed_sends view adds a join of every arrivals row). A catalog
+-- without the seed log's tables has no rows of it, rather than a macro
+-- that fails.
+-- needs: seed_decisions seed_sends
+-- else none: k VARCHAR, src VARCHAR, decisions BIGINT, sends BIGINT
+CREATE OR REPLACE MACRO coverage_seed_logs_of(jobs) AS TABLE
+    WITH cv_job_keys AS (
+        SELECT DISTINCT b.k, b.src FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k),
+    cv_d AS (
+        SELECT k, src, count(*) AS n FROM raw.seed_decisions SEMI JOIN cv_job_keys USING (k, src) GROUP BY ALL),
+    cv_s AS (
+        SELECT k, src, count(*) AS n FROM raw.seed_sends SEMI JOIN cv_job_keys USING (k, src) GROUP BY ALL)
+    SELECT k, src, coalesce(d.n, 0) AS decisions, coalesce(s.n, 0) AS sends FROM cv_d d FULL JOIN cv_s s USING (k, src);
 
 -- Every node's subscription to the seed in the runs `runs`
 -- (coverage_runs_of's rows), from parents: k, src, node, stream, open_ms
@@ -892,3 +916,230 @@ CREATE OR REPLACE MACRO seed_cover_in(runs) AS TABLE
 -- needs: arrivals parents viewer_phases
 CREATE OR REPLACE MACRO seed_cover_of(jobs) AS TABLE
     FROM seed_cover_in((SELECT list(cv_run) FROM coverage_runs_of(jobs) cv_run));
+
+-- I2, the invariant that the seed writes every chunk it publishes to a
+-- holder of its stream unless that holder cancelled it, with the sends
+-- behind a late chunk's cause (coverage_causes_in), in the runs `runs`
+-- (coverage_runs_of's rows): each judged chunk (coverage_chunks_in's) of
+-- a run with parents rows and a seed log, a row a chunk: k, src, seq,
+-- stream, pub_ms, phase, first_ms, interval_ms, late and
+-- dishonest_children (coverage_chunks_in's), children (the seed's
+-- children of its stream at its publication, seed_children_in's: no
+-- dishonest viewer; every judged chunk's) and, of the seed's sends of the
+-- chunk to those children (seed_sends of node the run's seed, peer a
+-- child, seq: pushes and answers, any incarnation; raw.seed_sends, the
+-- sends as written, as the view's join of every arrivals row is slow
+-- here), sends (how many), written (those of fate 'written'), cancelled
+-- (those of fate 'cancelled': a push dropped at write time for the
+-- child's CANCEL), fates (each distinct how and fate, as 'push stale',
+-- sorted; empty where none was queued) and cancel_ms (the earliest
+-- cancel_ms of a cancelled one); of the first written push (the earliest
+-- written, ties by peer; NULL without one), push_ms (its t_ms),
+-- push_wait_ms (its wait in the seed's queue, t_ms - queued_ms) and
+-- push_held_ms (its child's hold, the seed_sends view's held_ms: the
+-- child's earliest arrivals row of the chunk in the push's
+-- peer_incarnation; NULL for none); unwritten (I2 broken: a chunk with
+-- children none of whose sends to them was written or cancelled; NULL for
+-- a chunk with no child, I1's).
+-- needs: arrivals arrivals.released_ms arrivals.incarnation parents seed_decisions seed_sends
+-- else none: k VARCHAR, src VARCHAR, seq BIGINT, stream BIGINT, pub_ms BIGINT, phase VARCHAR, first_ms BIGINT
+-- else none: interval_ms DOUBLE, late BOOLEAN, dishonest_children BIGINT, children BIGINT, sends BIGINT
+-- else none: written BIGINT, cancelled BIGINT, fates VARCHAR[], cancel_ms BIGINT, push_ms BIGINT
+-- else none: push_wait_ms BIGINT, push_held_ms BIGINT, unwritten BOOLEAN
+CREATE OR REPLACE MACRO seed_writes_in(runs) AS TABLE
+    WITH cv_r AS (SELECT unnest(runs, recursive := true)),
+    cv_c AS MATERIALIZED (
+        SELECT c.k, c.src, c.seq, c.stream, c.pub_ms, c.phase, c.first_ms, c.interval_ms, c.late,
+               c.dishonest_children
+        FROM coverage_chunks_in(runs) c JOIN cv_r r USING (k, src)
+        WHERE c.judged AND r.parents_rows > 0 AND r.seed_decisions_rows + r.seed_sends_rows > 0),
+    cv_kids AS (
+        SELECT c.k, c.src, c.seq, s.node FROM cv_c c
+        JOIN seed_children_in(runs) s ON s.k = c.k AND s.src = c.src AND s.stream = c.stream
+                                      AND s.open_ms <= c.pub_ms AND c.pub_ms < s.close_ms),
+    cv_kid_n AS (
+        SELECT k, src, seq, count(*) AS children FROM cv_kids GROUP BY ALL),
+    cv_sent AS (
+        SELECT d.k, d.src, d.seq, d.node, x.peer_incarnation, x.how, x.fate, x.t_ms, x.queued_ms, x.cancel_ms
+        FROM cv_kids d JOIN cv_r r USING (k, src)
+        JOIN raw.seed_sends x ON x.k = d.k AND x.src = d.src AND x.node = r.seed_node AND x.peer = d.node
+                              AND x.seq = d.seq),
+    cv_sent_n AS (
+        SELECT k, src, seq, count(*) AS sends, count(*) FILTER (WHERE fate = 'written') AS written,
+               count(*) FILTER (WHERE fate = 'cancelled') AS cancelled,
+               list_sort(list(DISTINCT how || ' ' || fate)) AS fates,
+               min(cancel_ms) FILTER (WHERE fate = 'cancelled') AS cancel_ms,
+               arg_min({'t_ms': t_ms, 'wait_ms': t_ms - queued_ms, 'node': node, 'incarnation': peer_incarnation},
+                       (t_ms, node)) FILTER (WHERE how = 'push' AND fate = 'written') AS p
+        FROM cv_sent GROUP BY ALL),
+    -- The first written push's delivery: its child's earliest hold of the
+    -- chunk in its incarnation then, as the seed_sends view's held_ms.
+    cv_push_held AS (
+        SELECT s.k, s.src, s.seq, min(x.t_ms) AS held_ms FROM cv_sent_n s
+        JOIN arrivals x ON x.k = s.k AND x.src = s.src AND x.node = s.p.node AND x.seq = s.seq
+                        AND x.incarnation = s.p.incarnation
+        GROUP BY ALL)
+    SELECT c.*, coalesce(n.children, 0) AS children, coalesce(s.sends, 0) AS sends,
+           coalesce(s.written, 0) AS written, coalesce(s.cancelled, 0) AS cancelled,
+           coalesce(s.fates, []::VARCHAR[]) AS fates, s.cancel_ms, s.p.t_ms AS push_ms,
+           s.p.wait_ms AS push_wait_ms, h.held_ms AS push_held_ms,
+           CASE WHEN n.children > 0 THEN coalesce(s.written, 0) = 0 AND coalesce(s.cancelled, 0) = 0 END
+               AS unwritten
+    FROM cv_c c LEFT JOIN cv_kid_n n USING (k, src, seq) LEFT JOIN cv_sent_n s USING (k, src, seq)
+    LEFT JOIN cv_push_held h USING (k, src, seq);
+
+-- seed_writes_in over the runs `jobs`.
+-- needs: arrivals arrivals.released_ms arrivals.incarnation parents seed_decisions seed_sends
+CREATE OR REPLACE MACRO seed_writes_of(jobs) AS TABLE
+    FROM seed_writes_in((SELECT list(cv_run) FROM coverage_runs_of(jobs) cv_run));
+
+-- I3, the invariant that the seed never declines a request for a stream
+-- that has no subscriber, in the runs `runs` (coverage_runs_of's rows):
+-- each request the run's seed declined while the stream had none (its
+-- seed_decisions of kind 'request', granted false, subscribers 0: the
+-- stream's subscribers at the seed before its answer, the dishonest
+-- viewers' among them), a row a decision: k, src, t_ms, peer, stream, why
+-- (its rule), phase (the run's, verdict_seconds', of its second; @{tail}
+-- past the verdict's seconds) and dishonest (the peer is a dishonest
+-- viewer: the viewers row of its host, viewers.node, is hostile).
+-- needs: seed_decisions
+-- else none: k VARCHAR, src VARCHAR, t_ms BIGINT, peer BIGINT, stream BIGINT, why VARCHAR, phase VARCHAR
+-- else none: dishonest BOOLEAN
+CREATE OR REPLACE MACRO seed_declines_in(runs) AS TABLE
+    WITH cv_r AS (SELECT unnest(runs, recursive := true)),
+    cv_dishonest AS (
+        SELECT DISTINCT v.k, v.src, v.node FROM viewers v SEMI JOIN cv_r USING (k, src) WHERE v.hostile)
+    SELECT d.k, d.src, d.t_ms, d.peer, d.stream, d.why, coalesce(v.phase, @{tail}) AS phase,
+           h.node IS NOT NULL AS dishonest
+    FROM seed_decisions d JOIN cv_r r ON r.k = d.k AND r.src = d.src AND r.seed_node = d.node
+    LEFT JOIN cv_dishonest h ON h.k = d.k AND h.src = d.src AND h.node = d.peer
+    LEFT JOIN verdict_seconds v ON v.k = d.k AND v.src = d.src AND v.sec = d.t_ms // 1000
+    WHERE d.kind = 'request' AND NOT d.granted AND d.subscribers = 0;
+
+-- seed_declines_in over the runs `jobs`.
+-- needs: arrivals parents seed_decisions
+CREATE OR REPLACE MACRO seed_declines_of(jobs) AS TABLE
+    FROM seed_declines_in((SELECT list(cv_run) FROM coverage_runs_of(jobs) cv_run));
+
+-- Why each late chunk was late, in the runs `runs` (coverage_runs_of's
+-- rows): each judged late chunk of a run with parents rows and a seed log
+-- (seed_writes_in's), a row a chunk: k, src, seq, stream, pub_ms, phase,
+-- children and dishonest_children (seed_writes_in's), matches (every cause
+-- of the tree below that holds, in its order; ['other'] for none) and
+-- cause (the first, matches[1]):
+--   uncovered       no seed child of its stream at its publication, nor a
+--                   dishonest viewer subscribed to the seed on it
+--   defectors_only  no seed child, but a dishonest viewer subscribed
+--   not_written     children, but no send of it to them written
+--   written_late    the first written push to a child waited in the
+--                   seed's queue (push_wait_ms) past the run's interval
+--   delivered_late  that push was written within the interval, but its
+--                   child held it (push_held_ms) later than the interval
+--                   after the publication
+--   departed        every child departed (an events row of kind
+--                   @{kind_depart} or @{kind_crash} naming it, at or after
+--                   its subscription opened) before its first hold of
+--                   the chunk, or without one
+-- and of an uncovered chunk (NULL for the others): last_end (the reason
+-- the stream's last subscription to the seed, of any node, a dishonest
+-- viewer's too, ended at or before its publication,
+-- seed_subscriptions_in's, the least node's of those ending at one ms;
+-- NULL for a stream that had none), seed_end and seed_why (the seed log's
+-- removal of that subscriber within that subscription, after its open and
+-- by its end: the latest of its `closed` rows of the stream and its
+-- `holder_left` and `barred` rows, of those at one ms closed, then
+-- holder_left, then barred, its kind and why; NULL for none) and declined
+-- (the seed declined a request for the stream since that end, or since
+-- the run's start, by its publication: an I3 decline, seed_declines_in's,
+-- of a peer no dishonest viewer);
+-- fates (seed_writes_in's) and held_at_cancel (for a chunk with a
+-- cancelled send to a child: a node but the seed and the dishonest
+-- viewers held it by the earliest cancel_ms, its first_ms); and of its
+-- first written push (NULL without one) push_ms, push_wait_ms,
+-- delivery_ms (push_held_ms - push_ms) and, over the seed's sends
+-- written in the second before push_ms (raw.seed_sends: the sends as
+-- written, to every peer), answer_bytes and push_bytes (their bytes,
+-- answers' and pushes') and pushes (the written pushes).
+-- needs: arrivals arrivals.released_ms arrivals.incarnation parents seed_decisions seed_sends events
+-- else none: k VARCHAR, src VARCHAR, seq BIGINT, stream BIGINT, pub_ms BIGINT, phase VARCHAR, children BIGINT
+-- else none: dishonest_children BIGINT, matches VARCHAR[], cause VARCHAR, last_end VARCHAR, seed_end VARCHAR
+-- else none: seed_why VARCHAR, declined BOOLEAN, fates VARCHAR[], held_at_cancel BOOLEAN, push_ms BIGINT
+-- else none: push_wait_ms BIGINT, delivery_ms BIGINT, answer_bytes BIGINT, push_bytes BIGINT, pushes BIGINT
+CREATE OR REPLACE MACRO coverage_causes_in(runs) AS TABLE
+    WITH cv_r AS (SELECT unnest(runs, recursive := true)),
+    cv_w AS MATERIALIZED (
+        FROM seed_writes_in(runs) WHERE late),
+    -- A stream's subscription ends at one ms: the least node's.
+    cv_ends AS (
+        SELECT k, src, stream, close_ms, arg_min({'node': node, 'open_ms': open_ms, 'reason': end_reason}, node) AS e
+        FROM seed_subscriptions_in(runs) WHERE end_reason IS NOT NULL GROUP BY ALL),
+    cv_bare AS (
+        SELECT w.k, w.src, w.seq, w.stream, w.pub_ms, e.close_ms, e.e
+        FROM (FROM cv_w WHERE children = 0 AND dishonest_children = 0) w
+        ASOF LEFT JOIN cv_ends e ON e.k = w.k AND e.src = w.src AND e.stream = w.stream AND w.pub_ms >= e.close_ms),
+    cv_removed AS (
+        SELECT b.k, b.src, b.seq,
+               arg_max({'kind': d.kind, 'why': d.why},
+                       (d.t_ms, CASE d.kind WHEN 'closed' THEN 2 WHEN 'holder_left' THEN 1 ELSE 0 END,
+                        coalesce(d.why, ''))) AS d
+        FROM cv_bare b JOIN cv_r r USING (k, src)
+        JOIN seed_decisions d ON d.k = b.k AND d.src = b.src AND d.node = r.seed_node AND d.peer = b.e.node
+                              AND d.t_ms > b.e.open_ms AND d.t_ms <= b.close_ms
+                              AND (d.kind = 'closed' AND d.stream = b.stream OR d.kind IN ('holder_left', 'barred'))
+        GROUP BY ALL),
+    cv_declined AS (
+        SELECT DISTINCT b.k, b.src, b.seq FROM cv_bare b
+        JOIN seed_declines_in(runs) d ON d.k = b.k AND d.src = b.src AND d.stream = b.stream AND NOT d.dishonest
+                                      AND (b.close_ms IS NULL OR d.t_ms >= b.close_ms) AND d.t_ms <= b.pub_ms),
+    cv_kids AS (
+        SELECT w.k, w.src, w.seq, s.node, s.open_ms FROM cv_w w
+        JOIN seed_children_in(runs) s ON s.k = w.k AND s.src = w.src AND s.stream = w.stream
+                                      AND s.open_ms <= w.pub_ms AND w.pub_ms < s.close_ms),
+    cv_kid_holds AS (
+        SELECT x.k, x.src, x.node, x.seq, min(x.t_ms) AS t_ms FROM arrivals x JOIN cv_kids USING (k, src, node, seq)
+        GROUP BY ALL),
+    cv_left AS (
+        SELECT d.k, d.src, d.seq, d.node, count(e.t_ms) > 0 AS gone
+        FROM cv_kids d LEFT JOIN cv_kid_holds h USING (k, src, node, seq)
+        LEFT JOIN events e ON e.k = d.k AND e.src = d.src AND e.node = d.node
+                           AND e.kind IN (@{kind_depart}, @{kind_crash}) AND e.t_ms >= d.open_ms
+                           AND (h.t_ms IS NULL OR e.t_ms < h.t_ms)
+        GROUP BY ALL),
+    cv_departed AS (
+        SELECT k, src, seq, bool_and(gone) AS departed FROM cv_left GROUP BY ALL),
+    cv_load AS (
+        SELECT w.k, w.src, w.seq, sum(x.bytes) FILTER (WHERE x.how = 'answer')::BIGINT AS answer_bytes,
+               sum(x.bytes) FILTER (WHERE x.how = 'push')::BIGINT AS push_bytes,
+               count(*) FILTER (WHERE x.how = 'push') AS pushes
+        FROM cv_w w JOIN cv_r r USING (k, src)
+        JOIN raw.seed_sends x ON x.k = w.k AND x.src = w.src AND x.node = r.seed_node AND x.fate = 'written'
+                              AND x.t_ms >= w.push_ms - 1000 AND x.t_ms < w.push_ms
+        GROUP BY ALL),
+    cv_m AS (
+        SELECT w.k, w.src, w.seq, list_filter([
+                   CASE WHEN w.children = 0 AND w.dishonest_children = 0 THEN 'uncovered' END,
+                   CASE WHEN w.children = 0 AND w.dishonest_children > 0 THEN 'defectors_only' END,
+                   CASE WHEN w.children > 0 AND w.written = 0 THEN 'not_written' END,
+                   CASE WHEN w.children > 0 AND w.push_wait_ms > w.interval_ms THEN 'written_late' END,
+                   CASE WHEN w.children > 0 AND w.push_wait_ms <= w.interval_ms
+                             AND w.push_held_ms > w.pub_ms + w.interval_ms THEN 'delivered_late' END,
+                   CASE WHEN w.children > 0 AND p.departed THEN 'departed' END], x -> x IS NOT NULL) AS m
+        FROM cv_w w LEFT JOIN cv_departed p USING (k, src, seq))
+    SELECT w.k, w.src, w.seq, w.stream, w.pub_ms, w.phase, w.children, w.dishonest_children,
+           CASE WHEN len(m.m) > 0 THEN m.m ELSE ['other'] END AS matches,
+           CASE WHEN len(m.m) > 0 THEN m.m[1] ELSE 'other' END AS cause,
+           b.e.reason AS last_end, rm.d.kind AS seed_end, rm.d.why AS seed_why,
+           CASE WHEN b.seq IS NOT NULL THEN dc.seq IS NOT NULL END AS declined, w.fates,
+           CASE WHEN w.cancel_ms IS NOT NULL THEN coalesce(w.first_ms <= w.cancel_ms, false) END AS held_at_cancel,
+           w.push_ms, w.push_wait_ms, w.push_held_ms - w.push_ms AS delivery_ms,
+           CASE WHEN w.push_ms IS NOT NULL THEN coalesce(l.answer_bytes, 0) END AS answer_bytes,
+           CASE WHEN w.push_ms IS NOT NULL THEN coalesce(l.push_bytes, 0) END AS push_bytes,
+           CASE WHEN w.push_ms IS NOT NULL THEN coalesce(l.pushes, 0) END AS pushes
+    FROM cv_w w JOIN cv_m m USING (k, src, seq) LEFT JOIN cv_bare b USING (k, src, seq)
+    LEFT JOIN cv_removed rm USING (k, src, seq) LEFT JOIN cv_declined dc USING (k, src, seq)
+    LEFT JOIN cv_load l USING (k, src, seq);
+
+-- coverage_causes_in over the runs `jobs`.
+-- needs: arrivals arrivals.released_ms arrivals.incarnation parents seed_decisions seed_sends events
+CREATE OR REPLACE MACRO coverage_causes_of(jobs) AS TABLE
+    FROM coverage_causes_in((SELECT list(cv_run) FROM coverage_runs_of(jobs) cv_run));

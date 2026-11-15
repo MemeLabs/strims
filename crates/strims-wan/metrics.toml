@@ -709,6 +709,18 @@ description = "Each chunk the runs published, with its first hold by a node but 
 macro = "seed_cover_of"
 description = "The runs' I1: each stream-second an honest viewer watched, with the time in it that the stream had a seed child (the dishonest viewers left out)."
 
+[lake.seed_writes]
+macro = "seed_writes_of"
+description = "The runs' I2: each judged chunk, with the seed's sends of it to its seed children at publication (the dishonest viewers left out) and whether none was written or cancelled, from the seed log."
+
+[lake.seed_declines]
+macro = "seed_declines_of"
+description = "The runs' I3: each request the seed declined while the stream had no subscriber, with its rule, from the seed log."
+
+[lake.coverage_causes]
+macro = "coverage_causes_of"
+description = "Why each late chunk was late: every cause of the attribution tree that holds (no seed child, defectors only, not written, written late, delivered late, departed), the first its cause, from the seed log, parents, arrivals and events."
+
 [dimensions.sim]
 description = "The sim a job ran: strims-sim (the real stack)."
 values = ["strims-sim"]

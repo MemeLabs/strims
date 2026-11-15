@@ -14,10 +14,13 @@ parents the measure reads, folded
 and exported by simdb.py into a local suite invocation's source, and a
 second invocation's source that labels two of them again (decl's seed 1
 in a cell of its own, star-5b; its seed 2 in star-5, as the first has
-it), and a third invocation's (MIX) with arm mix's run, decl's seed 1
-with host 3 a dishonest viewer, indexed by the catalog. Every run
-publishes the same chunks: two streams, a chunk of each every 250 ms
-from 20 s to 39.75 s of a 40 s run, so the last 4 s are censored.
+it), a third invocation's (MIX) with arm mix's run, decl's seed 1
+with host 3 a dishonest viewer, and a fourth's (LOG) with arm log's,
+mix's run with a seed log (seed_decisions, seed_sends), a few holds
+and push parents changed and a viewer's departure, indexed by the
+catalog. Every run publishes the same chunks: two streams, a chunk of
+each every 250 ms from 20 s to 39.75 s of a 40 s run, so the last 4 s
+are censored.
 
   Prepare      the measure's per-run facts: the seed, the streams, the
                interval, the run's end, the phases, the censored chunks,
@@ -41,8 +44,15 @@ from 20 s to 39.75 s of a 40 s run, so the last 4 s are censored.
                seed's children no dishonest viewer, a late chunk's
                dishonest viewers subscribed to the seed counted apart; the
                runs without dishonest viewers have none of either
+  SeedLog      arm log's run, worked by hand: I2's chunks (the seed's
+               sends of each to its children), I2 and I3 by phase, each
+               late chunk's causes (every cause of the tree, the details
+               of each) and the attribution section's rows; runs without a
+               seed log, and a catalog without its tables, leave I2, I3
+               and the attribution empty, with a warning
   Cli          simdb.py coverage-report's tables and JSON, as a caller runs
-               it, and a section the catalog can't answer yet
+               it, the seed log's sections among them, and a section the
+               catalog can't answer yet
 
   python3 hack/simlab/tests/test_coverage.py
 """
@@ -89,6 +99,19 @@ PP_CHUNKS = 154
 MIX = "suite/wt/cv-mix"
 DISHONEST = 3
 MIX_SEL = forecast.Selection(exp=[MIX], names={"strims-sim-mix": "mix"}, phases="all")
+# The source of arm log's run, apart from the others: arm mix's run with a
+# seed log (log_decisions, log_sends) and the changes log_arrivals and
+# log_parents make, among them host 4 the seed's child of stream 0 from
+# 33.7 s until it departs at 34.6 s, holding nothing.
+LOG = "suite/wt/cv-log"
+LOG_SEL = forecast.Selection(exp=[LOG], names={"strims-sim-log": "log"}, phases="all")
+DEPARTED = 4
+DEPART_MS = 34600
+# The bytes of a written push and of a written answer in the seed log.
+PUSH_BYTES, ANSWER_BYTES = 1000, 1500
+# The warning of runs without a seed log, their count left to format.
+SEED_LOG_WARNING = ("coverage: {} runs have no seed log (seed_decisions, seed_sends: "
+                    f"{query.knobs_text('seed_sends')} writes them): their I2, I3 and late chunks' causes are NULL")
 
 
 def pub(q):
@@ -183,6 +206,107 @@ def mix_arrivals():
     return [(r[0], r[1], -1 if r[1] == DISHONEST else r[2], *r[3:]) for r in rows]
 
 
+def log_arrivals():
+    """Arm log's holds: arm mix's, but 110 late: host 1 holds it 400 ms
+    after by the seed's answer, host 2 440 ms after by host 1's push."""
+    rows = [r for r in mix_arrivals() if r[3] != 110 or r[1] == SEED]
+    return rows + [(pub(110) + after, node, node - 1, 110, how, peer, peer, None, 0)
+                   for node, after, how, peer in ((1, 400, "answer", SEED), (2, 440, "push", 1))]
+
+
+def log_parents():
+    """Arm log's push trees: decl's seed-1 ones, but host 4's (none of
+    its own here) and with host 3 the seed's child of stream 1 from 32.6 s
+    to 33 s, host 1 pruning stream 0 at 33.7 s and back at 34.05 s, and
+    host 4 the seed's child of stream 0 from 33.7 s, lost at its
+    departure."""
+    return [r for r in parents(1) if r[1] != DEPARTED] + [
+        (32600, DISHONEST, 1, 0, "open"), (33000, DISHONEST, 1, -1, "lost"),
+        (33700, 1, 0, -1, "prune"), (34050, 1, 0, 0, "open"),
+        (33700, DEPARTED, 0, 0, "open"), (DEPART_MS, DEPARTED, 0, -1, "lost")]
+
+
+def log_children(q):
+    """The seed's children of chunk q's stream at its publication in arm
+    log's run (log_parents), but the dishonest host 3."""
+    t = pub(q)
+    if q % 2 == 0:
+        return [n for n, on in ((1, not 33700 <= t < 34050), (DEPARTED, 33700 <= t < DEPART_MS)) if on]
+    return [n for n, on in ((1, not 32000 <= t < 33000), (5, t >= 37000)) if on]
+
+
+DECISION_COLS = [("t_ms", "BIGINT"), ("node", "BIGINT"), ("n", "BIGINT"), ("peer", "BIGINT"),
+                 ("peer_incarnation", "BIGINT"), ("kind", "VARCHAR"), ("stream", "BIGINT"), ("seq", "BIGINT"),
+                 ("why", "VARCHAR"), ("granted", "BOOLEAN"), ("subscribers", "BIGINT")]
+
+
+def log_decisions():
+    """Arm log's seed decisions (t_ms, peer, kind, stream, why, granted,
+    subscribers): requests, I3's those declined with no subscriber, and
+    the removals 101's uncovered stream (host 1's stream-1 subscription,
+    0 s to its prune at 32 s) meets or doesn't."""
+    rows = [
+        (21000, 2, "request", 0, "seed_streams_held", False, 0),  # I3, startup
+        (26000, 1, "request", 0, "seed_holder", True, 0),  # granted: none
+        (30000, 1, "barred", None, "unserved", None, None),  # within host 1's subscription, before the next
+        (31000, 1, "holder_left", None, "idle", None, None),  # its latest removal: 101's seed_end
+        (31500, 1, "closed", 0, "spill", None, 0),  # later, but of stream 0
+        (32100, 1, "barred", None, "silent", None, None),  # after its end
+        (32200, 2, "request", 1, "seed_no_copy", False, 0),  # I3, after the end, before 101: declined
+        (32300, DISHONEST, "request", 1, "seed_barred", False, 0),  # I3 of a dishonest viewer
+        (32400, 2, "request", 1, "seed_no_copy", False, 1),  # a subscriber: none
+        (38000, 2, "request", 1, "seed_no_copy", False, 0),  # I3, after the departure
+    ]
+    return [(t, SEED, n, peer, 0, kind, stream, None, why, granted, subs)
+            for n, (t, peer, kind, stream, why, granted, subs) in enumerate(rows)]
+
+
+SEND_COLS = [("t_ms", "BIGINT"), ("node", "BIGINT"), ("n", "BIGINT"), ("peer", "BIGINT"),
+             ("peer_incarnation", "BIGINT"), ("how", "VARCHAR"), ("stream", "BIGINT"), ("seq", "BIGINT"),
+             ("queued_ms", "BIGINT"), ("fate", "VARCHAR"), ("bytes", "BIGINT"), ("cancel_ms", "BIGINT"),
+             ("declared", "BOOLEAN"), ("subscribed", "BOOLEAN")]
+
+
+def log_sends():
+    """Arm log's seed sends: a push of each chunk to each of its children
+    (log_children), queued at its publication and written 5 ms after, but
+    (how, fate, queued_ms, t_ms, cancel_ms):
+
+      2    none (startup: not written, none queued)
+      100  stale, 500 ms after (not written)
+      102  written 350 ms after (written late)
+      104  cancelled at 255 ms, the CANCEL at 250, and an answer written
+           at 490 ms, its request at 300 (other: answered alone)
+      106  cancelled at 715 ms, the CANCEL at 710, 10 ms after host 2's
+           hold (not written; held at the cancel)
+      108  written 10 ms after, and an answer at 240 ms (delivered late:
+           host 1 holds it at 260)
+      112  to host 4 alone, written 350 ms after (written late, and
+           departed)
+
+    and the answers to nodes no child: host 2's of 101 at 290 ms and of
+    106 at 690, host 1's of 110 at 390 (110: pushed to host 4 alone,
+    which departs: departed). An answer is ANSWER_BYTES, a written push
+    PUSH_BYTES."""
+    special = {(2, 1): [],
+               (100, 1): [("push", "stale", 0, 500, None)],
+               (102, 1): [("push", "written", 0, 350, None)],
+               (104, 1): [("push", "cancelled", 0, 255, 250), ("answer", "written", 300, 490, None)],
+               (106, 1): [("push", "cancelled", 0, 715, 710)],
+               (108, 1): [("push", "written", 0, 10, None), ("answer", "written", 200, 240, None)],
+               (112, DEPARTED): [("push", "written", 0, 350, None)]}
+    sends = [(q, peer, *s) for q in range(CHUNKS) for peer in log_children(q)
+             for s in special.get((q, peer), [("push", "written", 0, 5, None)])]
+    sends += [(q, peer, "answer", "written", queued, t, None) for q, peer, queued, t in
+              ((101, 2, 200, 290), (106, 2, 650, 690), (110, 1, 350, 390))]
+    rows = sorted((pub(q) + t, peer, how, q, pub(q) + queued, fate, cancel) for q, peer, how, fate, queued, t, cancel
+                  in sends)
+    return [(t, SEED, n, peer, 0, how, q % 2, q, queued, fate,
+             (PUSH_BYTES if how == "push" else ANSWER_BYTES) if fate == "written" else None,
+             None if cancel is None else pub(q) + cancel, False, how == "push")
+            for n, (t, peer, how, q, queued, fate, cancel) in enumerate(rows)]
+
+
 ASK_COLS = [("t_ms", "BIGINT"), ("node", "BIGINT"), ("honest", "BOOLEAN"), ("ask", "BIGINT"), ("round", "VARCHAR"),
             ("peer", "BIGINT"), ("peer_honest", "BOOLEAN"), ("picked", "BOOLEAN"), ("stream", "BIGINT"),
             ("seq", "BIGINT")]
@@ -226,24 +350,35 @@ def build(root):
     sm.export(db, root / "target" / "sim-db" / "cache" / SRC)
     db.unlink()
     # Arm mix's run: decl's seed 1 with host 3 hostile in its viewers and
-    # its series_meta, which records its seed and stream count.
-    d = root / "jobs" / "mix-1"
-    rec = golden_cli.job_dir(d, (MIX, "strims-sim-mix:star-5:1", "strims-sim", "calibration_star", "star-5",
-                                 "strims-sim-mix", 1, golden_cli.SS_ENV, golden_cli.T0, None))
-    golden_cli.write_table(d, "arrivals", ARRIVAL_COLS, mix_arrivals())
-    golden_cli.write_table(d, "parents", PARENT_COLS, parents(1))
-    head, *lines = (d / "viewers.csv").read_text().splitlines()
-    cols = head.split(",")
-    viewers = [line.split(",") for line in lines]
-    for v in viewers:
-        if v[cols.index("host")] == str(DISHONEST):
-            v[cols.index("hostile")] = "true"
-    (d / "viewers.csv").write_text("\n".join([head, *(",".join(v) for v in viewers)]) + "\n")
-    meta = json.loads((d / "series_meta.json").read_text())
-    (d / "series_meta.json").write_text(json.dumps(meta | {"seed": SEED, "streams": 2, "hostile": [DISHONEST - 1]}))
-    sm.fold(db, [rec], MIX)
-    sm.export(db, root / "target" / "sim-db" / "cache" / MIX)
-    db.unlink()
+    # its series_meta, which records its seed and stream count; arm log's
+    # too, with its seed log and host 4's departure.
+    for arm, src, holds, trees in (("mix", MIX, mix_arrivals(), parents(1)),
+                                   ("log", LOG, log_arrivals(), log_parents())):
+        d = root / "jobs" / f"{arm}-1"
+        rec = golden_cli.job_dir(d, (src, f"strims-sim-{arm}:star-5:1", "strims-sim", "calibration_star", "star-5",
+                                     f"strims-sim-{arm}", 1, golden_cli.SS_ENV, golden_cli.T0, None))
+        golden_cli.write_table(d, "arrivals", ARRIVAL_COLS, holds)
+        golden_cli.write_table(d, "parents", PARENT_COLS, trees)
+        head, *lines = (d / "viewers.csv").read_text().splitlines()
+        cols = head.split(",")
+        viewers = [line.split(",") for line in lines]
+        for v in viewers:
+            if v[cols.index("host")] == str(DISHONEST):
+                v[cols.index("hostile")] = "true"
+        (d / "viewers.csv").write_text("\n".join([head, *(",".join(v) for v in viewers)]) + "\n")
+        meta = json.loads((d / "series_meta.json").read_text())
+        (d / "series_meta.json").write_text(json.dumps(meta | {"seed": SEED, "streams": 2,
+                                                               "hostile": [DISHONEST - 1]}))
+        if arm == "log":
+            golden_cli.write_table(d, "seed_decisions", DECISION_COLS, log_decisions())
+            golden_cli.write_table(d, "seed_sends", SEND_COLS, log_sends())
+            head, *lines = (d / "events.csv").read_text().splitlines()
+            lines.append(f"{DEPART_MS * 1000},depart,{DEPARTED},-1,1,abrupt")
+            lines.sort(key=lambda line: int(line.split(",")[0]))
+            (d / "events.csv").write_text("\n".join([head, *lines]) + "\n")
+        sm.fold(db, [rec], src)
+        sm.export(db, root / "target" / "sim-db" / "cache" / src)
+        db.unlink()
     label = "strims-sim-decl"
     golden_cli.relabel(root, RELABEL, [
         (f"{label}:star-5:{seed}", "strims-sim", "calibration_star", cell, label, seed, golden_cli.SS_ENV)
@@ -380,8 +515,10 @@ class Prepare(Fixture):
     def test_the_definitions_are_the_catalogs_macros(self):
         # Each with its comment and parameters, as describe gives them.
         got = {r["name"]: r for r in catalog.scoring_docs()}
-        want = {"coverage_runs_of": "(jobs)", "coverage_ask_streams_of": "(jobs)", "seed_subscriptions_in": "(runs)"}
-        for name in ("seed_children", "coverage_chunks", "seed_cover"):
+        want = {"coverage_runs_of": "(jobs)", "coverage_ask_streams_of": "(jobs)", "coverage_seed_logs_of": "(jobs)",
+                "seed_subscriptions_in": "(runs)"}
+        for name in ("seed_children", "coverage_chunks", "seed_cover", "seed_writes", "seed_declines",
+                     "coverage_causes"):
             want |= {f"{name}_in": "(runs)", f"{name}_of": "(jobs)"}
         for name, params in want.items():
             self.assertEqual((got[name]["kind"], got[name]["keys"]), ("table macro", params), name)
@@ -394,6 +531,11 @@ class Prepare(Fixture):
         self.assertIn("every node but the dishonest viewers", got["seed_children_in"]["description"])
         self.assertNotIn("else none", got["coverage_ask_streams_of"]["description"])
         self.assertIn("I1, the invariant that every stream a viewer watches", got["seed_cover_in"]["description"])
+        for name in ("coverage_seed_logs_of", "seed_writes_in", "seed_declines_in", "coverage_causes_in"):
+            self.assertNotIn("else none", got[name]["description"], name)
+        self.assertIn("I2, the invariant that the seed writes every chunk", got["seed_writes_in"]["description"])
+        self.assertIn("I3, the invariant that the seed never declines", got["seed_declines_in"]["description"])
+        self.assertIn("of kind 'depart' or 'crash'", got["coverage_causes_in"]["description"])
 
 
 class Sections(Fixture):
@@ -518,8 +660,8 @@ class Sections(Fixture):
                               warn=warned.append)
         self.assertEqual({(r["arm"], r["phase"]) for r in got["latency"].records()}, {("main", "steady")})
         self.assertEqual(warned, [])
-        with self.assertRaisesRegex(ValueError, "no section 'attribution'"):
-            coverage.report(SEL, ["attribution"], warn=[].append)
+        with self.assertRaisesRegex(ValueError, "no section 'mechanisms'"):
+            coverage.report(SEL, ["mechanisms"], warn=[].append)
 
 
 class Grain(Fixture):
@@ -551,12 +693,14 @@ class Grain(Fixture):
 
     def test_the_warnings(self):
         # noarr's run wrote no arrivals; bare's and the ppspp job's have no
-        # parents rows; of the five left only main's seed 2 (series_meta)
-        # and the ppspp job (its row) record their stream count.
+        # parents rows; none of the six left has a seed log; of them only
+        # main's seed 2 (series_meta) and the ppspp job (its row) record
+        # their stream count.
         self.assertEqual(self.warned, [
             f"coverage: 1 runs wrote no arrivals ({query.knobs_text('arrivals')} writes them): left out of every "
             "section",
-            "coverage: 2 runs have no parents rows (no push trees): their I1 and their late chunks' classes are NULL",
+            "coverage: 2 runs have no parents rows (no push trees): their I1, I2 and their late chunks' classes and "
+            "causes are NULL", SEED_LOG_WARNING.format(6),
             "coverage: 4 runs' stream count is inferred, not read (1 from asks, 3 from parents): neither their "
             "series_meta nor their row records it, and their interval and I1 take the count inferred"])
         got = {(r["arm"], r["collapsed"]): r["inferred_streams"] for r in self.rows("latency", phase="steady")}
@@ -676,7 +820,191 @@ class Dishonest(Fixture):
         # no late chunk has one subscribed to the seed.
         self.assertNotIn("dishonest", {x["source"] for x in self.results["routes"]})
         self.assertEqual({x["dishonest_children"] for x in self.results["late"]}, {0.0})
-        self.assertEqual(self.mix_warned, [])
+        # Arm mix's run has no seed log, alone among the warnings.
+        self.assertEqual(self.mix_warned, [SEED_LOG_WARNING.format(1)])
+
+
+class SeedLog(Fixture):
+    """Arm log's run (LOG's source): arm mix's with a seed log, host 3 the
+    dishonest child of stream 1 from 32.6 s to 33 s, host 1 off stream 0
+    from 33.7 s to 34.05 s, and host 4 the seed's child of stream 0 from
+    33.7 s, departing at 34.6 s (after_departure from 35 s); the late
+    chunks 2 (startup) and 100-114 (steady) each worked by hand."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with cls.patched(cls):
+            cls.log_warned = []
+            cls.log = {s: r.records() for s, r in coverage.report(LOG_SEL, warn=cls.log_warned.append).items()}
+            with forecast.connected() as c:
+                coverage.prepare(c, LOG_SEL)
+                cls.writes = {r[0]: r[1:] for r in c.execute(
+                    "SELECT seq, children, sends, written, cancelled, fates, cancel_ms, push_ms, push_wait_ms, "
+                    "push_held_ms, unwritten FROM cv_writes ORDER BY seq").fetchall()}
+                cls.causes = {r[0]: r[1:] for r in c.execute(
+                    "SELECT seq, cause, matches, last_end, seed_end, seed_why, declined, fates, held_at_cancel, "
+                    "push_wait_ms, delivery_ms, answer_bytes, push_bytes, pushes FROM cv_causes ORDER BY seq"
+                ).fetchall()}
+
+    def logged(self, section, **want):
+        return [r for r in self.log[section] if all(r.get(k) == v for k, v in want.items())]
+
+    def test_the_writes(self):
+        # (children, sends, written, cancelled, fates, cancel_ms, push_ms,
+        # push_wait_ms, push_held_ms, unwritten): host 1 the child but at
+        # 110 and 112 (host 4) and 114 (both); 101 has none (I1's).
+        self.assertEqual({q: self.writes[q] for q in (2, 100, 101, 104, 106, 108, 110, 112, 114)}, {
+            2: (1, 0, 0, 0, [], None, None, None, None, True),
+            100: (1, 1, 0, 0, ["push stale"], None, None, None, None, True),
+            101: (0, 0, 0, 0, [], None, None, None, None, None),
+            104: (1, 2, 1, 1, ["answer written", "push cancelled"], pub(104) + 250, None, None, None, False),
+            106: (1, 1, 0, 1, ["push cancelled"], pub(106) + 710, None, None, None, False),
+            108: (1, 2, 2, 0, ["answer written", "push written"], None, pub(108) + 10, 10, pub(108) + 260, False),
+            # Host 4 never holds a chunk.
+            110: (1, 1, 1, 0, ["push written"], None, pub(110) + 5, 5, None, False),
+            112: (1, 1, 1, 0, ["push written"], None, pub(112) + 350, 350, None, False),
+            # Both written at once: the first is host 1's, which holds it.
+            114: (2, 2, 2, 0, ["push written"], None, pub(114) + 5, 5, pub(114) + 300, False)})
+        # The judged chunks 0-127 (a run of 40 s, the last 4.25 s
+        # censored), of which 97, 99, 101 and 103 have no child (stream 1,
+        # 32-33 s); 2 and 100 alone break I2 (106's push was cancelled).
+        self.assertEqual(sorted(self.writes), list(range(128)))
+        self.assertEqual([q for q, w in self.writes.items() if w[0] == 0], [97, 99, 101, 103])
+        self.assertEqual([q for q, w in self.writes.items() if w[-1]], [2, 100])
+
+    def test_the_invariants(self):
+        # (child_chunks, unwritten, unwritten_share, declined,
+        # declined_rules, declined_dishonest): startup is 0-4 s and 20-24 s
+        # (chunks 0-39), steady 25-34 s (40-119, 4 without a child),
+        # after_departure 35-39 s (120-127 judged); the pooled row (NULL)
+        # pools those two and after_disruption (5-19 s, no chunk).
+        got = {r["phase"]: (r["child_chunks"], r["unwritten"], r["unwritten_share"], r["declined"],
+                            r["declined_rules"], r["declined_dishonest"], r["unlogged"])
+               for r in self.log["invariants"]}
+        self.assertEqual(got, {
+            "after_disruption": (0, None, None, 0, None, 0, 0),
+            "startup": (40, 1, 1 / 40, 1, {"seed_streams_held": 1}, 0, 0),
+            "steady": (76, 1, 1 / 76, 1, {"seed_no_copy": 1}, 1, 0),
+            "after_departure": (8, 0, 0.0, 1, {"seed_no_copy": 1}, 0, 0),
+            None: (84, 1, 1 / 84, 2, {"seed_no_copy": 2}, 1, 0)})
+        steady = self.logged("invariants", phase="steady")[0]
+        self.close(steady["unwritten_runs"], spread(1 / 76))
+        self.assertEqual(self.log_warned, [])
+
+    def test_the_causes(self):
+        # (cause, matches, last_end, seed_end, seed_why, declined, fates,
+        # held_at_cancel, push_wait_ms, delivery_ms, answer_bytes,
+        # push_bytes, pushes), the bytes those written in the second
+        # before the first written push (log_sends): 102's 101's answer,
+        # 98's and 105's pushes; 108's 101's and 104's answers, 102's,
+        # 105's, 107's and 109's pushes; 110's 108's answer and push too;
+        # 112's 104's, 108's, 106's and 110's answers, 108's, 109's,
+        # 110's, 111's, 113's, 114's two and 115's pushes; 114's those
+        # answers, 107's, 108's, 109's, 110's, 111's and 113's pushes.
+        nw, a = "not_written", ANSWER_BYTES
+        self.assertEqual(self.causes, {
+            2: (nw, [nw], None, None, None, None, [], None, None, None, None, None, None),
+            100: (nw, [nw], None, None, None, None, ["push stale"], None, None, None, None, None, None),
+            # The stream's last subscription to the seed ended by host 1's
+            # prune at 32 s; the seed's latest removal of host 1 within it
+            # its holder_left (its closed is stream 0's, its later bar
+            # after the end); host 2's request declined at 32.2 s.
+            101: ("uncovered", ["uncovered"], "prune", "holder_left", "idle", True, [], None, None, None, None, None,
+                  None),
+            102: ("written_late", ["written_late"], None, None, None, None, ["push written"], None, 350, 250, a,
+                  2 * PUSH_BYTES, 2),
+            103: ("defectors_only", ["defectors_only"], None, None, None, None, [], None, None, None, None, None,
+                  None),
+            # Cancelled at 250 ms, before host 1's hold at 500.
+            104: ("other", ["other"], None, None, None, None, ["answer written", "push cancelled"], False, None, None,
+                  None, None, None),
+            # Cancelled 10 ms after host 2's hold.
+            106: (nw, [nw], None, None, None, None, ["push cancelled"], True, None, None, None, None, None),
+            108: ("delivered_late", ["delivered_late"], None, None, None, None, ["answer written", "push written"],
+                  None, 10, 250, 2 * a, 4 * PUSH_BYTES, 4),
+            110: ("departed", ["departed"], None, None, None, None, ["push written"], None, 5, None, 3 * a,
+                  5 * PUSH_BYTES, 5),
+            112: ("written_late", ["written_late", "departed"], None, None, None, None, ["push written"], None, 350,
+                  None, 4 * a, 8 * PUSH_BYTES, 8),
+            114: ("delivered_late", ["delivered_late"], None, None, None, None, ["push written"], None, 5, 295, 4 * a,
+                  6 * PUSH_BYTES, 6)})
+
+    def test_attribution(self):
+        # Steady: 10 late of 80 judged chunks, a row each cause and each
+        # part of one.
+        got = [(r["cause"], r["breakdown"], r["value"], r["chunks"]) for r in self.logged("attribution",
+                                                                                         phase="steady")]
+        self.assertEqual(got, [
+            ("uncovered", None, None, 1), ("uncovered", "last_end", "prune", 1),
+            ("uncovered", "seed_end", "holder_left idle", 1), ("uncovered", "declined", "true", 1),
+            ("defectors_only", None, None, 1),
+            ("not_written", None, None, 2), ("not_written", "fates", "push cancelled", 1),
+            ("not_written", "fates", "push stale", 1), ("not_written", "held_at_cancel", "true", 1),
+            ("written_late", None, None, 2), ("written_late", "also", "departed", 1),
+            ("delivered_late", None, None, 2),
+            ("departed", None, None, 1),
+            ("other", None, None, 1), ("other", "fates", "answer written, push cancelled", 1)])
+        for r in self.logged("attribution", phase="steady"):
+            self.assertAlmostEqual(r["late_share"], r["chunks"] / 10)
+            self.assertAlmostEqual(r["share"], r["chunks"] / 80)
+            self.close(r["late_share_runs"], spread(r["chunks"] / 10))
+        row = lambda cause, breakdown=None: self.logged(  # noqa: E731
+            "attribution", phase="steady", cause=cause, breakdown=breakdown)[0]
+        # The first written push's wait and its child's hold after it, and
+        # the second's sends before it (test_the_causes): 102 and 112
+        # written late; 108 and 114 delivered late (114 with two
+        # children); 110 pushed to host 4, gone.
+        late, also, delivered, gone = (row("written_late"), row("written_late", "also"), row("delivered_late"),
+                                       row("departed"))
+        self.assertEqual((late["children"], late["wait_ms"], late["delivery_ms"]),
+                         (1.0, sketch.quantile([350, 350], 50), sketch.quantile([250], 50)))
+        self.assertEqual((late["answer_bytes"], late["push_bytes"], late["pushes"]), (2.5 * ANSWER_BYTES, 5000.0, 5.0))
+        self.assertEqual((also["wait_ms"], also["delivery_ms"], also["answer_bytes"], also["pushes"]),
+                         (sketch.quantile([350], 50), None, 4.0 * ANSWER_BYTES, 8.0))
+        self.assertEqual((delivered["children"], delivered["wait_ms"], delivered["delivery_ms"]),
+                         (1.5, sketch.quantile([10, 5], 50), sketch.quantile([250, 295], 50)))
+        self.assertEqual((delivered["answer_bytes"], delivered["push_bytes"], delivered["pushes"]),
+                         (3.0 * ANSWER_BYTES, 5000.0, 5.0))
+        self.assertEqual((gone["wait_ms"], gone["delivery_ms"], gone["answer_bytes"], gone["pushes"]),
+                         (sketch.quantile([5], 50), None, 3.0 * ANSWER_BYTES, 5.0))
+        self.assertEqual([row(c)["wait_ms"] for c in ("uncovered", "not_written", "other")], [None] * 3)
+        # Startup: chunk 2, never pushed. The pooled row (NULL) pools
+        # steady and after_departure (no late chunk), 88 judged.
+        self.assertEqual([(r["cause"], r["breakdown"], r["value"], r["chunks"])
+                          for r in self.logged("attribution", phase="startup")],
+                         [("not_written", None, None, 1), ("not_written", "fates", "none", 1)])
+        pooled = self.logged("attribution", phase=None)
+        self.assertEqual([(r["cause"], r["breakdown"], r["value"], r["chunks"]) for r in pooled], got)
+        self.assertAlmostEqual(pooled[0]["share"], 1 / 88)
+        self.assertEqual(self.logged("attribution", phase="after_departure"), [])
+
+    def test_runs_without_a_seed_log(self):
+        # SEL's runs have none: their I2 and I3 are empty, NULL, and they
+        # are left out of the attribution.
+        for r in self.results["invariants"]:
+            self.assertEqual((r["unlogged"], r["child_chunks"], r["unwritten"], r["unwritten_share"], r["declined"],
+                              r["declined_rules"], r["declined_dishonest"]), (r["runs"], 0, None, None, None, None,
+                                                                               None), (r["arm"], r["phase"]))
+        self.assertEqual(self.results["attribution"], [])
+
+    def test_a_catalog_without_the_seed_log(self):
+        # The seed log's macros give no rows: arm log's run is as one
+        # without a seed log, and the report runs.
+        real = catalog.scoring_cols
+
+        def without(columns, have=None):
+            return real(columns, have={t: c for t, c in (have or {}).items()
+                                       if t not in ("seed_decisions", "seed_sends")})
+
+        warned = []
+        with mock.patch.object(catalog, "scoring_cols", without):
+            got = coverage.report(LOG_SEL, ["invariants", "attribution"], warn=warned.append)
+        self.assertEqual(warned, [SEED_LOG_WARNING.format(1)])
+        steady = [r for r in got["invariants"].records() if r["phase"] == "steady"]
+        self.assertEqual([(r["unlogged"], r["child_chunks"], r["unwritten"], r["declined"]) for r in steady],
+                         [(1, 0, None, None)])
+        self.assertEqual(got["attribution"].records(), [])
 
 
 class Cli(Fixture):
@@ -695,9 +1023,22 @@ class Cli(Fixture):
         self.assertIn("| decl ", text)
         got = json.loads(self.cli("--exp", SRC, *names, "--section", "routes", "--json"))
         self.assertEqual(sorted(got), ["routes", "warnings"])
-        self.assertEqual((got["routes"], got["warnings"]), (self.results["routes"], self.warned))
+        # The routes read no seed log: no warning of one.
+        self.assertEqual((got["routes"], got["warnings"]),
+                         (self.results["routes"], [w for w in self.warned if w != SEED_LOG_WARNING.format(6)]))
         rest = json.loads(self.cli("--exp", SRC, *names, "--phases", "rest", "--section", "latency", "--json"))
         self.assertNotIn("startup", {r["phase"] for r in rest["latency"]})
+
+    def test_the_seed_log_sections(self):
+        # Arm log's: a map's entries as key=value in the text, a JSON
+        # object in --json.
+        args = ("--exp", LOG, "--name=log=strims-sim-log", "--section", "invariants", "--section", "attribution")
+        text = self.cli(*args)
+        self.assertIn("## attribution\n", text)
+        self.assertIn("| seed_no_copy=1 ", text)
+        got = json.loads(self.cli(*args, "--json"))
+        want = coverage.report(LOG_SEL, ["invariants", "attribution"], warn=[].append)
+        self.assertEqual(got, {**{s: r.records() for s, r in want.items()}, "warnings": []})
 
 
 if __name__ == "__main__":

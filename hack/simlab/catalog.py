@@ -2934,7 +2934,8 @@ TEMP = re.compile(r"^CREATE OR REPLACE (MACRO|TABLE|VIEW) ", re.M)
 # tables (table, or table.column) it reads that a catalog indexed by older
 # code may lack.
 NEEDS = re.compile(r"needs: (.+)")
-# A table macro's columns where its needs are missing: no rows of them.
+# A table macro's columns where its needs are missing: no rows of them,
+# its `-- else none:` lines' columns in order.
 ELSE_NONE = re.compile(r"else none: (.+)")
 
 
@@ -2952,10 +2953,10 @@ def needed(text, have):
     or column that `have` ({table: its columns}) lacks made one that fails
     saying so when called, so the others still score over a catalog its
     index made with older code, or a catalog without that table; or, for a
-    table macro whose comment has an `-- else none:` line of its columns
-    (`name TYPE, ...`), one of those columns and no rows, a fallback its
-    callers read as giving nothing. `text` as it is for `have` None (every
-    one there)."""
+    table macro whose comment has `-- else none:` lines of its columns
+    (`name TYPE, ...`, the lines' in order), one of those columns and no
+    rows, a fallback its callers read as giving nothing. `text` as it is
+    for `have` None (every one there)."""
     if have is None:
         return text
 
@@ -2972,7 +2973,7 @@ def needed(text, have):
         end = text.find(";", m.end())
         why = q(f"{m.group(2)} reads {', '.join(missing)}, which this catalog lacks: index it with this checkout")
         table = " AS TABLE" in text[m.end():m.end() + 20]
-        none = next((x.group(1) for line in comment_above(text, m.start()) if (x := ELSE_NONE.match(line))), None)
+        none = ", ".join(x.group(1) for line in comment_above(text, m.start()) if (x := ELSE_NONE.match(line)))
         if table and none:
             cols = [c.strip().split(None, 1) for c in none.split(",")]
             body = "TABLE SELECT " + ", ".join(f"NULL::{ty} AS {name}" for name, ty in cols) + " WHERE false"
@@ -2995,10 +2996,12 @@ def scoring_consts(suite=None):
             # The vocabulary's phases, in its order (dynamics_phases'), and
             # the one past the verdict's seconds (viewer_phases_of's and
             # coverage_chunks_in's); the parents reasons
-            # seed_subscriptions_in orders a millisecond's rows by.
+            # seed_subscriptions_in orders a millisecond's rows by; the
+            # event kinds coverage_causes_in reads as a child's departure.
             "phases": "[" + ", ".join(q(p) for p in a.VOCAB["phases"]) + "]",
             "tail": q(query.TAIL),
             "reason_switch": q(vocab.named("reasons", "switch")), "reason_open": q(vocab.named("reasons", "open")),
+            "kind_depart": q(vocab.named("kinds", "depart")), "kind_crash": q(vocab.named("kinds", "crash")),
             # simlab.sketch's buckets a doubling (sketch_floor's).
             "sketch_sub": sketch.SUB,
             **{f"t975_g{i}": double(c) for i, c in enumerate(g, 1)}}

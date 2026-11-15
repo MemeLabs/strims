@@ -37,8 +37,9 @@ server (hack/console).
             availability
   coverage  seed coverage: each chunk's publication to its first hold
             by a node but the seed and the dishonest viewers, its route,
-            the seed's children of its stream (I1), and why late chunks
-            were late
+            the seed's children of its stream (I1), its writes of each
+            chunk (I2) and declines (I3), and why late chunks were late,
+            cause by cause from the seed log
 
 Each module's docstring says what it offers. `engine` and the modules
 over it need the duckdb module, which hack/pyproject.toml pins (uv's venv,
