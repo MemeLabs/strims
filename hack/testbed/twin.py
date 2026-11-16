@@ -22,12 +22,10 @@ eight at a time, and keeps each seed's series (calibration_series) as
 DIR/TAG-<seed>.json (default target/twin) and its row as
 DIR/TAG-<seed>.row.json; a seed already there is kept. `--env` sets more
 of strims-sim's settings (STRIMS_SIM_RTC=chromium for browsers). The
-testbed's TRAIN_MS=1500 is strims-sim's STRIMS_SIM_EXP=trains-seed, added
-to the flags `--env` gives; the sim's flag fixes that staleness, so no
-other value runs. The testbed's tbf buckets, SEED_BURST and VIEWER_BURST,
-are calibration_star's too, at run.sh's 3028 bytes where the knobs don't
-give them, so a run and its twin shape their uplinks alike;
-`--env STRIMS_SIM_UPLINK_BURST=off` runs the sim's uplinks without one.
+testbed's tbf buckets, SEED_BURST and VIEWER_BURST, are calibration_star's
+too, at run.sh's 3028 bytes where the knobs don't give them, so a run and
+its twin shape their uplinks alike; `--env STRIMS_SIM_UPLINK_BURST=off`
+runs the sim's uplinks without one.
 
 The others compare twin runs (DIR/TAG-*.json) with a farm testbed matrix's
 runs (MATRIX, its rows.jsonl and runs/) of N viewers, in the phases of the
@@ -138,9 +136,6 @@ def cmd_run(args):
     # run.sh's tbf buckets, where the knobs leave them at its default.
     knobs = knobs + [f"{k}=3028" for k in ("SEED_BURST", "VIEWER_BURST")
                      if not any(kv.startswith(f"{k}=") for kv in knobs)]
-    other = [kv for kv in knobs if kv.startswith("TRAIN_MS=") and kv != "TRAIN_MS=1500"]
-    if other:
-        sys.exit(f"{other[0]}: the sim's trains-seed runs 1500 alone")
     os.makedirs(tdir, exist_ok=True)
 
     def one(seed):
@@ -150,11 +145,7 @@ def cmd_run(args):
         env = {**os.environ, "STRIMS_SIM_TCP": "1", "STRIMS_SIM_CLOCK_SKEW": "off", "STRIMS_SIM_SEED": str(seed), "STRIMS_SIM_ROWS": "1", **extra}
         for kv in knobs:
             k, v = kv.split("=", 1)
-            if k == "TRAIN_MS":
-                flags = [f for f in env.get("STRIMS_SIM_EXP", "").split(",") if f.strip() not in ("", "off")]
-                env["STRIMS_SIM_EXP"] = ",".join(flags + ["trains-seed"])
-            else:
-                env[f"STRIMS_SIM_CAL_{k}"] = v
+            env[f"STRIMS_SIM_CAL_{k}"] = v
         p = subprocess.run([binary, "--exact", "calibration_star", "--include-ignored", "--nocapture",
                             "--test-threads", "1"], env=env, capture_output=True, text=True, check=False)
         at = p.stdout.find("SERIES {")

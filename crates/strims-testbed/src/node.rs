@@ -23,7 +23,6 @@
 //! | `t_ms`, `rel_ms` | the wall clock, and ms since the start |
 //! | `index`, `seed` | the node, and whether it seeds |
 //! | `bytes_written` | bytes the driver wrote to its links |
-//! | `trains`, `filler_bytes` | vnic's uplink train legs started so far, and the filler written to fill them out |
 //! | `upload_rate`, `busy_permille`, `capacity`, `queue_delay_ms` | the upload meter |
 //! | `path_delay_ms`, `path_queued_ms`, `path_latest_ms` | the queueing delay from vnic's path measure ([`strims_base::path::node_delays`]): the links' excess round trips, and their queued bytes over their delivery rates; and their latest round trips' excess ([`strims_base::path::latest_excess`]) |
 //! | `children`, `seed_budget`, `seed_window`, `seed_copies`, `seed_first_wave` | the push scheduler |
@@ -443,14 +442,12 @@ impl Line<'_> {
         );
         let lag = self.lag;
         format!(
-            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"bytes_written\":{},\"trains\":{},\"filler_bytes\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{},\"media\":{}}}",
+            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{},\"media\":{}}}",
             self.t_ms,
             self.t_ms as i64 - self.s.start_ms as i64,
             self.s.index,
             self.seed,
             m.driver.bytes_written,
-            m.host.train_count,
-            m.host.filler_write_bytes,
             p.upload_rate,
             p.upload_busy_permille,
             p.upload_capacity,
