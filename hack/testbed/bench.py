@@ -205,9 +205,10 @@ def frames(run):
     try:
         qs = tcstats.parse_text(text)
     except ValueError as e:
-        # A file cut short: a tbf root as its text shows one.
-        tcstats.note(f"{p}: {e}; taking a 'qdisc tbf 10: root' in it for frames")
-        return "qdisc tbf 10: root" in text
+        # A file cut short: a root 10:, of any class, as its header line
+        # shows one (`dev eth0` in it since qdisc-<i>.txt has every device).
+        tcstats.note(f"{p}: {e}; taking a root 10: header in it for frames")
+        return re.search(r"^qdisc \S+ 10: (?:dev eth0 )?root\b", text, re.M) is not None
     # Every device's (`tc -s -d qdisc show`), or eth0's and the ifb's before.
     q = tcstats.find(qs, "10:", dev="eth0") or tcstats.find(qs, "10:")
     return q is not None and q.parent is None

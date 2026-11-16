@@ -223,12 +223,21 @@ class Readers(unittest.TestCase):
                 self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=fixture(f"{name}.all"))), name)
                 self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=fixture(f"{name}.txt"))), name)
             self.assertFalse(bench.frames(run_dir(d, None, [], qdisc=netem_root)))
-            # A file cut short takes its text's word for it, and says so.
-            cut = fixture("cable.txt")
-            cut = cut[:cut.index("qdisc pie") + 30]
-            with contextlib.redirect_stderr(io.StringIO()) as err:
-                self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=cut)))
-            self.assertIn("NOTE: ", err.getvalue())
+            # A file cut short takes its header lines' word for it, and says
+            # so: every class's, in the one-device form and in every
+            # device's, which run.sh writes now.
+            for name in CLASSES:
+                for form in ("txt", "all"):
+                    text = fixture(f"{name}.{form}")
+                    # Cut in the qdisc after the root, past its header.
+                    second = text.index("\nqdisc ", text.index(" 10: ")) + 1
+                    cut = text[:text.index("\n", second) + 1] + " Sent 1"
+                    with self.subTest(f"{name}.{form} cut"), contextlib.redirect_stderr(io.StringIO()) as err:
+                        self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=cut)))
+                        self.assertIn("NOTE: ", err.getvalue())
+            cut = netem_root[:netem_root.index("qdisc tbf") + 40]
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertFalse(bench.frames(run_dir(d, None, [], qdisc=cut)))
 
 
 if __name__ == "__main__":
