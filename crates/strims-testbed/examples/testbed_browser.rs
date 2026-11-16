@@ -81,6 +81,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use strims_testbed::browser::{Bundle, Site, args as browser_args, firefox_profile};
 use strims_testbed::native::{now_ms, read_host, tree_cpu_ms, write_host};
+use strims_testbed::record::BIN_MS;
 use strims_testbed::shape::RATE;
 use strims_testbed::topology::{BIND_PORT, Kind, Link, Topology, key_of, network_key};
 use tokio::sync::{broadcast, mpsc};
@@ -710,6 +711,9 @@ async fn run() -> Result<(), String> {
             "bindPort": BIND_PORT,
             "echoPort": ECHO_PORT,
             "replyPort": REPLY_PORT,
+            // The records strims-sim's tables take (strims_testbed::node's `rec`).
+            "statsBins": { "originMs": start_ms, "widthMs": BIN_MS },
+            "parentLog": true,
         });
         if a.capture.is_some() {
             start["capture"] = json!({

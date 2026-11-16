@@ -37,7 +37,10 @@
 //! (u64, big-endian), a flags byte (bit 0 the message completes a record,
 //! bit 1 a discontinuity came before it), its length (u32, big-endian) and
 //! its bytes. Each node prints its line per second on stdout, with the
-//! process's CPU time as `cpu_ms`.
+//! process's CPU time as `cpu_ms` and the records strims-sim's tables take
+//! (`rec`), for which it keeps stats bins of
+//! [`BIN_MS`](strims_testbed::record::BIN_MS) from the stream's start and
+//! its parent log, as a simulated node does.
 //!
 //! `--relay-only` runs the relay: it listens where the topology's `relay`
 //! line says, joins the testbed network, runs no swarm, and stops 5 s
@@ -52,12 +55,15 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
+use strims_base::time::{Duration as Span, Time};
+use strims_node::config::StatsBins;
 use strims_node::{
     CaptureConfig, NetworkOptions, Node, NodeConfig, NodeEvent, SystemClock, TokioNet, WebRtcConfig,
 };
 use strims_testbed::media::FlvFile;
 use strims_testbed::native::{now_ms, self_cpu_ms, write_host};
 use strims_testbed::node::{Runtime, Settings, Stream};
+use strims_testbed::record::{BIN_MS, ParentLog};
 use strims_testbed::shape::RATE;
 use strims_testbed::topology::{
     BIND_PORT, BrowserLinks, Link, Topology, key_of, network_key, relay_key,
@@ -235,6 +241,14 @@ async fn run() -> Result<(), String> {
     config.max_peers = 64;
     config.rate_limit = None;
     config.upload_capacity = None;
+    // The records strims-sim's tables take: stats bins from the stream's
+    // start, and the parent log.
+    config.stats_bins = Some(StatsBins {
+        origin: Time::from_unix_millis(i64::try_from(start_ms).unwrap_or(i64::MAX)),
+        width: Span::from_millis(BIN_MS),
+    });
+    let parents = ParentLog::default();
+    config.parent_log = Some(parents.sink());
     if topo.relay.is_some() {
         let at = me.browser_addr().to_string();
         match topo.browser_links {
@@ -312,7 +326,7 @@ async fn run() -> Result<(), String> {
     };
     let ran = tokio::select! {
         biased;
-        r = strims_testbed::node::run(&node, peers, settings, file.as_ref(), &rt) => r,
+        r = strims_testbed::node::run(&node, peers, settings, file.as_ref(), Some(&parents), &rt) => r,
         () = async { tokio::join!(forward, links); } => Ok(()),
     };
     let _ = node.shutdown().await;

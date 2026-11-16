@@ -31,11 +31,11 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use strims_base::path;
 use strims_base::stats::{ValueHistogram, WAIT_BUCKETS, WaitHistogram};
 use strims_base::time::Time;
 use strims_node::{HostId, NodeMetrics, SwarmKey};
-use strims_ppspp::{ChannelSchedulerStats, PushMode};
+use strims_ppspp::ChannelSchedulerStats;
+pub use strims_testbed::record::{Gated, MeterSample, SeedSample};
 pub use strims_testbed::transfer::{PeerTransfer, TransferSample};
 
 /// Extremes of the gauges over every sample of a host (all incarnations).
@@ -351,100 +351,6 @@ impl PathOverhead {
         self.pongs += o.pongs;
         self.link_ms += o.link_ms;
     }
-}
-
-/// A node's upload meter at one sample (`PushStats::upload_rate`,
-/// `upload_busy_permille`, `upload_capacity`, `upload_queue_delay` in
-/// milliseconds), with the subscriptions it served per scenario swarm
-/// (`PushStats::children`) and the STREAM_REQUESTs it answered (`accepted`
-/// plus `rejected`, over its hybrid swarms, since the incarnation started).
-/// `capacity` is the relay busy-time reading admission and shedding take
-/// (`UploadInfo::relay_capacity`), a seed's too; an adaptive seed's budget
-/// takes its own, per scenario swarm (`budget_capacity`,
-/// `PushStats::seed_budget_capacity`: the reading its latest allocation
-/// check measured the budget from, zero until measured).
-///
-/// Beside the meter's queueing delay, two from vnic's path measure over
-/// the node's links with a recent round trip, each aggregated as the meter
-/// does ([`strims_base::path::aggregate`]): how far each link's recent
-/// round trip stands above its base (`path_delay_ms`), and how long each
-/// link's queued bytes take at its delivery rate (`path_queued_ms`). And
-/// how far the links' latest round trips stand above their bases
-/// ([`strims_base::path::latest_excess`], `path_latest_ms`). And over its
-/// hybrid swarms, its channels (`PushStats::pace_channels`) and those whose
-/// peer it asks for lazy HAVEs and whose peer asked them of it
-/// (`have_lazy_out`, `have_lazy_in`). And the bytes the node handed to
-/// vnic since the incarnation started (`DriverMetrics::bytes_written`).
-/// And what the meter's truth takes its share from
-/// ([`crate::report::own_share`]): the channel payload bytes its runner
-/// has written since the run started, every incarnation (the bytes
-/// `UploadInfo::rate` counts, `ChannelMetrics::wire_bytes` of its
-/// outbound totals), what its uplink has charged its own messages
-/// (`EndStats::up_bytes`; with no WAN, 0), and its transports' and vnic's
-/// bytes beside them. With the live oracle, what it told the node ahead
-/// of the sample (`told`).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct MeterSample {
-    /// Simulated time since the start of the run.
-    pub t: Duration,
-    /// When the controller asked for the sample, which the meter's truth
-    /// is read at (`Report::upload_cap_at`): the live oracle tells the
-    /// node that truth then, ahead of the sample.
-    pub asked: Duration,
-    pub rate: u64,
-    pub busy_permille: u32,
-    pub queue_delay_ms: Option<u32>,
-    pub path_delay_ms: Option<u32>,
-    pub path_queued_ms: Option<u32>,
-    pub path_latest_ms: Option<u32>,
-    pub capacity: u64,
-    pub budget_capacity: BTreeMap<usize, u64>,
-    pub children: BTreeMap<usize, usize>,
-    pub requests_in: u32,
-    pub rejected: u32,
-    pub pace_channels: u32,
-    pub lazy_out: u32,
-    pub lazy_in: u32,
-    pub bytes_written: u64,
-    pub data_bytes: u64,
-    pub link_bytes: u64,
-    pub told: Option<u64>,
-    /// What the host's transports took of its uplink's messages so far
-    /// (vnic's bytes, counted as each message went to the link), and what
-    /// it handed vnic, every incarnation's (`DriverMetrics::bytes_written`).
-    pub app_bytes: u64,
-    /// What its link charged its transports' resends so far (the window
-    /// model's), which its share leaves out.
-    pub resent_bytes: u64,
-    pub vnic_bytes: u64,
-    /// Its near-saturated windows so far ([`Gated`]).
-    pub gated: Gated,
-}
-
-/// A host's near-saturated sample windows up to a meter sample: those
-/// whose own link charge was at least [`crate::report::NEAR_SATURATED`] of
-/// what its link could carry for it, summed (the transports' bytes, the
-/// link's charge of its first transmissions, its resends left out, the
-/// runner's channel payload bytes and vnic's), and whether the
-/// window ending at the sample was one. The meter's truth takes its share
-/// from them ([`crate::report::own_share`]).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Gated {
-    pub app: u64,
-    pub link: u64,
-    pub data: u64,
-    pub vnic: u64,
-    pub window: bool,
-}
-
-/// An adaptive seed's `PushStats` seed fields.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct SeedSample {
-    pub budget: usize,
-    pub window: usize,
-    pub copies: usize,
-    pub first_wave: usize,
-    pub first_wave_capacity: u64,
 }
 
 impl RunnerReport {
@@ -822,61 +728,33 @@ impl HostStats {
                 tracked.observe(c);
             }
         }
-        let mut meter: Option<MeterSample> = None;
         let told = self.told.take();
         self.data_now = m.runner.totals.outbound.wire_bytes();
         let data_bytes = self.data_done + self.data_now;
         self.vnic_now = m.driver.bytes_written;
         let vnic_bytes = self.vnic_done + self.vnic_now;
+        let (mut meter, seeds) = strims_testbed::record::meter_sample(m, index, t, clock);
+        // What the meter's truth takes its share from, which the sim's own
+        // counters give (a testbed node's records leave them out).
+        if let Some(ms) = meter.as_mut() {
+            ms.asked = asked;
+            ms.data_bytes = data_bytes;
+            ms.link_bytes = link_bytes;
+            ms.told = told;
+            ms.app_bytes = app_bytes;
+            ms.resent_bytes = resent_bytes;
+            ms.vnic_bytes = vnic_bytes;
+        }
+        for (s, seed) in seeds {
+            if self.seeds.insert(s, seed) != Some(seed) {
+                self.seed_changes.push((t, s, seed));
+            }
+        }
         for sw in &m.runner.swarms {
             let (Some(s), Some(sched), Some(push)) = (index(sw.swarm), sw.scheduler, &sw.push)
             else {
                 continue;
             };
-            if push.mode.resolve() == PushMode::Hybrid {
-                // One meter per node: every hybrid swarm reads the same.
-                let ms = meter.get_or_insert_with(|| MeterSample {
-                    t,
-                    asked,
-                    data_bytes,
-                    link_bytes,
-                    told,
-                    app_bytes,
-                    resent_bytes,
-                    vnic_bytes,
-                    bytes_written: m.driver.bytes_written,
-                    rate: push.upload_rate,
-                    busy_permille: push.upload_busy_permille,
-                    capacity: push.upload_capacity,
-                    queue_delay_ms: push
-                        .upload_queue_delay
-                        .map(|d| u32::try_from(d.as_millis().max(0)).unwrap_or(u32::MAX)),
-                    ..MeterSample::default()
-                });
-                ms.children.insert(s, push.children);
-                let count = |n: u64| u32::try_from(n).unwrap_or(u32::MAX);
-                ms.requests_in = ms
-                    .requests_in
-                    .saturating_add(count(push.accepted + push.rejected));
-                ms.rejected = ms.rejected.saturating_add(count(push.rejected));
-                let n = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
-                ms.pace_channels = ms.pace_channels.saturating_add(n(push.pace_channels));
-                ms.lazy_out = ms.lazy_out.saturating_add(n(push.have_lazy_out));
-                ms.lazy_in = ms.lazy_in.saturating_add(n(push.have_lazy_in));
-                if push.seed_window > 0 {
-                    ms.budget_capacity.insert(s, push.seed_budget_capacity);
-                    let seed = SeedSample {
-                        budget: push.seed_budget,
-                        window: push.seed_window,
-                        copies: push.seed_copies,
-                        first_wave: push.seed_first_wave,
-                        first_wave_capacity: push.seed_first_wave_capacity,
-                    };
-                    if self.seeds.insert(s, seed) != Some(seed) {
-                        self.seed_changes.push((t, s, seed));
-                    }
-                }
-            }
             let c = SwarmCounters {
                 wasted_chunks: sched.wasted_chunks,
                 expected: push.expected,
@@ -907,21 +785,6 @@ impl HostStats {
             push.copy_from_slice(&sched.push_wait.buckets);
             answer.copy_from_slice(&sched.answer_wait.buckets);
             self.waits.entry(s).or_default().observe(w);
-        }
-        if let Some(ms) = meter.as_mut() {
-            let ms_of = |d: strims_base::time::Duration| {
-                u32::try_from(d.as_millis().max(0)).unwrap_or(u32::MAX)
-            };
-            let (excess, queued) =
-                path::node_delays(m.links.iter().filter_map(|l| l.path?.reading));
-            ms.path_delay_ms = excess.map(ms_of);
-            ms.path_queued_ms = queued.map(ms_of);
-            ms.path_latest_ms = path::latest_excess(
-                m.links.iter().filter_map(|l| l.path?.reading),
-                clock,
-                &mut Vec::new(),
-            )
-            .map(ms_of);
         }
         self.meter.extend(meter);
         let h = &m.host;

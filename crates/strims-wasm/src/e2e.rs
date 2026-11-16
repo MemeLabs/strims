@@ -24,7 +24,7 @@
 //!
 //! | `type` | fields | what the node does |
 //! |---|---|---|
-//! | `start` | `profileKey: {type, private, public}`, `rngSeed`, `networkKey`, `bindPort`, `echoPort`, `replyPort`, and optionally `maxBufferedAmount` and `capture: {maxFileBytes, tap, label}` | Starts a node of [`node::browser_config`] with `ws://` dials allowed and no ICE servers (host candidates only), and `WebRtcConfig::max_buffered_amount` when given. With `capture`, the node captures its ppspp traffic (`NodeConfig::ppspp_capture`, labelled `label`) and sends the dump's bytes (see below). It joins the network `networkKey` with `NetworkOptions::auto_bind_port` `bindPort`, handles vpn messages on `echoPort` and `replyPort`, and reports `started`. Only the first `start` runs. |
+//! | `start` | `profileKey: {type, private, public}`, `rngSeed`, `networkKey`, `bindPort`, `echoPort`, `replyPort`, and optionally `maxBufferedAmount`, `statsBins: {originMs, widthMs}`, `parentLog` and `capture: {maxFileBytes, tap, label}` | Starts a node of [`node::browser_config`] with `ws://` dials allowed and no ICE servers (host candidates only), and `WebRtcConfig::max_buffered_amount` when given. `statsBins` keeps its stats bins (`NodeConfig::stats_bins`) of `widthMs` from `originMs` (Unix ms), and `parentLog` its parent log (`NodeConfig::parent_log`), for the testbed's records. With `capture`, the node captures its ppspp traffic (`NodeConfig::ppspp_capture`, labelled `label`) and sends the dump's bytes (see below). It joins the network `networkKey` with `NetworkOptions::auto_bind_port` `bindPort`, handles vpn messages on `echoPort` and `replyPort`, and reports `started`. Only the first `start` runs. |
 //! | `dial` | `uri` | Dials `uri` and reports `dialed`. |
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
@@ -98,10 +98,12 @@ use js_sys::{Array, ArrayBuffer, JSON, Object, Reflect, Uint8Array};
 use strims_base::time::Time;
 use strims_node_core::{
     HostId, NetworkId, NetworkOptions, Node, NodeEvent, NodeEvents, PeerInfo, PpsppCapture,
+    StatsBins,
 };
 use strims_proto::types::Key;
 use strims_testbed::media::Viewer;
 use strims_testbed::node::{Runtime, Settings, Stream, kind_name};
+use strims_testbed::record::ParentLog;
 use strims_testbed::shape::RATE;
 use strims_transfer::SwarmRead;
 use strims_video::{EgressPiece, VideoError};
@@ -200,6 +202,8 @@ struct Running {
     echo_port: u16,
     reply_port: u16,
     counts: Rc<Counts>,
+    /// With `start`'s `parentLog`, the node's parent log.
+    parents: Option<ParentLog>,
 }
 
 #[derive(Default)]
@@ -341,8 +345,15 @@ impl Control {
                         out: out.clone(),
                         feeds,
                     };
-                    if let Err(e) =
-                        strims_testbed::node::run(&r.node, peers, settings, None, &rt).await
+                    if let Err(e) = strims_testbed::node::run(
+                        &r.node,
+                        peers,
+                        settings,
+                        None,
+                        r.parents.as_ref(),
+                        &rt,
+                    )
+                    .await
                     {
                         out.error("testbed", &e);
                     }
@@ -369,6 +380,21 @@ impl Control {
             v if v.is_undefined() => None,
             _ => Some(usize::try_from(int(cmd, "maxBufferedAmount")?).map_err(|e| e.to_string())?),
         };
+        let stats_bins = match property(cmd, "statsBins") {
+            b if b.is_undefined() || b.is_null() => None,
+            b => Some(StatsBins {
+                origin: Time::from_unix_millis(
+                    i64::try_from(int(&b, "originMs")?).map_err(|e| e.to_string())?,
+                ),
+                width: strims_base::time::Duration::from_millis(
+                    i64::try_from(int(&b, "widthMs")?).map_err(|e| e.to_string())?,
+                ),
+            }),
+        };
+        let parents = property(cmd, "parentLog")
+            .as_bool()
+            .unwrap_or(false)
+            .then(ParentLog::default);
         let capture = match property(cmd, "capture") {
             c if c.is_undefined() || c.is_null() => None,
             c => Some((
@@ -405,6 +431,8 @@ impl Control {
             });
             drop(runtime::spawn(post_capture(self.out.clone(), rx)));
         }
+        config.stats_bins = stats_bins;
+        config.parent_log = parents.as_ref().map(ParentLog::sink);
         let (node, events) = node::spawn(config, signal).map_err(|e| e.to_string())?;
         let options = NetworkOptions {
             auto_bind_port: Some(bind_port),
@@ -424,6 +452,7 @@ impl Control {
             echo_port,
             reply_port,
             counts: Rc::default(),
+            parents,
         };
         let (peers_tx, peers) = mpsc::unbounded_channel();
         self.peers = Some(peers);

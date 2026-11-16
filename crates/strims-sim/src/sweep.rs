@@ -713,7 +713,11 @@ fn sweep_seeds(
         .map(|s| s.trim().to_owned())
         .filter(|s| !s.is_empty())
         .map(std::path::PathBuf::from);
-    let bin = Duration::from_millis(knob::<u64>("STRIMS_SIM_BIN_MS").unwrap_or(100).max(1));
+    let bin = Duration::from_millis(
+        knob::<u64>("STRIMS_SIM_BIN_MS")
+            .unwrap_or(strims_testbed::record::BIN_MS.unsigned_abs())
+            .max(1),
+    );
     let bin_nodes = knob::<u32>("STRIMS_SIM_BIN_NODES") == Some(1);
     let forecast = knob::<u32>("STRIMS_SIM_FORECAST") == Some(1);
     let request_logs = knob::<u32>("STRIMS_SIM_SPEC") == Some(1);

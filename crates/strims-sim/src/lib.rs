@@ -131,6 +131,7 @@
 
 pub mod arrivals;
 pub mod bench;
+pub mod calibration;
 mod control;
 mod fast_map;
 mod fields;

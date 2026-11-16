@@ -15,6 +15,7 @@ pub mod media;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;
 pub mod node;
+pub mod record;
 pub mod shape;
 pub mod stream;
 pub mod topology;

@@ -34,6 +34,7 @@
 //! | `tick_late_ms` | how late the timer of this line fired |
 //! | `write_late_ms` | at the seed, the latest of that second's writes past its time; `null` without writes |
 //! | `wakeups` | passes of the node's loop since the last line (`null` on the first): it follows traffic, so it shows load only next to a native node's |
+//! | `rec` | the line's records as strims-sim's tables take them (`Records`): the meter sample, the seed's state, the stats bins and parent changes since the last line, and every frame read since |
 //! | `media` | of a media stream, `null` otherwise: at the seed, [`SeedStats`]: the unit writer's `records`, `units`, `gops`, `bytes` and `padding`, `early_signs` and `dropped` units; at a viewer, [`ViewerStats`]: `units` and `keyframes` read whole, the `messages` that took records to the player (Data messages, or the batches of a browser player's feed) and their records' `bytes`, `first_message_ms`, the egress reader's `discontinuities`, `corrupt_frames`, `losses`, `records` and `rewinds`/`refused_rewinds`/`overtaken_rewinds`, and the join: `first_read_ms`, the first rewind's `rewind_start_ms`, `rewind_end_ms`, outcome (`granted`, `refused`, `timed_out`, `overtaken`) and bytes back from the reader's position, `rewind_back`. Times are Unix ms. |
 //!
 //! `tick_late_ms` and `write_late_ms` show a throttled timer or an
@@ -45,13 +46,14 @@ use std::future::Future;
 use strims_base::path;
 use strims_base::time::{Duration, Time};
 use strims_node_core::{
-    HostId, LinkKind, Node, NodeMetrics, PeerInfo, ReadError, SwarmId, SwarmKey, SwarmReader,
-    SwarmWriter, WriterOptions,
+    HostId, LinkKind, Node, NodeMetrics, ParentLogEntry, PeerInfo, ReadError, SwarmId, SwarmKey,
+    SwarmReader, SwarmWriter, WriterOptions,
 };
 use strims_transfer::SwarmRead;
 use tokio::sync::mpsc;
 
 use crate::media::{self, FlvFile, SeedStats, TagKind, ViewerStats};
+use crate::record::{self, ParentLog};
 use crate::shape::LiveShape;
 use crate::stream::{FRAME_LEN, FrameParser, Parsed, encode_frame};
 use crate::topology::{index_of, swarm_key};
@@ -121,12 +123,14 @@ pub struct Settings {
 
 /// Runs the node's part (see the [module docs](self)), taking the node's
 /// peers from `peers` as they're added. The seed of a media stream writes
-/// `file`.
+/// `file`. `parents` is the log the node's config hands its parent
+/// changes to (`NodeConfig::parent_log`), which the lines' records take.
 pub async fn run<R: Runtime + Clone + 'static>(
     node: &Node,
     mut peers: mpsc::UnboundedReceiver<PeerInfo>,
     s: Settings,
     file: Option<&FlvFile>,
+    parents: Option<&ParentLog>,
     rt: &R,
 ) -> Result<(), String> {
     let seed = s.index == 0;
@@ -195,6 +199,7 @@ pub async fn run<R: Runtime + Clone + 'static>(
 
     let end_ms = s.start_ms + s.secs * 1000;
     let lags = RefCell::new(Vec::<u64>::new());
+    let reads = RefCell::new(Vec::<[u64; 3]>::new());
     let write_late = Cell::new(None::<u64>);
     let seed_stats = Cell::new(SeedStats::default());
     let viewer_stats = RefCell::new(ViewerStats::default());
@@ -238,7 +243,7 @@ pub async fn run<R: Runtime + Clone + 'static>(
             }
         };
         let read = match s.stream {
-            Stream::Frames => read_frames(reader, rt, &lags).await,
+            Stream::Frames => read_frames(reader, rt, &lags, &reads).await,
             Stream::Units { .. } => {
                 // The join's spare, opened with the reader as egress opens it.
                 let spare = match node.open_reader(swarm).await {
@@ -279,6 +284,17 @@ pub async fn run<R: Runtime + Clone + 'static>(
                 Stream::Units { .. } if seed => Some(seed_stats.get().json()),
                 Stream::Units { .. } => Some(viewer_stats.borrow().json()),
             };
+            let now = Time::from_unix_millis(i64::try_from(t).unwrap_or(i64::MAX));
+            let rec = Records {
+                t_ms: t,
+                swarm,
+                m: &m,
+                ids: &ids.borrow(),
+                parents: parents.map(ParentLog::take).unwrap_or_default(),
+                reads: std::mem::take(&mut *reads.borrow_mut()),
+                now,
+            }
+            .json();
             let line = Line {
                 t_ms: t,
                 s: &s,
@@ -292,7 +308,8 @@ pub async fn run<R: Runtime + Clone + 'static>(
                 write_late: write_late.take(),
                 wakeups,
                 media,
-                now: Time::from_unix_millis(i64::try_from(t).unwrap_or(i64::MAX)),
+                rec,
+                now,
             };
             rt.emit(line.json());
             if t >= end_ms + 5000 {
@@ -309,7 +326,9 @@ pub async fn run<R: Runtime + Clone + 'static>(
 }
 
 /// Writes the self-checking frames of `shape` from `start_ms` until
-/// `end_ms`, the latest write past its time in `late`.
+/// `end_ms`, each stamped with the time its write was due (strims-sim's
+/// `Report::written_at`), so a viewer's lag counts a late write; the
+/// latest write past its time in `late`.
 async fn write_frames(
     writer: &mut SwarmWriter,
     shape: &LiveShape,
@@ -330,7 +349,7 @@ async fn write_frames(
         let t = rt.now_ms();
         late.set(Some(late.get().unwrap_or(0).max(t.saturating_sub(at))));
         for (j, f) in buf.chunks_mut(FRAME_LEN).enumerate() {
-            encode_frame(RUN_SEED, 0, k * fpw + j as u64, t, f);
+            encode_frame(RUN_SEED, 0, k * fpw + j as u64, at, f);
         }
         writer
             .write(&buf)
@@ -340,11 +359,13 @@ async fn write_frames(
     Ok(())
 }
 
-/// Reads the self-checking frames, each one's lag into `lags`.
+/// Reads the self-checking frames, each one's lag into `lags`, and its
+/// sequence number, stamp and read time into `reads`.
 async fn read_frames(
     mut reader: SwarmReader,
     rt: &impl Runtime,
     lags: &RefCell<Vec<u64>>,
+    reads: &RefCell<Vec<[u64; 3]>>,
 ) -> Result<(), String> {
     let mut buf = vec![0u8; 64 * 1024];
     let mut parser = FrameParser::default();
@@ -355,6 +376,7 @@ async fn read_frames(
                 parser.push(RUN_SEED, 0, buf.get(..n).unwrap_or_default(), |p| {
                     if let Parsed::Frame(f) = p {
                         lags.borrow_mut().push(now.saturating_sub(f.time_ms));
+                        reads.borrow_mut().push([f.seq, f.time_ms, now]);
                     }
                 });
             }
@@ -363,6 +385,88 @@ async fn read_frames(
             }
             Err(e) => return Err(format!("read: {e}")),
         }
+    }
+}
+
+/// A line's records, as strims-sim's tables take them ([`record`]): the
+/// meter sample of the line's metrics, its adaptive seed's state, the
+/// stats bins and parent changes since the last line, and every frame read
+/// since: `{"meter": MeterSample | null, "seed": SeedSample | null,
+/// "bins": [[edge_ms, [counters], [push waits], [answer waits]], ...],
+/// "parents": [[t_ms, stream, peer, why], ...], "parents_lost": n,
+/// "reads": [[seq, stamp_ms, read_ms], ...]}`, times Unix ms, peers by
+/// index (`null`: none, or one without), waits as
+/// [`record::waits_json`].
+struct Records<'a> {
+    t_ms: u64,
+    swarm: SwarmKey,
+    m: &'a NodeMetrics,
+    ids: &'a [(HostId, usize)],
+    parents: (Vec<ParentLogEntry>, u64),
+    reads: Vec<[u64; 3]>,
+    now: Time,
+}
+
+impl Records<'_> {
+    fn json(&self) -> String {
+        let index = |id: &HostId| self.ids.iter().find(|(x, _)| x == id).map(|&(_, i)| i);
+        let swarm = self.swarm;
+        let (meter, seeds) = record::meter_sample(
+            self.m,
+            |k| (k == swarm).then_some(0),
+            std::time::Duration::from_millis(self.t_ms),
+            self.now,
+        );
+        let seed = seeds
+            .iter()
+            .find(|(s, _)| *s == 0)
+            .map_or("null".to_owned(), |(_, x)| x.json());
+        let bins: Vec<String> = self
+            .m
+            .bins
+            .iter()
+            .filter_map(|b| {
+                let sw = b.swarms.iter().find(|s| s.swarm == swarm)?;
+                let c: Vec<String> = record::bin_counters(b, sw)
+                    .iter()
+                    .map(u64::to_string)
+                    .collect();
+                let [p, a] = record::bin_waits(sw);
+                Some(format!(
+                    "[{},[{}],{},{}]",
+                    b.at.unix_millis(),
+                    c.join(","),
+                    record::waits_json(&p),
+                    record::waits_json(&a)
+                ))
+            })
+            .collect();
+        let (changes, lost) = &self.parents;
+        let parents: Vec<String> = changes
+            .iter()
+            .filter_map(|e| match e {
+                ParentLogEntry::Change(p) if p.swarm == swarm => Some(format!(
+                    "[{},{},{},\"{}\"]",
+                    p.at.unix_millis(),
+                    p.stream,
+                    opt(p.parent.as_ref().and_then(index)),
+                    p.why.name()
+                )),
+                _ => None,
+            })
+            .collect();
+        let reads: Vec<String> = self
+            .reads
+            .iter()
+            .map(|[q, s, r]| format!("[{q},{s},{r}]"))
+            .collect();
+        format!(
+            "{{\"meter\":{},\"seed\":{seed},\"bins\":[{}],\"parents\":[{}],\"parents_lost\":{lost},\"reads\":[{}]}}",
+            meter.map_or("null".to_owned(), |m| m.json()),
+            bins.join(","),
+            parents.join(","),
+            reads.join(","),
+        )
     }
 }
 
@@ -382,6 +486,8 @@ struct Line<'a> {
     wakeups: Option<u64>,
     /// The media stream's stats, as JSON.
     media: Option<String>,
+    /// The line's records ([`Records`]), as JSON.
+    rec: String,
     /// When the metrics were read.
     now: Time,
 }
@@ -442,7 +548,7 @@ impl Line<'_> {
         );
         let lag = self.lag;
         format!(
-            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{},\"media\":{}}}",
+            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{},\"media\":{},\"rec\":{}}}",
             self.t_ms,
             self.t_ms as i64 - self.s.start_ms as i64,
             self.s.index,
@@ -471,6 +577,7 @@ impl Line<'_> {
             opt(self.write_late),
             opt(self.wakeups),
             self.media.as_deref().unwrap_or("null"),
+            self.rec,
         )
     }
 }

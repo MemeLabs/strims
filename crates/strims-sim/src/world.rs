@@ -1229,44 +1229,11 @@ impl World {
                 if since < 0 {
                     continue;
                 }
-                let o = &b.outbound;
-                let c = &sw.counters;
                 hs.node_bins.push(NodeBinRecord {
                     bin: (since / width) as u64,
                     incarnation: hs.incarnation,
-                    counters: [
-                        sw.hits,
-                        sw.misses,
-                        sw.pruned,
-                        sw.parents,
-                        sw.upload_capacity,
-                        sw.upload_busy_permille,
-                        sw.seed_copies,
-                        c.chunks_sent,
-                        c.pushed_chunks,
-                        c.requests_timed_out,
-                        c.wasted_chunks,
-                        c.answers_refused,
-                        c.answers_dropped,
-                        sw.switched,
-                        sw.shed,
-                        sw.sheds_sent,
-                        o.have_bytes,
-                        o.ack_bytes,
-                        o.request_bytes,
-                        o.announce_bytes,
-                        o.stream_bytes,
-                        o.session_bytes,
-                        o.ping_bytes,
-                        o.header_bytes,
-                        o.integrity_bytes + o.signed_integrity_bytes,
-                        o.data_bytes,
-                        o.payloads,
-                        o.have_only_payloads,
-                        b.bytes_written.saturating_sub(o.data_bytes),
-                        sw.seed_budget_capacity,
-                    ],
-                    waits: [c.push_wait, c.answer_wait],
+                    counters: strims_testbed::record::bin_counters(b, sw),
+                    waits: strims_testbed::record::bin_waits(sw),
                 });
             }
             for f in &m.forecasts {

@@ -299,52 +299,8 @@ pub struct NodeBinRecord {
     pub waits: [WaitHistogram; 2],
 }
 
-/// [`NodeBinRecord::counters`]: pushes before their deadline, deadlines
-/// released to pull, parents pruned and streams with an open parent; the
-/// upload meter's capacity (the relay busy-time reading,
-/// `PushStats::upload_capacity`) and busy thousandths and a seed's copies; chunks
-/// sent and pushed; requests timed out and chunks wasted; answers a full
-/// queue refused and answers dropped at write time
-/// ([`strims_ppspp::SwarmCounters`]); parents replaced, parents lost to
-/// their closing the subscription and subscribers closed for a saturated
-/// uplink (`PushStats`' `switched`, `shed`, `sheds_sent`); its outbound
-/// messages' bytes by kind, its payloads and those of HAVEs alone
-/// ([`strims_ppspp::ChannelMetrics`]); and the bytes it wrote that weren't
-/// chunk data (the series' overhead); and the capacity an adaptive seed's
-/// latest check measured its budget from (`PushStats::seed_budget_capacity`,
-/// zero elsewhere).
-pub const NODE_BIN_COUNTERS: [&str; 30] = [
-    "hits",
-    "misses",
-    "pruned",
-    "parents",
-    "capacity",
-    "busy",
-    "copies",
-    "sent",
-    "pushed",
-    "timeouts",
-    "wasted",
-    "answers_refused",
-    "answers_dropped",
-    "switched",
-    "shed",
-    "sheds_sent",
-    "have_bytes",
-    "ack_bytes",
-    "request_bytes",
-    "announce_bytes",
-    "stream_bytes",
-    "session_bytes",
-    "ping_bytes",
-    "header_bytes",
-    "integrity_bytes",
-    "data_bytes",
-    "payloads",
-    "have_only_payloads",
-    "ovh",
-    "budget_capacity",
-];
+/// [`NodeBinRecord::counters`]' names.
+pub use strims_testbed::record::NODE_BIN_COUNTERS;
 
 /// A forecast log sample of a node's ([`HostReport::forecasts`]): when it
 /// was taken and when its channel opened (true time from the run's start),
