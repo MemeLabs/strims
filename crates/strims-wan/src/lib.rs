@@ -29,8 +29,10 @@
 //! | module | role |
 //! |---|---|
 //! | [`city`] | cities and their RTT table |
+//! | [`framing`] | what an access link charges a packet past its IP bytes |
 //! | [`live`] | a live encoder's access units and early signing |
 //! | [`access`] | access link profiles, shaper buckets, sites and weighted mixes |
+//! | [`capacity`] | an uplink capacity as a schedule of delivery opportunities |
 //! | [`network`] | uplink and downlink FIFOs, uplink buckets, paths, jitter, loss |
 //! | [`playout`] | a live player's stalls at a fixed delay |
 //! | [`sample`] | seeded draws |
@@ -38,7 +40,9 @@
 //! | [`vocab`] | the sims' event vocabulary (`vocab.toml`), and the kinds of their `events` tables |
 
 pub mod access;
+pub mod capacity;
 pub mod city;
+pub mod framing;
 pub mod live;
 pub mod network;
 pub mod playout;
