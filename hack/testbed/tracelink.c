@@ -49,10 +49,14 @@
 // opportunity, so a device whose packets should each take their own sets
 // `gso_max_segs 1`. Departures are fq's, to its timer's slack (10 us).
 //
-// The classifier sits under a netem at the root so that netem's delay
-// orphans each packet's socket memory first: TCP Small Queues then lets a
-// sender queue as much as the link holds, as at a modem. Its enqueue runs
-// under the root qdisc's lock, so the program's state needs no atomics.
+// run.sh's links.sh makes the prio the root of the modem's device (eth0,
+// or with slots the ifb behind it) and has eth0's egress filter redirect
+// every packet to the ifb that holds its delay first: the redirect hands
+// on a clone of each packet and frees the socket's own (act_mirred clones
+// at egress, and sch_handle_egress consumes the stolen skb), so TCP Small
+// Queues counts nothing the link holds and lets a sender queue as much as
+// it holds, as at a modem. The prio's enqueue runs under its root lock,
+// so the program's state needs no atomics.
 // --start-ms puts the trace's time 0 (or --offset-s into it) at that time
 // since the epoch, repeating it back to before the program loads.
 //
