@@ -1651,11 +1651,6 @@ class Catalog(unittest.TestCase):
         (farm / "sa0001-00" / "index.jsonl").write_text("".join(json.dumps(r) + "\n" for r in [
             line("i1", "k1", "off", F1), line("i2", "k2", "a", F1),
             line("i9", "k9", "a", "farm/sb0001-00+0more-bbbb/i-1/0", **{"from": "sb0001-00", "at": old})]))
-        # farm.py's prices, which the catalog reads from it
-        (root / "hack" / "sim-farm").mkdir(parents=True)
-        (root / "hack" / "sim-farm" / "farm.py").write_text(
-            "S3_TIER1 = 0.0055 / 1000\nS3_TIER2 = 0.0044 / 10000\nS3_STORAGE_GB_MONTH = 0.026\nS3_KEPT_DAYS = 7\n"
-            "S3_INTER_REGION_GB = 0.02\nS3_INTERNET_GB = 0.09\nGB = 1 << 30\n")
         (farm / "costs.jsonl").write_text(json.dumps({"run": "sa0001-00+1more-aaaa", "kind": "test", "cost": 1.5,
                                                       "jobs": 2}) + "\n")
         (farm / "s3.jsonl").write_text(json.dumps({"run": "sa0001-00+1more-aaaa", "at": recent, "source": "pull",

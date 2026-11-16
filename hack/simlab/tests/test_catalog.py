@@ -1071,9 +1071,15 @@ class S3(Fixture):
     def test_a_ledger_indexed_without_line_numbers_is_read_again(self):
         # A catalog whose raw.s3_ledger predates its line column: the next
         # index (code changed, the ledger not) fills it again.
+        # farm.py (store.FARM_PY), a code input of the index's: a copy of
+        # it the test can touch.
+        stand_in = self.root / "farm.py"
+        shutil.copyfile(store.FARM_PY, stand_in)
+        p = mock.patch.object(store, "FARM_PY", stand_in)
+        p.start()
+        self.addCleanup(p.stop)
         catalog.index(workers=0)
         catalog.lake("ALTER TABLE raw.s3_ledger DROP COLUMN line;", write=True, out=None)
-        stand_in = self.root / "hack" / "sim-farm" / "farm.py"
         st = stand_in.stat()
         os.utime(stand_in, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
         catalog.index(workers=0)

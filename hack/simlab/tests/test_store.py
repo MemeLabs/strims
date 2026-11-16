@@ -15,6 +15,7 @@ read from its source:
 import contextlib
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -72,17 +73,65 @@ def parquet(path):
 
 
 class FarmConstants(unittest.TestCase):
-    def test_farm_pys_top_level_numbers_read_from_its_source(self):
-        with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / "farm.py"
-            p.write_text("S3_KEPT_DAYS = 7\nS3_TIER1 = 0.0055 / 1000\nGB = 1 << 30\nREGION = os.environ['X']\n"
-                         "    NESTED = 3\n")
-            self.assertEqual(store.farm_constants(["S3_KEPT_DAYS", "S3_TIER1", "GB", "REGION", "NESTED", "NONE"], p),
-                             {"S3_KEPT_DAYS": 7.0, "S3_TIER1": 0.0055 / 1000, "GB": float(1 << 30)})
-            self.assertEqual(store.farm_constants(["S3_KEPT_DAYS"], Path(d) / "gone.py"), {})
-        # The days S3 keeps a run's data that the lab reckons with are
-        # farm.py's own.
-        self.assertEqual(store.farm_constants(["S3_KEPT_DAYS"]), {"S3_KEPT_DAYS": float(store.S3_KEPT_DAYS)})
+    """store.farm_constant over farm.py sources of every shape a constant
+    takes (the reviewer's probe's among them)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.path = Path(tmp.name) / "farm.py"
+
+    def read(self, text, name="S3_KEPT_DAYS"):
+        self.path.write_text(text)
+        return store.farm_constant(name, self.path)
+
+    def refused(self, text, name="S3_KEPT_DAYS"):
+        self.path.write_text(text)
+        with self.assertRaises(ValueError) as cm:
+            store.farm_constant(name, self.path)
+        return str(cm.exception)
+
+    def test_a_constant_of_any_shape_reads_as_its_number(self):
+        for text, want in (("S3_KEPT_DAYS = 7\n", 7),
+                           ("S3_KEPT_DAYS = 7  # S3's lifecycle rule\n", 7),
+                           ("S3_KEPT_DAYS: int = 7\n", 7),
+                           ("S3_KEPT_DAYS = 1_0\n", 10),
+                           ("DAY_S = 86400\nRETAIN_S = 6 * DAY_S\nS3_KEPT_DAYS = RETAIN_S // DAY_S + 1\n", 7),
+                           ("S3_KEPT_DAYS = (\n    7\n)\n", 7),
+                           ("S3_KEPT_DAYS = 3\nS3_KEPT_DAYS = -(-7)\n", 7)):
+            with self.subTest(text=text):
+                got = self.read(text)
+                self.assertEqual((got, type(got)), (want, int))
+        self.assertEqual(self.read("S3_TIER1 = 0.0055 / 1000\n", "S3_TIER1"), 0.0055 / 1000)
+        self.assertEqual(self.read("GB = 1 << 30\n", "GB"), 1 << 30)
+
+    def test_a_constant_it_cant_read_fails_naming_the_line(self):
+        path = self.path
+        self.assertEqual(self.refused("DAY_S = 86400\nS3_KEPT_DAYS = RETAIN_S // DAY_S + 1\n"),
+                         f"{path}:2: S3_KEPT_DAYS = RETAIN_S // DAY_S + 1: S3_KEPT_DAYS isn't a number the lab can "
+                         "read (RETAIN_S isn't a number farm.py defines before it)")
+        self.assertEqual(self.refused("import os\nS3_KEPT_DAYS = int(os.environ['DAYS'])\n"),
+                         f"{path}:2: S3_KEPT_DAYS = int(os.environ['DAYS']): S3_KEPT_DAYS isn't a number the lab can "
+                         "read (int(os.environ['DAYS']) isn't arithmetic of numbers)")
+        self.assertEqual(self.refused("S3_KEPT_DAYS = 7 // 0\n"),
+                         f"{path}:1: S3_KEPT_DAYS = 7 // 0: S3_KEPT_DAYS isn't a number the lab can read "
+                         "(division by zero)")
+        self.assertEqual(self.refused("def f():\n    S3_KEPT_DAYS = 7\n"),
+                         f"{path}: farm.py assigns no S3_KEPT_DAYS at its top level")
+        self.assertTrue(self.refused("S3_KEPT_DAYS = = 7\n").startswith(
+            f"{path}: farm.py's S3_KEPT_DAYS can't be read: "))
+        self.path.unlink()
+        with self.assertRaisesRegex(ValueError, "farm.py's S3_KEPT_DAYS can't be read"):
+            store.farm_constant("S3_KEPT_DAYS", self.path)
+
+    def test_the_lab_reads_this_checkouts_farm_py_when_it_needs_a_constant(self):
+        self.assertEqual(store.FARM_PY, Path(store.__file__).resolve().parents[1] / "sim-farm" / "farm.py")
+        self.assertEqual(store.s3_kept_days(), 7)
+        # Importing the lab's modules reads no farm.py.
+        p = subprocess.run([sys.executable, "-c", "from simlab import catalog, query, scoring, store, suite, verdict; "
+                                                  "print(store._numbers.cache_info().currsize)"],
+                           cwd=HACK, capture_output=True, text=True, timeout=120)
+        self.assertEqual((p.returncode, p.stdout), (0, "0\n"), p.stderr)
 
 
 class Scratch(unittest.TestCase):

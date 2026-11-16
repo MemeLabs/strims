@@ -694,7 +694,7 @@ def inputs():
                     add(Path(e.path) / "matrices", "matrices")
     for n, kind in (("costs.jsonl", "costs"), ("s3.jsonl", "s3"), ("bin-hashes.json", "bin_hashes")):
         add(farm / n, kind)
-    for p in (simdb().main_checkout() / "hack" / "sim-farm" / "farm.py", ROOT / "hack" / "simlab" / "suite.py",
+    for p in (store.FARM_PY, ROOT / "hack" / "simlab" / "suite.py",
               ROOT / "hack" / "simlab" / "verdict.py", Path(__file__)):
         add(p, "code")
     return out
@@ -847,10 +847,10 @@ def matrices(paths):
 
 
 def s3_prices():
-    """The main checkout's farm.py's S3 prices: {name: value} of its S3_*
-    and GB constants (store.farm_constants)."""
-    return store.farm_constants(("S3_TIER1", "S3_TIER2", "S3_STORAGE_GB_MONTH", "S3_KEPT_DAYS", "S3_INTER_REGION_GB",
-                                 "S3_INTERNET_GB", "GB"), simdb().main_checkout() / "hack" / "sim-farm" / "farm.py")
+    """farm.py's S3 prices: {name: value} of its S3_* and GB constants
+    (store.farm_constant: this checkout's farm.py), as floats."""
+    return {n: float(store.farm_constant(n)) for n in ("S3_TIER1", "S3_TIER2", "S3_STORAGE_GB_MONTH", "S3_KEPT_DAYS",
+                                                       "S3_INTER_REGION_GB", "S3_INTERNET_GB", "GB")}
 
 
 # --- docs -----------------------------------------------------------------------
@@ -2272,14 +2272,10 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None, hidden
     out = [JOBS_SQL.format(csim=sim_case("csim"), promoted=",\n       ".join(
         f"{knob('env', v)} AS {n}" for n, v in PROMOTED.items()),
         job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped)]
-    prices = s3_prices()
-    if len(prices) < 7:
-        prices = dict.fromkeys(("S3_TIER1", "S3_TIER2", "S3_INTER_REGION_GB", "S3_INTERNET_GB",
-                                "S3_STORAGE_GB_MONTH", "S3_KEPT_DAYS"), 0.0) | {"GB": 1.0}
-    out.append(COSTS_SQL.format(**{k: repr(v) for k, v in prices.items()}))
+    out.append(COSTS_SQL.format(**{k: repr(v) for k, v in s3_prices().items()}))
     out.append(EXPERIMENTS_SQL.format(csim=sim_case("c.sim"), rsim=sim_case("sim"),
                                       job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped))
-    out.append(AVAILABILITY_SQL.format(days=store.S3_KEPT_DAYS))
+    out.append(AVAILABILITY_SQL.format(days=store.s3_kept_days()))
     out.append(EXP_RUNS_SQL)
     out += commits_sql(tmp, ins, parsed, commits)
     for t, name in sim_tables(cols).items():
@@ -3683,12 +3679,12 @@ def s3_spent(before, runs):
                     region = r.get("region", "")
                     cross = (sum(v for k, v in (r.get("up") or {}).items() if k not in ("here", region))
                              + sum(v for k, v in (r.get("down") or {}).items() if k not in ("internet", region)))
-                    total += (sum((r.get("tier1") or {}).values()) * p.get("S3_TIER1", 0)
-                              + sum((r.get("tier2") or {}).values()) * p.get("S3_TIER2", 0)
-                              + cross / p.get("GB", 1) * p.get("S3_INTER_REGION_GB", 0)
-                              + (r.get("down") or {}).get("internet", 0) / p.get("GB", 1) * p.get("S3_INTERNET_GB", 0)
-                              + r.get("stored", 0) / p.get("GB", 1) * p.get("S3_STORAGE_GB_MONTH", 0)
-                              * p.get("S3_KEPT_DAYS", 0) / 30)
+                    total += (sum((r.get("tier1") or {}).values()) * p["S3_TIER1"]
+                              + sum((r.get("tier2") or {}).values()) * p["S3_TIER2"]
+                              + cross / p["GB"] * p["S3_INTER_REGION_GB"]
+                              + (r.get("down") or {}).get("internet", 0) / p["GB"] * p["S3_INTERNET_GB"]
+                              + r.get("stored", 0) / p["GB"] * p["S3_STORAGE_GB_MONTH"]
+                              * p["S3_KEPT_DAYS"] / 30)
                     n += 1
     return total, n
 

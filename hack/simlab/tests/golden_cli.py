@@ -17,7 +17,7 @@ write their output dirs and folded and exported by simdb.py itself, under
 two local suite invocations and a suite `--sets` farm run of two matrices
 (its flushes, one lacking its reads as one pulled without --reads does;
 its matrices' indexes, one with a row the farm reused from another run;
-its farm-runs index), with stand-ins for farm.py's prices and config. Each
+its farm-runs index), with a stand-in for the farm's config. Each
 invocation runs as a live caller runs it, `python3 SCRIPT ARGS`, with
 SIM_DB_ROOT the fixture's cache root and GIT_DIR an empty repository at the
 fixture's root (main_checkout's), so the farm's and the suite's state come
@@ -277,7 +277,7 @@ def job_dir(d, job):
 
 def build(root):
     """Makes the fixture under `root`: its cache (target/sim-db), the
-    farm's and the suite's state, stand-ins for farm.py and its config, and
+    farm's and the suite's state, a stand-in for the farm's config, and
     an empty git repository (the fixture's main checkout)."""
     sm = simdb_test().simdb
     os.environ["SIM_DB_ROOT"] = str(root / "target" / "sim-db")
@@ -332,8 +332,6 @@ def build(root):
                                                "down": {"internet": 1 << 20}, "stored": 0}) + "\n")
     hf = root / "hack" / "sim-farm"
     hf.mkdir(parents=True)
-    (hf / "farm.py").write_text("S3_TIER1 = 0.0055 / 1000\nS3_TIER2 = 0.0044 / 10000\nS3_STORAGE_GB_MONTH = 0.026\n"
-                                "S3_KEPT_DAYS = 7\nS3_INTER_REGION_GB = 0.02\nS3_INTERNET_GB = 0.09\nGB = 1 << 30\n")
     (hf / "config.toml").write_text('s3_bucket = "golden-bucket"\ns3_region = "us-west-1"\n')
     # The aws CLI the invocations find: S3 is never reached from here.
     (root / "bin").mkdir()

@@ -70,13 +70,19 @@ matrices for its id (suite.py's write_matrices: <id>-NN):
                  matrices of that id, else `name` itself, unknown (S3 may
                  hold it all the same); of a run of that name (a matrix
                  run alone) and those that include it, the one started
-                 in the S3_KEPT_DAYS days S3 keeps a run (started) if one
-                 alone was, else the run of that name, naming the others;
-                 Refused, naming them, where several runs include a name
-                 no run has
+                 (started) in the days S3 keeps a run's data
+                 (s3_kept_days) if one alone was, else the run of that
+                 name, naming the others; Refused, naming them, where
+                 several runs include a name no run has
   started(run) -> float | None
                  when a run started: its state's matrices list's time,
                  else its newest flush's in the cache
+  farm_constant(name, path=None) -> number
+                 the number farm.py (this checkout's) assigns to `name`,
+                 read from its source: ValueError naming the line where it
+                 can't be
+  s3_kept_days() -> number
+                 farm.py's S3_KEPT_DAYS
   unknown(name, s3=False, runs=None) -> str
                  that no run the state or the cache knows is or includes
                  `name` (nor, with `s3`, does S3 hold one of that name),
@@ -134,13 +140,16 @@ script as sys.exit(message) does, and a caller that serves several (the
 console's server) catches it.
 """
 
+import ast
 import collections
 import contextlib
 import dataclasses
 import difflib
+import functools
 import fcntl
 import json
 import math
+import operator
 import os
 import re
 import shutil
@@ -352,28 +361,84 @@ def farm_state():
     return store_host.main_checkout() / "target" / "sim-farm"
 
 
-# farm.py beside simlab, whose constants the lab reads (farm_constants).
+# The farm.py whose constants the lab reads (farm_constant): this
+# checkout's, beside simlab, so the code reading a constant and the
+# constant are one commit's, and every checkout has it.
 FARM_PY = Path(__file__).resolve().parents[1] / "sim-farm" / "farm.py"
+_ARITHMETIC = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv,
+               ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod, ast.Pow: operator.pow,
+               ast.LShift: operator.lshift, ast.RShift: operator.rshift}
+_SIGNS = {ast.USub: operator.neg, ast.UAdd: operator.pos}
 
 
-def farm_constants(names, path=FARM_PY):
-    """{name: value} of those of `names` that farm.py (`path`) defines at
-    its top level as arithmetic of literals (`S3_KEPT_DAYS = 7`), read from
-    its source, as floats; none where it can't be read."""
-    out = {}
-    try:
-        src = Path(path).read_text()
-    except OSError:
-        return out
-    for name in names:
-        m = re.search(rf"^{name} = (.+)$", src, re.M)
-        if m and re.fullmatch(r"[0-9.e+\-*/ <()]+", m.group(1).strip()):
-            out[name] = float(eval(m.group(1), {"__builtins__": {}}))
+def _number(node, known):
+    """The value of expression `node`: arithmetic of number literals and
+    of the names in `known`; ValueError saying why not."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+        return node.value
+    if isinstance(node, ast.Name):
+        if node.id in known:
+            return known[node.id]
+        raise ValueError(f"{node.id} isn't a number farm.py defines before it")
+    if isinstance(node, ast.BinOp) and type(node.op) in _ARITHMETIC:
+        try:
+            return _ARITHMETIC[type(node.op)](_number(node.left, known), _number(node.right, known))
+        except ArithmeticError as e:
+            raise ValueError(str(e)) from None
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _SIGNS:
+        return _SIGNS[type(node.op)](_number(node.operand, known))
+    raise ValueError(f"{ast.unparse(node)} isn't arithmetic of numbers")
+
+
+@functools.cache
+def _numbers(path, mtime_ns):
+    """{name: (value, line, why)} of the names farm.py at `path` assigns at
+    its top level (`NAME = ...`, `NAME: T = ...`), in order: the value of
+    each that is arithmetic of numbers and of the names before it, else
+    None and why. Cached by the file's modification time."""
+    known, out = {}, {}
+    for node in ast.parse(Path(path).read_text(), str(path)).body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            name, value = node.targets[0].id, node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+            name, value = node.target.id, node.value
+        else:
+            continue
+        known.pop(name, None)
+        try:
+            known[name] = _number(value, known)
+            out[name] = (known[name], node.lineno, None)
+        except ValueError as e:
+            out[name] = (None, node.lineno, str(e))
     return out
 
 
-# How long S3 keeps a run's data, in days: farm.py's S3_KEPT_DAYS.
-S3_KEPT_DAYS = int(farm_constants(["S3_KEPT_DAYS"])["S3_KEPT_DAYS"])
+def farm_constant(name, path=None):
+    """The number farm.py (`path`, else FARM_PY: this checkout's) assigns to
+    `name` at its top level, read from its source when asked (ast:
+    arithmetic of number literals and of its constants before it, a
+    comment or an annotation beside); its last assignment where it has
+    several. ValueError, naming the file and the line, where it can't be
+    read."""
+    path = Path(path or FARM_PY)
+    try:
+        got = _numbers(str(path), path.stat().st_mtime_ns).get(name)
+    except (OSError, SyntaxError) as e:
+        raise ValueError(f"{path}: farm.py's {name} can't be read: {e}") from None
+    if got is None:
+        raise ValueError(f"{path}: farm.py assigns no {name} at its top level")
+    value, line, why = got
+    if why is not None:
+        text = path.read_text().splitlines()[line - 1].strip()
+        raise ValueError(f"{path}:{line}: {text}: {name} isn't a number the lab can read ({why})")
+    return value
+
+
+def s3_kept_days():
+    """How long S3 keeps a run's data, in days: farm.py's S3_KEPT_DAYS."""
+    return farm_constant("S3_KEPT_DAYS")
+
+
 # The part of a run's name standing for the matrices past EC2's tag limit
 # (farm.py's run_name).
 MORE = re.compile(r"\d+more-\w+")
@@ -439,7 +504,7 @@ class Named:
             what = f"{'a matrix' if self.matrices == [self.asked] else span(self.matrices)} of {what}"
         if self.also:
             others = ", ".join(f"farm run {r} (started {when(started(r))})" for r in self.also)
-            what += (f", the one run it names started in the {S3_KEPT_DAYS} days S3 keeps a run's data; it also "
+            what += (f", the one run it names started in the {s3_kept_days()} days S3 keeps a run's data; it also "
                      f"names {others}" if self.matrices else
                      f"; it also names {others}, which {'include' if len(self.also) > 1 else 'includes'} it: pull "
                      "--run one by its name for it")
@@ -471,14 +536,14 @@ def farm_run(name, runs=None):
     name or the matrices of the suite farm run of that id, else `name`
     itself, which S3 may hold all the same (unknown). Where a run of that
     name (a matrix run alone) and others that include it are among
-    `runs`, the one of them started in the S3_KEPT_DAYS days S3 keeps a
+    `runs`, the one of them started in the days S3 keeps a
     run's data, if one alone was, else the run of that name; the result
     names the others. Refused, naming them, where several runs include a
     name no run has."""
     runs = farm_runs() if runs is None else runs
     hits = {r: got for r, ms in sorted(runs.items()) if r != name and (got := includes(name, ms))}
     if name in runs:
-        kept = time.time() - S3_KEPT_DAYS * 86400
+        kept = time.time() - s3_kept_days() * 86400
         live = [r for r in (name, *hits) if (started(r) or 0) >= kept]
         if len(live) == 1 and live[0] != name:
             return Named(live[0], name, hits[live[0]], also=[name, *(r for r in hits if r != live[0])])
