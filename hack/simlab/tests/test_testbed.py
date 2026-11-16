@@ -38,10 +38,14 @@ class Cells(unittest.TestCase):
         c = next(c for c in suite.TIERS["robust"] if c["name"] == "star-15-10")
         env = {**c["env"], "STRIMS_SIM_HOSTILE": "off", "STRIMS_SIM_CLOCK_SKEW": "off",
                "STRIMS_SIM_CAL_SEED_BURST": "3028", "STRIMS_SIM_CAL_VIEWER_BURST": "3028",
-               "TESTBED_QDISC": "clsact>ifb-netem>root-class"}
+               "TESTBED_QDISC": "clsact>ifb-netem>root-class", "STRIMS_SIM_CAL_SEED_LINK": "tbf",
+               "STRIMS_SIM_CAL_VIEWER_LINK": "tbf"}
         for k in testbed.JOB_KNOBS:
             env.pop(k, None)
         self.assertEqual(testbed.cell_of(env), "star-15-10")
+        self.assertEqual(testbed.cell_of({**env, "STRIMS_SIM_CAL_LINKS": "1:tbf 2:tbf"}), "star-15-10")
+        # Another link class is another cell's (none of the tier's).
+        self.assertIsNone(testbed.cell_of({**env, "STRIMS_SIM_CAL_VIEWER_LINK": "cable,slot=2-4,aqm=fifo"}))
         # A setting no twin knob takes makes it no cell's.
         self.assertIsNone(testbed.cell_of({**env, "TESTBED_SEED_LOSS_PCT": "1"}))
         self.assertIsNone(testbed.cell_of({**env, "STRIMS_SIM_CAL_SECS": "61"}))

@@ -12,8 +12,9 @@ records the testbed's nodes log and the run's captures, and its
 (`calibration_star`), its twin's knobs (its env) and its row. A run's
 cell is the tier cell (suite.TIERS) whose env its knobs are, but for the
 knobs a testbed run always sets and a tier's cells don't (TESTBED_FIXED:
-one clock, its tbf's buckets, honest viewers) and the job keys; a run of no
-tier cell takes a cell named for its knobs (`tb-<hash>`).
+one clock, its tbf's buckets, honest viewers; links of run.sh's default
+class, DEFAULT_LINK) and the job keys; a run of no tier cell takes a cell
+named for its knobs (`tb-<hash>`).
 
   tables(run_dir, binary=None, knobs=None) -> Path
                  the run's tables dir (<run_dir>/tables), written by the
@@ -71,6 +72,10 @@ BINARY = ROOT / "target" / "release" / "examples" / "testbed_tables"
 # and the settings no twin knob takes (TESTBED_*); and the job keys.
 TESTBED_FIXED = ("STRIMS_SIM_CLOCK_SKEW", "STRIMS_SIM_CAL_SEED_BURST", "STRIMS_SIM_CAL_VIEWER_BURST",
                  "STRIMS_SIM_HOSTILE")
+# The access link class a run.sh node takes unless SEED_LINK, VIEWER_LINK
+# or LINKS name another, which a run's knobs name (its links file) and a
+# tier cell's don't: as the buckets, it isn't the cell's to differ in.
+DEFAULT_LINK = "tbf"
 JOB_KNOBS = ("STRIMS_SIM_JOB", "STRIMS_SIM_SERIES", "STRIMS_SIM_SEED", "STRIMS_SIM_OUT")
 
 
@@ -93,9 +98,16 @@ def tables(run_dir, binary=None, knobs=None):
 
 
 def comparable(env):
-    """`env` less TESTBED_FIXED, the TESTBED_ settings and the job keys."""
+    """`env` less TESTBED_FIXED, the TESTBED_ settings, the job keys and
+    link specs of DEFAULT_LINK alone."""
+    def default_link(k, v):
+        if k in ("STRIMS_SIM_CAL_SEED_LINK", "STRIMS_SIM_CAL_VIEWER_LINK"):
+            return v == DEFAULT_LINK
+        return k == "STRIMS_SIM_CAL_LINKS" and all(p.partition(":")[2] == DEFAULT_LINK for p in v.split())
+
     return {k: v for k, v in env.items()
-            if k not in TESTBED_FIXED and k not in JOB_KNOBS and not k.startswith("TESTBED_")}
+            if k not in TESTBED_FIXED and k not in JOB_KNOBS and not k.startswith("TESTBED_")
+            and not default_link(k, v)}
 
 
 # The tiers whose cells a run's knobs name first: the testbed tier's own
