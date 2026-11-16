@@ -189,22 +189,53 @@ impl Owed {
         &mut self,
         t: Time,
         key: u64,
+        seg: (u64, usize, u32),
+        clock: RcvClock,
+        fresh: &mut u64,
+    ) -> Vec<Ack> {
+        self.take(t, key, seg, true, clock, fresh)
+    }
+
+    /// The leading `packets` full packets (`len` bytes) of segment `seq`
+    /// are through at `t`, the rest of it lost on the way: [`Owed::arrive`]
+    /// for them, which leaves the segment open until the rest arrives, as
+    /// a hole the receiver acknowledges what comes past at once.
+    pub(super) fn arrive_head(
+        &mut self,
+        t: Time,
+        key: u64,
+        seg: (u64, usize, u32),
+        clock: RcvClock,
+        fresh: &mut u64,
+    ) -> Vec<Ack> {
+        self.take(t, key, seg, false, clock, fresh)
+    }
+
+    /// The packets of segment `seq` that arrive, all that is left of it
+    /// when `whole` (its last carries PSH), or its head.
+    fn take(
+        &mut self,
+        t: Time,
+        key: u64,
         (seq, len, packets): (u64, usize, u32),
+        whole: bool,
         clock: RcvClock,
         fresh: &mut u64,
     ) -> Vec<Ack> {
         if seq != self.next {
             // Past a hole (or, which the model never sends, again).
-            if seq > self.next {
+            if seq > self.next && whole {
                 self.ahead.insert(seq);
             }
             self.hold(t, (key, seq, len));
             return vec![self.ack(t, AckWhy::Now)];
         }
         let mut gap = !self.ahead.is_empty();
-        self.next = seq + 1;
-        while self.ahead.remove(&self.next) {
-            self.next += 1;
+        if whole {
+            self.next = seq + 1;
+            while self.ahead.remove(&self.next) {
+                self.next += 1;
+            }
         }
         let n = packets.max(1) as usize;
         let mut acks = Vec::new();
@@ -215,7 +246,7 @@ impl Owed {
             } else {
                 len.saturating_sub((n - 1) * MSS)
             };
-            self.measure(p, k + 1 == n);
+            self.measure(p, whole && k + 1 == n);
             self.inter_arrival(t, clock.rto);
             if self.waiting.is_empty() && piece.2 == 0 {
                 self.since = t;

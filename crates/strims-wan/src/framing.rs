@@ -136,6 +136,15 @@ impl fmt::Display for Framing {
     }
 }
 
+/// The IP bytes of each packet of a message of `wire` bytes in `packets`
+/// packets, in the order they leave ([`Framing::packets`] costs them).
+pub fn frames(wire: usize, packets: u32) -> impl Iterator<Item = usize> {
+    let (full, each, small, extra) = split(wire, packets);
+    std::iter::repeat_n(FULL, full)
+        .chain(std::iter::repeat_n(each, small))
+        .chain(std::iter::repeat_n(each + 1, extra))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

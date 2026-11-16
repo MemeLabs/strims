@@ -49,9 +49,10 @@
 //!   Linux's tbf, whose packets of a burst go once the tokens cover each
 //!   whole: packet `k` of a burst at `T` tokens leaves when the rate has
 //!   added `C_k − T` (`C_k` the burst's bytes through it). The queue holds
-//!   the bytes not yet out ([`Network::up_backlog`]), a byte limit as tbf's
-//!   is. Without a bucket an uplink drains at its rate alone, the model of
-//!   a link whose shaper lets no burst through. A rate step leaves the
+//!   the bytes of the frames not yet out, each frame's freed once it has
+//!   left ([`Network::up_backlog`]), a byte limit as tbf's is. Without a
+//!   bucket an uplink drains at its rate alone, the model of a link whose
+//!   shaper lets no burst through. A rate step leaves the
 //!   tokens as they are (tbf's `change` refills its bucket; a real link's
 //!   rate changes don't).
 //! - **Framing.** An uplink charges each message what its site's
@@ -289,9 +290,9 @@ struct End {
     /// The uplink's rate from each time on, in time order.
     up_steps: Vec<(Time, u64)>,
     up_free: Time,
-    /// The messages handed to the uplink that may not have left it yet:
-    /// when each started through it, when its last bit left, and its wire
-    /// bytes.
+    /// The frames handed to the uplink that may not have left it yet:
+    /// when each started through it, when its last bit left, and what it
+    /// charged.
     up_spans: VecDeque<(Time, Time, usize)>,
     /// With a bucket, the tokens it held at `tokens_at`, in
     /// byte-nanoseconds.
@@ -393,10 +394,10 @@ impl End {
         }
     }
 
-    /// Records a message of `wire` bytes handed to the uplink at `at` that
-    /// starts through it at `start` and ends at `up_free`, and forgets
-    /// those that had left by `at`.
-    fn span(&mut self, at: Time, start: Time, wire: usize) {
+    /// Records a frame of `wire` bytes handed to the uplink at `at` that
+    /// starts through it at `start` and ends at `done`, and forgets those
+    /// that had left by `at`.
+    fn span(&mut self, at: Time, start: Time, done: Time, wire: usize) {
         while self
             .up_spans
             .front()
@@ -404,7 +405,7 @@ impl End {
         {
             self.up_spans.pop_front();
         }
-        self.up_spans.push_back((start, self.up_free, wire));
+        self.up_spans.push_back((start, done, wire));
     }
 
     /// When a message of `wire` IP bytes in `packets` packets, handed to
@@ -458,6 +459,40 @@ impl End {
                 None => start,
             },
         }
+    }
+
+    /// Serves a message of `wire` IP bytes in `packets` packets, handed to
+    /// the uplink at `at`, from `start` (`charged` bytes,
+    /// [`Framing::message`]): its frames one after another, each a span of
+    /// its own, so its queue frees each frame's bytes once the shaper has
+    /// passed it, as the testbed's tbf takes the frames its ifb cuts TCP's
+    /// buffers into. A frame passes when the message's bytes through it
+    /// would ([`End::passed`]), the last when the whole message does
+    /// ([`End::serve`]). Returns how the shaper passed it.
+    fn serve_frames(
+        &mut self,
+        at: Time,
+        start: Time,
+        charged: usize,
+        wire: usize,
+        packets: u32,
+    ) -> Pass {
+        let (free, pass) = self.serve(start, charged);
+        let framing = self.site.profile.framing;
+        let n = packets.max(1) as usize;
+        let (mut from, mut through) = (start, 0);
+        for (k, charge) in framing.packets(wire, packets).enumerate() {
+            through += charge;
+            let done = if k + 1 == n {
+                free
+            } else {
+                self.passed(pass, start, through)
+            };
+            self.span(at, from, done, charge);
+            from = done;
+        }
+        self.up_free = free;
+        pass
     }
 
     /// When `wire` bytes that start through the uplink at `start`, no
@@ -696,9 +731,7 @@ impl Network {
     ) -> Transit {
         let end = self.end_mut(a);
         let (start, charged) = end.admit(sent, wire, packets);
-        let (free, pass) = end.serve(start, charged);
-        end.up_free = free;
-        end.span(sent, start, charged);
+        let pass = end.serve_frames(sent, start, charged, wire, packets);
         end.stats.up_bytes = end.stats.up_bytes.saturating_add(charged as u64);
         end.stats.up_ip_bytes = end.stats.up_ip_bytes.saturating_add(wire as u64);
         end.stats.up_packets = end.stats.up_packets.saturating_add(u64::from(packets));
@@ -718,17 +751,15 @@ impl Network {
     pub fn occupy_up(&mut self, at: Time, h: usize, wire: usize, packets: u32) -> Time {
         let end = self.end_mut(h);
         let (start, charged) = end.admit(at, wire, packets);
-        let (free, pass) = end.serve(start, charged);
-        end.up_free = free;
-        end.span(at, start, charged);
+        let pass = end.serve_frames(at, start, charged, wire, packets);
         end.grant(pass, start, wire, packets)
     }
 
     /// How long `h`'s uplink takes from `at` to send what it holds,
-    /// counting the message it is sending whole: an access queue frees a
-    /// message's bytes once its last bit has left (Linux's tbf frees a
-    /// GSO buffer once its tokens are in), so what it has room for grows
-    /// in steps of what it sends. With a bucket, the bytes it holds at the
+    /// counting the frame it is sending whole: an access queue frees a
+    /// frame's bytes once its last bit has left (the testbed's tbf takes
+    /// frames, and frees each once its tokens are in), so what it has room
+    /// for grows a frame at a time. With a bucket, the bytes it holds at the
     /// rate at `at`: the queue's limit is in bytes, which the bucket's
     /// tokens send sooner than the rate does.
     pub fn up_backlog(&mut self, h: usize, at: Time) -> Duration {
@@ -1082,7 +1113,7 @@ mod tests {
     }
 
     #[test]
-    fn an_uplink_frees_a_message_once_it_has_left() {
+    fn an_uplink_frees_each_frame_once_it_has_left() {
         let sites = [
             Site::new(City::Dallas, Access::Fiber).with_up(1_000_000),
             Site::new(City::Dallas, Access::Fiber),
@@ -1094,15 +1125,16 @@ mod tests {
                 loss: false,
             },
         );
-        // Two 3000-byte messages at 1 MB/s: 0-3 ms and 3-6 ms.
-        n.send(t(0), 0, 1, 3000, 2, Carrier::Stream);
-        n.occupy_up(t(0), 0, 3000, 2);
-        let ms = Duration::from_millis;
-        // The first counts whole until its last bit is out at 3 ms.
-        assert_eq!(n.up_backlog(0, t(1)), ms(6));
-        assert_eq!(n.up_backlog(0, t(2)), ms(6));
-        assert_eq!(n.up_backlog(0, t(3)), ms(3));
-        assert_eq!(n.up_backlog(0, t(5)), ms(3));
+        // Two 3000-byte messages of two frames at 1 MB/s: 0-3 ms and
+        // 3-6 ms, their frames 1.5 ms each.
+        assert_eq!(n.send(t(0), 0, 1, 3000, 2, Carrier::Stream).depart, t(3));
+        assert_eq!(n.occupy_up(t(0), 0, 3000, 2), t(6));
+        let us = Duration::from_micros;
+        // A frame counts whole until its last bit is out.
+        assert_eq!(n.up_backlog(0, t(1)), us(6000));
+        assert_eq!(n.up_backlog(0, t(2)), us(4500));
+        assert_eq!(n.up_backlog(0, t(3)), us(3000));
+        assert_eq!(n.up_backlog(0, t(5)), us(1500));
         assert_eq!(n.up_backlog(0, t(6)), Duration::ZERO);
         assert_eq!(n.up_backlog(0, t(9)), Duration::ZERO);
     }
@@ -1548,11 +1580,13 @@ mod tests {
         let mut n = net(&[site, Site::new(City::Dallas, Access::Fiber)], QUIET);
         let ms = Duration::from_millis;
         // The first 3000 bytes leave on the bucket at once; the next 3000
-        // wait for the rate, until 3 ms, and count whole till then.
+        // wait for the rate, their first frame until 1.5 ms and their
+        // second until 3 ms, each counting whole till then.
         assert_eq!(n.send(t(0), 0, 1, 3000, 2, Carrier::Stream).depart, t(0));
         assert_eq!(n.occupy_up(t(0), 0, 3000, 2), t(3));
         assert_eq!(n.up_backlog(0, t(0)), ms(3));
-        assert_eq!(n.up_backlog(0, t(2)), ms(3));
+        assert_eq!(n.up_backlog(0, t(1)), ms(3));
+        assert_eq!(n.up_backlog(0, t(2)), Duration::from_micros(1500));
         assert_eq!(n.up_backlog(0, t(3)), Duration::ZERO);
         // A host that loses power while its queue drains forgets the queue
         // and keeps the bucket as it was, empty: 1000 bytes then wait the

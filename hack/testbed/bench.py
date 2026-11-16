@@ -285,12 +285,13 @@ def metrics(nodes, sched, cls, t0_us, queue=None, compete=None, packets=False):
             m[("node 0", "x cwnd")].append(cwnd)
     for e in nodes.get(0, []):
         if e.get("ev") == "drops":
+            x_packets = e.get("competing_drop_packets", 2 * e.get("competing_drops", 0))
             if packets and "queue_drop_packets" in e:
-                m[("node 0", "drops")] = [e["queue_drop_packets"] + 2 * e.get("competing_drops", 0)]
+                m[("node 0", "drops")] = [e["queue_drop_packets"] + x_packets]
             else:
                 m[("node 0", "drops")] = [e["queue_drops"] + e.get("competing_drops", 0)]
             if "competing_drops" in e:
-                m[("node 0", "x drops")] = [2 * e["competing_drops"]]
+                m[("node 0", "x drops")] = [x_packets]
     for (c, _, _), recs in bursts.items():
         _, at, got = min(recs)
         m[(c, "first")].append((got - at) / 1000)

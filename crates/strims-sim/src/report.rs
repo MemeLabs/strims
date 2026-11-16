@@ -515,9 +515,11 @@ pub struct WanHostReport {
     /// resends. A str0m datagram's payload counts whole, its DTLS and SCTP
     /// framing included.
     pub app_bytes: u64,
-    /// With competing uploads, their segments lost to the full uplink, and
-    /// their windows summed every 100 ms while they run.
+    /// With competing uploads, their segments that lost a frame to the full
+    /// uplink, and the frames they lost, and their windows summed every
+    /// 100 ms while they run.
     pub competing_drops: u64,
+    pub competing_drop_packets: u64,
     pub competing_cwnd: Vec<(strims_base::time::Duration, u64)>,
 }
 

@@ -1906,6 +1906,7 @@ impl Network {
                 ack_waits: AckWaits::default(),
                 app_bytes: 0,
                 competing_drops: 0,
+                competing_drop_packets: 0,
                 competing_cwnd: Vec::new(),
             };
             if h >= run.nodes.len() {

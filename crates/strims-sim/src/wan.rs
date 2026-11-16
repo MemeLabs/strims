@@ -53,11 +53,12 @@
 //!   window; a connection with nothing in flight sends one anyway. A
 //!   connection writing sends what its window allows at once.
 //! - The access queues hold `uplink_queue` of transmission time, up and
-//!   down. A segment that doesn't fit in what one has left is lost there,
-//!   as a byte-limited FIFO (Linux's tbf and bfifo) drops it: a small
-//!   write fits where a full segment doesn't. An uplink queue frees a
-//!   segment's room once its last bit has left
-//!   ([`Network::up_backlog`](strims_wan::Network::up_backlog)). A
+//!   down. An uplink queue takes the leading frames of a segment that
+//!   fit in what it has left and loses the rest, as a byte-limited FIFO
+//!   (Linux's tbf and bfifo) drops a packet, and frees each frame's room
+//!   once its last bit has left
+//!   ([`Network::up_backlog`](strims_wan::Network::up_backlog)); a
+//!   downlink queue loses a segment that doesn't fit whole. A
 //!   datagram that doesn't fit is lost the same way, and forgotten. An
 //!   uplink with a shaper bucket (a site's
 //!   [`Bucket`](strims_wan::Bucket), `STRIMS_SIM_UPLINK_BURST`) sends what
@@ -273,6 +274,19 @@ enum Event {
     Timeout,
     /// The window model: `conn`'s tail-loss probe is due.
     Probe { conn: (SocketAddr, SocketAddr) },
+    /// The window model: the leading `packets` frames (`len` bytes, `wire`
+    /// on the wire) of segment `seq` of `conn`, whose tail the sender's
+    /// uplink queue dropped, reach host `to`'s downlink, or are `through`
+    /// it.
+    Head {
+        conn: (SocketAddr, SocketAddr),
+        to: HostIx,
+        seq: u64,
+        len: usize,
+        packets: u32,
+        wire: usize,
+        through: bool,
+    },
     /// The window model: the receiver of `conn`'s data sends the
     /// acknowledgement it delayed, unless data it sent back carried it.
     DelAck { conn: (SocketAddr, SocketAddr) },
@@ -283,11 +297,17 @@ enum Event {
         seq: u64,
         len: usize,
     },
-    /// Competing upload `i`'s segment `seq` is acknowledged, a round trip
-    /// of `rtt` after it went out.
-    CrossAck { i: usize, seq: u64, rtt: Duration },
-    /// Competing upload `i` learns its segment `seq` was lost.
-    CrossLost { i: usize, seq: u64 },
+    /// Competing upload `i`'s segment `seq` of `frames` frames is
+    /// acknowledged, a round trip of `rtt` after it went out.
+    CrossAck {
+        i: usize,
+        seq: u64,
+        frames: u32,
+        rtt: Duration,
+    },
+    /// Competing upload `i` learns its segment `seq` of `frames` frames was
+    /// lost.
+    CrossLost { i: usize, seq: u64, frames: u32 },
     /// A SACK of data channel `conn` reaches its sender: the association's
     /// SACK of the event's key.
     SctpSack { conn: (SocketAddr, SocketAddr) },
@@ -326,12 +346,14 @@ pub(crate) struct TcpEvent {
     pub in_flight: usize,
 }
 
-/// A competing upload's segment, its payload and its bytes on the wire:
-/// two packets, as the window model cuts its connections'
-/// ([`WINDOW_SEGMENT`](crate::spec::WINDOW_SEGMENT)) and as the upload's
-/// receiver acknowledges them, so that they meet a full queue at one size.
-const CROSS_SEGMENT: usize = crate::spec::WINDOW_SEGMENT;
-pub(crate) const CROSS_WIRE: usize = 2 * 1500;
+/// A competing upload's segment, in frames: two, as Linux's buffers are at
+/// the testbed's rates and the window model cuts its connections'
+/// ([`WINDOW_SEGMENT`](crate::spec::WINDOW_SEGMENT)); a frame's IP bytes;
+/// and a whole segment's. Its sequence numbers count frames, so a tail the
+/// queue dropped goes again as a segment of its own.
+const CROSS_FRAMES: u32 = 2;
+const CROSS_FRAME: usize = 1500;
+pub(crate) const CROSS_WIRE: usize = CROSS_FRAMES as usize * CROSS_FRAME;
 /// CUBIC's scaling constant, in segments per second cubed.
 const CUBIC_C: f64 = 0.4;
 /// Its initial window: 10 segments.
@@ -430,6 +452,21 @@ struct Flow {
     /// Segments acknowledged past the cumulative ack point (SACKed), by
     /// sequence number. Bound: the segments in flight.
     sacked: BTreeSet<u64>,
+    /// Segments whose leading frames the uplink queue took and whose tail
+    /// it dropped, by sequence number ([`Tail`]). Bound: the segments in
+    /// flight.
+    tails: BTreeMap<u64, Tail>,
+}
+
+/// What is out of a segment whose leading frames the uplink queue took and
+/// whose tail it dropped: the head's bytes not yet acknowledged, the
+/// tail's, and whether the tail went again. The tail is lost like a
+/// segment and resent alone, as Linux resends the frame a SACK left out.
+#[derive(Clone, Copy, Debug)]
+struct Tail {
+    head: usize,
+    tail: usize,
+    resent: bool,
 }
 
 /// A connection's loss recovery, as Linux's `TCP_CA_Recovery` runs it: from
@@ -498,6 +535,7 @@ impl Default for Flow {
             recovery: None,
             loss_high: None,
             sacked: BTreeSet::new(),
+            tails: BTreeMap::new(),
         }
     }
 }
@@ -681,6 +719,12 @@ impl Flow {
         });
     }
 
+    /// The bytes of segment `seq` (`len` of them) still out: its tail's,
+    /// if the queue took its head.
+    fn outstanding(&self, seq: u64, len: usize) -> usize {
+        self.tails.get(&seq).map_or(len, |t| t.tail)
+    }
+
     /// The sequence number of the first segment not acknowledged: the
     /// cumulative ack point.
     fn snd_una(&self) -> u64 {
@@ -812,9 +856,9 @@ struct Cross {
     rtt: Duration,
     flow: Flow,
     started: bool,
-    /// Lost segments not yet resent, by sequence number. Bound: the
-    /// segments in flight.
-    resend: BTreeSet<u64>,
+    /// Lost segments not yet resent, by sequence number, and their frames.
+    /// Bound: the segments in flight.
+    resend: BTreeMap<u64, u32>,
 }
 
 /// Whether a segment taking `tx` to send overflows an access queue that
@@ -949,6 +993,8 @@ pub(crate) struct Scheduler {
     resent_bytes: Vec<u64>,
     /// Per host, its competing uploads' segments lost to its full uplink.
     cross_drops: Vec<u64>,
+    /// Per host, the frames of those segments the queue dropped.
+    cross_drop_packets: Vec<u64>,
     /// Per host, the window model's falls of its connections' windows on a
     /// loss (one per recovery), and the timeouts among them that restarted
     /// a window from a segment.
@@ -1018,7 +1064,7 @@ impl Scheduler {
                     rtt: Duration::from(c.rtt),
                     flow: Flow::default(),
                     started: false,
-                    resend: BTreeSet::new(),
+                    resend: BTreeMap::new(),
                 })
             })
             .collect();
@@ -1096,6 +1142,7 @@ impl Scheduler {
             app_bytes: vec![0; spec.hosts.len()],
             resent_bytes: vec![0; spec.hosts.len()],
             cross_drops: vec![0; spec.hosts.len()],
+            cross_drop_packets: vec![0; spec.hosts.len()],
             cuts: vec![0; spec.hosts.len()],
             rtos: vec![0; spec.hosts.len()],
             owed: FastMap::default(),
@@ -1277,6 +1324,36 @@ impl Scheduler {
                     self.acked(t, conn, seq, len);
                     continue;
                 }
+                Event::Head {
+                    conn,
+                    to,
+                    seq,
+                    len,
+                    packets,
+                    wire,
+                    through,
+                } => {
+                    if through {
+                        self.owe_ack_head(t, conn, (id, seq, len, packets));
+                    } else {
+                        let done = self.net.receive(t, to, wire);
+                        let key = self.next;
+                        self.next += 1;
+                        self.events.insert(
+                            (done.max(t), key),
+                            Event::Head {
+                                conn,
+                                to,
+                                seq,
+                                len,
+                                packets,
+                                wire,
+                                through: true,
+                            },
+                        );
+                    }
+                    continue;
+                }
                 Event::Probe { conn } => {
                     self.probe(t, conn);
                     continue;
@@ -1288,12 +1365,17 @@ impl Scheduler {
                     }
                     continue;
                 }
-                Event::CrossAck { i, seq, rtt } => {
-                    self.cross_acked(t, i, seq, rtt);
+                Event::CrossAck {
+                    i,
+                    seq,
+                    frames,
+                    rtt,
+                } => {
+                    self.cross_acked(t, i, seq, frames, rtt);
                     continue;
                 }
-                Event::CrossLost { i, seq } => {
-                    self.cross_lost(t, i, seq);
+                Event::CrossLost { i, seq, frames } => {
+                    self.cross_lost(t, i, seq, frames);
                     continue;
                 }
                 Event::SctpSack { conn } => {
@@ -1426,6 +1508,7 @@ impl Scheduler {
                         }
                         f.lost.remove(&seq);
                     }
+                    let len = f.outstanding(seq, len);
                     f.in_flight = f.in_flight.saturating_sub(len);
                     f.sent_at.remove(&seq);
                     f.retx.insert(seq);
@@ -1483,6 +1566,7 @@ impl Scheduler {
                     self.pump(t, &[conn]);
                 }
                 Event::Ack { .. }
+                | Event::Head { .. }
                 | Event::Probe { .. }
                 | Event::DelAck { .. }
                 | Event::CrossAck { .. }
@@ -1521,7 +1605,22 @@ impl Scheduler {
             f.sampled(seq, t - sent);
         }
         f.in_flight = f.in_flight.saturating_sub(len);
-        if !f.retx.remove(&seq) {
+        // A head's acknowledgement leaves its tail out; the tail's ends it.
+        let head = match f.tails.get_mut(&seq) {
+            Some(tl) if tl.head > 0 => {
+                tl.head = tl.head.saturating_sub(len);
+                true
+            }
+            Some(tl) => {
+                tl.tail = tl.tail.saturating_sub(len);
+                if tl.tail == 0 {
+                    f.tails.remove(&seq);
+                }
+                false
+            }
+            None => false,
+        };
+        if !head && !f.retx.remove(&seq) {
             f.backoff = 0;
         }
         let advanced = f.snd_una() > una;
@@ -1557,7 +1656,7 @@ impl Scheduler {
         let traced_lost: Vec<u64> = marked.iter().map(|&(s, _)| s).collect();
         for (s, id) in marked {
             let l = match self.records.get(&id).map(|r| r.what) {
-                Some(What::Data { len, .. }) => len,
+                Some(What::Data { len, .. }) => f.outstanding(s, len),
                 _ => 0,
             };
             f.in_flight = f.in_flight.saturating_sub(l);
@@ -1671,11 +1770,36 @@ impl Scheduler {
     /// it sends now take their turn on its uplink. The acknowledgement
     /// clocks the sender's window.
     fn owe_ack(&mut self, t: Time, conn: (SocketAddr, SocketAddr), seg: (u64, u64, usize, u32)) {
+        self.owe_ack_in(t, conn, seg, true);
+    }
+
+    /// [`Scheduler::owe_ack`] for a segment's head, its tail still to come
+    /// ([`ack::Owed::arrive_head`]).
+    fn owe_ack_head(
+        &mut self,
+        t: Time,
+        conn: (SocketAddr, SocketAddr),
+        seg: (u64, u64, usize, u32),
+    ) {
+        self.owe_ack_in(t, conn, seg, false);
+    }
+
+    fn owe_ack_in(
+        &mut self,
+        t: Time,
+        conn: (SocketAddr, SocketAddr),
+        seg: (u64, u64, usize, u32),
+        whole: bool,
+    ) {
         let clock = self.rcv_clock(conn);
         let mut fresh = self.next;
         let o = self.owed.entry(conn).or_default();
         let before = o.due();
-        let acks = o.arrive(t, seg.0, (seg.1, seg.2, seg.3), clock, &mut fresh);
+        let acks = if whole {
+            o.arrive(t, seg.0, (seg.1, seg.2, seg.3), clock, &mut fresh)
+        } else {
+            o.arrive_head(t, seg.0, (seg.1, seg.2, seg.3), clock, &mut fresh)
+        };
         let due = o.due();
         self.next = fresh;
         for a in acks {
@@ -1781,15 +1905,16 @@ impl Scheduler {
     /// round trip of `rtt` after it went out, as a connection's are
     /// ([`Scheduler::acked`]): the end of a recovery it completes, a
     /// recovery a loss left, then the recovery's window or its growth.
-    fn cross_acked(&mut self, t: Time, i: usize, seq: u64, rtt: Duration) {
+    fn cross_acked(&mut self, t: Time, i: usize, seq: u64, frames: u32, rtt: Duration) {
         let was = self.cross.get(i).is_some_and(|c| c.flow.recovery.is_some());
+        let len = frames as usize * MSS as usize;
         if let Some(c) = self.cross.get_mut(i) {
             let f = &mut c.flow;
             let una = f.snd_una();
             if f.sent_at.remove(&seq).is_none() {
                 return;
             }
-            f.in_flight = f.in_flight.saturating_sub(CROSS_SEGMENT);
+            f.in_flight = f.in_flight.saturating_sub(len);
             f.retx.remove(&seq);
             f.sampled(seq, rtt);
             let advanced = f.snd_una() > una;
@@ -1799,48 +1924,49 @@ impl Scheduler {
             }
             // An upload always has data: its window always limits it.
             if f.recovery.is_some() {
-                f.reduction(CROSS_SEGMENT, advanced, false);
+                f.reduction(len, advanced, false);
             } else {
-                f.grow(t, CROSS_SEGMENT, c.rtt, f.srtt.max(c.rtt));
+                f.grow(t, len, c.rtt, f.srtt.max(c.rtt));
             }
         }
         if self.tcp_trace.is_some() {
             let now = self.cross.get(i).is_some_and(|c| c.flow.recovery.is_some());
             if was && !now {
-                self.traced_cross(t, i, "end", seq);
+                self.traced_cross(t, i, "end", seq, len);
             }
             if !was && now {
-                self.traced_cross(t, i, "rec", seq);
+                self.traced_cross(t, i, "rec", seq, len);
             }
-            self.traced_cross(t, i, "ack", seq);
+            self.traced_cross(t, i, "ack", seq, len);
         }
         self.cross_pump(t, i);
     }
 
     /// Competing upload `i` learned at `t` that its segment `seq` was
     /// lost: it owes a resend, and outside a recovery one begins.
-    fn cross_lost(&mut self, t: Time, i: usize, seq: u64) {
+    fn cross_lost(&mut self, t: Time, i: usize, seq: u64, frames: u32) {
         let was = self.cross.get(i).is_some_and(|c| c.flow.recovery.is_some());
+        let len = frames as usize * MSS as usize;
         if let Some(c) = self.cross.get_mut(i) {
             let f = &mut c.flow;
             if f.sent_at.remove(&seq).is_none() {
                 return;
             }
-            f.in_flight = f.in_flight.saturating_sub(CROSS_SEGMENT);
+            f.in_flight = f.in_flight.saturating_sub(len);
             f.retx.insert(seq);
-            c.resend.insert(seq);
+            c.resend.insert(seq, frames);
             if f.recovery.is_none() && f.loss_high.is_none() {
                 f.enter_recovery();
                 f.reduction(MSS as usize, false, true);
             } else {
-                f.lost_in_recovery(CROSS_SEGMENT);
+                f.lost_in_recovery(len);
             }
         }
         if self.tcp_trace.is_some() {
             if !was {
-                self.traced_cross(t, i, "rec", seq);
+                self.traced_cross(t, i, "rec", seq, len);
             }
-            self.traced_cross(t, i, "lost", seq);
+            self.traced_cross(t, i, "lost", seq, len);
         }
         self.cross_pump(t, i);
     }
@@ -1856,52 +1982,95 @@ impl Scheduler {
                 return;
             };
             let f = &mut c.flow;
-            if at < c.start || at >= c.stop || f.holds(CROSS_SEGMENT) {
+            // A segment's sequence number is its first frame's: a resent
+            // tail goes alone.
+            let (seq, frames) = match c.resend.first_key_value() {
+                Some((&s, &n)) => (s, n),
+                None => (f.sent_end, CROSS_FRAMES),
+            };
+            let len = frames as usize * MSS as usize;
+            if at < c.start || at >= c.stop || f.holds(len) {
                 return;
             }
+            if c.resend.remove(&seq).is_none() {
+                f.sent_end += u64::from(frames);
+            }
             let (host, rtt) = (c.host, c.rtt);
-            let seq = match c.resend.pop_first() {
-                Some(s) => s,
-                None => {
-                    f.sent_end += 1;
-                    f.sent_end - 1
-                }
-            };
             let resent = f.retx.contains(&seq);
-            f.recovery_sent(CROSS_SEGMENT);
-            f.sent(at, CROSS_SEGMENT, f.srtt.max(rtt));
+            f.recovery_sent(len);
+            f.sent(at, len, f.srtt.max(rtt));
             f.sent_at.insert(seq, at);
-            self.traced_cross(at, i, if resent { "rtx" } else { "tx" }, seq);
+            self.traced_cross(at, i, if resent { "rtx" } else { "tx" }, seq, len);
             let id = self.next;
             self.next += 1;
             let wait = self.net.up_backlog(host, at);
-            let charged = self.net.up_charge(host, CROSS_WIRE, 2);
-            if overflows(wait, tx_time(charged, self.net.up_rate(host, at)), cap) {
+            let rate = self.net.up_rate(host, at);
+            let framing = self.net.up_framing(host);
+            // The queue takes the leading frames that fit, a frame at a
+            // time, and drops the rest.
+            let mut took = 0;
+            while took < frames
+                && !overflows(
+                    wait,
+                    tx_time(framing.packet(CROSS_FRAME) * (took as usize + 1), rate),
+                    cap,
+                )
+            {
+                took += 1;
+            }
+            if took < frames {
                 if let Some(d) = self.cross_drops.get_mut(host) {
                     *d += 1;
                 }
-                self.traced_cross(at, i, "drop", seq);
-                self.events
-                    .insert((at + rtt + wait, id), Event::CrossLost { i, seq });
-                continue;
+                if let Some(d) = self.cross_drop_packets.get_mut(host) {
+                    *d += u64::from(frames - took);
+                }
+                let tail = seq + u64::from(took);
+                if let Some(c) = self.cross.get_mut(i) {
+                    // The tail is a segment of its own from now on.
+                    c.flow.sent_at.insert(tail, at);
+                }
+                self.traced_cross(at, i, "drop", tail, (frames - took) as usize * MSS as usize);
+                self.events.insert(
+                    (at + rtt + wait, id),
+                    Event::CrossLost {
+                        i,
+                        seq: tail,
+                        frames: frames - took,
+                    },
+                );
+                if took == 0 {
+                    continue;
+                }
             }
-            let depart = self.net.occupy_up(at, host, CROSS_WIRE, 2);
+            let wire = took as usize * CROSS_FRAME;
+            let depart = self.net.occupy_up(at, host, wire, took);
             if let Some(b) = self.cross_bytes.get_mut(host) {
-                *b += CROSS_WIRE as u64;
+                *b += wire as u64;
             }
-            if self.net.lost_off_net(depart, host, 2) {
-                self.events
-                    .insert((depart + rtt, id), Event::CrossLost { i, seq });
+            let id = self.next;
+            self.next += 1;
+            if self.net.lost_off_net(depart, host, took) {
+                self.events.insert(
+                    (depart + rtt, id),
+                    Event::CrossLost {
+                        i,
+                        seq,
+                        frames: took,
+                    },
+                );
                 continue;
             }
-            // Its two packets are more than the receiver's rcv_mss, which
-            // acknowledges them at once (`ack::Owed`).
+            // Two packets are more than the receiver's rcv_mss, which
+            // acknowledges them at once (`ack::Owed`); a lone one goes with
+            // the next to come, or fills a hole.
             let ack = depart + rtt;
             self.events.insert(
                 (ack, id),
                 Event::CrossAck {
                     i,
                     seq,
+                    frames: took,
                     rtt: ack - at,
                 },
             );
@@ -1930,12 +2099,16 @@ impl Scheduler {
                         f.pending.pop_front();
                         continue;
                     };
+                    let len = f.outstanding(seq, len);
                     // Retransmissions first, all within the window.
                     if f.holds(len) {
                         f.held = true;
                         return false;
                     }
                     f.pending.pop_front();
+                    if let Some(t) = f.tails.get_mut(&seq) {
+                        t.resent = true;
+                    }
                     f.recovery_sent(len);
                     f.sent(at, len, f.srtt.max(rtt));
                     f.sent_end = f.sent_end.max(seq + 1);
@@ -1959,33 +2132,100 @@ impl Scheduler {
         let Some(r) = self.records.get(&id) else {
             return;
         };
-        let (from, to, wire, packets, conn) = (r.from, r.to, r.wire, r.packets, (r.src, r.dst));
-        let (seq, len) = match r.what {
+        let (from, to, conn) = (r.from, r.to, (r.src, r.dst));
+        let (seq, full) = match r.what {
             What::Data { seq, len } => (seq, len),
             _ => (0, 0),
+        };
+        // A tail the queue dropped goes again alone.
+        let tail = self
+            .flows
+            .get(&conn)
+            .and_then(|f| f.tails.get(&seq))
+            .map(|t| t.tail);
+        let (len, (wire, packets)) = match tail {
+            Some(t) => (t, tcp_wire(t)),
+            None => (full, (r.wire, r.packets)),
         };
         // A segment's bytes leave its socket's unsent count once, as it
         // first goes out; its retransmissions were never unsent again.
         let resent = self.flows.get(&conn).is_some_and(|f| f.retx.contains(&seq));
         if self.buffers.is_some() && !resent {
-            self.admits.insert((at, id), (conn, len));
+            self.admits.insert((at, id), (conn, full));
         }
         self.traced(at, conn, if resent { "rtx" } else { "tx" }, seq, len);
         let wait = self.net.up_backlog(from, at);
+        let rate = self.net.up_rate(from, at);
         let charged = self.net.up_charge(from, wire, packets);
-        if overflows(wait, tx_time(charged, self.net.up_rate(from, at)), cap) {
-            self.traced(at, conn, "drop", seq, len);
+        if overflows(wait, tx_time(charged, rate), cap) {
+            // The queue takes the leading frames that fit, a frame at a
+            // time, and drops the rest.
+            let framing = self.net.up_framing(from);
+            let (mut took, mut head_wire, mut charge) = (0u32, 0, 0);
+            for ip in strims_wan::framing::frames(wire, packets) {
+                charge += framing.packet(ip);
+                if took + 1 >= packets || overflows(wait, tx_time(charge, rate), cap) {
+                    break;
+                }
+                took += 1;
+                head_wire += ip;
+            }
+            let head = (took as usize * MSS as usize).min(len);
+            self.traced(at, conn, "drop", seq, len - head);
             if let Some(d) = self.drops.get_mut(from) {
                 *d += 1;
             }
             if let Some(d) = self.drop_packets.get_mut(from) {
-                *d += u64::from(packets);
+                *d += u64::from(packets - took);
             }
+            if took == 0 {
+                self.dropped(at, conn, seq, id);
+                return;
+            }
+            let t = self
+                .net
+                .send(at, from, to, head_wire, took, Carrier::Stream);
+            // What went out of the segment: its tail goes again as a resend.
+            self.sent(from, if resent { 0 } else { head });
+            if resent {
+                let head_charge = self.net.up_charge(from, head_wire, took);
+                self.resent(from, head_charge);
+            }
+            let f = self.flows.entry(conn).or_default();
+            if t.retransmit > Duration::ZERO {
+                // The head lost on the path too: the segment is lost whole.
+                f.tails.remove(&seq);
+                self.dropped(at, conn, seq, id);
+                return;
+            }
+            f.tails.insert(
+                seq,
+                Tail {
+                    head,
+                    tail: len - head,
+                    resent: false,
+                },
+            );
             self.dropped(at, conn, seq, id);
+            self.piggyback(conn, at, t.arrival);
+            let key = self.next;
+            self.next += 1;
+            self.events.insert(
+                (t.arrival, key),
+                Event::Head {
+                    conn,
+                    to,
+                    seq,
+                    len: head,
+                    packets: took,
+                    wire: head_wire,
+                    through: false,
+                },
+            );
             return;
         }
         let t = self.net.send(at, from, to, wire, packets, Carrier::Stream);
-        self.sent(from, if resent { 0 } else { len });
+        self.sent(from, if resent { 0 } else { full });
         if resent {
             self.resent(from, charged);
         }
@@ -2534,7 +2774,7 @@ impl Scheduler {
 
     /// Traces `what` of competing upload `i`'s segment `seq` at `t`, its
     /// sink as host `names.len() + i`.
-    fn traced_cross(&mut self, t: Time, i: usize, what: &'static str, seq: u64) {
+    fn traced_cross(&mut self, t: Time, i: usize, what: &'static str, seq: u64, len: usize) {
         let Some(tr) = self.tcp_trace.as_mut() else {
             return;
         };
@@ -2547,7 +2787,7 @@ impl Scheduler {
             to: self.names.len() + i,
             what,
             seq,
-            len: CROSS_SEGMENT,
+            len,
             cwnd: c.flow.cwnd,
             ssthresh: c.flow.ssthresh,
             in_flight: c.flow.in_flight,
@@ -2652,6 +2892,11 @@ impl Scheduler {
                         ack_waits: self.ack_waits.get(h).cloned().unwrap_or_default(),
                         app_bytes: self.app_bytes.get(h).copied().unwrap_or(0),
                         competing_drops: self.cross_drops.get(h).copied().unwrap_or(0),
+                        competing_drop_packets: self
+                            .cross_drop_packets
+                            .get(h)
+                            .copied()
+                            .unwrap_or(0),
                         competing_cwnd: self.cross_cwnd.get(h).cloned().unwrap_or_default(),
                     })
                 })
