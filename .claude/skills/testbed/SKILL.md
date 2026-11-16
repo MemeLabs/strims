@@ -18,14 +18,22 @@ that matters, and run few times.
 The header of `hack/testbed/run.sh` is the reference: every setting,
 what lands in the out dir, and the images.
 
-    cargo build --release -p strims-sim --example testbed_node
+    cargo build --release -p strims-sim --example testbed_node \
+      && hack/testbed/stamp.py write target/release/examples/testbed_node
     cargo build --release -p strims-testbed --example testbed_browser
-    pnpm exec webpack --mode production --env TARGET=wasm-testbed
+    pnpm exec webpack --mode production --env TARGET=wasm-testbed \
+      && hack/testbed/stamp.py write dist/wasm-testbed
     VIEWERS=3 SECS=90 hack/testbed/run.sh target/testbed/OUT
     KINDS="native chromium chromium firefox" BROWSER_LINKS=webrtc hack/testbed/run.sh target/testbed/OUT
 
 The first line builds the native node, and the next two the browser
-nodes' harness and their page (dist/wasm-testbed).
+nodes' harness and their page (dist/wasm-testbed). `stamp.py write`
+records beside each the hash of the sources the node and the page share
+(hack/testbed/stamp.py's doc), and a run with browsers refuses a page
+whose stamp isn't the node's, or an unstamped or since rebuilt artifact:
+one from other sources may not speak the node's protocol (links come up,
+no stream flows). A worktree whose shared crates differ from the page's
+builds its own.
 
 - **One testbed per Docker host at a time.** The container names
   (tb-*), the network and its subnet are fixed. Check

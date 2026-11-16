@@ -122,7 +122,9 @@
 #   NODE_BIN=<path>        the testbed_node binary (default
 #                          target/release/examples/testbed_node), built by
 #                          `cargo build --release -p strims-sim --example
-#                          testbed_node`
+#                          testbed_node && hack/testbed/stamp.py write
+#                          target/release/examples/testbed_node`, which
+#                          writes its stamp beside it
 #   RATE=<bytes/s>         the stream's rate, at every node (default
 #                          strims-testbed's RATE, 256 KiB/s)
 #   MEDIA=<flv file>       the seed streams the file's H.264 and AAC in the
@@ -167,10 +169,18 @@
 #   RELAY=0                no relay, for a harness that makes its nodes'
 #                          links itself (the bare bench's, bench.sh)
 #   WEB_BUNDLE=<dir>       the browsers' page (default dist/wasm-testbed),
-#                          built by `npx webpack --mode production --env
-#                          TARGET=wasm-testbed` (node_modules, the pinned
-#                          wasm-bindgen-cli and the wasm32 target); the
-#                          harness checks it holds its page
+#                          built by `pnpm exec webpack --mode production
+#                          --env TARGET=wasm-testbed &&
+#                          hack/testbed/stamp.py write dist/wasm-testbed`
+#                          (node_modules, the pinned wasm-bindgen-cli and
+#                          the wasm32 target); the harness checks it holds
+#                          its page. A run with browsers needs it and
+#                          NODE_BIN stamped from one checkout's sources
+#                          (stamp.py): a page from other sources may not
+#                          speak the node's protocol (links come up, no
+#                          stream flows), and run.sh refuses it, or an
+#                          artifact without a stamp or rebuilt since,
+#                          saying how to rebuild
 #
 # Writes to <out dir>: topology, node-<i>.jsonl (a JSON line per second
 # from each node, strims-testbed's node module; a browser's adds post_ms
@@ -329,6 +339,7 @@ if [ "$browsers" = 1 ]; then
   [ -x "$browser_bin" ] || { echo "no testbed_browser at $browser_bin" >&2; exit 1; }
   [ -d "$web" ] || { echo "no web bundle at $web" >&2; exit 1; }
   web=$(cd "$web" && pwd)
+  python3 "$root/hack/testbed/stamp.py" check "$bin" "$web" || exit 1
   docker build -q -t "$browser_image" -f "$root/hack/testbed/browser.Dockerfile" \
     "$root/hack/testbed" >/dev/null
   # Written by the nodes, whatever user each runs as.

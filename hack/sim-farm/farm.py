@@ -392,7 +392,9 @@ CARGO_INCREMENTAL (above; in target/, an arm's build would also replace
 the example run.sh finds by default), and STRIMS_ROOT at this checkout.
 It packs the worktree's hack/testbed and each artifact (a file or a
 directory at a path in the worktree, where $VAR and ${VAR} take the
-build's environment) into the arm's bundle,
+build's environment), with its stamp (artifacts/<VAR>.stamp, from the
+arm's hack/testbed/stamp.py where it has one, which run.sh checks before
+a run with browsers), into the arm's bundle,
 target/sim-farm/bin/testbed-<hash>.tar.gz, which
 hashes the arm's source, the commands and the artifacts. A host runs
 run.sh from the bundle's hack/testbed with each artifact's variable set
@@ -1569,14 +1571,24 @@ def build_testbed(matrix: Matrix) -> None:
                     sys.exit(f"building {arm} ({commit[:12]}): `{cmd}` failed")
             if not (src / TESTBED).is_dir():
                 sys.exit(f"{arm} ({commit[:12]}) has no {TESTBED}")
+            paths = {var: src / expand(spec, env) for var, spec in sorted(matrix.artifacts.items())}
+            for var, path in paths.items():
+                if not path.exists():
+                    sys.exit(f"building {arm} ({commit[:12]}): no artifact {var} at {path}")
+            # Each artifact's stamp beside it, from the arm's own stamp.py.
+            stamp = src / TESTBED / "stamp.py"
+            stamped = stamp.is_file() and bool(paths)
+            if stamped and subprocess.run(
+                ["python3", str(stamp), "write", *map(str, paths.values())], cwd=src, env=env,
+            ).returncode:
+                sys.exit(f"building {arm} ({commit[:12]}): {TESTBED}/stamp.py write failed")
             tmp = out.with_name(out.name + ".tmp")
             with tarfile.open(tmp, "w:gz", dereference=True) as tar:
                 tar.add(src / TESTBED, arcname=TESTBED)
-                for var, spec in sorted(matrix.artifacts.items()):
-                    path = src / expand(spec, env)
-                    if not path.exists():
-                        sys.exit(f"building {arm} ({commit[:12]}): no artifact {var} at {path}")
+                for var, path in paths.items():
                     tar.add(path, arcname=f"artifacts/{var}")
+                    if stamped:
+                        tar.add(f"{os.path.normpath(path)}.stamp", arcname=f"artifacts/{var}.stamp")
             os.replace(tmp, out)
         log(f"packed {arm} as {out.name} ({out.stat().st_size / 1e6:.1f} MB)")
 
@@ -1980,7 +1992,7 @@ def link_check(testbeds: dict[str, Path]) -> str:
         env = dict(os.environ)
         arts = root / "artifacts"
         if arts.is_dir():
-            env.update({a.name: str(a) for a in arts.iterdir()})
+            env.update({a.name: str(a) for a in arts.iterdir() if a.suffix != ".stamp"})
         p = subprocess.run(["bash", str(script)], capture_output=True, text=True, env=env)
         if p.returncode:
             sys.exit(f"{label}: {TESTBED}/linkcheck.sh failed: {p.stderr.strip()}")

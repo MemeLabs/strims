@@ -49,7 +49,8 @@ which takes it as an interruption.
 A testbed job (kind "testbed") runs hack/testbed/run.sh from its bundle,
 a tarball in D/bin/ extracted once into D/trees/, as `run.sh
 D/work/<id>/out`, with the job's environment, each of the bundle's
-artifacts/<VAR> as $VAR, and each of the job's files (in D/bin/) as its
+artifacts/<VAR> as $VAR (its stamp, <VAR>.stamp, run.sh's to read),
+and each of the job's files (in D/bin/) as its
 variable. It starts once no container named tb-* is running: run.sh's
 names are fixed, so two testbeds on one Docker host take each other's
 containers. A timed-out run's containers, which outlive it, are removed.
@@ -765,7 +766,8 @@ def testbed_run(root: Path, job: dict, work: Path) -> tuple[list[str], dict[str,
     }
     arts = tree / "artifacts"
     if arts.is_dir():
-        env.update({a.name: str(a) for a in arts.iterdir()})
+        # A <VAR>.stamp beside an artifact is its stamp, for run.sh.
+        env.update({a.name: str(a) for a in arts.iterdir() if a.suffix != ".stamp"})
     env.update({var: str(root / "bin" / name) for var, name in job.get("files", {}).items()})
     return ["bash", str(tree / "hack" / "testbed" / "run.sh"), str(work / "out")], env
 
