@@ -134,9 +134,13 @@ a sizing decision rests on them.
   0.08 core, more than a native node; hack/testbed/tcsample.c (one process,
   rtnetlink, the same lines) 0.001. The cpu loop (date, sed and cat once a
   second) costs 0.012; read with bash's builtins and `read -t` it costs
-  nothing measurable. The seed's ss loop costs 0.024. With every node
-  sampled, count the tc loop in a host's `host_cores` until tcsample
-  replaces it.
+  nothing measurable. The seed's ss loop costs 0.025 at 1 Hz, most of it
+  the kernel walking its whole established hash (every network
+  namespace's) for the dump, which ss and a sock_diag dump pay alike:
+  hack/testbed/sssample.c dumps every 5th sample and asks for each known
+  socket by address in between, 0.004 (a socket opened since shows from
+  the next dump). With every node sampled, count the tc loop in a host's
+  `host_cores` until tcsample replaces it.
 
 ## The device lab
 
