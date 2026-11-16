@@ -65,7 +65,8 @@
 //! `run.sh`'s `COMPETE` runs them, on the testbed in `compete-<s>.json`),
 //! and a `{"ev":"drops",..}` line with the segments the window model lost
 //! to its full access queues, the connections' and the uploads', the pure
-//! acknowledgements and SACKs the node's uplink carried (`acks`), and its
+//! acknowledgements and SACKs the node's uplink carried (`acks`) and the
+//! bytes its link charged them (`ack_bytes`), and its
 //! TCP receivers' acknowledgements by why (`ack_now`, `ack_quick`,
 //! `ack_read`, `ack_timer`, `ack_data`: [`crate::ACK_WHYS`]) with the
 //! delayed ones' mean and p90 wait (`delack_mean_ms`, `delack_p90_ms`).
@@ -1221,12 +1222,13 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
             .collect();
         let waits = &h.ack_waits;
         l.push(format!(
-            r#"{{"ev":"drops","up_packets":{},"queue_drops":{},"queue_drop_packets":{},"competing_drops":{},"acks":{}{},"delack_mean_ms":{},"delack_p90_ms":{}}}"#,
+            r#"{{"ev":"drops","up_packets":{},"queue_drops":{},"queue_drop_packets":{},"competing_drops":{},"acks":{},"ack_bytes":{}{},"delack_mean_ms":{},"delack_p90_ms":{}}}"#,
             h.stats.up_bytes / 1500,
             h.queue_drops,
             h.queue_drop_packets,
             h.competing_drops,
             h.acks,
+            h.ack_bytes,
             whys.concat(),
             waits.mean_ms().map_or("null".to_owned(), |m| format!("{m:.2}")),
             waits
@@ -1467,6 +1469,37 @@ mod tests {
             "cable's burst took {cable} us"
         );
         assert!(tbf > 65_000, "tbf's burst took {tbf} us");
+    }
+
+    /// A pure ACK and a SACK cost what their link charges them: Ethernet's 14
+    /// bytes more a packet on a viewer that charges it for a TCP ACK, and
+    /// the same for a data channel's SACK, whose datagram carries those 14
+    /// bytes of its own where the link charges none.
+    #[test]
+    fn acknowledgements_count_their_links_charge() {
+        let per_ack = |settings: &str, topology: &str| {
+            let bench =
+                Bench::testbed(settings, topology, "burst 0 1 0 250 16384 16384", true).unwrap();
+            let logs = simulate(&bench).unwrap();
+            let line = logs[1]
+                .iter()
+                .find(|l| l.contains("\"ev\":\"drops\""))
+                .unwrap()
+                .to_owned();
+            let acks = field(&line, "acks").unwrap();
+            let bytes = field(&line, "ack_bytes").unwrap();
+            assert!(acks > 0, "{line}");
+            bytes as f64 / acks as f64
+        };
+        let tcp = "VIEWERS=1\nSECS=4";
+        let plain = per_ack(tcp, "");
+        let framed = per_ack(&format!("{tcp}\nVIEWER_LINK=tbf"), "");
+        assert!((framed - plain - 14.0).abs() < 1e-9, "{plain} {framed}");
+        let rtc = "VIEWERS=1\nSECS=4\nNODE_ARGS=--webrtc";
+        let topology = "node 0 10.77.0.10:4000\nnode 1 10.77.0.11:4000 chromium\nlink 0 1\n";
+        let plain = per_ack(rtc, topology);
+        let framed = per_ack(&format!("{rtc}\nVIEWER_LINK=tbf"), topology);
+        assert!((framed - plain).abs() < 1.0, "{plain} {framed}");
     }
 
     /// The same link from a Chromium node

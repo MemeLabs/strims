@@ -1128,7 +1128,11 @@ pub(crate) enum RowInt {
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
     /// handshakes; and in WAN mode `up_transport`, the transports' framing and
-    /// resends, and `up_acks`, pure ACKs and SACKs alone.
+    /// resends and the link framing of each packet a host's site charges
+    /// (`strims_wan::framing`: none at a site that charges IP bytes alone,
+    /// where a data channel's datagrams still carry Ethernet's 14 bytes of
+    /// their own), and `up_acks`, pure ACKs and SACKs alone, in the bytes their
+    /// links charge them.
     ///
     /// Unit: bytes.
     UpHostile,
@@ -1152,7 +1156,11 @@ pub(crate) enum RowInt {
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
     /// handshakes; and in WAN mode `up_transport`, the transports' framing and
-    /// resends, and `up_acks`, pure ACKs and SACKs alone.
+    /// resends and the link framing of each packet a host's site charges
+    /// (`strims_wan::framing`: none at a site that charges IP bytes alone,
+    /// where a data channel's datagrams still carry Ethernet's 14 bytes of
+    /// their own), and `up_acks`, pure ACKs and SACKs alone, in the bytes their
+    /// links charge them.
     ///
     /// Unit: bytes.
     UpPorts,
@@ -1181,7 +1189,11 @@ pub(crate) enum RowInt {
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
     /// handshakes; and in WAN mode `up_transport`, the transports' framing and
-    /// resends, and `up_acks`, pure ACKs and SACKs alone.
+    /// resends and the link framing of each packet a host's site charges
+    /// (`strims_wan::framing`: none at a site that charges IP bytes alone,
+    /// where a data channel's datagrams still carry Ethernet's 14 bytes of
+    /// their own), and `up_acks`, pure ACKs and SACKs alone, in the bytes their
+    /// links charge them.
     ///
     /// Unit: bytes.
     UpTransport,
@@ -1190,7 +1202,11 @@ pub(crate) enum RowInt {
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
     /// handshakes; and in WAN mode `up_transport`, the transports' framing and
-    /// resends, and `up_acks`, pure ACKs and SACKs alone.
+    /// resends and the link framing of each packet a host's site charges
+    /// (`strims_wan::framing`: none at a site that charges IP bytes alone,
+    /// where a data channel's datagrams still carry Ethernet's 14 bytes of
+    /// their own), and `up_acks`, pure ACKs and SACKs alone, in the bytes their
+    /// links charge them.
     ///
     /// Unit: bytes.
     UpVnic,
@@ -1199,7 +1215,11 @@ pub(crate) enum RowInt {
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
     /// handshakes; and in WAN mode `up_transport`, the transports' framing and
-    /// resends, and `up_acks`, pure ACKs and SACKs alone.
+    /// resends and the link framing of each packet a host's site charges
+    /// (`strims_wan::framing`: none at a site that charges IP bytes alone,
+    /// where a data channel's datagrams still carry Ethernet's 14 bytes of
+    /// their own), and `up_acks`, pure ACKs and SACKs alone, in the bytes their
+    /// links charge them.
     ///
     /// Unit: bytes.
     UpWire,
@@ -3272,9 +3292,10 @@ pub(crate) mod cols {
         /// their lower bound (never above the wait, at most a sixth under it
         /// below 46 s; empty without any). The window model's acknowledgements
         /// alone through a host's uplink, as `UP_COUNTERS` names them: TCP's
-        /// pure ACKs and the data channels' SACKs, packets and wire bytes of
-        /// each. The row's `packets_ack` and `up_acks` count both kinds, over
-        /// the whole run and every host.
+        /// pure ACKs and the data channels' SACKs, packets and the bytes their
+        /// links charge of each (their IP bytes, and their framing at a site
+        /// that charges it). The row's `packets_ack` and `up_acks` count both
+        /// kinds, over the whole run and every host.
         ///
         /// None is written as -1.
         WhoCounter(u16),
@@ -3779,9 +3800,10 @@ pub(crate) mod cols {
         /// their lower bound (never above the wait, at most a sixth under it
         /// below 46 s; empty without any). The window model's acknowledgements
         /// alone through a host's uplink, as `UP_COUNTERS` names them: TCP's
-        /// pure ACKs and the data channels' SACKs, packets and wire bytes of
-        /// each. The row's `packets_ack` and `up_acks` count both kinds, over
-        /// the whole run and every host.
+        /// pure ACKs and the data channels' SACKs, packets and the bytes their
+        /// links charge of each (their IP bytes, and their framing at a site
+        /// that charges it). The row's `packets_ack` and `up_acks` count both
+        /// kinds, over the whole run and every host.
         ///
         /// None is written as an empty field.
         Counter(u16),

@@ -525,8 +525,10 @@ pub struct WanHostReport {
     pub competing: Vec<(strims_base::time::Duration, u64)>,
     /// With the window model, the segments its connections lost to a full
     /// access queue, up or down, and the pure acknowledgements (SACKs alone
-    /// on a data channel) its uplink carried, with their wire bytes: they
-    /// take the uplink's time but aren't in `stats.up_bytes`. The tables'
+    /// on a data channel) its uplink carried, with the bytes its link
+    /// charged them (`Network::up_charge`): they take the uplink's time but
+    /// aren't in `stats.up_bytes`, which counts what the link charged the
+    /// rest. The tables'
     /// bins count the two kinds apart ([`crate::tables::ACK_COLS`]).
     pub queue_drops: u64,
     /// The packets of those segments, as a queue of frames (Linux's tbf

@@ -1136,7 +1136,7 @@ impl Scheduler {
             return;
         }
         let depart = self.net.occupy_up(t, to, wire, 1);
-        self.sack_sent(to, wire);
+        self.sack_sent(to, self.net.up_charge(to, wire, 1));
         let at = depart + self.net.one_way(to, from);
         self.sack_held(conn, sack, Some(at));
     }

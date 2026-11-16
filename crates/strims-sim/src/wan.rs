@@ -1369,8 +1369,9 @@ impl Scheduler {
             return;
         }
         self.ack_counted(to, a.why, a.wait);
-        let depart = self.net.occupy_up(t, to, tcp_wire(0).0, 1);
-        self.ack_sent(to, tcp_wire(0).0);
+        let ack = tcp_wire(0).0;
+        let depart = self.net.occupy_up(t, to, ack, 1);
+        self.ack_sent(to, self.net.up_charge(to, ack, 1));
         self.acked_at(depart + self.net.one_way(to, from), conn, a.pieces);
     }
 
@@ -2129,7 +2130,9 @@ impl Scheduler {
         }
     }
 
-    /// `h`'s uplink carried an acknowledgement alone of `wire` bytes.
+    /// `h`'s uplink carried an acknowledgement alone that its link charged
+    /// `wire` bytes ([`Network::up_charge`]: its IP bytes, and its framing
+    /// at a site that charges it).
     fn ack_sent(&mut self, h: usize, wire: usize) {
         if let (Some(n), Some(b)) = (self.acks.get_mut(h), self.ack_bytes.get_mut(h)) {
             *n += 1;
@@ -2137,8 +2140,9 @@ impl Scheduler {
         }
     }
 
-    /// `h`'s uplink carried a SACK alone of `wire` bytes: an
-    /// acknowledgement ([`Scheduler::ack_sent`]) the tables tell apart.
+    /// `h`'s uplink carried a SACK alone that its link charged `wire`
+    /// bytes: an acknowledgement ([`Scheduler::ack_sent`]) the tables tell
+    /// apart.
     fn sack_sent(&mut self, h: usize, wire: usize) {
         self.ack_sent(h, wire);
         if let (Some(n), Some(b)) = (self.sacks.get_mut(h), self.sack_bytes.get_mut(h)) {
