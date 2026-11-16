@@ -496,6 +496,7 @@ add to it.
 """
 
 import argparse
+import base64
 import collections
 import concurrent.futures as cf
 import contextlib
@@ -503,6 +504,7 @@ import csv
 import dataclasses
 import datetime
 import fcntl
+import gzip
 import hashlib
 import itertools
 import json
@@ -1949,6 +1951,27 @@ def pools(region: str, slot_mem_gib: float, families: list[str], max_cores: int,
     ]
     out.sort(key=pool_order)
     return out
+
+
+# EC2's limit on an instance's user data, before its base64.
+USER_DATA_MAX = 16384
+
+
+def user_data(minutes: int, testbed: bool) -> str:
+    """The instances' boot script, user-data.sh, filled in: its lifetime,
+    whether the host runs testbeds, and hack/testbed/links.sh (gzipped,
+    base64), whose functions a testbed host's check builds each link
+    class's tree with."""
+    links = gzip.compress((HERE.parent / "testbed" / "links.sh").read_bytes(), mtime=0)
+    text = (
+        (HERE / "user-data.sh").read_text()
+        .replace("@MINUTES@", str(minutes))
+        .replace("@DOCKER@", "1" if testbed else "0")
+        .replace("@LINKS_GZ@", base64.encodebytes(links).decode().strip())
+    )
+    if len(text.encode()) > USER_DATA_MAX:
+        sys.exit(f"user-data.sh is {len(text.encode())} bytes filled in, past EC2's {USER_DATA_MAX}")
+    return text
 
 
 def launch(run: str, pool: Pool, region: Region, user_data: Path) -> str:
@@ -4026,10 +4049,7 @@ class Run:
         self.last_stuck = 0.0
         minutes = int(self.args.hours * 60)
         self.user_data = self.state / "user-data.sh"
-        self.user_data.write_text(
-            (HERE / "user-data.sh").read_text().replace("@MINUTES@", str(minutes))
-            .replace("@DOCKER@", "1" if self.testbed is not None else "0")
-        )
+        self.user_data.write_text(user_data(minutes, self.testbed is not None))
         if self.testbed is None:
             canary = self.ms[0].canary_job()
             self.canary_item = Item(canary, "canary")

@@ -200,15 +200,13 @@
 # per Docker host at a time.
 #
 # Needs Docker (the user's docker group) and the kernel modules the links
-# are shaped with: every run's sch_netem, sch_tbf, ifb, sch_ingress (eth0's
-# clsact), cls_matchall and act_mirred; the link classes' sch_pie (cable),
-# sch_fq_codel and sch_cake (router=), and sch_prio, sch_fq and cls_bpf
-# (trace); and SEED_LOSS_PCT's act_gact and cls_u32. If tc can't load
-# them, run once (hack/sim-farm/user-data.sh loads the same on a farm host)
+# are shaped with, which links.sh's link_modules lists (every run's netem,
+# tbf, ifb, clsact and redirect, SEED_LOSS_PCT's filter, and the link
+# classes' qdiscs and classifiers). If tc can't load them, run once (a farm
+# host's boot, hack/sim-farm/user-data.sh, loads them and builds each
+# class's tree with links.sh)
 #
-#   sudo modprobe -a sch_netem sch_tbf ifb sch_ingress cls_matchall \
-#       act_mirred sch_pie sch_fq_codel sch_cake sch_prio sch_fq cls_bpf \
-#       act_gact cls_u32
+#   sudo modprobe -a $(. hack/testbed/links.sh; link_modules)
 #
 # A trace link's container also
 # gets CAP_BPF and CAP_PERFMON, and run.sh builds tracelink

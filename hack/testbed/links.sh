@@ -15,6 +15,9 @@
 #       BASE_UP_MBIT, the rate it started at, to UP_MBIT
 #   link_files SPEC
 #       the host files the link reads, mounted at /links
+#   link_modules
+#       the kernel modules run.sh and the classes shape with, for a host to
+#       load (hack/sim-farm/user-data.sh does)
 #
 # The classes, each charging a packet what its link does past its IP bytes
 # (tc's size table over the 14 bytes of Ethernet header a qdisc counts,
@@ -219,4 +222,13 @@ link_files() {
   [ -z "$f" ] || echo "$f"
   d=$(link_opt "$spec" delay "")
   [ -z "$d" ] || echo "${d%@*}"
+}
+
+# Every run's: the delay's netem on an ifb behind eth0's clsact and its
+# matchall redirect, tbf, and SEED_LOSS_PCT's u32 match and gact. The
+# classes': cable's PIE, the routers' fq_codel and cake, and the trace's
+# prio, fq and tracelink's cls_bpf classifier.
+link_modules() {
+  echo "sch_netem sch_tbf ifb sch_ingress cls_matchall act_mirred cls_u32 act_gact" \
+    "sch_pie sch_fq_codel sch_cake sch_prio sch_fq cls_bpf"
 }

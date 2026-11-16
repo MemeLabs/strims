@@ -2,25 +2,58 @@
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
 #
-# The sim farm's instance boot (cloud-init user data; farm.py fills in the
-# lifetime, and whether the host runs testbeds). The instance terminates
-# when it shuts down, so the scheduled shutdown caps what a forgotten
-# instance costs. Background apt work would take cores from the jobs.
+# The sim farm's instance boot (cloud-init user data; farm.py's user_data
+# fills in the lifetime, whether the host runs testbeds, and
+# hack/testbed/links.sh). The instance terminates when it shuts down, so
+# the scheduled shutdown caps what a forgotten instance costs. Background
+# apt work would take cores from the jobs.
 #
 # A testbed host gets Docker, with the ubuntu user in its group, and the
-# kernel modules hack/testbed/run.sh and links.sh shape links with (run.sh's
-# header lists them), from linux-modules-extra if the kernel splits any
-# out. The trees they build are tried on a dummy device: run.sh's delay
-# ifb behind eth0's clsact redirect with cable's slots, its root tbf, the
-# link classes' roots (cable's size table, peak and DOCSIS-PIE, ADSL's
-# cells under a router's fq_codel, a router's cake, the trace's prio and
-# fq), the slow downlink's ingress redirect and SEED_LOSS_PCT's filter.
-# farm.py waits for farm/bin, which comes last; a failed setup leaves its
-# log in farm/host-failed instead.
+# kernel modules links.sh's link_modules lists, which the farm's image
+# (Ubuntu 26.04, linux-aws) has in its base modules package: a module that
+# doesn't load fails the host, named. Then each link class's tree is built
+# with links.sh's own functions, in a network namespace of its own whose
+# dummy eth0 stands for a node's: run.sh's delay ifb behind eth0's clsact
+# redirect (with the class's slots), link_root's modem (a trace's
+# tracelink left out, its tc lines kept), link_change's step, and on the
+# ingress SEED_LOSS_PCT's filter and the slow downlink's redirect. farm.py
+# waits for farm/bin, which comes last; a failed setup leaves its log in
+# farm/host-failed instead.
 
 shutdown -h +@MINUTES@
 systemctl disable --now unattended-upgrades.service apt-daily.timer apt-daily-upgrade.timer || true
 install -d -o ubuntu -g ubuntu /home/ubuntu/farm
+
+links=/root/farm-links.sh
+
+# One class's tree on the namespace's eth0, as run.sh builds a node's link.
+check_tree() {
+  local spec=$1 peak="" root
+  link_check "$spec"
+  [ "$(link_class "$spec")" = tbf ] && peak=100
+  ip link add eth0 type dummy
+  ip link set eth0 up
+  ip link add ifbd type ifb
+  ip link set ifbd up
+  tc qdisc add dev ifbd root netem delay 20ms$(link_slot "$spec") limit 100000
+  tc qdisc add dev eth0 clsact
+  tc filter add dev eth0 egress matchall action mirred egress redirect dev ifbd
+  root=$(link_root "$spec" 10 3028 125000 "$peak" 0 0)
+  [ -n "$root" ]
+  while read -r cmd; do
+    case $cmd in tc\ * | ip\ *) eval "$cmd" ;; esac
+  done <<< "$root"
+  if [ "$(link_class "$spec")" != trace ]; then
+    eval "$(link_change "$spec" 5 3028 62500 "$peak" 10)"
+  fi
+  tc filter add dev eth0 ingress prio 1 protocol ip u32 match ip src 10.77.0.10/32 \
+    action gact continue random netrand drop 100
+  ip link add ifbs type ifb
+  ip link set ifbs up
+  tc filter add dev eth0 ingress prio 2 matchall action mirred egress redirect dev ifbs
+  tc qdisc add dev ifbs root tbf rate 1000kbit burst 3028 limit 12500
+  tc qdisc show
+}
 
 testbed_host() {
   set -ex
@@ -29,42 +62,27 @@ testbed_host() {
   $apt update
   $apt install --no-install-recommends docker.io docker-buildx
   usermod -aG docker ubuntu
-  mods="sch_netem sch_tbf ifb sch_ingress cls_matchall act_mirred sch_pie sch_fq_codel sch_cake sch_prio sch_fq
-    cls_bpf act_gact cls_u32 dummy"
-  modprobe -a $mods || {
-    $apt install --no-install-recommends "linux-modules-extra-$(uname -r)"
-    modprobe -a $mods
-  }
-  ip link add farm-check type dummy
-  ip link set farm-check up
-  ip link add farm-ifb type ifb
-  ip link set farm-ifb up
-  tc qdisc add dev farm-ifb root netem delay 20ms slot 2ms 8ms limit 100000
-  tc qdisc add dev farm-check clsact
-  tc filter add dev farm-check egress matchall action mirred egress redirect dev farm-ifb
-  tc qdisc replace dev farm-check root handle 10: tbf rate 10000kbit burst 3028 limit 125000 peakrate 100mbit mtu 3028
-  tc qdisc del dev farm-check root
-  tc qdisc replace dev farm-check root handle 10: stab overhead 4 mpu 64 mtu 2048 tsize 2048 \
-    tbf rate 10000kbit burst 156250 limit 125000 peakrate 100mbit mtu 3028
-  tc qdisc add dev farm-check parent 10:1 handle 20: pie limit 10000 target 10ms tupdate 16ms
-  tc qdisc del dev farm-check root
-  tc qdisc replace dev farm-check root handle 10: stab linklayer atm overhead 26 mtu 2048 tsize 2048 \
-    tbf rate 9500kbit burst 1749 limit 125000
-  tc qdisc add dev farm-check parent 10:1 handle 20: fq_codel
-  tc qdisc del dev farm-check root
-  tc qdisc replace dev farm-check root handle 10: cake bandwidth 9500kbit docsis
-  tc qdisc del dev farm-check root
-  tc qdisc replace dev farm-check root handle 10: prio bands 2 priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
-  tc qdisc add dev farm-check parent 10:1 handle 20: fq nopacing limit 100000 flow_limit 100000 horizon 100s
-  ip link add farm-ifbs type ifb
-  ip link set farm-ifbs up
-  tc filter add dev farm-check ingress prio 1 protocol ip u32 match ip src 10.77.0.10/32 \
-    action gact continue random netrand drop 100
-  tc filter add dev farm-check ingress prio 2 matchall action mirred egress redirect dev farm-ifbs
-  tc qdisc add dev farm-ifbs root tbf rate 1000kbit burst 3028 limit 12500
-  ip link del farm-ifbs
-  ip link del farm-ifb
-  ip link del farm-check
+  base64 -d <<'LINKS_GZ' | gunzip > "$links"
+@LINKS_GZ@
+LINKS_GZ
+  # shellcheck source=hack/testbed/links.sh
+  source "$links"
+  local m missing=""
+  for m in $(link_modules) dummy; do
+    modprobe "$m" || missing="$missing $m"
+  done
+  if [ -n "$missing" ]; then
+    echo "kernel $(uname -r) can't load:$missing" >&2
+    return 1
+  fi
+  local spec
+  for spec in tbf tbf,slot=2-8 cable cable,aqm=fifo dsl dsl,line=vdsl fiber \
+    cable,router=fq_codel dsl,router=fq_codel cable,router=cake dsl,router=cake trace,file=up.mm; do
+    ip netns add farm-check
+    ip netns exec farm-check bash -ex -c "source $links; $(declare -f check_tree); check_tree '$spec'"
+    ip netns del farm-check
+    echo "link ok: $spec"
+  done
   docker info
 }
 
