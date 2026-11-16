@@ -206,11 +206,23 @@ fn small_bucket(site: &Site) -> Option<String> {
     })
 }
 
+/// `STRIMS_SIM_UPLINK_BURST=profiles`' bucket for `site`: its access
+/// kind's ([`Access::bucket`](strims_wan::Access::bucket)), at least its
+/// kind's largest frame (a cable link's 125 ms of a rate under about
+/// 0.1 Mbit/s is less than a DOCSIS frame).
+fn profile_bucket(site: &Site) -> Option<Bucket> {
+    site.access.bucket(site.profile.up).map(|b| Bucket {
+        bytes: b.bytes.max(site.access.framing().packet(1500) as u64),
+        ..b
+    })
+}
+
 /// Fails on a WAN host of `spec` whose bucket is smaller than its link's
-/// largest frame ([`small_bucket`]).
+/// largest frame ([`small_bucket`]); a host with a capacity schedule
+/// sends in its opportunities, its bucket unused, and passes.
 #[allow(clippy::panic)] // a knob's bucket the testbed refuses fails its test
 fn check_buckets(spec: &Scenario) {
-    for h in &spec.hosts {
+    for h in spec.hosts.iter().filter(|h| h.up_capacity.is_none()) {
         if let Some(e) = h.site.and_then(|s| small_bucket(&s)) {
             panic!(
                 "{}: {e} (STRIMS_SIM_UPLINK_BURST, STRIMS_SIM_FRAMING)",
@@ -781,7 +793,7 @@ fn sweep_seeds(
                 let bucket = match burst {
                     UplinkBurst::Off => None,
                     UplinkBurst::Bytes(b) => Some(Bucket::of(b)),
-                    UplinkBurst::Profiles => site.access.bucket(site.profile.up),
+                    UplinkBurst::Profiles => profile_bucket(site),
                 };
                 *site = site.with_bucket(bucket);
             }
@@ -1067,6 +1079,33 @@ mod tests {
         assert_eq!(small_bucket(&site(1518, Framing::DOCSIS)), None);
         assert!(small_bucket(&site(MIN_BURST, Framing::ADSL_PPPOE)).is_some());
         assert_eq!(small_bucket(&site(1749, Framing::ADSL_PPPOE)), None);
+        // A host that sends in a capacity schedule's opportunities has no
+        // use for its bucket.
+        let mut spec = Scenario::new("buckets");
+        let h = spec.host_at("a", site(MIN_BURST, Framing::ADSL_PPPOE));
+        let cap = strims_wan::capacity::Capacity::mahimahi("1\n", 1514, 1.0).unwrap();
+        if let Some(host) = spec.hosts.get_mut(h) {
+            host.up_capacity = Some(std::sync::Arc::new(cap));
+        }
+        check_buckets(&spec);
+        // The profiles' cable bucket holds a DOCSIS frame at any rate.
+        let cable = Site::new(strims_wan::City::Chicago, strims_wan::Access::Cable).with_up(6_250);
+        assert_eq!(profile_bucket(&cable).map(|b| b.bytes), Some(1518));
+        let fast = cable.with_up(1_250_000);
+        assert_eq!(profile_bucket(&fast).map(|b| b.bytes), Some(156_250));
+    }
+
+    #[test]
+    #[should_panic(expected = "less than its link's largest frame")]
+    fn a_bucket_under_a_frame_fails_the_run() {
+        let mut spec = Scenario::new("buckets");
+        spec.host_at(
+            "a",
+            Site::new(strims_wan::City::Chicago, strims_wan::Access::Dsl)
+                .with_bucket(Some(Bucket::of(MIN_BURST)))
+                .with_framing(strims_wan::framing::Framing::DOCSIS),
+        );
+        check_buckets(&spec);
     }
 
     #[test]
