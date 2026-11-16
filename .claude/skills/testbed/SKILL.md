@@ -69,17 +69,24 @@ builds its own.
 - **Into the lake.** `simdb.py testbed OUT... --name NAME` writes each
   run's tables (strims-sim's `testbed_tables` example: `cargo build
   --release -p strims-sim --example testbed_tables`) and folds them into
-  the cache as source testbed/NAME, each run a job of sim `testbed` and of
-  its twin's cell (simlab.testbed). `simdb.py index` then takes them in.
-  The tables, the verdicts, the scoring macros and the views read a
-  testbed run as they read a sim run.
-- **The twin.** `simdb.py twin testbed/NAME --name NAME-twin --bin
+  the cache as source testbed/NAME, each run a job of sim `testbed`.
+  `simdb.py index` then takes them in, naming each run's cell by its
+  knobs (`<tier>:<cell>@<qdisc tree>`, else `tb-<hash>`), and the
+  tables, the verdicts, the scoring macros and the views read a testbed
+  run as they read a sim run. A run that didn't stream (a node without
+  lines or records, a viewer that read nothing) has no tables, and a run
+  stamped by uutils' late `date` keys apart (TESTBED_STAMPS=date).
+- **The twin.** `simdb.py twin 'testbed/NAME' --name NAME-twin --bin
   SCENARIOS --seeds 8` runs strims-sim's `calibration_star` with each
   cell's knobs (a scenarios test binary from `cargo test --release -p
-  strims-sim --test scenarios --no-run`). The macros `twin_runs_of` and
+  strims-sim --test scenarios --no-run`), its runs a side's from the
+  catalog (index first; `farm/RUN/%` for a farm run's, `--kind` and
+  `--side-arm` as testbed_side's). The macros `twin_runs_of` and
   `twin_fit_of` compare the two over the same tables (`simdb.py describe
-  twin_fit_of`), and `effects` scores one against the other, a testbed run
-  paired with the twin seed of its number. The bare TCP bench is
+  twin_fit_of`): a side is `testbed_side(SRC_LIKE, kind := ..., arm :=
+  ...)`, and twin_fit_of gives each cell's medians and the testbed runs'
+  place among the twin's seeds (b_quantile). `effects` scores one against
+  the other, a testbed run paired with the twin seed of its number. The bare TCP bench is
   `hack/testbed/bench.sh` with `benchsuite.py run` and `benchsuite.py
   score`, over the cases in hack/testbed/bench/.
 - **On the farm.** A `kind = "testbed"` matrix runs run.sh as a black box
@@ -87,7 +94,14 @@ builds its own.
   for each repeat. The sim-farm skill covers running one, and farm.py's
   docstring the matrix keys. The rows land in
   target/sim-farm/MATRIX/rows.jsonl and the out dirs in runs/;
-  `farm.py report MATRIX.toml` groups them.
+  `farm.py report MATRIX.toml` groups them. A matrix whose artifacts hold
+  `TABLES_BIN` (strims-sim's testbed_tables) has each run's tables folded
+  on its host and flushed to S3 as a sim job's are (the farm's S3 bucket
+  and permissions, as sim matrices' flushes take), so `simdb.py pull
+  --run MATRIX` brings a farm run into the cache, an experiment
+  `farm/RUN`. `simdb.py testbed-tier DIR` writes the testbed tier's
+  matrices (hack/sim-farm/matrices/testbed-tier: the tiers' cells the
+  testbed hosts, one a matrix, each repeat its own joins).
 
 ## Browser node costs
 

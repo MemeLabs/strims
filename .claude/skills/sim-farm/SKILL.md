@@ -7,7 +7,9 @@ description: "The sim farm (hack/sim-farm: strims-sim and testbed matrices on EC
 
 `hack/sim-farm/farm.py` runs matrices on EC2 spot instances: strims-sim
 sweeps (one seed a job, `STRIMS_SIM_SEED`) and testbed matrices
-(`kind = "testbed"`: the testbed skill). Its module docstring documents
+(`kind = "testbed"`: the testbed skill; with a `TABLES_BIN` artifact a
+testbed run's tables fold and flush to S3 as a sim job's do, and `simdb.py
+pull --run` takes them in). Its module docstring documents
 every key, flag and mechanism. The ppspp sim is a correctness harness:
 no matrix runs it, and its timings are never evidence.
 

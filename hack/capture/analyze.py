@@ -509,9 +509,26 @@ def line_env(r):
     return {**r.get("env", {}), "arm": r.get("arm", ""), "commit": r.get("commit", "")[:8], "test": r.get("test", "")}
 
 
+def not_testbed(p):
+    """Refuses a testbed run's out dir (run.sh's: node-<i>.jsonl), whose
+    verdicts and queueing scores are the lake's (`simdb.py testbed`, then
+    `index`), not these commands'."""
+    if p.is_dir() and (p / "node-0.jsonl").exists():
+        sys.exit(f"{p}: a testbed run's out dir: its verdicts and rows are the lake's "
+                 "(hack/sim-db/simdb.py testbed, then index)")
+
+
+def not_testbed_row(p, r):
+    """Refuses a testbed matrix's rows (`kind` testbed), as not_testbed."""
+    if r.get("kind") == "testbed":
+        sys.exit(f"{p}: a testbed matrix's runs: their verdicts and rows are the lake's "
+                 "(hack/sim-db/simdb.py pull --run, then index)")
+
+
 def runs(paths):
     """(label, env, row, series) per run in `paths` (see the module docs)."""
     for p in map(Path, paths):
+        not_testbed(p)
         if (index := index_of(p)) is not None:
             for r, row, s in index_rows(index):
                 yield r["id"], line_env(r), row, s
@@ -528,6 +545,7 @@ def runs(paths):
                     r = json.loads(line)
                 except ValueError:
                     continue  # a torn append's
+                not_testbed_row(p, r)
                 if "row" in r:
                     env = {
                         **r.get("env", {}),
@@ -555,6 +573,7 @@ DELAY_READINGS = (
 def delay_rows(paths):
     """(env, row) per run in `paths`."""
     for p in map(Path, paths):
+        not_testbed(p)
         if (index := index_of(p)) is not None:
             for r, row, _ in index_rows(index):
                 yield line_env(r), row
@@ -570,6 +589,7 @@ def delay_rows(paths):
                     r = json.loads(line)
                 except ValueError:
                     continue  # a torn append's
+                not_testbed_row(p, r)
                 if "row" in r:
                     env = {
                         **r.get("env", {}),
