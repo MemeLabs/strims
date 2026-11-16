@@ -666,6 +666,7 @@ impl Run {
             wan: Some(net.wan),
             wire_bins: net.bins,
             wire_unmeasured: net.unmeasured,
+            sockets: Vec::new(),
             parent_losses: Vec::new(),
             parent_changes,
             loops: None,
@@ -698,6 +699,10 @@ impl Run {
             path_latest_ms: o("path_latest_ms"),
             capacity: u("capacity")?,
             budget_capacity: by_swarm("budget_capacity"),
+            latest_floor_ms: by_swarm("latest_floor_ms")
+                .into_iter()
+                .map(|(s, f)| (s, u32::try_from(f).unwrap_or(u32::MAX)))
+                .collect(),
             children: by_swarm("children")
                 .into_iter()
                 .map(|(s, c)| (s, c as usize))
@@ -969,6 +974,7 @@ impl Network {
                 site,
                 stats: Default::default(),
                 up_queue: Vec::new(),
+                up_backlog: Vec::new(),
                 competing: Vec::new(),
                 competing_log: Vec::new(),
                 queue_drops: 0,

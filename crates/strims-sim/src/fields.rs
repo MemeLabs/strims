@@ -290,7 +290,7 @@ pub(crate) trait Column: Key {
 }
 
 /// The tables strims-sim writes zstd-compressed, `<name>.csv.zst`.
-pub(crate) const ZSTD: [&str; 7] = [
+pub(crate) const ZSTD: [&str; 9] = [
     "reads",
     "events",
     "node_bins",
@@ -298,6 +298,8 @@ pub(crate) const ZSTD: [&str; 7] = [
     "arrivals",
     "asks",
     "haves",
+    "peer_samples",
+    "sockets",
 ];
 
 /// The row's fields that hold an integer.
@@ -3438,6 +3440,24 @@ pub(crate) mod cols {
         ///
         /// None is written as -1.
         BudgetCapacity,
+        /// The seed's uplink queue at the bin's end, as the wait a byte joining
+        /// it would have (`WanHostReport::up_queue`, its latest sample at or
+        /// before the edge). The sim measures the wait (its uplink's model); a
+        /// testbed run derives it from its tbf's backlog over the tbf's nominal
+        /// rate, which charges each packet's IP length and its Ethernet header.
+        /// Empty outside WAN mode or before a sample.
+        ///
+        /// Unit: ms. None is written as an empty field.
+        SeedUpQueueMs,
+        /// The seed's uplink queue at the bin's end, in bytes
+        /// (`WanHostReport::up_backlog`, its latest sample at or before the
+        /// edge). A testbed run measures it (its tbf's backlog: each packet's
+        /// IP length and Ethernet header); the sim derives it as its measured
+        /// wait times its uplink's rate then. Empty outside WAN mode or before
+        /// a sample.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        SeedUpQueueBytes,
     }
 
     impl Bins {
@@ -3477,6 +3497,8 @@ pub(crate) mod cols {
                 Bins::SeedUpPackets => "seed_up_packets",
                 Bins::SeedSmallPackets => "seed_small_packets",
                 Bins::BudgetCapacity => "budget_capacity",
+                Bins::SeedUpQueueMs => "seed_up_queue_ms",
+                Bins::SeedUpQueueBytes => "seed_up_queue_bytes",
             }
         }
 
@@ -3539,7 +3561,9 @@ pub(crate) mod cols {
                 | Bins::SeedUpBytes
                 | Bins::SeedUpPackets
                 | Bins::SeedSmallPackets
-                | Bins::BudgetCapacity => Ty::Int,
+                | Bins::BudgetCapacity
+                | Bins::SeedUpQueueMs
+                | Bins::SeedUpQueueBytes => Ty::Int,
             }
         }
     }
@@ -3879,6 +3903,24 @@ pub(crate) mod cols {
         /// The window model's retransmission timeouts on the node's links in
         /// the bin.
         Rtos,
+        /// The node's uplink queue at the bin's end, as the wait a byte joining
+        /// it would have (`WanHostReport::up_queue`, its latest sample at or
+        /// before the edge): measured by the sim's uplink model, derived on the
+        /// testbed from the tbf's backlog over its nominal rate (IP length and
+        /// Ethernet header per packet). Empty outside WAN mode or before a
+        /// sample.
+        ///
+        /// Unit: ms. None is written as an empty field.
+        UpQueueMs,
+        /// The node's uplink queue at the bin's end, in bytes
+        /// (`WanHostReport::up_backlog`, its latest sample at or before the
+        /// edge): measured on the testbed (the tbf's backlog, IP length and
+        /// Ethernet header per packet), derived in the sim as its measured wait
+        /// times its uplink's rate then. Empty outside WAN mode or before a
+        /// sample.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        UpQueueBytes,
     }
 
     impl NodeBins {
@@ -3900,6 +3942,8 @@ pub(crate) mod cols {
                 NodeBins::SmallPackets => "small_packets",
                 NodeBins::WindowCuts => "window_cuts",
                 NodeBins::Rtos => "rtos",
+                NodeBins::UpQueueMs => "up_queue_ms",
+                NodeBins::UpQueueBytes => "up_queue_bytes",
             }
         }
 
@@ -3937,7 +3981,9 @@ pub(crate) mod cols {
                 | NodeBins::UpPackets
                 | NodeBins::SmallPackets
                 | NodeBins::WindowCuts
-                | NodeBins::Rtos => Ty::Int,
+                | NodeBins::Rtos
+                | NodeBins::UpQueueMs
+                | NodeBins::UpQueueBytes => Ty::Int,
             }
         }
     }
@@ -4019,6 +4065,118 @@ pub(crate) mod cols {
         ///
         /// Unit: bytes/s. None is written as an empty field.
         AvailBps,
+        /// The upload meter's write rate at the sample (`MeterSample::rate`,
+        /// `PushStats::upload_rate`): the bytes the node handed its links per
+        /// second over the meter's window, payload and framing as the runner
+        /// wrote them.
+        ///
+        /// Unit: bytes/s.
+        RateBps,
+        /// The share of the meter's window in which some peer had data queued
+        /// in the runner, in thousandths (`MeterSample::busy_permille`,
+        /// `PushStats::upload_busy_permille`).
+        BusyPermille,
+        /// The meter's queueing delay past the runner, from the driver's probes
+        /// of its links (`MeterSample::queue_delay_ms`,
+        /// `PushStats::upload_queue_delay`); empty with too few peers to read
+        /// one.
+        ///
+        /// Unit: ms. None is written as an empty field.
+        QueueDelayMs,
+        /// vnic's path measure over the node's links with a recent round trip:
+        /// how far each link's recent round trip stands above its base,
+        /// aggregated as the meter aggregates (`MeterSample::path_delay_ms`,
+        /// `strims_base::path::node_delays`); empty without such a link.
+        ///
+        /// Unit: ms. None is written as an empty field.
+        PathDelayMs,
+        /// How long the node's links' queued bytes take at their delivery
+        /// rates, aggregated as the meter aggregates
+        /// (`MeterSample::path_queued_ms`, `strims_base::path::node_delays`);
+        /// empty without a link that reads both.
+        ///
+        /// Unit: ms. None is written as an empty field.
+        PathQueuedMs,
+        /// How far the links' latest round trips stand above their bases
+        /// (`MeterSample::path_latest_ms`, `strims_base::path::latest_excess`):
+        /// the queue input the seed's budget and a relay's bound read; empty
+        /// without a fresh echo.
+        ///
+        /// Unit: ms. None is written as an empty field.
+        PathLatestMs,
+        /// The push subscriptions the node served in the first swarm at the
+        /// sample (`MeterSample::children`, `PushStats::children`); empty where
+        /// the node ran no hybrid swarm scheduler then.
+        ///
+        /// None is written as an empty field.
+        Children,
+        /// The STREAM_REQUESTs the node had answered, accepted or declined,
+        /// over its hybrid swarms since its incarnation started
+        /// (`MeterSample::requests_in`): cumulative.
+        RequestsIn,
+        /// Of `requests_in`, those the node declined (`MeterSample::rejected`):
+        /// cumulative over the incarnation.
+        Rejected,
+        /// The bytes the node's driver had handed its links since its
+        /// incarnation started (`MeterSample::bytes_written`,
+        /// `DriverMetrics::bytes_written`): every port's, before the
+        /// transports' framing.
+        ///
+        /// Unit: bytes.
+        BytesWritten,
+        /// The capacity reading an adaptive seed's latest allocation check
+        /// measured its first-swarm budget from
+        /// (`MeterSample::budget_capacity`, `PushStats::seed_budget_capacity`):
+        /// bounded by what it wrote lately; empty at a node that doesn't seed
+        /// adaptively and before the budget is measured.
+        ///
+        /// Unit: bytes/s. None is written as an empty field.
+        BudgetCapacityBps,
+        /// The latest floor the seed's latest allocation check read its
+        /// first-swarm budget's growth from (`MeterSample::latest_floor_ms`,
+        /// `PushStats::seed_latest_floor_ms`): the least latest excess of its
+        /// links over the second before the check, which sets the growth over
+        /// what it wrote lately; empty before the budget is measured, where the
+        /// check read no fresh round trips, and at other nodes.
+        ///
+        /// Unit: ms. None is written as an empty field.
+        LatestFloorMs,
+        /// The adaptive seed's budget in stream slots at the sample
+        /// (`SeedSample::budget`, `PushStats::seed_budget`): its latest state
+        /// change in the first swarm at or before the sample
+        /// (`RunnerReport::seed_changes`), zero until measured; empty at other
+        /// nodes.
+        ///
+        /// None is written as an empty field.
+        Budget,
+        /// The adaptive seed's copy window at the sample (`SeedSample::window`,
+        /// `PushStats::seed_window`), as of its latest state change in the
+        /// first swarm at or before it; empty at other nodes.
+        ///
+        /// None is written as an empty field.
+        Window,
+        /// The copies the adaptive seed had in effect at the sample
+        /// (`SeedSample::copies`, `PushStats::seed_copies`), as of its latest
+        /// state change in the first swarm at or before it; empty at other
+        /// nodes.
+        ///
+        /// None is written as an empty field.
+        Copies,
+        /// The most copies the adaptive seed's window opened before its budget
+        /// was measured (`SeedSample::first_wave`,
+        /// `PushStats::seed_first_wave`), as of its latest state change in the
+        /// first swarm at or before the sample; empty at other nodes.
+        ///
+        /// None is written as an empty field.
+        FirstWave,
+        /// The unbounded capacity reading that sized the adaptive seed's first
+        /// wave (`SeedSample::first_wave_capacity`,
+        /// `PushStats::seed_first_wave_capacity`), as of its latest state
+        /// change in the first swarm at or before the sample; empty at other
+        /// nodes.
+        ///
+        /// Unit: bytes/s. None is written as an empty field.
+        FirstWaveCapacityBps,
     }
 
     impl MeterSamples {
@@ -4030,6 +4188,23 @@ pub(crate) mod cols {
                 MeterSamples::Role => "role",
                 MeterSamples::CapacityBps => "capacity_bps",
                 MeterSamples::AvailBps => "avail_bps",
+                MeterSamples::RateBps => "rate_bps",
+                MeterSamples::BusyPermille => "busy_permille",
+                MeterSamples::QueueDelayMs => "queue_delay_ms",
+                MeterSamples::PathDelayMs => "path_delay_ms",
+                MeterSamples::PathQueuedMs => "path_queued_ms",
+                MeterSamples::PathLatestMs => "path_latest_ms",
+                MeterSamples::Children => "children",
+                MeterSamples::RequestsIn => "requests_in",
+                MeterSamples::Rejected => "rejected",
+                MeterSamples::BytesWritten => "bytes_written",
+                MeterSamples::BudgetCapacityBps => "budget_capacity_bps",
+                MeterSamples::LatestFloorMs => "latest_floor_ms",
+                MeterSamples::Budget => "budget",
+                MeterSamples::Window => "window",
+                MeterSamples::Copies => "copies",
+                MeterSamples::FirstWave => "first_wave",
+                MeterSamples::FirstWaveCapacityBps => "first_wave_capacity_bps",
             }
         }
     }
@@ -4050,7 +4225,24 @@ pub(crate) mod cols {
                 MeterSamples::TMs
                 | MeterSamples::Node
                 | MeterSamples::CapacityBps
-                | MeterSamples::AvailBps => Ty::Int,
+                | MeterSamples::AvailBps
+                | MeterSamples::RateBps
+                | MeterSamples::BusyPermille
+                | MeterSamples::QueueDelayMs
+                | MeterSamples::PathDelayMs
+                | MeterSamples::PathQueuedMs
+                | MeterSamples::PathLatestMs
+                | MeterSamples::Children
+                | MeterSamples::RequestsIn
+                | MeterSamples::Rejected
+                | MeterSamples::BytesWritten
+                | MeterSamples::BudgetCapacityBps
+                | MeterSamples::LatestFloorMs
+                | MeterSamples::Budget
+                | MeterSamples::Window
+                | MeterSamples::Copies
+                | MeterSamples::FirstWave
+                | MeterSamples::FirstWaveCapacityBps => Ty::Int,
                 MeterSamples::Role => Ty::Text,
             }
         }
@@ -4544,6 +4736,286 @@ pub(crate) mod cols {
                 | Haves::ChannelOpenMs
                 | Haves::PeerIncarnation => Ty::Int,
                 Haves::Honest | Haves::PeerHonest => Ty::Bool,
+            }
+        }
+    }
+
+    /// The `peer_samples` table's columns: a row per node, transfer sample and
+    /// peer: each peer's channel of the first swarm at each of the node's stats
+    /// samples.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum PeerSamples {
+        /// When the node's transfers were sampled, in ms from the stream's
+        /// start.
+        ///
+        /// Unit: ms.
+        TMs,
+        /// The sampling host, as `events` numbers hosts.
+        Node,
+        /// The host at the channel's other end, as `events` numbers hosts;
+        /// empty for one the node can't name.
+        ///
+        /// None is written as an empty field.
+        Peer,
+        /// Chunk data the node had written to the peer on the channel
+        /// (`PeerTransfer::sent`): cumulative.
+        ///
+        /// Unit: bytes.
+        SentBytes,
+        /// Chunk data the node had read from the peer on the channel
+        /// (`PeerTransfer::received`): cumulative.
+        ///
+        /// Unit: bytes.
+        ReceivedBytes,
+        /// REQUEST messages the peer had sent the node on the channel
+        /// (`PeerTransfer::requests_in`): cumulative.
+        RequestsIn,
+        /// REQUEST messages the node had sent the peer on the channel
+        /// (`PeerTransfer::requests_out`): cumulative.
+        RequestsOut,
+        /// Pushes waiting in the node's data queue toward the peer, every
+        /// swarm's (`PeerTransfer::queued`'s first, ppspp's
+        /// `PeerStats::queued_data`): live entries at the sample.
+        QueuedPush,
+        /// Request answers waiting in the node's data queue toward the peer,
+        /// every swarm's (`PeerTransfer::queued`'s second): live entries at the
+        /// sample.
+        QueuedAnswer,
+        /// The node's request window toward the peer, its cap on the bytes
+        /// requested and not yet received (`PeerTransfer::cwnd`), at the
+        /// sample; 0 without a scheduler.
+        ///
+        /// Unit: bytes.
+        CwndBytes,
+        /// The bytes the node had requested of the peer and not yet received
+        /// (`PeerTransfer::flight`), at the sample; 0 without a scheduler.
+        ///
+        /// Unit: bytes.
+        FlightBytes,
+        /// The round trip the node's request window reads toward the peer
+        /// (`PeerTransfer::rtt_ms`, the scheduler's mean), at the sample; 0
+        /// without a scheduler.
+        ///
+        /// Unit: ms.
+        RttMs,
+        /// The node's request timeout toward the peer (`PeerTransfer::cto_ms`),
+        /// at the sample; 0 without a scheduler.
+        ///
+        /// Unit: ms.
+        CtoMs,
+        /// The node's request deadlines outstanding toward the peer
+        /// (`PeerTransfer::pending`), at the sample.
+        Pending,
+    }
+
+    impl PeerSamples {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                PeerSamples::TMs => "t_ms",
+                PeerSamples::Node => "node",
+                PeerSamples::Peer => "peer",
+                PeerSamples::SentBytes => "sent_bytes",
+                PeerSamples::ReceivedBytes => "received_bytes",
+                PeerSamples::RequestsIn => "requests_in",
+                PeerSamples::RequestsOut => "requests_out",
+                PeerSamples::QueuedPush => "queued_push",
+                PeerSamples::QueuedAnswer => "queued_answer",
+                PeerSamples::CwndBytes => "cwnd_bytes",
+                PeerSamples::FlightBytes => "flight_bytes",
+                PeerSamples::RttMs => "rtt_ms",
+                PeerSamples::CtoMs => "cto_ms",
+                PeerSamples::Pending => "pending",
+            }
+        }
+    }
+
+    impl sealed::Sealed for PeerSamples {}
+
+    impl Key for PeerSamples {
+        fn name(self) -> &'static str {
+            PeerSamples::name(self)
+        }
+    }
+
+    impl Column for PeerSamples {
+        const TABLE: &'static str = "peer_samples";
+
+        fn ty(self) -> Ty {
+            match self {
+                PeerSamples::TMs
+                | PeerSamples::Node
+                | PeerSamples::Peer
+                | PeerSamples::SentBytes
+                | PeerSamples::ReceivedBytes
+                | PeerSamples::RequestsIn
+                | PeerSamples::RequestsOut
+                | PeerSamples::QueuedPush
+                | PeerSamples::QueuedAnswer
+                | PeerSamples::CwndBytes
+                | PeerSamples::FlightBytes
+                | PeerSamples::RttMs
+                | PeerSamples::CtoMs
+                | PeerSamples::Pending => Ty::Int,
+            }
+        }
+    }
+
+    /// The `sockets` table's columns: a row per TCP socket sample: one
+    /// established socket at one `ss` sample.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum Sockets {
+        /// When `ss` sampled the socket, in ms from the stream's start.
+        ///
+        /// Unit: ms.
+        TMs,
+        /// The node whose socket it is, as `events` numbers hosts.
+        Node,
+        /// The node at the socket's other end, as `events` numbers hosts; empty
+        /// for an address that isn't a node's (the relay, the competing
+        /// upload's sink).
+        ///
+        /// None is written as an empty field.
+        Peer,
+        /// The kernel's smoothed round trip of the socket (`ss`'s `rtt:` first
+        /// figure), in µs.
+        ///
+        /// Unit: us. None is written as an empty field.
+        RttUs,
+        /// The kernel's round trip variation of the socket (`ss`'s `rtt:`
+        /// second figure), in µs.
+        ///
+        /// Unit: us. None is written as an empty field.
+        RttvarUs,
+        /// The least round trip the kernel has seen on the socket (`ss`'s
+        /// `minrtt:`), in µs.
+        ///
+        /// Unit: us. None is written as an empty field.
+        MinRttUs,
+        /// The socket's congestion window in segments (`ss`'s `cwnd:`).
+        ///
+        /// None is written as an empty field.
+        CwndSegments,
+        /// The socket's slow start threshold in segments (`ss`'s `ssthresh:`);
+        /// empty before the window's first cut, when ss leaves it out.
+        ///
+        /// None is written as an empty field.
+        SsthreshSegments,
+        /// Payload bytes the socket has sent, retransmissions included (`ss`'s
+        /// `bytes_sent:`): cumulative.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        BytesSent,
+        /// Payload bytes its peer has acknowledged (`ss`'s `bytes_acked:`):
+        /// cumulative.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        BytesAcked,
+        /// Payload bytes the socket has received (`ss`'s `bytes_received:`):
+        /// cumulative.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        BytesReceived,
+        /// Bytes the node has written to the socket that the kernel hasn't sent
+        /// yet (`ss`'s `notsent:`), at the sample; empty when ss shows none.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        NotsentBytes,
+        /// Segments the socket has sent, pure acknowledgements and
+        /// retransmissions included (`ss`'s `segs_out:`): cumulative.
+        ///
+        /// None is written as an empty field.
+        SegsOut,
+        /// Segments the socket has received (`ss`'s `segs_in:`): cumulative.
+        ///
+        /// None is written as an empty field.
+        SegsIn,
+        /// Segments carrying data the socket has sent (`ss`'s
+        /// `data_segs_out:`): cumulative.
+        ///
+        /// None is written as an empty field.
+        DataSegsOut,
+        /// Segments carrying data the socket has received (`ss`'s
+        /// `data_segs_in:`): cumulative.
+        ///
+        /// None is written as an empty field.
+        DataSegsIn,
+        /// Segments the socket has retransmitted over its life (`ss`'s
+        /// `retrans:` total, the figure after the slash): cumulative.
+        ///
+        /// None is written as an empty field.
+        RetransSegments,
+        /// The kernel's estimate of the socket's delivery rate (`ss`'s
+        /// `delivery_rate`, in bits per second there), in bytes per second.
+        ///
+        /// Unit: bytes/s. None is written as an empty field.
+        DeliveryRateBps,
+        /// The rate the kernel paces the socket at (`ss`'s `pacing_rate`, in
+        /// bits per second there), in bytes per second.
+        ///
+        /// Unit: bytes/s. None is written as an empty field.
+        PacingRateBps,
+    }
+
+    impl Sockets {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                Sockets::TMs => "t_ms",
+                Sockets::Node => "node",
+                Sockets::Peer => "peer",
+                Sockets::RttUs => "rtt_us",
+                Sockets::RttvarUs => "rttvar_us",
+                Sockets::MinRttUs => "min_rtt_us",
+                Sockets::CwndSegments => "cwnd_segments",
+                Sockets::SsthreshSegments => "ssthresh_segments",
+                Sockets::BytesSent => "bytes_sent",
+                Sockets::BytesAcked => "bytes_acked",
+                Sockets::BytesReceived => "bytes_received",
+                Sockets::NotsentBytes => "notsent_bytes",
+                Sockets::SegsOut => "segs_out",
+                Sockets::SegsIn => "segs_in",
+                Sockets::DataSegsOut => "data_segs_out",
+                Sockets::DataSegsIn => "data_segs_in",
+                Sockets::RetransSegments => "retrans_segments",
+                Sockets::DeliveryRateBps => "delivery_rate_bps",
+                Sockets::PacingRateBps => "pacing_rate_bps",
+            }
+        }
+    }
+
+    impl sealed::Sealed for Sockets {}
+
+    impl Key for Sockets {
+        fn name(self) -> &'static str {
+            Sockets::name(self)
+        }
+    }
+
+    impl Column for Sockets {
+        const TABLE: &'static str = "sockets";
+
+        fn ty(self) -> Ty {
+            match self {
+                Sockets::TMs
+                | Sockets::Node
+                | Sockets::Peer
+                | Sockets::RttUs
+                | Sockets::RttvarUs
+                | Sockets::MinRttUs
+                | Sockets::CwndSegments
+                | Sockets::SsthreshSegments
+                | Sockets::BytesSent
+                | Sockets::BytesAcked
+                | Sockets::BytesReceived
+                | Sockets::NotsentBytes
+                | Sockets::SegsOut
+                | Sockets::SegsIn
+                | Sockets::DataSegsOut
+                | Sockets::DataSegsIn
+                | Sockets::RetransSegments
+                | Sockets::DeliveryRateBps
+                | Sockets::PacingRateBps => Ty::Int,
             }
         }
     }

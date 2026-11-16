@@ -5186,3 +5186,36 @@ fn the_seed_log_records_the_answer_rate_as_it_changes() {
         ]
     );
 }
+
+#[test]
+fn push_stats_carry_the_floor_the_seeds_budget_grew_from() {
+    let floor = |latest_floor| {
+        let mut f = adaptive_seed(4, 2);
+        let mut q = MockQueue::default();
+        let p = ready_channel(&mut f, &mut q);
+        for s in 0..4 {
+            f.sched
+                .handle_stream_request(p, s, Bin(0), Bin(0), now(), &mut q)
+                .unwrap();
+        }
+        let t = now() + Duration::from_secs(1);
+        publish(&mut f, now(), t);
+        f.sched.set_upload(push::UploadInfo {
+            rate: 900_000,
+            busy: 1.0,
+            latest_floor,
+            written_peak: 1_800_000.0,
+            ..Default::default()
+        });
+        f.sched.run_push(t, &mut q);
+        // Not measured yet: no floor read.
+        let before = f.sched.push_stats().seed_latest_floor_ms;
+        publish(&mut f, t, t + push::seed::ALLOC_MEASURE);
+        let t = t + push::seed::ALLOC_MEASURE;
+        f.sched.run_push(t, &mut q);
+        (before, f.sched.push_stats().seed_latest_floor_ms)
+    };
+    // The check reads the floor it was handed, none where it had none.
+    assert_eq!(floor(Some(Duration::from_millis(12))), (None, Some(12)));
+    assert_eq!(floor(None), (None, None));
+}

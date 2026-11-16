@@ -473,7 +473,13 @@ pub struct WanHostReport {
     pub site: Site,
     pub stats: EndStats,
     /// The uplink queue's wait every 100 ms: (time since the start, wait).
+    /// The sim's uplink model measures it; a testbed run derives it from its
+    /// tbf's backlog over the tbf's nominal rate ([`crate::testbed`]).
     pub up_queue: Vec<(strims_base::time::Duration, strims_base::time::Duration)>,
+    /// The uplink queue's bytes at the same samples: (time since the start,
+    /// bytes). A testbed run measures them (its tbf's backlog); the sim
+    /// derives them as the wait times the uplink's rate then.
+    pub up_backlog: Vec<(strims_base::time::Duration, u64)>,
     /// With competing uploads
     /// ([`HostSpec::competing`](crate::spec::HostSpec::competing)), the
     /// wire bytes they have sent, every 100 ms: (time since the start,
@@ -581,6 +587,9 @@ pub struct Report {
     /// measure, which the tables leave empty: none of a sim's, those a
     /// testbed run's captures can't tell ([`crate::testbed`]).
     pub wire_unmeasured: Vec<usize>,
+    /// A testbed run's TCP sockets, sample by sample ([`SocketSample`]):
+    /// empty in a sim run, whose tables then hold no `sockets`.
+    pub sockets: Vec<SocketSample>,
     /// With [`Scenario::departures`], every viewer's push parent that
     /// departed, in departure order.
     pub parent_losses: Vec<ParentLoss>,
@@ -604,6 +613,35 @@ pub struct Report {
     /// reached. The trace names each but the last; the tables read only
     /// the applied ones ([`Report::applied_faults`]).
     pub skipped_faults: Vec<usize>,
+}
+
+/// One TCP socket of a testbed node at one `ss` sample
+/// ([`Report::sockets`], the `sockets` table): when (run time), the node and
+/// the node at the other end (`None`: an address that isn't a node's), and
+/// what `ss -tin` reports of it, each `None` where it leaves the field out:
+/// round trips in µs, windows in segments, bytes and segments cumulative,
+/// rates in bytes per second (ss's bits per second over 8).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SocketSample {
+    pub t: Duration,
+    pub node: HostIx,
+    pub peer: Option<HostIx>,
+    pub rtt_us: Option<u64>,
+    pub rttvar_us: Option<u64>,
+    pub min_rtt_us: Option<u64>,
+    pub cwnd_segments: Option<u64>,
+    pub ssthresh_segments: Option<u64>,
+    pub bytes_sent: Option<u64>,
+    pub bytes_acked: Option<u64>,
+    pub bytes_received: Option<u64>,
+    pub notsent_bytes: Option<u64>,
+    pub segs_out: Option<u64>,
+    pub segs_in: Option<u64>,
+    pub data_segs_out: Option<u64>,
+    pub data_segs_in: Option<u64>,
+    pub retrans_segments: Option<u64>,
+    pub delivery_rate_bps: Option<u64>,
+    pub pacing_rate_bps: Option<u64>,
 }
 
 /// A change of `node`'s push parent of `stream` ([`Report::parent_changes`]):

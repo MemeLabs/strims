@@ -1144,6 +1144,13 @@ pub struct PushStats {
     /// measured. Not [`upload_capacity`](Self::upload_capacity), the relay
     /// reading.
     pub seed_budget_capacity: u64,
+    /// The latest floor (ms) the latest check read
+    /// `seed_budget_capacity`'s growth from: the least latest excess of the
+    /// seed's links over the last second (`UploadInfo::latest_floor`),
+    /// which sets the growth over what it wrote lately ([`SEED_GROWTH`]
+    /// while it reads no queue forming, less as one forms). `None` until
+    /// measured, and where the check read no fresh round trips.
+    pub seed_latest_floor_ms: Option<u64>,
     /// Channels, and those whose peer we ask for lazy HAVEs and those whose
     /// peer asked lazy HAVEs of us.
     pub pace_channels: usize,

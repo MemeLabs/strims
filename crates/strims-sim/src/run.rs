@@ -499,6 +499,7 @@ fn report(
         wan,
         wire_bins,
         wire_unmeasured: Vec::new(),
+        sockets: Vec::new(),
         parent_losses,
         parent_changes,
         loops,

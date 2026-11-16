@@ -326,6 +326,12 @@ fn a_run_with_tables_keeps_its_trace() {
             assert!(lines("forecast") > 1, "{name}: {ms} ms");
             budget_reading_is_the_budgets(&r, &d);
             meter_samples_say_what_they_are(&r, &d);
+            peer_samples_say_what_they_are(&r, &d);
+            queues_say_what_they_are(&r, &d);
+            assert!(
+                !d.join("sockets.csv.zst").exists() && !d.join("sockets.csv").exists(),
+                "{name}: a sim run writes no sockets"
+            );
             held_truth_meets_the_reads(&r, &d);
             request_logs_say_what_they_are(&r, &d);
             stalls_say_how_playout_went(&d);
@@ -1111,8 +1117,10 @@ fn seed_tables_say_what_the_seed_did(r: &strims_sim::Report, d: &Path) {
 /// before it read any; and while the stream is live each host's capacity
 /// ÷ its uplink (`avail_bps`) are the readings the row's `meter_seed_p*`
 /// and `meter_{pop}_p*` take over their window
-/// ([`strims_sim::Report::meter_series`]). Returns the seed's rows, each
-/// with its sample's time.
+/// ([`strims_sim::Report::meter_series`]). Each row holds its sample's
+/// other readings, and the seed's its state as of its last change at or
+/// before the sample (`RunnerReport::seed_changes`), which no viewer's
+/// row has. Returns the seed's rows, each with its sample's time.
 fn meter_samples_say_what_they_are(
     r: &strims_sim::Report,
     d: &Path,
@@ -1139,6 +1147,77 @@ fn meter_samples_say_what_they_are(
             assert_eq!(row["role"], role, "{at}");
             let capacity = (m.capacity > 0).then_some(m.capacity as i64);
             assert_eq!(int(&row, "capacity_bps"), capacity, "{at}");
+            let opt = |v: Option<u32>| v.map(i64::from);
+            assert_eq!(
+                [
+                    int(&row, "rate_bps"),
+                    int(&row, "busy_permille"),
+                    int(&row, "queue_delay_ms"),
+                    int(&row, "path_delay_ms"),
+                    int(&row, "path_queued_ms"),
+                    int(&row, "path_latest_ms"),
+                    int(&row, "children"),
+                    int(&row, "requests_in"),
+                    int(&row, "rejected"),
+                    int(&row, "bytes_written"),
+                ],
+                [
+                    Some(m.rate as i64),
+                    Some(i64::from(m.busy_permille)),
+                    opt(m.queue_delay_ms),
+                    opt(m.path_delay_ms),
+                    opt(m.path_queued_ms),
+                    opt(m.path_latest_ms),
+                    m.children.get(&0).map(|&c| c as i64),
+                    Some(i64::from(m.requests_in)),
+                    Some(i64::from(m.rejected)),
+                    Some(m.bytes_written as i64),
+                ],
+                "{at}"
+            );
+            assert!(int(&row, "busy_permille").unwrap() <= 1000, "{at}");
+            assert!(int(&row, "rejected") <= int(&row, "requests_in"), "{at}");
+            let budget_capacity = m.budget_capacity.get(&0).copied().filter(|&c| c > 0);
+            assert_eq!(
+                int(&row, "budget_capacity_bps"),
+                budget_capacity.map(|c| c as i64),
+                "{at}"
+            );
+            // A floor is read only where a budget was measured.
+            if int(&row, "latest_floor_ms").is_some() {
+                assert!(budget_capacity.is_some(), "{at}");
+            }
+            let state = r.hosts[h]
+                .runner
+                .seed_changes
+                .iter()
+                .rev()
+                .find(|(t, s, _)| *s == 0 && *t <= m.t)
+                .map(|(_, _, x)| *x);
+            assert_eq!(
+                [
+                    int(&row, "budget"),
+                    int(&row, "window"),
+                    int(&row, "copies"),
+                    int(&row, "first_wave"),
+                    int(&row, "first_wave_capacity_bps"),
+                ],
+                state.map_or([None; 5], |x| [
+                    Some(x.budget as i64),
+                    Some(x.window as i64),
+                    Some(x.copies as i64),
+                    Some(x.first_wave as i64),
+                    Some(x.first_wave_capacity as i64),
+                ]),
+                "{at}"
+            );
+            if h != swarm.seed {
+                assert_eq!(
+                    int(&row, "copies"),
+                    None,
+                    "{at}: a viewer has no seed state"
+                );
+            }
             if m.t <= swarm.stop
                 && let (Some(c), Some(a)) = (int(&row, "capacity_bps"), int(&row, "avail_bps"))
                 && a > 0
@@ -1161,6 +1240,103 @@ fn meter_samples_say_what_they_are(
     }
     assert!(rows.next().is_none(), "a row for no sample");
     seed
+}
+
+/// The `peer_samples` table against the run: a row for each peer of each
+/// of the seed's and the viewers' transfer samples from the stream's start
+/// (`HostReport::transfers`), in order, holding that channel's counters;
+/// a peer is never its own node, and what it reads back never exceeds what
+/// it asked for in flight.
+fn peer_samples_say_what_they_are(r: &strims_sim::Report, d: &Path) {
+    let swarm = &r.scenario.swarms[0];
+    let mut rows = table_rows(d, "peer_samples").into_iter();
+    let hosts = std::iter::once(swarm.seed)
+        .chain(r.viewers.iter().filter(|v| v.swarm == 0).map(|v| v.host));
+    let mut seen = 0;
+    for h in hosts {
+        for (t, _, x) in r.hosts[h]
+            .transfers
+            .iter()
+            .filter(|(t, s, _)| *s == 0 && *t >= swarm.start)
+        {
+            for p in &x.peers {
+                let row = rows.next().expect("a row for every peer of every sample");
+                let at = format!("host {h} at {t:?}");
+                assert_eq!(int(&row, "node"), Some(h as i64), "{at}");
+                let ms = (*t - swarm.start).as_millis() as i64;
+                assert_eq!(int(&row, "t_ms"), Some(ms), "{at}");
+                assert_eq!(int(&row, "peer"), p.peer.map(|p| p as i64), "{at}");
+                assert_ne!(int(&row, "peer"), Some(h as i64), "{at}: its own peer");
+                assert_eq!(
+                    [
+                        int(&row, "sent_bytes"),
+                        int(&row, "received_bytes"),
+                        int(&row, "requests_in"),
+                        int(&row, "requests_out"),
+                        int(&row, "queued_push"),
+                        int(&row, "queued_answer"),
+                        int(&row, "cwnd_bytes"),
+                        int(&row, "flight_bytes"),
+                        int(&row, "rtt_ms"),
+                        int(&row, "cto_ms"),
+                        int(&row, "pending"),
+                    ],
+                    [
+                        p.sent as i64,
+                        p.received as i64,
+                        p.requests_in as i64,
+                        p.requests_out as i64,
+                        p.queued[0] as i64,
+                        p.queued[1] as i64,
+                        p.cwnd,
+                        p.flight,
+                        p.rtt_ms as i64,
+                        p.cto_ms as i64,
+                        p.pending as i64,
+                    ]
+                    .map(Some),
+                    "{at}"
+                );
+                seen += 1;
+            }
+        }
+    }
+    assert!(rows.next().is_none(), "a row for no peer");
+    assert!(seen > 0, "the nodes' channels were sampled");
+}
+
+/// The uplink queues in `bins` and `node_bins`: the seed's in each bin is
+/// its node bin's, a reading has its wait and its bytes, a queue of no
+/// bytes has no wait (the sim's bytes are its wait at the uplink's rate),
+/// and in WAN mode the seed's queue is read.
+fn queues_say_what_they_are(r: &strims_sim::Report, d: &Path) {
+    let seed = r.scenario.swarms[0].seed as i64;
+    let mut by_bin = BTreeMap::new();
+    for row in table_rows(d, "node_bins") {
+        let (ms, bytes) = (int(&row, "up_queue_ms"), int(&row, "up_queue_bytes"));
+        assert_eq!(ms.is_some(), bytes.is_some(), "{row:?}");
+        if let (Some(ms), Some(bytes)) = (ms, bytes) {
+            assert!(ms >= 0 && bytes >= 0, "{row:?}");
+            if bytes == 0 {
+                assert_eq!(ms, 0, "{row:?}: a wait with no bytes");
+            }
+        }
+        if int(&row, "node") == Some(seed) {
+            by_bin.insert(int(&row, "bin"), (ms, bytes));
+        }
+    }
+    let mut read = 0;
+    for row in table_rows(d, "bins") {
+        let got = (
+            int(&row, "seed_up_queue_ms"),
+            int(&row, "seed_up_queue_bytes"),
+        );
+        if let Some(&want) = by_bin.get(&int(&row, "bin")) {
+            assert_eq!(got, want, "bin {:?}", int(&row, "bin"));
+        }
+        read += usize::from(got.0.is_some());
+    }
+    assert!(r.wan.is_some() && read > 0, "the seed's queue was read");
 }
 
 /// A table's rows, each by column name.

@@ -3141,6 +3141,7 @@ mod tests {
             wan: None,
             wire_bins: Vec::new(),
             wire_unmeasured: Vec::new(),
+            sockets: Vec::new(),
             parent_losses: Vec::new(),
             parent_changes: Vec::new(),
             loops: None,

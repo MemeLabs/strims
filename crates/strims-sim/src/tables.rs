@@ -3,8 +3,11 @@
 
 //! A run's tables (`STRIMS_SIM_OUT=<dir>`, [`Report::write_tables`]): its
 //! first swarm second by second, every read and its viewers' stalls, its
-//! push trees' changes, finer bins, its hosts' upload meter samples beside
-//! their uplinks, its timed events and its forecast logs, as CSV files
+//! push trees' changes, finer bins with the uplinks' queues, its hosts'
+//! upload meter samples beside their uplinks, their channels with each peer
+//! at each transfer sample (`peer_samples`), its timed events and its
+//! forecast logs, and a testbed run's TCP sockets (`sockets`,
+//! [`Report::sockets`], which a sim run has none of), as CSV files
 //! each with a `<table>.schema.json` of its columns'
 //! names and types, for `hack/sim-db` to load without guessing them. Times
 //! are true time, in ms (µs for `events`) from the swarm's stream start.
@@ -60,6 +63,7 @@ use strims_wan::vocab::Kind;
 use crate::fields::{Column, JsonRow, MetaInt, MetaInts, MetaJson, MetaText, Ty, ZSTD, cols};
 use crate::report::{HostReport, NODE_BIN_COUNTERS, NodeBinRecord, Report, ViewerReport};
 use crate::spec::{Departure, Fault, HostClass, HostIx};
+use crate::stats::SeedSample;
 pub use crate::wan::UP_COUNTERS;
 
 /// How much of a [`Table`]'s CSV it holds before writing it to its file.
@@ -329,6 +333,8 @@ pub(crate) fn bin_cols() -> Vec<cols::Bins> {
         cols.extend(ACK_COLS.iter().map(|c| cols::Bins::who_counter(who, c)));
     }
     cols.push(cols::Bins::BudgetCapacity);
+    cols.push(cols::Bins::SeedUpQueueMs);
+    cols.push(cols::Bins::SeedUpQueueBytes);
     cols
 }
 
@@ -358,6 +364,8 @@ pub(crate) fn node_bin_cols() -> Vec<cols::NodeBins> {
     cols.push(cols::NodeBins::WindowCuts);
     cols.push(cols::NodeBins::Rtos);
     cols.extend(ACK_COLS.iter().map(cols::NodeBins::counter));
+    cols.push(cols::NodeBins::UpQueueMs);
+    cols.push(cols::NodeBins::UpQueueBytes);
     cols
 }
 
@@ -591,6 +599,12 @@ impl Report {
         }
         self.meter_samples_table(dir, &hosts, spec.seed, start)?
             .finish()?;
+        if self.scenario.transfer_samples {
+            self.peer_samples_table(dir, &hosts, start)?.finish()?;
+        }
+        if !self.sockets.is_empty() {
+            self.sockets_table(dir, start)?.finish()?;
+        }
         let mut t = Table::new(
             dir,
             &[
@@ -779,6 +793,9 @@ impl Report {
             row.extend(ACK_COLS.iter().map(|c| wire_sum(honest, ku, uc(c))));
             row.extend(ACK_COLS.iter().map(|c| self.wire_delta(seed, ku, uc(c))));
             row.push(gauge(nc("budget_capacity")).filter(|&c| c > 0));
+            let edge = start + width * (k as u32 + 1);
+            let (ms, bytes) = self.up_queue_at(seed, edge);
+            row.extend([ms, bytes]);
             t.opt_ints(&row);
         }
         Ok(t)
@@ -796,6 +813,11 @@ impl Report {
         let nb = self.node_bins();
         let edges = nb.edges().max(self.wire_bins.len() as u64);
         let mut t = Table::new(dir, &node_bin_cols())?;
+        let start = self
+            .scenario
+            .swarms
+            .first()
+            .map_or(Duration::ZERO, |s| s.start);
         let w = width.as_millis() as i64;
         let node_cols = node_cols();
         for k in 0..edges.saturating_sub(1) {
@@ -825,6 +847,9 @@ impl Report {
                 row.push(self.wire_delta(h, ku, uc("window_cuts")));
                 row.push(self.wire_delta(h, ku, uc("rtos")));
                 row.extend(ACK_COLS.iter().map(|c| self.wire_delta(h, ku, uc(c))));
+                let edge = start + width * (k as u32 + 1);
+                let (ms, bytes) = self.up_queue_at(h, edge);
+                row.extend([ms, bytes]);
                 t.opt_ints(&row);
             }
         }
@@ -851,6 +876,23 @@ impl Report {
                 cols::MeterSamples::Role,
                 cols::MeterSamples::CapacityBps,
                 cols::MeterSamples::AvailBps,
+                cols::MeterSamples::RateBps,
+                cols::MeterSamples::BusyPermille,
+                cols::MeterSamples::QueueDelayMs,
+                cols::MeterSamples::PathDelayMs,
+                cols::MeterSamples::PathQueuedMs,
+                cols::MeterSamples::PathLatestMs,
+                cols::MeterSamples::Children,
+                cols::MeterSamples::RequestsIn,
+                cols::MeterSamples::Rejected,
+                cols::MeterSamples::BytesWritten,
+                cols::MeterSamples::BudgetCapacityBps,
+                cols::MeterSamples::LatestFloorMs,
+                cols::MeterSamples::Budget,
+                cols::MeterSamples::Window,
+                cols::MeterSamples::Copies,
+                cols::MeterSamples::FirstWave,
+                cols::MeterSamples::FirstWaveCapacityBps,
             ],
         )?;
         for &h in hosts {
@@ -862,7 +904,22 @@ impl Report {
                 Some(HostClass::Hostile(_)) => "hostile",
                 _ => "honest",
             };
+            // The seed's state changes of the first swarm, in time order.
+            let changes: Vec<(Duration, SeedSample)> = host
+                .runner
+                .seed_changes
+                .iter()
+                .filter(|(_, s, _)| *s == 0)
+                .map(|&(at, _, x)| (at, x))
+                .collect();
+            let opt = |v: Option<u64>| v.map_or(String::new(), |v| v.to_string());
             for m in host.runner.meter.iter().filter(|m| m.t >= start) {
+                let i = changes.partition_point(|&(at, _)| at <= m.t);
+                let seed = i
+                    .checked_sub(1)
+                    .and_then(|i| changes.get(i))
+                    .map(|&(_, x)| x);
+                let of_seed = |f: fn(&SeedSample) -> u64| opt(seed.as_ref().map(f));
                 t.fields(&[
                     ms_since(m.t, start).to_string(),
                     h.to_string(),
@@ -873,8 +930,125 @@ impl Report {
                         .map_or(String::new(), |c| c.to_string()),
                     self.upload_cap_at(h, m.asked)
                         .map_or(String::new(), |c| c.to_string()),
+                    m.rate.to_string(),
+                    m.busy_permille.to_string(),
+                    opt(m.queue_delay_ms.map(u64::from)),
+                    opt(m.path_delay_ms.map(u64::from)),
+                    opt(m.path_queued_ms.map(u64::from)),
+                    opt(m.path_latest_ms.map(u64::from)),
+                    opt(m.children.get(&0).map(|&c| c as u64)),
+                    m.requests_in.to_string(),
+                    m.rejected.to_string(),
+                    m.bytes_written.to_string(),
+                    // Zero until measured: no reading.
+                    opt(m.budget_capacity.get(&0).copied().filter(|&c| c > 0)),
+                    opt(m.latest_floor_ms.get(&0).map(|&f| u64::from(f))),
+                    of_seed(|x| x.budget as u64),
+                    of_seed(|x| x.window as u64),
+                    of_seed(|x| x.copies as u64),
+                    of_seed(|x| x.first_wave as u64),
+                    of_seed(|x| x.first_wave_capacity),
                 ]);
             }
+        }
+        Ok(t)
+    }
+
+    /// Host `h`'s uplink queue at `at` (time since the start): its latest
+    /// sample at or before it ([`WanHostReport::up_queue`], `up_backlog`),
+    /// in ms and in bytes, each `None` outside WAN mode or before a sample.
+    ///
+    /// [`WanHostReport::up_queue`]: crate::report::WanHostReport::up_queue
+    fn up_queue_at(&self, h: HostIx, at: Duration) -> (Option<i64>, Option<i64>) {
+        let name = self.scenario.hosts.get(h).map(|x| x.name.as_str());
+        let Some(w) = self
+            .wan
+            .as_ref()
+            .and_then(|w| w.hosts.iter().find(|w| Some(w.name.as_str()) == name))
+        else {
+            return (None, None);
+        };
+        let at = strims_base::time::Duration::from(at);
+        let last = |i: usize| i.checked_sub(1);
+        let wait = last(w.up_queue.partition_point(|&(t, _)| t <= at))
+            .and_then(|i| w.up_queue.get(i))
+            .map(|&(_, d)| d.as_millis().max(0));
+        let bytes = last(w.up_backlog.partition_point(|&(t, _)| t <= at))
+            .and_then(|i| w.up_backlog.get(i))
+            .map(|&(_, b)| i64::try_from(b).unwrap_or(i64::MAX));
+        (wait, bytes)
+    }
+
+    /// The `peer_samples` table of `hosts`: each one's channels of the
+    /// first swarm at each of its transfer samples from the stream's
+    /// `start` ([`HostReport::transfers`]' peers), a row a peer.
+    fn peer_samples_table(
+        &self,
+        dir: &Path,
+        hosts: &[HostIx],
+        start: Duration,
+    ) -> io::Result<Table> {
+        let mut t = Table::new(dir, &PEER_SAMPLE_COLS)?;
+        for &h in hosts {
+            let Some(host) = self.hosts.get(h) else {
+                continue;
+            };
+            for (at, _, x) in host
+                .transfers
+                .iter()
+                .filter(|(at, s, _)| *s == 0 && *at >= start)
+            {
+                let at = ms_since(*at, start).to_string();
+                for p in &x.peers {
+                    t.fields(&[
+                        at.clone(),
+                        h.to_string(),
+                        p.peer.map_or(String::new(), |p| p.to_string()),
+                        p.sent.to_string(),
+                        p.received.to_string(),
+                        p.requests_in.to_string(),
+                        p.requests_out.to_string(),
+                        p.queued[0].to_string(),
+                        p.queued[1].to_string(),
+                        p.cwnd.to_string(),
+                        p.flight.to_string(),
+                        p.rtt_ms.to_string(),
+                        p.cto_ms.to_string(),
+                        p.pending.to_string(),
+                    ]);
+                }
+            }
+        }
+        Ok(t)
+    }
+
+    /// The `sockets` table: a testbed run's TCP sockets
+    /// ([`Report::sockets`]), times from `start`.
+    fn sockets_table(&self, dir: &Path, start: Duration) -> io::Result<Table> {
+        let mut t = Table::new(dir, &SOCKET_COLS)?;
+        let opt = |v: Option<u64>| v.map_or(String::new(), |v| v.to_string());
+        for x in &self.sockets {
+            t.fields(&[
+                ms_since(x.t, start).to_string(),
+                x.node.to_string(),
+                x.peer.map_or(String::new(), |p| p.to_string()),
+                opt(x.rtt_us),
+                opt(x.rttvar_us),
+                opt(x.min_rtt_us),
+                opt(x.cwnd_segments),
+                opt(x.ssthresh_segments),
+                opt(x.bytes_sent),
+                opt(x.bytes_acked),
+                opt(x.bytes_received),
+                opt(x.notsent_bytes),
+                opt(x.segs_out),
+                opt(x.segs_in),
+                opt(x.data_segs_out),
+                opt(x.data_segs_in),
+                opt(x.retrans_segments),
+                opt(x.delivery_rate_bps),
+                opt(x.pacing_rate_bps),
+            ]);
         }
         Ok(t)
     }
@@ -1458,6 +1632,47 @@ fn incarnation(starts: &[Vec<Duration>], h: HostIx, at: Duration) -> usize {
         s.iter().filter(|&&t| t <= at).count().saturating_sub(1)
     })
 }
+
+/// The columns of the `peer_samples` table.
+const PEER_SAMPLE_COLS: [cols::PeerSamples; 14] = [
+    cols::PeerSamples::TMs,
+    cols::PeerSamples::Node,
+    cols::PeerSamples::Peer,
+    cols::PeerSamples::SentBytes,
+    cols::PeerSamples::ReceivedBytes,
+    cols::PeerSamples::RequestsIn,
+    cols::PeerSamples::RequestsOut,
+    cols::PeerSamples::QueuedPush,
+    cols::PeerSamples::QueuedAnswer,
+    cols::PeerSamples::CwndBytes,
+    cols::PeerSamples::FlightBytes,
+    cols::PeerSamples::RttMs,
+    cols::PeerSamples::CtoMs,
+    cols::PeerSamples::Pending,
+];
+
+/// The columns of the `sockets` table.
+const SOCKET_COLS: [cols::Sockets; 19] = [
+    cols::Sockets::TMs,
+    cols::Sockets::Node,
+    cols::Sockets::Peer,
+    cols::Sockets::RttUs,
+    cols::Sockets::RttvarUs,
+    cols::Sockets::MinRttUs,
+    cols::Sockets::CwndSegments,
+    cols::Sockets::SsthreshSegments,
+    cols::Sockets::BytesSent,
+    cols::Sockets::BytesAcked,
+    cols::Sockets::BytesReceived,
+    cols::Sockets::NotsentBytes,
+    cols::Sockets::SegsOut,
+    cols::Sockets::SegsIn,
+    cols::Sockets::DataSegsOut,
+    cols::Sockets::DataSegsIn,
+    cols::Sockets::RetransSegments,
+    cols::Sockets::DeliveryRateBps,
+    cols::Sockets::PacingRateBps,
+];
 
 /// The columns of the `asks` table (see the [module docs](self)).
 const ASK_COLS: [cols::Asks; 25] = [

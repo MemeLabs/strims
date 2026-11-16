@@ -731,8 +731,9 @@ pub(crate) struct Scheduler {
     /// Scratch for [`Scheduler::pump`].
     sending: Vec<u64>,
     /// Per host, its uplink queue's wait every `queue_every`: (time since
-    /// the start, wait).
+    /// the start, wait); and its bytes then, the wait at the uplink's rate.
     up_queue: Vec<Vec<(Duration, Duration)>>,
+    up_backlog: Vec<Vec<(Duration, u64)>>,
     queue_every: Duration,
     next_queue_sample: Time,
     next_cross_sample: Time,
@@ -898,6 +899,7 @@ impl Scheduler {
             flows: FastMap::default(),
             sending: Vec::new(),
             up_queue: vec![Vec::new(); spec.hosts.len()],
+            up_backlog: vec![Vec::new(); spec.hosts.len()],
             queue_every: QUEUE_SAMPLE_EVERY,
             next_queue_sample: epoch(),
             next_cross_sample: epoch(),
@@ -991,9 +993,17 @@ impl Scheduler {
         self.admit(now);
         if now >= self.next_queue_sample {
             self.next_queue_sample = now + self.queue_every;
-            for (h, samples) in self.up_queue.iter_mut().enumerate() {
+            for (h, (samples, bytes)) in self
+                .up_queue
+                .iter_mut()
+                .zip(self.up_backlog.iter_mut())
+                .enumerate()
+            {
                 let wait = (self.net.up_free(h) - now).max(Duration::ZERO);
                 samples.push((now - epoch(), wait));
+                let rate = i128::from(self.net.up_rate(h, now));
+                let b = i128::from(wait.as_nanos()) * rate / 1_000_000_000;
+                bytes.push((now - epoch(), u64::try_from(b).unwrap_or(u64::MAX)));
             }
         }
         if now >= self.next_cross_sample {
@@ -2244,6 +2254,7 @@ impl Scheduler {
                         site: *self.net.site(h)?,
                         stats: self.net.stats(h),
                         up_queue: self.up_queue.get(h).cloned().unwrap_or_default(),
+                        up_backlog: self.up_backlog.get(h).cloned().unwrap_or_default(),
                         competing: self.cross_sent.get(h).cloned().unwrap_or_default(),
                         competing_log: self.cross_log.get(h).cloned().unwrap_or_default(),
                         queue_drops: self.drops.get(h).copied().unwrap_or(0),

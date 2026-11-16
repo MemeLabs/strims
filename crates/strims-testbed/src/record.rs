@@ -38,7 +38,10 @@ pub const BIN_MS: i64 = 100;
 /// (`UploadInfo::relay_capacity`), a seed's too; an adaptive seed's budget
 /// takes its own, per scenario swarm (`budget_capacity`,
 /// `PushStats::seed_budget_capacity`: the reading its latest allocation
-/// check measured the budget from, zero until measured).
+/// check measured the budget from, zero until measured), and the latest
+/// floor that check read its growth from (`latest_floor_ms`,
+/// `PushStats::seed_latest_floor_ms`: none until measured, or where it
+/// read no fresh round trips).
 ///
 /// Beside the meter's queueing delay, two from vnic's path measure over
 /// the node's links with a recent round trip, each aggregated as the meter
@@ -77,6 +80,7 @@ pub struct MeterSample {
     pub path_latest_ms: Option<u32>,
     pub capacity: u64,
     pub budget_capacity: BTreeMap<usize, u64>,
+    pub latest_floor_ms: BTreeMap<usize, u32>,
     pub children: BTreeMap<usize, usize>,
     pub requests_in: u32,
     pub rejected: u32,
@@ -169,6 +173,10 @@ pub fn meter_sample(
         ms.lazy_in = ms.lazy_in.saturating_add(n(push.have_lazy_in));
         if push.seed_window > 0 {
             ms.budget_capacity.insert(s, push.seed_budget_capacity);
+            if let Some(f) = push.seed_latest_floor_ms {
+                ms.latest_floor_ms
+                    .insert(s, u32::try_from(f).unwrap_or(u32::MAX));
+            }
             seeds.push((
                 s,
                 SeedSample {
@@ -353,7 +361,7 @@ impl MeterSample {
     /// One JSON object, fields named as here, `t` as `t_ms` in ms.
     pub fn json(&self) -> String {
         format!(
-            "{{\"t_ms\":{},\"rate\":{},\"busy_permille\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"capacity\":{},\"budget_capacity\":{},\"children\":{},\"requests_in\":{},\"rejected\":{},\"pace_channels\":{},\"lazy_out\":{},\"lazy_in\":{},\"bytes_written\":{}}}",
+            "{{\"t_ms\":{},\"rate\":{},\"busy_permille\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"capacity\":{},\"budget_capacity\":{},\"latest_floor_ms\":{},\"children\":{},\"requests_in\":{},\"rejected\":{},\"pace_channels\":{},\"lazy_out\":{},\"lazy_in\":{},\"bytes_written\":{}}}",
             self.t.as_millis(),
             self.rate,
             self.busy_permille,
@@ -363,6 +371,7 @@ impl MeterSample {
             opt(self.path_latest_ms),
             self.capacity,
             by_swarm(&self.budget_capacity),
+            by_swarm(&self.latest_floor_ms),
             by_swarm(&self.children),
             self.requests_in,
             self.rejected,

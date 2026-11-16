@@ -2519,6 +2519,20 @@ type = "int"
 none = "-1"
 description = "the capacity reading the seed's budget was measured from, at the bin's end: `PushStats::seed_budget_capacity`, empty until measured"
 
+[columns.bins.seed_up_queue_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "The seed's uplink queue at the bin's end, as the wait a byte joining it would have (`WanHostReport::up_queue`, its latest sample at or before the edge). The sim measures the wait (its uplink's model); a testbed run derives it from its tbf's backlog over the tbf's nominal rate, which charges each packet's IP length and its Ethernet header. Empty outside WAN mode or before a sample."
+
+[columns.bins.seed_up_queue_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The seed's uplink queue at the bin's end, in bytes (`WanHostReport::up_backlog`, its latest sample at or before the edge). A testbed run measures it (its tbf's backlog: each packet's IP length and Ethernet header); the sim derives it as its measured wait times its uplink's rate then. Empty outside WAN mode or before a sample."
+
 [tables.viewers]
 sims = ["strims-sim"]
 grain = "viewer, numbered as viewer_seconds and reads number them"
@@ -2758,6 +2772,20 @@ sims = ["strims-sim"]
 type = "int"
 description = "The window model's retransmission timeouts on the node's links in the bin."
 
+[columns.node_bins.up_queue_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "The node's uplink queue at the bin's end, as the wait a byte joining it would have (`WanHostReport::up_queue`, its latest sample at or before the edge): measured by the sim's uplink model, derived on the testbed from the tbf's backlog over its nominal rate (IP length and Ethernet header per packet). Empty outside WAN mode or before a sample."
+
+[columns.node_bins.up_queue_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The node's uplink queue at the bin's end, in bytes (`WanHostReport::up_backlog`, its latest sample at or before the edge): measured on the testbed (the tbf's backlog, IP length and Ethernet header per packet), derived in the sim as its measured wait times its uplink's rate then. Empty outside WAN mode or before a sample."
+
 [tables.meter_samples]
 sims = ["strims-sim"]
 grain = "node and meter sample"
@@ -2797,6 +2825,112 @@ type = "int"
 unit = "bytes/s"
 none = "empty"
 description = "What the host could upload at the sample, the meter's truth (`Report::upload_cap_at`): what the host could upload over the second before the sample, in the meter's units, the data bytes its runner writes (`UploadInfo::rate`'s, its channel payloads): what its uplink carries over that second (its rate's mean, its steps' from their times; with a capacity schedule, its opportunities in it) less what its link charged its competing uploads in it, times its share of its link in channel bytes (`Report::own_share`, a property of its link, its transports and vnic): the bytes its transports took of its messages over what its link charged their first transmissions as they went to it (its resends, pure acknowledgements and competing uploads apart), over its near-saturated sample windows so far (its own charge at least `NEAR_SATURATED`, 0.8, of what its link could carry for it), else a full message's (a TCP segment of two full packets, or a data channel's full datagram, at its framing); times its runner's channel bytes over what it handed vnic over its near-saturated windows (1 before any); within its rate limit; 0 over a second its link carries nothing for the host (an outage), and empty with neither a site nor a limit."
+
+[columns.meter_samples.rate_bps]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes/s"
+description = "The upload meter's write rate at the sample (`MeterSample::rate`, `PushStats::upload_rate`): the bytes the node handed its links per second over the meter's window, payload and framing as the runner wrote them."
+
+[columns.meter_samples.busy_permille]
+sims = ["strims-sim"]
+type = "int"
+description = "The share of the meter's window in which some peer had data queued in the runner, in thousandths (`MeterSample::busy_permille`, `PushStats::upload_busy_permille`)."
+
+[columns.meter_samples.queue_delay_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "The meter's queueing delay past the runner, from the driver's probes of its links (`MeterSample::queue_delay_ms`, `PushStats::upload_queue_delay`); empty with too few peers to read one."
+
+[columns.meter_samples.path_delay_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "vnic's path measure over the node's links with a recent round trip: how far each link's recent round trip stands above its base, aggregated as the meter aggregates (`MeterSample::path_delay_ms`, `strims_base::path::node_delays`); empty without such a link."
+
+[columns.meter_samples.path_queued_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "How long the node's links' queued bytes take at their delivery rates, aggregated as the meter aggregates (`MeterSample::path_queued_ms`, `strims_base::path::node_delays`); empty without a link that reads both."
+
+[columns.meter_samples.path_latest_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "How far the links' latest round trips stand above their bases (`MeterSample::path_latest_ms`, `strims_base::path::latest_excess`): the queue input the seed's budget and a relay's bound read; empty without a fresh echo."
+
+[columns.meter_samples.children]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The push subscriptions the node served in the first swarm at the sample (`MeterSample::children`, `PushStats::children`); empty where the node ran no hybrid swarm scheduler then."
+
+[columns.meter_samples.requests_in]
+sims = ["strims-sim"]
+type = "int"
+description = "The STREAM_REQUESTs the node had answered, accepted or declined, over its hybrid swarms since its incarnation started (`MeterSample::requests_in`): cumulative."
+
+[columns.meter_samples.rejected]
+sims = ["strims-sim"]
+type = "int"
+description = "Of `requests_in`, those the node declined (`MeterSample::rejected`): cumulative over the incarnation."
+
+[columns.meter_samples.bytes_written]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "The bytes the node's driver had handed its links since its incarnation started (`MeterSample::bytes_written`, `DriverMetrics::bytes_written`): every port's, before the transports' framing."
+
+[columns.meter_samples.budget_capacity_bps]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes/s"
+none = "empty"
+description = "The capacity reading an adaptive seed's latest allocation check measured its first-swarm budget from (`MeterSample::budget_capacity`, `PushStats::seed_budget_capacity`): bounded by what it wrote lately; empty at a node that doesn't seed adaptively and before the budget is measured."
+
+[columns.meter_samples.latest_floor_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+none = "empty"
+description = "The latest floor the seed's latest allocation check read its first-swarm budget's growth from (`MeterSample::latest_floor_ms`, `PushStats::seed_latest_floor_ms`): the least latest excess of its links over the second before the check, which sets the growth over what it wrote lately; empty before the budget is measured, where the check read no fresh round trips, and at other nodes."
+
+[columns.meter_samples.budget]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The adaptive seed's budget in stream slots at the sample (`SeedSample::budget`, `PushStats::seed_budget`): its latest state change in the first swarm at or before the sample (`RunnerReport::seed_changes`), zero until measured; empty at other nodes."
+
+[columns.meter_samples.window]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The adaptive seed's copy window at the sample (`SeedSample::window`, `PushStats::seed_window`), as of its latest state change in the first swarm at or before it; empty at other nodes."
+
+[columns.meter_samples.copies]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The copies the adaptive seed had in effect at the sample (`SeedSample::copies`, `PushStats::seed_copies`), as of its latest state change in the first swarm at or before it; empty at other nodes."
+
+[columns.meter_samples.first_wave]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The most copies the adaptive seed's window opened before its budget was measured (`SeedSample::first_wave`, `PushStats::seed_first_wave`), as of its latest state change in the first swarm at or before the sample; empty at other nodes."
+
+[columns.meter_samples.first_wave_capacity_bps]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes/s"
+none = "empty"
+description = "The unbounded capacity reading that sized the adaptive seed's first wave (`SeedSample::first_wave_capacity`, `PushStats::seed_first_wave_capacity`), as of its latest state change in the first swarm at or before the sample; empty at other nodes."
 
 [tables.forecast]
 sims = ["strims-sim"]
@@ -3921,3 +4055,223 @@ description = "at the end, the peer said it holds the chunk: its HAVEs announced
 sims = ["strims-sim"]
 type = "bool"
 description = "at the end, the peer was subscribed to the chunk's stream"
+
+[tables.peer_samples]
+sims = ["strims-sim"]
+grain = "node, transfer sample and peer: each peer's channel of the first swarm at each of the node's stats samples"
+keys = "k, node, t_ms, peer"
+joins = "viewers USING (k, src, node)"
+sample = false
+zstd = true
+description = "Each node's channels with its peers in the first swarm, sample by sample, as its transfers count them (`TransferSample::peers`): data each way, requests each way, its data queues, and its request window toward the peer."
+notes.strims-sim = "A host's samples are its stats ticks' (`Scenario::transfer_samples`, each `Scenario::stats_every`, on with the tables), its incarnations' in order, from the stream's start; a testbed run's are its nodes' line timers' (`crate::testbed`). The counters are cumulative per channel and restart with it."
+
+[columns.peer_samples.t_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "When the node's transfers were sampled, in ms from the stream's start."
+
+[columns.peer_samples.node]
+sims = ["strims-sim"]
+type = "int"
+description = "The sampling host, as `events` numbers hosts."
+
+[columns.peer_samples.peer]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The host at the channel's other end, as `events` numbers hosts; empty for one the node can't name."
+
+[columns.peer_samples.sent_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "Chunk data the node had written to the peer on the channel (`PeerTransfer::sent`): cumulative."
+
+[columns.peer_samples.received_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "Chunk data the node had read from the peer on the channel (`PeerTransfer::received`): cumulative."
+
+[columns.peer_samples.requests_in]
+sims = ["strims-sim"]
+type = "int"
+description = "REQUEST messages the peer had sent the node on the channel (`PeerTransfer::requests_in`): cumulative."
+
+[columns.peer_samples.requests_out]
+sims = ["strims-sim"]
+type = "int"
+description = "REQUEST messages the node had sent the peer on the channel (`PeerTransfer::requests_out`): cumulative."
+
+[columns.peer_samples.queued_push]
+sims = ["strims-sim"]
+type = "int"
+description = "Pushes waiting in the node's data queue toward the peer, every swarm's (`PeerTransfer::queued`'s first, ppspp's `PeerStats::queued_data`): live entries at the sample."
+
+[columns.peer_samples.queued_answer]
+sims = ["strims-sim"]
+type = "int"
+description = "Request answers waiting in the node's data queue toward the peer, every swarm's (`PeerTransfer::queued`'s second): live entries at the sample."
+
+[columns.peer_samples.cwnd_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "The node's request window toward the peer, its cap on the bytes requested and not yet received (`PeerTransfer::cwnd`), at the sample; 0 without a scheduler."
+
+[columns.peer_samples.flight_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "The bytes the node had requested of the peer and not yet received (`PeerTransfer::flight`), at the sample; 0 without a scheduler."
+
+[columns.peer_samples.rtt_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The round trip the node's request window reads toward the peer (`PeerTransfer::rtt_ms`, the scheduler's mean), at the sample; 0 without a scheduler."
+
+[columns.peer_samples.cto_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "The node's request timeout toward the peer (`PeerTransfer::cto_ms`), at the sample; 0 without a scheduler."
+
+[columns.peer_samples.pending]
+sims = ["strims-sim"]
+type = "int"
+description = "The node's request deadlines outstanding toward the peer (`PeerTransfer::pending`), at the sample."
+
+[tables.sockets]
+sims = ["strims-sim"]
+grain = "TCP socket sample: one established socket at one `ss` sample"
+keys = "k, node, t_ms, peer"
+joins = "viewers USING (k, src, node)"
+sample = false
+zstd = true
+description = "A testbed run's TCP sockets as the kernel reports them (`ss -tin`), sample by sample: the round trip, the congestion window, the bytes sent, acknowledged and unsent, segments and retransmissions, and the delivery and pacing rates."
+notes.strims-sim = "Only testbed runs write it (`crate::testbed`: the seed's ss-0.log, run.sh's `SS_EVERY`, each of its sockets to another node); a sim run's sockets are its window model's and write no table (`Report::sockets` is empty). A field ss leaves out is empty."
+
+[columns.sockets.t_ms]
+sims = ["strims-sim"]
+type = "int"
+unit = "ms"
+description = "When `ss` sampled the socket, in ms from the stream's start."
+
+[columns.sockets.node]
+sims = ["strims-sim"]
+type = "int"
+description = "The node whose socket it is, as `events` numbers hosts."
+
+[columns.sockets.peer]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The node at the socket's other end, as `events` numbers hosts; empty for an address that isn't a node's (the relay, the competing upload's sink)."
+
+[columns.sockets.rtt_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "The kernel's smoothed round trip of the socket (`ss`'s `rtt:` first figure), in µs."
+
+[columns.sockets.rttvar_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "The kernel's round trip variation of the socket (`ss`'s `rtt:` second figure), in µs."
+
+[columns.sockets.min_rtt_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "The least round trip the kernel has seen on the socket (`ss`'s `minrtt:`), in µs."
+
+[columns.sockets.cwnd_segments]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The socket's congestion window in segments (`ss`'s `cwnd:`)."
+
+[columns.sockets.ssthresh_segments]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The socket's slow start threshold in segments (`ss`'s `ssthresh:`); empty before the window's first cut, when ss leaves it out."
+
+[columns.sockets.bytes_sent]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "Payload bytes the socket has sent, retransmissions included (`ss`'s `bytes_sent:`): cumulative."
+
+[columns.sockets.bytes_acked]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "Payload bytes its peer has acknowledged (`ss`'s `bytes_acked:`): cumulative."
+
+[columns.sockets.bytes_received]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "Payload bytes the socket has received (`ss`'s `bytes_received:`): cumulative."
+
+[columns.sockets.notsent_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "Bytes the node has written to the socket that the kernel hasn't sent yet (`ss`'s `notsent:`), at the sample; empty when ss shows none."
+
+[columns.sockets.segs_out]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "Segments the socket has sent, pure acknowledgements and retransmissions included (`ss`'s `segs_out:`): cumulative."
+
+[columns.sockets.segs_in]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "Segments the socket has received (`ss`'s `segs_in:`): cumulative."
+
+[columns.sockets.data_segs_out]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "Segments carrying data the socket has sent (`ss`'s `data_segs_out:`): cumulative."
+
+[columns.sockets.data_segs_in]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "Segments carrying data the socket has received (`ss`'s `data_segs_in:`): cumulative."
+
+[columns.sockets.retrans_segments]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "Segments the socket has retransmitted over its life (`ss`'s `retrans:` total, the figure after the slash): cumulative."
+
+[columns.sockets.delivery_rate_bps]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes/s"
+none = "empty"
+description = "The kernel's estimate of the socket's delivery rate (`ss`'s `delivery_rate`, in bits per second there), in bytes per second."
+
+[columns.sockets.pacing_rate_bps]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes/s"
+none = "empty"
+description = "The rate the kernel paces the socket at (`ss`'s `pacing_rate`, in bits per second there), in bytes per second."
