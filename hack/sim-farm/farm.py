@@ -407,9 +407,12 @@ result is dropped), and a job is done only by a row of its id in one of
 the run's matrices (no key, no row index). Instances are the --families types with host_cores
 cores, one job at a time each, and of one type where it has capacity:
 the type of the run's first launch comes first in every zone of every
-region. Docker and the qdisc modules are set up at boot, and shaping is
-tried on a dummy device; a host that fails is dropped with its log, as
-one that fails to boot. A host runs a testbed job once no container named
+region. Docker is set up at boot, and the link check each arm's bundle
+renders here (its hack/testbed/linkcheck.sh, run as a host runs run.sh)
+loads the modules the arm's links take and builds each of its link
+classes' trees on dummy devices; a host that fails is dropped with its
+log, as one that fails to boot. An arm whose bundle has none (a commit
+from before it) is said to go unchecked. A host runs a testbed job once no container named
 tb-* (run.sh's) is running.
 
 With `paired`, the jobs of one environment and repeat, one per arm, go to
@@ -1957,17 +1960,59 @@ def pools(region: str, slot_mem_gib: float, families: list[str], max_cores: int,
 USER_DATA_MAX = 16384
 
 
-def user_data(minutes: int, testbed: bool) -> str:
+def link_check(testbeds: dict[str, Path]) -> str:
+    """A testbed host's link check (user-data.sh runs it): each testbed's
+    hack/testbed/linkcheck.sh, rendered here as a host runs run.sh (from
+    the testbed's hack/testbed, each artifact's variable set to its path
+    under artifacts/), so a host builds what each arm builds and parses no
+    link spec itself. `testbeds` maps a label (the arms) to an unpacked
+    bundle. Their modules go on one line and their trees each once, in
+    order. One that fails to render, or renders no module or no tree,
+    stops the run; one without a linkcheck.sh (from before it) goes
+    unchecked, said here, and with none the check is empty."""
+    modules: dict[str, None] = {}
+    trees: dict[str, None] = {}
+    for label, root in testbeds.items():
+        script = root / TESTBED / "linkcheck.sh"
+        if not script.is_file():
+            log(f"{label}: its bundle has no {TESTBED}/linkcheck.sh, so a host checks none of its links")
+            continue
+        env = dict(os.environ)
+        arts = root / "artifacts"
+        if arts.is_dir():
+            env.update({a.name: str(a) for a in arts.iterdir()})
+        p = subprocess.run(["bash", str(script)], capture_output=True, text=True, env=env)
+        if p.returncode:
+            sys.exit(f"{label}: {TESTBED}/linkcheck.sh failed: {p.stderr.strip()}")
+        mods: list[str] = []
+        blocks: list[list[str]] = []
+        for line in p.stdout.splitlines():
+            if line.startswith("modules ") and not blocks:
+                mods += line.split()[1:]
+            elif line.startswith("tree "):
+                blocks.append([line])
+            elif blocks:
+                blocks[-1].append(line)
+            elif line.strip():
+                sys.exit(f"{label}: {TESTBED}/linkcheck.sh: {line!r} before its first tree")
+        if not mods or not blocks:
+            sys.exit(f"{label}: {TESTBED}/linkcheck.sh renders no {'module' if not mods else 'tree'}")
+        modules.update(dict.fromkeys(mods))
+        trees.update(dict.fromkeys("".join(f"{ln}\n" for ln in b) for b in blocks))
+    if not trees:
+        return ""
+    return f"modules {' '.join(modules)}\n" + "".join(trees)
+
+
+def user_data(minutes: int, check: str | None) -> str:
     """The instances' boot script, user-data.sh, filled in: its lifetime,
-    whether the host runs testbeds, and hack/testbed/links.sh (gzipped,
-    base64), whose functions a testbed host's check builds each link
-    class's tree with."""
-    links = gzip.compress((HERE.parent / "testbed" / "links.sh").read_bytes(), mtime=0)
+    and on a testbed host (`check` not None) its link check (link_check's,
+    gzipped, base64)."""
     text = (
         (HERE / "user-data.sh").read_text()
         .replace("@MINUTES@", str(minutes))
-        .replace("@DOCKER@", "1" if testbed else "0")
-        .replace("@LINKS_GZ@", base64.encodebytes(links).decode().strip())
+        .replace("@DOCKER@", "0" if check is None else "1")
+        .replace("@CHECK_GZ@", base64.encodebytes(gzip.compress((check or "").encode(), mtime=0)).decode().strip())
     )
     if len(text.encode()) > USER_DATA_MAX:
         sys.exit(f"user-data.sh is {len(text.encode())} bytes filled in, past EC2's {USER_DATA_MAX}")
@@ -4049,7 +4094,7 @@ class Run:
         self.last_stuck = 0.0
         minutes = int(self.args.hours * 60)
         self.user_data = self.state / "user-data.sh"
-        self.user_data.write_text(user_data(minutes, self.testbed is not None))
+        self.user_data.write_text(user_data(minutes, self.link_check() if self.testbed is not None else None))
         if self.testbed is None:
             canary = self.ms[0].canary_job()
             self.canary_item = Item(canary, "canary")
@@ -4096,6 +4141,23 @@ class Run:
         if self.testbed is None:
             self.estimated = self.estimate()
             log("estimate: " + self.say_estimate(self.estimated))
+
+    def link_check(self) -> str:
+        """The run's testbed arms' link check (link_check), from their
+        bundles, each unpacked once beside the run's state."""
+        arms: dict[str, list[str]] = {}
+        for m in self.ms:
+            if m.kind == "testbed":
+                for arm, source in m.sources.items():
+                    arms.setdefault(m.bin_name(source), []).append(f"{m.name} {arm}")
+        with tempfile.TemporaryDirectory(dir=self.state, prefix="bundles.") as d:
+            roots = {}
+            for name, labels in sorted(arms.items()):
+                root = Path(d) / name.removesuffix(".tar.gz")
+                with tarfile.open(BIN / name) as t:
+                    t.extractall(root, filter="data")
+                roots[", ".join(labels)] = root
+            return link_check(roots)
 
     def estimate_only(self) -> dict:
         """`estimate`: the run's estimate, printed and returned, with nothing

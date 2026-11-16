@@ -205,8 +205,8 @@
 # are shaped with, which links.sh's link_modules lists (every run's netem,
 # tbf, ifb, clsact and redirect, SEED_LOSS_PCT's filter, and the link
 # classes' qdiscs and classifiers). If tc can't load them, run once (a farm
-# host's boot, hack/sim-farm/user-data.sh, loads them and builds each
-# class's tree with links.sh)
+# host's boot loads them and builds each class's tree as linkcheck.sh
+# renders it)
 #
 #   sudo modprobe -a $(. hack/testbed/links.sh; link_modules)
 #
@@ -443,7 +443,8 @@ for i in $(seq 0 $((n - 1))); do
     done < <(link_files "$link")
   fi
   # The egress filter's actions: PCAP's mirror of what the node offers,
-  # then the delay's redirect.
+  # then the delay's redirect. linkcheck.sh renders this tree for a farm
+  # host's boot check, so a change to it goes there too.
   offered=""
   if [ "${PCAP:-0}" = 1 ]; then offered="action mirred egress mirror dev ifbo "; fi
   shape="ethtool -K eth0 tso off gso off gro off >/dev/null 2>&1 || true
