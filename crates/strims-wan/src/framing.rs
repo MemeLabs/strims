@@ -11,6 +11,8 @@
 //! a 64-byte IP packet costs 159 bytes of ADSL cells under PPPoE over LLC,
 //! a 1500-byte one 1749.
 
+use core::fmt;
+
 use crate::wire::{MSS, TCP_HEADER};
 
 /// How a link carries its frames' bytes.
@@ -99,6 +101,22 @@ impl Framing {
         full.saturating_mul(self.packet(FULL))
             .saturating_add((tail - extra).saturating_mul(self.packet(each)))
             .saturating_add(extra.saturating_mul(self.packet(each + 1)))
+    }
+}
+
+impl fmt::Display for Framing {
+    /// `<overhead>`, ` mpu <mpu>` if it has one, and ` atm` or ` ptm` for
+    /// a line code.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.overhead)?;
+        if self.mpu > 0 {
+            write!(f, " mpu {}", self.mpu)?;
+        }
+        match self.line {
+            Line::Bytes => Ok(()),
+            Line::Atm => f.write_str(" atm"),
+            Line::Ptm => f.write_str(" ptm"),
+        }
     }
 }
 

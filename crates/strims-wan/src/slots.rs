@@ -16,6 +16,8 @@
 //! draws the next, uniformly `min` to `max` after the time it is looked at
 //! ([`SlotState::depart`] follows netem's dequeue).
 
+use core::fmt;
+
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
 
@@ -34,6 +36,18 @@ impl Slots {
     pub fn netem(self) -> String {
         format!(
             "slot {}us {}us",
+            self.min.as_nanos() / 1000,
+            self.max.as_nanos() / 1000
+        )
+    }
+}
+
+impl fmt::Display for Slots {
+    /// `<min>-<max>us`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}-{}us",
             self.min.as_nanos() / 1000,
             self.max.as_nanos() / 1000
         )

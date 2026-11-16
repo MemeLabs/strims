@@ -380,7 +380,9 @@ impl Site {
 
 impl fmt::Display for Site {
     /// `<city> <access> <down>/<up>` with rates in kbit/s, and with a
-    /// bucket ` burst <bytes>`, `@<peak>` in kbit/s if it has one.
+    /// bucket ` burst <bytes>`, `@<peak>` in kbit/s if it has one; then
+    /// ` framing <framing>` unless it is [`Framing::NONE`], and
+    /// ` slots <slots>` if it has any.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -395,6 +397,12 @@ impl fmt::Display for Site {
             if let Some(peak) = b.peak {
                 write!(f, "@{}", peak * 8 / 1000)?;
             }
+        }
+        if self.profile.framing != Framing::NONE {
+            write!(f, " framing {}", self.profile.framing)?;
+        }
+        if let Some(s) = self.profile.slots {
+            write!(f, " slots {s}")?;
         }
         Ok(())
     }
@@ -491,6 +499,15 @@ mod tests {
             s.to_string(),
             "chicago cable 300000/20000 burst 312500@100000"
         );
+        let s = s
+            .with_framing(Access::Cable.framing())
+            .with_slots(Access::Cable.slots());
+        assert_eq!(
+            s.to_string(),
+            "chicago cable 300000/20000 burst 312500@100000 framing 18 mpu 64 slots 2000-8000us"
+        );
+        let s = Site::new(City::Chicago, Access::Dsl).with_framing(Access::Dsl.framing());
+        assert_eq!(s.to_string(), "chicago dsl 50000/10000 framing 40 atm");
     }
 
     #[test]

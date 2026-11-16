@@ -105,6 +105,21 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
                 format!("{} up {}", hs.name, steps.join(", ")),
             );
         }
+        for hs in &spec.hosts {
+            if let Some(cap) = &hs.up_capacity {
+                w.log_at(
+                    0,
+                    "capacity",
+                    format!(
+                        "{} up a schedule of {} B a {} ms period ({} B/s)",
+                        hs.name,
+                        cap.per_period(),
+                        cap.period().as_millis(),
+                        cap.mean_rate()
+                    ),
+                );
+            }
+        }
     }
     if !spec.clock_skew.is_off() {
         for (h, hs) in spec.hosts.iter().enumerate() {
