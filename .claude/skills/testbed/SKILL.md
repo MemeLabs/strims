@@ -40,6 +40,12 @@ nodes' harness and their page (dist/wasm-testbed).
   The default is a star.
 - Each node writes node-<i>.jsonl, a line a second, and cpu-<i>.log, its
   container's CPU time and memory each second.
+- `SEED_LINK`, `VIEWER_LINK` and `LINKS` give nodes access link classes
+  (tbf, cable, dsl, fiber, trace; `hack/testbed/links.sh` documents
+  each). A trace link replays a capacity trace with tracelink
+  (`hack/testbed/tracelink.c`, an EDT classifier over fq that run.sh
+  builds with gcc), its files mounted from the host; calibration_star's
+  `STRIMS_SIM_CAL_SEED_LINK` and the bench sim take the same specs.
 - `CPU_PROFILE` samples the Chromium nodes' V8 profiles.
   `hack/testbed/cpuprofile.py` summarises them (`--crate`, `--match`).
   Wasm frames have names only when the bundle is built with
