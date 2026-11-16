@@ -838,6 +838,25 @@ impl Network {
         t
     }
 
+    /// Whether a message of `packets` packets from `a` to `b`, its last bit
+    /// having left `a`'s uplink at `depart`, loses one on the path: the
+    /// draw [`Network::transit`] makes, from both ends' loss, for a
+    /// message the caller times itself (the window model's pure
+    /// acknowledgements).
+    pub fn lost(&mut self, depart: Time, a: usize, b: usize, packets: u32) -> bool {
+        if !self.options.loss {
+            return false;
+        }
+        let reach = depart + self.one_way(a, b);
+        let p =
+            1.0 - (1.0 - self.end_mut(a).loss_at(depart)) * (1.0 - self.end_mut(b).loss_at(reach));
+        if p <= 0.0 {
+            return false;
+        }
+        let dir = self.dir_mut(a, b);
+        unit(&mut dir.rng) < 1.0 - (1.0 - p).powi(i32::try_from(packets).unwrap_or(i32::MAX))
+    }
+
     /// Whether a message of `packets` packets from `h` to a lossless peer
     /// outside the network, leaving `h`'s uplink at `at`, loses a packet on
     /// `h`'s access link.

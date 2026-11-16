@@ -103,8 +103,10 @@
 //!   segment's worth of bytes (every two full packets), as quickacks, as
 //!   its reader drains a short packet outside pingpong mode, else on its
 //!   delayed acknowledgement's timer, unless data it sends back carries the
-//!   acknowledgement first; pure ones take their turn on its uplink. The
-//!   window grows by the packets acknowledged in slow start, which HyStart's
+//!   acknowledgement first; pure ones take their turn on its uplink, and
+//!   one the path loses (the sites' loss) leaves what it acknowledged to
+//!   the receiver's next, pure or on data. The window grows by the
+//!   packets acknowledged in slow start, which HyStart's
 //!   delay test ends, and as CUBIC (RFC 8312) past it, only while it
 //!   limits the connection and outside a recovery; a connection idle for
 //!   longer than its retransmission timeout restarts from a smaller one.
@@ -360,9 +362,10 @@ fn window_bytes(len: usize) -> usize {
 /// One event of the window model's TCP, traced for the bench
 /// ([`Scheduler::trace_tcp`]): at `t`, on the connection from host `from`
 /// to host `to`, `what` ("tx", "rtx", "drop", "ack", "lost", "rec",
-/// "end", "rto") of segment `seq` of `len` bytes, and the sender's window,
-/// threshold and what the window counts in flight (its packets an MSS
-/// each) after it.
+/// "end", "rto", or "acklost" for the receiver's acknowledgement of it
+/// lost on the path) of segment `seq` of `len` bytes, and the sender's
+/// window, threshold and what the window counts in flight (its packets an
+/// MSS each) after it.
 #[derive(Clone, Debug)]
 pub(crate) struct TcpEvent {
     pub t: Time,
@@ -2152,7 +2155,12 @@ impl Scheduler {
 
     /// The receiver of `conn` sends pure acknowledgement `a` at `t`: it
     /// takes its turn on the receiver's uplink and reaches the sender a
-    /// one-way trip after.
+    /// one-way trip after, unless the path loses it (the sites' loss, as
+    /// a segment's packets), when the receiver's next acknowledgement
+    /// carries what it acknowledged ([`ack::Owed::lost`]). A sender whose
+    /// acknowledgements then stop has its transmit timer
+    /// ([`Scheduler::probe`]), whose probe the receiver answers at once
+    /// with what it owes.
     fn send_ack(&mut self, t: Time, conn: (SocketAddr, SocketAddr), a: ack::Ack) {
         let (Some(&from), Some(&to)) = (
             self.ip_host.get(&conn.0.ip()),
@@ -2167,6 +2175,15 @@ impl Scheduler {
         let ack = tcp_wire(0).0;
         let depart = self.net.occupy_up(t, to, ack, 1);
         self.ack_sent(to, self.net.up_charge(to, ack, 1));
+        if self.net.lost(depart, to, from, 1) {
+            if let Some(&(_, seq, len)) = a.pieces.first() {
+                self.traced(depart, conn, "acklost", seq, len);
+            }
+            if let Some(o) = self.owed.get_mut(&conn) {
+                o.lost(a.pieces);
+            }
+            return;
+        }
         self.acked_at(depart + self.net.one_way(to, from), conn, a.pieces);
     }
 

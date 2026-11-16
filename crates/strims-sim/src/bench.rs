@@ -73,7 +73,8 @@
 //! With [`Bench::trace_tcp`] it adds a
 //! `{"ev":"tcp","t":..,"to":..,"k":..,"seq":..,"len":..,"cwnd":..,"ssthresh":..,"flight":..}`
 //! line per event of the window model's TCP the node sends (`k`: `tx`,
-//! `rtx`, `drop`, `ack`, `lost`, `rec`, `end` or `rto` of segment `seq`;
+//! `rtx`, `drop`, `ack`, `lost`, `rec`, `end`, `rto` of segment `seq`, or
+//! `acklost` for its acknowledgement lost on the path;
 //! the sender's window, threshold (-1 before the first) and bytes in
 //! flight after it, in bytes), a competing upload's `to` past the nodes,
 //! for the testbed's packet captures (`run.sh`'s `PCAP`) to set beside.
@@ -1597,6 +1598,38 @@ mod tests {
         assert_eq!(write(0, 500_000), Some(502_000));
         assert_eq!(write(1, 207_000), Some(208_000));
         assert_eq!(write(1, 407_000), Some(407_000));
+    }
+
+    /// While anything is in flight a transmit timer is armed: a one-way
+    /// link over 5 % site loss, whose receiver's acknowledgements the path
+    /// loses too, keeps delivering its records to the end, at every seed.
+    #[test]
+    fn a_link_keeps_delivering_through_lost_acknowledgements() {
+        for seed in 1..=8 {
+            let mut bench = Bench::testbed(
+                "VIEWERS=1\nSECS=20\nSEED_LOSS_PCT=5",
+                "",
+                "burst 0 1 0 250 16384 16384",
+                true,
+            )
+            .unwrap();
+            bench.seed = seed;
+            let logs = simulate(&bench).unwrap();
+            let got: Vec<i64> = logs
+                .get(1)
+                .into_iter()
+                .flatten()
+                .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+                .filter(|e| e["ev"] == "r")
+                .filter_map(|e| e["got"].as_i64())
+                .collect();
+            let last = got.iter().copied().max().unwrap_or_default();
+            assert!(
+                got.len() >= 76 && last > 18_000_000,
+                "seed {seed}: {} records, the last at {last} us",
+                got.len()
+            );
+        }
     }
 
     /// A lossy bench's draws are its seed's: the same seed runs the same,

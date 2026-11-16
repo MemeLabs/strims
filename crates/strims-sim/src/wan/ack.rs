@@ -136,11 +136,13 @@ pub(super) struct RcvClock {
 /// when data last arrived and ato, its quickacks left, pingpong mode, the
 /// pushed marks (one or two), its `rcv_mss` and the last short packet's
 /// length, and the next segment in order (turmoil numbers a connection's
-/// segments from 1) and those past a hole. Bound: the connection's
-/// segments in flight.
+/// segments from 1) and those past a hole; and what its acknowledgements
+/// lost on the path acknowledged ([`Owed::lost`]). Bound: the
+/// connection's segments in flight.
 #[derive(Clone, Debug)]
 pub(super) struct Owed {
     waiting: Vec<Piece>,
+    lost: Vec<Piece>,
     unacked: usize,
     since: Time,
     due: Option<Time>,
@@ -159,6 +161,7 @@ impl Default for Owed {
     fn default() -> Owed {
         Owed {
             waiting: Vec::new(),
+            lost: Vec::new(),
             unacked: 0,
             since: Time::NIL,
             due: None,
@@ -299,15 +302,33 @@ impl Owed {
 
     /// A segment the receiver has reaches it again at `t` (its sender's
     /// tail-loss probe or retransmission): it acknowledges at once what it
-    /// owes, if anything.
+    /// owes and what a lost acknowledgement acknowledged, if anything.
     pub(super) fn probed(&mut self, t: Time) -> Option<Ack> {
-        (!self.waiting.is_empty()).then(|| self.ack(t, AckWhy::Now))
+        (!self.waiting.is_empty() || !self.lost.is_empty()).then(|| self.ack(t, AckWhy::Now))
+    }
+
+    /// An acknowledgement of `pieces` was lost on the path: the next to
+    /// leave acknowledges them too, as Linux's cumulative and selective
+    /// acknowledgements cover what an earlier one did. The receiver's
+    /// state stays as the lost one left it.
+    pub(super) fn lost(&mut self, pieces: Vec<Piece>) {
+        self.lost.extend(pieces);
     }
 
     /// The receiver sends data at `t`: the acknowledgement it carries, if
-    /// it owes one.
+    /// it owes one or one was lost.
     pub(super) fn data_sent(&mut self, t: Time) -> Option<Ack> {
-        let ack = (!self.waiting.is_empty()).then(|| self.ack(t, AckWhy::Data));
+        let ack = if !self.waiting.is_empty() {
+            Some(self.ack(t, AckWhy::Data))
+        } else if !self.lost.is_empty() {
+            Some(Ack {
+                why: AckWhy::Data,
+                pieces: std::mem::take(&mut self.lost),
+                wait: Duration::ZERO,
+            })
+        } else {
+            None
+        };
         // The model sends a walk's writes a step back, where data it
         // reads may have arrived since.
         if !self.last.is_nil() && (t <= self.last || t - self.last < self.ato) {
@@ -409,9 +430,11 @@ impl Owed {
         self.pushed = 0;
         self.due = None;
         self.unacked = 0;
+        let mut pieces = std::mem::take(&mut self.lost);
+        pieces.append(&mut self.waiting);
         Ack {
             why,
-            pieces: std::mem::take(&mut self.waiting),
+            pieces,
             wait: t - self.since,
         }
     }
@@ -715,5 +738,31 @@ mod tests {
         assert_eq!(rx.acks, [(50, Now, 1200 + MSS)]);
         assert_eq!(rx.o.waiting, [(fresh, seq, MSS)]);
         assert_eq!(rx.fresh, fresh + 1);
+    }
+
+    #[test]
+    fn a_lost_acknowledgement_goes_with_the_next() {
+        // What a pure acknowledgement the path lost acknowledged goes first
+        // in the receiver's next, by bytes or on its data, and the lost one
+        // still counts as sent: its delayed acknowledgement isn't
+        // rearmed.
+        let mut rx = Rx::new();
+        rx.warm();
+        rx.seg(30, 2 * MSS);
+        rx.seg(31, 2 * MSS);
+        let lost = vec![(rx.seq - 2, rx.seq - 2, 2 * MSS)];
+        rx.o.lost(lost.clone());
+        assert_eq!(rx.o.due(), None);
+        rx.acks.clear();
+        let seq = rx.seq;
+        let acks =
+            rx.o.arrive(rx.t, seq, (seq, 2 * MSS, 2), rx.clock, &mut rx.fresh);
+        assert_eq!(acks.len(), 1);
+        assert_eq!(acks[0].pieces, [lost[0], (seq, seq, 2 * MSS)]);
+        // With nothing owed, data carries a lost one's alone.
+        rx.o.lost(vec![(seq, seq, 2 * MSS)]);
+        let a = rx.o.data_sent(rx.t).unwrap();
+        assert_eq!((a.why, a.pieces), (Data, vec![(seq, seq, 2 * MSS)]));
+        assert!(rx.o.data_sent(rx.t).is_none());
     }
 }
