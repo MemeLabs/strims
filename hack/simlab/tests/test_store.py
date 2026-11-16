@@ -6,7 +6,8 @@ and failures as simdb.duck gives them; simdb.py's fold and export of both
 sims' jobs (golden_cli's fixture jobs, in batches that add columns and
 fold a job again) run both ways into Parquet of the same rows and types
 (the same bytes: one DuckDB release writes them);
-a fold that fails rolling back in both; `install`:
+a fold that fails rolling back in both; `install`; farm.py's constants
+read from its source:
 
   python3 hack/simlab/tests/test_store.py
 """
@@ -68,6 +69,20 @@ def parquet(path):
         return cols, c.execute(f"SELECT * FROM read_parquet({lit})").fetchall()
     finally:
         c.close()
+
+
+class FarmConstants(unittest.TestCase):
+    def test_farm_pys_top_level_numbers_read_from_its_source(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "farm.py"
+            p.write_text("S3_KEPT_DAYS = 7\nS3_TIER1 = 0.0055 / 1000\nGB = 1 << 30\nREGION = os.environ['X']\n"
+                         "    NESTED = 3\n")
+            self.assertEqual(store.farm_constants(["S3_KEPT_DAYS", "S3_TIER1", "GB", "REGION", "NESTED", "NONE"], p),
+                             {"S3_KEPT_DAYS": 7.0, "S3_TIER1": 0.0055 / 1000, "GB": float(1 << 30)})
+            self.assertEqual(store.farm_constants(["S3_KEPT_DAYS"], Path(d) / "gone.py"), {})
+        # The days S3 keeps a run's data that the lab reckons with are
+        # farm.py's own.
+        self.assertEqual(store.farm_constants(["S3_KEPT_DAYS"]), {"S3_KEPT_DAYS": float(store.S3_KEPT_DAYS)})
 
 
 class Scratch(unittest.TestCase):

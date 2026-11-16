@@ -352,8 +352,28 @@ def farm_state():
     return store_host.main_checkout() / "target" / "sim-farm"
 
 
-# How long S3 keeps a run's data, in days (farm.py's S3_KEPT_DAYS).
-S3_KEPT_DAYS = 7
+# farm.py beside simlab, whose constants the lab reads (farm_constants).
+FARM_PY = Path(__file__).resolve().parents[1] / "sim-farm" / "farm.py"
+
+
+def farm_constants(names, path=FARM_PY):
+    """{name: value} of those of `names` that farm.py (`path`) defines at
+    its top level as arithmetic of literals (`S3_KEPT_DAYS = 7`), read from
+    its source, as floats; none where it can't be read."""
+    out = {}
+    try:
+        src = Path(path).read_text()
+    except OSError:
+        return out
+    for name in names:
+        m = re.search(rf"^{name} = (.+)$", src, re.M)
+        if m and re.fullmatch(r"[0-9.e+\-*/ <()]+", m.group(1).strip()):
+            out[name] = float(eval(m.group(1), {"__builtins__": {}}))
+    return out
+
+
+# How long S3 keeps a run's data, in days: farm.py's S3_KEPT_DAYS.
+S3_KEPT_DAYS = int(farm_constants(["S3_KEPT_DAYS"])["S3_KEPT_DAYS"])
 # The part of a run's name standing for the matrices past EC2's tag limit
 # (farm.py's run_name).
 MORE = re.compile(r"\d+more-\w+")

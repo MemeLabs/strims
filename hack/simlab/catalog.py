@@ -340,8 +340,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # A change to the catalog's layout: the next index makes it again, whole.
 CATALOG_VERSION = 1
-# How long S3 keeps a flush (farm.py's S3_KEPT_DAYS).
-S3_DAYS = 7
 # The env's knobs promoted to jobs' columns: the sim's setting of each
 # (STRIMS_SIM_<NAME>).
 PROMOTED = {"known_uplink": "KNOWN_UPLINK", "arrivals": "ARRIVALS", "depart": "DEPART", "exp": "EXP"}
@@ -849,18 +847,10 @@ def matrices(paths):
 
 
 def s3_prices():
-    """farm.py's S3 prices: {name: value} of its S3_* and GB constants."""
-    out = {}
-    try:
-        src = (simdb().main_checkout() / "hack" / "sim-farm" / "farm.py").read_text()
-    except OSError:
-        return out
-    for name in ("S3_TIER1", "S3_TIER2", "S3_STORAGE_GB_MONTH", "S3_KEPT_DAYS", "S3_INTER_REGION_GB",
-                 "S3_INTERNET_GB", "GB"):
-        m = re.search(rf"^{name} = (.+)$", src, re.M)
-        if m and re.fullmatch(r"[0-9.e+\-*/ <()]+", m.group(1).strip()):
-            out[name] = float(eval(m.group(1), {"__builtins__": {}}))
-    return out
+    """The main checkout's farm.py's S3 prices: {name: value} of its S3_*
+    and GB constants (store.farm_constants)."""
+    return store.farm_constants(("S3_TIER1", "S3_TIER2", "S3_STORAGE_GB_MONTH", "S3_KEPT_DAYS", "S3_INTER_REGION_GB",
+                                 "S3_INTERNET_GB", "GB"), simdb().main_checkout() / "hack" / "sim-farm" / "farm.py")
 
 
 # --- docs -----------------------------------------------------------------------
@@ -2289,7 +2279,7 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None, hidden
     out.append(COSTS_SQL.format(**{k: repr(v) for k, v in prices.items()}))
     out.append(EXPERIMENTS_SQL.format(csim=sim_case("c.sim"), rsim=sim_case("sim"),
                                       job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped))
-    out.append(AVAILABILITY_SQL.format(days=S3_DAYS))
+    out.append(AVAILABILITY_SQL.format(days=store.S3_KEPT_DAYS))
     out.append(EXP_RUNS_SQL)
     out += commits_sql(tmp, ins, parsed, commits)
     for t, name in sim_tables(cols).items():
