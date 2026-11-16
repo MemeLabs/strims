@@ -1420,46 +1420,74 @@ CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
           AND (arm IN ('one', 'any') OR stored_arm = arm))
     SELECT CASE
         WHEN kind = 'one' AND kinds > 1
-            THEN error('testbed_side: native and browser runs; name a kind (native, browsers or any)')
+            THEN error('testbed_side: native and browser runs, name a kind (native, browsers or any)')
         WHEN arm = 'one' AND arms > 1
-            THEN error('testbed_side: runs of ' || arms || ' arms; name an arm, or any')
+            THEN error('testbed_side: runs of ' || arms || ' arms, name an arm or any')
         ELSE side END
     FROM (SELECT count(DISTINCT browsers) AS kinds, count(DISTINCT stored_arm) AS arms,
                  coalesce(list({'cell': stored_cell, 'seed': seed, 'k': k, 'src': src} ORDER BY stored_cell, seed),
                           []) AS side
           FROM r));
 
--- A testbed side against its twin's (twin_runs_of over both, `a_jobs` the
--- twin's, `b_jobs` the testbed's): each cell and measure both sides have,
--- a_runs and b_runs, a_median and b_median (sketch_quantile's p50 over
--- each side's runs), ratio (b_median / a_median); and over the cells, a
--- row of cell NULL per measure: cells, corr (Pearson's, of the cells'
--- medians), rank_corr (Spearman's: of their ranks) and ratio (the
--- geometric mean of the cells' ratios). How well the twin follows the
--- testbed across cells is the fidelity a model change is judged by.
+-- Twin rows against testbed rows (`a_rows` the twin's, `b_rows` the
+-- testbed's: lists of {cell, measure, k, value}, a run's measure each, as
+-- twin_runs_of gives them): each cell and measure both sides have,
+-- a_runs and b_runs, a_median and b_median (each side's median over its
+-- runs, quantile_cont's: the mean of the middle two at an even count, as
+-- a testbed's two repeats are; a sketch's p50 would take the lower),
+-- ratio (b_median / a_median) and b_quantile, where the testbed's runs
+-- stand among the twin's seeds: each run's mid-rank quantile among them
+-- (the share of seeds below it, half of those it ties), their mean (0.5 a
+-- twin centred on the testbed, 0 or 1 one wholly above or below it); and
+-- over the cells, a row of cell NULL per measure: cells, corr (Pearson's,
+-- of the cells' medians), rank_corr (Spearman's: of their ranks, ties
+-- their mean rank), ratio (the geometric mean of the cells' ratios) and
+-- b_quantile (the cells' mean). How well the twin follows the testbed
+-- across cells is the fidelity a model change is judged by.
+CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
+    WITH a AS (SELECT unnest(a_rows, recursive := true)),
+    b AS (SELECT unnest(b_rows, recursive := true)),
+    am AS (SELECT cell, measure, count(*) AS runs, quantile_cont(value, 0.5) AS m FROM a GROUP BY ALL),
+    bm AS (SELECT cell, measure, count(*) AS runs, quantile_cont(value, 0.5) AS m FROM b GROUP BY ALL),
+    place AS (
+        SELECT b.cell, b.measure, b.k,
+               (count(*) FILTER (WHERE a.value < b.value) + 0.5 * count(*) FILTER (WHERE a.value = b.value))
+                   / count(*) AS q
+        FROM b JOIN a USING (cell, measure) GROUP BY b.cell, b.measure, b.k),
+    pq AS (SELECT cell, measure, avg(q) AS q FROM place GROUP BY ALL),
+    c AS (
+        SELECT cell, measure, am.runs AS a_runs, bm.runs AS b_runs, am.m AS a_median, bm.m AS b_median,
+               CASE WHEN am.m <> 0 THEN bm.m / am.m END AS ratio, pq.q AS b_quantile
+        FROM am JOIN bm USING (cell, measure) JOIN pq USING (cell, measure)),
+    ranked AS (
+        SELECT *,
+               rank() OVER (PARTITION BY measure ORDER BY a_median)
+                   + (count(*) OVER (PARTITION BY measure, a_median) - 1) / 2.0 AS ra,
+               rank() OVER (PARTITION BY measure ORDER BY b_median)
+                   + (count(*) OVER (PARTITION BY measure, b_median) - 1) / 2.0 AS rb FROM c)
+    SELECT cell, measure, a_runs, b_runs, a_median, b_median, ratio, b_quantile, NULL::BIGINT AS cells,
+           NULL::DOUBLE AS corr, NULL::DOUBLE AS rank_corr
+    FROM c
+    UNION ALL
+    SELECT NULL, measure, sum(a_runs), sum(b_runs), NULL, NULL,
+           exp(avg(ln(CASE WHEN ratio > 0 THEN ratio END))), avg(b_quantile), count(*), corr(a_median, b_median),
+           corr(ra, rb)
+    FROM ranked GROUP BY measure;
+
+-- twin_fit_rows of a testbed side and its twin's (twin_runs_of over both,
+-- `a_jobs` the twin's, `b_jobs` the testbed's).
 -- needs: seconds bins bins.seed_up_queue_ms node_bins meter_samples peer_samples viewer_seconds viewers events
 -- needs: meter_samples.rate_bps meter_samples.busy_permille meter_samples.queue_delay_ms
 -- needs: meter_samples.path_latest_ms meter_samples.children meter_samples.requests_in meter_samples.budget
 -- needs: meter_samples.copies meter_samples.latest_floor_ms
 CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 0, hi_s := 1e9, frame_bytes := 14, full_packet := 1500,
                                     growth_x := 3.5) AS TABLE
-    WITH a AS (FROM twin_runs_of(a_jobs, lo_s := lo_s, hi_s := hi_s, frame_bytes := frame_bytes,
-                                 full_packet := full_packet, growth_x := growth_x)),
-    b AS (FROM twin_runs_of(b_jobs, lo_s := lo_s, hi_s := hi_s, frame_bytes := frame_bytes,
-                            full_packet := full_packet, growth_x := growth_x)),
-    am AS (SELECT cell, measure, count(*) AS runs, sketch_quantile(value, 50) AS m FROM a GROUP BY ALL),
-    bm AS (SELECT cell, measure, count(*) AS runs, sketch_quantile(value, 50) AS m FROM b GROUP BY ALL),
-    c AS (
-        SELECT cell, measure, am.runs AS a_runs, bm.runs AS b_runs, am.m AS a_median, bm.m AS b_median,
-               CASE WHEN am.m <> 0 THEN bm.m / am.m END AS ratio
-        FROM am JOIN bm USING (cell, measure)),
-    ranked AS (
-        SELECT *, rank() OVER (PARTITION BY measure ORDER BY a_median) AS ra,
-               rank() OVER (PARTITION BY measure ORDER BY b_median) AS rb FROM c)
-    SELECT cell, measure, a_runs, b_runs, a_median, b_median, ratio, NULL::BIGINT AS cells, NULL::DOUBLE AS corr,
-           NULL::DOUBLE AS rank_corr
-    FROM c
-    UNION ALL
-    SELECT NULL, measure, sum(a_runs), sum(b_runs), NULL, NULL,
-           exp(avg(ln(CASE WHEN ratio > 0 THEN ratio END))), count(*), corr(a_median, b_median), corr(ra, rb)
-    FROM ranked GROUP BY measure;
+    FROM twin_fit_rows(
+        (SELECT coalesce(list({'cell': cell, 'measure': measure, 'k': k, 'value': value}),
+                         []::STRUCT(cell VARCHAR, measure VARCHAR, k VARCHAR, value DOUBLE)[])
+         FROM twin_runs_of(a_jobs, lo_s := lo_s, hi_s := hi_s, frame_bytes := frame_bytes,
+                           full_packet := full_packet, growth_x := growth_x)),
+        (SELECT coalesce(list({'cell': cell, 'measure': measure, 'k': k, 'value': value}),
+                         []::STRUCT(cell VARCHAR, measure VARCHAR, k VARCHAR, value DOUBLE)[])
+         FROM twin_runs_of(b_jobs, lo_s := lo_s, hi_s := hi_s, frame_bytes := frame_bytes,
+                           full_packet := full_packet, growth_x := growth_x)));

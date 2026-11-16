@@ -238,6 +238,32 @@ class Arithmetic(unittest.TestCase):
     def setUp(self):
         scoring.SCORE_DB = self.db
 
+    def test_twin_fit_rows(self):
+        """twin_fit_rows: a side's median is the mean of its middle two at an
+        even count; a testbed run stands at its mid-rank quantile among the
+        twin's seeds; Spearman's rank_corr gives ties their mean rank."""
+        def rows(side):
+            return "[" + ", ".join(f"{{'cell': '{c}', 'measure': 'm', 'k': '{c}{i}', 'value': {v}}}"
+                                   for c, vs in side.items() for i, v in enumerate(vs)) + "]"
+        twin = {"x": [1.0, 2.0, 3.0, 4.0], "y": [10.0, 20.0, 30.0, 40.0], "z": [10.0, 20.0, 30.0, 40.0]}
+        bed = {"x": [2.0, 5.0], "y": [25.0, 25.0], "z": [0.0, 40.0]}
+        got = {r["cell"]: r for r in scored(f"FROM twin_fit_rows({rows(twin)}, {rows(bed)});")}
+        self.assertEqual((got["x"]["a_median"], got["x"]["b_median"]), (2.5, 3.5))
+        # x: 2 ties one of four and beats one (0.375), 5 beats all (1).
+        self.assertAlmostEqual(got["x"]["b_quantile"], (0.375 + 1.0) / 2)
+        self.assertAlmostEqual(got["y"]["b_quantile"], 0.5)
+        # z: 0 below all, 40 ties the top (0.875).
+        self.assertAlmostEqual(got["z"]["b_quantile"], (0.0 + 0.875) / 2)
+        across = got[None]
+        self.assertEqual((across["cells"], across["a_runs"], across["b_runs"]), (3, 12, 6))
+        # The twin's medians tie at y and z (25, 25): their ranks are 2.5
+        # each, the testbed's (25, 20) 3 and 2; x is 1 on both.
+        ra, rb = [1, 2.5, 2.5], [1, 3, 2]
+        mean = lambda v: sum(v) / len(v)
+        cov = sum((p - mean(ra)) * (q - mean(rb)) for p, q in zip(ra, rb))
+        sd = lambda v: sum((p - mean(v)) ** 2 for p in v) ** 0.5
+        self.assertAlmostEqual(across["rank_corr"], cov / (sd(ra) * sd(rb)))
+
     def test_sums(self):
         """compensated_sum adds a list in its order as Python's sum() adds
         floats, bit for bit (signed zeros, the infinities and NaN too), where
