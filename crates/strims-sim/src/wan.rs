@@ -260,42 +260,51 @@ impl Records {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 enum Event {
     /// The message reaches the receiver's downlink.
     Arrive,
     /// The message is through the receiver's downlink.
     Deliver,
-    /// The window model: the sender learns the segment was lost, from
-    /// later segments' acknowledgements or a tail-loss probe's.
-    Lost,
-    /// The window model: a retransmission timeout tells the sender a
-    /// retransmitted segment was lost again.
-    Timeout,
+    /// The window model: `conn`'s sender learns its segment `seq` was
+    /// lost, from later segments' acknowledgements or a tail-loss probe's.
+    Lost {
+        conn: (SocketAddr, SocketAddr),
+        seq: u64,
+    },
+    /// The window model: a retransmission timeout tells `conn`'s sender its
+    /// retransmitted segment `seq` was lost again.
+    Timeout {
+        conn: (SocketAddr, SocketAddr),
+        seq: u64,
+    },
     /// The window model: `conn`'s tail-loss probe is due.
     Probe { conn: (SocketAddr, SocketAddr) },
-    /// The window model: the leading `packets` frames (`len` bytes, `wire`
-    /// on the wire) of segment `seq` of `conn`, whose tail the sender's
-    /// uplink queue dropped, reach host `to`'s downlink, or are `through`
-    /// it.
-    Head {
+    /// The window model: the bytes `from..from + len` of segment `seq` of
+    /// `conn`, in `packets` frames (`wire` on the wire), reach host `to`'s
+    /// downlink, or are `through` it; `whole` when they end the segment, as
+    /// all of it or the tail resent, and not when they are the leading
+    /// frames the sender's uplink queue took, its tail dropped.
+    Segment {
         conn: (SocketAddr, SocketAddr),
         to: HostIx,
         seq: u64,
+        from: usize,
         len: usize,
         packets: u32,
         wire: usize,
+        whole: bool,
         through: bool,
     },
     /// The window model: the receiver of `conn`'s data sends the
     /// acknowledgement it delayed, unless data it sent back carried it.
     DelAck { conn: (SocketAddr, SocketAddr) },
-    /// The window model: an acknowledgement of the `len` bytes at `seq`
-    /// of `conn` reaches the sender.
+    /// The window model: an acknowledgement reaches `conn`'s sender, of
+    /// the bytes at each segment of `pieces` (its sequence number and how
+    /// many).
     Ack {
         conn: (SocketAddr, SocketAddr),
-        seq: u64,
-        len: usize,
+        pieces: Vec<(u64, usize)>,
     },
     /// Competing upload `i`'s segment `seq` of `frames` frames is
     /// acknowledged, a round trip of `rtt` after it went out.
@@ -394,9 +403,16 @@ struct Flow {
     ssthresh: f64,
     /// Bytes sent, neither acknowledged nor known lost.
     in_flight: usize,
-    /// Data records waiting for the window, in send order. Bound: the
-    /// connection's records in flight.
-    pending: VecDeque<u64>,
+    /// Data records not yet sent whole, in write order, and how many of
+    /// their bytes are unsent: Linux's write queue, whose unsent tail a
+    /// write adds to, so writes the window holds back go out together.
+    /// Bound: the connection's records in flight.
+    unsent: VecDeque<(u64, usize)>,
+    /// The segments sent and not yet acknowledged whole, by sequence
+    /// number ([`Wire`]), and those lost and owed again, lowest first.
+    /// Bound: the segments in flight.
+    segments: BTreeMap<u64, Wire>,
+    resend: BTreeSet<u64>,
     /// CUBIC's window before its last cut, in segments; when its epoch
     /// began (`NIL` until the first acknowledgement past slow start or a
     /// cut), the window it grows back to and how long that takes, and the
@@ -433,11 +449,11 @@ struct Flow {
     /// When the flow last sent.
     last_send: Time,
     /// Segments the access queues dropped that the sender doesn't know of
-    /// yet, by sequence number (their record, when they went out and a lost
+    /// yet, by sequence number (when they went out and a lost
     /// retransmission's timeout), and those it retransmitted and hasn't
     /// seen acknowledged; how often their timeout backed off, and whether
     /// a tail-loss probe is pending. Bound: the segments in flight.
-    lost: BTreeMap<u64, (u64, Time, Option<Time>)>,
+    lost: BTreeMap<u64, (Time, Option<Time>)>,
     retx: BTreeSet<u64>,
     backoff: u32,
     probing: bool,
@@ -456,6 +472,16 @@ struct Flow {
     /// it dropped, by sequence number ([`Tail`]). Bound: the segments in
     /// flight.
     tails: BTreeMap<u64, Tail>,
+}
+
+/// A segment the window model sent: its bytes, the records they are of
+/// (each record's id and its bytes in the segment, in order), and the bytes
+/// acknowledged so far.
+#[derive(Clone, Debug)]
+struct Wire {
+    len: usize,
+    parts: Vec<(u64, usize)>,
+    acked: usize,
 }
 
 /// What is out of a segment whose leading frames the uplink queue took and
@@ -507,7 +533,9 @@ impl Default for Flow {
             cwnd: INIT_WINDOW,
             ssthresh: f64::INFINITY,
             in_flight: 0,
-            pending: VecDeque::new(),
+            unsent: VecDeque::new(),
+            segments: BTreeMap::new(),
+            resend: BTreeSet::new(),
             w_max: 0.0,
             epoch: Time::NIL,
             origin: 0.0,
@@ -719,10 +747,42 @@ impl Flow {
         });
     }
 
-    /// The bytes of segment `seq` (`len` of them) still out: its tail's,
-    /// if the queue took its head.
-    fn outstanding(&self, seq: u64, len: usize) -> usize {
-        self.tails.get(&seq).map_or(len, |t| t.tail)
+    /// The bytes of segment `seq` still out: its tail's, if the queue took
+    /// its head.
+    fn outstanding(&self, seq: u64) -> usize {
+        match self.tails.get(&seq) {
+            Some(t) => t.tail,
+            None => self.segments.get(&seq).map_or(0, |g| g.len),
+        }
+    }
+
+    /// The most bytes a new segment takes (`tcp_xmit_size_goal`, TSO
+    /// autosizing's `tcp_tso_autosize`): a millisecond of the pacing rate
+    /// (`sk_pacing_rate >> 10`; `tcp_update_pacing_rate`, twice the window
+    /// a smoothed round trip in slow start's first half and 1.2 times it
+    /// past), and 64 KiB more than doubled for each 512 us the least round
+    /// trip takes (`tcp_tso_rtt_log`), in whole packets, at least two
+    /// (`tcp_min_tso_segs`) and at most 64 KiB's; `base` stands for the
+    /// round trip before one is sampled.
+    fn size_goal(&self, base: Duration) -> usize {
+        const GSO_MAX: f64 = 65536.0;
+        let srtt = if self.srtt > Duration::ZERO {
+            self.srtt
+        } else {
+            base
+        };
+        let ratio = if self.cwnd < self.ssthresh / 2.0 {
+            2.0
+        } else {
+            1.2
+        };
+        let mut bytes = ratio * self.cwnd / srtt.as_secs_f64().max(1e-6) / 1024.0;
+        let r = self.min_rtt.as_micros() >> 9;
+        if self.min_rtt > Duration::ZERO && r < 64 {
+            bytes += GSO_MAX / 2f64.powi(r as i32);
+        }
+        let segs = (bytes.min(GSO_MAX) / MSS).floor().max(2.0);
+        (segs * MSS) as usize
     }
 
     /// The sequence number of the first segment not acknowledged: the
@@ -777,6 +837,19 @@ impl Flow {
         self.in_flight > 0
             && (self.in_flight + len) as f64 > self.cwnd
             && self.recovery.is_none_or(|r| r.out > 0)
+    }
+
+    /// The piece from byte `from` of segment `seq`, the leading frames the
+    /// uplink queue took, was lost too: the segment is lost whole, or the
+    /// resent tail it was cut from is lost whole from where that starts.
+    fn head_lost(&mut self, seq: u64, from: usize) {
+        if from == 0 {
+            self.tails.remove(&seq);
+        } else if let Some(tl) = self.tails.get_mut(&seq) {
+            tl.tail += tl.head;
+            tl.head = 0;
+            tl.resent = false;
+        }
     }
 
     /// A segment of `len` bytes shown lost in a recovery apart from an
@@ -947,12 +1020,16 @@ pub(crate) struct Scheduler {
     /// sent data.
     flows: FastMap<(SocketAddr, SocketAddr), Flow>,
     /// Scratch for [`Scheduler::pump`].
-    sending: Vec<u64>,
+    sending: Vec<((SocketAddr, SocketAddr), u64)>,
     /// Per host, its uplink queue's wait every `queue_every`: (time since
     /// the start, wait); and its bytes then, the wait at the uplink's rate.
     up_queue: Vec<Vec<(Duration, Duration)>>,
     up_backlog: Vec<Vec<(Duration, u64)>>,
     queue_every: Duration,
+    /// The window model's data records not yet through to their receiver,
+    /// and how many of their bytes the segments holding them have still
+    /// to bring. Bound: the records in flight.
+    arriving: FastMap<u64, usize>,
     /// The window model's TCP events, when traced ([`Scheduler::trace_tcp`]).
     /// Bound: the run's events; only the bench traces, for one run.
     tcp_trace: Option<Vec<TcpEvent>>,
@@ -1121,6 +1198,7 @@ impl Scheduler {
             buffers,
             admits: BTreeMap::new(),
             flows: FastMap::default(),
+            arriving: FastMap::default(),
             sending: Vec::new(),
             up_queue: vec![Vec::new(); spec.hosts.len()],
             up_backlog: vec![Vec::new(); spec.hosts.len()],
@@ -1180,13 +1258,9 @@ impl Scheduler {
         }
         let flow = self.flows.get(&conn);
         let pending = flow.map(|f| {
-            f.pending
-                .iter()
-                .filter_map(|id| match self.records.get(id)?.what {
-                    What::Data { len, .. } => Some(len as u64),
-                    _ => None,
-                })
-                .sum()
+            let unsent: usize = f.unsent.iter().map(|&(_, n)| n).sum();
+            let resend: usize = f.resend.iter().map(|&q| f.outstanding(q)).sum();
+            (unsent + resend) as u64
         });
         let host = self.ip_host.get(&conn.0.ip()).copied();
         ConnState {
@@ -1320,38 +1394,139 @@ impl Scheduler {
             }
             let event = entry.remove();
             match event {
-                Event::Ack { conn, seq, len } => {
-                    self.acked(t, conn, seq, len);
+                Event::Ack { conn, pieces } => {
+                    // Linux takes an acknowledgement whole (`tcp_ack`), then
+                    // sends what the window has room for.
+                    for (seq, len) in pieces {
+                        self.acked(t, conn, seq, len);
+                    }
+                    self.pump(t, &[conn]);
                     continue;
                 }
-                Event::Head {
+                Event::Segment {
                     conn,
                     to,
                     seq,
+                    from,
                     len,
                     packets,
                     wire,
+                    whole,
                     through,
                 } => {
                     if through {
-                        self.owe_ack_head(t, conn, (id, seq, len, packets));
-                    } else {
-                        let done = self.net.receive(t, to, wire);
-                        let key = self.next;
-                        self.next += 1;
-                        self.events.insert(
-                            (done.max(t), key),
-                            Event::Head {
-                                conn,
-                                to,
-                                seq,
-                                len,
-                                packets,
-                                wire,
-                                through: true,
-                            },
-                        );
+                        self.segment_through(conn, seq, from, len);
+                        if whole {
+                            self.owe_ack(t, conn, (id, seq, len, packets));
+                        } else {
+                            self.owe_ack_head(t, conn, (id, seq, len, packets));
+                        }
+                        continue;
                     }
+                    let rate = self.net.site(to).map_or(u64::MAX, |s| s.profile.down);
+                    if self.window().is_some_and(|cap| {
+                        overflows(self.net.down_free(to) - t, tx_time(wire, rate), cap)
+                    }) {
+                        let sender = self.ip_host.get(&conn.0.ip()).copied();
+                        if let Some(d) = sender.and_then(|h| self.drops.get_mut(h)) {
+                            *d += 1;
+                        }
+                        if let Some(d) = sender.and_then(|h| self.drop_packets.get_mut(h)) {
+                            *d += u64::from(packets);
+                        }
+                        if whole {
+                            self.dropped(t, conn, seq);
+                        } else if let Some(f) = self.flows.get_mut(&conn) {
+                            // A head lost too, its tail already: the segment
+                            // is lost whole, or a resent tail cut again is
+                            // lost whole from where it starts.
+                            f.head_lost(seq, from);
+                        }
+                        continue;
+                    }
+                    let done = self.net.receive(t, to, wire);
+                    let key = self.next;
+                    self.next += 1;
+                    self.events.insert(
+                        (done.max(t), key),
+                        Event::Segment {
+                            conn,
+                            to,
+                            seq,
+                            from,
+                            len,
+                            packets,
+                            wire,
+                            whole,
+                            through: true,
+                        },
+                    );
+                    continue;
+                }
+                Event::Lost { conn, seq } | Event::Timeout { conn, seq } => {
+                    let timeout = matches!(event, Event::Timeout { .. });
+                    let from = self.ip_host.get(&conn.0.ip()).copied();
+                    let Some(f) = self.flows.get_mut(&conn) else {
+                        continue;
+                    };
+                    if timeout {
+                        // Unless a later segment's acknowledgement told first.
+                        if f.lost.get(&seq).is_none_or(|&(_, due)| due != Some(t)) {
+                            continue;
+                        }
+                        f.lost.remove(&seq);
+                    }
+                    let len = f.outstanding(seq);
+                    f.in_flight = f.in_flight.saturating_sub(len);
+                    f.sent_at.remove(&seq);
+                    f.retx.insert(seq);
+                    f.resend.insert(seq);
+                    if timeout {
+                        if f.timed_out != t {
+                            // Linux's loss state (`tcp_enter_loss`): the
+                            // threshold falls unless a recovery or loss
+                            // state already cut it for what is out, and the
+                            // timeout backs off, once for the segments it
+                            // finds lost together. CUBIC keeps its state
+                            // (Linux's `bictcp_reset` would clear it), and a
+                            // lost retransmission in the loss state stays in
+                            // it (`FLAG_LOST_RETRANS` would start a
+                            // recovery); no F-RTO.
+                            if f.recovery.is_none() && f.loss_high.is_none() {
+                                f.reduce();
+                                if let Some(n) = from.and_then(|h| self.cuts.get_mut(h)) {
+                                    *n += 1;
+                                }
+                            }
+                            f.recovery = None;
+                            f.loss_high = Some(f.sent_end);
+                            f.backoff = f.backoff.saturating_add(1);
+                            f.timed_out = t;
+                            if let Some(n) = from.and_then(|h| self.rtos.get_mut(h)) {
+                                *n += 1;
+                            }
+                        }
+                        // Its window is what is still in flight and a
+                        // packet (`tcp_enter_loss`, the segments the
+                        // timeout found lost out of the flight).
+                        f.cwnd = f.in_flight as f64 + MSS;
+                    } else if f.recovery.is_none() && f.loss_high.is_none() {
+                        // A loss shown by RACK's timer or a tail-loss probe
+                        // starts a recovery, whose first step counts a
+                        // packet delivered (`tcp_rack_reo_timeout`).
+                        f.enter_recovery();
+                        f.reduction(MSS as usize, false, true);
+                        if let Some(n) = from.and_then(|h| self.cuts.get_mut(h)) {
+                            *n += 1;
+                        }
+                        self.traced(t, conn, "rec", seq, 0);
+                    } else {
+                        f.lost_in_recovery(len);
+                    }
+                    if self.tcp_trace.is_some() {
+                        self.traced(t, conn, if timeout { "rto" } else { "lost" }, seq, len);
+                    }
+                    self.pump(t, &[conn]);
                     continue;
                 }
                 Event::Probe { conn } => {
@@ -1443,7 +1618,7 @@ impl Scheduler {
                         self.sctp_arrived(done.max(t), conn, seq);
                         continue;
                     }
-                    if let (Some(cap), true) = (window, data.is_some() || (datagram && !r.nominal))
+                    if let (Some(cap), true) = (window, datagram && !r.nominal)
                         && overflows(
                             self.net.down_free(r.to) - t,
                             tx_time(
@@ -1459,19 +1634,12 @@ impl Scheduler {
                         if let Some(d) = self.drop_packets.get_mut(r.from) {
                             *d += u64::from(r.packets);
                         }
-                        if datagram {
-                            r.state = State::Dropped;
-                            self.records.dropped += 1;
-                            continue;
-                        }
-                        let (conn, seq) = ((r.src, r.dst), data.map_or(0, |(s, _)| s));
-                        self.dropped(t, conn, seq, id);
+                        r.state = State::Dropped;
+                        self.records.dropped += 1;
                         continue;
                     }
                     let done = self.net.receive(t, r.to, r.wire);
-                    // The window model's receiver takes a segment as it is
-                    // through, in time order with the rest.
-                    if done <= now && (window.is_none() || data.is_none()) {
+                    if done <= now {
                         r.state = State::Due;
                         if let Some(ls) = self.links.get_mut(r.link) {
                             ls.due = true;
@@ -1485,88 +1653,11 @@ impl Scheduler {
                     if let Some(ls) = self.links.get_mut(r.link) {
                         ls.due = true;
                     }
-                    let conn = (r.src, r.dst);
-                    if let (Some(_), What::Data { seq, len }) = (window, r.what)
-                        && !self.assocs.contains_key(&conn)
-                    {
-                        let packets = r.packets;
-                        self.owe_ack(t, conn, (id, seq, len, packets));
-                    }
-                }
-                Event::Lost | Event::Timeout => {
-                    let conn = (r.src, r.dst);
-                    let (seq, len) = match r.what {
-                        What::Data { seq, len } => (seq, len),
-                        _ => (0, 0),
-                    };
-                    let from = r.from;
-                    let f = self.flows.entry(conn).or_default();
-                    if matches!(event, Event::Timeout) {
-                        // Unless a later segment's acknowledgement told first.
-                        if f.lost.get(&seq).is_none_or(|&(_, _, due)| due != Some(t)) {
-                            continue;
-                        }
-                        f.lost.remove(&seq);
-                    }
-                    let len = f.outstanding(seq, len);
-                    f.in_flight = f.in_flight.saturating_sub(len);
-                    f.sent_at.remove(&seq);
-                    f.retx.insert(seq);
-                    f.pending.push_front(id);
-                    if matches!(event, Event::Timeout) {
-                        if f.timed_out != t {
-                            // Linux's loss state (`tcp_enter_loss`): the
-                            // threshold falls unless a recovery or loss
-                            // state already cut it for what is out, and the
-                            // timeout backs off, once for the segments it
-                            // finds lost together. CUBIC keeps its state
-                            // (Linux's `bictcp_reset` would clear it), and a
-                            // lost retransmission in the loss state stays in
-                            // it (`FLAG_LOST_RETRANS` would start a
-                            // recovery); no F-RTO.
-                            if f.recovery.is_none() && f.loss_high.is_none() {
-                                f.reduce();
-                                if let Some(n) = self.cuts.get_mut(from) {
-                                    *n += 1;
-                                }
-                            }
-                            f.recovery = None;
-                            f.loss_high = Some(f.sent_end);
-                            f.backoff = f.backoff.saturating_add(1);
-                            f.timed_out = t;
-                            if let Some(n) = self.rtos.get_mut(from) {
-                                *n += 1;
-                            }
-                        }
-                        // Its window is what is still in flight and a
-                        // packet (`tcp_enter_loss`, the segments the
-                        // timeout found lost out of the flight).
-                        f.cwnd = f.in_flight as f64 + MSS;
-                    } else if f.recovery.is_none() && f.loss_high.is_none() {
-                        // A loss shown by RACK's timer or a tail-loss probe
-                        // starts a recovery, whose first step counts a
-                        // packet delivered (`tcp_rack_reo_timeout`).
-                        f.enter_recovery();
-                        f.reduction(MSS as usize, false, true);
-                        if let Some(n) = self.cuts.get_mut(from) {
-                            *n += 1;
-                        }
-                        self.traced(t, conn, "rec", seq, 0);
-                    } else {
-                        f.lost_in_recovery(len);
-                    }
-                    if self.tcp_trace.is_some() {
-                        let what = if matches!(event, Event::Timeout) {
-                            "rto"
-                        } else {
-                            "lost"
-                        };
-                        self.traced(t, conn, what, seq, len);
-                    }
-                    self.pump(t, &[conn]);
                 }
                 Event::Ack { .. }
-                | Event::Head { .. }
+                | Event::Segment { .. }
+                | Event::Lost { .. }
+                | Event::Timeout { .. }
                 | Event::Probe { .. }
                 | Event::DelAck { .. }
                 | Event::CrossAck { .. }
@@ -1605,6 +1696,12 @@ impl Scheduler {
             f.sampled(seq, t - sent);
         }
         f.in_flight = f.in_flight.saturating_sub(len);
+        if let Some(g) = f.segments.get_mut(&seq) {
+            g.acked += len;
+            if g.acked >= g.len {
+                f.segments.remove(&seq);
+            }
+        }
         // A head's acknowledgement leaves its tail out; the tail's ends it.
         let head = match f.tails.get_mut(&seq) {
             Some(tl) if tl.head > 0 => {
@@ -1637,32 +1734,32 @@ impl Scheduler {
             let earlier: Vec<u64> = f
                 .lost
                 .iter()
-                .filter(|(_, v)| v.1 < sent)
+                .filter(|(_, v)| v.0 < sent)
                 .map(|(&s, _)| s)
                 .collect();
             let now = f.recovery.is_some() || f.sacked.len() >= 2;
             let reo = f.min_rtt / 4;
             for s in earlier {
-                if let Some((id, _, _)) = f.lost.remove(&s) {
+                if f.lost.remove(&s).is_some() {
                     if now {
-                        marked.push((s, id));
+                        marked.push(s);
                     } else {
-                        self.events.insert((t + reo, id), Event::Lost);
+                        let key = self.next;
+                        self.next += 1;
+                        self.events
+                            .insert((t + reo, key), Event::Lost { conn, seq: s });
                     }
                 }
             }
         }
         let newly_lost = !marked.is_empty();
-        let traced_lost: Vec<u64> = marked.iter().map(|&(s, _)| s).collect();
-        for (s, id) in marked {
-            let l = match self.records.get(&id).map(|r| r.what) {
-                Some(What::Data { len, .. }) => f.outstanding(s, len),
-                _ => 0,
-            };
+        let traced_lost = marked.clone();
+        for s in marked {
+            let l = f.outstanding(s);
             f.in_flight = f.in_flight.saturating_sub(l);
             f.sent_at.remove(&s);
             f.retx.insert(s);
-            f.pending.push_front(id);
+            f.resend.insert(s);
         }
         // A loss shown, or one a recovery left (a segment it sent lost),
         // starts the next recovery, outside the loss state.
@@ -1696,25 +1793,26 @@ impl Scheduler {
             }
             self.traced(t, conn, "ack", seq, len);
         }
-        self.pump(t, &[conn]);
     }
 
-    /// The access queues dropped segment `seq` (record `id`) of `conn` at
-    /// `t`. Its sender learns so from the acknowledgement of a segment sent
-    /// after it ([`Scheduler::acked`]), or failing that from its tail-loss
-    /// probe's ([`Scheduler::probe`]); a lost retransmission fails over to
-    /// the retransmission timeout, doubled for each time it backed off.
-    fn dropped(&mut self, t: Time, conn: (SocketAddr, SocketAddr), seq: u64, id: u64) {
+    /// The access queues dropped segment `seq` of `conn` at `t`. Its
+    /// sender learns so from the acknowledgement of a segment sent after it
+    /// ([`Scheduler::acked`]), or failing that from its tail-loss probe's
+    /// ([`Scheduler::probe`]); a lost retransmission fails over to the
+    /// retransmission timeout, doubled for each time it backed off.
+    fn dropped(&mut self, t: Time, conn: (SocketAddr, SocketAddr), seq: u64) {
         let base = self.conn_rtt(conn);
         let f = self.flows.entry(conn).or_default();
         let sent = f.sent_at.get(&seq).copied().unwrap_or(t);
         if f.retx.contains(&seq) {
             let due = (sent + f.rto() * (1i64 << f.backoff.min(6))).max(t);
-            f.lost.insert(seq, (id, sent, Some(due)));
-            self.events.insert((due, id), Event::Timeout);
+            f.lost.insert(seq, (sent, Some(due)));
+            let key = self.next;
+            self.next += 1;
+            self.events.insert((due, key), Event::Timeout { conn, seq });
             return;
         }
-        f.lost.insert(seq, (id, sent, None));
+        f.lost.insert(seq, (sent, None));
         if !f.probing {
             f.probing = true;
             let at = f.probe_at(base).max(t);
@@ -1733,7 +1831,7 @@ impl Scheduler {
             return;
         };
         f.probing = false;
-        if f.lost.values().all(|&(_, _, due)| due.is_some()) {
+        if f.lost.values().all(|&(_, due)| due.is_some()) {
             return;
         }
         let at = f.probe_at(base);
@@ -1754,12 +1852,15 @@ impl Scheduler {
         let found: Vec<u64> = f
             .lost
             .iter()
-            .filter(|(_, v)| v.2.is_none())
+            .filter(|(_, v)| v.1.is_none())
             .map(|(&s, _)| s)
             .collect();
         for s in found {
-            if let Some((id, _, _)) = f.lost.remove(&s) {
-                self.events.insert((t + back, id), Event::Lost);
+            if f.lost.remove(&s).is_some() {
+                let key = self.next;
+                self.next += 1;
+                self.events
+                    .insert((t + back, key), Event::Lost { conn, seq: s });
             }
         }
     }
@@ -1854,9 +1955,11 @@ impl Scheduler {
     /// The acknowledgement of `pieces` (of segments of `conn`) reaches the
     /// sender at `at`.
     fn acked_at(&mut self, at: Time, conn: (SocketAddr, SocketAddr), pieces: Vec<ack::Piece>) {
-        for (key, seq, len) in pieces {
-            self.events.insert((at, key), Event::Ack { conn, seq, len });
-        }
+        let Some(&(key, _, _)) = pieces.first() else {
+            return;
+        };
+        let pieces = pieces.into_iter().map(|(_, seq, len)| (seq, len)).collect();
+        self.events.insert((at, key), Event::Ack { conn, pieces });
     }
 
     /// Data of `conn` leaves its sender at `at` and reaches the peer at
@@ -2078,7 +2181,10 @@ impl Scheduler {
     }
 
     /// Sends what `conns`' windows allow at `at`, a segment from each in
-    /// turn.
+    /// turn: a lost one again first, then one of the bytes unsent, as
+    /// many as the size goal and the window's room in whole packets take
+    /// (`tcp_write_xmit`'s `tcp_cwnd_test`, a segment past it cut to it as
+    /// `tso_fragment` does), from as many records as hold them.
     fn pump(&mut self, at: Time, conns: &[(SocketAddr, SocketAddr)]) {
         let mut open: Vec<((SocketAddr, SocketAddr), Duration)> =
             conns.iter().map(|&c| (c, self.conn_rtt(c))).collect();
@@ -2087,81 +2193,203 @@ impl Scheduler {
                 let Some(f) = self.flows.get_mut(&conn) else {
                     return false;
                 };
-                loop {
-                    let Some(&id) = f.pending.front() else {
-                        f.held = false;
-                        return false;
-                    };
-                    let Some((seq, len)) = self.records.get(&id).and_then(|r| match r.what {
-                        What::Data { seq, len } => Some((seq, len)),
-                        _ => None,
-                    }) else {
-                        f.pending.pop_front();
-                        continue;
-                    };
-                    let len = f.outstanding(seq, len);
-                    // Retransmissions first, all within the window.
+                if let Some(&seq) = f.resend.first() {
+                    let len = f.outstanding(seq);
                     if f.holds(len) {
                         f.held = true;
                         return false;
                     }
-                    f.pending.pop_front();
+                    f.resend.pop_first();
                     if let Some(t) = f.tails.get_mut(&seq) {
                         t.resent = true;
                     }
                     f.recovery_sent(len);
                     f.sent(at, len, f.srtt.max(rtt));
-                    f.sent_end = f.sent_end.max(seq + 1);
                     f.sent_at.insert(seq, at);
-                    self.sending.push(id);
+                    self.sending.push((conn, seq));
                     return true;
                 }
+                let goal = f.size_goal(rtt);
+                let mut have = 0;
+                for &(id, n) in &f.unsent {
+                    if self.records.get(&id).is_some() {
+                        have += n;
+                    }
+                    if have >= goal {
+                        break;
+                    }
+                }
+                if have == 0 {
+                    f.unsent.clear();
+                    f.held = false;
+                    return false;
+                }
+                let mut len = have.min(goal);
+                let room =
+                    (f.cwnd - f.in_flight as f64).max(0.0) as usize / MSS as usize * MSS as usize;
+                if room > 0 && room < len {
+                    // TSO deferral (`tcp_tso_should_defer`): outside a
+                    // recovery and the loss state, a segment the window
+                    // would cut waits for
+                    // the room the next acknowledgement brings, if the flow
+                    // sent within the last millisecond, the room is under a
+                    // third of the window (`tcp_tso_win_divisor`) and the
+                    // oldest segment's acknowledgement is due within a
+                    // millisecond or half a round trip.
+                    let srtt = if f.srtt > Duration::ZERO { f.srtt } else { rtt };
+                    let soon = Duration::from_millis(1).min(srtt / 2);
+                    let ack_due = f.sent_at.first_key_value().map(|(_, &sent)| sent + srtt);
+                    if f.recovery.is_none()
+                        && f.loss_high.is_none()
+                        && !f.last_send.is_nil()
+                        && at - f.last_send < Duration::from_millis(1)
+                        && (room as f64) < f.cwnd / 3.0
+                        && ack_due.is_some_and(|due| due - at <= soon)
+                    {
+                        f.held = true;
+                        return false;
+                    }
+                    len = room;
+                }
+                if f.holds(len) {
+                    f.held = true;
+                    return false;
+                }
+                let mut parts = Vec::new();
+                let mut left = len;
+                while left > 0 {
+                    let Some(front) = f.unsent.front_mut() else {
+                        break;
+                    };
+                    let Some(r) = self.records.get(&front.0) else {
+                        f.unsent.pop_front();
+                        continue;
+                    };
+                    let take = front.1.min(left);
+                    parts.push((front.0, take));
+                    front.1 -= take;
+                    left -= take;
+                    if front.1 == 0 {
+                        // Its bytes all out: they leave its socket's
+                        // unsent count.
+                        if let (true, What::Data { len, .. }) = (self.buffers.is_some(), r.what) {
+                            self.admits.insert((at, front.0), (conn, len));
+                        }
+                        f.unsent.pop_front();
+                    }
+                }
+                let len = len - left;
+                let seq = f.sent_end;
+                f.sent_end += 1;
+                f.segments.insert(
+                    seq,
+                    Wire {
+                        len,
+                        parts,
+                        acked: 0,
+                    },
+                );
+                f.recovery_sent(len);
+                f.sent(at, len, f.srtt.max(rtt));
+                f.sent_at.insert(seq, at);
+                self.sending.push((conn, seq));
+                true
             });
-            for id in std::mem::take(&mut self.sending) {
-                self.transmit_window(at, id);
+            for (conn, seq) in std::mem::take(&mut self.sending) {
+                self.transmit_window(at, conn, seq);
             }
         }
     }
 
-    /// The window model's send of data record `id` at `at`: credited to
-    /// its socket at once, and lost if the uplink queue would overflow.
-    fn transmit_window(&mut self, at: Time, id: u64) {
+    /// Data record `id` joins `conn`'s write queue.
+    fn queue_window(&mut self, conn: (SocketAddr, SocketAddr), id: u64) {
+        let len = match self.records.get(&id).map(|r| r.what) {
+            Some(What::Data { len, .. }) => len,
+            _ => return,
+        };
+        self.arriving.insert(id, len);
+        self.flows
+            .entry(conn)
+            .or_default()
+            .unsent
+            .push_back((id, len));
+    }
+
+    /// The bytes `from..from + len` of segment `seq` of `conn` are through
+    /// to its receiver: a record whose bytes have all come is due.
+    fn segment_through(
+        &mut self,
+        conn: (SocketAddr, SocketAddr),
+        seq: u64,
+        from: usize,
+        len: usize,
+    ) {
+        let Some(g) = self.flows.get(&conn).and_then(|f| f.segments.get(&seq)) else {
+            return;
+        };
+        let (mut at, end) = (0, from + len);
+        let mut done = Vec::new();
+        for &(id, n) in &g.parts {
+            let (a, b) = (at.max(from), (at + n).min(end));
+            at += n;
+            if b <= a {
+                continue;
+            }
+            if let Some(left) = self.arriving.get_mut(&id) {
+                *left = left.saturating_sub(b - a);
+                if *left == 0 {
+                    done.push(id);
+                }
+            }
+        }
+        for id in done {
+            self.arriving.swap_remove(&id);
+            if let Some(r) = self.records.get_mut(&id) {
+                r.state = State::Due;
+                if let Some(ls) = self.links.get_mut(r.link) {
+                    ls.due = true;
+                }
+            }
+        }
+    }
+
+    /// The window model's send of `conn`'s segment `seq` at `at`, lost if
+    /// the uplink queue would overflow: its leading frames that fit go, the
+    /// rest is lost, as the testbed's tbf takes and drops frames.
+    fn transmit_window(&mut self, at: Time, conn: (SocketAddr, SocketAddr), seq: u64) {
         let Some(cap) = self.window() else {
             return;
         };
-        let Some(r) = self.records.get(&id) else {
+        let (Some(&from), Some(&to)) = (
+            self.ip_host.get(&conn.0.ip()),
+            self.ip_host.get(&conn.1.ip()),
+        ) else {
             return;
         };
-        let (from, to, conn) = (r.from, r.to, (r.src, r.dst));
-        let (seq, full) = match r.what {
-            What::Data { seq, len } => (seq, len),
-            _ => (0, 0),
+        let Some(f) = self.flows.get(&conn) else {
+            return;
         };
+        let Some(g) = f.segments.get(&seq) else {
+            return;
+        };
+        let resent = f.retx.contains(&seq);
         // A tail the queue dropped goes again alone.
-        let tail = self
-            .flows
-            .get(&conn)
-            .and_then(|f| f.tails.get(&seq))
-            .map(|t| t.tail);
-        let (len, (wire, packets)) = match tail {
-            Some(t) => (t, tcp_wire(t)),
-            None => (full, (r.wire, r.packets)),
+        let (start, len) = match f.tails.get(&seq) {
+            Some(t) => (g.len - t.tail, t.tail),
+            None => (0, g.len),
         };
-        // A segment's bytes leave its socket's unsent count once, as it
-        // first goes out; its retransmissions were never unsent again.
-        let resent = self.flows.get(&conn).is_some_and(|f| f.retx.contains(&seq));
-        if self.buffers.is_some() && !resent {
-            self.admits.insert((at, id), (conn, full));
-        }
+        let (wire, packets) = tcp_wire(len);
         self.traced(at, conn, if resent { "rtx" } else { "tx" }, seq, len);
         let wait = self.net.up_backlog(from, at);
         let rate = self.net.up_rate(from, at);
         let charged = self.net.up_charge(from, wire, packets);
+        let (mut took, mut head_wire) = (packets, wire);
         if overflows(wait, tx_time(charged, rate), cap) {
             // The queue takes the leading frames that fit, a frame at a
             // time, and drops the rest.
             let framing = self.net.up_framing(from);
-            let (mut took, mut head_wire, mut charge) = (0u32, 0, 0);
+            let mut charge = 0;
+            (took, head_wire) = (0, 0);
             for ip in strims_wan::framing::frames(wire, packets) {
                 charge += framing.packet(ip);
                 if took + 1 >= packets || overflows(wait, tx_time(charge, rate), cap) {
@@ -2179,25 +2407,10 @@ impl Scheduler {
                 *d += u64::from(packets - took);
             }
             if took == 0 {
-                self.dropped(at, conn, seq, id);
+                self.dropped(at, conn, seq);
                 return;
-            }
-            let t = self
-                .net
-                .send(at, from, to, head_wire, took, Carrier::Stream);
-            // What went out of the segment: its tail goes again as a resend.
-            self.sent(from, if resent { 0 } else { head });
-            if resent {
-                let head_charge = self.net.up_charge(from, head_wire, took);
-                self.resent(from, head_charge);
             }
             let f = self.flows.entry(conn).or_default();
-            if t.retransmit > Duration::ZERO {
-                // The head lost on the path too: the segment is lost whole.
-                f.tails.remove(&seq);
-                self.dropped(at, conn, seq, id);
-                return;
-            }
             f.tails.insert(
                 seq,
                 Tail {
@@ -2206,37 +2419,53 @@ impl Scheduler {
                     resent: false,
                 },
             );
-            self.dropped(at, conn, seq, id);
-            self.piggyback(conn, at, t.arrival);
-            let key = self.next;
-            self.next += 1;
-            self.events.insert(
-                (t.arrival, key),
-                Event::Head {
-                    conn,
-                    to,
-                    seq,
-                    len: head,
-                    packets: took,
-                    wire: head_wire,
-                    through: false,
-                },
-            );
-            return;
         }
-        let t = self.net.send(at, from, to, wire, packets, Carrier::Stream);
-        self.sent(from, if resent { 0 } else { full });
+        let whole = took == packets;
+        let t = self
+            .net
+            .send(at, from, to, head_wire, took, Carrier::Stream);
+        // What went out of the segment: a tail the queue dropped goes again
+        // as a resend.
+        let went = (took as usize * MSS as usize).min(len);
+        self.sent(from, if resent { 0 } else { went });
         if resent {
-            self.resent(from, charged);
+            let charge = self.net.up_charge(from, head_wire, took);
+            self.resent(from, charge);
         }
         if t.retransmit > Duration::ZERO {
             // A packet of it was lost on the path: its sender learns so as
-            // of a full queue's drop, and resends it.
-            self.dropped(at, conn, seq, id);
+            // of a full queue's drop, and resends it whole.
+            if let Some(f) = self.flows.get_mut(&conn) {
+                f.tails.remove(&seq);
+            }
+            self.dropped(at, conn, seq);
             return;
         }
+        if !whole {
+            self.dropped(at, conn, seq);
+        }
         self.piggyback(conn, at, t.arrival);
-        self.events.insert((t.arrival, id), Event::Arrive);
+        let key = self.next;
+        self.next += 1;
+        let sent = if whole {
+            len
+        } else {
+            (took as usize * MSS as usize).min(len)
+        };
+        self.events.insert(
+            (t.arrival, key),
+            Event::Segment {
+                conn,
+                to,
+                seq,
+                from: start,
+                len: sent,
+                packets: took,
+                wire: head_wire,
+                whole,
+                through: false,
+            },
+        );
     }
 
     /// Lines every queue up against its records, releases the due ones and
@@ -2465,7 +2694,7 @@ impl Scheduler {
                     });
                     match data {
                         Some(conn) => {
-                            self.flows.entry(conn).or_default().pending.push_back(id);
+                            self.queue_window(conn, id);
                             if !flows.contains(&conn) {
                                 flows.push(conn);
                             }
@@ -2547,7 +2776,7 @@ impl Scheduler {
                         self.sctp_write(at, conn, id, end);
                     }
                     Some(conn) => {
-                        self.flows.entry(conn).or_default().pending.push_back(id);
+                        self.queue_window(conn, id);
                         self.pump(at, &[conn]);
                     }
                     None => self.transmit(at, id),
@@ -3120,6 +3349,29 @@ mod tests {
     }
 
     #[test]
+    fn a_resent_tail_cut_again_and_lost_goes_again_from_where_it_starts() {
+        // A segment's tail resent alone, the uplink queue taking only its
+        // first packet, which the receiver's downlink then loses: what
+        // goes again is the tail from where it started, not the head the
+        // receiver had.
+        let mut f = Flow::default();
+        f.tails.insert(
+            7,
+            Tail {
+                head: 1448,
+                tail: 1200,
+                resent: true,
+            },
+        );
+        f.head_lost(7, 1448);
+        let tl = f.tails.get(&7).copied().unwrap();
+        assert_eq!((tl.head, tl.tail, tl.resent), (0, 2648, false));
+        // A segment's own head lost after its tail: lost whole.
+        f.head_lost(7, 0);
+        assert!(!f.tails.contains_key(&7));
+    }
+
+    #[test]
     fn round_trips_take_the_paths_rtt() {
         let mut sim = build();
         let sites = [
@@ -3270,11 +3522,14 @@ mod tests {
             window: true,
         });
         let (wrote, got, peak) = buffered_writes(Some(buffers), |_| {});
-        // The window, not the queue, paces the writes: the bytes still take
-        // their 1.2 s on the wire, and a segment waits at most the queue, as
-        // one that doesn't fit is lost.
+        // The window, not the queue, paces the writes: the bytes take their
+        // 1.2 s on the wire, and a segment waits at most the queue, as the
+        // frames that don't fit are lost. The last segment's second frame
+        // meets the queue full, and goes again on the tail-loss probe, two
+        // round trips and RTO_MIN after its send: the last bytes come about
+        // 1.6 s in.
         assert!(wrote > 700, "last write after {wrote} ms");
-        assert!((1190..1300).contains(&got), "{got} ms");
+        assert!((1190..1700).contains(&got), "{got} ms");
         assert!(peak <= Duration::from_millis(100), "{peak:?}");
     }
 
@@ -3493,10 +3748,10 @@ mod tests {
         // Over a 30 ms round trip, a connection that loses 1 % of its
         // packets keeps a window of a few segments, as Linux's does
         // (hack/testbed/bench/lossy-over.sched): 1.45 MB take about 1.3 s
-        // on the bare uplink and nearly twice that through the loss.
+        // on the bare uplink and about 1.65 times that through the loss.
         let (clean, _) = beside_an_upload(1_448_000, (30, 30), 0.0);
         let (lossy, _) = beside_an_upload(1_448_000, (30, 30), 0.01);
-        assert!(lossy * 10 > clean * 18, "{lossy} ms against {clean} ms");
+        assert!(lossy * 10 > clean * 16, "{lossy} ms against {clean} ms");
         // An upload from the site loses its packets too, and sends about
         // half as much.
         let (_, a) = beside_an_upload(0, (0, 30), 0.0);

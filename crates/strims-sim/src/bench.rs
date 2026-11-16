@@ -1356,6 +1356,38 @@ mod tests {
         })
     }
 
+    /// The bench sim's TCP events of `bench` (its `trace_tcp`), node 0's.
+    fn tcp_events(bench: &mut Bench) -> Vec<serde_json::Value> {
+        bench.trace_tcp = true;
+        let logs = simulate(bench).unwrap();
+        logs.first()
+            .into_iter()
+            .flatten()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter(|e| e["ev"] == "tcp")
+            .collect()
+    }
+
+    /// Writes the window holds back join the unsent tail of the write
+    /// queue and go out as segments of the size goal: a 64 KiB burst of
+    /// 4 KiB writes past its first window sends two-packet segments, not
+    /// each write's 2896 and 1200 bytes.
+    #[test]
+    fn writes_the_window_holds_back_go_out_at_the_size_goal() {
+        let mut bench =
+            Bench::testbed("VIEWERS=1\nSECS=1", "", "burst 0 1 0 250 65536 4096", true).unwrap();
+        let tx: Vec<(i64, i64)> = tcp_events(&mut bench)
+            .iter()
+            .filter(|e| e["k"] == "tx" && e["to"] == 1)
+            .filter_map(|e| Some((e["t"].as_i64()?, e["len"].as_i64()?)))
+            .collect();
+        let short = tx
+            .iter()
+            .filter(|&&(t, len)| (10_000..250_000).contains(&t) && len < 2896)
+            .count();
+        assert!(short <= 2, "{short} short segments: {tx:?}");
+    }
+
     #[test]
     fn schedules_take_bursts_and_probes() {
         let s = Schedule::parse(
