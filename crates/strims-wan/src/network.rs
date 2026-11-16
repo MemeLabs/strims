@@ -60,14 +60,17 @@
 //!   bucket's tokens, its queue's bytes and its stats' `up_bytes` count
 //!   those. [`Framing::NONE`] charges the IP bytes alone.
 //! - **Slots.** An uplink whose site has [`Slots`] sends what its shaper
-//!   passed when the next slot opens ([`SlotState::depart`]): a slot opens
-//!   `min` to `max` (uniformly, from an rng forked at the network's
-//!   construction for each such site) after the first message ready past
-//!   the last, and every message ready before it rides it, as a cable
-//!   modem's grants send what its shaper passed. The testbed's link
-//!   classes hold them there with a netem of slots alone after the shaper.
-//!   The queue's limit counts what waits for the shaper, not for a slot,
-//!   and the shaper takes the next message once it has passed the last.
+//!   passed when the next slot opens ([`SlotState::depart`]), a packet at
+//!   a time, each as the shaper passes it ([`Framing::packets`]): a slot
+//!   opens `min` to `max` (uniformly, from an rng forked at the network's
+//!   construction for each such site) after the first packet ready past
+//!   the last, and every packet ready before it rides it, as a cable
+//!   modem's grants send what its shaper passed; a message leaves with its
+//!   last packet. The testbed's link classes hold them there with a netem
+//!   of slots alone after the shaper, which takes each packet as tbf
+//!   passes it. The queue's limit counts what waits for the shaper, not
+//!   for a slot, and the shaper takes the next message once it has passed
+//!   the last.
 //! - **Capacity.** An uplink given a [`Capacity`] ([`Network::set_up_capacity`])
 //!   sends in its delivery opportunities, in place of its rate, bucket and
 //!   steps: a message's last bit leaves at the opportunity where the
@@ -413,17 +416,47 @@ impl End {
         (sent.max(self.up_free), charged)
     }
 
-    /// When a message the shaper passed at `passed` leaves: when its slot
-    /// opens, if the uplink has slots, the slot stage looking at it as it
-    /// comes or once the message before it has left.
-    fn grant(&mut self, passed: Time) -> Time {
-        match &mut self.slots {
-            Some(s) => {
-                let depart = s.depart(passed, passed.max(self.slot_last));
+    /// When a message of `wire` IP bytes in `packets` packets that
+    /// started through the shaper at `start` (`pass`, as [`End::serve`]
+    /// found it) leaves: once its shaper has passed it, or with slots once
+    /// its last packet has left them, each packet given to the slot stage
+    /// as the shaper passes it, the stage looking at it as it comes or once
+    /// the packet before it has left (netem's slots on what tbf passed).
+    fn grant(&mut self, pass: Pass, start: Time, wire: usize, packets: u32) -> Time {
+        if self.slots.is_none() {
+            return self.up_free;
+        }
+        let mut sent = 0;
+        let mut depart = self.up_free;
+        for bytes in self.site.profile.framing.packets(wire, packets) {
+            sent += bytes;
+            let passed = self.passed(pass, start, sent);
+            if let Some(s) = &mut self.slots {
+                depart = s.depart(passed, passed.max(self.slot_last));
                 self.slot_last = depart;
-                depart
             }
-            None => passed,
+        }
+        depart
+    }
+
+    /// When the first `bytes` of a message that started through the shaper
+    /// at `start` were through, the shaper as `pass` says [`End::serve`]
+    /// found it: [`End::serve`]'s time for the whole message, at its end.
+    fn passed(&self, pass: Pass, start: Time, bytes: usize) -> Time {
+        let rate = self.site.profile.up;
+        match pass {
+            Pass::Rate => through(rate, &self.up_steps, start, bytes),
+            Pass::Bucket { have, peak } => {
+                let need = i128::try_from(bytes).unwrap_or(i128::MAX) * NS;
+                let done = drain(rate, &self.up_steps, start, (need - have).max(0));
+                peak.map_or(done, |p| done.max(start + tx_time(bytes, p)))
+            }
+            Pass::Capacity { base } => match &self.capacity {
+                Some((cap, _)) => cap
+                    .carries(base + i128::try_from(bytes).unwrap_or(i128::MAX))
+                    .max(start),
+                None => start,
+            },
         }
     }
 
@@ -431,14 +464,16 @@ impl End {
     /// earlier than everything before them has left, are through: at the
     /// rate, or with a bucket what its tokens cover at once (or at its
     /// peak) and the rest at the rate, or in its capacity's opportunities
-    /// (see the module docs).
-    fn serve(&mut self, start: Time, wire: usize) -> Time {
+    /// (see the module docs); and the shaper as it found it, from which
+    /// [`End::passed`] times their packets.
+    fn serve(&mut self, start: Time, wire: usize) -> (Time, Pass) {
         if let Some((cap, cursor)) = &mut self.capacity {
-            return cursor.take(cap, start, wire);
+            let base = cursor.0.max(cap.before(start));
+            return (cursor.take(cap, start, wire), Pass::Capacity { base });
         }
         let rate = self.site.profile.up;
         let Some(Bucket { bytes, peak }) = self.site.profile.bucket else {
-            return through(rate, &self.up_steps, start, wire);
+            return (through(rate, &self.up_steps, start, wire), Pass::Rate);
         };
         let cap = i128::from(bytes) * NS;
         let have = (self.tokens + carried(rate, &self.up_steps, self.tokens_at, start)).min(cap);
@@ -449,8 +484,18 @@ impl End {
         }
         self.tokens = (have - need + carried(rate, &self.up_steps, start, done)).clamp(0, cap);
         self.tokens_at = done;
-        done
+        (done, Pass::Bucket { have, peak })
     }
+}
+
+/// The shaper as [`End::serve`] found a message: at the rate, with the
+/// bucket's tokens there and its peak, or with the capacity cursor's
+/// place (the capacity that came before it lost).
+#[derive(Clone, Copy, Debug)]
+enum Pass {
+    Rate,
+    Bucket { have: i128, peak: Option<u64> },
+    Capacity { base: i128 },
 }
 
 #[derive(Clone, Debug)]
@@ -651,7 +696,8 @@ impl Network {
     ) -> Transit {
         let end = self.end_mut(a);
         let (start, charged) = end.admit(sent, wire, packets);
-        end.up_free = end.serve(start, charged);
+        let (free, pass) = end.serve(start, charged);
+        end.up_free = free;
         end.span(sent, start, charged);
         end.stats.up_bytes = end.stats.up_bytes.saturating_add(charged as u64);
         end.stats.up_ip_bytes = end.stats.up_ip_bytes.saturating_add(wire as u64);
@@ -661,7 +707,7 @@ impl Network {
             .small_packets
             .saturating_add(u64::from(small_packets(wire, packets)));
         end.stats.up_queue_max = end.stats.up_queue_max.max(start - sent);
-        let depart = end.grant(end.up_free);
+        let depart = end.grant(pass, start, wire, packets);
         self.transit(depart, a, b, packets, carrier)
     }
 
@@ -672,9 +718,10 @@ impl Network {
     pub fn occupy_up(&mut self, at: Time, h: usize, wire: usize, packets: u32) -> Time {
         let end = self.end_mut(h);
         let (start, charged) = end.admit(at, wire, packets);
-        end.up_free = end.serve(start, charged);
+        let (free, pass) = end.serve(start, charged);
+        end.up_free = free;
         end.span(at, start, charged);
-        end.grant(end.up_free)
+        end.grant(pass, start, wire, packets)
     }
 
     /// How long `h`'s uplink takes from `at` to send what it holds,
@@ -1577,6 +1624,11 @@ mod tests {
             t(13)
         );
         assert_eq!(n.up_slots(0).map(|s| s.min), Some(ms(2)));
+        // Each packet goes to the slots as the shaper passes it: a
+        // message's first packet, passed at 21 ms, draws the slot at
+        // 23 ms, which its second, passed at 22 ms, rides.
+        let wire = 2 * (crate::wire::MSS + crate::wire::TCP_HEADER);
+        assert_eq!(n.send(t(20), 0, 1, wire, 2, Carrier::Stream).depart, t(23));
     }
 
     #[test]

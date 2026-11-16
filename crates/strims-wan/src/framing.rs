@@ -92,16 +92,32 @@ impl Framing {
     /// but the last a full TCP packet ([`crate::wire::tcp_wire`]'s; a
     /// datagram is one packet).
     pub fn message(self, wire: usize, packets: u32) -> usize {
-        let full = (packets.max(1) as usize - 1).min(wire / FULL);
-        let rest = wire - full * FULL;
-        let tail = packets.max(1) as usize - full;
-        // Packets past the full ones share what is left evenly.
-        let each = rest / tail.max(1);
-        let extra = rest - each * tail.max(1);
+        let (full, each, small, extra) = split(wire, packets);
         full.saturating_mul(self.packet(FULL))
-            .saturating_add((tail - extra).saturating_mul(self.packet(each)))
+            .saturating_add(small.saturating_mul(self.packet(each)))
             .saturating_add(extra.saturating_mul(self.packet(each + 1)))
     }
+
+    /// What each packet of such a message costs, in the order they leave:
+    /// its full packets, then the rest ([`Framing::message`] is their sum).
+    pub fn packets(self, wire: usize, packets: u32) -> impl Iterator<Item = usize> {
+        let (full, each, small, extra) = split(wire, packets);
+        std::iter::repeat_n(self.packet(FULL), full)
+            .chain(std::iter::repeat_n(self.packet(each), small))
+            .chain(std::iter::repeat_n(self.packet(each + 1), extra))
+    }
+}
+
+/// A message of `wire` IP bytes in `packets` packets, all but the last a
+/// full TCP packet: its full packets, and the rest's packets of `each`
+/// bytes and of `each + 1`, which share what is left evenly.
+fn split(wire: usize, packets: u32) -> (usize, usize, usize, usize) {
+    let full = (packets.max(1) as usize - 1).min(wire / FULL);
+    let rest = wire - full * FULL;
+    let tail = packets.max(1) as usize - full;
+    let each = rest / tail.max(1);
+    let extra = rest - each * tail.max(1);
+    (full, each, tail - extra, extra)
 }
 
 impl fmt::Display for Framing {
@@ -124,6 +140,33 @@ impl fmt::Display for Framing {
 mod tests {
     use super::*;
     use crate::wire::{tcp_wire, udp_wire};
+
+    #[test]
+    fn a_messages_packets_cost_what_it_does() {
+        for f in [
+            Framing::NONE,
+            Framing::ETHERNET,
+            Framing::DOCSIS,
+            Framing::ADSL_PPPOE,
+        ] {
+            for (wire, packets) in [
+                (40, 1),
+                (1500, 1),
+                (3000, 2),
+                (2000, 3),
+                (10_000, 7),
+                (5, 4),
+            ] {
+                let each: Vec<usize> = f.packets(wire, packets).collect();
+                assert_eq!(each.len(), packets as usize, "{wire} {packets}");
+                assert_eq!(
+                    each.iter().sum::<usize>(),
+                    f.message(wire, packets),
+                    "{wire} {packets}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn links_charge_their_frames() {
