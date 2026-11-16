@@ -127,9 +127,8 @@ const stories: Story[] = [
         rooms={4}
         topics={mixed}
         active={0}
-        hidden={[1, 2, 4]}
         whisperUnread={3}
-        // Arrive after the rooms are hidden: every hidden room counts them.
+        // Every room but the active one, which is shown, counts them.
         emitter={() => new MessageEmitter({ ivl: 800, preload: 12, limit: 12, messages })}
       />
     ),
@@ -141,7 +140,6 @@ const stories: Story[] = [
         rooms={2}
         topics={[room(1), room(2)]}
         active={0}
-        hidden={[1]}
         emitter={() => new MessageEmitter({ ivl: 800, preload: 150, limit: 150, messages })}
       />
     ),

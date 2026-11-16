@@ -9,6 +9,7 @@ import React, { useEffect, useRef } from "react";
 import LayoutChat from "../../../../components/Layout/Chat";
 import { useChat } from "../../../../contexts/Chat";
 import { useLayout } from "../../../../contexts/Layout";
+import { DEVICE_TYPE, DeviceType } from "../../../../lib/userAgent";
 import {
   MockChat,
   OpenTopics,
@@ -27,13 +28,24 @@ interface PanelProps {
   onMount?: (el: HTMLElement) => void;
   /** Whether the chat is hidden (Layout's showChat), as its toggle does. */
   closed?: boolean;
+  /**
+   * On a phone or a tablet, the drawer left closed: its Shell mounted, the
+   * chat off screen but for the peek.
+   */
+  drawerClosed?: boolean;
 }
 
 // The chat panel once a topic is active (or at once with none), as the app
-// shows it on the right of its body.
-const Panel: React.FC<PanelProps & { wait: boolean }> = ({ onMount, closed, wait }) => {
+// shows it on the right of its body; on a phone or a tablet, where the chat
+// is the drawer's, as the open drawer shows it.
+const Panel: React.FC<PanelProps & { wait: boolean }> = ({
+  onMount,
+  closed,
+  drawerClosed,
+  wait,
+}) => {
   const [{ mainActiveTopic }] = useChat();
-  const { toggleShowChat } = useLayout();
+  const { toggleShowChat, toggleOverlayOpen } = useLayout();
   const ref = useRef<HTMLDivElement>(null);
   const ready = !wait || !!mainActiveTopic;
 
@@ -42,6 +54,12 @@ const Panel: React.FC<PanelProps & { wait: boolean }> = ({ onMount, closed, wait
       toggleShowChat(false);
       // The layout is the storybook's: leave it as it was.
       return () => toggleShowChat(true);
+    }
+  }, []);
+  useEffect(() => {
+    if (DEVICE_TYPE === DeviceType.Portable && !drawerClosed) {
+      toggleOverlayOpen(true);
+      return () => toggleOverlayOpen(false);
     }
   }, []);
   useEffect(() => {
@@ -68,7 +86,7 @@ const whisper: WhisperTopic = { whisper: "soadsoap" };
 
 interface ChatStoryProps extends PanelProps, Partial<OpenTopicsProps> {}
 
-const ChatStory: React.FC<ChatStoryProps> = ({ topics = [], active, hidden, ...props }) => (
+const ChatStory: React.FC<ChatStoryProps> = ({ topics = [], active, ...props }) => (
   <MockChat
     chat={() =>
       new ChatService(replay(messages.slice(0, 60)), {
@@ -92,7 +110,7 @@ const ChatStory: React.FC<ChatStoryProps> = ({ topics = [], active, hidden, ...p
     }
   >
     <StaticNetwork>
-      <OpenTopics topics={topics} active={active} hidden={hidden} />
+      <OpenTopics topics={topics} active={active} />
       <Panel wait={topics.length > 0} {...props} />
     </StaticNetwork>
   </MockChat>
@@ -113,6 +131,10 @@ const stories: Story[] = [
   { name: "Whisper", component: () => <ChatStory topics={[room, whisper]} active={1} /> },
   { name: "Menu open", component: () => <ChatStory topics={[room]} onMount={openMenu} /> },
   { name: "Closed", component: () => <ChatStory topics={[room]} closed /> },
+  // On a phone or a tablet, what the closed drawer holds: the room's
+  // messages arrive while its chat is off screen and count as unread. On a
+  // desktop the panel is shown, as in "Room".
+  { name: "Room, drawer closed", component: () => <ChatStory topics={[room]} drawerClosed /> },
 ];
 
 export default stories;

@@ -175,7 +175,9 @@ const initialRoomState: ThreadState = {
   label: "",
   icon: null,
   unreadCount: 0,
-  visible: true,
+  // A thread, room or whisper, is on screen once a view shows it (Shell
+  // while the user can see the chat, a popout not minimized), which reads it.
+  visible: false,
 };
 
 const initialState: State = {
@@ -421,8 +423,6 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         state: thread ? ThreadInitState.OPEN : ThreadInitState.INITIALIZED,
         records: new Map(),
         messageStates: [],
-        // On screen once a view (Shell, a popout) shows it and reads it.
-        visible: false,
       }),
       mainTopics: [...state.mainTopics, topic],
       mainActiveTopic: topic,

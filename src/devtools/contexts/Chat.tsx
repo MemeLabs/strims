@@ -19,6 +19,7 @@ import StyleSheet from "../../components/Chat/StyleSheet";
 import {
   Provider as ChatProvider,
   ThreadProvider as ChatRoomProvider,
+  ThreadInitState,
   Topic,
   useChat,
   useRoom,
@@ -189,10 +190,12 @@ export type WhisperTopic = { whisper: string };
 
 export interface OpenTopicsProps {
   topics: (RoomTopic | WhisperTopic)[];
-  /** Which of them is the main active topic (default the last opened). */
+  /**
+   * Which of them is the main active topic (default the last opened), which
+   * is shown, as the main chat's Shell shows it, and so reads what arrives;
+   * the others, shown by no view, count it as unread.
+   */
   active?: number;
-  /** Which of them are hidden, so messages that arrive count as unread. */
-  hidden?: number[];
   /** Which of them are popped out, once ChatBar has room for them. */
   popouts?: number[];
 }
@@ -202,21 +205,23 @@ const topicOf = (t: RoomTopic | WhisperTopic): Topic =>
     ? { type: "ROOM", topicKey: t.room }
     : { type: "WHISPER", topicKey: peerKey(t.whisper) };
 
-// Hides a thread as Shell does when it isn't shown.
-const HideThread: React.FC = () => {
+// Shows a thread as Shell does while the user can see it: visible, read.
+const ShowThread: React.FC = () => {
+  const [, { resetTopicUnreadCount }] = useChat();
   const [room, { toggleVisible }] = useRoom();
-  useEffect(() => toggleVisible(false), [room.id]);
+  useEffect(() => {
+    if (room.state === ThreadInitState.OPEN) {
+      toggleVisible(true);
+      resetTopicUnreadCount(room.topic);
+      return () => toggleVisible(false);
+    }
+  }, [room.id, room.state]);
   return null;
 };
 
 // Opens rooms and whisper threads on mount, as the room menu does, then
-// makes one active, hides some and pops some out.
-export const OpenTopics: React.FC<OpenTopicsProps> = ({
-  topics,
-  active,
-  hidden = [],
-  popouts = [],
-}) => {
+// makes one active and shown, and pops some out.
+export const OpenTopics: React.FC<OpenTopicsProps> = ({ topics, active, popouts = [] }) => {
   const [{ rooms, whispers, popoutTopicCapacity }, actions] = useChat();
 
   useEffect(() => {
@@ -244,16 +249,11 @@ export const OpenTopics: React.FC<OpenTopicsProps> = ({
     }
   }, [opened, popoutTopicCapacity]);
 
-  return (
-    <>
-      {opened &&
-        hidden.map((i) => (
-          <ChatRoomProvider key={i} {...topicOf(topics[i])}>
-            <HideThread />
-          </ChatRoomProvider>
-        ))}
-    </>
-  );
+  return opened && active !== undefined ? (
+    <ChatRoomProvider {...topicOf(topics[active])}>
+      <ShowThread />
+    </ChatRoomProvider>
+  ) : null;
 };
 
 export interface MessageListProps {
