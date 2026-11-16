@@ -780,9 +780,12 @@ impl Network {
         let end = self.end_mut(h);
         end.up_free = now;
         end.up_spans.clear();
-        // What it forgets takes no tokens past `now`.
+        // What it forgets takes no tokens past `now`, and no capacity.
         end.tokens_at = end.tokens_at.min(now);
         end.slot_last = end.slot_last.min(now);
+        if let Some((cap, cursor)) = &mut end.capacity {
+            cursor.forget(cap, now);
+        }
         end.down_free = now;
         for x in 0..self.ends.len() {
             self.dir_mut(h, x).last_arrival = Time::NIL;
@@ -1578,5 +1581,27 @@ mod tests {
         assert_eq!(n.up_backlog(0, t(1)), tx_time(3000, 1_000_000_000));
         // The 6 and 8 ms opportunities pass unused while it idles.
         assert_eq!(n.send(t(9), 0, 1, 100, 1, Carrier::Stream).depart, t(10));
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn a_reset_empties_a_capacity_uplink() {
+        use crate::capacity::Capacity;
+        // A 1500-byte opportunity every ms.
+        let cap = Capacity::mahimahi("1\n", 1500, 1.0).unwrap().starting(t(0));
+        let site = Site::new(City::Dallas, Access::Fiber).with_up(1_500_000);
+        let mut n = net(&[site, Site::new(City::Dallas, Access::Fiber)], QUIET);
+        n.set_up_capacity(0, std::sync::Arc::new(cap));
+        // 225 KB take the opportunities of 0-149 ms; a power cut at 1 ms
+        // forgets them, and 100
+        // bytes at 2 ms take the next.
+        assert_eq!(
+            n.send(t(0), 0, 1, 225_000, 150, Carrier::Stream).depart,
+            t(149)
+        );
+        n.reset(0, t(1));
+        assert_eq!(n.up_backlog(0, t(1)), Duration::ZERO);
+        let d = n.send(t(2), 0, 1, 100, 1, Carrier::Stream).depart;
+        assert!(d <= t(3), "{d:?}");
     }
 }

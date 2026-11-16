@@ -258,6 +258,12 @@ impl Cursor {
     pub fn held(&self, cap: &Capacity, at: Time) -> u64 {
         u64::try_from(self.0 - cap.before(at)).unwrap_or(0)
     }
+
+    /// Forgets what the uplink holds at `at`: the bytes taken past what
+    /// the schedule carried by then.
+    pub fn forget(&mut self, cap: &Capacity, at: Time) {
+        self.0 = self.0.min(cap.before(at));
+    }
 }
 
 #[cfg(test)]
