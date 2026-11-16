@@ -12,21 +12,39 @@
 #   hack/testbed/run.sh <out dir>
 #
 # Every container is its own network namespace with a veth on the bridge.
-# Each shapes its egress with netem (a fixed one-way delay) over a tbf
-# (the access link's rate, its bucket and queue):
+# Each shapes its egress as a host behind an access modem: eth0's clsact
+# hands every packet it sends to an ifb whose netem holds it for the
+# one-way delay, and the ifb hands it back to eth0, whose root tbf is the
+# modem (the access link's rate, its bucket and queue):
 #
-#   tc qdisc replace dev eth0 root handle 1: netem delay <d>ms limit 100000
-#   tc qdisc add dev eth0 parent 1:1 handle 10: tbf rate <up>mbit \
-#       burst <bucket> limit <up x queue x 125 bytes>
+#   tc qdisc replace dev eth0 root handle 10: tbf rate <up>mbit \
+#       burst <bucket> limit <up x queue x 125 bytes> [peakrate <p>mbit mtu 3028]
+#   tc qdisc add dev ifbd root netem delay <d>ms limit 100000
+#   tc filter add dev eth0 egress matchall action mirred egress redirect dev ifbd
 #
-# The bucket, what leaves at the line's rate once the link has idled, is
-# 3028 bytes (two full frames) unless SEED_BURST (the seed's) or
+# The bucket, what leaves at once (or at the peak rate) once the link has
+# idled, is 3028 bytes (two full frames) unless SEED_BURST (the seed's) or
 # VIEWER_BURST (the viewers') says otherwise.
 #
-# netem stays at the root with a delay of at least 1 ms: it releases the
-# socket's memory for the packets it holds, so TCP Small Queues doesn't
-# keep the tbf queue empty. Offloads are off, so tbf shapes real packets.
-# One viewer can get a slow downlink (an ifb device with a tbf).
+# The order is a modem's. netem, holding each packet with a delay of at
+# least 1 ms, releases the socket's memory for it (skb_orphan_partial), as
+# a host's NIC does once it has handed a packet to a modem, so TCP Small
+# Queues doesn't keep the modem's queue empty. tbf, the root, is offered
+# each packet as netem releases it and dequeues before the next, so a
+# burst its tokens cover leaves as it comes, and its byte limit is met as
+# the packets arrive. (With netem at the root and the tbf its child,
+# netem_dequeue moves every packet due into the tbf before the tbf sends
+# any, so a burst the tokens covered still met the limit at once and lost
+# its tail.) A fixed delay ahead of a FIFO shaper delays its departures as
+# one after it would, so a rate step applies the delay after its time.
+# Offloads are off on eth0 and on the ifb, which so cuts TCP's GSO
+# buffers (TCP always builds them) into the frames a modem would take:
+# tbf shapes real packets. A peak's bucket holds two frames: tbf wakes
+# for each frame its peak paces some 25 us late on this host, which a
+# one-frame bucket would lose (100 Mbit/s read 86), and two frames back to
+# back at most is what a line at the peak sends in 0.24 ms at 100 Mbit/s.
+# One viewer can get a slow downlink (an ifb device with a tbf, on eth0's
+# ingress).
 #
 # Browser nodes (KINDS) are shaped the same way. The harness in a browser
 # container serves the page and drives it on the container's loopback, so
@@ -50,16 +68,27 @@
 #                          full frame, 1514)
 #   VIEWER_BURST=<bytes>   each viewer's tbf bucket (default 3028; at least
 #                          a full frame)
-#   SEED_DELAY_MS=<ms>     the seed's one-way delay (default 20)
-#   VIEWER_DELAY_MS=<ms>   each viewer's (default 10)
+#   SEED_PEAK_MBIT=<m>     the rate the seed's bucket sends at, its line's
+#                          own (tbf's peakrate; more than its uplink's
+#                          rate, its steps' too); unset, at once
+#   VIEWER_PEAK_MBIT=<m>   each viewer's
+#   SEED_DELAY_MS=<ms>     the seed's one-way delay (default 20; at least 1)
+#   VIEWER_DELAY_MS=<ms>   each viewer's (default 10; at least 1)
 #   SECS=<s>               the stream's length (default 180)
 #   JOIN_AT=<s>            when viewers dial in, after the start (default 0)
 #   JOINS="<i>:<s> ..."    node i dials in <s> seconds after the start, in
 #                          place of JOIN_AT
 #   SLOW_DOWN_KBIT=<k>     viewer 1's downlink, if set
 #   SEED_UP_STEPS="<s>:<m> ..."  the seed's uplink becomes <m> Mbit/s <s>
-#                          seconds after the stream starts (tc qdisc change;
-#                          the queue keeps QUEUE_MS at the new rate)
+#                          seconds after the stream starts (tc qdisc change,
+#                          SEED_DELAY_MS later; the queue keeps QUEUE_MS at
+#                          the new rate). tbf's change fills its bucket
+#                          (tbf_change sets its tokens to the buffer), which
+#                          a link whose rate changes doesn't do; no qdisc
+#                          here steps a byte bucket's rate keeping its
+#                          tokens (HTB keeps them as time at the rate, and
+#                          passes a packet on any), so a step hands the seed
+#                          a full bucket, SEED_BURST bytes at once
 #   COMPETE="<s>:<d> ..."  a bulk TCP upload (iperf3, CUBIC) from the seed's
 #                          namespace, through its shaped uplink, to a sink
 #                          container (10 ms egress delay), from <s> seconds
@@ -100,7 +129,7 @@
 #                          egress queue: what it drops isn't there), and
 #                          what it offers its egress queue in
 #                          pcap-<i>-offered.pcap (a clsact mirror to an
-#                          ifb, ahead of the queue): the first
+#                          ifb, ahead of the delay and the queue): the first
 #                          PCAP_SNAPLEN bytes of each (default 128: the
 #                          headers; a data channel's payload past its DTLS
 #                          record header is encrypted)
@@ -159,6 +188,8 @@ viewer_up=${VIEWER_UP_MBIT:-20}
 queue=${QUEUE_MS:-100}
 seed_burst=${SEED_BURST:-3028}
 viewer_burst=${VIEWER_BURST:-3028}
+seed_peak=${SEED_PEAK_MBIT:-}
+viewer_peak=${VIEWER_PEAK_MBIT:-}
 seed_delay=${SEED_DELAY_MS:-20}
 viewer_delay=${VIEWER_DELAY_MS:-10}
 secs=${SECS:-180}
@@ -261,7 +292,7 @@ docker network inspect "$net" >/dev/null 2>&1 \
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
   > "$out/settings" || true
 
 # The containers start one after another before the stream does, and
@@ -293,28 +324,33 @@ if [ "$browsers" = 1 ] && [ "$relay_on" = 1 ]; then
 exec /testbed_node --relay-only --topology /out/topology --start $start --secs $secs 2> /out/node-relay.err" >/dev/null
 fi
 
+peak_arg() { if [ -n "$1" ]; then echo " peakrate ${1}mbit mtu 3028"; fi; }
 for i in $(seq 0 $((n - 1))); do
-  if [ "$i" -eq 0 ]; then up=$seed_up; delay=$seed_delay; burst=$seed_burst; else up=$viewer_up; delay=$viewer_delay; burst=$viewer_burst; fi
+  if [ "$i" -eq 0 ]; then up=$seed_up; delay=$seed_delay; burst=$seed_burst; peak=$seed_peak
+  else up=$viewer_up; delay=$viewer_delay; burst=$viewer_burst; peak=$viewer_peak; fi
   limit=$((up * queue * 125))
+  # The egress filter's actions: PCAP's mirror of what the node offers,
+  # then the delay's redirect.
+  offered=""
+  if [ "${PCAP:-0}" = 1 ]; then offered="action mirred egress mirror dev ifbo "; fi
   shape="ethtool -K eth0 tso off gso off gro off >/dev/null 2>&1 || true
-tc qdisc replace dev eth0 root handle 1: netem delay ${delay}ms limit 100000
-tc qdisc add dev eth0 parent 1:1 handle 10: tbf rate ${up}mbit burst $burst limit $limit"
-  ingress=""
+tc qdisc replace dev eth0 root handle 10: tbf rate ${up}mbit burst $burst limit $limit$(peak_arg "$peak")
+ip link add ifbd type ifb && ip link set ifbd up
+ethtool -K ifbd tso off gso off >/dev/null 2>&1 || true
+tc qdisc add dev ifbd root netem delay ${delay}ms limit 100000
+tc qdisc add dev eth0 clsact
+tc filter add dev eth0 egress matchall ${offered}action mirred egress redirect dev ifbd"
   if [ -n "$loss_every" ]; then
     # The seed loses what it receives; a viewer, what the seed sends it.
     if [ "$i" -eq 0 ]; then match=matchall; else match="protocol ip u32 match ip src $subnet.10/32"; fi
-    ingress="tc filter add dev eth0 parent ffff: prio 1 $match action gact continue random netrand drop $loss_every"
+    shape="$shape
+tc filter add dev eth0 ingress prio 1 $match action gact continue random netrand drop $loss_every"
   fi
   if [ "$i" -eq 1 ] && [ -n "$slow" ]; then
-    ingress="$ingress
-ip link add ifb0 type ifb && ip link set ifb0 up
-tc filter add dev eth0 parent ffff: prio 2 matchall action mirred egress redirect dev ifb0
-tc qdisc add dev ifb0 root tbf rate ${slow}kbit burst 3028 limit $((slow * queue / 8))"
-  fi
-  if [ -n "$ingress" ]; then
     shape="$shape
-tc qdisc add dev eth0 handle ffff: ingress
-$ingress"
+ip link add ifbs type ifb && ip link set ifbs up
+tc filter add dev eth0 ingress prio 2 matchall action mirred egress redirect dev ifbs
+tc qdisc add dev ifbs root tbf rate ${slow}kbit burst 3028 limit $((slow * queue / 8))"
   fi
   sample=""
   if [ "$i" -eq 0 ]; then
@@ -322,12 +358,11 @@ $ingress"
 ( while :; do echo \"@ \$(date +%s%3N)\"; ss -tin state established; sleep $ss_every; done > /out/ss-$i.log ) &"
   fi
   if [ "${PCAP:-0}" = 1 ]; then
+    shape="ip link add ifbo type ifb && ip link set ifbo up
+$shape"
     sample="$sample
-ip link add ifb1 type ifb && ip link set ifb1 up
-tc qdisc add dev eth0 clsact
-tc filter add dev eth0 egress matchall action mirred egress mirror dev ifb1
 ( tcpdump -i eth0 -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i.pcap 2> /out/tcpdump-$i.err ) &
-( tcpdump -i ifb1 -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i-offered.pcap 2> /out/tcpdump-$i-offered.err ) &"
+( tcpdump -i ifbo -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i-offered.pcap 2> /out/tcpdump-$i-offered.err ) &"
   fi
   capture=""
   if [ "${CAPTURE:-0}" = 1 ]; then capture="--capture /out/capture"; fi
@@ -364,7 +399,7 @@ tc filter add dev eth0 egress matchall action mirred egress mirror dev ifb1
       --cap-add NET_ADMIN -v "$bin:/testbed_node:ro" -v "$out:/out" "${media_mount[@]}" "$image" \
       bash -c "set -e
 $shape
-tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
+{ tc -s qdisc show dev eth0; tc -s qdisc show dev ifbd; } > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
 exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join $rate_arg $units_arg $media_arg $record_arg $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
@@ -378,7 +413,7 @@ exec /testbed_node --index $i --topology /out/topology --start $start --secs $se
       -v "$web:/web:ro" -v "$out:/out" "$browser_image" \
       bash -c "set -e
 $shape
-tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
+{ tc -s qdisc show dev eth0; tc -s qdisc show dev ifbd; } > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
 exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
@@ -390,12 +425,15 @@ if [ -n "$steps" ]; then
     for step in $steps; do
       at=${step%%:*}
       rate=${step#*:}
-      ms=$(awk "BEGIN { printf \"%d\", $start + $at * 1000 }")
+      # The delay is ahead of the shaper: what the seed sends from the
+      # step's time on reaches it that much later.
+      ms=$(awk "BEGIN { printf \"%d\", $start + $at * 1000 + $seed_delay }")
       wait=$(( ms - $(date +%s%3N) ))
       if [ "$wait" -gt 0 ]; then sleep "$(awk "BEGIN { print $wait / 1000 }")"; fi
       limit=$(awk "BEGIN { printf \"%d\", $rate * $queue * 125 }")
-      docker exec tb-0 tc qdisc change dev eth0 parent 1:1 handle 10: \
-        tbf rate "${rate}mbit" burst "$seed_burst" limit "$limit"
+      # shellcheck disable=SC2046 # the peak's words
+      docker exec tb-0 tc qdisc change dev eth0 root handle 10: \
+        tbf rate "${rate}mbit" burst "$seed_burst" limit "$limit" $(peak_arg "$seed_peak")
       echo "$(date +%s%3N) $rate" >> "$out/steps.log"
     done
   ) &

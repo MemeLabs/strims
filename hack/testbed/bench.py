@@ -35,8 +35,10 @@ links that carry the same schedule:
           (testbed: iperf3's report; sim: the model's wire bytes)
   x cwnd  its window (KiB) each second
   drops   what the seed's uplink queue dropped over the whole run: tc's
-          tbf counts the buffers it drops (TCP's GSO buffers of one or two
-          packets, a loss event each), the sim its window model's segments
+          tbf counts the buffers it drops, frames behind run.sh's ifb (the
+          sim its window model's packets, a competing upload's two a
+          segment), TCP's GSO buffers of one or two packets in a run of the
+          netem-rooted shaper before it (the sim its segments)
   x drops the competing uploads' lost packets (testbed: iperf3's
           retransmits; sim: two per lost segment)
 """
@@ -112,6 +114,11 @@ def classes(sched):
     return names
 
 
+# The seed's tbf in a tc-0.log sample (`tc -s qdisc show dev eth0` on one
+# line): its drops and backlog, by its handle wherever run.sh put it.
+TBF = re.compile(r"qdisc tbf 10: .*?dropped (\d+),.*?backlog (\d+)b")
+
+
 def tc_queue(run, start_ms, s):
     """The seed's tbf queue in ms, [(t_us, ms)], from tc-0.log."""
     p = os.path.join(run, "tc-0.log")
@@ -128,14 +135,14 @@ def tc_queue(run, start_ms, s):
         if not w:
             continue
         t = (int(w[0]) - start_ms) * 1000
-        backs = re.findall(r"backlog (\d+)b", line)
-        if len(backs) < 2:
+        tbf = TBF.search(line)
+        if not tbf:
             continue
         rate = up
         for a, m in steps:
             if t >= a * 1e6:
                 rate = m
-        out.append((t, int(backs[1]) * 8 / (rate * 1e6) * 1000))
+        out.append((t, int(tbf.group(2)) * 8 / (rate * 1e6) * 1000))
     return sorted(out)
 
 
@@ -145,8 +152,8 @@ def tc_drops(run):
     if not os.path.exists(p):
         return None
     last = max(open(p), key=lambda l: int(l.split()[0]) if l.split() else 0)
-    d = re.findall(r"dropped (\d+)", last)
-    return int(d[1]) if len(d) > 1 else None
+    tbf = TBF.search(last)
+    return int(tbf.group(1)) if tbf else None
 
 
 def tc_compete(run, start_ms):
@@ -198,7 +205,15 @@ def sim_compete(evs):
     return out
 
 
-def metrics(nodes, sched, cls, t0_us, queue=None, compete=None):
+def frames(run):
+    """Whether the run's tbf took frames (run.sh's ifb segments TCP's GSO
+    buffers ahead of its root tbf), as against GSO buffers (a netem root
+    with a tbf child, before)."""
+    p = os.path.join(run, "qdisc-0.txt")
+    return os.path.exists(p) and "qdisc tbf 10: root" in open(p).read()
+
+
+def metrics(nodes, sched, cls, t0_us, queue=None, compete=None, packets=False):
     m = defaultdict(list)
     period = {}
     for e in sched:
@@ -267,7 +282,10 @@ def metrics(nodes, sched, cls, t0_us, queue=None, compete=None):
             m[("node 0", "x cwnd")].append(cwnd)
     for e in nodes.get(0, []):
         if e.get("ev") == "drops":
-            m[("node 0", "drops")] = [e["queue_drops"] + e.get("competing_drops", 0)]
+            if packets and "queue_drop_packets" in e:
+                m[("node 0", "drops")] = [e["queue_drop_packets"] + 2 * e.get("competing_drops", 0)]
+            else:
+                m[("node 0", "drops")] = [e["queue_drops"] + e.get("competing_drops", 0)]
             if "competing_drops" in e:
                 m[("node 0", "x drops")] = [2 * e["competing_drops"]]
     for (c, _, _), recs in bursts.items():
@@ -317,7 +335,7 @@ def compare(run, extra=(), only=None, t0=2.0):
                     start = e["ms"]
         q = tc_queue(run, start, s) if name == "testbed" else None
         x = tc_compete(run, start) if name == "testbed" else None
-        m = metrics(nodes, sched, cls, int(t0 * 1e6), q, x)
+        m = metrics(nodes, sched, cls, int(t0 * 1e6), q, x, frames(run))
         if name == "testbed":
             m[("node 0", "drops")] = [tc_drops(run)]
             x = tc_compete_retx(run)
