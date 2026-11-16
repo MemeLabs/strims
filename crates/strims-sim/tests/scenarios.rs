@@ -13,6 +13,7 @@
     clippy::indexing_slicing
 )]
 
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use strims_base::rng::{DetRng, det_rng};
@@ -2253,7 +2254,10 @@ fn cross_traffic_hybrid() {
 // stream. A hostile host's own counts are what its runner wrote, not what
 // went out, so none is read here.
 
-/// A 16-viewer Hybrid mesh with `share` of its viewers hostile of `kind`.
+/// A 16-viewer Hybrid mesh with `share` of its viewers hostile of `kind`,
+/// spread over it (`Scenario::hostile`), and any honest viewer the mesh's
+/// draw walled off from the seed by hostile hosts linked to it
+/// ([`unwall`]).
 fn hostile_mesh(seed: u64, kind: &'static str, share: f64) -> Scenario {
     let mut m = streaming(
         &format!("hostile_mesh {kind}"),
@@ -2264,7 +2268,45 @@ fn hostile_mesh(seed: u64, kind: &'static str, share: f64) -> Scenario {
         (3, 33),
     );
     m.s.hostile(&[(kind, share)]);
+    unwall(&mut m.s);
     m.s
+}
+
+/// The honest viewers of `s`'s first swarm that no path through honest
+/// hosts reaches from its seed: alone among hostile neighbours, or with
+/// other honest viewers that are.
+fn walled_in(s: &Scenario) -> Vec<HostIx> {
+    let honest = |h: HostIx| s.hosts[h].class == HostClass::Honest;
+    let seed = s.swarms[0].seed;
+    let mut reached = vec![false; s.hosts.len()];
+    reached[seed] = true;
+    let mut next = vec![seed];
+    while let Some(h) = next.pop() {
+        for n in s.neighbours(h) {
+            if honest(n) && !reached[n] {
+                reached[n] = true;
+                next.push(n);
+            }
+        }
+    }
+    s.swarms[0]
+        .viewers
+        .iter()
+        .copied()
+        .filter(|&v| honest(v) && !reached[v])
+        .collect()
+}
+
+/// Links each honest viewer [`walled_in`] by hostile hosts to the seed.
+/// With no discovery a scenario's links are its topology, so such a viewer
+/// would read nothing whatever the hostile kind does (`echo_greed_eclipse`
+/// keeps that case); the hostile viewers keep their places on the mesh's
+/// paths.
+fn unwall(s: &mut Scenario) {
+    let seed = s.swarms[0].seed;
+    for v in walled_in(s) {
+        s.link(v, seed, Transport::Tcp);
+    }
 }
 
 /// Whether host `h` is a hostile host of `kind`.
@@ -2404,75 +2446,229 @@ fn grabbers_rejected_input_leaves_clean_input_alone() {
     );
 }
 
-/// Withholders keep their children's subscriptions open (their
-/// STREAM_CLOSEs go out as STREAM_OPENs) and push nothing, so their
-/// children prune them for missed pushes, and by the end no honest viewer
-/// keeps one as a parent. Whether any viewer grafts onto a withholder is
-/// the seed's draw, so a run where none did is checked for the stream
-/// alone, and the sweep for some run where one did. The withholders are
-/// the mesh's first four viewers, its best linked ([`random_mesh`] links
-/// each host to three earlier ones), which most runs' viewers graft onto.
+/// The 16-viewer Hybrid mesh of four streams with its first four viewers
+/// withholders, and the seed linked to them alone: every honest viewer's
+/// stream comes through them, so honest viewers take them as parents at
+/// every seed. Their uplinks of two stream rates admit fewer
+/// subscriptions than their children ask for, so they decline some, with
+/// STREAM_CLOSEs that go out as STREAM_OPENs.
+fn withholders(seed: u64) -> Scenario {
+    let mut m = streaming(
+        "withholders",
+        seed,
+        16,
+        (2048 * KIB, 1024 * KIB),
+        PushMode::Hybrid,
+        (3, 33),
+    );
+    let held: Vec<HostIx> = m.viewers[..4].to_vec();
+    for &v in &held {
+        m.s.hosts[v].class = HostClass::Hostile("withholder");
+        m.s.hosts[v].uplink = Some(2 * RATE);
+    }
+    let src = m.seed;
+    m.s.links.retain(|l| {
+        let other = if l.from == src {
+            l.to
+        } else if l.to == src {
+            l.from
+        } else {
+            return true;
+        };
+        held.contains(&other)
+    });
+    for &v in &held {
+        if !m.s.neighbours(v).contains(&src) {
+            m.s.link(v, src, Transport::Tcp);
+        }
+    }
+    m.s.swarms[0].options.stream_count = 4;
+    m.s.transfer_samples = true;
+    m.s.wire_bins = Some(secs(1));
+    m.s.request_logs = true;
+    m.s
+}
+
+/// Withholders take push subscriptions, send a peer only the chunks it
+/// asked of them, and send their STREAM_CLOSEs as STREAM_OPENs, so their
+/// children prune them for the pushes that never come. At every seed:
+/// some honest viewer takes a withholder as a parent, every change away
+/// from one is a prune (`Report::parent_changes`), and none taken before
+/// the stream's last 2 s is kept at the end; every chunk an honest viewer
+/// stored from a withholder it had asked of that withholder by then (the
+/// request logs); no STREAM_CLOSE of a withholder's reaches an honest
+/// viewer and the STREAM_OPENs they read of it are its opens and closes,
+/// none in flight at the end (each withholder's admissions, declines,
+/// sheds and subscribers, which queue them, settled 4 s before it), and
+/// some withholder declines; and every honest viewer reads the whole
+/// stream, which the withholders answer requests for.
 #[test]
 fn withholders_keep_streams_open_and_get_pruned() {
-    let opens = |r: &Report| inbound_from(r, |h| of_kind(r, h, "withholder"));
-    let reports = sweep(
+    sweep(
         "withholders_keep_streams_open_and_get_pruned",
-        |s| {
-            let mut m = streaming(
-                "withholders",
-                s,
-                16,
-                (2048 * KIB, 1024 * KIB),
-                PushMode::Hybrid,
-                (3, 33),
-            );
-            for &v in &m.viewers[..4] {
-                m.s.hosts[v].class = HostClass::Hostile("withholder");
-            }
-            m.s.transfer_samples = true;
-            m.s
-        },
+        withholders,
         |r| {
             honest_whole_stream(r)?;
-            let mut pruned = 0;
+            let held: Vec<HostIx> = (0..r.hosts.len())
+                .filter(|&h| of_kind(r, h, "withholder"))
+                .collect();
+            // Each (node, stream)'s parent as the changes go, and per
+            // withholder: the subscriptions honest viewers took of it,
+            // and why they left it.
+            let mut parent: BTreeMap<(HostIx, u16), (HostIx, Duration)> = BTreeMap::new();
+            let mut took: BTreeMap<HostIx, u64> = BTreeMap::new();
+            let mut left: BTreeMap<HostIx, Vec<strims_ppspp::ParentWhy>> = BTreeMap::new();
+            for c in &r.parent_changes {
+                if !honest(r, c.node) {
+                    continue;
+                }
+                let key = (c.node, c.stream);
+                if let Some(&(p, _)) = parent.get(&key)
+                    && held.contains(&p)
+                    && c.parent != Some(p)
+                {
+                    left.entry(p).or_default().push(c.why);
+                }
+                match c.parent {
+                    Some(p) => {
+                        if parent.get(&key).is_none_or(|&(q, _)| q != p) {
+                            if held.contains(&p) {
+                                *took.entry(p).or_default() += 1;
+                            }
+                            parent.insert(key, (p, c.at));
+                        }
+                    }
+                    None => {
+                        parent.remove(&key);
+                    }
+                }
+            }
+            if took.is_empty() {
+                return Err("no honest viewer took a withholder as a parent".into());
+            }
+            for (&w, &n) in &took {
+                let whys = left.get(&w).map_or(&[][..], Vec::as_slice);
+                if whys
+                    .iter()
+                    .any(|&why| why != strims_ppspp::ParentWhy::Prune)
+                {
+                    return Err(format!(
+                        "{}, a parent {n} times, left for {whys:?}",
+                        r.hosts[w].name
+                    ));
+                }
+            }
+            if left.values().all(Vec::is_empty) {
+                return Err("no honest viewer pruned a withholder".into());
+            }
+            // A subscription taken in the stream's last seconds may outlast
+            // it, since no push is due after it; one taken before is
+            // pruned by the end.
+            let late = r.scenario.swarms[0].stop.saturating_sub(secs(2));
+            if let Some((k, (p, at))) = parent
+                .iter()
+                .find(|(_, (p, at))| held.contains(p) && *at < late)
+            {
+                return Err(format!(
+                    "{} keeps the withholder {} as a parent of stream {} from {at:?}",
+                    r.hosts[k.0].name, r.hosts[*p].name, k.1
+                ));
+            }
+            // A withholder sends a child only chunks the child asked of it.
+            // Its answer to a request that expired at the child just
+            // before it landed counts as a push there (`HeldHow::Push`,
+            // the withholder the child's parent), so the arrivals' way in
+            // can't tell; the request logs can.
             for (h, host) in r.hosts.iter().enumerate() {
                 if !honest(r, h) {
                     continue;
                 }
-                let Some((_, _, last)) = host.transfers.iter().rev().find(|(_, sw, _)| *sw == 0)
-                else {
-                    continue;
-                };
-                pruned += last.pruned;
-                if let Some(p) = last
-                    .parent_peers
-                    .iter()
-                    .flatten()
-                    .find(|&&p| of_kind(r, p, "withholder"))
-                {
+                if host.requests_lost > 0 {
                     return Err(format!(
-                        "{} keeps the withholder {} as a parent",
-                        host.name, r.hosts[*p].name
+                        "{} lost {} requests",
+                        host.name, host.requests_lost
                     ));
                 }
+                for a in &host.arrivals {
+                    let Some(w) = a.peer.filter(|p| held.contains(p)) else {
+                        continue;
+                    };
+                    let asked = host.requests.iter().any(|q| {
+                        q.peer == Some(w)
+                            && q.record.bin.contains(a.held.bin)
+                            && (q.record.at - q.epoch).to_std().is_some_and(|t| t <= a.at)
+                    });
+                    if !asked {
+                        return Err(format!(
+                            "{} had {:?} from {} unasked ({:?})",
+                            host.name, a.held.bin, r.hosts[w].name, a.held.how
+                        ));
+                    }
+                }
             }
-            let (w, wl) = opens(r);
-            if w.stream_opens_in > 0 && pruned == 0 {
-                return Err(format!(
-                    "{} STREAM_OPENs from withholders over {wl} links, and no honest viewer pruned a parent",
-                    w.stream_opens_in
-                ));
+            // Per withholder, the STREAM_OPENs and STREAM_CLOSEs its runner
+            // wrote to honest viewers, and what they read of it: every close
+            // went out as an open. Two hosts' last samples differ by what
+            // is in flight between them, so they are compared settled. A
+            // withholder queues an open at an admission and a close at a
+            // decline, a shed or a silent subscriber's close, and writes it
+            // at the head of its next frame to the peer (two queued for a
+            // stream go as one): with none of its
+            // admissions, declines, sheds and subscribers (its transfer
+            // samples) changed in its last `quiet`, it wrote nothing then,
+            // and nothing it wrote was in flight at the last sample.
+            let quiet = secs(4);
+            let mut closes = 0;
+            for &w in &held {
+                let name = &r.hosts[w].name;
+                let (mut opens_out, mut closes_out) = (0, 0);
+                for &(peer, sw, m) in &r.hosts[w].messages {
+                    if sw == 0 && peer.is_some_and(|p| honest(r, p)) {
+                        opens_out += m.stream_opens_out;
+                        closes_out += m.stream_closes_out;
+                    }
+                }
+                let decided = |x: &strims_sim::TransferSample| {
+                    (x.accepted, x.rejected, x.sheds_sent, x.children)
+                };
+                let samples: Vec<(Duration, &strims_sim::TransferSample)> = r.hosts[w]
+                    .transfers
+                    .iter()
+                    .filter(|(_, sw, _)| *sw == 0)
+                    .map(|(at, _, x)| (*at, x))
+                    .collect();
+                let Some(&(end, last)) = samples.last() else {
+                    return Err(format!("{name} has no transfer samples"));
+                };
+                match samples.iter().rev().find(|&&(at, _)| at + quiet <= end) {
+                    Some(&(_, x)) if decided(x) == decided(last) => {}
+                    _ => {
+                        return Err(format!(
+                            "{name} decided a subscription in its last {quiet:?}"
+                        ));
+                    }
+                }
+                let (mut opens_in, mut closes_in) = (0, 0);
+                for (h, host) in r.hosts.iter().enumerate() {
+                    for &(peer, sw, m) in &host.messages {
+                        if honest(r, h) && sw == 0 && peer == Some(w) {
+                            opens_in += m.stream_opens_in;
+                            closes_in += m.stream_closes_in;
+                        }
+                    }
+                }
+                if closes_in > 0 || opens_in != opens_out + closes_out {
+                    return Err(format!(
+                        "{name} wrote {opens_out} STREAM_OPENs and {closes_out} STREAM_CLOSEs; honest viewers read {opens_in} and {closes_in}"
+                    ));
+                }
+                closes += closes_out;
+            }
+            if closes == 0 {
+                return Err("no withholder declined a subscription".into());
             }
             Ok(())
         },
-    );
-    let taken: Vec<(u64, u64)> = reports
-        .iter()
-        .map(|r| (r.seed, opens(r).0.stream_opens_in))
-        .collect();
-    assert!(
-        taken.iter().any(|&(_, n)| n > 0),
-        "no STREAM_OPEN from withholders at any seed (seed, opens): {taken:?}"
     );
 }
 
@@ -2513,32 +2709,40 @@ fn colluders_report_to_the_seed() {
 /// How long a `free-rider+echo` holds its echoes (`hostile::ECHO_HOLD`).
 const HELD_ECHO_MS: u64 = 300;
 
+/// The 16-viewer Hybrid mesh with two `free-rider+echo` and two
+/// `liar+echo` viewers, alternating, at every fourth viewer (v1, v5, v9,
+/// v13).
+fn echo_greed(seed: u64) -> Scenario {
+    let mut m = streaming(
+        "echo_greed",
+        seed,
+        16,
+        (2048 * KIB, 1024 * KIB),
+        PushMode::Hybrid,
+        (3, 33),
+    );
+    for (j, i) in [1, 5, 9, 13].into_iter().enumerate() {
+        let kind = if j % 2 == 0 {
+            "free-rider+echo"
+        } else {
+            "liar+echo"
+        };
+        m.s.hosts[m.viewers[i]].class = HostClass::Hostile(kind);
+    }
+    m.s
+}
+
 /// A `free-rider+echo` holds each answer to its peers' path probes, and a
-/// `liar+echo`'s answers name probes its peers never sent.
+/// `liar+echo`'s answers name probes its peers never sent ([`echo_greed`],
+/// [`unwall`]ed).
 #[test]
 fn echo_greedy_hosts_hold_or_forge_their_echoes() {
     sweep(
         "echo_greedy_hosts_hold_or_forge_their_echoes",
         |s| {
-            let mut m = streaming(
-                "echo_greed",
-                s,
-                16,
-                (2048 * KIB, 1024 * KIB),
-                PushMode::Hybrid,
-                (3, 33),
-            );
-            for (i, &v) in m.viewers.iter().enumerate() {
-                if i % 4 == 1 {
-                    let kind = if i % 8 == 1 {
-                        "free-rider+echo"
-                    } else {
-                        "liar+echo"
-                    };
-                    m.s.hosts[v].class = HostClass::Hostile(kind);
-                }
-            }
-            m.s
+            let mut sc = echo_greed(s);
+            unwall(&mut sc);
+            sc
         },
         |r| {
             honest_whole_stream(r)?;
@@ -2585,6 +2789,41 @@ fn echo_greedy_hosts_hold_or_forge_their_echoes() {
                 return Err("no honest host read a forged echo".into());
             }
             Ok(())
+        },
+    );
+}
+
+/// **An honest viewer among peers that serve nothing.** Seed 144's draw
+/// of [`echo_greed`]'s mesh links v15 to three hostile viewers alone, free
+/// riders and liars. Here the hosts also find each other through the
+/// signalling relay's discovery (`Scenario::discovering`, which keeps the
+/// mesh), but v15's peer slots hold its three links and the relay's, so it
+/// takes no other: it keeps peers that serve it nothing and reads none of
+/// the stream. Checks what a viewer that seeks other peers when its own
+/// serve it nothing (PLAN's greedy peers) achieves: v15 reads every frame
+/// written from 15 s on.
+#[test]
+#[ignore = "an open behaviour's case: a viewer among peers that serve nothing keeps them"]
+fn echo_greed_eclipse() {
+    sweep_at(
+        "echo_greed_eclipse",
+        144,
+        |s| {
+            let mut sc = echo_greed(s);
+            sc.discovering();
+            for v in walled_in(&sc) {
+                let slots = sc.neighbours(v).len();
+                sc.hosts[v].max_peers = u32::try_from(slots).unwrap_or(u32::MAX);
+            }
+            sc
+        },
+        |r| {
+            let walled = walled_in(&r.scenario);
+            if walled.is_empty() {
+                return Err("no honest viewer walled in by hostile hosts".into());
+            }
+            let spec = &r.scenario.swarms[0];
+            complete(r, &walled, secs(15), spec.stop)
         },
     );
 }

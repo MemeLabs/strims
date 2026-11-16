@@ -995,6 +995,15 @@ impl Scenario {
     /// exchanges carry what a host can be reached by: WebRTC sessions, or
     /// its listeners.
     pub fn organic(&mut self) {
+        let relay = self.discovering();
+        self.links.retain(|l| l.to == relay || l.from == relay);
+    }
+
+    /// [`Scenario::organic`]'s discovery beside the scenario's links, which
+    /// stay: each host also links to the signalling relay, publishes its
+    /// swarms on its network and links to the hosts it finds there. Returns
+    /// the relay.
+    pub fn discovering(&mut self) -> HostIx {
         let signal = self.networks.iter().position(|n| n.port == SIGNAL_PORT);
         let relay = self.hosts.iter().position(|h| h.class == HostClass::Infra);
         let (relay, net) = match (relay, signal) {
@@ -1007,8 +1016,8 @@ impl Scenario {
                 (r, n)
             }
         };
-        self.links.retain(|l| l.to == relay || l.from == relay);
         self.discovery = Some(net);
+        relay
     }
 
     pub fn link(&mut self, from: HostIx, to: HostIx, transport: Transport) {

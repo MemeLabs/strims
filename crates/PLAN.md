@@ -349,6 +349,10 @@ and dropped are in `TRIED.md`.
    - **ANNOUNCE's reach** (Wire changes, ppspp), then **holders nobody
      grafts onto**: a far holder can relay to nobody, and keeps its copy
      while no reporter votes on it.
+   - **A viewer among peers that serve nothing.** An honest viewer whose
+     every peer serves it nothing (free riders, liars) seeks other peers.
+     Test it with `echo_greed_eclipse`: a viewer whose peer slots its
+     links to such peers fill, with discovery beside them.
 4. **Pull on lossy, sparse and mobile paths.** The worst scenarios after
    a constrained seed, where pull does the most repair.
    - **The silence after a timeout.** LEDBAT's minimum window, under a
