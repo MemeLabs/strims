@@ -13,7 +13,8 @@
 // the bytes each may carry. `mm` is Mahimahi's format (Winstein et al.,
 // NSDI 2013): a millisecond a line, each line one opportunity of
 // --opp-bytes (default 1514, a 1500-byte IP packet's Ethernet frame), the
-// period the last line's time. `us` is `<t_us> <bytes>` a line, the
+// period the last line's time, whose opportunities come at each period's
+// time 0. `us` is `<t_us> <bytes>` a line, the
 // period the last line's time unless a `# period_us <p>` line gives it.
 // The trace repeats from its start every period. --scale multiplies every
 // opportunity's bytes.
@@ -544,6 +545,24 @@ static uint64_t load(const char *path, int us, double opp_bytes, double scale) {
   if (!nopps) fail("empty trace");
   if (!period) period = last;
   if (period < opps[nopps - 1].t || period == 0) fail("period shorter than the trace");
+  // An opportunity at the period's end is the next period's first, at its
+  // time 0 (as strims-wan's Capacity takes it).
+  uint64_t k = 0;
+  while (k < nopps && opps[nopps - 1 - k].t == period) k++;
+  if (k) {
+    struct opp *r = malloc(nopps * sizeof(*r));
+    if (!r) fail("out of memory");
+    uint64_t sum = 0;
+    for (uint64_t j = 0; j < nopps; j++) {
+      uint64_t i = j < k ? nopps - k + j : j - k;
+      uint64_t bytes = opps[i].cum - (i ? opps[i - 1].cum : 0);
+      sum += bytes;
+      r[j].t = j < k ? 0 : opps[i].t;
+      r[j].cum = sum;
+    }
+    free(opps);
+    opps = r;
+  }
   if (nopps >= (1ull << SEARCH_STEPS)) fail("trace too long");
   return period;
 }
