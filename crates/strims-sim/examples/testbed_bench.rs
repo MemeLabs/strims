@@ -10,7 +10,7 @@
 //!               [--secs <s>] [--start <unix ms>] [--webrtc]
 //!               [--web <dir>] [--browser-bin <path>]
 //! testbed_bench --sim <testbed run dir> --out <dir> [--window]
-//!               [--segment <bytes>] [--str0m] [--bucket]
+//!               [--segment <bytes>] [--str0m] [--bucket] [--nominal]
 //! ```
 //!
 //! On the testbed a node listens on its topology address, dials the nodes
@@ -41,7 +41,10 @@
 //! it (`SEED_BURST`, `VIEWER_BURST`; `run.sh`'s 3028 without), which the
 //! sim's uplinks otherwise lack. A competing upload starts when the run's
 //! iperf3 client did (`compete.log` and its `compete-<s>.json` report),
-//! where the run has them.
+//! where the run has them. Each node releases its schedule's records when
+//! the run's node did ([`Releases`], from its log's writes), so the model
+//! takes the testbed node's timers and stalls as its input; with
+//! `--nominal` at their dues.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -57,8 +60,8 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use strims_node::{TokioNet, WebRtcConfig};
 use strims_sim::bench::{
-    Bench, BenchClock, Entry, LINGER, NodePlan, RtcPlan, Schedule, links, node, read_signal,
-    simulate, write_signal,
+    Bench, BenchClock, Entry, LINGER, NodePlan, Releases, RtcPlan, Schedule, Written, links, node,
+    read_signal, simulate, write_signal,
 };
 use strims_testbed::browser::{Bundle, Site, Socket, args as browser_args, firefox_profile};
 use strims_testbed::native::now_ms;
@@ -85,6 +88,7 @@ struct Args {
     str0m: bool,
     bucket: bool,
     trace_tcp: bool,
+    nominal: bool,
     web: Option<PathBuf>,
     browser_bin: Option<PathBuf>,
 }
@@ -114,6 +118,7 @@ fn args() -> Result<Args, String> {
             "--str0m" => a.str0m = true,
             "--bucket" => a.bucket = true,
             "--trace-tcp" => a.trace_tcp = true,
+            "--nominal" => a.nominal = true,
             "--web" => a.web = Some(value()?.into()),
             "--browser-bin" => a.browser_bin = Some(value()?.into()),
             "--join-at" | "--rate" | "--hosts" | "--capture" | "--units" | "--player" => {
@@ -187,6 +192,34 @@ fn competitor_starts(dir: &std::path::Path, bench: &mut Bench) -> Result<(), Str
     Ok(())
 }
 
+/// Each node's releases of its schedule's records in the run, from its
+/// log's writes; a node without a log releases them at their dues.
+fn recorded_releases(dir: &std::path::Path, bench: &mut Bench) {
+    bench.releases.clear();
+    for i in 0..bench.sites.len() {
+        let Ok(log) = std::fs::read_to_string(dir.join(format!("node-{i}.jsonl"))) else {
+            bench.releases.push(Releases::default());
+            continue;
+        };
+        let writes: Vec<Written> = log
+            .lines()
+            .filter(|l| l.contains(r#""ev":"w""#))
+            .filter_map(|l| {
+                let v: Value = serde_json::from_str(l).ok()?;
+                let n = |k: &str| v.get(k)?.as_i64();
+                Some(Written {
+                    to: usize::try_from(n("to")?).ok()?,
+                    kind: u8::try_from(n("k")?).ok()?,
+                    due: n("due")?,
+                    at: n("at")?,
+                    done: n("done")?,
+                })
+            })
+            .collect();
+        bench.releases.push(Releases::recorded(&writes));
+    }
+}
+
 fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
     let out = a.out.clone().ok_or("--sim needs --out")?;
     let mut bench = Bench::testbed(
@@ -196,6 +229,9 @@ fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
         a.window,
     )?;
     competitor_starts(dir, &mut bench)?;
+    if !a.nominal {
+        recorded_releases(dir, &mut bench);
+    }
     bench.tcp_segment = a.segment;
     bench.str0m = a.str0m;
     bench.buckets = a.bucket;

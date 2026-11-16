@@ -82,7 +82,7 @@
 #![allow(clippy::disallowed_types)]
 
 use std::cell::{Cell, RefCell};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
@@ -209,6 +209,81 @@ impl Schedule {
     }
 }
 
+/// A record's write as a node's log has it (an `ev:"w"` line).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Written {
+    pub to: usize,
+    /// Its kind's code (see the module docs).
+    pub kind: u8,
+    pub due: i64,
+    pub at: i64,
+    pub done: i64,
+}
+
+/// When a recorded run's node released its schedule's records, for a
+/// replay to release them then rather than at their dues: each group's (a
+/// burst's records, or a probe) by link, kind and due. A group was
+/// released when its first record's write began, which carries the node's
+/// timer lateness (a tokio timer fires on its wheel's next millisecond,
+/// 1.0-1.4 ms past the due at the median on the testbed) and its stalls
+/// (whole-node pauses of 50-75 ms). A group that came due while its link's
+/// writer was still writing hides its release, and takes its link and
+/// kind's median lateness, no later than its write. A release is the
+/// millisecond nearest it: the sim's tasks run on turmoil's millisecond
+/// steps (a shorter step runs tokio's timers ahead of the sim's clock),
+/// where a timer's later deadline would resolve to the next.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Releases(BTreeMap<(usize, u8, i64), i64>);
+
+impl Releases {
+    /// The releases `writes`, a node's in its log's order, record.
+    pub fn recorded(writes: &[Written]) -> Releases {
+        let mut first: BTreeMap<(usize, u8, i64), (i64, bool)> = BTreeMap::new();
+        let mut done: BTreeMap<usize, i64> = BTreeMap::new();
+        for w in writes {
+            let busy = done.get(&w.to).is_some_and(|&d| d > w.due);
+            done.insert(w.to, w.done);
+            if w.kind != Kind::Echo.code() {
+                first.entry((w.to, w.kind, w.due)).or_insert((w.at, busy));
+            }
+        }
+        let mut late: BTreeMap<(usize, u8), Vec<i64>> = BTreeMap::new();
+        for (&(to, kind, due), &(at, busy)) in &first {
+            if !busy {
+                late.entry((to, kind)).or_default().push(at - due);
+            }
+        }
+        let median: BTreeMap<(usize, u8), i64> = late
+            .into_iter()
+            .filter_map(|(k, mut v)| {
+                v.sort_unstable();
+                Some((k, *v.get(v.len() / 2)?))
+            })
+            .collect();
+        Releases(
+            first
+                .into_iter()
+                .filter_map(|((to, kind, due), (at, busy))| {
+                    let at = if busy {
+                        at.min(due + median.get(&(to, kind))?)
+                    } else {
+                        at
+                    };
+                    Some(((to, kind, due), (at + 500).div_euclid(1000) * 1000))
+                })
+                .collect(),
+        )
+    }
+
+    /// When the group of `kind` due at `due` on the link to `to` is
+    /// released: its recorded release, or else its due.
+    fn at(&self, to: usize, kind: Kind, due: i64) -> i64 {
+        self.0
+            .get(&(to, kind.code(), due))
+            .map_or(due, |&at| at.max(due))
+    }
+}
+
 /// The bench's clock: microseconds since the run's start, negative before
 /// it. Timers are the runtime's, so under turmoil they are simulated.
 pub trait BenchClock: Clone + 'static {
@@ -251,6 +326,9 @@ pub struct NodePlan {
     /// How many nodes dial it.
     pub accepts: usize,
     pub schedule: Schedule,
+    /// When its schedule's records are released, where a recorded run
+    /// replays; by default at their dues.
+    pub releases: Releases,
     /// When the schedule ends, in µs from the start.
     pub end_us: i64,
 }
@@ -288,6 +366,7 @@ impl NodePlan {
             dial,
             accepts,
             schedule,
+            releases: Releases::default(),
             end_us,
         }
     }
@@ -545,6 +624,7 @@ pub async fn node<N: BenchNet, C: BenchClock>(
             }
             links.push(link);
         }
+        let releases = Rc::new(plan.releases.clone());
         for e in &plan.schedule.entries {
             let (from, to) = e.ends();
             if from != me {
@@ -558,6 +638,7 @@ pub async fn node<N: BenchNet, C: BenchClock>(
                 link.clone(),
                 clock.clone(),
                 plan.end_us,
+                releases.clone(),
             )));
         }
         join_all(tasks).await;
@@ -616,8 +697,15 @@ fn setup<N: Net>(net: &N, s: &N::TcpStream) {
     let _ = net.configure_tcp_send_queue(s, &TcpSocketConfig::default());
 }
 
-/// Queues `e`'s records on `link` as they come due.
-async fn feed<C: BenchClock>(e: Entry, link: Rc<LinkState>, clock: C, end_us: i64) {
+/// Queues `e`'s records on `link` as they come due, or as `releases`
+/// releases them.
+async fn feed<C: BenchClock>(
+    e: Entry,
+    link: Rc<LinkState>,
+    clock: C,
+    end_us: i64,
+    releases: Rc<Releases>,
+) {
     let (start_ms, period_ms, end_ms) = match e {
         Entry::Burst {
             start_ms,
@@ -633,9 +721,13 @@ async fn feed<C: BenchClock>(e: Entry, link: Rc<LinkState>, clock: C, end_us: i6
         } => (start_ms, period_ms, end_ms),
     };
     let end = end_ms.map_or(end_us, |ms| (ms as i64 * 1000).min(end_us));
+    let kind = match e {
+        Entry::Burst { .. } => Kind::Data,
+        Entry::Probe { .. } => Kind::Probe,
+    };
     let mut due = start_ms as i64 * 1000;
     while due < end {
-        sleep_until(&clock, due).await;
+        sleep_until(&clock, releases.at(link.peer, kind, due)).await;
         match e {
             Entry::Burst { bytes, write, .. } => {
                 let mut left = bytes;
@@ -897,6 +989,9 @@ pub struct Bench {
     /// (`ev:"tcp"` lines: `t`, `to`, `k`, `seq`, `len`, `cwnd`,
     /// `ssthresh`, `flight`).
     pub trace_tcp: bool,
+    /// When each node's schedule is released ([`NodePlan::releases`]), by
+    /// node; a node without its schedule's dues.
+    pub releases: Vec<Releases>,
 }
 
 /// The defaults of `hack/testbed/run.sh`.
@@ -1053,6 +1148,7 @@ impl Bench {
             tcp_segment: None,
             buckets: false,
             trace_tcp: false,
+            releases: Vec::new(),
         })
     }
 }
@@ -1179,7 +1275,7 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
         let net = SimNet::new(Some(buffers.clone()))
             .with_wan(wan.clone())
             .with_segment(segment);
-        let plan = NodePlan::new(
+        let mut plan = NodePlan::new(
             me,
             &bench.links,
             "0.0.0.0:9000".to_owned(),
@@ -1187,6 +1283,7 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
             bench.schedule.clone(),
             end_us,
         );
+        plan.releases = bench.releases.get(me).cloned().unwrap_or_default();
         let logs = logs.clone();
         let log = move |line: String| {
             if let Some(l) = logs.borrow_mut().get_mut(me) {
@@ -1440,6 +1537,63 @@ mod tests {
         );
         assert!(Schedule::parse("burst 0 1 0 250 65536 8").is_err());
         assert!(Schedule::parse("pause 0 1").is_err());
+    }
+
+    /// A replay releases a group when the run's first write of it began; a
+    /// group that came due while its link's writer was busy takes its link
+    /// and kind's median lateness, no later than its write; echoes and
+    /// groups the run lacks keep their dues.
+    #[test]
+    fn a_replay_releases_the_records_when_the_run_wrote_them() {
+        let w = |to, kind, due, at, done| Written {
+            to,
+            kind,
+            due,
+            at,
+            done,
+        };
+        let r = Releases::recorded(&[
+            w(1, 0, 0, 1_200, 1_210),
+            w(1, 0, 0, 1_210, 60_000),
+            w(1, 0, 50_000, 60_000, 60_010),
+            w(1, 2, 57_000, 60_020, 60_030),
+            w(1, 0, 100_000, 101_600, 101_610),
+            w(2, 1, 7_000, 8_100, 8_110),
+        ]);
+        let at = |to, kind, due| r.at(to, kind, due);
+        assert_eq!(at(1, Kind::Data, 0), 1_000);
+        assert_eq!(at(1, Kind::Data, 50_000), 52_000);
+        assert_eq!(at(1, Kind::Data, 100_000), 102_000);
+        assert_eq!(at(1, Kind::Data, 150_000), 150_000);
+        assert_eq!(at(1, Kind::Echo, 57_000), 57_000);
+        assert_eq!(at(2, Kind::Probe, 7_000), 8_000);
+
+        let mut bench = Bench::testbed(
+            "VIEWERS=1\nSECS=1",
+            "",
+            "burst 0 1 0 250 4096 4096\nprobe 0 1 7 200",
+            true,
+        )
+        .unwrap();
+        bench.releases = vec![Releases::recorded(&[
+            w(1, 1, 207_000, 208_250, 208_260),
+            w(1, 0, 500_000, 501_600, 501_610),
+        ])];
+        let logs = simulate(&bench).unwrap();
+        let write = |k: i64, due: i64| {
+            logs[0]
+                .iter()
+                .find(|l| {
+                    l.contains(r#""ev":"w""#)
+                        && field(l, "k") == Some(k)
+                        && field(l, "due") == Some(due)
+                })
+                .and_then(|l| field(l, "at"))
+        };
+        assert_eq!(write(0, 250_000), Some(250_000));
+        assert_eq!(write(0, 500_000), Some(502_000));
+        assert_eq!(write(1, 207_000), Some(208_000));
+        assert_eq!(write(1, 407_000), Some(407_000));
     }
 
     /// On the testbed (`hack/testbed/bench/over.sched`) a socket asked for
