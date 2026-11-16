@@ -2543,7 +2543,7 @@ joins = "viewers USING (k, src, node)"
 sample = false
 zstd = true
 normalized = "kind the vocabulary's current id: a retired kind's replacement for the run's sim (event_kinds' replaced_by), and strims-sim's retired parent_lost of value -1 (its viewer never stopped counting on the parent) parent_departed, its value NULL (vocab.toml's notes on parent_lost); written_kind the id the run wrote; t_ms = t_us / 1000; node and peer NULL for none; detail_map: detail as a MAP where it is key=value pairs."
-description = "The run's timed events, each kind's node, peer, value and detail as the vocabulary (crates/strims-wan/vocab.toml) gives them."
+description = "The run's timed events, each kind's node, peer, value and detail as the vocabulary (crates/strims-wan/vocab.toml) gives them. A scenario fault the run skipped, or never reached (at or past its end), has no row."
 
 [columns.events.t_us]
 sims = ["strims-sim"]

@@ -366,15 +366,21 @@ pub enum Fault {
     /// every other host. The FINs of the sockets the crash drops are lost,
     /// as in a power loss; peers notice by timeouts, or by an RST once the
     /// host answers again.
+    ///
+    /// A crash before the host's [`HostSpec::arrive_at`], or after it
+    /// departed, finds no host, and one while it is down from an earlier
+    /// crash finds it stopped: either is skipped.
     Crash(HostIx),
     /// Start the host's software again (`Sim::bounce`): a new node with the
     /// same profile key (so the same URIs) and a new host key. Repairs every
     /// partition between the host and the others first, including those of
     /// a [`Fault::Partition`].
     ///
-    /// A crash before the host's [`HostSpec::arrive_at`], or after it
-    /// departed, finds no host and is skipped, and so is the restart that
-    /// follows a skipped crash.
+    /// Only a host that is down from a crash restarts: a restart of one
+    /// that isn't there, never crashed, or is up again from an earlier
+    /// restart is skipped, since bouncing a live host would drop its
+    /// sockets without the cut-off a crash makes first, in an order that
+    /// isn't reproducible.
     Restart(HostIx),
     /// The host leaves for good ([`Departure`]), and takes part in no
     /// fault after. An abrupt departure is a crash that leaves the host
@@ -851,12 +857,18 @@ impl Scenario {
         !self.arrivals.is_t0() || self.departures.is_some()
     }
 
-    /// When host `h` leaves for good ([`Fault::Depart`]), and how.
+    /// When host `h` leaves for good ([`Fault::Depart`]), and how: its
+    /// earliest departure, the first given of those at one time, as the
+    /// run applies them (a later one is a second departure, which it
+    /// skips).
     pub fn departure(&self, h: HostIx) -> Option<(Duration, Departure)> {
-        self.faults.iter().find_map(|f| match f.fault {
-            Fault::Depart(x, how) if x == h => Some((f.at, how)),
-            _ => None,
-        })
+        self.faults
+            .iter()
+            .filter_map(|f| match f.fault {
+                Fault::Depart(x, how) if x == h => Some((f.at, how)),
+                _ => None,
+            })
+            .min_by_key(|&(at, _)| at)
     }
 
     /// Adds a node and returns its index.

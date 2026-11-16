@@ -976,6 +976,55 @@ fn viewer_churn_hybrid() {
     );
 }
 
+/// Two crash and restart pairs of one viewer that overlap: a crash at
+/// 10 s, another at 11 s while it is down, a restart at 12 s and another
+/// at 14 s. The second crash finds the viewer down and the second restart
+/// finds it up, so the run skips both, and the viewer goes down once and
+/// comes back once; a restart of a live host would drop its sockets
+/// without a crash's cut-off, in an order the sweep's replay of the seed
+/// wouldn't reproduce. It reads every frame written from 8 s after its
+/// restart on.
+#[test]
+fn overlapping_crashes_restart_a_host_once() {
+    sweep(
+        "overlapping_crashes_restart_a_host_once",
+        |s| {
+            let mut m = streaming(
+                "overlapping_crashes",
+                s,
+                8,
+                (2048 * KIB, 1024 * KIB),
+                PushMode::Hybrid,
+                (3, 33),
+            );
+            let v = m.viewers[3];
+            m.s.at(secs(10), Fault::Crash(v));
+            m.s.at(secs(11), Fault::Crash(v));
+            m.s.at(secs(12), Fault::Restart(v));
+            m.s.at(secs(14), Fault::Restart(v));
+            m.s
+        },
+        |r| {
+            sound(r)?;
+            let v = r.scenario.swarms[0].viewers[3];
+            let skipped: Vec<(Duration, &Fault)> = r
+                .skipped_faults
+                .iter()
+                .map(|&i| (r.scenario.faults[i].at, &r.scenario.faults[i].fault))
+                .collect();
+            let want = [(secs(11), &Fault::Crash(v)), (secs(14), &Fault::Restart(v))];
+            if skipped != want {
+                return Err(format!("skipped {skipped:?}"));
+            }
+            if r.hosts[v].restarts != 1 {
+                return Err(format!("{} restarts", r.hosts[v].restarts));
+            }
+            let spec = &r.scenario.swarms[0];
+            complete(r, &[v], secs(12 + CATCH_UP), spec.stop)
+        },
+    );
+}
+
 // --- 3a. arrivals and departures --------------------------------------------
 
 /// After its arrival, each viewer reads every frame written from `after`

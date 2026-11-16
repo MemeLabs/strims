@@ -151,7 +151,9 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
         while let Some(f) = faults.get(next)
             && sim.elapsed() >= f.at
         {
-            apply(&mut sim, w, w.wan.lock().as_mut(), &f.fault);
+            if !apply(&mut sim, w, w.wan.lock().as_mut(), &f.fault) {
+                w.fault_skipped(next);
+            }
             next += 1;
         }
         // The counters as they stood at each edge passed: before this
@@ -174,6 +176,10 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
             Ok(false) => {}
             Err(e) => return Err(e.to_string()),
         }
+    }
+    // The faults the run never reached.
+    for i in next..faults.len() {
+        w.fault_skipped(i);
     }
     let secs = sim.elapsed().as_secs_f64();
     let end = sim.elapsed();
@@ -248,12 +254,20 @@ fn cut_off(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, h: HostIx)
     w.observe_stopped(sim.elapsed(), false, wan);
 }
 
-/// Applies a fault. In WAN mode the scheduler holds every link between
-/// hosts, so turmoil's own hold, release and latency never apply to them:
-/// the scheduler freezes pairs, takes new latencies, and is told of every
-/// partition and repair (a repaired link is held anew).
-fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) {
+/// Applies a fault, and whether it did. It skips, and the trace says so,
+/// a crash of a host that isn't there (before it arrives, or after it
+/// departed) or that is down from an earlier crash; a restart of a host
+/// that isn't down (one that isn't there, never crashed, or is up again
+/// from an earlier restart), since restarting a live host would drop its
+/// sockets without [`cut_off`]; a host's second departure; and a one-way
+/// latency without the WAN model. In WAN mode the scheduler
+/// holds every link between hosts, so turmoil's own hold, release and
+/// latency never apply to them: the scheduler freezes pairs, takes new
+/// latencies, and is told of every partition and repair (a repaired link
+/// is held anew).
+fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) -> bool {
     let ms = u64::try_from(sim.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let mut applied = true;
     let line = match f {
         Fault::Partition(a, b) => {
             for_pairs(w, a, b, |x, y| sim.partition(x, y));
@@ -308,10 +322,19 @@ fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) {
                     for_ix_pairs(a, b, |x, y| s.set_latency_from(x, y, (*d).into()));
                     line
                 }
-                None => format!("{line} skipped: one way needs the WAN model"),
+                None => {
+                    applied = false;
+                    format!("{line} skipped: one way needs the WAN model")
+                }
             }
         }
-        Fault::Crash(h) if w.skips_crash(*h, sim.elapsed()) => {
+        // A crash of a host already down leaves its restart to come.
+        Fault::Crash(h) if w.is_down(*h) => {
+            applied = false;
+            format!("crash {} skipped: down", w.name(*h))
+        }
+        Fault::Crash(h) if w.is_absent(*h, sim.elapsed()) => {
+            applied = false;
             format!("crash {} skipped: not there", w.name(*h))
         }
         Fault::Crash(h) => {
@@ -319,8 +342,13 @@ fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) {
             w.crashed(*h, ms);
             format!("crash {}", w.name(*h))
         }
-        Fault::Restart(h) if w.skips_restart(*h) => {
+        Fault::Restart(h) if w.is_absent(*h, sim.elapsed()) => {
+            applied = false;
             format!("restart {} skipped: not there", w.name(*h))
+        }
+        Fault::Restart(h) if !w.is_down(*h) => {
+            applied = false;
+            format!("restart {} skipped: up", w.name(*h))
         }
         Fault::Restart(h) => {
             for x in others(w, *h) {
@@ -335,6 +363,10 @@ fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) {
             sim.bounce(w.name(*h));
             w.restarted(*h);
             format!("restart {}", w.name(*h))
+        }
+        Fault::Depart(h, _) if w.departed(*h) => {
+            applied = false;
+            format!("depart {} skipped: departed", w.name(*h))
         }
         // The host's own task leaves its swarms and closes its links
         // (`host::depart`); from here on no host dials it.
@@ -372,6 +404,7 @@ fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) {
         }
     };
     w.log_at(ms, "fault", line);
+    applied
 }
 
 fn report(
@@ -436,6 +469,7 @@ fn report(
     let violations = std::mem::take(&mut st.violations);
     let wire_bins = std::mem::take(&mut st.wire_bins);
     let parent_losses = std::mem::take(&mut st.parent_losses);
+    let skipped_faults = std::mem::take(&mut st.skipped_faults);
     let loops = st.loops.as_ref().map(crate::loops::Loops::report);
     drop(st);
     let parent_changes = w.parent_changes();
@@ -467,7 +501,9 @@ fn report(
         parent_losses,
         parent_changes,
         loops,
+        skipped_faults,
     };
+    // As the run applied them, so `skipped_faults` indexes them.
     r.scenario.faults.sort_by_key(|f| f.at);
     r
 }

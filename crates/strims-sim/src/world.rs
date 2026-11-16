@@ -148,8 +148,6 @@ pub(crate) struct HostState {
     pub departed: Option<u64>,
     /// Crashed, and not restarted yet.
     pub down: bool,
-    /// Its last crash found no host (see [`World::skips_crash`]).
-    pub crash_skipped: bool,
     /// With [`Scenario::departures`], the hosts its first swarm's streams
     /// had as push parents at its last stats sample, one per stream.
     pub parents: Vec<HostIx>,
@@ -262,6 +260,8 @@ pub(crate) struct WorldState {
     pub wire_bins: Vec<Vec<[u64; crate::wan::UP_COUNTERS.len()]>>,
     /// See [`crate::Report::parent_losses`].
     pub parent_losses: Vec<ParentLoss>,
+    /// See [`crate::Report::skipped_faults`].
+    pub skipped_faults: Vec<usize>,
     /// With the tables, every node's parent changes as their sinks gave
     /// them ([`World::parent_changes`]): the host, its incarnation, the
     /// change.
@@ -378,6 +378,7 @@ impl World {
             rng,
             wire_bins: Vec::new(),
             parent_losses: Vec::new(),
+            skipped_faults: Vec::new(),
             parents: Vec::new(),
             loops: spec.loops.then(crate::loops::Loops::default),
         };
@@ -709,6 +710,12 @@ impl World {
 
     // --- faults -------------------------------------------------------------
 
+    /// The run skipped fault `i` of its time-ordered faults
+    /// ([`crate::Report::skipped_faults`]).
+    pub fn fault_skipped(&self, i: usize) {
+        self.record(|st| st.skipped_faults.push(i));
+    }
+
     /// `h` crashed at `ms`.
     pub fn crashed(&self, h: HostIx, ms: u64) {
         self.record(|st| {
@@ -730,44 +737,17 @@ impl World {
         });
     }
 
-    /// Whether a crash of `h` at `now` finds no host: before its
+    /// Whether `h` isn't there at `now`: before its
     /// [`HostSpec::arrive_at`](crate::HostSpec::arrive_at), or after it
-    /// departed. The restart that follows a skipped crash is skipped too
-    /// ([`World::skips_restart`]).
-    pub fn skips_crash(&self, h: HostIx, now: Duration) -> bool {
+    /// departed.
+    pub fn is_absent(&self, h: HostIx, now: Duration) -> bool {
         let early = self
             .spec
             .hosts
             .get(h)
             .and_then(|s| s.arrive_at)
             .is_some_and(|at| now < at);
-        let skip = early || self.departed(h);
-        if skip
-            || self
-                .st
-                .borrow()
-                .hosts
-                .get(h)
-                .is_some_and(|s| s.crash_skipped)
-        {
-            self.record(|st| {
-                if let Some(s) = st.hosts.get_mut(h) {
-                    s.crash_skipped = skip;
-                }
-            });
-        }
-        skip
-    }
-
-    /// Whether a restart of `h` is skipped: it departed, or its crash was.
-    pub fn skips_restart(&self, h: HostIx) -> bool {
-        self.departed(h)
-            || self
-                .st
-                .borrow()
-                .hosts
-                .get(h)
-                .is_some_and(|s| s.crash_skipped)
+        early || self.departed(h)
     }
 
     /// Whether `h` is down from a crash it hasn't restarted from.

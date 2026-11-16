@@ -707,6 +707,7 @@ mod tests {
             parent_losses: Vec::new(),
             parent_changes: Vec::new(),
             loops: None,
+            skipped_faults: Vec::new(),
         }
     }
 

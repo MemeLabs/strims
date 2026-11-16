@@ -604,7 +604,7 @@ impl Report {
         for (i, v) in viewers.iter().enumerate() {
             let h = self.hosts.get(v.host);
             let (arrive, _) = self.presence(v.host);
-            let depart = self.scenario.departure(v.host);
+            let depart = self.departure(v.host);
             t.fields(&[
                 i.to_string(),
                 v.host.to_string(),
@@ -907,7 +907,8 @@ impl Report {
             };
         let first = |g: &[HostIx]| g.first().map_or(-1, |&h| h as i64);
         let groups = |a: &[HostIx], b: &[HostIx]| (a.len() * b.len()) as i64;
-        for f in &self.scenario.faults {
+        // The faults the run applied (a skipped one is only the trace's).
+        for f in self.applied_faults() {
             let at = f.at;
             match &f.fault {
                 Fault::Partition(a, b) => {
@@ -920,13 +921,21 @@ impl Report {
                 }
                 Fault::Crash(h) => push(at, Kind::Crash, *h as i64, -1, 0, ""),
                 Fault::Restart(h) => push(at, Kind::Restart, *h as i64, -1, 0, ""),
-                Fault::Latency(a, b, d) | Fault::LatencyFrom(a, b, d) => push(
+                Fault::Latency(a, b, d) => push(
                     at,
                     Kind::Latency,
                     first(a),
                     first(b),
                     d.as_millis() as i64,
-                    "",
+                    "both",
+                ),
+                Fault::LatencyFrom(a, b, d) => push(
+                    at,
+                    Kind::Latency,
+                    first(a),
+                    first(b),
+                    d.as_millis() as i64,
+                    "one-way",
                 ),
                 Fault::PauseReading(h) => push(at, Kind::PauseReading, *h as i64, -1, 0, ""),
                 Fault::ResumeReading(h) => push(at, Kind::ResumeReading, *h as i64, -1, 0, ""),
@@ -958,7 +967,7 @@ impl Report {
         // how, as the `viewers` table's `depart_ms`), then the viewer's
         // notice, if it came.
         for l in &self.parent_losses {
-            let (at, how) = match self.scenario.departure(l.parent) {
+            let (at, how) = match self.departure(l.parent) {
                 Some((at, Departure::Graceful)) => (at, "graceful"),
                 Some((at, Departure::Abrupt)) => (at, "abrupt"),
                 None => (Duration::from_millis(l.departed_ms), ""),
@@ -988,9 +997,7 @@ impl Report {
         // host a fault caps (the faults are its steps).
         let seed = self.scenario.swarms.first().map(|s| s.seed);
         let capped: BTreeSet<HostIx> = self
-            .scenario
-            .faults
-            .iter()
+            .applied_faults()
             .filter_map(|f| match f.fault {
                 Fault::Uplink(h, _) => Some(h),
                 _ => None,
@@ -1127,19 +1134,7 @@ impl Report {
                 None => -(start.saturating_sub(at).as_millis() as i64),
             }
         };
-        // When each host's incarnations started: a chunk an earlier one
-        // held isn't what a later one announced.
-        let mut starts: Vec<Vec<Duration>> = vec![vec![Duration::ZERO]; self.hosts.len()];
-        for f in &self.scenario.faults {
-            if let Fault::Restart(h) = f.fault
-                && let Some(s) = starts.get_mut(h)
-            {
-                s.push(f.at);
-            }
-        }
-        for s in &mut starts {
-            s.sort_unstable();
-        }
+        let starts = incarnations(self);
         let place = |h: HostIx, at: Duration| -> Duration {
             starts
                 .get(h)
@@ -1250,7 +1245,7 @@ impl Report {
                 cols::Arrivals::Incarnation,
             ],
         )?;
-        let starts = incarnations(&self.scenario);
+        let starts = incarnations(self);
         for (h, r) in self.hosts.iter().enumerate() {
             let viewer = number.get(&h).map_or(-1, |&i| i as i64).to_string();
             for a in &r.arrivals {
@@ -1291,7 +1286,7 @@ impl Report {
     /// column as `strims_ppspp`'s seed log writes it.
     fn seed_tables(&self, dir: &Path, start: Duration) -> io::Result<(Table, Table)> {
         use strims_ppspp::scheduler_peer::seed_log::{RowHead, decision_fields, send_fields};
-        let starts = incarnations(&self.scenario);
+        let starts = incarnations(self);
         let mut t = Table::new(dir, &cols::SeedDecisions::all())?;
         let mut sends = Table::new(dir, &cols::SeedSends::all())?;
         // A row's time, the seed's host, its place in the seed's log, and
@@ -1340,7 +1335,7 @@ impl Report {
                 cols::Haves::PeerIncarnation,
             ],
         )?;
-        let starts = incarnations(&self.scenario);
+        let starts = incarnations(self);
         for (h, r) in self.hosts.iter().enumerate() {
             let honest = self.honest(h).to_string();
             for x in &r.haves {
@@ -1367,7 +1362,7 @@ impl Report {
     fn asks_table(&self, dir: &Path, start: Duration) -> io::Result<Table> {
         let ms = |at: Duration| ms_from(start, at);
         let mut t = Table::new(dir, &ASK_COLS)?;
-        let starts = incarnations(&self.scenario);
+        let starts = incarnations(self);
         let mut ask = 0u64;
         for (h, r) in self.hosts.iter().enumerate() {
             let honest = self.honest(h).to_string();
@@ -1435,10 +1430,11 @@ fn ms_from(start: Duration, at: Duration) -> i64 {
 }
 
 /// When each host's incarnations started, in order, the run's start the
-/// first's: a chunk an earlier one held isn't what a later one announced.
-fn incarnations(scenario: &crate::Scenario) -> Vec<Vec<Duration>> {
-    let mut starts: Vec<Vec<Duration>> = vec![vec![Duration::ZERO]; scenario.hosts.len()];
-    for f in &scenario.faults {
+/// first's (its applied restarts): a chunk an earlier one held isn't what
+/// a later one announced.
+fn incarnations(r: &Report) -> Vec<Vec<Duration>> {
+    let mut starts: Vec<Vec<Duration>> = vec![vec![Duration::ZERO]; r.scenario.hosts.len()];
+    for f in r.applied_faults() {
         if let Fault::Restart(h) = f.fault
             && let Some(s) = starts.get_mut(h)
         {

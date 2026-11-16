@@ -531,7 +531,7 @@ impl Report {
             .get(h)
             .and_then(|s| s.arrive_at)
             .unwrap_or_default();
-        t >= arrive + warm && self.scenario.departure(h).is_none_or(|(at, _)| t < at)
+        t >= arrive + warm && self.departure(h).is_none_or(|(at, _)| t < at)
     }
 
     /// `swarm`'s honest viewers' first joins, or with `rejoins` their later
@@ -597,10 +597,7 @@ impl Report {
                 .first()
                 .map_or(Duration::ZERO, |jn| Duration::from_millis(jn.start_ms));
             let join = ms_since(join.max(start), start);
-            let left = self
-                .scenario
-                .departure(v.host)
-                .map(|(at, _)| ms_since(at, start));
+            let left = self.departure(v.host).map(|(at, _)| ms_since(at, start));
             let plays = DELAYS_MS.map(|d| playout::play(&reads, d));
             // Every viewer's, then its population's.
             let pop = match self.class(v.host) {
@@ -676,7 +673,7 @@ impl Report {
         let departed: Vec<HostIx> = viewers
             .iter()
             .copied()
-            .filter(|&h| self.scenario.departure(h).is_some())
+            .filter(|&h| self.departure(h).is_some())
             .collect();
         j.int(
             RowInt::ArrivedHonest,
@@ -829,7 +826,7 @@ impl Report {
             .filter(|v| {
                 v.swarm == swarm
                     && self.class(v.host) == HostClass::Honest
-                    && self.scenario.departure(v.host).is_none()
+                    && self.departure(v.host).is_none()
                     && self.presence(v.host).0 < open
             })
             .collect();
@@ -872,7 +869,7 @@ impl Report {
                 .and_then(|r| r.neighbours.last())
                 .is_some_and(|(_, ns)| {
                     ns.iter()
-                        .any(|&n| spec.member(n) && self.scenario.departure(n).is_none())
+                        .any(|&n| spec.member(n) && self.departure(n).is_none())
                 })
         };
         Some(Recovery {
@@ -2693,7 +2690,7 @@ impl Report {
         let mut it = samples.iter().peekable();
         // A host that departed parents no one from then on.
         let left: Vec<Option<Duration>> = (0..self.hosts.len())
-            .map(|h| self.scenario.departure(h).map(|(at, _)| at))
+            .map(|h| self.departure(h).map(|(at, _)| at))
             .collect();
         let gone = |x: usize, t: Duration| left.get(x).copied().flatten().is_some_and(|at| at <= t);
         while let Some(&&(t, h, p)) = it.peek() {
@@ -3146,6 +3143,7 @@ mod tests {
             parent_losses: Vec::new(),
             parent_changes: Vec::new(),
             loops: None,
+            skipped_faults: Vec::new(),
         }
     }
 

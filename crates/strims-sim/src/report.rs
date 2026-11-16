@@ -633,6 +633,17 @@ pub struct Report {
     /// With [`Scenario::loops`], how push loops formed and the grafts and
     /// switches asked ([`crate::loops`]).
     pub loops: Option<crate::loops::LoopReport>,
+    /// The faults the run skipped, by their index in `scenario.faults`
+    /// (in time order, as the run applies them; faults at one time in
+    /// the order the scenario gave them): a crash of a host before it
+    /// arrived, after it departed or while it is down from an earlier
+    /// crash; a restart of a host that isn't down (one that isn't there,
+    /// never crashed, or is up again); a host's second departure; a
+    /// [`Fault::LatencyFrom`](crate::Fault::LatencyFrom) without the WAN
+    /// model; and every fault at or past the run's end, which it never
+    /// reached. The trace names each but the last; the tables read only
+    /// the applied ones ([`Report::applied_faults`]).
+    pub skipped_faults: Vec<usize>,
 }
 
 /// A change of `node`'s push parent of `stream` ([`Report::parent_changes`]):
@@ -692,6 +703,26 @@ pub struct MediaLog {
 }
 
 impl Report {
+    /// When host `h` left for good and how: its applied
+    /// [`Fault::Depart`](crate::Fault::Depart), if any.
+    pub fn departure(&self, h: HostIx) -> Option<(Duration, crate::Departure)> {
+        self.applied_faults().find_map(|f| match f.fault {
+            crate::Fault::Depart(x, how) if x == h => Some((f.at, how)),
+            _ => None,
+        })
+    }
+
+    /// The faults the run applied, in time order: `scenario.faults` less
+    /// [`Report::skipped_faults`].
+    pub fn applied_faults(&self) -> impl Iterator<Item = &crate::spec::TimedFault> + '_ {
+        self.scenario
+            .faults
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !self.skipped_faults.contains(i))
+            .map(|(_, f)| f)
+    }
+
     /// Simulated seconds per wall second.
     pub fn speed(&self) -> f64 {
         if self.wall_secs > 0.0 {
@@ -827,7 +858,6 @@ impl Report {
             .and_then(|s| s.arrive_at)
             .unwrap_or_default();
         let to = self
-            .scenario
             .departure(h)
             .map_or(self.scenario.duration, |(at, _)| at);
         (from, to)
@@ -857,7 +887,7 @@ impl Report {
                 }),
             None => 0,
         };
-        let to = match self.scenario.departure(v.host) {
+        let to = match self.departure(v.host) {
             Some((at, _)) => {
                 let kept = at.saturating_sub(Duration::from_millis(crate::stream::CAUGHT_UP_MS));
                 self.frames_between(v.swarm, Duration::ZERO, kept).end

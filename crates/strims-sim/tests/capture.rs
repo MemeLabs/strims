@@ -29,7 +29,7 @@ use strims_ppspp_capture::{Dir, Reader, Record, sample_kind};
 use strims_sim::tables::UP_COUNTERS;
 use strims_sim::topology::random_mesh;
 use strims_sim::{
-    Fault, Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport, WanHostReport, run,
+    Departure, Fault, Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport, WanHostReport, run,
 };
 use strims_wan::playout::DELAYS_MS;
 use strims_wan::{Access, City, Site};
@@ -534,6 +534,221 @@ fn a_runs_events_are_its_scenarios_and_losses() {
         }
     }
     assert!(noticed[0] > 0 && noticed[1] > 0, "{noticed:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The faults of [`skipping`], with whether the run applies each (with
+/// the WAN model if `wan`), in the order the scenario gives them: out of
+/// time order, and two pairs at one time with different fates. v2 leaves
+/// at 3 s, so its crash and restart then find no host, nor does its second
+/// departure, given before its first; v3 arrives at 4 s, after its crash
+/// and restart; v1's second
+/// crash finds it down and leaves its restart to come, and its second
+/// restart finds it up, as does v0's restart without a crash; the one-way
+/// latency needs the WAN model; and v0's pause, uplink cap and departure
+/// come past the run's end.
+fn skipping_faults(wan: bool) -> Vec<(Duration, Fault, bool)> {
+    let ms = Duration::from_millis;
+    let latency = |a: usize, b: usize, d: u64| Fault::Latency(vec![a], vec![b], ms(d));
+    let one_way = Fault::LatencyFrom(vec![0], vec![1], ms(20));
+    vec![
+        (ms(6000), Fault::Restart(2), true),
+        (ms(5000), Fault::Crash(3), false),
+        (ms(7000), Fault::Depart(3, Departure::Abrupt), false),
+        (ms(3000), Fault::Depart(3, Departure::Graceful), true),
+        (ms(5000), Fault::Crash(2), true),
+        (ms(5500), Fault::Crash(2), false),
+        (ms(6000), Fault::Restart(3), false),
+        (ms(1000), one_way, wan),
+        (ms(1000), latency(1, 2, 10), true),
+        (ms(3000), Fault::Crash(4), false),
+        (ms(3500), Fault::Restart(4), false),
+        (ms(6500), Fault::Restart(2), false),
+        (ms(7000), Fault::Restart(1), false),
+        (ms(20_000), Fault::PauseReading(1), false),
+        (ms(20_000), Fault::Uplink(1, 64 * 1024), false),
+        (ms(25_000), Fault::Depart(1, Departure::Graceful), false),
+    ]
+}
+
+/// A seed and four viewers, in a full mesh, under the WAN model if `wan`,
+/// v3 arriving at 4 s, with [`skipping_faults`].
+fn skipping(wan: bool) -> Scenario {
+    let mut s = Scenario::new("skipping");
+    let site = Site::new(City::Chicago, Access::Cable);
+    let seed = s.host_at("seed", site);
+    let v: Vec<_> = (0..4).map(|i| s.host_at(&format!("v{i}"), site)).collect();
+    let all: Vec<_> = std::iter::once(seed).chain(v.iter().copied()).collect();
+    for (i, &a) in all.iter().enumerate() {
+        for &b in all.iter().skip(i + 1) {
+            s.link(b, a, Transport::Tcp);
+        }
+    }
+    // A host at a site puts the run in WAN mode; without it, turmoil's.
+    s.wan = wan.then_some(strims_wan::Options {
+        jitter: false,
+        loss: false,
+    });
+    s.hosts[v[3]].arrive_at = Some(Duration::from_secs(4));
+    s.swarm(
+        SwarmSpec::live(
+            seed,
+            v.clone(),
+            32 * 1024,
+            Duration::from_secs(2),
+            Duration::from_secs(8),
+        )
+        .with_push_mode(PushMode::Hybrid),
+    );
+    for (at, f, _) in skipping_faults(wan) {
+        s.at(at, f);
+    }
+    s.duration = Duration::from_secs(10);
+    s
+}
+
+/// The tables read the faults the run applied and leave out those it
+/// skipped ([`strims_sim::Report::skipped_faults`], by their index in the
+/// time-ordered faults, each named in the trace but the one past the
+/// run's end): the `events` table has a row for each applied fault alone,
+/// a one-way latency's detail `one-way` and a two-way one's `both`, and the
+/// `arrivals` table counts a host's incarnations by its applied restarts,
+/// so v3 stays in its first and v1 is in its second after 6 s.
+#[test]
+fn a_skipped_fault_has_no_event() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "a_skipped_fault_has_no_event-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    for wan in [true, false] {
+        let mut spec = skipping(wan);
+        spec.wire_bins = Some(Duration::from_millis(1000));
+        spec.request_logs = true;
+        let r = run(spec, 1).unwrap();
+        let d = dir.join(if wan { "wan" } else { "turmoil" });
+        r.write_tables(&d, Duration::from_millis(1000), true)
+            .unwrap();
+        // The faults in time order, a time's in the scenario's order.
+        let mut faults = skipping_faults(wan);
+        faults.sort_by_key(|f| f.0);
+        let skipped: Vec<(Duration, &Fault)> = r
+            .skipped_faults
+            .iter()
+            .map(|&i| (r.scenario.faults[i].at, &r.scenario.faults[i].fault))
+            .collect();
+        let want: Vec<(Duration, &Fault)> = faults
+            .iter()
+            .filter(|f| !f.2)
+            .map(|f| (f.0, &f.1))
+            .collect();
+        assert_eq!(skipped, want, "wan {wan}");
+        let skips = r.trace.iter().filter(|l| l.contains(" skipped: ")).count();
+        assert_eq!(
+            skips,
+            want.len() - 3,
+            "wan {wan}: all but the three past the end"
+        );
+        // The events of the fault kinds: (time, kind, node, peer, value,
+        // detail), sorted.
+        let csv = strims_sim::tables::read_table(&d, "events").unwrap();
+        let start = r.scenario.swarms[0].start;
+        let us = |at: Duration| at.as_micros() as i64 - start.as_micros() as i64;
+        let mut got: Vec<(i64, String, i64, i64, i64, String)> = csv
+            .lines()
+            .skip(1)
+            .map(|l| l.split(',').collect::<Vec<_>>())
+            .filter(|f| {
+                ["crash", "restart", "latency", "depart", "pause_reading"].contains(&f[1])
+                    || (f[1] == "rate_limit" && f[2] == "1")
+            })
+            .map(|f| {
+                let int = |i: usize| f[i].parse::<i64>().unwrap();
+                (
+                    int(0),
+                    f[1].to_owned(),
+                    int(2),
+                    int(3),
+                    int(4),
+                    f[5].to_owned(),
+                )
+            })
+            .collect();
+        let row = |at: u64, kind: &str, node: i64, peer: i64, value: i64, detail: &str| {
+            let at = us(Duration::from_millis(at));
+            (at, kind.to_owned(), node, peer, value, detail.to_owned())
+        };
+        let mut want = vec![
+            row(1000, "latency", 1, 2, 10, "both"),
+            row(3000, "depart", 3, -1, 0, "graceful"),
+            row(5000, "crash", 2, -1, 0, ""),
+            row(6000, "restart", 2, -1, 0, ""),
+        ];
+        if wan {
+            want.push(row(1000, "latency", 0, 1, 20, "one-way"));
+        }
+        got.sort();
+        want.sort();
+        assert_eq!(got, want, "wan {wan}");
+        // v1's incarnation from its restart on, v3's never past its first.
+        let csv = strims_sim::tables::read_table(&d, "arrivals").unwrap();
+        let mut rows = csv.lines();
+        let head: Vec<&str> = rows.next().unwrap().split(',').collect();
+        let col = |n: &str| head.iter().position(|&c| c == n).unwrap();
+        let (t, host, inc) = (col("t_ms"), col("node"), col("incarnation"));
+        let mut seen = [0, 0];
+        for l in rows {
+            let f: Vec<&str> = l.split(',').collect();
+            let (h, at) = (
+                f[host].parse::<usize>().unwrap(),
+                f[t].parse::<i64>().unwrap(),
+            );
+            let at = at + start.as_millis() as i64;
+            let want = match h {
+                2 if at >= 6000 => "1",
+                4 => "0",
+                _ => continue,
+            };
+            assert_eq!(f[inc], want, "wan {wan}: {l}");
+            seen[usize::from(h == 4)] += 1;
+        }
+        assert!(seen[0] > 0 && seen[1] > 0, "wan {wan}: {seen:?}");
+        // v2's node left at its earliest departure, the graceful one at 3 s
+        // given after the abrupt one at 7 s: it read nothing past it.
+        let v2 = r.viewers.iter().find(|v| v.host == 3).unwrap();
+        let last = v2
+            .stats
+            .lags
+            .iter()
+            .map(|&(seq, lag)| r.written_at(v2.swarm, seq) + Duration::from_millis(lag.into()))
+            .max()
+            .unwrap();
+        assert!(
+            last <= Duration::from_secs(3),
+            "wan {wan}: v2 read at {last:?}"
+        );
+        // v2 left at 3 s; v0's departure past the end leaves it in.
+        let csv = strims_sim::tables::read_table(&d, "viewers").unwrap();
+        let mut rows = csv.lines();
+        let head: Vec<&str> = rows.next().unwrap().split(',').collect();
+        let col = |n: &str| head.iter().position(|&c| c == n).unwrap();
+        let (host, depart) = (col("host"), col("depart_ms"));
+        let departs: Vec<(String, String)> = rows
+            .map(|l| l.split(',').collect::<Vec<_>>())
+            .map(|f| (f[host].to_owned(), f[depart].to_owned()))
+            .collect();
+        let left = us(Duration::from_secs(3)) / 1000;
+        assert_eq!(
+            departs,
+            [
+                ("1".to_owned(), String::new()),
+                ("2".to_owned(), String::new()),
+                ("3".to_owned(), left.to_string()),
+                ("4".to_owned(), String::new()),
+            ],
+            "wan {wan}"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
