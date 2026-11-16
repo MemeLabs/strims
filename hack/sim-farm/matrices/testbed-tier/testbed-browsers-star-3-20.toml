@@ -35,4 +35,4 @@ BROWSER_ARGS = "--chunk 4096 --munro 32768"
 STRIMS_SIM_ARRIVALS = "trickle"
 
 [repeat_env]
-JOINS = ["1:5.5 2:9.7 3:15.0", "1:11.7 2:12.8 3:13.2"]
+JOINS = ["1:5.4 2:9.6 3:14.9", "1:11.7 2:12.7 3:13.1"]

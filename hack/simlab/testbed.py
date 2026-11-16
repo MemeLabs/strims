@@ -26,11 +26,11 @@ its knobs (`tb-<hash>`).
                  checkout's release build), `knobs` added to its twin's
   cells_of(envs) -> [str], cell_of(env) -> str
                  each env's cell (see above; cell_sql's keying)
-  ingest(run_dirs, name, binary=None, cell=None, arm="testbed", knobs=None,
+  ingest(run_dirs, name, binary=None, arm="testbed", knobs=None,
          replace=False) -> (src, [job])
                  the runs' tables folded into the cache as source
-                 testbed/<name>; each run a job of `cell` (else
-                 cell_of's) and `arm`, its seed its place among
+                 testbed/<name>; each run a job of its knobs' cell
+                 (cell_of's) and `arm`, its seed its place among
                  the runs of its cell (1, 2, ...), as a twin's seeds pair
                  with it
   twins(src, binary, name, seeds=8, arm="twin", env=None, kind="one",
@@ -63,6 +63,7 @@ matrices puts its runs in the cache as farm sources (`simdb.py pull`).
 
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -189,12 +190,11 @@ def cell_of(env):
     return cells_of([env])[0]
 
 
-def ingest(run_dirs, name, binary=None, cell=None, arm="testbed", knobs=None, replace=False):
+def ingest(run_dirs, name, binary=None, arm="testbed", knobs=None, replace=False):
     """The runs folded into the cache as source testbed/<name> (see the
-    module docs); returns the source and the jobs. An existing source is
-    refused unless `replace` (its runs and seeds would go), and so is a
-    `cell` over runs of two knobs (the job keys aside), which one twin
-    can't stand for."""
+    module docs), each a job of its knobs' cell (cells_of, as the index
+    names it); returns the source and the jobs. An existing source is
+    refused unless `replace` (its runs and seeds would go)."""
     src = f"testbed/{name}"
     refuse_existing(src, replace)
     jobs, seeds = [], {}
@@ -202,11 +202,7 @@ def ingest(run_dirs, name, binary=None, cell=None, arm="testbed", knobs=None, re
         out = tables(d, binary, knobs)
         job = json.loads((out / "job.json").read_text())
         jobs.append({**job, "dir": str(out), "arm": arm, "at": None, "wall_s": None, "rss_mb": None})
-    if cell is not None:
-        envs = {json.dumps({k: v for k, v in j["env"].items() if k not in JOB_KNOBS}, sort_keys=True) for j in jobs}
-        if len(envs) > 1:
-            raise ValueError(f"--cell {cell} over runs of {len(envs)} knobs: name each set its own cell")
-    for j, c in zip(jobs, [cell] * len(jobs) if cell else cells_of(j["env"] for j in jobs)):
+    for j, c in zip(jobs, cells_of(j["env"] for j in jobs)):
         seeds[c] = seeds.get(c, 0) + 1
         j.update(cell=c, seed=seeds[c])
     export(src, jobs)
@@ -367,8 +363,9 @@ def joins_of(arrivals, viewers, secs, rng):
     third; event:<warm %>:<at>:<window>: the warm share uniform before
     `at`, the rest uniform within `window` from it), the k-th soonest
     viewer k's, so the topology's order is the arrivals' as the twin lays
-    its links out, to a tenth of a second (a node's --join-at takes
-    seconds to the ms)."""
+    its links out, to the tenth of a second below (a node's --join-at
+    takes seconds to the ms; rounding up could put a warm join on its
+    burst's start)."""
     parts = arrivals.split(":")
     if parts == ["trickle"]:
         times = [rng.uniform(0, secs / 3) for _ in range(viewers)]
@@ -378,7 +375,7 @@ def joins_of(arrivals, viewers, secs, rng):
         times = [rng.uniform(0, at) for _ in range(m)] + [at + rng.uniform(0, window) for _ in range(viewers - m)]
     else:
         raise ValueError(f"arrivals {arrivals}: the tier takes trickle and event profiles")
-    return " ".join(f"{i}:{t:.1f}" for i, t in enumerate(sorted(times), start=1))
+    return " ".join(f"{i}:{math.floor(t * 10) / 10:.1f}" for i, t in enumerate(sorted(times), start=1))
 
 
 def num(x):

@@ -26,7 +26,7 @@
   hack/sim-db/simdb.py export DB DEST
   hack/sim-db/simdb.py pull --run RUN [--reads [--cell C] [--arm A] [--seed N]] [--dry-run]
   hack/sim-db/simdb.py gc [--days N]
-  hack/sim-db/simdb.py testbed RUN_DIR... --name NAME [--cell C] [--arm A] [--knob KEY=VALUE ...] [--bin PATH]
+  hack/sim-db/simdb.py testbed RUN_DIR... --name NAME [--arm A] [--knob KEY=VALUE ...] [--bin PATH]
                        [--replace]
   hack/sim-db/simdb.py twin SRC_LIKE --name NAME --bin SCENARIOS [--seeds N] [--arm A] [--kind K]
                        [--side-arm A] [--env KEY=VALUE ...] [--replace]
@@ -526,8 +526,7 @@ def cmd_testbed(a):
     from simlab import testbed
 
     knobs = dict(kv.split("=", 1) for kv in a.knob or [])
-    src, jobs = testbed.ingest(a.run_dirs, a.name, binary=a.bin, cell=a.cell, arm=a.arm, knobs=knobs,
-                               replace=a.replace)
+    src, jobs = testbed.ingest(a.run_dirs, a.name, binary=a.bin, arm=a.arm, knobs=knobs, replace=a.replace)
     for j in jobs:
         print(f"{src} {j['k']} {j['cell']} {j['arm']} seed {j['seed']}  {j['dir']}")
     print("simdb.py index takes them in")
@@ -660,8 +659,6 @@ def main():
                        "testbed/NAME, each a run of its twin's cell (simlab.testbed)")
     t.add_argument("run_dirs", nargs="+")
     t.add_argument("--name", required=True, help="the source's name: testbed/NAME")
-    t.add_argument("--cell", help="every run's cell (default: its knobs', simlab.testbed.cell_sql); runs of one "
-                   "knobs alone")
     t.add_argument("--replace", action="store_true", help="write over an existing testbed/NAME (its runs go)")
     t.add_argument("--arm", default="testbed")
     t.add_argument("--knob", action="append", help="a twin knob KEY=VALUE to add to the runs' (a trickle's "

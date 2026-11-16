@@ -52,7 +52,11 @@ both, so take a name's meaning from it, not from a guess at the name.
   fields, verdict.py and the reports all use it, so your numbers match
   theirs. Don't use DuckDB's quantile_cont or median, and don't put a bare
   `quantile_disc` in the same query as `sketch_quantile`: DuckDB merges
-  them into one aggregate.
+  them into one aggregate. The one exception is twin_fit_rows' medians of
+  a testbed cell's runs against its twin's: two testbed repeats have no
+  middle run, and a sketch's p50 would take the lower one, so it takes
+  quantile_cont's exact mean of the two (each run's place among the twin's
+  seeds, b_quantile, is the comparison that needs no median at all).
 
 ## Which command
 

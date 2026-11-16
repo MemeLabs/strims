@@ -74,17 +74,12 @@ class Cells(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, f"{odd}, which no twin knob takes"):
                 testbed.twin_cells([("tb-x", {**env, odd: "1"})])
 
-    def test_an_ingest_neither_overwrites_nor_pools_two_knobs_in_a_cell(self):
+    def test_an_ingest_doesnt_overwrite_a_source(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"SIM_DB_ROOT": d}):
             (Path(d) / "cache" / "testbed" / "old").mkdir(parents=True)
             with self.assertRaisesRegex(FileExistsError, "testbed/old exists"):
                 testbed.ingest([], "old")
             testbed.refuse_existing("testbed/old", replace=True)
-            jobs = [{"env": {"STRIMS_SIM_CAL_VIEWERS": "3"}}, {"env": {"STRIMS_SIM_CAL_VIEWERS": "7"}}]
-            with mock.patch.object(testbed, "tables", side_effect=lambda d, b, k: Path(d)), \
-                    mock.patch.object(Path, "read_text", side_effect=[json.dumps(j) for j in jobs]):
-                with self.assertRaisesRegex(ValueError, "--cell c over runs of 2 knobs"):
-                    testbed.ingest(["a", "b"], "new", cell="c")
 
     def test_the_tiers_runs_name_their_cells_through_knobs_of(self):
         # run.sh's settings for each tier cell (run_env), read by
