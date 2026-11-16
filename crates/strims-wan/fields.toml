@@ -1106,7 +1106,7 @@ description = "Most samples of a push channel have nothing out, so the flight an
 sims = []
 lines = ["decl", "p4tf"]
 type = "int"
-description = "Of the honest viewers' timeouts (`timeouts_honest`), the requests that timed out (the others: speculative ones that expired or were answered NOT_YET)."
+description = "Of the honest viewers' requests that ended without data (`timeouts_honest`, which on the lines that send speculative requests counts them too, as `seed_timeouts` and `timeouts_dishonest` do the seed's and the dishonest peers'), those that timed out unanswered (SwarmCounters::timeouts); the others are `timeouts_spec_expired` and `timeouts_spec_not_yet`."
 
 [rows.requests_not_yet]
 sims = []
@@ -1258,7 +1258,7 @@ notes.strims-sim = "The streams pushed to each neighbour at the seed's stats sam
 [rows.seed_timeouts]
 sims = ["strims-sim"]
 type = "int"
-description = "The seed's requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts), and the speculative ones that expired or that their holder answered NOT_YET (SwarmCounters::spec_expired, spec_not_yet, which main's sims never send) (Report::timeouts)."
+description = "The seed's requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts) (Report::timeouts)."
 
 [rows.seed_chunk_share]
 sims = ["strims-sim"]
@@ -1483,25 +1483,25 @@ description = "The sweep test the job ran (strims-sim's tests/scenarios.rs name)
 sims = ["strims-sim"]
 type = "int"
 aggregate = "count"
-description = "The honest viewers' requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts), and the speculative ones that expired or that their holder answered NOT_YET (SwarmCounters::spec_expired, spec_not_yet, which main's sims never send): every host but the seed and the dishonest ones."
+description = "The honest viewers' requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts): every host but the seed and the dishonest ones."
 
 [rows.timeouts_dishonest]
 sims = ["strims-sim"]
 type = "int"
 aggregate = "count"
-description = "With dishonest peers, their requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts), and the speculative ones that expired or that their holder answered NOT_YET (SwarmCounters::spec_expired, spec_not_yet, which main's sims never send) (the hostile hosts'); left out without any."
+description = "With dishonest peers, their requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts) (the hostile hosts'); left out without any."
 
 [rows.timeouts_spec_expired]
 sims = []
 lines = ["decl", "p4tf"]
 type = "int"
-description = "The honest viewers' speculative requests that expired without data, over every incarnation (SwarmCounters::spec_expired): every host but the seed and the dishonest ones."
+description = "Of the honest viewers' requests that ended without data (`timeouts_honest`, on the lines that send speculative requests), the speculative ones that expired, over every incarnation (SwarmCounters::spec_expired): every host but the seed and the dishonest ones."
 
 [rows.timeouts_spec_not_yet]
 sims = []
 lines = ["decl", "p4tf"]
 type = "int"
-description = "The honest viewers' speculative requests their holder answered NOT_YET, over every incarnation (SwarmCounters::spec_not_yet): every host but the seed and the dishonest ones."
+description = "Of the honest viewers' requests that ended without data (`timeouts_honest`, on the lines that send speculative requests), the speculative ones their holder answered NOT_YET, over every incarnation (SwarmCounters::spec_not_yet): every host but the seed and the dishonest ones."
 
 [rows.top_seed_link_s]
 sims = ["strims-sim"]
