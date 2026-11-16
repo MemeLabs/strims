@@ -32,7 +32,9 @@
 //!   data channel's SACKs inside DTLS, which it counts with the data) is
 //!   left empty, and a sampler that stopped before the run's end leaves its
 //!   columns empty past it (`Report::wire_ends`,
-//!   `WanHostReport::up_queue_until`). The competing upload's bytes are its
+//!   `WanHostReport::up_queue_until`): a tc sampler past its last sample, a
+//!   capture past the stamp run.sh writes when its tcpdump exits while its
+//!   node runs (`pcap-<i>.end`). The competing upload's bytes are its
 //!   packets' to the sink, from the seed's capture.
 //!
 //! A run's lines name the seed's stream start (`t_ms - rel_ms`), which every
@@ -1284,6 +1286,15 @@ fn tc_rate(v: &str) -> Option<u64> {
     Some((n.parse::<f64>().ok()? * mult / 8.0) as u64)
 }
 
+/// The wire counters a node's capture gives.
+const PCAP_COUNTERS: [&str; 5] = [
+    "up_bytes",
+    "up_packets",
+    "small_packets",
+    "up_ack_packets",
+    "up_ack_bytes",
+];
+
 /// The network side of a testbed run's report.
 struct Network {
     wan: WanReport,
@@ -1341,6 +1352,21 @@ impl Network {
             let pcap = std::fs::read(run.dir.join(format!("pcap-{h}.pcap")))
                 .ok()
                 .and_then(|b| packets(&b));
+            // A capture that stopped while its node ran (tcpdump exited:
+            // run.sh's pcap-<i>.end, its unix ms) leaves the node's wire
+            // columns unmeasured past it, not 0: they end at the first
+            // edge after it, as a stopped tc sampler's drops do. A
+            // capture's last packet can't tell: a node's own traffic
+            // falls silent for seconds while it runs.
+            let pcap_end = run
+                .file(&format!("pcap-{h}.end"))
+                .and_then(|t| t.split_whitespace().next()?.parse::<u64>().ok())
+                .and_then(|ms| (0..bins.len()).find(|&k| edge_us(k as u64) > ms * 1000));
+            if let (Some(end), true) = (pcap_end, pcap.is_some()) {
+                for c in PCAP_COUNTERS {
+                    ends.insert((h, up(c)), end);
+                }
+            }
             match pcap {
                 Some(ps) => {
                     let mut mine = ps
@@ -1379,7 +1405,7 @@ impl Network {
                                 }
                             }
                         }
-                        if h == seed {
+                        if h == seed && pcap_end.is_none_or(|end| k < end) {
                             let t = LEAD + Duration::from_millis(k as u64 * bin);
                             w.competing.push((t.into(), cross));
                         }
@@ -1460,16 +1486,7 @@ impl Network {
             wan.hosts.push(w);
         }
         if !have_pcap {
-            unmeasured.extend(
-                [
-                    "up_bytes",
-                    "up_packets",
-                    "small_packets",
-                    "up_ack_packets",
-                    "up_ack_bytes",
-                ]
-                .map(up),
-            );
+            unmeasured.extend(PCAP_COUNTERS.map(up));
         }
         if !have_tc {
             unmeasured.push(up("drops"));
@@ -1915,6 +1932,42 @@ mod tests {
                 assert_eq!((f[drops], f[queue]), ("", ""), "{l}");
                 after += 1;
             } else if ms < 400 && !f[drops].is_empty() {
+                before += 1;
+            }
+        }
+        assert!(before > 0 && after > 0, "{before} {after}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_capture_that_stopped_leaves_its_columns_unmeasured_past_it() {
+        let dir = fixture("pcap-end");
+        // tcpdump on the seed exited 450 ms in, its node running on.
+        std::fs::write(dir.join("pcap-0.end"), format!("{} 1\n", START + 450)).unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        let end = r.wire_ends[&(0, up("up_bytes"))];
+        assert!(end < r.wire_bins.len() - 1, "{end}");
+        for c in PCAP_COUNTERS {
+            assert_eq!(r.wire_ends.get(&(0, up(c))), Some(&end), "{c}");
+        }
+        // The viewer's capture ran to the end.
+        assert!(!r.wire_ends.contains_key(&(1, up("up_bytes"))));
+        let out = dir.join("tables");
+        r.write_tables(&out, Duration::from_millis(100), true)
+            .unwrap();
+        let bins = crate::tables::read_table(&out, "bins").unwrap();
+        let head: Vec<&str> = bins.lines().next().unwrap().split(',').collect();
+        let col = |name: &str| head.iter().position(|c| *c == name).unwrap();
+        let (t, bytes, acks) = (col("t_ms"), col("seed_up_bytes"), col("seed_up_ack_bytes"));
+        let (mut before, mut after) = (0, 0);
+        for l in bins.lines().skip(1) {
+            let f: Vec<&str> = l.split(',').collect();
+            let ms: i64 = f[t].parse().unwrap();
+            if ms > 1000 {
+                assert_eq!((f[bytes], f[acks]), ("", ""), "{l}");
+                after += 1;
+            } else if ms < 400 {
+                assert!(!f[bytes].is_empty(), "{l}");
                 before += 1;
             }
         }
