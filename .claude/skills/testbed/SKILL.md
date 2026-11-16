@@ -80,10 +80,8 @@ builds its own.
   STAMPS=clock (run.sh's clock stamped its steps and samples) keys apart
   (TESTBED_STAMPS=date: uutils' `date` stamps late), and so do a sampler's
   stamps that go back (back) and a step or competing upload off its
-  schedule (TESTBED_SCHEDULE). Today's run.sh writes STAMPS=date, so
-  every run it makes keys apart and has no twin, until run.sh stamps from
-  its own clock and writes STAMPS=clock (the sampler wiring). Don't spend
-  farm money on testbed matrices, the tier's included, before then.
+  schedule (TESTBED_SCHEDULE). run.sh writes STAMPS=clock; a run from
+  before it did has no twin.
 - **The twin.** `simdb.py twin 'testbed/NAME' --name NAME-twin --bin
   SCENARIOS --seeds 8` runs strims-sim's `calibration_star` with each
   cell's knobs (a scenarios test binary from `cargo test --release -p
@@ -109,8 +107,8 @@ builds its own.
   --run MATRIX` brings a farm run into the cache, an experiment
   `farm/RUN`. `simdb.py testbed-tier DIR` writes the testbed tier's
   matrices (hack/sim-farm/matrices/testbed-tier: the tiers' cells the
-  testbed hosts, one a matrix, each repeat its own joins). While run.sh
-  writes STAMPS=date, each matrix's header says its runs key apart.
+  testbed hosts, one a matrix, each repeat its own joins). Were run.sh to
+  write STAMPS=date, each matrix's header would say its runs key apart.
 
 ## Browser node costs
 

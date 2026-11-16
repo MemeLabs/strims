@@ -1,9 +1,6 @@
 # The testbed tier's star-31-5 (native): 31 viewers, a 5 Mbit/s seed, honest, against its twin
 # (simlab.testbed.tier_matrices writes it).
 
-# Not yet: run.sh writes STAMPS=date, so every run keys apart (TESTBED_STAMPS) and has no
-# twin until run.sh stamps from its clock (STAMPS=clock). Don't run it on the farm before then.
-
 kind = "testbed"
 repeats = 2
 host_cores = 8
