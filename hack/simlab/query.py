@@ -306,19 +306,23 @@ def suite_cells(names):
 
 
 def reused(srcs, stored):
-    """The rows the farm runs of sources `srcs` count by reference: the
+    """The rows the farm runs of sources `srcs` count by reference, as SQL
+    of (k, src, matrix, arm), else None, and the sources holding them: the
     lines of their matrices' indexes (the main checkout's
     target/sim-farm/<matrix>/index.jsonl) whose row ran for another job
     (`from` names the matrix of the job that ran it: an earlier run's, a
     matrix of its own that shares the job, or, for another arm of the
     matrix whose binary is the same bytes, the matrix itself, whose flush
-    stores the row under the arm that ran it), as SQL of (k, src, matrix,
-    arm), else None; and the sources holding those rows. A run's matrices
-    are its state's list, and the cells its rows in `srcs` were `stored`
-    under. A line of a row stored under its own cell and arm adds nothing:
-    the views count a key once a cell and arm."""
+    stores the row under the arm that ran it), and those without `from`
+    whose row the flush stores under another cell or arm (a key that two
+    jobs ran into one flush, which keeps one copy of it: two arms of one
+    binary before the farm ran such a key once). `stored` is SQL of the
+    runs of `srcs` (runs_of's), and a run's matrices are its state's list
+    and the cells its rows there were stored under. A line of a row stored
+    under its own cell and arm adds nothing: the views count a key once a
+    cell and arm."""
     farm = store_host.main_checkout() / "target" / "sim-farm"
-    names = set(stored)
+    names = {r["cell"] for r in records(f"SELECT DISTINCT cell FROM {stored} WHERE src LIKE 'farm/%';")}
     for run in {s.split("/")[1] for s in srcs if s.startswith("farm/")}:
         with contextlib.suppress(OSError):
             names |= set((farm / run / "matrices").read_text().split())
@@ -327,9 +331,13 @@ def reused(srcs, stored):
         return None, []
     matrix = r"regexp_extract(filename, '([^/]+)/index\.jsonl$', 1)"
     cols = struct({"key": "VARCHAR", "src": "VARCHAR", "arm": "VARCHAR", "from": "VARCHAR"})
-    sql = (f"(SELECT key AS k, src, {matrix} AS matrix, arm FROM read_json({plist(paths)}, "
-           f"format='newline_delimited', columns={cols}, filename=true, ignore_errors=true) "
-           f"WHERE src IS NOT NULL AND \"from\" IS NOT NULL)")
+    lines = (f"(SELECT key AS k, src, {matrix} AS matrix, arm, \"from\" AS ran_for FROM read_json({plist(paths)}, "
+             f"format='newline_delimited', columns={cols}, filename=true, ignore_errors=true) "
+             f"WHERE src IS NOT NULL)")
+    sql = (f"(SELECT k, src, matrix, arm FROM {lines} WHERE ran_for IS NOT NULL "
+           f"UNION SELECT l.k, l.src, l.matrix, l.arm FROM {lines} l "
+           f"JOIN (SELECT DISTINCT k, src, cell, arm FROM {stored}) s ON s.k = l.k AND s.src = l.src "
+           f"WHERE l.ran_for IS NULL AND (s.cell <> l.matrix OR s.arm IS DISTINCT FROM l.arm))")
     held = [r["src"] for r in records(f"SELECT DISTINCT src FROM {sql};")]
     return (sql if held else None), held
 
@@ -374,8 +382,7 @@ def views(sel, derived=True, fetch=True, say=None):
     stored = runs_of(srcs)
     moved, held = None, []
     if any(s.startswith("farm/") for s in srcs):
-        moved, held = reused(srcs, [r["cell"] for r in records(
-            f"SELECT DISTINCT cell FROM {stored} WHERE src LIKE 'farm/%';")])
+        moved, held = reused(srcs, stored)
     lack = [s for s in held if not have_src(s)]
     if lack and not fetch:
         say(f"the cache lacks {len(lack)} flushes whose rows the selection's runs reused: left out")

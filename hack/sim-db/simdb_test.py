@@ -236,6 +236,22 @@ class Selection(unittest.TestCase):
             self.assertEqual([r["k"] for r in got], ["k1", "k2"], src)
             self.assertEqual(got[0]["src"], f"{A}/i-1/0", src)
 
+    def test_a_key_two_jobs_ran_into_one_flush_holds_each_jobs_row(self):
+        # Before the farm ran a shared key once, arms main and fix2 of
+        # sa0001-00 each ran k1 (their binaries the same bytes) and both
+        # copies went into one flush, which keeps main's: fix2's line has no
+        # `from`, its row the one main's is.
+        index = simdb.main_checkout() / "target" / "sim-farm" / "sa0001-00" / "index.jsonl"
+        with index.open("a") as f:
+            f.write("\n" + json.dumps({"key": "k1", "arm": "fix2", "src": f"{A}/i-1/0", "row": {}}) + "\n")
+        for src in (None, [f"{A}*"], [f"{A}/i-1/0"]):
+            got = self.select(src, ["star-3-5@sa0001"], "SELECT k, arm, count(*) AS n FROM runs GROUP BY ALL")
+            self.assertEqual({(r["k"], r["arm"]): r["n"] for r in got},
+                             {("k1", "main"): 1, ("k1", "fix2"): 1, ("k2", "fix"): 1}, src)
+        # A selection without that flush adds nothing of it.
+        got =self.select([f"{A}/i-2/0"], None, "SELECT k, arm FROM runs WHERE cell = 'star-3-5@sa0001'")
+        self.assertEqual([(r["k"], r["arm"]) for r in got], [("k2", "fix")])
+
     def test_rows_prints_a_key_in_each_of_its_cells(self):
         # kr and kq: B's rows, which A's run reused; rows() gives a key's
         # row once, whatever cells it counts in.

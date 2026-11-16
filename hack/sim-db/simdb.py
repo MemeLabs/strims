@@ -125,7 +125,8 @@ a `--sets` run's (its index has a knob) by its set, the value its env
 gives the knob, else by its matrix's arm, a `--refs` name. A farm run's
 cells hold every row it scored: also those the farm reused from other
 runs or matrices, and those of the arms whose binaries are the same
-bytes, which it ran once for all of them, by its matrices' indexes
+bytes, which it runs once for all of them (and ran into one flush, which
+keeps one copy, before it did), by its matrices' indexes
 (target/sim-farm/<matrix>/index.jsonl), whose sources' tables join the
 selection (pulled when the cache lacks them). A key counts once in each
 cell and arm that holds it, and its tables come from one of its sources
