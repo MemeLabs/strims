@@ -677,14 +677,17 @@ impl Run {
         s
     }
 
-    /// When host `h` started reading: its arrival, its last restart, or the
-    /// run's start.
-    fn joined(s: &Scenario, h: HostIx) -> Duration {
+    /// When host `h` started reading: its arrival, its last applied restart
+    /// (of `s`'s time-ordered faults less `skipped`), or the run's start.
+    fn joined(s: &Scenario, skipped: &[usize], h: HostIx) -> Duration {
         s.hosts.get(h).and_then(|x| x.arrive_at).unwrap_or_else(|| {
             s.faults
                 .iter()
-                .filter(|f| matches!(f.fault, Fault::Restart(x) if x == h))
-                .map(|f| f.at)
+                .enumerate()
+                .filter(|(i, f)| {
+                    !skipped.contains(i) && matches!(f.fault, Fault::Restart(x) if x == h)
+                })
+                .map(|(_, f)| f.at)
                 .max()
                 .unwrap_or_default()
         })
@@ -692,7 +695,12 @@ impl Run {
 
     /// The run's report (see the [module docs](self)).
     pub fn report(&self) -> Report {
-        let scenario = self.scenario();
+        let mut scenario = self.scenario();
+        // As a run orders them, and with the run's skips, so the tables
+        // read the applied faults (Report::applied_faults, departure) as
+        // the twin's do.
+        scenario.faults.sort_by_key(|f| f.at);
+        let skipped_faults = skipped_faults(&scenario);
         let mut hosts: Vec<HostReport> = scenario
             .hosts
             .iter()
@@ -712,7 +720,7 @@ impl Run {
             let mut stats = ViewerStats::default();
             let is_viewer = swarm.is_some_and(|s| s.viewers.contains(&i));
             if is_viewer {
-                stats.start(Self::joined(&scenario, i).as_millis() as u64);
+                stats.start(Self::joined(&scenario, &skipped_faults, i).as_millis() as u64);
             }
             let mut last_seed: Option<SeedSample> = None;
             for l in lines {
@@ -838,6 +846,7 @@ impl Run {
             parent_losses: Vec::new(),
             parent_changes,
             loops: None,
+            skipped_faults,
             scenario,
         }
     }
@@ -1077,6 +1086,58 @@ fn off_schedule(dir: &Path, settings: &BTreeMap<String, String>, start_ms: u64) 
 /// iperf3's control messages (its cookie, its parameters' JSON) are under
 /// it, its data's full segments over it.
 const COMPETE_DATA_PAYLOAD: u64 = 512;
+
+/// The faults of `s` (time-ordered, as a run sorts them) a run of it skips
+/// (Report::skipped_faults), by the run's own rules (run.rs's `apply`): a
+/// crash of a host that isn't there (before its arrival, after its
+/// departure) or is down, a restart of a host that isn't there or isn't
+/// down, a host's second departure, and every fault at or past the run's
+/// end, which it never reaches. A testbed run has the WAN model, so a
+/// one-way latency applies. The testbed's nodes did what the scenario says
+/// (their joins and links are run.sh's), so its skips are its twin's.
+fn skipped_faults(s: &Scenario) -> Vec<usize> {
+    let n = s.hosts.len();
+    let (mut down, mut departed) = (vec![false; n], vec![false; n]);
+    let absent = |h: usize, at: Duration, departed: &[bool]| {
+        s.hosts
+            .get(h)
+            .and_then(|x| x.arrive_at)
+            .is_some_and(|a| at < a)
+            || departed.get(h).copied().unwrap_or(false)
+    };
+    let mut out = Vec::new();
+    for (i, f) in s.faults.iter().enumerate() {
+        let skip = f.at >= s.duration
+            || match f.fault {
+                Fault::Crash(h) => {
+                    let skip = down.get(h).copied().unwrap_or(false) || absent(h, f.at, &departed);
+                    if !skip && let Some(d) = down.get_mut(h) {
+                        *d = true;
+                    }
+                    skip
+                }
+                Fault::Restart(h) => {
+                    let skip = absent(h, f.at, &departed) || !down.get(h).copied().unwrap_or(false);
+                    if !skip && let Some(d) = down.get_mut(h) {
+                        *d = false;
+                    }
+                    skip
+                }
+                Fault::Depart(h, _) => {
+                    let skip = departed.get(h).copied().unwrap_or(false);
+                    if let Some(d) = departed.get_mut(h) {
+                        *d = true;
+                    }
+                    skip
+                }
+                _ => false,
+            };
+        if skip {
+            out.push(i);
+        }
+    }
+    out
+}
 
 /// iperf3's setup ahead of its data, in its path's round trips: its data
 /// stream's handshake and the server's TEST_START and TEST_RUNNING (the
@@ -2509,6 +2570,46 @@ mod tests {
             "back"
         );
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_testbed_run_skips_the_faults_a_run_of_its_scenario_would() {
+        let mut s = calibration_star(&Calibration::from_knobs(|k| {
+            (k == "STRIMS_SIM_CAL_JOIN_AT").then(|| "2".to_owned())
+        }));
+        let (v0, v1, v2) = (1, 2, 3);
+        s.hosts[v2].arrive_at = Some(Duration::from_secs(9));
+        let end = s.duration;
+        s.at(Duration::from_secs(8), Fault::Crash(v2)); // not there yet
+        s.at(Duration::from_secs(10), Fault::Restart(v1)); // up
+        s.at(
+            Duration::from_secs(11),
+            Fault::Depart(v0, crate::Departure::Graceful),
+        );
+        s.at(
+            Duration::from_secs(12),
+            Fault::Depart(v0, crate::Departure::Abrupt),
+        ); // again
+        s.at(Duration::from_secs(13), Fault::Crash(v0)); // departed
+        s.at(end, Fault::Crash(v1)); // unreached
+        s.faults.sort_by_key(|f| f.at);
+        let skipped: Vec<String> = skipped_faults(&s)
+            .into_iter()
+            .map(|i| format!("{:?}@{}", s.faults[i].fault, s.faults[i].at.as_secs()))
+            .collect();
+        assert_eq!(
+            skipped,
+            [
+                // The join's crash and restart, before v2 arrives.
+                format!("Crash({v2})@0"),
+                format!("Restart({v2})@7"),
+                format!("Crash({v2})@8"),
+                format!("Restart({v1})@10"),
+                format!("Depart({v0}, Abrupt)@12"),
+                format!("Crash({v0})@13"),
+                format!("Crash({v1})@{}", end.as_secs()),
+            ]
+        );
     }
 
     #[test]
