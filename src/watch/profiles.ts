@@ -5,6 +5,7 @@ import { Base64 } from "js-base64";
 
 import { LinkedProfile, LinkedProfile_CredentialsCase } from "../apis/strims/auth/v1/auth.pb";
 import type { Ops } from "../contexts/Session";
+import { readItem, writeItem } from "../lib/storage";
 
 /** The local storage key of the linked profile the watch page signs in with. */
 export const PROFILE_ID_KEY = "watch.profileId";
@@ -18,30 +19,11 @@ const PROFILE_LOCK = "strims.watch.profile";
 const NAME_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const NAME_SUFFIX_LENGTH = 10;
 
-const storage = (): Storage | null => {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-};
-
 /** The id of the linked profile the page signed in with last. */
-export const rememberedProfileId = (): string | null => {
-  try {
-    return storage()?.getItem(PROFILE_ID_KEY) ?? null;
-  } catch {
-    return null;
-  }
-};
+export const rememberedProfileId = (): string | null => readItem(PROFILE_ID_KEY);
 
-export const rememberProfileId = (id: bigint): void => {
-  try {
-    storage()?.setItem(PROFILE_ID_KEY, id.toString());
-  } catch {
-    // The next visit picks the newest profile instead.
-  }
-};
+// Where storage fails, the next visit picks the newest profile instead.
+export const rememberProfileId = (id: bigint): void => writeItem(PROFILE_ID_KEY, id.toString());
 
 /** A name for a new anonymous profile, valid under `validNamePattern`. */
 export const viewerName = (
