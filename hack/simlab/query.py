@@ -1379,7 +1379,7 @@ def pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False, sa
         if dry_run and not named.known:
             raise Refused(store.unknown(run))
         if dry_run:
-            raise Refused((f"{named.text()}; " if named.matrices else "")
+            raise Refused((f"{named.text()}; " if named.text() else "")
                           + f"the cache lacks farm/{run}: pull --run {run} copies the tables that name its jobs")
         store.pull(run)
         if not sources([f"farm/{run}"]):
@@ -1413,7 +1413,7 @@ def pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False, sa
 
 
 def pull_text(p):
-    lines = [p.named.text()] if p.named and p.named.matrices else []
+    lines = [p.named.text()] if p.named and p.named.text() else []
     gone = f"; S3 holds none for {p.lost} jobs (expired, or never landed)" if p.lost else ""
     if not p.dry_run and p.dest is not None:
         lines.append(f"{p.run}: {p.sources} sources in {p.dest}")

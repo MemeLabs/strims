@@ -68,8 +68,15 @@ matrices for its id (suite.py's write_matrices: <id>-NN):
                  the run `name` names: the run of that name, else the one
                  run including a matrix of that name or a suite run's
                  matrices of that id, else `name` itself, unknown (S3 may
-                 hold it all the same); Refused, naming them, where
-                 several runs include it
+                 hold it all the same); of a run of that name (a matrix
+                 run alone) and those that include it, the one started
+                 in the S3_KEPT_DAYS days S3 keeps a run (started) if one
+                 alone was, else the run of that name, naming the others;
+                 Refused, naming them, where several runs include a name
+                 no run has
+  started(run) -> float | None
+                 when a run started: its state's matrices list's time,
+                 else its newest flush's in the cache
   unknown(name, s3=False, runs=None) -> str
                  that no run the state or the cache knows is or includes
                  `name` (nor, with `s3`, does S3 hold one of that name),
@@ -345,6 +352,8 @@ def farm_state():
     return store_host.main_checkout() / "target" / "sim-farm"
 
 
+# How long S3 keeps a run's data, in days (farm.py's S3_KEPT_DAYS).
+S3_KEPT_DAYS = 7
 # The part of a run's name standing for the matrices past EC2's tag limit
 # (farm.py's run_name).
 MORE = re.compile(r"\d+more-\w+")
@@ -391,31 +400,69 @@ def span(matrices):
 class Named:
     """The farm run `run` that the name `asked` names (farm_run); the
     run's `matrices` it names, where it names matrices rather than the
-    run; whether the farm's state or the cache knows the run (`known`)."""
+    run; whether the farm's state or the cache knows the run (`known`);
+    the other runs the name names too (`also`: a run of that name, or
+    those that include it)."""
     run: str
     asked: str
     matrices: list = dataclasses.field(default_factory=list)
     known: bool = True
+    also: list = dataclasses.field(default_factory=list)
 
     def text(self):
         """The line saying which run the name names, where it names
-        matrices; else None."""
-        if not self.matrices:
+        matrices or other runs too; else None."""
+        if not self.matrices and not self.also:
             return None
-        what = "a matrix" if self.matrices == [self.asked] else span(self.matrices)
-        return f"{self.asked}: {what} of farm run {self.run}"
+        what = f"farm run {self.run}"
+        if self.matrices:
+            what = f"{'a matrix' if self.matrices == [self.asked] else span(self.matrices)} of {what}"
+        if self.also:
+            others = ", ".join(f"farm run {r} (started {when(started(r))})" for r in self.also)
+            what += (f", the one run it names started in the {S3_KEPT_DAYS} days S3 keeps a run's data; it also "
+                     f"names {others}" if self.matrices else
+                     f"; it also names {others}, which {'include' if len(self.also) > 1 else 'includes'} it: pull "
+                     "--run one by its name for it")
+        return f"{self.asked}: {what}"
+
+
+def started(run):
+    """When farm run `run` started, in seconds since the epoch: its state's
+    matrices list's modification time (a run writes it as it starts),
+    else the newest of its flushes' in the cache; None for neither."""
+    with contextlib.suppress(OSError):
+        return (farm_state() / run / "matrices").stat().st_mtime
+    times = []
+    with contextlib.suppress(OSError):
+        for f in (store_host.cache_root() / "cache" / "farm" / run).glob("*/*/runs.parquet"):
+            with contextlib.suppress(OSError):
+                times.append(f.stat().st_mtime)
+    return max(times, default=None)
+
+
+def when(t):
+    """A time from started, as a date and time (UTC), or "when unknown"."""
+    return "when unknown" if t is None else time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(t))
 
 
 def farm_run(name, runs=None):
     """The farm run `name` names, among `runs` (farm_runs' by default): the
     run of that name, else the one run that includes the matrix of that
     name or the matrices of the suite farm run of that id, else `name`
-    itself, which S3 may hold all the same (unknown). Refused, naming
-    them, where several runs include it."""
+    itself, which S3 may hold all the same (unknown). Where a run of that
+    name (a matrix run alone) and others that include it are among
+    `runs`, the one of them started in the S3_KEPT_DAYS days S3 keeps a
+    run's data, if one alone was, else the run of that name; the result
+    names the others. Refused, naming them, where several runs include a
+    name no run has."""
     runs = farm_runs() if runs is None else runs
+    hits = {r: got for r, ms in sorted(runs.items()) if r != name and (got := includes(name, ms))}
     if name in runs:
-        return Named(name, name)
-    hits = {r: got for r, ms in sorted(runs.items()) if (got := includes(name, ms))}
+        kept = time.time() - S3_KEPT_DAYS * 86400
+        live = [r for r in (name, *hits) if (started(r) or 0) >= kept]
+        if len(live) == 1 and live[0] != name:
+            return Named(live[0], name, hits[live[0]], also=[name, *(r for r in hits if r != live[0])])
+        return Named(name, name, also=list(hits))
     if len(hits) > 1:
         raise Refused(f"{name}: {len(hits)} farm runs include it; pull --run one of them:\n"
                       + "\n".join(f"  {r}: {span(ms)}" for r, ms in hits.items()))
@@ -458,7 +505,7 @@ def unpulled(named, runs=None):
     knows, unknown's."""
     if not named.known:
         return unknown(named.asked, True, runs)
-    head = f"{named.text()}; " if named.matrices else f"{named.run}: "
+    head = f"{named.text()}; " if named.text() else f"{named.run}: "
     return (head + f"S3 holds nothing under sim-data/{named.run}/ (expired, or never landed), and the cache none of "
             "its flushes")
 

@@ -1044,6 +1044,30 @@ class SamplesPull(unittest.TestCase):
         self.assertEqual(store.farm_runs(), {RUN: [C0]})
         self.assertEqual(store.farm_run("sz0001"), store.Named(RUN, "sz0001", [C0]))
 
+    def test_a_matrix_run_alone_that_s3_dropped_gives_way_to_the_run_including_it(self):
+        # C0 also ran alone a month ago (a run of its name: its state's
+        # matrices list), its data gone from S3 since: --run C0 names RUN,
+        # started a day ago, and the line names both.
+        farm = simdb.main_checkout() / "target" / "sim-farm"
+        (farm / C0 / "matrices").write_text(f"{C0}\n")
+        old, new = time.time() - 30 * 86400, time.time() - 86400
+        os.utime(farm / C0 / "matrices", (old, old))
+        os.utime(farm / RUN / "matrices", (new, new))
+        dest = simdb.cache_root() / "cache" / "farm" / RUN
+        out, _ = self.cli("pull", "--run", C0)
+        self.assertEqual(out, f"{C0}: a matrix of farm run {RUN}, the one run it names started in the 7 days S3 keeps "
+                              f"a run's data; it also names farm run {C0} (started {store.when(old)})\n"
+                              f"{RUN}: 4 sources in {dest}\n")
+        self.assertEqual([a[2] for a in self.calls], [f"s3://bkt/sim-data/{RUN}/"])
+        # Both in S3's days: the run of that name, the line naming RUN.
+        os.utime(farm / C0 / "matrices", (new - 86400, new - 86400))
+        self.assertEqual(store.farm_run(C0), store.Named(C0, C0, also=[RUN]))
+        self.assertEqual(store.farm_run(C0).text(), f"{C0}: farm run {C0}; it also names farm run {RUN} (started "
+                                                    f"{store.when(new)}), which includes it: pull --run one by its "
+                                                    "name for it")
+        # A suite id two runs include is refused, as before.
+        self.assertTrue(self.refused("--run", "sz0001").startswith("sz0001: 2 farm runs include it"))
+
     def test_a_name_several_runs_include_is_refused(self):
         other = f"sy0001-00+{C1}"
         (simdb.main_checkout() / "target" / "sim-farm" / other).mkdir()

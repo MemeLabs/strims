@@ -84,7 +84,10 @@ invocation's store into the cache, `<main checkout>/target/sim-db/cache/`
 puts its instances' flushes in S3, and `pull` copies a run's into the
 cache (farm/<run>/...). `--run` names the run, or a matrix or a suite
 farm run's id (its matrices <id>-NN) that one run includes, as the
-farm's state lists them, and the pull then names the run; a pull that
+farm's state lists them, and the pull then names the run; a matrix that
+also ran alone (a run of its name) names the one of those runs started
+in the 7 days S3 keeps a run's data, if one alone was, else the run of
+its name, and the pull names the others; a pull that
 finds none of the run's flushes fails, saying where it looked and, for a
 name of no run, the names nearest it. Its sample tables (sim-samples/)
 come with `--reads`: the whole run's, or with `--cell`, `--arm` and
