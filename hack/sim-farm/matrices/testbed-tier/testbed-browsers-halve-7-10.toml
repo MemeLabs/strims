@@ -1,0 +1,33 @@
+# The testbed tier's halve-7-10 (browsers): 7 viewers, a 10 Mbit/s seed halved at 30 s, as browsers, honest, against its twin
+# (simlab.testbed.tier_matrices writes it).
+
+kind = "testbed"
+repeats = 2
+host_cores = 8
+cell = "halve-7-10"
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node --example testbed_tables", "cargo build --release --locked -p strims-testbed --example testbed_browser", "export PATH=$HOME/.nvm/versions/node/v26.11.1/bin:$PATH && pnpm install --frozen-lockfile --offline && pnpm exec webpack --mode production --env TARGET=wasm-testbed"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
+BROWSER_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_browser"
+WEB_BUNDLE = "dist/wasm-testbed"
+
+[files]
+TOPOLOGY = "../topologies/full-v7"
+
+[arms]
+main = "main"
+
+[env]
+VIEWERS = "7"
+SEED_UP_MBIT = "10"
+SECS = "70"
+PCAP = "1"
+SEED_UP_STEPS = "30:5"
+NODE_ARGS = "--chunk 4096 --munro 32768"
+KINDS = "chromium chromium chromium firefox chromium chromium chromium firefox"
+BROWSER_LINKS = "webrtc"
+BROWSER_ARGS = "--chunk 4096 --munro 32768"

@@ -352,7 +352,7 @@ class FarmNames(unittest.TestCase):
         self.assertIn('columns = ["delivery:mean,min", "lag_p50_ms:median", "lag_p99_ms:median,max"]',
                       (FARM / "farm.py").read_text())
         self.assertEqual(sorted(set(defaults) - self.rows), [])
-        matrices = sorted((FARM / "matrices").glob("*.toml"))
+        matrices = sorted((FARM / "matrices").rglob("*.toml"))
         self.assertTrue(matrices)
         worker = farm_module("worker")
         tests = testbeds = 0

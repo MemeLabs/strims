@@ -37,14 +37,25 @@ tier cell takes a cell named for its knobs (`tb-<hash>`).
                  pairs: testbed/<name> arm `arm` against src arm testbed)
   cells_in(src) -> {cell: env}
                  a testbed source's cells and their twins' knobs
+  tier_cells() -> [(kind, cell)]
+                 the testbed tier: the robust tier's calibration_star cells
+                 a testbed hosts on native nodes and the browsers tier's on
+                 browsers (no cable jitter, rate limit or departures, at
+                 most MAX_VIEWERS viewers), each honest
+  tier_matrices(dest, repeats=2, ref="main") -> [path]
+                 the tier as farm testbed matrices, one a cell, each naming
+                 its cell, its arrivals' knob and each repeat's joins
+                 (run_env: strims-sim's testbed::knobs_of the other way)
 
-hack/sim-db/simdb.py testbed and twin are its command line; `simdb.py index` then
-takes the source in. A testbed source is a local experiment (exp_id its
-source), its arm `arm`.
+hack/sim-db/simdb.py testbed, twin and testbed-tier are its command line;
+`simdb.py index` then takes a source in. A testbed source is a local
+experiment (exp_id its source), its arm `arm`; a farm run of the tier's
+matrices puts its runs in the cache as farm sources (`simdb.py pull`).
 """
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -87,15 +98,22 @@ def comparable(env):
             if k not in TESTBED_FIXED and k not in JOB_KNOBS and not k.startswith("TESTBED_")}
 
 
+# The tiers whose cells a run's knobs name first: the testbed tier's own
+# (tier_cells), then the rest in suite.TIERS' order. Two tiers can hold one
+# env under two names (peers' star-15 is robust's star-15-10's).
+CELL_TIERS = ("robust", "browsers")
+
+
 def cell_of(env):
     """The name of the calibration_star tier cell whose env is `env` (see
-    the module docs), or None."""
+    the module docs: CELL_TIERS' first), or None."""
     from . import suite
 
     if any(k.startswith("TESTBED_") and k != "TESTBED_QDISC" for k in env):
         return None
     want = comparable(env)
-    for cells in suite.TIERS.values():
+    order = [*CELL_TIERS, *(t for t in suite.TIERS if t not in CELL_TIERS)]
+    for cells in (suite.TIERS[t] for t in order if t in suite.TIERS):
         for c in cells:
             if c["test"] == "calibration_star" and comparable(c["env"]) == want:
                 return c["name"]
@@ -193,3 +211,144 @@ def _base_env():
     import os
 
     return {k: os.environ[k] for k in ("PATH", "HOME") if k in os.environ}
+
+
+# --- the testbed tier
+
+# The knobs a tier cell may hold that the testbed can't stand for: a cable
+# path's jitter, a node's rate limit, departures (run.sh's nodes stay to the
+# stream's end). A cell with one isn't the tier's.
+UNHOSTED = ("STRIMS_SIM_CAL_JITTER", "STRIMS_SIM_CAL_RATE_LIMIT_PCT", "STRIMS_SIM_DEPART")
+# The most viewers a tier cell has: native nodes (32 containers fit one
+# host easily), and browsers (the testbed skill's 16-node full mesh).
+MAX_VIEWERS = {"native": 31, "browsers": 15}
+# Each kind's host, by viewers: about half idle at the testbed skill's
+# per-node CPU (native nodes 0.01-0.07 core; a browser 0.1-0.55 by peers).
+HOST_CORES = {"native": ((15, 4), (31, 8)), "browsers": ((3, 4), (7, 8), (15, 16))}
+
+
+def tier_cells():
+    """The testbed tier's cells, (kind, cell): the robust tier's
+    calibration_star cells for native nodes and the browsers tier's for
+    browsers, the testbed can host (UNHOSTED, MAX_VIEWERS), each honest
+    (STRIMS_SIM_HOSTILE=off), as their twins run it."""
+    from . import suite
+
+    out = []
+    for kind, tier in (("native", "robust"), ("browsers", "browsers")):
+        for c in suite.TIERS[tier]:
+            env = c["env"]
+            if c["test"] != "calibration_star" or any(k in env for k in UNHOSTED):
+                continue
+            if int(env.get("STRIMS_SIM_CAL_VIEWERS", "3")) > MAX_VIEWERS[kind]:
+                continue
+            out.append((kind, {**c, "env": {**env, "STRIMS_SIM_HOSTILE": "off"}}))
+    return out
+
+
+def joins_of(arrivals, viewers, secs, rng):
+    """JOINS for an arrivals profile (crates/strims-sim's arrivals.rs, its
+    knob's form): each viewer's join, in seconds after the stream's start,
+    as the twin draws them (trickle: uniform within the stream's first
+    third; event:<warm %>:<at>:<window>: the warm share uniform before
+    `at`, the rest uniform within `window` from it), the k-th soonest
+    viewer k's, so the topology's order is the arrivals' as the twin lays
+    its links out."""
+    parts = arrivals.split(":")
+    if parts == ["trickle"]:
+        times = [rng.uniform(0, secs / 3) for _ in range(viewers)]
+    elif parts[0] == "event" and len(parts) == 4:
+        warm, at, window = float(parts[1]), float(parts[2]), float(parts[3])
+        m = min(viewers, round(viewers * warm / 100))
+        times = [rng.uniform(0, at) for _ in range(m)] + [at + rng.uniform(0, window) for _ in range(viewers - m)]
+    else:
+        raise ValueError(f"arrivals {arrivals}: the tier takes trickle and event profiles")
+    return " ".join(f"{i}:{t:.1f}" for i, t in enumerate(sorted(times), start=1))
+
+
+def num(x):
+    """A number as run.sh's settings take it: 5, 2.5."""
+    return f"{x:g}"
+
+
+def run_env(kind, cell):
+    """run.sh's settings for a tier cell ((kind, cell) of tier_cells), the
+    knobs testbed_tables adds to the run's (its arrivals), and the topology
+    file (topologies/<name>, relative to the matrices)."""
+    env = cell["env"]
+    viewers = int(env["STRIMS_SIM_CAL_VIEWERS"])
+    mbit = float(env.get("STRIMS_SIM_CAL_SEED_UP_MBIT", "10"))
+    out = {"VIEWERS": str(viewers), "SEED_UP_MBIT": num(mbit), "SECS": env.get("STRIMS_SIM_CAL_SECS", "180"),
+           "PCAP": "1"}
+    if "STRIMS_SIM_CAL_VIEWER_UP_MBIT" in env:
+        out["VIEWER_UP_MBIT"] = env["STRIMS_SIM_CAL_VIEWER_UP_MBIT"]
+    if "STRIMS_SIM_CAL_SEED_UP_SCALE" in env:
+        out["SEED_UP_STEPS"] = " ".join(f"{a}:{num(float(f) * mbit)}" for a, f in
+                                        (p.split(":") for p in env["STRIMS_SIM_CAL_SEED_UP_SCALE"].split()))
+    if "STRIMS_SIM_CHUNK" in env:
+        args = f"--chunk {env['STRIMS_SIM_CHUNK']} --munro {env['STRIMS_SIM_MUNRO']}"
+        out["NODE_ARGS"] = args
+    mesh = env.get("STRIMS_SIM_CAL_MESH")
+    topology = {"full": f"full-v{viewers}", "mesh6": f"mesh6-v{viewers}", None: None}[mesh]
+    if kind == "browsers":
+        stacks = env["STRIMS_SIM_RTC"].split(",")
+        out["KINDS"] = " ".join(stacks[i % len(stacks)] for i in range(viewers + 1))
+        out["BROWSER_LINKS"] = "webrtc"
+        if "NODE_ARGS" in out:
+            out["BROWSER_ARGS"] = out["NODE_ARGS"]
+    knobs = {k: env[k] for k in ("STRIMS_SIM_ARRIVALS",) if k in env}
+    return out, knobs, topology
+
+
+def cores(kind, viewers):
+    return next(c for v, c in HOST_CORES[kind] if viewers <= v)
+
+
+def tier_matrices(dest, repeats=2, ref="main"):
+    """The testbed tier as farm testbed matrices in `dest`, one a cell
+    (testbed-<kind>-<cell>.toml), each naming its tier cell (`cell`) and its
+    arrivals' knob (`knobs`), each repeat its own draw of a trickle's or an
+    event's joins ([repeat_env] JOINS: random.Random(cell, kind, repeat)),
+    at the arm `ref`; returns their paths. A twin's seed r pairs with
+    repeat r - 1's run."""
+    import random
+
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    matrices = Path(__file__).resolve().parents[1] / "sim-farm" / "matrices"
+    out = []
+    for kind, cell in tier_cells():
+        env, knobs, topology = run_env(kind, cell)
+        viewers = int(env["VIEWERS"])
+        lines = [f"# The testbed tier's {cell['name']} ({kind}): {cell['why']}, honest, against its twin",
+                 "# (simlab.testbed.tier_matrices writes it).", "",
+                 'kind = "testbed"', f"repeats = {repeats}", f"host_cores = {cores(kind, viewers)}",
+                 f'cell = "{cell["name"]}"']
+        builds = ["cargo build --release --locked -p strims-sim --example testbed_node --example testbed_tables"]
+        arts = {"NODE_BIN": "$CARGO_TARGET_DIR/release/examples/testbed_node",
+                "TABLES_BIN": "$CARGO_TARGET_DIR/release/examples/testbed_tables"}
+        if kind == "browsers":
+            builds += ["cargo build --release --locked -p strims-testbed --example testbed_browser",
+                       "export PATH=$HOME/.nvm/versions/node/v26.11.1/bin:$PATH && pnpm install --frozen-lockfile "
+                       "--offline && pnpm exec webpack --mode production --env TARGET=wasm-testbed"]
+            arts |= {"BROWSER_BIN": "$CARGO_TARGET_DIR/release/examples/testbed_browser",
+                     "WEB_BUNDLE": "dist/wasm-testbed"}
+        lines += ["", "[build]", "commands = [" + ", ".join(json.dumps(b) for b in builds) + "]", "", "[artifacts]"]
+        lines += [f'{k} = "{v}"' for k, v in arts.items()]
+        if topology:
+            if not (matrices / "topologies" / topology).exists():
+                raise FileNotFoundError(f"no topology {topology} in {matrices / 'topologies'}")
+            rel = os.path.relpath(matrices / "topologies" / topology, dest.resolve())
+            lines += ["", "[files]", f'TOPOLOGY = "{rel}"']
+        lines += ["", "[arms]", f'main = "{ref}"', "", "[env]"]
+        lines += [f"{k} = {json.dumps(v)}" for k, v in env.items()]
+        if knobs:
+            lines += ["", "[knobs]"] + [f"{k} = {json.dumps(v)}" for k, v in knobs.items()]
+            arrivals = knobs["STRIMS_SIM_ARRIVALS"]
+            draws = [joins_of(arrivals, viewers, float(env["SECS"]), random.Random(f"{cell['name']}:{kind}:{r}"))
+                     for r in range(repeats)]
+            lines += ["", "[repeat_env]", "JOINS = [" + ", ".join(json.dumps(d) for d in draws) + "]"]
+        path = dest / f"testbed-{kind}-{cell['name']}.toml"
+        path.write_text("\n".join(lines) + "\n")
+        out.append(path)
+    return out

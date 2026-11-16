@@ -1,0 +1,38 @@
+# The testbed tier's star-15-10 (browsers): 15 viewers, a 10 Mbit/s seed, as browsers, honest, against its twin
+# (simlab.testbed.tier_matrices writes it).
+
+kind = "testbed"
+repeats = 2
+host_cores = 16
+cell = "star-15-10"
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node --example testbed_tables", "cargo build --release --locked -p strims-testbed --example testbed_browser", "export PATH=$HOME/.nvm/versions/node/v26.11.1/bin:$PATH && pnpm install --frozen-lockfile --offline && pnpm exec webpack --mode production --env TARGET=wasm-testbed"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
+BROWSER_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_browser"
+WEB_BUNDLE = "dist/wasm-testbed"
+
+[files]
+TOPOLOGY = "../topologies/full-v15"
+
+[arms]
+main = "main"
+
+[env]
+VIEWERS = "15"
+SEED_UP_MBIT = "10"
+SECS = "60"
+PCAP = "1"
+NODE_ARGS = "--chunk 4096 --munro 32768"
+KINDS = "chromium chromium chromium firefox chromium chromium chromium firefox chromium chromium chromium firefox chromium chromium chromium firefox"
+BROWSER_LINKS = "webrtc"
+BROWSER_ARGS = "--chunk 4096 --munro 32768"
+
+[knobs]
+STRIMS_SIM_ARRIVALS = "trickle"
+
+[repeat_env]
+JOINS = ["1:4.7 2:5.6 3:5.6 4:5.8 5:7.0 6:7.1 7:9.9 8:11.7 9:12.0 10:15.8 11:15.8 12:17.9 13:18.1 14:18.4 15:19.0", "1:1.1 2:1.2 3:2.1 4:2.9 5:5.6 6:5.8 7:7.4 8:8.6 9:10.8 10:15.2 11:15.2 12:16.7 13:16.8 14:19.2 15:19.3"]

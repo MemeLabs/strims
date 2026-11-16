@@ -1,0 +1,8 @@
+# The testbed's seed and 3 viewers, each node linked to every other:
+# strims-sim's calibration_star under STRIMS_SIM_CAL_MESH=full (calibration::full_mesh).
+link 0 1
+link 0 2
+link 0 3
+link 1 2
+link 1 3
+link 2 3

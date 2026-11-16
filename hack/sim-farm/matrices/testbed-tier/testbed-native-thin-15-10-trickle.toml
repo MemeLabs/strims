@@ -1,0 +1,34 @@
+# The testbed tier's thin-15-10-trickle (native): 15 viewers with 3 Mbit/s uplinks, a 10 Mbit/s seed, trickling in, honest, against its twin
+# (simlab.testbed.tier_matrices writes it).
+
+kind = "testbed"
+repeats = 2
+host_cores = 4
+cell = "thin-15-10-trickle"
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node --example testbed_tables"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
+
+[files]
+TOPOLOGY = "../topologies/full-v15"
+
+[arms]
+main = "main"
+
+[env]
+VIEWERS = "15"
+SEED_UP_MBIT = "10"
+SECS = "60"
+PCAP = "1"
+VIEWER_UP_MBIT = "3"
+NODE_ARGS = "--chunk 4096 --munro 32768"
+
+[knobs]
+STRIMS_SIM_ARRIVALS = "trickle"
+
+[repeat_env]
+JOINS = ["1:1.7 2:2.6 3:3.9 4:5.6 5:9.5 6:9.6 7:12.6 8:14.9 9:15.3 10:15.4 11:16.5 12:16.7 13:17.7 14:18.9 15:19.0", "1:4.6 2:7.2 3:8.8 4:9.5 5:9.6 6:12.1 7:12.7 8:13.3 9:13.6 10:14.5 11:15.0 12:15.7 13:16.0 14:17.9 15:19.7"]

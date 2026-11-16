@@ -28,6 +28,7 @@
   hack/sim-db/simdb.py gc [--days N]
   hack/sim-db/simdb.py testbed RUN_DIR... --name NAME [--cell C] [--arm A] [--knob KEY=VALUE ...] [--bin PATH]
   hack/sim-db/simdb.py twin SRC --name NAME --bin SCENARIOS [--seeds N] [--arm A] [--env KEY=VALUE ...]
+  hack/sim-db/simdb.py testbed-tier DIR [--repeats N] [--ref REF]
 
 `describe`, `lake`, `view`, `index` and `fetch` are the catalog's
 (hack/sim-db/catalog.py, whose docs say more): every result the cache,
@@ -529,6 +530,13 @@ def cmd_testbed(a):
     print("simdb.py index takes them in")
 
 
+def cmd_testbed_tier(a):
+    from simlab import testbed
+
+    for p in testbed.tier_matrices(a.dir, repeats=a.repeats, ref=a.ref):
+        print(p)
+
+
 def cmd_twin(a):
     from simlab import testbed
 
@@ -653,6 +661,11 @@ def main():
     t.add_argument("--knob", action="append", help="a twin knob KEY=VALUE to add to the runs' (a trickle's "
                    "STRIMS_SIM_ARRIVALS, say)")
     t.add_argument("--bin", help="the testbed_tables binary (default: this checkout's release build)")
+    tt = sub.add_parser("testbed-tier", help="the testbed tier as farm testbed matrices in DIR, one a cell "
+                        "(simlab.testbed.tier_matrices)")
+    tt.add_argument("dir")
+    tt.add_argument("--repeats", type=int, default=2)
+    tt.add_argument("--ref", default="main", help="the arm's git ref")
     w = sub.add_parser("twin", help="the twins of a testbed source's cells (strims-sim's calibration_star at seeds "
                        "1..N) into the cache as source testbed/NAME (simlab.testbed.twins)")
     w.add_argument("src", help="the testbed source, testbed/NAME")
@@ -680,6 +693,8 @@ def main():
         cmd_testbed(a)
     elif a.cmd == "twin":
         cmd_twin(a)
+    elif a.cmd == "testbed-tier":
+        cmd_testbed_tier(a)
     elif a.cmd in lake:
         lake[a.cmd](a)
     elif a.cmd == "forecast-report":

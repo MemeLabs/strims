@@ -1,0 +1,33 @@
+# The testbed tier's star-3-5 (native): 3 viewers, a 5 Mbit/s seed, honest, against its twin
+# (simlab.testbed.tier_matrices writes it).
+
+kind = "testbed"
+repeats = 2
+host_cores = 4
+cell = "star-3-5"
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node --example testbed_tables"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
+
+[files]
+TOPOLOGY = "../topologies/full-v3"
+
+[arms]
+main = "main"
+
+[env]
+VIEWERS = "3"
+SEED_UP_MBIT = "5"
+SECS = "60"
+PCAP = "1"
+NODE_ARGS = "--chunk 4096 --munro 32768"
+
+[knobs]
+STRIMS_SIM_ARRIVALS = "trickle"
+
+[repeat_env]
+JOINS = ["1:2.9 2:11.3 3:16.7", "1:2.5 2:9.6 3:9.6"]

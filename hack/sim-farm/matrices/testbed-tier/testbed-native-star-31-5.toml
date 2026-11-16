@@ -1,0 +1,27 @@
+# The testbed tier's star-31-5 (native): 31 viewers, a 5 Mbit/s seed, honest, against its twin
+# (simlab.testbed.tier_matrices writes it).
+
+kind = "testbed"
+repeats = 2
+host_cores = 8
+cell = "star-31-5"
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node --example testbed_tables"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
+
+[files]
+TOPOLOGY = "../topologies/full-v31"
+
+[arms]
+main = "main"
+
+[env]
+VIEWERS = "31"
+SEED_UP_MBIT = "5"
+SECS = "60"
+PCAP = "1"
+NODE_ARGS = "--chunk 4096 --munro 32768"

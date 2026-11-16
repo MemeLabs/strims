@@ -1,0 +1,28 @@
+# The testbed tier's halve-7-10 (native): 7 viewers, a 10 Mbit/s seed halved at 30 s, honest, against its twin
+# (simlab.testbed.tier_matrices writes it).
+
+kind = "testbed"
+repeats = 2
+host_cores = 4
+cell = "halve-7-10"
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node --example testbed_tables"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
+
+[files]
+TOPOLOGY = "../topologies/full-v7"
+
+[arms]
+main = "main"
+
+[env]
+VIEWERS = "7"
+SEED_UP_MBIT = "10"
+SECS = "70"
+PCAP = "1"
+SEED_UP_STEPS = "30:5"
+NODE_ARGS = "--chunk 4096 --munro 32768"
