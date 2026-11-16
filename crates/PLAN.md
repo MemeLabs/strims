@@ -480,6 +480,14 @@ and dropped are in `TRIED.md`.
     of 50 ms every 4 s, the satellites' reassignment every 15 s; the
     profiles' docs), and jitter changes every 20 ms per end. Measure both
     where the app runs on those links.
+  - Score the twin against the testbed per access link class (`run.sh`'s
+    `SEED_LINK` classes, strims-sim's `link` specs) once the testbed's runs
+    are on the metrics layer, and turn framing, slots and capacity traces
+    on where they improve the correlation.
+  - The WAN model lacks what the testbed's classes build beyond a FIFO:
+    DOCSIS-PIE (cable's `aqm=pie`), a home router's fq_codel or cake
+    (`router=`), a trace's varying delay (`delay=`); and the testbed's cable
+    grants precede its shaper, so under load they don't batch what it sends.
   - Browser peers collapse more often than TCP peers (the `browsers` tier,
     `STRIMS_SIM_RTC`), most in thin relays and the WAN cells, where SCTP's
     Reno holds a long, lossy path's window low. Mixed audiences (a native
