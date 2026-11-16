@@ -70,8 +70,9 @@ tarball, into the out dir's tables/ (`TABLES_BIN out out/tables`, a
 test job's out dir does: the fold's key, sim, test, env and row are
 tables/job.json's, the row with the host's fields, its cell the job's
 `cell` (else its matrix; the index names a testbed job's cell by its knobs
-again, simlab.testbed.cell_sql), its arm the job's and its seed its
-`repeat`;
+again, simlab.testbed.cell_sql), its arm the job's, its seed its
+`repeat`, its commit and binary_sha256 the job's (its arm's commit, its
+bundle's sha256);
 its result says `key` and `flush` as a stored test job's does. Tables
 that fail (a run that didn't stream, which testbed_tables refuses) fail
 the job: its result has no row, its `error` and `tables_error` saying why,
@@ -586,6 +587,8 @@ class Store:
                 "k": t.get("k") or wid, "dir": self.fold_dir / wid, "sim": t.get("sim"), "test": t.get("test"),
                 "cell": job.get("cell") or job.get("matrix"), "arm": job.get("arm"), "seed": job.get("repeat"),
                 "env": t.get("env") or {}, "row": rec["row"], "wall_s": res.get("wall_s"), "rss_mb": None,
+                "commit": job.get("commit"), "binary_sha256": job.get("binary_sha256"),
+                "dirty": False if job.get("commit") else None,
             }
         env = job.get("env", {})
         seed = env.get("STRIMS_SIM_SEED")

@@ -1914,6 +1914,14 @@ def knob(env, name):
 STREAMED = ("(r.sim IS DISTINCT FROM 'testbed' OR (coalesce(TRY_CAST(json_extract_string(r.row_json, '$.delivery') "
             "AS DOUBLE), 1) > 0 AND r.src IN (SELECT src FROM raw.files WHERE tbl = 'viewer_seconds')))")
 
+# The runs of raw.runs (r) that are their source's experiment's, not a
+# suite farm run's (whose experiments its index names): a suite
+# invocation's (suite/...) and a testbed ingest's or twins' (testbed/...),
+# each its source; and a farm run's testbed runs, each of its flushes'
+# (farm/<run>/<host>/<seq>) the farm run's, farm/<run> (LOCAL_EXP).
+LOCAL_RUNS = "(r.src LIKE 'suite/%' OR r.src LIKE 'testbed/%' OR (r.sim = 'testbed' AND r.src LIKE 'farm/%'))"
+LOCAL_EXP = ("CASE WHEN r.src LIKE 'farm/%' THEN 'farm/' || split_part(r.src, '/', 2) ELSE r.src END")
+
 JOBS_SQL = """
 CREATE OR REPLACE TABLE main.jobs AS
 WITH cand AS (
@@ -1976,12 +1984,12 @@ FROM raw.suite_cells c JOIN raw.suite_runs r USING (exp_id)
 LEFT JOIN fenv f ON f.matrix = c.exp_id || '-' || lpad(c.i::VARCHAR, 2, '0')
 WHERE c.sim IS NULL OR c.sim NOT IN ({skipped})
 UNION ALL BY NAME
-SELECT src AS exp_id, cell, any_value({rsim}) AS sim, any_value(test) AS test, any_value(env) AS env
-FROM (SELECT src, sim, test, json_transform(env, '"MAP(VARCHAR, VARCHAR)"') AS env,
+SELECT exp_id, cell, any_value({rsim}) AS sim, any_value(test) AS test, any_value(env) AS env
+FROM (SELECT {local_exp} AS exp_id, sim, test, json_transform(env, '"MAP(VARCHAR, VARCHAR)"') AS env,
              CASE WHEN sim = 'testbed' THEN testbed_cell(json_transform(env, '"MAP(VARCHAR, VARCHAR)"'))
                   ELSE cell END AS cell
-      FROM raw.runs r WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND sim NOT IN ({skipped}) AND {streamed})
-GROUP BY src, cell;
+      FROM raw.runs r WHERE {local} AND sim NOT IN ({skipped}) AND {streamed})
+GROUP BY exp_id, cell;
 
 CREATE OR REPLACE TABLE main.experiment_jobs AS
 SELECT u.* EXCLUDE (line), j.src FROM (
@@ -1994,12 +2002,11 @@ SELECT u.* EXCLUDE (line), j.src FROM (
     JOIN raw.farm_index f ON f.matrix = c.exp_id || '-' || lpad(c.i::VARCHAR, 2, '0')
     WHERE f.src IS NOT NULL AND f.k IS NOT NULL AND (c.sim IS NULL OR c.sim NOT IN ({skipped}))
     UNION ALL BY NAME
-    SELECT src AS exp_id,
+    SELECT {local_exp} AS exp_id,
            CASE WHEN sim = 'testbed' THEN testbed_cell(json_transform(env, '"MAP(VARCHAR, VARCHAR)"'))
                 ELSE cell END AS cell,
            arm AS arm_label, arm AS ref, k, seed, false AS reused, src AS flush, 0 AS line
-    FROM raw.runs r WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND sim NOT IN ({skipped})
-      AND {streamed}) u
+    FROM raw.runs r WHERE {local} AND sim NOT IN ({skipped}) AND {streamed}) u
 LEFT JOIN main.jobs j USING (k)
 QUALIFY row_number() OVER (PARTITION BY u.exp_id, u.cell, u.arm_label, u.seed, u.k ORDER BY u.reused, u.line DESC) = 1;
 
@@ -2047,16 +2054,20 @@ FROM raw.suite_runs r LEFT JOIN ej USING (exp_id) LEFT JOIN spend sp USING (exp_
 LEFT JOIN refs USING (exp_id)
 UNION ALL BY NAME
 SELECT * FROM (
-    SELECT src AS exp_id, 'local' AS kind, min(TRY_CAST("at" AS TIMESTAMPTZ)) AS started_at,
-           max(TRY_CAST("at" AS TIMESTAMPTZ)) AS finished_at, list(DISTINCT seed ORDER BY seed) AS seeds,
-           list(DISTINCT arm ORDER BY arm) AS arm_labels, false AS pending, count(DISTINCT cell) AS cells,
-           count(*) AS jobs
-    FROM raw.runs WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') GROUP BY src)
+    SELECT e.exp_id, CASE WHEN e.exp_id LIKE 'farm/%' THEN 'farm' ELSE 'local' END AS kind,
+           min(j.ran_at) AS started_at, max(j.ran_at) AS finished_at, list(DISTINCT e.seed ORDER BY e.seed) AS seeds,
+           list(DISTINCT e.arm_label ORDER BY e.arm_label) AS arm_labels, false AS pending,
+           count(DISTINCT e.cell) AS cells, count(*) AS jobs
+    FROM main.experiment_jobs e LEFT JOIN main.jobs j USING (k)
+    WHERE e.exp_id IN (SELECT DISTINCT {local_exp} FROM raw.runs r WHERE {local}) GROUP BY e.exp_id)
 LEFT JOIN (
-    SELECT src AS exp_id, map_from_entries(list({{'key': arm, 'value': commit}} ORDER BY arm)) AS arms
-    FROM (SELECT src, arm, arg_max(commit, "at") AS commit FROM raw.runs
-          WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND arm IS NOT NULL AND commit IS NOT NULL GROUP BY src, arm)
-    GROUP BY src) USING (exp_id);
+    SELECT exp_id, map_from_entries(list({{'key': arm, 'value': commit}} ORDER BY arm)) AS arms
+    FROM (SELECT {local_exp} AS exp_id, arm, arg_max(commit, "at") AS commit FROM raw.runs r
+          WHERE {local} AND arm IS NOT NULL AND commit IS NOT NULL GROUP BY ALL)
+    GROUP BY exp_id) USING (exp_id)
+LEFT JOIN (
+    SELECT 'farm/' || run AS exp_id, [run] AS farm_runs, sum(cost) AS cost_usd FROM raw.costs GROUP BY run)
+    USING (exp_id);
 """
 
 COSTS_SQL = """
@@ -2288,7 +2299,7 @@ def main_version():
     any makes them again at the next index, the data unchanged."""
     from . import testbed
 
-    text = "\n".join([JOBS_SQL, EXPERIMENTS_SQL, STREAMED, testbed.cell_sql("raw.tier_cells"),
+    text = "\n".join([JOBS_SQL, EXPERIMENTS_SQL, STREAMED, LOCAL_RUNS, LOCAL_EXP, testbed.cell_sql("raw.tier_cells"),
                       json.dumps(tier_cells(), sort_keys=True)])
     return hashlib.sha256(text.encode()).hexdigest()[:12]
 
@@ -2313,7 +2324,7 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None, hidden
     out.append(COSTS_SQL.format(**{k: repr(v) for k, v in s3_prices().items()}))
     out.append(EXPERIMENTS_SQL.format(csim=sim_case("c.sim"), rsim=sim_case("sim"),
                                       job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped,
-                                      streamed=STREAMED))
+                                      streamed=STREAMED, local=LOCAL_RUNS, local_exp=LOCAL_EXP))
     out.append(AVAILABILITY_SQL.format(days=store.s3_kept_days()))
     out.append(EXP_RUNS_SQL)
     out += commits_sql(tmp, ins, parsed, commits)

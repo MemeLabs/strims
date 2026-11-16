@@ -2798,8 +2798,10 @@ class Run:
             m = self.owners[j.id][0][0] if j.id in self.owners else self.ms[0]
             w["files"] = dict(j.files)
             w["seq"] = self.seqs.get(item.wid, 0)
+            # Its provenance, as a test job's index line has it: the arm's
+            # commit and its bundle's sha256.
             w.update(matrix=m.name, arm=j.arm, repeat=j.repeat, cell=m.cell, knobs=m.knobs,
-                     fields=self.fields.get(j.id, []))
+                     fields=self.fields.get(j.id, []), commit=j.commit, binary_sha256=bin_hash(j.bin))
             return w
         m = self.owners[j.id][0][0] if j.id in self.owners else self.ms[0]
         w.update(key=j.key, matrix=m.name, arm=j.arm, sim=f"{m.package}:{m.target}", out=OUT_KNOBS.get(m.package),

@@ -1089,7 +1089,8 @@ class TestbedTables(unittest.TestCase):
         out = root / "work" / "j1" / "out"
         out.mkdir(parents=True)
         job = {"id": "j1", "kind": "testbed", "bin": "b.tar.gz", "matrix": "tb", "arm": "main", "repeat": 2,
-               "cell": "star-3-10", "knobs": {"STRIMS_SIM_ARRIVALS": "trickle"}, "fields": []}
+               "cell": "star-3-10", "knobs": {"STRIMS_SIM_ARRIVALS": "trickle"}, "fields": [],
+               "commit": "c" * 40, "binary_sha256": "b" * 64}
         dest, meta, why = self.worker.testbed_tables(root, job, out)
         self.assertIsNone(why)
         self.assertEqual(dest, out / "tables")
@@ -1111,9 +1112,12 @@ class TestbedTables(unittest.TestCase):
         self.assertEqual((done["flush"], done["key"]), (0, "tb-0123456789abcdef"))
         flushed = sink / "r1" / "i-1" / "0"
         runs = self.worker.store().duck(
-            f"SELECT k, sim, test, cell, arm, seed, env, row_json FROM read_parquet('{flushed / 'runs.parquet'}');")
+            f"SELECT k, sim, test, cell, arm, seed, env, row_json, commit, binary_sha256 "
+            f"FROM read_parquet('{flushed / 'runs.parquet'}');")
         self.assertEqual([(r["k"], r["sim"], r["test"], r["cell"], r["arm"], r["seed"]) for r in runs],
                          [("tb-0123456789abcdef", "testbed", "calibration_star", "star-3-10", "main", 2)])
+        # Its provenance, as a test job's: the arm's commit, the bundle's sha.
+        self.assertEqual((runs[0]["commit"], runs[0]["binary_sha256"]), ("c" * 40, "b" * 64))
         self.assertEqual(json.loads(runs[0]["env"])["STRIMS_SIM_ARRIVALS"], "trickle")
         self.assertEqual(json.loads(runs[0]["row_json"]), {**full})
         self.assertTrue((flushed / "viewers.parquet").exists())
@@ -1182,8 +1186,9 @@ class TestbedTables(unittest.TestCase):
         run.sink_dir = d / "sink"
         first, second = sorted(run.queue, key=lambda i: i.job.repeat)
         w = run.wire(first, host)
-        self.assertEqual((w["cell"], w["knobs"], w["repeat"], w["matrix"], w["arm"]),
-                         ("star-3-10", {"STRIMS_SIM_ARRIVALS": "trickle"}, 1, "tb", "main"))
+        self.assertEqual((w["cell"], w["knobs"], w["repeat"], w["matrix"], w["arm"], w["commit"]),
+                         ("star-3-10", {"STRIMS_SIM_ARRIVALS": "trickle"}, 1, "tb", "main", first.job.commit))
+        self.assertIn("binary_sha256", w)
         rows = m.state / "rows.jsonl"
         res = {"row": {"steal_pct": 0.5}, "flush": 3, "key": "tb-0123456789abcdef", "wall_s": 60.0, "exit": 0}
         run.store(host, first, res)
