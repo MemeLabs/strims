@@ -99,12 +99,13 @@ link_check() {
 }
 
 # tc's size table: what the link charges past skb->len (which holds the
-# 14-byte Ethernet header).
+# 14-byte Ethernet header), a byte at a time (tsize 2048 over mtu 2048: the
+# default table rounds a size up to 4 bytes, 1518 to 1520).
 link_stab() {
   case $(link_class "$1") in
-    cable) echo "stab overhead 4 mpu 64 " ;;
-    dsl) if [ "$(link_opt "$1" line adsl)" = vdsl ]; then echo "stab overhead 16 "; else echo "stab linklayer atm overhead 26 "; fi ;;
-    fiber) echo "stab overhead 4 " ;;
+    cable) echo "stab overhead 4 mpu 64 mtu 2048 tsize 2048 " ;;
+    dsl) if [ "$(link_opt "$1" line adsl)" = vdsl ]; then echo "stab overhead 16 mtu 2048 tsize 2048 "; else echo "stab linklayer atm overhead 26 mtu 2048 tsize 2048 "; fi ;;
+    fiber) echo "stab overhead 4 mtu 2048 tsize 2048 " ;;
     *) echo "" ;;
   esac
 }
