@@ -16,10 +16,10 @@
 #   ...                    network namespace of their own
 #
 # and fails (and the launch with it) on what it can't render. A tree
-# stands for a node's link on a dummy eth0: run.sh's delay ifb behind
-# eth0's clsact redirect (with the class's slots), link_root's modem (a
-# trace's tracelink left out, its tc lines kept), link_change's step, and
-# on the ingress SEED_LOSS_PCT's filter and the slow downlink's redirect.
+# stands for a node's link on a dummy eth0: links.sh's node_tree, as
+# run.sh builds it, with the loss filter and the slow downlink (its tc and
+# ip lines: a trace's tracelink and the offloads left out), then
+# link_change's step.
 #
 #   hack/testbed/linkcheck.sh
 
@@ -44,18 +44,9 @@ for spec in tbf tbf,slot=2-8 cable cable,aqm=fifo dsl dsl,line=vdsl fiber \
   echo "tree $spec"
   echo "ip link add eth0 type dummy"
   echo "ip link set eth0 up"
-  echo "ip link add ifbd type ifb"
-  echo "ip link set ifbd up"
-  echo "tc qdisc add dev ifbd root netem delay 20ms$(link_slot "$spec") limit 100000"
-  echo "tc qdisc add dev eth0 clsact"
-  echo "tc filter add dev eth0 egress matchall action mirred egress redirect dev ifbd"
-  grep -E '^(tc|ip) ' <<< "$root"
+  node_tree "$spec" 10 3028 125000 "$peak" 0 0 20 0 \
+    "protocol ip u32 match ip src 10.77.0.10/32" 100 1000 100 | grep -E '^(tc|ip) '
   if [ "$class" != trace ]; then
     link_change "$spec" 5 3028 62500 "$peak" 10
   fi
-  echo "tc filter add dev eth0 ingress prio 1 protocol ip u32 match ip src 10.77.0.10/32 action gact continue random netrand drop 100"
-  echo "ip link add ifbs type ifb"
-  echo "ip link set ifbs up"
-  echo "tc filter add dev eth0 ingress prio 2 matchall action mirred egress redirect dev ifbs"
-  echo "tc qdisc add dev ifbs root tbf rate 1000kbit burst 3028 limit 12500"
 done

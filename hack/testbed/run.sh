@@ -472,38 +472,20 @@ for i in $(seq 0 $((n - 1))); do
       link_mounts+=(-v "$(cd "$(dirname "$f")" && pwd)/$(basename "$f"):/links/$(basename "$f"):ro")
     done < <(link_files "$link")
   fi
-  # The egress filter's actions: PCAP's mirror of what the node offers,
-  # then the delay's redirect. linkcheck.sh renders this tree for a farm
-  # host's boot check, so a change to it goes there too.
-  offered=""
-  if [ "${PCAP:-0}" = 1 ]; then offered="action mirred egress mirror dev ifbo "; fi
-  shape="ethtool -K eth0 tso off gso off gro off >/dev/null 2>&1 || true
-$(link_root "$link" "$up" "$burst" "$limit" "$peak" $((start + delay)) "$i")
-ip link add ifbd type ifb && ip link set ifbd up
-ethtool -K ifbd tso off gso off >/dev/null 2>&1 || true
-tc qdisc add dev ifbd root netem delay ${delay}ms$(link_slot "$link") limit 100000
-tc qdisc add dev eth0 clsact
-tc filter add dev eth0 egress matchall ${offered}action mirred egress redirect dev ifbd"
-  if [ -n "$loss_every" ]; then
-    # The seed loses what it receives; a viewer, what the seed sends it.
-    if [ "$i" -eq 0 ]; then match=matchall; else match="protocol ip u32 match ip src $subnet.10/32"; fi
-    shape="$shape
-tc filter add dev eth0 ingress prio 1 $match action gact continue random netrand drop $loss_every"
-  fi
-  if [ "$i" -eq 1 ] && [ -n "$slow" ]; then
-    shape="$shape
-ip link add ifbs type ifb && ip link set ifbs up
-tc filter add dev eth0 ingress prio 2 matchall action mirred egress redirect dev ifbs
-tc qdisc add dev ifbs root tbf rate ${slow}kbit burst 3028 limit $((slow * queue / 8))"
-  fi
+  # The node's link (links.sh's node_tree, which linkcheck.sh checks on
+  # a farm host): the seed loses what it receives, a viewer what the seed
+  # sends it, and the first viewer's downlink is SLOW_DOWN_KBIT's.
+  if [ "$i" -eq 0 ]; then match=matchall; else match="protocol ip u32 match ip src $subnet.10/32"; fi
+  node_slow=""
+  if [ "$i" -eq 1 ]; then node_slow=$slow; fi
+  shape=$(node_tree "$link" "$up" "$burst" "$limit" "$peak" $((start + delay)) "$i" "$delay" \
+    "${PCAP:-0}" "$match" "$loss_every" "$node_slow" "$queue")
   sample=""
   if [ "$i" -eq 0 ]; then
     sample="( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"\$t \$(tc -s -j qdisc show dev eth0 | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &
 ( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"@ \$t\"; ss -tin state established; sleep $ss_every; done > /out/ss-$i.log ) &"
   fi
   if [ "${PCAP:-0}" = 1 ]; then
-    shape="ip link add ifbo type ifb && ip link set ifbo up
-$shape"
     sample="$sample
 ( tcpdump -i eth0 -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i.pcap 2> /out/tcpdump-$i.err ) &
 ( tcpdump -i ifbo -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i-offered.pcap 2> /out/tcpdump-$i-offered.err ) &"

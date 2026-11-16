@@ -215,6 +215,41 @@ link_change() {
   echo "tc qdisc change dev eth0 root handle 10: $stab$(link_shaper "$spec" "$up" "$burst" "$limit" "$peak" "$base")"
 }
 
+# A node's link as run.sh builds it on the node's eth0, a command a line:
+#
+#   node_tree SPEC UP BURST LIMIT PEAK ORIGIN NODE DELAY PCAP LOSS_MATCH LOSS_EVERY SLOW QUEUE
+#
+# eth0's offloads off, the class's modem (link_root with SPEC to NODE),
+# and the delay's netem (DELAY ms, the class's slots) on an ifb behind
+# eth0's clsact redirect; with PCAP 1, a mirror of what the node offers to
+# an ifb (ifbo) ahead of it; with LOSS_EVERY, the ingress filter that drops
+# one packet in LOSS_EVERY of those LOSS_MATCH (a tc match) takes; with
+# SLOW (kbit/s), the downlink's tbf on an ifb behind an ingress redirect,
+# QUEUE ms of it. linkcheck.sh builds each class's on a farm host.
+node_tree() {
+  local spec=$1 up=$2 burst=$3 limit=$4 peak=$5 origin=$6 node=$7 delay=$8
+  local pcap=$9 loss_match=${10} loss_every=${11} slow=${12} queue=${13} offered=""
+  if [ "$pcap" = 1 ]; then
+    echo "ip link add ifbo type ifb && ip link set ifbo up"
+    offered="action mirred egress mirror dev ifbo "
+  fi
+  echo "ethtool -K eth0 tso off gso off gro off >/dev/null 2>&1 || true"
+  link_root "$spec" "$up" "$burst" "$limit" "$peak" "$origin" "$node"
+  echo "ip link add ifbd type ifb && ip link set ifbd up"
+  echo "ethtool -K ifbd tso off gso off >/dev/null 2>&1 || true"
+  echo "tc qdisc add dev ifbd root netem delay ${delay}ms$(link_slot "$spec") limit 100000"
+  echo "tc qdisc add dev eth0 clsact"
+  echo "tc filter add dev eth0 egress matchall ${offered}action mirred egress redirect dev ifbd"
+  if [ -n "$loss_every" ]; then
+    echo "tc filter add dev eth0 ingress prio 1 $loss_match action gact continue random netrand drop $loss_every"
+  fi
+  if [ -n "$slow" ]; then
+    echo "ip link add ifbs type ifb && ip link set ifbs up"
+    echo "tc filter add dev eth0 ingress prio 2 matchall action mirred egress redirect dev ifbs"
+    echo "tc qdisc add dev ifbs root tbf rate ${slow}kbit burst 3028 limit $((slow * queue / 8))"
+  fi
+}
+
 link_files() {
   local spec=$1 f d
   [ "$(link_class "$spec")" = trace ] || return 0
