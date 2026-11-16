@@ -169,13 +169,18 @@ impl TransferSample {
                 )
             })
             .collect();
+        let parents: Vec<String> = self
+            .parent_peers
+            .iter()
+            .map(|p| p.map_or("null".to_owned(), |i| i.to_string()))
+            .collect();
         let lag: Vec<String> = self
             .parent_lag
             .iter()
             .map(|l| l.map_or("null".to_owned(), |(d, dl)| format!("[{d},{dl}]")))
             .collect();
         format!(
-            "{{\"chunks_sent\":{},\"pushed_chunks\":{},\"children\":{},\"parents\":{},\"hits\":{},\"misses\":{},\"late\":{},\"opens\":{},\"declined\":{},\"open_timeouts\":{},\"shed\":{},\"pruned\":{},\"switched\":{},\"accepted\":{},\"rejected\":{},\"sheds_sent\":{},\"stale_drops\":{},\"overhead\":{},\"parent_lag\":[{}],\"peers\":[{}]}}",
+            "{{\"chunks_sent\":{},\"pushed_chunks\":{},\"children\":{},\"parents\":{},\"hits\":{},\"misses\":{},\"late\":{},\"opens\":{},\"declined\":{},\"open_timeouts\":{},\"shed\":{},\"pruned\":{},\"switched\":{},\"accepted\":{},\"rejected\":{},\"sheds_sent\":{},\"stale_drops\":{},\"overhead\":{},\"parent_peers\":[{}],\"parent_lag\":[{}],\"peers\":[{}]}}",
             self.chunks_sent,
             self.pushed_chunks,
             self.children,
@@ -194,6 +199,7 @@ impl TransferSample {
             self.sheds_sent,
             self.stale_drops,
             self.overhead,
+            parents.join(","),
             lag.join(","),
             peers.join(","),
         )

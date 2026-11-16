@@ -443,8 +443,12 @@ impl NodeBins<'_> {
 
 impl Report {
     /// Host `h`'s network counter `f` added in bin `k`; `None` outside WAN
-    /// mode.
+    /// mode, and for a counter its network didn't measure
+    /// ([`Report::wire_unmeasured`]).
     fn wire_delta(&self, h: HostIx, k: usize, f: usize) -> Option<i64> {
+        if self.wire_unmeasured.contains(&f) {
+            return None;
+        }
         let (a, b) = (
             self.wire_bins.get(k)?.get(h)?,
             self.wire_bins.get(k + 1)?.get(h)?,

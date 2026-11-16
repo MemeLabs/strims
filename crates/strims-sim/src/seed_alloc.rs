@@ -704,6 +704,7 @@ mod tests {
             violations: Vec::new(),
             wan: None,
             wire_bins: Vec::new(),
+            wire_unmeasured: Vec::new(),
             parent_losses: Vec::new(),
             parent_changes: Vec::new(),
             loops: None,

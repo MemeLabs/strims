@@ -577,6 +577,10 @@ pub struct Report {
     /// counters ([`crate::tables::UP_COUNTERS`]) at each bin edge from the
     /// first swarm's start.
     pub wire_bins: Vec<Vec<[u64; crate::wan::UP_COUNTERS.len()]>>,
+    /// The indexes of the uplink counters in `wire_bins` its network didn't
+    /// measure, which the tables leave empty: none of a sim's, those a
+    /// testbed run's captures can't tell ([`crate::testbed`]).
+    pub wire_unmeasured: Vec<usize>,
     /// With [`Scenario::departures`], every viewer's push parent that
     /// departed, in departure order.
     pub parent_losses: Vec<ParentLoss>,

@@ -153,6 +153,7 @@ pub mod stats;
 pub mod stream;
 pub mod sweep;
 pub mod tables;
+pub mod testbed;
 pub mod topology;
 mod wan;
 mod world;

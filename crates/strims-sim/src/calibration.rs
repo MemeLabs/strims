@@ -4,7 +4,7 @@
 //! The calibration scenario: `hack/testbed/run.sh`'s shaped links in the
 //! WAN model ([`calibration_star`]), from the testbed's settings under the
 //! knobs' names ([`Calibration`]). strims-sim's `calibration_star` test
-//! runs it as the testbed's twin, and strims-sim's `testbed` module reads a testbed
+//! runs it as the testbed's twin, and [`crate::testbed`] reads a testbed
 //! run against it.
 //!
 //! A mistyped setting fails its run, and a topology's links name the

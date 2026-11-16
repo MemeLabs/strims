@@ -498,6 +498,7 @@ fn report(
         violations,
         wan,
         wire_bins,
+        wire_unmeasured: Vec::new(),
         parent_losses,
         parent_changes,
         loops,
