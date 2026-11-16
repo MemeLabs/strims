@@ -26,7 +26,8 @@
 //! `slot=` gives any class slots. What the model has no form of, it
 //! refuses: a home router's AQM (`router=`), DOCSIS-PIE (`aqm=pie`, cable's
 //! default on the testbed: give `aqm=fifo`), a trace's delay trace
-//! (`delay=`); `limit=` is the queue the run gives.
+//! (`delay=`), a trace's byte limit (`limit=`: the model's queue is the
+//! run's `QUEUE_MS` at the node's rate, as `run.sh`'s default limit is).
 
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
@@ -109,7 +110,12 @@ impl TestbedLink {
         };
         for (k, _) in &kv {
             let ok = match *k {
-                "slot" | "limit" => true,
+                "slot" => true,
+                "limit" => {
+                    return Err(format!(
+                        "link {spec}: the model's queue is the run's at the node's rate; leave limit= out"
+                    ));
+                }
                 "burst" | "peak" | "aqm" => class == "cable",
                 "line" => class == "dsl",
                 "file" | "format" | "scale" | "offset" => class == "trace",
@@ -266,6 +272,7 @@ mod tests {
             "dsl,line=sdsl",
             "token",
             "fiber,slot=4-1",
+            "trace,file=x,limit=300000",
         ] {
             assert!(TestbedLink::parse(spec, 125_000).is_err(), "{spec}");
         }

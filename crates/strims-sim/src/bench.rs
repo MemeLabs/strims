@@ -1442,6 +1442,33 @@ mod tests {
         assert!((65_000..85_000).contains(&p90), "one-way p90 {p90} us");
     }
 
+    /// A run's link classes reach the sim: a cable seed's 64 KiB burst every
+    /// 250 ms waits its grant (4 ms here) and leaves on its bucket at the
+    /// 100 Mbit/s peak, 5.4 ms of DOCSIS frames, where a tbf of two frames
+    /// sends it at the 10 Mbit/s rate.
+    #[test]
+    fn a_cable_link_sends_its_burst_at_the_peak_after_its_grant() {
+        let last = |link: &str| {
+            let settings = format!("VIEWERS=1\nSEED_UP_MBIT=10\nSECS=4\nSEED_LINK={link}");
+            let bench = Bench::testbed(&settings, "", "burst 0 1 0 250 65536 16384", true).unwrap();
+            let logs = simulate(&bench).unwrap();
+            let owd: Vec<i64> = events(&logs[1], "r")
+                .filter(|l| {
+                    field(l, "k") == Some(0) && field(l, "at").is_some_and(|a| a >= 1_000_000)
+                })
+                .filter_map(|l| Some(field(l, "got")? - field(l, "at")?))
+                .collect();
+            quantile(owd, 1.0)
+        };
+        let cable = last("cable,aqm=fifo,slot=4-4");
+        let tbf = last("tbf");
+        assert!(
+            (28_000..36_000).contains(&cable),
+            "cable's burst took {cable} us"
+        );
+        assert!(tbf > 65_000, "tbf's burst took {tbf} us");
+    }
+
     /// The same link from a Chromium node
     /// (`hack/testbed/bench/rtc-single-chromium.sched`): dcSCTP sends four
     /// packets a send opportunity, so its burst waits in its own queue more
