@@ -75,9 +75,9 @@ they were opened at.
                              last report of each tab, a tab unseen for 2 minutes forgotten.
                              `took` is the seq of the last address it was sent and went to (0
                              for none; a page without it predates goto): a goto's time in ms,
-                             so a restarted server's seqs pass those it took before. Returns
-                             its listing and `goto`, the address waiting for it ({seq, url}) or
-                             null
+                             past the tab's took, so a restarted server's seqs pass those it
+                             took before. Returns its listing and `goto`, the address waiting
+                             for it ({seq, url}) or null
   GET  /console/tabs         the tabs' reports, [{id, url, focused, visible, last_seen,
                              focused_ago}] (seconds since its last report, and since it last
                              said it was focused, or null), the latest focused first: what
@@ -471,11 +471,12 @@ class Tabs:
     later goto replaces it, or the goto's wait ends without it. A tab's
     goto stream (follow) pushes it, and so does its next report's answer.
     A seq is the goto's time in ms since the epoch by `wall` (seconds), or
-    one past the last one sent where that's no later: so a restarted
-    server's seqs pass those its predecessors sent, which an open tab's
-    `took` may hold, unless the clock went back by more than the time
-    between. A goto's and a stream's waits are the machine's monotonic
-    time, `ping_s` a stream's gap between lines."""
+    one past the last one sent, or one past the tab's took, whichever is
+    latest: so a restarted server's seqs pass those its predecessors sent,
+    which an open tab's `took` holds, its clock on or back (a goto goes
+    only to a tab that has reported its took). A goto's and a stream's
+    waits are the machine's monotonic time, `ping_s` a stream's gap
+    between lines."""
 
     def __init__(self, clock=time.monotonic, ttl=TAB_TTL_S, ping_s=PING_S, wall=time.time):
         self.clock = clock
@@ -553,7 +554,7 @@ class Tabs:
                 raise HttpError(404, f"no tab {id!r} has reported in the last {self.ttl:g} s")
             if t["took"] is None:
                 raise HttpError(409, f"tab {id}'s page predates goto: reload it on a current build ({views.BUILD})")
-            self._seq = seq = max(self._seq + 1, int(self.wall() * 1000))
+            self._seq = seq = max(self._seq + 1, int(self.wall() * 1000), t["took"] + 1)
             t["goto"], t["posted"] = {"seq": seq, "url": url}, seq
             self._changed.notify_all()
             deadline = time.monotonic() + wait_s

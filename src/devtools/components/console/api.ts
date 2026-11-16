@@ -450,7 +450,8 @@ const GOTO_NONE_MS = 30_000;
 
 /**
  * The seq of the last address the server sent this tab that it took (0: none), which its reports
- * carry: a seq is the goto's time in ms, so one from a server started since passes it.
+ * carry: a seq is the goto's time in ms, past the took this tab last reported, so one from a
+ * server started since passes it.
  */
 let took = 0;
 /** What takes this tab to a console route, while startTabReports runs. */

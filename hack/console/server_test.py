@@ -1186,6 +1186,27 @@ class TabGotos(unittest.TestCase):
         self.put("r", self.PAGE + "playback", took=first["seq"] + 1)
         self.assertEqual(self.answer(second)["state"], "taken")
 
+    def test_a_restarted_servers_seqs_pass_an_open_tabs_took_with_its_clock_back(self):
+        # The new server's clock is 10 s behind the old one's: its seq is
+        # past the tab's took all the same, and waits for the tab.
+        wall = [1_763_300_000.0]
+        CONSOLE.tabs = server.Tabs(clock=lambda: self.now[0], ping_s=0.1, wall=lambda: wall[0])
+        self.put("k", self.PAGE + "tree")
+        posted = self.goto("k", self.PAGE + "scorecard")
+        before = self.waiting("k")
+        self.put("k", self.PAGE + "scorecard", took=before["seq"])
+        self.assertEqual(self.answer(posted)["state"], "taken")
+        wall[0] -= 10
+        CONSOLE.tabs = server.Tabs(clock=lambda: self.now[0], ping_s=0.1, wall=lambda: wall[0])
+        self.put("k", self.PAGE + "scorecard", took=before["seq"])
+        a = self.answer(self.goto("k", self.PAGE + "overhead", wait_s=0.3))
+        self.assertEqual((a["state"], a["tab"]["url"]), ("missed", self.PAGE + "scorecard"))
+        posted = self.goto("k", self.PAGE + "overhead")
+        after = self.waiting("k")
+        self.assertEqual(after["seq"], before["seq"] + 2)
+        self.put("k", self.PAGE + "overhead", took=after["seq"])
+        self.assertEqual(self.answer(posted)["state"], "taken")
+
     def test_a_late_report_leaves_the_seq_a_later_one_took(self):
         self.put("s", self.PAGE + "tree")
         posted = self.goto("s", self.PAGE + "scorecard", wait_s=2)
