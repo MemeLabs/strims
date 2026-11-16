@@ -120,12 +120,13 @@ export const createPreferenceSaver = (
 };
 
 // Whether the user can see the layout's chat: on a portable device the
-// drawer open (closed, its peek shows none of the chat), else the chat panel
-// shown.
+// drawer settled open (closed, its peek shows none of the chat; a drag
+// reports it open past 10 px and closed short of them, back and forth,
+// until it settles), else the chat panel shown.
 export const chatOnScreen = (
   { overlayState, showChat }: Pick<LayoutState, "overlayState" | "showChat">,
   portable: boolean
-): boolean => (portable ? overlayState.open : showChat);
+): boolean => (portable ? overlayState.open && !overlayState.transitioning : showChat);
 
 export interface WithRootRefProps {
   rootRef: RefCallback<HTMLElement>;

@@ -18,7 +18,9 @@ interface ShellProps {
   /**
    * Whether the user can see the chat (default true): mounted, it can still
    * be off screen, as in a phone's closed drawer, whose peek shows none of
-   * it. The thread is visible, and read, only while it's shown.
+   * it. The thread is visible, and read, only while it's shown and the Shell
+   * takes up room: one a stylesheet hides (display: none, as a desktop
+   * window under 768 px wide hides the layout's chat) has no size.
    */
   shown?: boolean;
 }
@@ -27,16 +29,17 @@ const Shell: React.FC<ShellProps> = ({ className, shown = true }) => {
   const [{ uiConfig, uiConfigHighlights, uiConfigTags, uiConfigIgnores }, chatActions] = useChat();
   const [room, roomActions] = useRoom();
 
+  const ref = useRef<HTMLDivElement>(null);
+  const size = useSize(ref);
+  const seen = shown && size?.width > 0 && size?.height > 0;
+
   useEffect(() => {
-    if (room.state === ThreadInitState.OPEN && shown) {
+    if (room.state === ThreadInitState.OPEN && seen) {
       roomActions.toggleVisible(true);
       chatActions.resetTopicUnreadCount(room.topic);
       return () => roomActions.toggleVisible(false);
     }
-  }, [room.id, room.state, shown]);
-
-  const ref = useRef<HTMLDivElement>(null);
-  const size = useSize(ref);
+  }, [room.id, room.state, seen]);
 
   const renderMessage = useCallback(
     ({ index, style, ref }: MessageProps) => (

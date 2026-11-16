@@ -6,6 +6,7 @@ import "./chat.stories.scss";
 import React from "react";
 
 import { MessageState } from "../../../../apis/strims/chat/v1/chat.pb";
+import RoomCarousel from "../../../../components/Chat/RoomCarousel";
 import SettingsDrawer from "../../../../components/Chat/SettingsDrawer";
 import Shell from "../../../../components/Chat/Shell";
 import { MockChat, RoomProvider, WhisperProvider } from "../../../contexts/Chat";
@@ -23,6 +24,11 @@ interface ShellStoryProps {
   settings?: boolean;
   /** A whisper thread with this alias in place of the room. */
   whisper?: string;
+  /**
+   * The Shell under a stylesheet's display: none (as a desktop window under
+   * 768 px wide hides the layout's chat), the room's carousel above it.
+   */
+  hidden?: boolean;
 }
 
 const ShellStory: React.FC<ShellStoryProps> = ({
@@ -30,8 +36,23 @@ const ShellStory: React.FC<ShellStoryProps> = ({
   options,
   settings,
   whisper,
+  hidden,
 }) => {
-  const shell = <Shell className="chat_story__panel" />;
+  const shell = hidden ? (
+    <>
+      <div className="chat_story_header">
+        <RoomCarousel onChange={() => undefined} />
+      </div>
+      <p className="chat_story__caption">
+        the chat below is hidden by its stylesheet: its room counts its messages unread
+      </p>
+      <div style={{ display: "none" }}>
+        <Shell className="chat_story__panel" />
+      </div>
+    </>
+  ) : (
+    <Shell className="chat_story__panel" />
+  );
   return (
     <MockChat chat={() => new ChatService(replay(history), options)}>
       <div className={settings ? "chat_story chat_story--pair" : "chat_story"}>
@@ -113,6 +134,9 @@ const stories: Story[] = [
     ),
   },
   { name: "With settings", component: () => <ShellStory settings /> },
+  // Mounted but hidden by a stylesheet, the Shell has no size and shows its
+  // room to no one: the room's messages count as unread on its gem.
+  { name: "Hidden by a stylesheet", component: () => <ShellStory hidden /> },
 ];
 
 export default stories;

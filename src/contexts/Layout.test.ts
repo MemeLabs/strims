@@ -62,9 +62,9 @@ describe("Layout actions", () => {
 });
 
 describe("chatOnScreen", () => {
-  const layout = (open: boolean, showChat: boolean) => ({
+  const layout = (open: boolean, showChat: boolean, transitioning = false) => ({
     ...initialLayoutState,
-    overlayState: { open, transitioning: false },
+    overlayState: { open, transitioning },
     showChat,
   });
 
@@ -72,6 +72,15 @@ describe("chatOnScreen", () => {
     // The closed drawer's peek shows none of the chat, its Shell mounted.
     assert.strictEqual(chatOnScreen(layout(false, true), true), false);
     assert.strictEqual(chatOnScreen(layout(true, true), true), true);
+  });
+
+  it("on a portable device, waits for the drawer to settle open", () => {
+    // A drag reports the drawer open past 10 px and closed short of them.
+    const drag = [true, false, true, false, true].map((open) =>
+      chatOnScreen(layout(open, true, true), true)
+    );
+    assert.deepStrictEqual(drag, [false, false, false, false, false]);
+    assert.strictEqual(chatOnScreen(layout(true, true, false), true), true);
   });
 
   it("elsewhere, follows the chat panel", () => {
