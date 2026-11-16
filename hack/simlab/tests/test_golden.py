@@ -194,6 +194,13 @@ class Groups(unittest.TestCase):
         self.assertEqual(sorted(engine + catalog), every)
         self.assertIn("test_golden", engine)
 
+    def test_the_unit_sets_put_this_directory_ahead_of_the_callers_path(self):
+        with mock.patch.dict(os.environ, {"PYTHONPATH": "/x" + os.pathsep + "/y"}):
+            self.assertEqual(golden.unit_env(), {"PYTHONPATH": os.pathsep.join([str(HERE), "/x", "/y"])})
+        with mock.patch.dict(os.environ):
+            os.environ.pop("PYTHONPATH", None)
+            self.assertEqual(golden.unit_env(), {"PYTHONPATH": str(HERE)})
+
 
 class Unbuffered(Fixture):
     def test_a_killed_check_has_printed_the_sets_it_finished(self):

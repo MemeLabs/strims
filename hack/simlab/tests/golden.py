@@ -153,6 +153,12 @@ def unit_tests(name):
     return sorted(t.stem for t in HERE.glob("test_*.py") if (t.stem in CATALOG_TESTS) == (name == "catalog"))
 
 
+def unit_env():
+    """What the engine and catalog sets add to the environment: this
+    directory on PYTHONPATH, ahead of the caller's own."""
+    return {"PYTHONPATH": os.pathsep.join([str(HERE), *filter(None, [os.environ.get("PYTHONPATH")])])}
+
+
 def run_set(name):
     if name == "cli":
         return golden_cli.check()
@@ -163,7 +169,7 @@ def run_set(name):
     if name == "simdb_test":
         return script([sys.executable, str(HACK / "sim-db" / "simdb_test.py")], name)
     if name in ("engine", "catalog"):
-        return script([*UV, "-m", "unittest", *unit_tests(name)], name, env={"PYTHONPATH": str(HERE)})
+        return script([*UV, "-m", "unittest", *unit_tests(name)], name, env=unit_env())
     if name == "scorecards":
         return script([sys.executable, str(HACK / "sim-suite" / "golden.py"), "check"], name)
     raise ValueError(name)
