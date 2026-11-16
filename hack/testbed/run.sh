@@ -209,7 +209,8 @@
 # built here. Container names (tb-<i>, tb-relay, tb-sink), the network
 # (strims-testbed-sealed, internal: no route out, removed when the run
 # ends) and its subnet (10.77.0.0/24) are fixed: one testbed per Docker
-# host at a time.
+# host at a time; run.sh stops if a tb-* container or a testbed network
+# with containers on it is there.
 #
 # Needs Docker (the user's docker group) and the kernel modules the links
 # are shaped with, which links.sh's link_modules lists (every run's netem,
@@ -357,9 +358,27 @@ fi
 # images built beforehand. It has a name of its own, which no older run.sh
 # reuses (they make strims-testbed, routable, whose browsers need its
 # route), and goes when the run ends; the two share the subnet, so the
-# old one goes first, and either with a container on it is another run's,
-# which stops this one. One of the new name is kept only as this run.sh
+# old one goes first. One of the new name is kept only as this run.sh
 # makes it.
+#
+# One testbed per Docker host: a container named tb-* is another run's,
+# live or left by one killed before its cleanup, and this run's would
+# take its name (each start removes a container of its name first), and
+# a testbed network with containers on it is another run's. Either stops
+# this run before it touches anything.
+stale=$(docker ps -a --format '{{.Names}}' | grep '^tb-' | sort | tr '\n' ' ' || true)
+if [ -n "$stale" ]; then
+  echo "containers ${stale% } exist: another testbed run is live, or one killed before its cleanup" \
+    "left them; if none is live, remove them: docker rm -f ${stale% }" >&2
+  exit 1
+fi
+for nw in "$old_net" "$net"; do
+  on=$(docker network inspect -f '{{len .Containers}}' "$nw" 2>/dev/null) || on=0
+  if [ "$on" != 0 ]; then
+    echo "network $nw has $on containers on it: another testbed run is live" >&2
+    exit 1
+  fi
+done
 names=()
 cleanup() {
   docker rm -f "${names[@]}" >/dev/null 2>&1 || true
