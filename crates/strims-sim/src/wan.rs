@@ -386,6 +386,10 @@ const CROSS_FRAME: usize = 1500;
 pub(crate) const CROSS_WIRE: usize = CROSS_FRAMES as usize * CROSS_FRAME;
 /// CUBIC's scaling constant, in segments per second cubed.
 const CUBIC_C: f64 = 0.4;
+/// Its TCP-friendly estimate's scale: Reno's window grows a packet for
+/// each `cwnd * BETA_SCALE / 8` packets acknowledged (Linux's
+/// `beta_scale`, `8 * (1024 + 717) / 3 / (1024 - 717)` in integers).
+const BETA_SCALE: f64 = 15.0;
 /// Its initial window: 10 segments.
 const INIT_WINDOW: f64 = 10.0 * MSS;
 /// The window after a loss, as a share of the window (CUBIC's beta).
@@ -439,13 +443,15 @@ struct Flow {
     resend: BTreeSet<u64>,
     /// CUBIC's window before its last cut, in segments; when its epoch
     /// began (`NIL` until the first acknowledgement past slow start or a
-    /// cut), the window it grows back to and how long that takes, and the
-    /// window Reno would have started the epoch with.
+    /// cut), the window it grows back to and how long that takes; and
+    /// its TCP-friendly estimate (`tcp_cwnd`, segments) and the segments
+    /// acknowledged toward its next one (`ack_cnt`).
     w_max: f64,
     epoch: Time,
     origin: f64,
     k: f64,
-    reno_start: f64,
+    tcp_cwnd: f64,
+    ack_cnt: f64,
     /// The sequence number past the furthest data segment sent (turmoil
     /// numbers a connection's segments).
     sent_end: u64,
@@ -578,7 +584,8 @@ impl Default for Flow {
             epoch: Time::NIL,
             origin: 0.0,
             k: 0.0,
-            reno_start: 0.0,
+            tcp_cwnd: 0.0,
+            ack_cnt: 0.0,
             sent_end: 0,
             flight_now: 0,
             flight_last: 0,
@@ -777,24 +784,30 @@ impl Flow {
     }
 
     /// `len` bytes were acknowledged at `t`, the path's base round trip
-    /// `base` and its smoothed one `srtt`: slow start below the threshold,
-    /// CUBIC (RFC 8312, as Linux's `bictcp_update`) above it. Its epoch
-    /// starts at the first acknowledgement past slow start or a cut, from
-    /// the window lost last or the window now if that is larger; the
-    /// window then grows toward the cubic curve a base round trip ahead,
-    /// by at most half a segment for each segment acknowledged (1.5 times
-    /// a round trip), or follows the window Reno would have after as many
-    /// smoothed round trips, whichever is larger.
-    fn grow(&mut self, t: Time, len: usize, base: Duration, srtt: Duration) {
+    /// `base`: slow start below the threshold, CUBIC (RFC 8312, as Linux's
+    /// `bictcp_update`) above it. Its epoch starts at the first
+    /// acknowledgement past slow start or a cut, from the window lost last
+    /// or the window now if that is larger; the window then grows toward
+    /// the cubic curve a base round trip ahead, or toward Reno's window if
+    /// that grows faster, by at most half a segment for each segment
+    /// acknowledged (1.5 times a round trip). Reno's window is CUBIC's
+    /// TCP-friendly estimate (`tcp_friendliness`): from the window at the
+    /// epoch's start, a segment for each [`BETA_SCALE`] / 8 windows of
+    /// segments acknowledged while the window limits the flow (the only
+    /// acknowledgements this sees), so it grows with what the flow sends,
+    /// not with time.
+    fn grow(&mut self, t: Time, len: usize, base: Duration) {
         let len = window_bytes(len);
         if self.cwnd < self.ssthresh {
             self.cwnd += len as f64;
             return;
         }
         let cwnd = self.cwnd / MSS;
+        let segs = len as f64 / MSS;
         if self.epoch.is_nil() {
             self.epoch = t;
-            self.reno_start = cwnd;
+            self.ack_cnt = segs;
+            self.tcp_cwnd = cwnd;
             if self.w_max <= cwnd {
                 self.k = 0.0;
                 self.origin = cwnd;
@@ -802,22 +815,29 @@ impl Flow {
                 self.k = ((self.w_max - cwnd) / CUBIC_C).cbrt();
                 self.origin = self.w_max;
             }
+        } else {
+            self.ack_cnt += segs;
         }
-        let (base, srtt) = (base.as_secs_f64().max(1e-3), srtt.as_secs_f64().max(1e-3));
+        let base = base.as_secs_f64().max(1e-3);
         let since = (t - self.epoch).as_secs_f64();
         let cubic = self.origin + CUBIC_C * (since + base - self.k).powi(3);
-        let reno = self.reno_start + 3.0 * (1.0 - BETA) / (1.0 + BETA) * since / srtt;
-        let segs = len as f64 / MSS;
         let mut step = if cubic > cwnd {
-            ((cubic - cwnd) / cwnd).min(0.5)
+            (cubic - cwnd) / cwnd
         } else {
             0.01 / cwnd
         };
         if self.w_max == 0.0 {
             step = step.max(0.05);
         }
-        let next = (cwnd + step * segs).max(reno.min(cwnd + 0.5 * segs));
-        self.cwnd = next.max(cwnd) * MSS;
+        let delta = (cwnd.floor() * BETA_SCALE / 8.0).floor().max(1.0);
+        while self.ack_cnt > delta {
+            self.ack_cnt -= delta;
+            self.tcp_cwnd += 1.0;
+        }
+        if self.tcp_cwnd > cwnd {
+            step = step.max((self.tcp_cwnd - cwnd) / cwnd);
+        }
+        self.cwnd = (cwnd + step.min(0.5) * segs) * MSS;
     }
 
     /// The threshold falls to [`BETA`] of the window, CUBIC's target
@@ -1932,7 +1952,7 @@ impl Scheduler {
         } else if (seq <= una || advanced) && f.limited() {
             // `tcp_may_raise_cwnd`: data the cumulative ack covers, not a
             // SACK's alone.
-            f.grow(t, len, base, f.srtt.max(base));
+            f.grow(t, len, base);
         }
         // Data acknowledged at the cumulative point re-arms the timer.
         if seq <= una || advanced {
@@ -2246,7 +2266,7 @@ impl Scheduler {
             if f.recovery.is_some() {
                 f.reduction(len, advanced, false);
             } else {
-                f.grow(t, len, c.rtt, f.srtt.max(c.rtt));
+                f.grow(t, len, c.rtt);
             }
         }
         if self.tcp_trace.is_some() {
@@ -3645,6 +3665,31 @@ mod tests {
     }
 
     #[test]
+    fn the_tcp_friendly_estimate_grows_with_the_packets_acknowledged() {
+        // At the window lost last CUBIC's curve starts flat; its
+        // TCP-friendly estimate grows a packet for each window times 15 / 8
+        // packets acknowledged, however little time passes
+        // (`tcp_friendliness`, `ack_cnt`).
+        let ms = |n: i64| Duration::from_millis(n);
+        let t = Time::EPOCH + ms(1000);
+        let mut f = Flow {
+            cwnd: 40.0 * MSS,
+            ssthresh: 40.0 * MSS,
+            w_max: 40.0,
+            ..Flow::default()
+        };
+        let seg = 2 * MSS as usize;
+        for _ in 0..37 {
+            f.grow(t, seg, ms(30));
+        }
+        assert!(f.cwnd < 40.1 * MSS, "{} packets after 74", f.cwnd / MSS);
+        for _ in 37..80 {
+            f.grow(t, seg, ms(30));
+        }
+        assert!(f.cwnd >= 41.0 * MSS, "{} packets after 160", f.cwnd / MSS);
+    }
+
+    #[test]
     fn the_transmit_timer_rearms_on_each_send_and_acknowledgement() {
         // `tcp_schedule_loss_probe`: two smoothed round trips and 2 ms on
         // from a send with more than a packet out, no later than what is
@@ -4006,9 +4051,11 @@ mod tests {
         let (b, c) = two_receivers(model(true));
         // Without windows the uplink splits evenly however slow `c` reads:
         // `b` waits for `c`'s half. With them `c`'s window follows its
-        // downlink, and `b` gets the rest of the uplink.
+        // downlink, and `b` gets more of the uplink (about 1.9 s against
+        // 2.2: past its threshold its window grows with the segments it
+        // has acknowledged).
         assert!(b_fifo > 2000, "{b_fifo} ms");
-        assert!(b < b_fifo * 3 / 4, "{b} ms against {b_fifo} ms");
+        assert!(b < b_fifo * 9 / 10, "{b} ms against {b_fifo} ms");
         assert!(c >= 5800 && c_fifo >= 5800, "{c} and {c_fifo} ms");
     }
 

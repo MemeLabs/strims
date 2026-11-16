@@ -1649,7 +1649,7 @@ mod tests {
     /// other's, which meets the queue full: their windows sat at 53 and 16
     /// KiB at p50. The idle links' small writes fit in the queue's last
     /// room, and arrived 114 ms after they were written at p50, 174-177 at
-    /// p90.
+    /// p90. The uplink has its testbed bucket ([`Bench::buckets`]).
     #[test]
     fn the_socket_written_first_takes_the_queue_and_small_writes_fit() {
         let mut schedule = String::from("burst 0 1 0 250 65536 4096\nburst 0 2 0 250 65536 4096\n");
@@ -1659,7 +1659,10 @@ mod tests {
         for (v, phase) in (1..=10).zip([7, 47, 17, 37, 57, 77, 97, 117, 137, 157]) {
             schedule += &format!("probe 0 {v} {phase} 200\n");
         }
-        let logs = run("VIEWERS=10\nSEED_UP_MBIT=5\nSECS=30", &schedule);
+        let mut bench =
+            Bench::testbed("VIEWERS=10\nSEED_UP_MBIT=5\nSECS=30", "", &schedule, true).unwrap();
+        bench.buckets = true;
+        let logs = simulate(&bench).unwrap();
         let cwnd = |to: i64| {
             let xs = events(&logs[0], "s")
                 .filter(|l| field(l, "to") == Some(to))
