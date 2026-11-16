@@ -2727,13 +2727,14 @@ pub(crate) enum RowNums {
     MeterBucketPop(u16),
     /// **meter readings**: the upload meter's capacity, the relay busy-time
     /// reading admission and shedding take (`PushStats::upload_capacity`,
-    /// `MeterSample::capacity`), ÷ the host's uplink: the seed's quantiles
-    /// `meter_seed_p*`, the populations' `meter_accepting_p*`,
-    /// `meter_delivering_p*` and `meter_others_p*`, its median per bucket over
-    /// the seeds' samples (`meter_bucket_seeds`) and the populations'
-    /// (`meter_bucket_accepting`, `meter_bucket_delivering`,
-    /// `meter_bucket_others`), and how it tracked changes
-    /// (`off_{change}_{role}`).
+    /// `MeterSample::capacity`), ÷ the host's uplink (what it carried at the
+    /// sample, `Report::upload_cap_at`, in IP bytes at the host's own packet
+    /// sizes, as the meter counts them): the seed's quantiles `meter_seed_p*`,
+    /// the populations' `meter_accepting_p*`, `meter_delivering_p*` and
+    /// `meter_others_p*`, its median per bucket over the seeds' samples
+    /// (`meter_bucket_seeds`) and the populations' (`meter_bucket_accepting`,
+    /// `meter_bucket_delivering`, `meter_bucket_others`), and how it tracked
+    /// changes (`off_{change}_{role}`).
     MeterBucketSeeds,
     /// How the upload meter tracked each change of the host's available upload
     /// (a step of its uplink's rate, a competing upload's start or stop) while
@@ -3963,10 +3964,14 @@ pub(crate) mod cols {
         ///
         /// Unit: bytes/s. None is written as an empty field.
         CapacityBps,
-        /// What the host could upload at the sample (`Report::upload_cap_at`):
-        /// its uplink's rate then less what its competing uploads sent in the
-        /// second before, within its rate limit; empty with neither a site nor
-        /// a limit.
+        /// What the host could upload at the sample (`Report::upload_cap_at`),
+        /// in IP bytes at the host's own packet sizes (`Report::ip_share`: its
+        /// messages' IP bytes over what its link charged them, so a framed
+        /// link's truth is its rate less its framing): what its uplink carries
+        /// then (its rate and steps; with a capacity schedule, what the
+        /// schedule carried over the second before) less what its link charged
+        /// its competing uploads in the second before, within its rate limit;
+        /// empty with neither a site nor a limit.
         ///
         /// Unit: bytes/s. None is written as an empty field.
         AvailBps,

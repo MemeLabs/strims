@@ -143,8 +143,12 @@ pub struct Transit {
 /// One host's counters.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct EndStats {
-    /// Wire bytes through the uplink.
+    /// Bytes through the uplink, as its link charged them (its framing
+    /// in).
     pub up_bytes: u64,
+    /// The IP bytes of the messages through the uplink, before its
+    /// framing.
+    pub up_ip_bytes: u64,
     /// Wire bytes through the downlink.
     pub down_bytes: u64,
     /// The longest a message waited for the uplink.
@@ -650,6 +654,7 @@ impl Network {
         end.up_free = end.serve(start, charged);
         end.span(sent, start, charged);
         end.stats.up_bytes = end.stats.up_bytes.saturating_add(charged as u64);
+        end.stats.up_ip_bytes = end.stats.up_ip_bytes.saturating_add(wire as u64);
         end.stats.up_packets = end.stats.up_packets.saturating_add(u64::from(packets));
         end.stats.small_packets = end
             .stats

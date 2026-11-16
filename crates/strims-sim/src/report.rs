@@ -1025,11 +1025,58 @@ impl Report {
         }
     }
 
-    /// The most host `h` can upload, in bytes per second: the smaller of
-    /// its rate limit and its site's uplink. `None` with neither.
+    /// The share of what host `h`'s link charges that is the IP bytes it
+    /// was handed, at the host's own packet sizes: its messages' IP bytes
+    /// over what its link charged them (`EndStats::up_ip_bytes` over
+    /// `up_bytes`); 1 at a site that charges IP bytes alone, or before it
+    /// sent anything.
+    pub fn ip_share(&self, h: HostIx) -> f64 {
+        let Some(spec) = self.scenario.hosts.get(h) else {
+            return 1.0;
+        };
+        if spec
+            .site
+            .is_none_or(|s| s.profile.framing == strims_wan::framing::Framing::NONE)
+        {
+            return 1.0;
+        }
+        let Some(w) = self
+            .wan
+            .as_ref()
+            .and_then(|w| w.hosts.iter().find(|w| w.name == spec.name))
+        else {
+            return 1.0;
+        };
+        if w.stats.up_bytes == 0 {
+            return 1.0;
+        }
+        w.stats.up_ip_bytes as f64 / w.stats.up_bytes as f64
+    }
+
+    /// Link bytes a second (as host `h`'s link charges them) in IP bytes at
+    /// its own packet sizes ([`Report::ip_share`]).
+    fn as_ip(&self, h: HostIx, link: u64) -> u64 {
+        let share = self.ip_share(h);
+        if share == 1.0 {
+            link
+        } else {
+            (link as f64 * share) as u64
+        }
+    }
+
+    /// The most host `h` can upload, in IP bytes per second at its own
+    /// packet sizes: the smaller of its rate limit and what its site's
+    /// uplink carries (its rate, or its capacity schedule's mean). `None`
+    /// with neither.
     pub fn upload_cap(&self, h: HostIx) -> Option<u64> {
         let spec = self.scenario.hosts.get(h)?;
-        let site = spec.site.map(|s| s.profile.up);
+        let site = spec.site.map(|s| {
+            let link = spec
+                .up_capacity
+                .as_ref()
+                .map_or(s.profile.up, |c| c.mean_rate());
+            self.as_ip(h, link)
+        });
         match (spec.uplink, site) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
@@ -1037,23 +1084,42 @@ impl Report {
         .filter(|&c| c > 0)
     }
 
-    /// The most host `h` can upload at `t` (time since the start), in bytes
-    /// per second: the smaller of its rate limit and what its site's uplink
-    /// has available then: its rate ([`HostSpec::up_steps`]) less what its
-    /// competing uploads sent in the second before ([`HostSpec::competing`]).
-    /// `None` with neither.
+    /// The most host `h` can upload at `t` (time since the start), in IP
+    /// bytes per second at its own packet sizes ([`Report::ip_share`]): the
+    /// smaller of its rate limit and what its site's uplink carries then,
+    /// its rate ([`HostSpec::up_steps`]; with a capacity schedule,
+    /// [`HostSpec::up_capacity`], what the schedule carried over the second
+    /// before), less what its link charged its competing uploads in the
+    /// second before ([`HostSpec::competing`]). A bucket's bursts leave it
+    /// its rate. `None` with neither.
     ///
     /// [`HostSpec::up_steps`]: crate::spec::HostSpec::up_steps
+    /// [`HostSpec::up_capacity`]: crate::spec::HostSpec::up_capacity
     /// [`HostSpec::competing`]: crate::spec::HostSpec::competing
     pub fn upload_cap_at(&self, h: HostIx, t: std::time::Duration) -> Option<u64> {
         let spec = self.scenario.hosts.get(h)?;
         let site = spec.site.map(|s| {
-            spec.up_steps
-                .iter()
-                .filter(|&&(at, _)| at <= t)
-                .max_by_key(|&&(at, _)| at)
-                .map_or(s.profile.up, |&(_, rate)| rate)
-                .saturating_sub(self.competing_rate(h, t))
+            let link = match &spec.up_capacity {
+                Some(c) => {
+                    let to = crate::wan::sim_time(t);
+                    c.rate_between(to - strims_base::time::Duration::SECOND, to)
+                }
+                None => spec
+                    .up_steps
+                    .iter()
+                    .filter(|&&(at, _)| at <= t)
+                    .max_by_key(|&&(at, _)| at)
+                    .map_or(s.profile.up, |&(_, rate)| rate),
+            };
+            let framing = s.profile.framing;
+            let cross = self.competing_rate(h, t);
+            let cross = if framing == strims_wan::framing::Framing::NONE {
+                cross
+            } else {
+                let w = crate::wan::CROSS_WIRE;
+                cross * framing.message(w, 2) as u64 / w as u64
+            };
+            self.as_ip(h, link.saturating_sub(cross))
         });
         match (spec.uplink, site) {
             (Some(a), Some(b)) => Some(a.min(b)),

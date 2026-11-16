@@ -299,7 +299,7 @@ pub(crate) const MSS: f64 = 1448.0;
 /// ([`WINDOW_SEGMENT`](crate::spec::WINDOW_SEGMENT)) and as the upload's
 /// receiver acknowledges them, so that they meet a full queue at one size.
 const CROSS_SEGMENT: usize = crate::spec::WINDOW_SEGMENT;
-const CROSS_WIRE: usize = 2 * 1500;
+pub(crate) const CROSS_WIRE: usize = 2 * 1500;
 /// CUBIC's scaling constant, in segments per second cubed.
 const CUBIC_C: f64 = 0.4;
 /// Its initial window: 10 segments.

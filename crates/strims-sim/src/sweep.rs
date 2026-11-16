@@ -770,6 +770,7 @@ fn sweep_seeds(
         }
         if let Some(which) = known_uplink.as_deref() {
             let seeds: Vec<HostIx> = spec.swarms.iter().map(|s| s.seed).collect();
+            let spec_secs = spec.duration.as_secs();
             let (which, live) = match which.strip_suffix("-static") {
                 Some(w) => (w, false),
                 None => (which, true),
@@ -783,9 +784,41 @@ fn sweep_seeds(
                     _ => false,
                 };
                 if told && let Some(site) = h.site {
-                    h.upload_capacity = Some(site.profile.up);
-                    if live {
-                        h.upload_capacity_steps = h.up_steps.clone();
+                    // What the link carries in IP bytes, at full-size
+                    // packets: the node is told before it sends any.
+                    let f = site.profile.framing;
+                    let ip = |r: u64| {
+                        if f == strims_wan::framing::Framing::NONE {
+                            r
+                        } else {
+                            r * 1500 / f.packet(1500) as u64
+                        }
+                    };
+                    match &h.up_capacity {
+                        Some(c) => {
+                            h.upload_capacity = Some(ip(c.mean_rate()));
+                            if live {
+                                let secs = spec_secs;
+                                h.upload_capacity_steps = (1..=secs)
+                                    .map(|k| {
+                                        let to =
+                                            crate::wan::sim_time(std::time::Duration::from_secs(k));
+                                        let level = c.rate_between(
+                                            to - strims_base::time::Duration::SECOND,
+                                            to,
+                                        );
+                                        (std::time::Duration::from_secs(k), ip(level))
+                                    })
+                                    .collect();
+                            }
+                        }
+                        None => {
+                            h.upload_capacity = Some(ip(site.profile.up));
+                            if live {
+                                h.upload_capacity_steps =
+                                    h.up_steps.iter().map(|&(at, r)| (at, ip(r))).collect();
+                            }
+                        }
                     }
                 }
             }
