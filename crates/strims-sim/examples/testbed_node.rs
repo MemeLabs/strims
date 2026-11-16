@@ -12,7 +12,7 @@
 //!              [--rate <bytes/s>] [--chunk <bytes> --munro <bytes>]
 //!              [--units <chunks per signature> [--media <flv file>]]
 //!              [--record <file>] [--join-at <s>] [--hosts <dir>]
-//!              [--capture <dir>]
+//!              [--capture <dir>] [--train-ms <ms>]
 //! testbed_node --relay-only --topology <file> [--secs <s>] [--start <unix ms>]
 //! ```
 //!
@@ -36,7 +36,10 @@
 //! at the times they came: each is its arrival time in Unix milliseconds
 //! (u64, big-endian), a flags byte (bit 0 the message completes a record,
 //! bit 1 a discontinuity came before it), its length (u32, big-endian) and
-//! its bytes. Each node prints its line per second on stdout, with the
+//! its bytes. With `--train-ms`, the seed sends uplink train legs, its
+//! reading at most that stale while the uplink holds
+//! (`NodeConfig::train_interval`), as strims-sim's `trains-seed` flag
+//! does. Each node prints its line per second on stdout, with the
 //! process's CPU time as `cpu_ms`.
 //!
 //! `--relay-only` runs the relay: it listens where the topology's `relay`
@@ -78,6 +81,9 @@ struct Args {
     join_at: u64,
     hosts: Option<PathBuf>,
     capture: Option<String>,
+    /// The seed's uplink train staleness in milliseconds
+    /// (`NodeConfig::train_interval`); none by default.
+    train_ms: Option<u64>,
 }
 
 fn args() -> Result<Args, String> {
@@ -99,6 +105,7 @@ fn args() -> Result<Args, String> {
         join_at: 0,
         hosts: None,
         capture: None,
+        train_ms: None,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -118,6 +125,7 @@ fn args() -> Result<Args, String> {
             "--join-at" => a.join_at = num(value()?)?,
             "--hosts" => a.hosts = Some(value()?.into()),
             "--capture" => a.capture = Some(value()?),
+            "--train-ms" => a.train_ms = Some(num(value()?)?),
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -235,6 +243,11 @@ async fn run() -> Result<(), String> {
     config.max_peers = 64;
     config.rate_limit = None;
     config.upload_capacity = None;
+    if a.index == 0 {
+        config.train_interval = a
+            .train_ms
+            .map(|ms| strims_base::time::Duration::from_millis(ms as i64));
+    }
     if topo.relay.is_some() {
         let at = me.browser_addr().to_string();
         match topo.browser_links {

@@ -84,6 +84,10 @@
 #   RECORD="<i> ..."       with MEDIA, these native viewers record the Data
 #                          messages they read in record-<i>.bin
 #                          (testbed_node's --record)
+#   TRAIN_MS=<ms>          the seed sends uplink train legs, its reading at
+#                          most that stale (testbed_node's --train-ms, as
+#                          strims-sim's trains-seed does at 1500); it must
+#                          be native
 #   NODE_ARGS=<args>       more flags for every native node
 #   CAPTURE=1              ppspp captures in <out dir>/capture, one dump
 #                          per node (native and browser), named by host id
@@ -166,6 +170,7 @@ fi
 node_args=${NODE_ARGS:-}
 browser_args=${BROWSER_ARGS:-}
 rate_arg=${RATE:+--rate $RATE}
+train_arg=${TRAIN_MS:+--train-ms $TRAIN_MS}
 bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
 browser_bin=${BROWSER_BIN:-$root/target/release/examples/testbed_browser}
 web=${WEB_BUNDLE:-$root/dist/wasm-testbed}
@@ -200,6 +205,9 @@ browsers=0
 nbrowsers=0
 if [ -n "$media" ] && [ "$(kind_of 0)" != native ]; then
   echo "MEDIA needs a native seed" >&2; exit 1
+fi
+if [ -n "$train_arg" ] && [ "$(kind_of 0)" != native ]; then
+  echo "TRAIN_MS needs a native seed" >&2; exit 1
 fi
 for i in $(seq 0 $((n - 1))); do
   case $(kind_of "$i") in
@@ -251,7 +259,7 @@ docker network inspect "$net" >/dev/null 2>&1 \
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|TRAIN_MS|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
   > "$out/settings" || true
 
 # The containers start one after another before the stream does, and
@@ -357,7 +365,7 @@ $shape
 tc -s qdisc show dev eth0 > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
-exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join $rate_arg $units_arg $media_arg $record_arg $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join $rate_arg $units_arg $media_arg $record_arg $hosts $capture $train_arg $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   else
     # The browser runs as the image's unprivileged user, after root has
     # shaped the link. Its profile, in /tmp, stays in memory, so its
