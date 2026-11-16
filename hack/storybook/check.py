@@ -118,7 +118,7 @@ included) has been quiet for NET_QUIET_S, the document has nothing
 pending (a script or stylesheet it inserted with no load or error event
 yet, a fetch unsettled or its response's body still being read, an XHR
 not ended, a FileReader's read not ended, an image off the document not
-loaded or failed: the page can ask for more between the checker's look
+complete: the page can ask for more between the checker's look
 at the network and the step, a chunk's loader times out on the clock,
 and the network never hears of a read), and no worker is new or has just
 exchanged a message, after the page has laid out what changed: to the
@@ -1188,7 +1188,7 @@ CAPTURE_SCRIPT = r"""(() => {
   // And what the page loads that the network never hears of: a
   // FileReader's read (a dropped file's bytes) until its loadend, and an
   // image off the document (a new Image() whose size the page wants, of a
-  // file's or a data: URL) from its src until its load or error.
+  // file's or a data: URL) from its src while it isn't complete.
   if (window.FileReader) {
     for (const name of ["readAsArrayBuffer", "readAsBinaryString", "readAsDataURL", "readAsText"]) {
       const read = FileReader.prototype[name];
@@ -1205,26 +1205,36 @@ CAPTURE_SCRIPT = r"""(() => {
       };
     }
   }
+  // An image is held while it isn't complete, as each look finds it, not by
+  // its events: one whose src goes while it loads gets neither load nor
+  // error, and a page's listener can stop them before the checker's. A
+  // complete image is loaded, broken or has no src.
   const imageSrc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
-  const offDocument = new WeakSet();
+  const offDocument = new Map();
   Object.defineProperty(HTMLImageElement.prototype, "src", {
     ...imageSrc,
     set(v) {
       imageSrc.set.call(this, v);
-      if (this.isConnected || offDocument.has(this) || !this.getAttribute("src")) return;
-      offDocument.add(this);
-      const url = String(v);
-      const done = ask(/^(https?|blob):/.test(url) ? url : "about:blank#an-image-off-the-document");
-      const end = () => {
-        this.removeEventListener("load", end);
-        this.removeEventListener("error", end);
-        offDocument.delete(this);
-        done();
-      };
-      this.addEventListener("load", end);
-      this.addEventListener("error", end);
+      if (this.isConnected || offDocument.has(this)) return;
+      let url = "about:blank#an-image-off-the-document";
+      try {
+        const u = new URL(String(v), document.baseURI);
+        if (/^(https?|blob):$/.test(u.protocol)) url = u.href;
+      } catch {}
+      offDocument.set(this, { url, at: realNow() });
     },
   });
+  // The images off the document still loading (a lazy one, which never
+  // loads off the document, aside), forgetting those now complete.
+  const imagesOffDocument = () => {
+    const t = realNow();
+    const out = [];
+    for (const [img, p] of offDocument) {
+      if (img.complete || img.loading === "lazy") offDocument.delete(img);
+      else out.push({ url: p.url, ms: Math.round(t - p.at) });
+    }
+    return out;
+  };
   new MutationObserver((records) => {
     mutations++;
     let removed = false;
@@ -1465,7 +1475,8 @@ CAPTURE_SCRIPT = r"""(() => {
       await turn();
       await turn();
     }
-    const waiting = advance && (pending.size > 0 || workersBusy(quietMs));
+    const waiting =
+      advance && (pending.size > 0 || imagesOffDocument().length > 0 || workersBusy(quietMs));
     advance = advance && !waiting;
     animate();
     const due = next();
@@ -1483,7 +1494,8 @@ CAPTURE_SCRIPT = r"""(() => {
       for (let i = 0; advance && limit !== null && !finished && i < CHAIN_TIMERS; i++) {
         const due = next();
         if (!(due <= limit) || !dueNow(due)[0].chain) break;
-        if (pending.size > 0 || imagesLoading() || workersBusy(quietMs)) break;
+        if (pending.size > 0 || imagesOffDocument().length > 0 || imagesLoading()) break;
+        if (workersBusy(quietMs)) break;
         if (mutations !== laidOut && Math.floor(due / FRAME) > laidOutFrame) {
           await frame();
           await turn();
@@ -1508,7 +1520,8 @@ CAPTURE_SCRIPT = r"""(() => {
     return { now, fired, waiting, next: Number.isFinite(after) ? after : null,
              state: root ? root.dataset.storyState ?? null : null,
              route: root ? root.dataset.storyRoute ?? null : null,
-             pending: [...pending.values()].map((p) => ({ url: p.url, ms: Math.round(t - p.at) })) };
+             pending: [...pending.values()].map((p) => ({ url: p.url, ms: Math.round(t - p.at) }))
+               .concat(imagesOffDocument()) };
   };
   // Stops the clock's hold on animations, for FINISH_SCRIPT's.
   const hold = () => {
