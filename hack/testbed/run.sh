@@ -212,6 +212,13 @@
 # host at a time; run.sh stops if a tb-* container or a testbed network
 # with containers on it is there.
 #
+# The containers send nothing off the testbed, but the host still talks
+# to each run's new bridge: its avahi's mDNS and its IPv6 multicast
+# (mDNS and listener reports from its link-local address), 16-19 mDNS and
+# about 42 IPv6 packets into each container a run, most before the stream.
+# They come in only, so no node's uplink carries them, and the metrics
+# count node-to-node traffic alone.
+#
 # Needs Docker (the user's docker group) and the kernel modules the links
 # are shaped with, which links.sh's link_modules lists (every run's netem,
 # tbf, ifb, clsact and redirect, SEED_LOSS_PCT's filter, and the link
