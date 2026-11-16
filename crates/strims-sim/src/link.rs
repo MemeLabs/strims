@@ -276,6 +276,26 @@ impl Spec {
         }
     }
 
+    /// The link's largest frame, what it charges a full packet (1500 IP
+    /// bytes): the least a bucket may hold, since a shaper drops a packet
+    /// it can't cover whole.
+    pub fn max_frame(&self) -> u64 {
+        self.framing().packet(1500) as u64
+    }
+
+    /// Fails on a bucket smaller than the link's largest frame
+    /// ([`Spec::max_frame`]).
+    pub fn check_bucket(&self, bytes: u64) -> Result<(), String> {
+        if bytes < self.max_frame() {
+            return Err(format!(
+                "a {} link's bucket holds at least its largest frame, {} bytes, not {bytes}",
+                self.class.name(),
+                self.max_frame()
+            ));
+        }
+        Ok(())
+    }
+
     /// The bucket the link's shaper has, its rate having started at
     /// `base` bytes per second, given the run's `run` bucket (tbf's and
     /// fiber's).
@@ -481,9 +501,14 @@ pub fn cli(args: &[String]) -> Result<String, String> {
         return Err("--link <spec> --up-mbit <m> --burst <bytes> --limit <bytes> [--peak-mbit <m>] [--base-mbit <m>]".to_owned());
     };
     let s = Spec::parse(&spec)?;
+    let base = base.unwrap_or(up);
+    if s.router.is_none() && s.class != Class::Trace {
+        s.check_bucket(s.bucket(mbit(base), Bucket::of(burst)).bytes)
+            .map_err(|e| format!("link {spec}: {e}"))?;
+    }
     Ok(s.shell(&Run {
         up_mbit: up,
-        base_mbit: base.unwrap_or(up),
+        base_mbit: base,
         burst,
         peak_mbit: peak,
         limit,
@@ -538,15 +563,22 @@ impl TestbedLink {
     }
 
     /// `site` shaped as the link is: its framing, slots and bucket, the
-    /// run's `bucket` where the class takes it (`None`: none).
-    pub fn site(&self, site: Site, bucket: Option<Bucket>) -> Site {
+    /// run's `bucket` where the class takes it (`None`: none); fails on a
+    /// bucket smaller than the link's largest frame, as the testbed does.
+    pub fn site(&self, site: Site, bucket: Option<Bucket>) -> Result<Site, String> {
         let bucket = match self.spec.class {
             Class::Tbf | Class::Fiber | Class::Trace => bucket,
             Class::Cable | Class::Dsl => Some(self.spec.bucket(site.profile.up, Bucket::of(0))),
         };
-        site.with_framing(self.framing())
+        if let Some(b) = bucket
+            && self.spec.class != Class::Trace
+        {
+            self.spec.check_bucket(b.bytes)?;
+        }
+        Ok(site
+            .with_framing(self.framing())
             .with_slots(self.slots())
-            .with_bucket(bucket)
+            .with_bucket(bucket))
     }
 
     /// A trace link's schedule, its time 0 (less `offset=`) at `start`,
@@ -579,11 +611,15 @@ mod tests {
         let base = Site::new(City::Chicago, Access::Cable).with_up(up);
         let run = Some(Bucket::of(3028));
         let tbf = TestbedLink::parse("tbf").unwrap();
-        assert_eq!(tbf.site(base, run).profile.bucket, run);
-        assert_eq!(tbf.site(base, run).profile.framing, Framing::ETHERNET);
+        assert_eq!(tbf.site(base, run).unwrap().profile.bucket, run);
+        assert_eq!(
+            tbf.site(base, run).unwrap().profile.framing,
+            Framing::ETHERNET
+        );
         let cable = TestbedLink::parse("cable,aqm=fifo")
             .unwrap()
-            .site(base, run);
+            .site(base, run)
+            .unwrap();
         assert_eq!(
             cable.profile.bucket,
             Some(Bucket {
@@ -595,10 +631,14 @@ mod tests {
         assert_eq!(cable.profile.framing, Framing::DOCSIS);
         let cable = TestbedLink::parse("cable,aqm=fifo,burst=10000,peak=10,slot=off")
             .unwrap()
-            .site(base, run);
+            .site(base, run)
+            .unwrap();
         assert_eq!(cable.profile.bucket, Some(Bucket::of(10_000)));
         assert_eq!(cable.profile.slots, None);
-        let dsl = TestbedLink::parse("dsl,line=vdsl").unwrap().site(base, run);
+        let dsl = TestbedLink::parse("dsl,line=vdsl")
+            .unwrap()
+            .site(base, run)
+            .unwrap();
         assert_eq!(dsl.profile.framing, Framing::VDSL_PPPOE);
         assert_eq!(dsl.profile.bucket, Some(Bucket::of(3500)));
         let ms = Duration::from_millis;
@@ -646,6 +686,35 @@ mod tests {
         ] {
             assert!(Spec::parse(spec).is_err(), "{spec}");
         }
+    }
+
+    #[test]
+    fn a_bucket_holds_the_largest_frame_on_both_sides() {
+        let up = mbit(20.0);
+        let base = Site::new(City::Chicago, Access::Cable).with_up(up);
+        let arg = |spec: &str, burst: &str| {
+            cli(&[
+                "--link",
+                spec,
+                "--up-mbit",
+                "20",
+                "--burst",
+                burst,
+                "--limit",
+                "1",
+            ]
+            .map(String::from))
+        };
+        // Fibre's and cable's frames are 1518 bytes, a tbf's 1514.
+        assert!(arg("fiber", "1517").is_err());
+        assert!(arg("fiber", "1518").is_ok());
+        assert!(arg("tbf", "1514").is_ok());
+        assert!(arg("cable,burst=1517", "3028").is_err());
+        let fiber = TestbedLink::parse("fiber").unwrap();
+        assert!(fiber.site(base, Some(Bucket::of(1517))).is_err());
+        assert!(fiber.site(base, Some(Bucket::of(1518))).is_ok());
+        let cable = TestbedLink::parse("cable,aqm=fifo,burst=1517").unwrap();
+        assert!(cable.site(base, None).is_err());
     }
 
     #[test]

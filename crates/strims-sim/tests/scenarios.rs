@@ -3358,7 +3358,7 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
             .with_up(mbit * 125_000)
             .with_bucket(bucket);
         match link(i) {
-            Some(l) => l.site(st, bucket),
+            Some(l) => l.site(st, bucket).unwrap_or_else(|e| panic!("{e}")),
             None => st,
         }
     };

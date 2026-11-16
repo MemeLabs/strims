@@ -1087,7 +1087,7 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
             .with_loss(s.loss)
             .with_bucket(bench.buckets.then_some(run_bucket));
         if let Some(link) = &s.link {
-            site = link.site(site, Some(run_bucket));
+            site = link.site(site, Some(run_bucket))?;
         }
         if let Some(d) = s.down {
             site = site.with_down(d);
