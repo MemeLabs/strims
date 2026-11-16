@@ -59,7 +59,8 @@ second, since steal and load from elsewhere bend a real-time run. A
 finished run leaves its out dir as D/done/<id>.tar.gz beside its result,
 whose row holds the host's steal and busy shares of CPU time over the
 run, steal's worst 10 s, the load's mean and max, and node-<i>.jsonl's
-line counts (HOST_FIELDS); with no node-<i>.jsonl it fails. The
+line counts (HOST_FIELDS); with no node-<i>.jsonl, or one without
+lines (a node that never ran), it fails. The
 containers write some of the out dir as root: what the worker can't read
 or remove goes through sudo where it needs no password (EC2), else a
 container. With a store and its bundle's TABLES_BIN artifact (strims-sim's
@@ -70,8 +71,9 @@ test job's out dir does: the fold's key, sim, test, env and row are
 tables/job.json's, the row with the host's fields, its cell the job's
 `cell` (else its matrix), its arm the job's and its seed its `repeat`;
 its result says `key` and `flush` as a stored test job's does. Tables
-that fail leave the run a success with its tarball, its result's
-`tables_error` saying why.
+that fail (a run that didn't stream, which testbed_tables refuses) fail
+the job: its result has no row, its `error` and `tables_error` saying why,
+and the controller counts it failed, logs it and runs it again.
 
 With --imds it polls the instance metadata (--imds-url, for tests) every
 5 s for a spot interruption notice, which comes 2 minutes before EC2
@@ -805,6 +807,12 @@ def finish_testbed(root: Path, r: Running, work: Path, ok: bool) -> dict:
     lines = node_lines(out) if out.is_dir() else {}
     if not lines:
         return {**res, "error": "no node-<i>.jsonl in the out dir"}
+    silent = [i for i, n in lines.items() if n == 0]
+    if silent:
+        # A node that never ran: the run didn't stream.
+        why = (out / f"node-{silent[0]}.err")
+        why = why.read_text(errors="replace").strip().splitlines()[:1] if why.exists() else []
+        return {**res, "error": f"node-{', '.join(silent)}.jsonl without lines" + (f": {why[0]}" if why else "")}
     try:
         pack(out, root / "done" / f"{r.job['id']}.tar.gz", root)
     except Exception as e:
@@ -917,7 +925,9 @@ def serve(args: argparse.Namespace) -> None:
             return False
         dest, meta, why = testbed_tables(root, r.job, work / "out")
         if why is not None:
-            result["tables_error"] = why
+            # Tables that fail fail the job (a run that didn't stream, a
+            # reader's error): the controller counts, logs and retries it.
+            result.update(row=None, error=why, tables_error=why, log_tail=why)
         if dest is None:
             return False
         full = {**meta.get("row", {}), **row}

@@ -1130,6 +1130,20 @@ class TestbedTables(unittest.TestCase):
         (root / "trees" / "b" / "artifacts" / "TABLES_BIN").unlink()
         self.assertEqual(self.worker.testbed_tables(root, {"bin": "b.tar.gz"}, out), (None, None, None))
 
+    def test_a_run_with_a_node_that_never_ran_fails(self):
+        root = self.host_root()
+        work = root / "work" / "j3"
+        out = work / "out"
+        out.mkdir(parents=True)
+        (out / "node-0.jsonl").write_text('{"t_ms": 1}\n')
+        (out / "node-1.jsonl").write_text("")
+        (out / "node-1.err").write_text("testbed_node: --join-at: invalid digit found in string\n")
+        r = mock.Mock(at=1.0, job={"id": "j3"})
+        res = self.worker.finish_testbed(root, r, work, True)
+        self.assertNotIn("row", res)
+        self.assertEqual(res["error"], "node-1.jsonl without lines: testbed_node: --join-at: invalid digit found "
+                                       "in string")
+
     def test_a_stored_runs_line_waits_for_its_flush(self):
         d = self.dir
         env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
@@ -1183,9 +1197,9 @@ class TestbedTables(unittest.TestCase):
                          (first.job.id, "tb-0123456789abcdef", "farm/" + run.name + "/local/3", 1))
         self.assertEqual(line["row"], {"steal_pct": 0.5})
         self.assertEqual(host.acks, [first.wid])
-        # One that stored nothing has its line at once.
-        run.store(host, second, {"row": {"steal_pct": 0.1}, "wall_s": 60.0, "exit": 0, "tables_error": "x"})
-        self.assertEqual([r.get("tables_error") for r in fp.read_jsonl(rows)], [None, "x"])
+        # One that stored nothing (no TABLES_BIN) has its line at once.
+        run.store(host, second, {"row": {"steal_pct": 0.1}, "wall_s": 60.0, "exit": 0})
+        self.assertEqual([r.get("key") for r in fp.read_jsonl(rows)], ["tb-0123456789abcdef", None])
 
     def test_a_testbed_runs_estimate_prices_a_host_per_group(self):
         d = self.dir

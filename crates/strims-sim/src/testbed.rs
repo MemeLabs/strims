@@ -426,16 +426,33 @@ impl Run {
                 .lines()
                 .filter_map(|l| serde_json::from_str::<Value>(l).ok())
                 .collect::<Vec<_>>();
-            // A node that never ran (its arguments refused, a crash at
-            // start) leaves no lines, and its run would read as a swarm
-            // without it: no run's tables.
-            if lines.is_empty() {
+            // A run that didn't stream has no tables: one would read as a
+            // swarm without its silent nodes, every lag measure empty and
+            // its row's lag the best there is. A node that never ran (its
+            // arguments refused, a crash at start) leaves no lines; one
+            // from before the records (`rec`) leaves none of them; a viewer
+            // that read no frame didn't stream.
+            let err = || {
                 let why = read(&format!("node-{i}.err")).unwrap_or_default();
-                let why = why
-                    .lines()
+                why.lines()
                     .find(|l| !l.trim().is_empty())
-                    .unwrap_or("no node-<i>.err");
-                return Err(format!("node-{i}.jsonl has no lines: {why}"));
+                    .unwrap_or("no node-<i>.err")
+                    .to_owned()
+            };
+            if lines.is_empty() {
+                return Err(format!("node-{i}.jsonl has no lines: {}", err()));
+            }
+            if !lines.iter().any(|l| l.get("rec").is_some()) {
+                return Err(format!(
+                    "node-{i}.jsonl has no records (`rec`): a node from before them"
+                ));
+            }
+            let reads = lines
+                .iter()
+                .filter_map(|l| l.get("rec")?.get("reads")?.as_array().map(Vec::len))
+                .sum::<usize>();
+            if i > 0 && reads == 0 {
+                return Err(format!("viewer {i} read no frame: {}", err()));
             }
             nodes.push(lines);
         }
@@ -1663,6 +1680,27 @@ mod tests {
         assert_eq!(
             err,
             "node-1.jsonl has no lines: testbed_node: --join-at: invalid digit found in string"
+        );
+        // A viewer that ran but read nothing, and a node from before the
+        // records, didn't stream either.
+        let line = |rec: &str| {
+            format!(
+                "{{\"t_ms\":{},\"rel_ms\":1000,\"transfers\":{{}}{rec}}}\n",
+                START + 1000
+            )
+        };
+        std::fs::write(
+            dir.join("node-1.jsonl"),
+            line(",\"rec\":{\"meter\":null,\"seed\":null,\"bins\":[],\"parents\":[],\"parents_lost\":0,\"reads\":[]}"),
+        )
+        .unwrap();
+        let err = Run::read(&dir, &BTreeMap::new()).err().unwrap();
+        assert!(err.starts_with("viewer 1 read no frame: "), "{err}");
+        std::fs::write(dir.join("node-1.jsonl"), line("")).unwrap();
+        let err = Run::read(&dir, &BTreeMap::new()).err().unwrap();
+        assert_eq!(
+            err,
+            "node-1.jsonl has no records (`rec`): a node from before them"
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }

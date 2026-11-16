@@ -1529,6 +1529,7 @@ def index(workers=None, progress=None, wait=True):
                 raise
         warn_undocumented()
         warn_branch_ids()
+        warn_unstreamed()
         say("write", f"index: compacting ({took():.0f} s in)")
         skipped = compacted(say)
         private = not mine["verdicts"] and made_private(cache, workers, say)
@@ -1903,6 +1904,15 @@ def knob(env, name):
     return f"{env}['STRIMS_SIM_{name}']"
 
 
+# A run of raw.runs (r) that streamed: every sim run; a testbed run whose
+# row's delivery isn't 0 and whose source holds viewer_seconds. One that
+# didn't stream (a node that never ran, a viewer that read nothing) isn't a
+# job, whatever wrote its tables: its lag measures would be empty and its
+# row's lag the best there is. testbed_tables refuses such runs; flushes
+# from before it did are told apart by what they hold.
+STREAMED = ("(r.sim IS DISTINCT FROM 'testbed' OR (coalesce(TRY_CAST(json_extract_string(r.row_json, '$.delivery') "
+            "AS DOUBLE), 1) > 0 AND r.src IN (SELECT src FROM raw.files WHERE tbl = 'viewer_seconds')))")
+
 JOBS_SQL = """
 CREATE OR REPLACE TABLE main.jobs AS
 WITH cand AS (
@@ -1911,7 +1921,8 @@ WITH cand AS (
            r.binary_sha256, r.dirty,
            row_number() OVER (PARTITION BY r.k ORDER BY s.n_tables DESC, coalesce(s.manifest_at, '') DESC,
                               s.seq DESC, r.src DESC) AS rn
-    FROM raw.runs r JOIN raw.sources s USING (src)),
+    FROM raw.runs r JOIN raw.sources s USING (src)
+    WHERE {streamed}),
 canon AS (SELECT * EXCLUDE (rn) FROM cand WHERE rn = 1),
 fi AS (SELECT k, arg_min(f, (f.reused_from IS NOT NULL AND f.reused_from <> f.matrix, f.ran_at, f.line)) AS f
        FROM raw.farm_index f WHERE k IS NOT NULL GROUP BY k),
@@ -1963,7 +1974,8 @@ WHERE c.sim IS NULL OR c.sim NOT IN ({skipped})
 UNION ALL BY NAME
 SELECT src AS exp_id, cell, any_value({rsim}) AS sim, any_value(test) AS test,
        any_value(json_transform(env, '"MAP(VARCHAR, VARCHAR)"')) AS env
-FROM raw.runs WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND sim NOT IN ({skipped}) GROUP BY src, cell;
+FROM raw.runs r WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND sim NOT IN ({skipped}) AND {streamed}
+GROUP BY src, cell;
 
 CREATE OR REPLACE TABLE main.experiment_jobs AS
 SELECT u.* EXCLUDE (line), j.src FROM (
@@ -2273,10 +2285,11 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None, hidden
     skipped = ", ".join(q(s) for s in SKIPPED_SIMS)
     out = [JOBS_SQL.format(csim=sim_case("csim"), promoted=",\n       ".join(
         f"{knob('env', v)} AS {n}" for n, v in PROMOTED.items()),
-        job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped)]
+        job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped, streamed=STREAMED)]
     out.append(COSTS_SQL.format(**{k: repr(v) for k, v in s3_prices().items()}))
     out.append(EXPERIMENTS_SQL.format(csim=sim_case("c.sim"), rsim=sim_case("sim"),
-                                      job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped))
+                                      job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped,
+                                      streamed=STREAMED))
     out.append(AVAILABILITY_SQL.format(days=store.s3_kept_days()))
     out.append(EXP_RUNS_SQL)
     out += commits_sql(tmp, ins, parsed, commits)
@@ -2909,6 +2922,19 @@ def warn_branch_ids():
               f"{', ...' if r['jobs'] > 3 else ''}): a branch older than the vocabulary wrote them, under which the id "
               "also names a parent's channel closing; the views read them as departures: run them again on a branch "
               "rebased onto the vocabulary", file=sys.stderr)
+
+
+def warn_unstreamed():
+    """Warns on stderr of the testbed runs the jobs leave out for not
+    streaming (STREAMED)."""
+    try:
+        r = lake(f"SELECT count(*) AS n, list(DISTINCT split_part(src, '/', 1) || '/' || split_part(src, '/', 2))[:3] "
+                 f"AS some FROM raw.runs r WHERE NOT {STREAMED};")[0]
+    except store_host.DuckError:
+        return
+    if r["n"]:
+        print(f"index: {r['n']} testbed runs that didn't stream aren't jobs (no viewer read a frame: "
+              f"{', '.join(r['some'])})", file=sys.stderr)
 
 
 def warn_undocumented():

@@ -2852,8 +2852,6 @@ class Run:
                 "at": at,
                 "run_dir": f"runs/{jid}",
             }
-            if res.get("tables_error"):
-                rec["tables_error"] = res["tables_error"]
             if seq is not None:
                 rec["key"] = res.get("key")
                 rec["src"], rec["data"] = self.src_of(host, seq), self.data_of(host, seq)
