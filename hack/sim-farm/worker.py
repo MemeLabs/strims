@@ -65,9 +65,10 @@ containers write some of the out dir as root: what the worker can't read
 or remove goes through sudo where it needs no password (EC2), else a
 container. With a store and its bundle's TABLES_BIN artifact (strims-sim's
 testbed_tables), a finished run's tables are written too, after the
-tarball, into the out dir's tables/ (`TABLES_BIN out out/tables`, a
-`--knob` for each of the job's `knobs`), and fold into the store as a
-test job's out dir does: the fold's key, sim, test, env and row are
+tarball, by the store's folder (off the loop that polls for spot notices,
+niced, and before the host's next testbed run starts) into the out dir's
+tables/ (`TABLES_BIN out out/tables`, a `--knob` for each of the job's
+`knobs`), and fold into the store as a test job's out dir does: the fold's key, sim, test, env and row are
 tables/job.json's, the row with the host's fields, its cell the job's
 `cell` (else its matrix; the index names a testbed job's cell by its knobs
 again, simlab.testbed.cell_sql), its arm the job's, its seed its
@@ -555,8 +556,13 @@ class Store:
             except (OSError, ValueError):
                 (self.fold_dir / f"{w}.json").unlink(missing_ok=True)
         seq = self.seq
-        jobs = {w: self.fold_job(w, r) for w, r in recs.items()}
         failed = {}
+        for w, r in recs.items():
+            if r["job"].get("tables_pending"):
+                why = self.testbed_tables(w, r)
+                if why is not None:
+                    failed[w] = why
+        jobs = {w: self.fold_job(w, r) for w, r in recs.items() if w not in failed}
         try:
             store().fold(self.db(seq), jobs.values(), self.src(seq), threads=self.threads, memory=STORE_MEMORY)
         except store().FoldError:
@@ -569,6 +575,11 @@ class Store:
             res = dict(r["result"])
             if w in failed:
                 res.update(row=None, error=failed[w])
+                if r["job"].get("tables_pending"):
+                    # Tables that fail fail the job (a run that didn't
+                    # stream, a reader's error): the controller counts,
+                    # logs and retries it.
+                    res.update(tables_error=failed[w], log_tail=failed[w])
             else:
                 res["flush"] = seq
             write_atomic(self.root / "done" / f"{w}.json", json.dumps(res))
@@ -577,6 +588,25 @@ class Store:
         with self.cv:
             self.open_jobs += len(recs) - len(failed)
 
+    def testbed_tables(self, wid: str, rec: dict) -> str | None:
+        """A testbed run's tables, written (testbed_tables, niced; the next
+        testbed run waits for the store's folds) into its out dir in fold/,
+        and its record made a stored run's: its job's `tables`, its
+        result's key and row (the run's row fields the controller keeps,
+        THIN, HOST_FIELDS and the job's), its lake row (lake_row); or why
+        there are none."""
+        job, res = rec["job"], rec["result"]
+        out = self.fold_dir / wid
+        dest, meta, why = testbed_tables(self.root, job, out)
+        if why is not None:
+            return why
+        full = {**meta.get("row", {}), **(res.get("row") or {})}
+        keep = (*THIN, *HOST_FIELDS, *job.get("fields", ()))
+        job.update(tables={k: meta.get(k) for k in ("k", "sim", "test", "env")}, tables_dir=str(dest))
+        res.update(key=meta.get("k"), row={k: full[k] for k in keep if k in full})
+        rec["row"] = lake_row(meta.get("row", {}), rec["row"] or {})
+        return None
+
     def fold_job(self, wid: str, rec: dict) -> dict:
         job, res = rec["job"], rec["result"]
         if "tables" in job:
@@ -584,7 +614,8 @@ class Store:
             # repeat (the module docs).
             t = job["tables"]
             return {
-                "k": t.get("k") or wid, "dir": self.fold_dir / wid, "sim": t.get("sim"), "test": t.get("test"),
+                "k": t.get("k") or wid, "dir": Path(job.get("tables_dir") or self.fold_dir / wid), "sim": t.get("sim"),
+                "test": t.get("test"),
                 "cell": job.get("cell") or job.get("matrix"), "arm": job.get("arm"), "seed": job.get("repeat"),
                 "env": t.get("env") or {}, "row": rec["row"], "wall_s": res.get("wall_s"), "rss_mb": None,
                 "commit": job.get("commit"), "binary_sha256": job.get("binary_sha256"),
@@ -853,7 +884,7 @@ def testbed_tables(root: Path, job: dict, out: Path) -> tuple[Path | None, dict 
     if not tables.exists():
         return None, None, None
     dest = out / "tables"
-    args = [str(tables), str(out), str(dest)]
+    args = ["nice", "-n", "10", str(tables), str(out), str(dest)]
     for k, v in sorted((job.get("knobs") or {}).items()):
         args += ["--knob", f"{k}={v}"]
     try:
@@ -924,23 +955,12 @@ def serve(args: argparse.Namespace) -> None:
         return store is not None and job.get("kind") != "testbed" and job.get("store", True)
 
     def store_testbed(jid: str, r: Running, result: dict, row: dict, work: Path) -> bool:
-        """A finished testbed run's tables into the store (the module
-        docs); whether they went, the result saying why not."""
-        if store is None:
+        """A finished testbed run into the store, its tables to be written
+        by the store's folder (Store.fold: off this loop, which polls for
+        spot notices); whether it went (with a store and a TABLES_BIN)."""
+        if store is None or not (tree_of(root, r.job["bin"]) / "artifacts" / "TABLES_BIN").exists():
             return False
-        dest, meta, why = testbed_tables(root, r.job, work / "out")
-        if why is not None:
-            # Tables that fail fail the job (a run that didn't stream, a
-            # reader's error): the controller counts, logs and retries it.
-            result.update(row=None, error=why, tables_error=why, log_tail=why)
-        if dest is None:
-            return False
-        full = {**meta.get("row", {}), **row}
-        keep = (*THIN, *HOST_FIELDS, *r.job.get("fields", ()))
-        result["key"] = meta.get("k")
-        job = {**r.job, "tables": {k: meta.get(k) for k in ("k", "sim", "test", "env")}}
-        store.add(jid, job, {**result, "row": {k: full[k] for k in keep if k in full}},
-                  lake_row(meta.get("row", {}), row), dest)
+        store.add(jid, {**r.job, "tables_pending": True}, result, row, work / "out")
         return True
 
     def end_job(jid: str, r: Running, status: int, usage, now: float, timed_out: bool = False,
@@ -1052,6 +1072,11 @@ def serve(args: argparse.Namespace) -> None:
                 others = testbed_names()
                 if others:
                     waits = f"waiting for {others[0]}, another testbed's container, to end"
+                    break
+                # A real-time run shares the host with nothing: the last
+                # one's tables and fold finish first.
+                if store is not None and store.folds():
+                    waits = "waiting for the store to fold the last testbed run"
                     break
             # A job's slot holds its memory: with less free, the jobs
             # running took more, and another could run the host out.

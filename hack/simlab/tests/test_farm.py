@@ -1122,6 +1122,34 @@ class TestbedTables(unittest.TestCase):
         self.assertEqual(json.loads(runs[0]["row_json"]), {**full})
         self.assertTrue((flushed / "viewers.parquet").exists())
 
+    def test_a_stored_runs_tables_are_the_folders_and_their_failure_fails_it(self):
+        root = self.host_root()
+        sink = self.dir / "sink"
+        (root / "policy.json").write_text(json.dumps({"dir": str(sink)}))
+        args = mock.Mock(run="r1", instance="i-1", policy=str(root / "policy.json"), rotate_mb=100.0, duckdb=None)
+        job = {"id": "j1", "kind": "testbed", "bin": "b.tar.gz", "matrix": "tb", "arm": "main", "repeat": 1,
+               "cell": "star-3-10", "knobs": {}, "fields": [], "tables_pending": True}
+        host = {"steal_pct": 0.5, "node_lines_min": 40, "wall_s": 60.0}
+        outs = {}
+        for jid in ("j1", "j2"):
+            out = root / "work" / jid / "out"
+            out.mkdir(parents=True)
+            outs[jid] = out
+        (outs["j2"] / "fail").touch()
+        with mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(self.dir / "sim-db")}):
+            store = self.worker.Store(root, args)
+            for jid, out in outs.items():
+                store.add(jid, {**job, "id": jid}, {"id": jid, "row": dict(host)}, dict(host), out)
+            store.close(60)
+        done = json.loads((root / "done" / "j1.json").read_text())
+        self.assertEqual((done["flush"], done["key"]), (0, "tb-0123456789abcdef"))
+        self.assertEqual(done["row"]["steal_pct"], 0.5)
+        failed = json.loads((root / "done" / "j2.json").read_text())
+        self.assertIsNone(failed["row"])
+        self.assertIn("no node lines", failed["error"])
+        self.assertEqual(failed["tables_error"], failed["error"])
+        self.assertNotIn("flush", failed)
+
     def test_tables_that_fail_say_why(self):
         root = self.host_root()
         out = root / "work" / "j2" / "out"
