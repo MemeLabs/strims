@@ -339,7 +339,8 @@ impl Spec {
     /// What `links.sh` builds the link from, as shell assignments:
     /// `LINK_CLASS`; `LINK_STAB`, tc's size table for the class's
     /// framing over the 14 bytes of Ethernet header a qdisc counts;
-    /// `LINK_SHAPER`, the shaper qdisc (tbf, or the router's); `LINK_CHILD`,
+    /// `LINK_SHAPER`, the shaper qdisc (tbf, a peak's bucket two of the
+    /// class's largest frames, or the router's); `LINK_CHILD`,
     /// the qdisc that holds its queue, if not tbf's own; `LINK_SLOT`,
     /// netem's slot argument; `LINK_TRACE`, tracelink's arguments (the
     /// files at `/links/<name>`); and `LINK_FILES`, the host files to
@@ -407,7 +408,10 @@ impl Spec {
                     kbit(run.up_mbit * line),
                     bucket.bytes,
                     run.limit,
-                    peak.map_or(String::new(), |p| format!(" peakrate {p}mbit mtu 3028"))
+                    peak.map_or(String::new(), |p| format!(
+                        " peakrate {p}mbit mtu {}",
+                        2 * self.max_frame()
+                    ))
                 ),
                 if self.class == Class::Cable && self.pie {
                     "pie limit 10000 target 10ms tupdate 16ms".to_owned()
@@ -759,7 +763,7 @@ mod tests {
             sh("dsl", &run)
                 .contains("LINK_STAB='stab overhead 26 linklayer atm mtu 2047 tsize 2048'")
         );
-        assert!(cable.contains("LINK_SHAPER='tbf rate 10000kbit burst 156250 limit 125000 peakrate 100mbit mtu 3028'"), "{cable}");
+        assert!(cable.contains("LINK_SHAPER='tbf rate 10000kbit burst 156250 limit 125000 peakrate 100mbit mtu 3036'"), "{cable}");
         assert!(
             cable.contains("LINK_CHILD='pie limit 10000 target 10ms tupdate 16ms'"),
             "{cable}"
@@ -770,6 +774,13 @@ mod tests {
                 .contains("LINK_SHAPER='cake bandwidth 9500kbit pppoe-ptm'")
         );
         assert!(sh("dsl,line=vdsl,router=fq_codel", &run).contains("tbf rate 9354kbit"));
+        // A peak's bucket holds two of the class's frames.
+        let peaked = Run {
+            peak_mbit: Some(40.0),
+            ..run
+        };
+        assert!(sh("tbf", &peaked).contains("peakrate 40mbit mtu 3028'"));
+        assert!(sh("fiber", &peaked).contains("peakrate 40mbit mtu 3036'"));
         // A step keeps the bucket of the rate it started at.
         let step = sh(
             "cable",
