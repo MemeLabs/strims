@@ -14,6 +14,13 @@ export const BACK_SWIPE_EDGE_PX = 34;
  */
 export const TAP_SLOP_PX = 10;
 
+// Whether the page has an edge back swipe to guard against: an iOS
+// browser's tab (Safari's, or another's, all WebKit), on `ios`, not
+// `standalone` (a home screen app, which has none). Android has no in-page
+// back swipe, nor has a desktop: there the guard would only cost the band's
+// scrolling, long presses and text selection.
+export const hasEdgeBackSwipe = (ios: boolean, standalone: boolean): boolean => ios && !standalone;
+
 /** A touch, as a TouchEvent's touch lists give it. */
 export interface TouchPoint {
   identifier: number;
@@ -22,12 +29,13 @@ export interface TouchPoint {
 }
 
 /**
- * The guard against Safari's back swipe, which starts from the screen's
- * left edge, where the network nav sits, or swapped on a phone, the
- * drawer's strip, whose rightward swipe opens the drawer. A touch that
- * starts within BACK_SWIPE_EDGE_PX of the edge is cancelled (its
- * touchstart's default prevented), which also takes the browser's click
- * for a tap there. The guard gives a tap its click back: a touch alone on
+ * The guard against Safari's back swipe (where hasEdgeBackSwipe), which
+ * starts from the screen's left edge, where the network nav sits, or
+ * swapped on a phone, the drawer's strip, whose rightward swipe opens the
+ * drawer. A touch that starts within BACK_SWIPE_EDGE_PX of the edge is
+ * cancelled (its touchstart's default prevented), which also takes the
+ * browser's click for a tap there, and the page's scrolling, long press
+ * and text selection from it. The guard gives a tap its click back: a touch alone on
  * the screen that ends within TAP_SLOP_PX of where it started and never
  * moved further. A drag gets none, as it gets none from the browser, so a
  * panel's swipe from a button (the drawer's arrow) doesn't end in a click

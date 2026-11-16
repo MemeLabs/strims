@@ -3,12 +3,30 @@
 
 import assert from "assert";
 
-import { BACK_SWIPE_EDGE_PX, BackSwipeGuard, TAP_SLOP_PX, TouchPoint } from "./backSwipeGuard";
+import {
+  BACK_SWIPE_EDGE_PX,
+  BackSwipeGuard,
+  TAP_SLOP_PX,
+  TouchPoint,
+  hasEdgeBackSwipe,
+} from "./backSwipeGuard";
 
 const at = (clientX: number, clientY: number, identifier = 0): TouchPoint => ({
   identifier,
   clientX,
   clientY,
+});
+
+describe("hasEdgeBackSwipe", () => {
+  it("guards only an iOS browser's tab", () => {
+    // iOS Safari (or another iOS browser) in a tab.
+    assert.strictEqual(hasEdgeBackSwipe(true, false), true);
+    // iOS, the app added to the home screen.
+    assert.strictEqual(hasEdgeBackSwipe(true, true), false);
+    // Android, in Chrome's tab or installed; a desktop.
+    assert.strictEqual(hasEdgeBackSwipe(false, false), false);
+    assert.strictEqual(hasEdgeBackSwipe(false, true), false);
+  });
 });
 
 describe("BackSwipeGuard", () => {

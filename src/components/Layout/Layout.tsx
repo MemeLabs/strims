@@ -15,7 +15,7 @@ import NotificationToast from "../Notification/Toast";
 import { withTheme } from "../Theme";
 import Footer from "./Footer";
 import Header from "./Header";
-import { BackSwipeGuard } from "./backSwipeGuard";
+import { BackSwipeGuard, hasEdgeBackSwipe } from "./backSwipeGuard";
 import { layoutShapeClassNames, layoutStateClassNames, screenOrientation } from "./shape";
 
 export type Breakpoint = "sm" | "md" | "lg" | "xl";
@@ -84,6 +84,23 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
       return;
     }
 
+    // disable pinch zoom
+    const handleTouchMove = (event: ScaledTouchEvent) => {
+      if ("scale" in event && event.scale !== 1) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+    return () => document.removeEventListener("touchmove", handleTouchMove);
+  }, []);
+
+  useEffect(() => {
+    if (!hasEdgeBackSwipe(IS_IOS, IS_PWA)) {
+      return;
+    }
+
     // Swipe history navigation is off near the page's left edge, so a swipe
     // of a panel there (the nav, the swapped drawer's strip) doesn't go
     // back; swipes beginning past the edge of the screen are unaffected.
@@ -123,20 +140,12 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
 
     const handleTouchCancel = () => guard.cancel();
 
-    const handleTouchMove = (event: ScaledTouchEvent) => {
-      guard.move(event.changedTouches);
-
-      // disable pinch zoom
-      if ("scale" in event && event.scale !== 1) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
+    const handleTouchMove = (event: TouchEvent) => guard.move(event.changedTouches);
 
     document.addEventListener("touchstart", handleTouchStart, { capture: true, passive: false });
     document.addEventListener("touchend", handleTouchEnd);
     document.addEventListener("touchcancel", handleTouchCancel);
-    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+    document.addEventListener("touchmove", handleTouchMove, { passive: true });
     return () => {
       document.removeEventListener("touchstart", handleTouchStart, { capture: true });
       document.removeEventListener("touchend", handleTouchEnd);
