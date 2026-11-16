@@ -12,7 +12,7 @@ import { useToggle } from "react-use";
 
 import { RoomButtons } from "../../components/Chat/RoomMenu";
 import { ThreadProvider, ThreadProviderProps, useChat } from "../../contexts/Chat";
-import { useLayout } from "../../contexts/Layout";
+import { chatOnScreen, useLayout } from "../../contexts/Layout";
 import useClickAway from "../../hooks/useClickAway";
 import { globalHotkeyOptions } from "../../lib/hotkeys";
 import { DEVICE_TYPE, DeviceType } from "../../lib/userAgent";
@@ -39,7 +39,9 @@ const Header: React.FC<HeaderProps> = ({ onToggleClick, onMenuToggleClick, onCha
 );
 
 const Chat: React.FC = () => {
-  const { showChat, toggleShowChat, swapMainPanels, setOverlayState } = useLayout();
+  const layout = useLayout();
+  const { showChat, toggleShowChat, swapMainPanels, setOverlayState } = layout;
+  const shown = chatOnScreen(layout, DEVICE_TYPE === DeviceType.Portable);
   const [{ mainActiveTopic }, { setMainActiveTopic }] = useChat();
   const [menuOpenToggled, toggleMenuOpen] = useToggle(!mainActiveTopic);
 
@@ -116,7 +118,7 @@ const Chat: React.FC = () => {
         />
         {showChat && mainActiveTopic && (
           <ThreadProvider {...mainActiveTopic}>
-            <ChatShell />
+            <ChatShell shown={shown} />
           </ThreadProvider>
         )}
       </div>

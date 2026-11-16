@@ -4,7 +4,12 @@
 import assert from "assert";
 
 import { DevicePreferenceStore, DevicePreferences } from "../lib/devicePreferences";
-import { createLayoutActions, createPreferenceSaver, initialLayoutState } from "./Layout";
+import {
+  chatOnScreen,
+  createLayoutActions,
+  createPreferenceSaver,
+  initialLayoutState,
+} from "./Layout";
 
 // A store that records what it is given.
 const recordingStore = () => {
@@ -53,6 +58,25 @@ describe("Layout actions", () => {
     assert.deepStrictEqual(s.overlayState, { open: false, transitioning: false });
     s = toggleOverlayOpen(s, true);
     assert.deepStrictEqual(s.overlayState, { open: true, transitioning: false });
+  });
+});
+
+describe("chatOnScreen", () => {
+  const layout = (open: boolean, showChat: boolean) => ({
+    ...initialLayoutState,
+    overlayState: { open, transitioning: false },
+    showChat,
+  });
+
+  it("on a portable device, follows the drawer, not the panel", () => {
+    // The closed drawer's peek shows none of the chat, its Shell mounted.
+    assert.strictEqual(chatOnScreen(layout(false, true), true), false);
+    assert.strictEqual(chatOnScreen(layout(true, true), true), true);
+  });
+
+  it("elsewhere, follows the chat panel", () => {
+    assert.strictEqual(chatOnScreen(layout(false, true), false), true);
+    assert.strictEqual(chatOnScreen(layout(true, false), false), false);
   });
 });
 

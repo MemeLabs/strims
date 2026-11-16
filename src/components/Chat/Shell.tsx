@@ -15,19 +15,25 @@ import StyleSheet from "./StyleSheet";
 
 interface ShellProps {
   className?: string;
+  /**
+   * Whether the user can see the chat (default true): mounted, it can still
+   * be off screen, as in a phone's closed drawer, whose peek shows none of
+   * it. The thread is visible, and read, only while it's shown.
+   */
+  shown?: boolean;
 }
 
-const Shell: React.FC<ShellProps> = ({ className }) => {
+const Shell: React.FC<ShellProps> = ({ className, shown = true }) => {
   const [{ uiConfig, uiConfigHighlights, uiConfigTags, uiConfigIgnores }, chatActions] = useChat();
   const [room, roomActions] = useRoom();
 
   useEffect(() => {
-    if (room.state === ThreadInitState.OPEN) {
+    if (room.state === ThreadInitState.OPEN && shown) {
       roomActions.toggleVisible(true);
       chatActions.resetTopicUnreadCount(room.topic);
       return () => roomActions.toggleVisible(false);
     }
-  }, [room.id, room.state]);
+  }, [room.id, room.state, shown]);
 
   const ref = useRef<HTMLDivElement>(null);
   const size = useSize(ref);
