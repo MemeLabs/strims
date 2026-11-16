@@ -524,7 +524,7 @@ pub struct WanHostReport {
     /// bytes).
     pub competing: Vec<(strims_base::time::Duration, u64)>,
     /// The same after each walk of the run that moved it, stamped with the
-    /// walk's time: the truth's competing uploads ([`competing_before`]).
+    /// walk's time: the truth's competing uploads (`competing_before`).
     pub competing_log: Vec<(strims_base::time::Duration, u64)>,
     /// With the window model, the segments its connections lost to a full
     /// access queue, up or down, and the pure acknowledgements (SACKs alone
@@ -1058,7 +1058,7 @@ impl Report {
 
     /// The meter's truth: what host `h` could upload over the second
     /// before `t` (time since the start), in its meter's units
-    /// ([`upload_truth`]), from its meter samples and its competing uploads'
+    /// (`upload_truth`), from its meter samples and its competing uploads'
     /// log; `None` with neither a site nor a rate limit, and 0 while its
     /// link carries nothing for it (an outage), which the tables keep and
     /// the meter's ratios leave out ([`Report::meter_series`]).

@@ -192,7 +192,7 @@ pub const MIN_BURST: u64 = 1514;
 /// What is wrong with `site`'s bucket, if it holds less than its link's
 /// largest frame (a full packet's charge, `Framing::packet(1500)`): a
 /// shaper drops a packet its bucket can't cover whole, so the testbed
-/// refuses such a bucket (strims-sim's `link::Spec::check_bucket`), and the
+/// refuses such a bucket ([`strims_wan::testbed::Spec::check_bucket`]), and the
 /// model would pass what the testbed drops.
 fn small_bucket(site: &Site) -> Option<String> {
     let b = site.profile.bucket?;
