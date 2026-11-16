@@ -40,7 +40,7 @@
 //     (skb->tstamp, which fq holds it to) is the time of the opportunity
 //     where the cursor now ends, never earlier than the previous packet's,
 //     plus the --delay trace's delay at that time, if given (`<ms>` a
-//     line, one every --delay-step-ms, repeating).
+//     line, one every --delay-step-ms, repeating from the trace's time 0).
 //
 // This is Mahimahi's link queue (mm-link) at a byte's resolution: an
 // opportunity's bytes serve the packets that wait when it comes, a packet
@@ -100,7 +100,9 @@ enum {
   S_DSTEP = 88,   // the delay trace's step, ns (0: none)
   S_DN = 96,      // its entries
   S_SEQ = 104,    // packets classified, the samples' next slot
-  S_SIZE = 112,
+  S_DBASE = 112,  // the delay trace's time 0, the trace's moved back by
+                  // whole delay periods
+  S_SIZE = 120,
 };
 
 // A trace entry: the opportunity's time in its period (ns), and the
@@ -336,6 +338,7 @@ static void assemble(int state_fd, int trace_fd, int delay_fd, int samples_fd, u
   jmp_imm(BPF_JEQ, BPF_REG_3, 0, nodelay);
   ldx(BPF_DW, BPF_REG_4, BPF_REG_7, S_DN);
   jmp_imm(BPF_JEQ, BPF_REG_4, 0, nodelay);
+  ldx(BPF_DW, BPF_REG_2, BPF_REG_7, S_DBASE);
   mov_reg(BPF_REG_1, BPF_REG_8);
   alu_reg(BPF_SUB, BPF_REG_1, BPF_REG_2);
   alu_reg(BPF_DIV, BPF_REG_1, BPF_REG_3);
@@ -654,8 +657,15 @@ int main(int argc, char **argv) {
   // back by whole periods to before now.
   uint64_t mono = clock_ns(CLOCK_MONOTONIC), real = clock_ns(CLOCK_REALTIME);
   int64_t at = start_ms ? (int64_t)(start_ms * 1000000ull) - (int64_t)real : 0;
-  int64_t base = (int64_t)mono + at - (int64_t)(offset_s * 1e9);
+  int64_t zero = (int64_t)mono + at - (int64_t)(offset_s * 1e9);
+  int64_t base = zero;
   while (base > (int64_t)mono) base -= (int64_t)period;
+  // The delay trace's time 0 is the trace's, moved back by whole delay
+  // periods.
+  int64_t dbase = zero, dperiod = ndelays ? (int64_t)ndelays * (int64_t)(delay_step_ms * 1e6) : 0;
+  if (dperiod > 0) {
+    while (dbase > (int64_t)mono) dbase -= dperiod;
+  }
   uint64_t st[S_SIZE / 8];
   memset(st, 0, sizeof(st));
   st[S_BASE / 8] = (uint64_t)base;
@@ -665,6 +675,7 @@ int main(int argc, char **argv) {
   st[S_LIMIT / 8] = limit;
   st[S_DSTEP / 8] = ndelays ? (uint64_t)(delay_step_ms * 1e6) : 0;
   st[S_DN / 8] = ndelays;
+  st[S_DBASE / 8] = (uint64_t)dbase;
   map_set(state_fd, 0, st);
 
   assemble(state_fd, trace_fd, delay_fd, samples_fd, nsamples - 1);
@@ -679,10 +690,10 @@ int main(int argc, char **argv) {
   uint64_t read_seq = 0;
   if (samples) fprintf(samples, "# unix_ns_in unix_ns_out bytes (out 0: dropped)\n");
   // The base in the realtime clock, to set departures beside captures.
-  fprintf(log, "# base_unix_ns %lld period_ns %llu total_bytes %llu opportunities %llu limit %llu\n",
+  fprintf(log, "# base_unix_ns %lld period_ns %llu total_bytes %llu opportunities %llu limit %llu delay_base_unix_ns %lld\n",
           (long long)((int64_t)real - ((int64_t)mono - base)), (unsigned long long)period,
           (unsigned long long)opps[nopps - 1].cum, (unsigned long long)nopps,
-          (unsigned long long)limit);
+          (unsigned long long)limit, (long long)((int64_t)real - ((int64_t)mono - dbase)));
   fprintf(log, "# unix_ms queued_bytes pkts bytes drops max_queued\n");
   fflush(log);
   signal(SIGTERM, on_signal);
