@@ -122,7 +122,12 @@ chunk's loader times out on the clock), and no worker is new
 or has just exchanged a message, after the page has laid out what
 changed: to the next timer until the root leaves
 "loading", then on to `--settle` ms of clock time after it (and while
-the root is empty, on in 100 ms steps up to `--timeout` s). A story frame
+the root is empty, on in 100 ms steps up to `--timeout` s). Past
+"loading", a step fires on through the timers its timers set (a chain of
+0 ms timeouts, 4 ms apart past the fifth, and the animation frames)
+while nothing would hold the clock, laying out what they change once a
+frame of clock time, as a browser does, rather than a step and its look
+at the network for each; a longer timeout waits for the next step. A story frame
 on the clock renders once i18next has its strings. Then finite
 animations and transitions jump to their end, infinite ones (spinners,
 animated emotes) and SVG animations hold at their start, videos pause
@@ -1263,13 +1268,15 @@ CAPTURE_SCRIPT = r"""(() => {
   const timers = new Map();
   let ids = 0;
   let nesting = 0;
-  const add = (fn, ms, args, repeat) => {
+  // `chain`: a timer a step's chain may fire (a timeout asked for in under
+  // 4 ms, as soon as may be, or the animation frames' timer).
+  const add = (fn, ms, args, repeat, chain = !repeat && (Number(ms) || 0) < 4) => {
     const id = ++ids;
     const level = nesting + 1;
     let delay = Math.max(0, Number(ms) || 0);
     if (level > 5 && delay < 4) delay = 4;
     if (repeat && delay < 1) delay = 1;
-    timers.set(id, { id, fn, args, due: now + delay, every: repeat ? delay : 0, level });
+    timers.set(id, { id, fn, args, due: now + delay, every: repeat ? delay : 0, level, chain });
     return id;
   };
   const clear = (id) => {
@@ -1296,7 +1303,7 @@ CAPTURE_SCRIPT = r"""(() => {
             reportError(e);
           }
         }
-      }, (Math.floor(now / FRAME) + 1) * FRAME - now, [], false);
+      }, (Math.floor(now / FRAME) + 1) * FRAME - now, [], false, true);
     }
     return id;
   };
@@ -1304,7 +1311,7 @@ CAPTURE_SCRIPT = r"""(() => {
     frames.delete(id);
   };
   window.requestIdleCallback = (cb) =>
-    add(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 1, [], false);
+    add(() => cb({ didTimeout: false, timeRemaining: () => 50 }), 1, [], false, false);
   window.cancelIdleCallback = clear;
 
   // A real task's turn: what the page queued before it runs first.
@@ -1322,8 +1329,10 @@ CAPTURE_SCRIPT = r"""(() => {
   // that passes its end, it finishes.
   let began = new WeakMap();
   let held = false;
+  // How many it finished, whose events come with the next frame.
   const animate = () => {
-    if (held) return;
+    let finished = 0;
+    if (held) return finished;
     for (const a of document.getAnimations()) {
       let t0 = began.get(a);
       if (t0 === undefined) {
@@ -1340,6 +1349,7 @@ CAPTURE_SCRIPT = r"""(() => {
           a.finish();
         } catch {}
         mutations++;
+        finished++;
       } else if (a.currentTime !== now - t0) {
         try {
           a.currentTime = now - t0;
@@ -1347,14 +1357,15 @@ CAPTURE_SCRIPT = r"""(() => {
         mutations++;
       }
     }
+    return finished;
   };
   const next = () => {
     let due = Infinity;
     for (const t of timers.values()) due = Math.min(due, t.due);
     return due;
   };
-  // The timers due by now, in the order they fall due.
-  const dueNow = () => [...timers.values()].filter((t) => t.due <= now)
+  // The timers due by now (or `by`), in the order they fall due.
+  const dueNow = (by = now) => [...timers.values()].filter((t) => t.due <= by)
     .sort((a, b) => a.due - b.due || a.id - b.id);
   // Fires timer `t` (unless cleared since), true if it ran.
   const fire = (t) => {
@@ -1379,6 +1390,28 @@ CAPTURE_SCRIPT = r"""(() => {
   // with `advance` (the network quiet), nothing pending and no worker busy
   // for `quietMs`, by `limit` (null: whenever); else, so, moves the clock
   // to `limit`. `pending` lists what is still pending.
+  //
+  // With `advance` and a `limit`, it then fires on, in the same step, the
+  // timers those set (a chain of 0 ms timeouts each set by the one before,
+  // as process.nextTick's queue and the RPC streams' hops are, which past
+  // the fifth are clamped to 4 ms and so moved the clock 4 ms a step, each
+  // step a look at the network and real frames for what the timer
+  // changed): each in turn up to `limit` while the next due is a chain
+  // timer (a timeout asked for in under 4 ms, or the animation frames';
+  // any other, a poll's or a debounce's, waits for the next step, which
+  // gives the page's untracked work, a FileReader's or an off-document
+  // image's, real time as before) and nothing pending, no <img> loading
+  // and no worker busy would hold the clock, laying out what they changed
+  // as a browser does, once a frame: a real frame before the first timer
+  // of a later frame on the clock. An animation the clock finishes ends
+  // it, its events coming with the next step's frames. At most
+  // CHAIN_TIMERS timers, so the step ends; the network's look comes with
+  // the next step, and the settle ends only once it is quiet.
+  const CHAIN_TIMERS = 1000;
+  const imagesLoading = () => {
+    for (const img of document.images) if (!img.complete) return true;
+    return false;
+  };
   let seen = 0;
   const step = async (limit, advance, quietMs) => {
     await turn();
@@ -1395,10 +1428,30 @@ CAPTURE_SCRIPT = r"""(() => {
     let fired = 0;
     if (due <= now || (advance && due <= (limit ?? Infinity))) {
       now = Math.max(now, due);
-      animate();
+      const finished = animate();
+      let laidOut = mutations;
+      let laidOutFrame = Math.floor(now / FRAME);
       for (const t of dueNow()) {
         if (!fire(t)) continue;
         fired++;
+        await turn();
+      }
+      for (let i = 0; advance && limit !== null && !finished && i < CHAIN_TIMERS; i++) {
+        const due = next();
+        if (!(due <= limit) || !dueNow(due)[0].chain) break;
+        if (pending.size > 0 || imagesLoading() || workersBusy(quietMs)) break;
+        if (mutations !== laidOut && Math.floor(due / FRAME) > laidOutFrame) {
+          await frame();
+          await turn();
+          await turn();
+          laidOut = mutations;
+          laidOutFrame = Math.floor(due / FRAME);
+          continue;
+        }
+        now = Math.max(now, due);
+        if (animate()) break;
+        const [t] = dueNow();
+        if (fire(t)) fired++;
         await turn();
       }
     } else if (advance && limit !== null && limit > now) {
