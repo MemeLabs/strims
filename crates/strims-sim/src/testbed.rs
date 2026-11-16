@@ -49,7 +49,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use strims_base::stats::WaitHistogram;
 use strims_ppspp::ParentWhy;
-use strims_testbed::record::{BIN_MS, MeterSample, NODE_BIN_COUNTERS, SeedSample};
+use strims_testbed::record::{BIN_MS, Gated, MeterSample, NODE_BIN_COUNTERS, SeedSample};
 use strims_testbed::stream::{FrameInfo, Parsed};
 use strims_testbed::transfer::{PeerTransfer, TransferSample};
 
@@ -794,6 +794,22 @@ impl Run {
             }
         }
         let net = Network::read(self, &scenario, seed);
+        // The meter's truth's share at each sample, from the captures.
+        let run0_us = self.start_ms.saturating_sub(LEAD.as_millis() as u64) * 1000;
+        for (h, host) in hosts.iter_mut().enumerate() {
+            let (Some(spec), Some(sends)) = (scenario.hosts.get(h), net.sends.get(h)) else {
+                continue;
+            };
+            let log = net
+                .wan
+                .hosts
+                .iter()
+                .find(|w| w.name == spec.name)
+                .map_or(&[][..], |w| &w.competing_log[..]);
+            gate(&mut host.runner.meter, sends, spec, log, |d| {
+                run0_us + d.as_micros() as u64
+            });
+        }
         Report {
             seed: 0,
             trace_hash: self.key(),
@@ -1509,6 +1525,75 @@ struct Network {
     bins: Vec<Vec<[u64; UP_COUNTERS.len()]>>,
     unmeasured: Vec<usize>,
     ends: BTreeMap<(HostIx, usize), usize>,
+    /// Each host's own sends to the swarm, from its capture (none without
+    /// one): what its meter's truth takes its share from (`gate`).
+    sends: Vec<Vec<Send>>,
+}
+
+/// One segment a node sent the swarm, as its capture saw it: when (Unix
+/// µs), what its link charged it (its class's framing over its IP length,
+/// `Framing::packet`), its transport's payload (TCP's: the vnic bytes its
+/// transport took; 0 for a data channel's datagram, whose payload DTLS
+/// hides), and whether it resent bytes its flow had sent.
+struct Send {
+    us: u64,
+    charge: u64,
+    app: u64,
+    resent: bool,
+}
+
+/// The meter's truth's share at each of a testbed node's meter samples,
+/// as strims-sim's HostStats::gate takes it from the sim's counters, from
+/// the node's capture (`sends`): its own charge, its first transmissions'
+/// and its transports' bytes so far (link_bytes, app_bytes,
+/// resent_bytes), and over its near-saturated windows (`Gated`: a window
+/// between two samples whose own charge was at least NEAR_SATURATED of
+/// what its link could carry for it, `report::available` over `spec` and
+/// its competitor's log) its transports' bytes over its link's charge of
+/// its first transmissions. Its runner's channel bytes aren't recorded on
+/// the testbed (no data_bytes counter on the node), so its channel share
+/// is 1 (`report::channel_share` of no data). `us_of` takes a sample's
+/// ask to Unix µs.
+fn gate(
+    meter: &mut [MeterSample],
+    sends: &[Send],
+    spec: &crate::spec::HostSpec,
+    competing: &[(strims_base::time::Duration, u64)],
+    us_of: impl Fn(Duration) -> u64,
+) {
+    let mut g = Gated::default();
+    let (mut link, mut app, mut resent) = (0u64, 0u64, 0u64);
+    let mut next = sends.iter().peekable();
+    let mut prev: Option<Duration> = None;
+    for m in meter.iter_mut() {
+        let to = us_of(m.asked);
+        let (mut charged, mut took, mut again) = (0u64, 0u64, 0u64);
+        while let Some(x) = next.next_if(|x| x.us <= to) {
+            charged += x.charge;
+            if x.resent {
+                again += x.charge;
+            } else {
+                took += x.app;
+            }
+        }
+        link += charged;
+        app += took;
+        resent += again;
+        (m.link_bytes, m.app_bytes, m.resent_bytes) = (link, app, resent);
+        g.window = prev.is_some_and(|at| {
+            at < m.asked
+                && charged > 0
+                && charged as f64
+                    >= crate::report::NEAR_SATURATED
+                        * crate::report::available(spec, competing, at, m.asked) as f64
+        });
+        if g.window {
+            g.app += took;
+            g.link += charged.saturating_sub(again);
+        }
+        m.gated = g;
+        prev = Some(m.asked);
+    }
 }
 
 impl Network {
@@ -1529,6 +1614,7 @@ impl Network {
         let (mut have_pcap, mut have_tc) = (true, true);
         let mut wan = WanReport::default();
         let mut ends = BTreeMap::new();
+        let mut sends: Vec<Vec<Send>> = (0..s.hosts.len()).map(|_| Vec::new()).collect();
         for (h, spec) in s.hosts.iter().enumerate() {
             let Some(site) = spec.site else {
                 continue;
@@ -1590,6 +1676,36 @@ impl Network {
                         o.and_then(|o| o.checked_sub(10))
                             .is_some_and(|i| usize::from(i) < run.nodes.len())
                     };
+                    // Its own data to the swarm, a TCP flow's resends told
+                    // by their sequence numbers falling under what the flow
+                    // had sent (`gate` takes them).
+                    let framing = site.profile.framing;
+                    let mut sent: BTreeMap<(Option<u8>, u16, u16), u32> = BTreeMap::new();
+                    let own: Vec<Send> = ps
+                        .iter()
+                        .filter(|p| p.src.is_some() && p.src == me && node(p.dst))
+                        .filter(|p| !p.pure_ack && p.payload > 0)
+                        .map(|p| {
+                            let resent = p.tcp.is_some_and(|(sp, dp, seq)| {
+                                let end = seq.wrapping_add(p.payload as u32);
+                                let max = sent.entry((p.dst, sp, dp)).or_insert(seq);
+                                let again = (seq.wrapping_sub(*max) as i32) < 0;
+                                if (end.wrapping_sub(*max) as i32) > 0 {
+                                    *max = end;
+                                }
+                                again
+                            });
+                            Send {
+                                us: p.us,
+                                charge: framing.packet(p.ip_len as usize) as u64,
+                                app: if p.tcp.is_some() { p.payload } else { 0 },
+                                resent,
+                            }
+                        })
+                        .collect();
+                    if let Some(x) = sends.get_mut(h) {
+                        *x = own;
+                    }
                     for (k, edge) in bins.iter_mut().enumerate() {
                         while let Some(p) = mine.next_if(|p| p.us < edge_us(k as u64)) {
                             if p.dst == Some(SINK) {
@@ -1620,6 +1736,9 @@ impl Network {
                     }
                     w.acks = cum.get(up("up_ack_packets")).copied().unwrap_or(0);
                     w.ack_bytes = cum.get(up("up_ack_bytes")).copied().unwrap_or(0);
+                    // The truth's log of the competitor's bytes: its IP bytes
+                    // so far at each edge (report::available charges them).
+                    w.competing_log = w.competing.clone();
                 }
                 None => have_pcap = false,
             }
@@ -1716,6 +1835,7 @@ impl Network {
             bins,
             unmeasured,
             ends,
+            sends,
         }
     }
 }
@@ -2237,6 +2357,52 @@ mod tests {
             ("cable".to_owned(), Some("ifbm".to_owned()))
         );
         std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn the_truth_takes_its_share_from_the_captures_near_saturated_windows() {
+        let s = calibration_star(&Calibration::from_knobs(|_| None));
+        let spec = &s.hosts[0];
+        let link = crate::report::available(spec, &[], Duration::ZERO, Duration::from_secs(1));
+        let sample = |secs: u64| MeterSample {
+            t: Duration::from_secs(secs),
+            asked: Duration::from_secs(secs),
+            ..MeterSample::default()
+        };
+        // A second at 0.9 of its link, 10 of its 1000 segments resent; then
+        // one at a tenth of it.
+        let full = link * 9 / 10 / 1000;
+        let mut sends: Vec<Send> = (0..1000u64)
+            .map(|i| Send {
+                us: 1_000_000 + 1 + i * 999,
+                charge: full,
+                app: full - 60,
+                resent: i % 100 == 0,
+            })
+            .collect();
+        sends.extend((0..100u64).map(|i| Send {
+            us: 2_000_000 + 1 + i * 9_999,
+            charge: full,
+            app: full - 60,
+            resent: false,
+        }));
+        let mut meter = vec![sample(1), sample(2), sample(3)];
+        gate(&mut meter, &sends, spec, &[], |d| d.as_micros() as u64);
+        assert!(!meter[0].gated.window);
+        let g = meter[1].gated;
+        assert!(g.window);
+        assert_eq!((g.app, g.link), (990 * (full - 60), 990 * full));
+        // The light second isn't one: the share stays the saturated one's.
+        assert!(!meter[2].gated.window);
+        assert_eq!(meter[2].gated.link, g.link);
+        assert_eq!(meter[2].link_bytes, 1100 * full);
+        assert_eq!(meter[2].resent_bytes, 10 * full);
+        // The truth there is the link's second times that share (no
+        // channel share on the testbed: 1).
+        let truth = crate::report::upload_truth(spec, Some(&meter[2]), &[], Duration::from_secs(4))
+            .unwrap();
+        let share = g.app as f64 / g.link as f64;
+        assert_eq!(truth, (link as f64 * share) as u64);
     }
 
     #[test]

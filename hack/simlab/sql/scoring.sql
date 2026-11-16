@@ -1250,7 +1250,12 @@ CREATE OR REPLACE MACRO viewers_link_overhead(env, dflt := '') AS
 --   meter_p10, meter_p50, meter_p90
 --                       the seed's meter samples' capacity over what it
 --                       could upload then (meter_samples: avail_bps), as
---                       the row's meter_seed_p* takes them
+--                       the row's meter_seed_p* takes them: the truth
+--                       min(L x S_c, A x S_c x S_t) of the sim's
+--                       report::upload_truth on both sides, a testbed
+--                       run's from its capture with S_c = 1 (the node
+--                       records no data_bytes, its runner's channel
+--                       bytes, yet: `basis` says so)
 --   seed_drops_s        packets the seed's uplink queue dropped a second
 --   seed_pps            packets the seed's uplink carried a second, pure
 --                       ACKs in
@@ -1366,7 +1371,15 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
                sum(viewer_shed) / (count(*) * any_value(bin_ms) / 1000.0) AS viewer_shed_s
         FROM units GROUP BY ALL),
     -- The meter's truth, what the seed could upload at each sample: its
-    -- meter_samples' avail_bps (Report::upload_cap_at's, on both sides).
+    -- meter_samples' avail_bps (Report::upload_cap_at's, on both sides),
+    -- truth(t) = min(L x S_c, A x S_c x S_t) in channel bytes a second:
+    -- A what its link carries for it over (t - 1 s, t] less its
+    -- competitor's link charge, L its QoS limit, S_t its transports' share
+    -- of its link over its near-saturated windows, S_c its runner's
+    -- channel bytes over vnic's. A testbed run's A and S_t come from its
+    -- tc rates, steps and capture (strims-sim's testbed::gate), and its
+    -- S_c is 1: its node has no data_bytes counter yet, so its readings
+    -- over this truth run high by its channel share.
     truth AS (
         SELECT m.k, m.src, m.t_ms, m.capacity_bps, m.avail_bps AS truth_bps
         FROM meter_samples m SEMI JOIN j USING (k, src)
@@ -1448,7 +1461,9 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
         LEFT JOIN wire USING (k, src) LEFT JOIN meter USING (k, src) LEFT JOIN comp USING (k, src)
         LEFT JOIN nb USING (k, src) LEFT JOIN ms USING (k, src) LEFT JOIN q USING (k, src)
         LEFT JOIN ps USING (k, src) LEFT JOIN pr USING (k, src))
-    SELECT k, src, sim, cell, seed, measure, value::DOUBLE AS value
+    SELECT k, src, sim, cell, seed, measure, value::DOUBLE AS value,
+           CASE WHEN sim = 'testbed' AND measure LIKE 'meter_p%' THEN 'truth with S_c = 1 (no data_bytes)' END
+               AS basis
     FROM (UNPIVOT wide ON COLUMNS(* EXCLUDE (k, src, sim, cell, seed)) INTO NAME measure VALUE value)
     WHERE value IS NOT NULL;
 
@@ -1504,7 +1519,9 @@ CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
 -- of the cells' medians), rank_corr (Spearman's: of their ranks, ties
 -- their mean rank), ratio (the geometric mean of the cells' ratios) and
 -- b_quantile (the cells' mean). How well the twin follows the testbed
--- across cells is the fidelity a model change is judged by.
+-- across cells is the fidelity a model change is judged by. `caveat`
+-- flags a meter reading's fit (meter_p*): the testbed's truth takes its
+-- channel share as 1 (twin_runs_of's `basis`).
 CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
     WITH a AS (SELECT unnest(a_rows, recursive := true)),
     b AS (SELECT unnest(b_rows, recursive := true)),
@@ -1526,14 +1543,16 @@ CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
                    + (count(*) OVER (PARTITION BY measure, a_median) - 1) / 2.0 AS ra,
                rank() OVER (PARTITION BY measure ORDER BY b_median)
                    + (count(*) OVER (PARTITION BY measure, b_median) - 1) / 2.0 AS rb FROM c)
-    SELECT cell, measure, a_runs, b_runs, a_median, b_median, ratio, b_quantile, NULL::BIGINT AS cells,
-           NULL::DOUBLE AS corr, NULL::DOUBLE AS rank_corr
-    FROM c
-    UNION ALL
-    SELECT NULL, measure, sum(a_runs), sum(b_runs), NULL, NULL,
-           exp(avg(ln(CASE WHEN ratio > 0 THEN ratio END))), avg(b_quantile), count(*), corr(a_median, b_median),
-           corr(ra, rb)
-    FROM ranked GROUP BY measure;
+    SELECT *, CASE WHEN measure LIKE 'meter_p%' THEN 'the testbed truth takes S_c = 1 (no data_bytes)' END AS caveat
+    FROM (
+        SELECT cell, measure, a_runs, b_runs, a_median, b_median, ratio, b_quantile, NULL::BIGINT AS cells,
+               NULL::DOUBLE AS corr, NULL::DOUBLE AS rank_corr
+        FROM c
+        UNION ALL
+        SELECT NULL, measure, sum(a_runs), sum(b_runs), NULL, NULL,
+               exp(avg(ln(CASE WHEN ratio > 0 THEN ratio END))), avg(b_quantile), count(*), corr(a_median, b_median),
+               corr(ra, rb)
+        FROM ranked GROUP BY measure);
 
 -- twin_fit_rows of a testbed side and its twin's (twin_runs_of over both,
 -- `a_jobs` the twin's, `b_jobs` the testbed's).
