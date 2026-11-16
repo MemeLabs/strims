@@ -1,0 +1,1 @@
+[{"kind":"tbf","handle":"10:","root":true,"refcnt":2,"options":{"rate":125000,"burst":3028,"lat":775776},"bytes":3072,"packets":3,"drops":0,"overlimits":5,"requeues":0,"backlog":3072,"qlen":3},{"kind":"clsact","handle":"ffff:","parent":"ffff:fff1","options":{},"bytes":0,"packets":0,"drops":0,"overlimits":0,"requeues":0,"backlog":0,"qlen":0}]

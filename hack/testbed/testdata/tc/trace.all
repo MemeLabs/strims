@@ -1,0 +1,17 @@
+qdisc noqueue 0: dev lo root refcnt 2 
+ Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0
+qdisc prio 10: dev eth0 root refcnt 2 bands 2 priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ Sent 28566 bytes 23 pkt (dropped 35064, overlimits 0 requeues 0) 
+ backlog 29808b 24p requeues 0
+qdisc fq 20: dev eth0 parent 10:1 limit 100000p flow_limit 100000p buckets 1024 orphan_mask 1023 nopacing bands 3 priomap 1 2 2 2 1 2 0 0 1 1 1 1 1 1 1 1 weights 589824 196608 65536 quantum 3028b initial_quantum 15140b low_rate_threshold 550Kbit refill_delay 40ms timer_slack 10us horizon 100s horizon_drop offload_horizon 0us 
+ Sent 28566 bytes 23 pkt (dropped 0, overlimits 0 requeues 0) 
+ backlog 29808b 24p requeues 0
+  flows 45 (inactive 22 throttled 23) band0_pkts 0 band1_pkts 24 band2_pkts 0 next_packet_delay 37.2ms
+  gc 0 highprio 0 throttled 46 latency 17.8us
+qdisc clsact ffff: dev eth0 parent ffff:fff1 
+ Sent 87215724 bytes 70222 pkt (dropped 0, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0
+qdisc netem 8626: dev ifbd root refcnt 2 limit 100000 delay 1ms seed 1403207119201941477
+ Sent 43607862 bytes 35111 pkt (dropped 0, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0

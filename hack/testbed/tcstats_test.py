@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
-"""tcstats' parsers on tc's output (iproute2 6.19, the testbed image's),
-captured from the link classes' trees on a dummy device with a queue
-standing.
+"""tcstats and its readers on tc's output as iproute2 6.19 (the testbed
+image's) prints it. testdata/tc holds captures (testdata/tc/capture.sh) of
+each link class's tree as run.sh builds a node's, at 100 kbit/s under a
+UDP flood so its queue stands and drops: `tc -s qdisc show dev eth0`
+(<class>.txt), its JSON (<class>.json) and every device's detailed text
+(<class>.all, qdisc-<i>.txt's form); tbf-kib, a tbf at 1 Mbit/s whose
+3 KiB backlog tc's text prints as 3Kb; and dsl-cake-flood.json, a dsl
+router's cake at 1 Mbit/s 2 s into a flood of 1400-byte payloads.
 
     python3 hack/testbed/tcstats_test.py
 """
@@ -14,73 +19,98 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, "..", "capture"))
+import bench  # noqa: E402
 import tcstats  # noqa: E402
 
-# A tbf root holding 2 KiB, which tc prints as 2Kb, joined as run.sh's
-# tc-0.log has it; the clsact after it holds 0b.
-TBF_LINE = (
-    "1794840471604 qdisc tbf 10: root refcnt 2 rate 1Mbit burst 3028b lat 776ms   Sent 4096 bytes 4 pkt "
-    "(dropped 0, overlimits 6 requeues 0)   backlog 2Kb 2p requeues 0 qdisc clsact ffff: parent ffff:fff1   "
-    "Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)   backlog 0b 0p requeues 0 "
-)
-# The same tbf a moment later, as text and as JSON.
-TBF_TEXT = """qdisc tbf 10: root refcnt 2 rate 1Mbit burst 3028b lat 776ms
- Sent 3072 bytes 3 pkt (dropped 0, overlimits 5 requeues 0)
- backlog 3Kb 3p requeues 0
-qdisc clsact ffff: parent ffff:fff1
- Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-"""
-TBF_JSON = (
-    '[{"kind":"tbf","handle":"10:","root":true,"refcnt":2,"options":{"rate":125000,"burst":3028,"lat":775776},'
-    '"bytes":3072,"packets":3,"drops":0,"overlimits":5,"requeues":0,"backlog":3072,"qlen":3},'
-    '{"kind":"clsact","handle":"ffff:","parent":"ffff:fff1","options":{},"bytes":0,"packets":0,"drops":0,'
-    '"overlimits":0,"requeues":0,"backlog":0,"qlen":0}]'
-)
-# cable's tbf, its peak and size table, over DOCSIS-PIE.
-CABLE = """qdisc tbf 10: root refcnt 2 rate 1Mbit burst 15625b peakrate 100Mbit minburst 3028b lat 675ms
- Sent 6168 bytes 6 pkt (dropped 2, overlimits 4 requeues 0)
- backlog 3084b 3p requeues 0
-qdisc pie 20: parent 10:1 limit 10000p target 10ms tupdate 16ms alpha 2 beta 20
- Sent 6168 bytes 6 pkt (dropped 2, overlimits 0 requeues 0)
- backlog 3084b 3p requeues 0
-  prob 0 delay 0us
-  pkts_in 6 overlimit 0 dropped 0 maxq 1 ecn_mark 0
-"""
-# A cake router at the root; its tins' table repeats a backlog.
-CAKE = """qdisc cake 10: root refcnt 2 bandwidth 950Kbit diffserv3 triple-isolate nonat nowash no-ack-filter split-gso rtt 100ms noatm overhead 18 mpu 64
- Sent 1024 bytes 1 pkt (dropped 0, overlimits 6 requeues 0)
- backlog 5Kb 5p requeues 0
- memory used: 11520b of 4Mb
- capacity estimate: 950Kbit
-                   Bulk  Best Effort        Voice
-  backlog            0b          5Kb           0b
-  pkts                0            6            0
-qdisc clsact ffff: parent ffff:fff1
- Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-"""
-CAKE_JSON = (
-    '[{"kind":"cake","handle":"10:","root":true,"refcnt":2,"options":{"bandwidth":118750,"diffserv":"diffserv3",'
-    '"flowmode":"triple-isolate","nat":false,"wash":false,"ingress":false,"ack-filter":"disabled","split_gso":true,'
-    '"rtt":100000,"raw":false,"atm":"noatm","overhead":18,"mpu":64,"fwmark":"0"},'
-    '"bytes":1024,"packets":1,"drops":0,"overlimits":6,"requeues":0,"backlog":5120,"qlen":5,'
-    '"tins":[{"backlog_bytes":5120}]}]'
-)
+DATA = os.path.join(HERE, "testdata", "tc")
+# Each capture's spec, as the run's `links` file names it.
+CLASSES = {
+    "tbf": "tbf",
+    "cable": "cable",
+    "cable_aqm_fifo": "cable,aqm=fifo",
+    "dsl": "dsl",
+    "dsl_line_vdsl": "dsl,line=vdsl",
+    "fiber": "fiber",
+    "cable_router_fq_codel": "cable,router=fq_codel",
+    "dsl_router_cake": "dsl,router=cake",
+    "trace": "trace,file=slow.us,format=us",
+}
+
+
+def fixture(name):
+    with open(os.path.join(DATA, name)) as f:
+        return f.read()
+
+
+def run_dir(d, links, lines, qdisc=None):
+    """A run's files: its `links` line(s), tc-0.log's (stamp, text) lines
+    and qdisc-0.txt."""
+    if links is not None:
+        with open(os.path.join(d, "links"), "w") as f:
+            f.write(links)
+    with open(os.path.join(d, "tc-0.log"), "w") as f:
+        for t, text in lines:
+            f.write(f"{t} {' '.join(text.split())}\n")
+    if qdisc is not None:
+        with open(os.path.join(d, "qdisc-0.txt"), "w") as f:
+            f.write(qdisc)
+    return d
 
 
 class Parse(unittest.TestCase):
+    def test_every_class_reads_alike_from_its_text_and_its_json(self):
+        for name, spec in CLASSES.items():
+            with self.subTest(name):
+                text = tcstats.parse(fixture(f"{name}.txt"))
+                self.assertEqual(text, tcstats.parse(fixture(f"{name}.json")))
+                q = tcstats.find(text, "10:")
+                self.assertEqual((q.kind, q.parent), (tcstats.queue_kind(spec), None))
+                self.assertGreater(q.qlen, 0)
+                self.assertGreater(q.drops, 0)
+                self.assertGreaterEqual(q.held, q.backlog)
+
+    def test_each_class_has_its_tree(self):
+        kinds = {name: [(q.kind, q.handle, q.parent) for q in tcstats.parse(fixture(f"{name}.json"))]
+                 for name in CLASSES}
+        self.assertEqual(kinds["cable"][:2], [("tbf", "10:", None), ("pie", "20:", "10:1")])
+        self.assertEqual(kinds["cable_router_fq_codel"][:2], [("tbf", "10:", None), ("fq_codel", "20:", "10:1")])
+        self.assertEqual(kinds["trace"][:2], [("prio", "10:", None), ("fq", "20:", "10:1")])
+        self.assertEqual(kinds["dsl_router_cake"][0], ("cake", "10:", None))
+        # The shaping rates: VDSL2's 64/65 of 100 kbit/s, a router's 95 %.
+        rates = {name: tcstats.find(tcstats.parse(fixture(f"{name}.json")), "10:").rate for name in CLASSES}
+        self.assertEqual((rates["tbf"], rates["dsl_line_vdsl"], rates["cable_router_fq_codel"]), (12500, 12250, 11875))
+        self.assertEqual((rates["dsl_router_cake"], rates["trace"]), (11875, None))
+        # A tbf over a qdisc holds what the qdisc does.
+        tbf, child = tcstats.parse(fixture("cable_router_fq_codel.json"))[:2]
+        self.assertEqual((tbf.backlog, tbf.qlen, tbf.drops), (child.backlog, child.qlen, child.drops))
+
+    def test_every_device_s_detailed_qdiscs_name_their_device(self):
+        for name in CLASSES:
+            with self.subTest(name):
+                qs = tcstats.parse_text(fixture(f"{name}.all"))
+                self.assertEqual({q.dev for q in qs}, {"lo", "eth0", "ifbd"})
+                q = tcstats.find(qs, "10:", dev="eth0")
+                self.assertIsNone(q.parent)
+                self.assertIsNone(tcstats.find(qs, "10:", dev="ifbd"))
+        # -d adds a class's size table, which leaves the stats alone.
+        qs = tcstats.parse_text(fixture("cable.all"))
+        self.assertIn("overhead 4 mpu 64 mtu 2048 tsize 2048", fixture("cable.all"))
+        self.assertEqual(tcstats.find(qs, "10:").rate, 12500)
+
     def test_a_backlog_in_kib_reads_as_its_bytes(self):
-        t, rest = TBF_LINE.split(" ", 1)
-        qs = tcstats.parse(rest)
-        tbf = tcstats.find(qs, "10:", "tbf")
-        self.assertEqual((tbf.backlog, tbf.qlen, tbf.drops, tbf.sent), (2048, 2, 0, 4096))
-        self.assertEqual(tbf.rate, 125000)
-        self.assertIsNone(tbf.parent)
-        self.assertEqual(tcstats.find(qs, "ffff:").backlog, 0)
+        text, json_ = tcstats.parse(fixture("tbf-kib.txt")), tcstats.parse(fixture("tbf-kib.json"))
+        self.assertIn("backlog 3Kb 3p", fixture("tbf-kib.txt"))
+        self.assertEqual(text, json_)
+        self.assertEqual(tcstats.find(text, "10:", "tbf").backlog, 3072)
+        # tc's joined text, as old runs' tc-0.log has it: the clsact after
+        # the tbf holds 0b, which a lazy regex once read for the tbf's.
+        joined = " ".join(fixture("tbf-kib.txt").split())
+        self.assertEqual(tcstats.find(tcstats.parse(joined), "10:").backlog, 3072)
 
     def test_sizes_and_rates_take_their_units(self):
         self.assertEqual(tcstats.size("1072218b"), 1072218)
@@ -92,96 +122,30 @@ class Parse(unittest.TestCase):
         with self.assertRaises(ValueError):
             tcstats.size("3K")
 
-    def test_text_and_json_agree(self):
-        self.assertEqual(tcstats.parse(TBF_TEXT), tcstats.parse(TBF_JSON))
-        self.assertEqual(tcstats.parse(CAKE)[0], tcstats.parse(CAKE_JSON)[0])
-
-    def test_a_child_has_its_parent_and_the_root_its_rate(self):
-        tbf, pie = tcstats.parse(CABLE)
-        self.assertEqual((tbf.kind, tbf.handle, tbf.parent, tbf.rate, tbf.drops, tbf.backlog), ("tbf", "10:", None, 125000, 2, 3084))
-        self.assertEqual((pie.kind, pie.handle, pie.parent, pie.rate), ("pie", "20:", "10:1", None))
-
-    def test_cake_has_its_bandwidth_and_root_backlog(self):
-        cake = tcstats.parse(CAKE)[0]
-        self.assertEqual((cake.kind, cake.backlog, cake.qlen, cake.rate), ("cake", 5120, 5, 118750))
-        # Its 1024-byte skbs cost DOCSIS's 18 bytes past their 1010 of IP.
-        self.assertEqual(cake.held, 5 * 1028)
-
     def test_cake_holds_what_its_shaper_charges(self):
         # A dsl router's cake under a flood of 1442-byte skbs (1428 IP
         # bytes): each costs 1428 + 40 in ATM cells, 31 of 53 bytes, so its
         # queue drains at 1442 / 1643 of its bandwidth in skb bytes (0.879
         # measured over 10 s).
-        with open(os.path.join(HERE, "testdata", "tc", "dsl-cake-flood.json")) as f:
-            cake = tcstats.find(tcstats.parse(f.read()), "10:", "cake")
+        cake = tcstats.find(tcstats.parse(fixture("dsl-cake-flood.json")), "10:", "cake")
         self.assertEqual(cake.backlog, cake.qlen * 1442)
         self.assertEqual(cake.held, cake.qlen * 1643)
-        self.assertEqual(tcstats.find(tcstats.parse(TBF_JSON), "10:").held, 3072)
+        # Its text has the same options as its JSON.
+        self.assertEqual(tcstats.parse(fixture("dsl_router_cake.txt")), tcstats.parse(fixture("dsl_router_cake.json")))
+        self.assertGreater(tcstats.find(tcstats.parse(fixture("dsl_router_cake.txt")), "10:").held, cake.backlog // cake.qlen)
 
-    def test_samples_skip_a_torn_line(self):
+
+class Samples(unittest.TestCase):
+    def test_samples_keep_file_order_and_skip_a_torn_line(self):
+        a, b = fixture("tbf.json").strip(), fixture("tbf-kib.json").strip()
         with tempfile.TemporaryDirectory() as d:
-            p = os.path.join(d, "tc-0.log")
-            with open(p, "w") as f:
-                f.write(f"1794840471700 {TBF_JSON}\n")
-                f.write(TBF_LINE + "\n")
-                f.write('1794840471800 [{"kind":"tbf","handle"\n')
-                f.write("1794840471900 qdisc tbf 10: root refcnt 2 rate 1Mbit burst\n")
-            got = tcstats.samples(p)
-            # File order, whatever the stamps say.
-            self.assertEqual([t for t, _ in got], [1794840471700, 1794840471604])
-            self.assertEqual([tcstats.find(qs, "10:").backlog for _, qs in got], [3072, 2048])
-
-
-# The trace class's tree: tracelink's program drops in the prio and holds
-# packets in the fq.
-TRACE_JSON = (
-    '[{"kind":"prio","handle":"10:","root":true,"refcnt":2,"options":{"bands":2},"bytes":572980,"packets":566,'
-    '"drops":893,"overlimits":0,"requeues":0,"backlog":22308,"qlen":22},'
-    '{"kind":"fq","handle":"20:","parent":"10:1","options":{"limit":100000},"bytes":572980,"packets":566,'
-    '"drops":0,"overlimits":0,"requeues":0,"backlog":22308,"qlen":22}]'
-)
-# run.sh's tree before the ifb: netem at the root, the tbf its child.
-NETEM_ROOT = """qdisc netem 1: root refcnt 2 limit 100000 delay 20ms
- Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-qdisc tbf 10: parent 1:1 rate 10Mbit burst 3028b lat 99.9ms
- Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-"""
-
-
-# qdisc-<i>.txt: every device's qdiscs in detail (`tc -s -d qdisc show`),
-# eth0's root with its size table, the delay's ifb and the slow downlink's.
-ALL_DEVICES = """qdisc noqueue 0: dev lo root refcnt 2
- Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-qdisc tbf 10: dev eth0 root refcnt 2 rate 10Mbit burst 3028b/1 mpu 0b lat 21.6ms linklayer ethernet
- overhead 4 mpu 64 mtu 2048 tsize 2048
- Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-qdisc clsact ffff: dev eth0 parent ffff:fff1
- Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-qdisc netem 8001: dev ifbd root refcnt 2 limit 100000 delay 20ms
- Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-qdisc tbf 857b: dev ifbs root refcnt 2 rate 1Mbit burst 3028b/1 mpu 0b lat 75.8ms linklayer ethernet
- Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
- backlog 0b 0p requeues 0
-"""
-
-
-def run_dir(d, links, lines, qdisc=None):
-    if links is not None:
-        with open(os.path.join(d, "links"), "w") as f:
-            f.write(links)
-    with open(os.path.join(d, "tc-0.log"), "w") as f:
-        for t, text in lines:
-            f.write(f"{t} {text}\n")
-    if qdisc is not None:
-        with open(os.path.join(d, "qdisc-0.txt"), "w") as f:
-            f.write(qdisc)
-    return d
+            # The second's stamp is late (date's lost leading zero), the
+            # third's line text, the fourth's torn.
+            run_dir(d, None, [(1794840471700, a), (1794840471604, b), (1794840471800, fixture("tbf-kib.txt")),
+                              (1794840471900, '[{"kind":"tbf","handle"')])
+            got = tcstats.samples(os.path.join(d, "tc-0.log"))
+            self.assertEqual([t for t, _ in got], [1794840471700, 1794840471604, 1794840471800])
+            self.assertEqual([tcstats.find(qs, "10:").backlog for _, qs in got], [29808, 3072, 3072])
 
 
 class Uplink(unittest.TestCase):
@@ -191,53 +155,80 @@ class Uplink(unittest.TestCase):
                            ("fiber", "tbf"), ("trace,file=up.mm,limit=30000", "prio")):
             self.assertEqual(tcstats.queue_kind(spec), kind, spec)
 
-    def test_a_class_s_queue_is_read_from_its_links_line(self):
-        with tempfile.TemporaryDirectory() as d:
-            run_dir(d, "node 0 cable,router=cake 10 20 100\nnode 1 tbf 20 10 100\n", [(1000, CAKE_JSON)])
-            spec, got = tcstats.uplink(d, 0)
-            self.assertEqual(spec, "cable,router=cake")
-            self.assertEqual([(t, q.kind, q.backlog, q.rate) for t, q in got], [(1000, "cake", 5120, 118750)])
-            self.assertEqual(tcstats.link_spec(d, 1), "tbf")
-
-    def test_a_trace_s_queue_has_its_drops_and_no_rate(self):
-        with tempfile.TemporaryDirectory() as d:
-            run_dir(d, "node 0 trace,file=up.mm 10 20 100\n", [(1000, TRACE_JSON)])
-            spec, got = tcstats.uplink(d, 0)
-            q = got[0][1]
-            self.assertEqual((q.kind, q.drops, q.backlog, q.rate), ("prio", 893, 22308, None))
+    def test_each_class_s_queue_is_read_from_its_links_line(self):
+        for name, spec in CLASSES.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as d:
+                run_dir(d, f"node 0 {spec} 10 20 100\nnode 1 tbf 20 10 100\n", [(1000, fixture(f"{name}.json"))])
+                got_spec, got = tcstats.uplink(d, 0)
+                self.assertEqual((got_spec, got[0][1].kind), (spec, tcstats.queue_kind(spec)))
+                self.assertEqual(tcstats.link_spec(d, 1), "tbf")
 
     def test_a_log_without_the_class_s_queue_is_an_error(self):
         with tempfile.TemporaryDirectory() as d:
-            run_dir(d, "node 0 cable,router=cake 10 20 100\n", [(1000, TBF_JSON)])
+            run_dir(d, "node 0 cable,router=cake 10 20 100\n", [(1000, fixture("tbf.json"))])
             with self.assertRaisesRegex(LookupError, "cable,router=cake link has no cake 10:"):
                 tcstats.uplink(d, 0)
 
     def test_a_run_before_the_links_file_had_a_tbf(self):
         with tempfile.TemporaryDirectory() as d:
-            run_dir(d, None, [(1000, TBF_JSON)])
+            run_dir(d, None, [(1000, fixture("tbf-kib.json"))])
             spec, got = tcstats.uplink(d, 0)
             self.assertEqual((spec, got[0][1].backlog), ("tbf", 3072))
 
-    def test_the_bench_takes_frames_where_the_class_s_qdisc_is_the_root(self):
-        import bench
+
+class Readers(unittest.TestCase):
+    """What the tools make of a run, and what they say where they can't."""
+
+    def test_upq_times_a_queue_by_its_rate_and_a_trace_s_has_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            run_dir(d, "node 0 dsl,router=cake 0.1 20 100\n", [(2000, fixture("dsl_router_cake.json"))])
+            q = tcstats.find(tcstats.parse(fixture("dsl_router_cake.json")), "10:")
+            self.assertEqual(bench.tc_queue(d, 1000), [(1_000_000, q.held / q.rate * 1000)])
+        with tempfile.TemporaryDirectory() as d:
+            run_dir(d, "node 0 trace,file=slow.us 0.1 20 100\n", [(2000, fixture("trace.json"))])
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(bench.tc_queue(d, 1000), [])
+            self.assertIn("NOTE: ", err.getvalue())
+            self.assertIn("has no rate", err.getvalue())
+            # Its drops are the prio's.
+            self.assertEqual(bench.tc_drops(d), 35064)
+
+    def test_a_reader_says_so_where_the_log_lacks_the_class_s_queue(self):
+        with tempfile.TemporaryDirectory() as d:
+            run_dir(d, "node 0 cable,router=cake 10 20 100\n", [(1000, fixture("tbf.json"))])
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertIsNone(bench.tc_drops(d))
+                self.assertEqual(bench.tc_queue(d, 0), [])
+            self.assertEqual(err.getvalue().count("NOTE: "), 2)
+
+    def test_analyze_s_delays_say_so_for_a_trace(self):
+        import analyze
 
         with tempfile.TemporaryDirectory() as d:
-            self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=CAKE)))
-            self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=CABLE)))
-            self.assertFalse(bench.frames(run_dir(d, None, [], qdisc=NETEM_ROOT)))
-            self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=ALL_DEVICES)))
-            # A file cut short takes its text's word for it, and says so.
+            run_dir(d, "node 0 trace,file=slow.us 0.1 20 100\n", [(2000, fixture("trace.json"))])
             with contextlib.redirect_stderr(io.StringIO()) as err:
-                self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=CABLE[:CABLE.index("qdisc pie") + 30])))
-            self.assertIn("NOTE: ", err.getvalue())
+                self.assertEqual(analyze.tc_queue(Path(d)), [])
+            self.assertIn("no delay fields", err.getvalue())
+            run_dir(d, "node 0 cable 0.1 20 100\n", [(2000, fixture("cable.json"))])
+            q = tcstats.find(tcstats.parse(fixture("cable.json")), "10:")
+            self.assertEqual(analyze.tc_queue(Path(d)), [(2000, 1000 * q.held / q.rate)])
 
-    def test_every_device_s_qdiscs_name_their_device(self):
-        qs = tcstats.parse_text(ALL_DEVICES)
-        self.assertEqual([(q.dev, q.kind, q.handle, q.parent) for q in qs], [
-            ("lo", "noqueue", "0:", None), ("eth0", "tbf", "10:", None), ("eth0", "clsact", "ffff:", "ffff:fff1"),
-            ("ifbd", "netem", "8001:", None), ("ifbs", "tbf", "857b:", None)])
-        self.assertEqual(tcstats.find(qs, "857b:", dev="ifbs").rate, 125000)
-        self.assertIsNone(tcstats.find(qs, "10:", dev="ifbs"))
+    def test_the_bench_takes_frames_where_the_class_s_qdisc_is_the_root(self):
+        netem_root = fixture("tbf.txt").replace("qdisc tbf 10: root", "qdisc tbf 10: parent 1:1")
+        netem_root = ("qdisc netem 1: root refcnt 2 limit 100000 delay 20ms\n"
+                      " Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)\n backlog 0b 0p requeues 0\n"
+                      + netem_root)
+        with tempfile.TemporaryDirectory() as d:
+            for name in CLASSES:
+                self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=fixture(f"{name}.all"))), name)
+                self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=fixture(f"{name}.txt"))), name)
+            self.assertFalse(bench.frames(run_dir(d, None, [], qdisc=netem_root)))
+            # A file cut short takes its text's word for it, and says so.
+            cut = fixture("cable.txt")
+            cut = cut[:cut.index("qdisc pie") + 30]
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=cut)))
+            self.assertIn("NOTE: ", err.getvalue())
 
 
 if __name__ == "__main__":

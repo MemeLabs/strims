@@ -1,0 +1,18 @@
+qdisc noqueue 0: dev lo root refcnt 2 
+ Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0
+qdisc tbf 10: dev eth0 root refcnt 2 rate 100Kbit burst 1562b/1 mpu 0b peakrate 100Mbit mtu 3028b/1 mpu 0b lat 2.28s linklayer ethernet 
+ overhead 4 mpu 64 mtu 2048 tsize 2048 
+ Sent 24920 bytes 20 pkt (dropped 25812, overlimits 35837 requeues 0) 
+ backlog 12447540b 9990p requeues 0
+qdisc pie 20: dev eth0 parent 10:1 limit 10000p target 10ms tupdate 16ms alpha 2 beta 20 
+ Sent 26166 bytes 21 pkt (dropped 25812, overlimits 0 requeues 0) 
+ backlog 12447540b 9990p requeues 0
+  prob 0.198182 delay 1.87s
+  pkts_in 10010 overlimit 8406 dropped 25812 maxq 9999 ecn_mark 0
+qdisc clsact ffff: dev eth0 parent ffff:fff1 
+ Sent 88981848 bytes 71644 pkt (dropped 0, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0
+qdisc netem 861f: dev ifbd root refcnt 2 limit 100000 delay 1ms seed 8097575485415770795
+ Sent 44490924 bytes 35822 pkt (dropped 0, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0
