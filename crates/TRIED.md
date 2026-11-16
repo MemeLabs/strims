@@ -321,16 +321,13 @@ variants) A hybrid receiver ACKed the first and last DATA of each write
 burst it read with their one-way delays, and a PONG carried its PING's, so
 the seed read each burst as a train (its bytes over the time between the
 two reads) and its links' trains together as a held reading whose peak it
-kept; that fed its budget alone, its meter staying the busy time. Against
-the uplink trains above (`meter-c52-rebase` 517b632e, in sims without an
-uplink bucket), over the robust and browsers tiers' 35 cells whose seed
-isn't told its capacity, at 32 fresh seeds under the hostile mix, the
-budget's error (|log2| of reading over uplink at p10, p50 and p90,
-averaged) was 0.33 and 0.31 against 0.165 and 0.198 (main 0.74 and 0.77),
-the trains less it -0.17 and -0.11 paired over the cells, each 95 %
-interval below 0; lag p99 and wire were alike, collapses mixed (robust 34
-against 46, browsers 65 against 62). The larger of the two budgets in each
-100 ms bin moved the trains' error over the bins by -0.011 to +0.019.
+kept; that fed its budget alone, its meter staying the busy time. The
+comparison ran in sims without uplink buckets, which flattered the uplink
+trains above: against them (`meter-c52-rebase` 517b632e), over the robust
+and browsers tiers' 35 cells whose seed isn't told its capacity, at 32
+seeds under the hostile mix, the budget's error (|log2| of reading over
+uplink at p10, p50 and p90, averaged) was 0.33 and 0.31 against 0.165 and
+0.198 (main 0.74 and 0.77); lag p99 and wire were alike.
 
 **Admitting by count until the uplink saturates.** (`idle-count`,
 `idle-count-all`, against 5d81aaf6) An idle relay reads twenty times its

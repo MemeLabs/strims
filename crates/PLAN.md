@@ -263,6 +263,7 @@ and dropped are in `TRIED.md`.
      main with `sims = []`.
    - Give the seed a meter that reads a bucketed uplink's sustained rate,
      scored with realistic buckets on (`STRIMS_SIM_UPLINK_BURST=profiles`).
+     When the search resumes, rescreen `meter-ytf-rebase` with them on.
      Settle what a seed should read under cross traffic, the whole link or
      what a competitor leaves it, with a truth row planned first. Choose
      the relays' meter change after measuring the viewers' gap to a known
