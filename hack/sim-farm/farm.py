@@ -3260,6 +3260,12 @@ class Run:
             if st.get("error"):
                 log(f"{host.id}: its store: {st['error'].strip().splitlines()[-1]}")
             host.store_error = st.get("error")
+        if st.get("broken") and host.state != "lost":
+            # Its store can't fold (its folds kept failing, or a thread of
+            # it died): what it holds would wait while the host bills. Its
+            # jobs go back to the queue, for other hosts.
+            self.lose(host, f"its store is broken: {st['broken'].strip().splitlines()[-1]}")
+            return
         host.running = set(reply["running"])
         there = (set(reply["queued"]) | set(reply["running"]) | set(reply.get("folding", []))
                  | set(reply.get("held", [])))

@@ -146,6 +146,8 @@ IMDS_URL = "http://169.254.169.254"
 # cut off.
 NOTICE_FINISH_S = 20
 NOTICE_ABORT_S = 5
+# How many times in a row a fold may fail before the store breaks.
+FOLD_TRIES = 3
 # Finished jobs fold into the store this many a transaction.
 FOLD_BATCH = 32
 # DuckDB's share of the host while jobs run.
@@ -429,6 +431,9 @@ class Store:
         self.want_rotate = False
         self.flushing: int | None = None
         self.error: str | None = None
+        # Why it can't go on: its folds kept failing, or a thread of it
+        # died. The controller takes its host as lost.
+        self.broken: str | None = None
         self.threads = STORE_THREADS
         self.abort_at: float | None = None
         self.stopping = False
@@ -450,6 +455,7 @@ class Store:
         write_atomic(self.dir / "status.json", json.dumps({
             "open": self.seq, "open_jobs": self.open_jobs, "folding": len(self.folds()),
             "closed": list(self.closed), "flushing": self.flushing, "error": self.error,
+            "broken": self.broken,
         }))
 
     def folds(self) -> list[str]:
@@ -491,6 +497,14 @@ class Store:
         self.abort_at = abort_at
         self.rotate()
 
+    def busy(self) -> bool:
+        """Folding, or a closed generation waiting for its upload or in it:
+        work that would share the host with a real-time run. (The open
+        generation closes once the queue is empty, so a run can't wait for
+        it.)"""
+        with self.cv:
+            return bool(self.folds() or self.closed) or self.flushing is not None
+
     def idle(self) -> bool:
         """Nothing left to fold, close or upload."""
         with self.cv:
@@ -511,10 +525,12 @@ class Store:
             f()
         except Exception:
             self.error = traceback.format_exc()[-1000:]
+            self.broken = self.error
             with self.cv:
                 self.save()
 
     def folder(self) -> None:
+        failures = 0
         while True:
             with self.cv:
                 while not self.folds() and not self.want_rotate and not self.stopping:
@@ -525,10 +541,19 @@ class Store:
             if batch:
                 try:
                     self.fold(batch)
+                    failures = 0
                 except Exception as e:
                     self.error = f"fold: {e}"[-1000:]
+                    failures += 1
+                    if failures >= FOLD_TRIES:
+                        # It would hold its jobs, and the host's next
+                        # testbed run (which waits for the store), while
+                        # the host bills: broken, it folds no more.
+                        self.broken = self.error
                     with self.cv:
                         self.save()
+                    if self.broken:
+                        return
                     time.sleep(5)
                     continue
             with self.cv:
@@ -583,7 +608,8 @@ class Store:
             else:
                 res["flush"] = seq
             write_atomic(self.root / "done" / f"{w}.json", json.dumps(res))
-            shutil.rmtree(self.fold_dir / w, ignore_errors=True)
+            # A testbed run's out dir holds what its containers wrote as root.
+            remove(self.fold_dir / w, self.root)
             (self.fold_dir / f"{w}.json").unlink(missing_ok=True)
         with self.cv:
             self.open_jobs += len(recs) - len(failed)
@@ -1057,6 +1083,10 @@ def serve(args: argparse.Namespace) -> None:
 
         queued = sorted(d["queue"].glob("*.json"), key=queue_order)
         waits = None
+        if store is not None and store.broken:
+            # Its jobs couldn't land: the controller takes the host as lost.
+            waits = f"its store is broken: {store.broken.strip().splitlines()[-1]}"
+            queued = []
         while len(running) < args.slots and queued and noticed is None and not ending:
             q = queued[0]
             try:
@@ -1074,9 +1104,9 @@ def serve(args: argparse.Namespace) -> None:
                     waits = f"waiting for {others[0]}, another testbed's container, to end"
                     break
                 # A real-time run shares the host with nothing: the last
-                # one's tables and fold finish first.
-                if store is not None and store.folds():
-                    waits = "waiting for the store to fold the last testbed run"
+                # one's tables, fold and flush finish first.
+                if store is not None and store.busy():
+                    waits = "waiting for the store to fold and flush the last testbed run"
                     break
             # A job's slot holds its memory: with less free, the jobs
             # running took more, and another could run the host out.
