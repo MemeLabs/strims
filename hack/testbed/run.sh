@@ -367,7 +367,17 @@ lead=$(( 8000 + 1500 * (n > 4 ? n - 4 : 0) ))
 if [ "$browsers" = 1 ]; then
   lead=$(( lead + 20000 + 1000 * nbrowsers ))
 fi
-start=$(( $(date +%s%3N) + lead ))
+# Milliseconds since the epoch, from bash's clock ($EPOCHREALTIME: seconds
+# and six digits of microseconds, no fork); the containers' samplers stamp
+# their lines the same way (`t=${EPOCHREALTIME/[.,]/}; t=${t%???}`). The
+# images' and hosts' date (uutils coreutils 0.10) prints %3N from the
+# nanoseconds without their leading zeros, so in a second's first 100 ms
+# `date +%s%3N` read up to 900 ms late.
+now_ms() {
+  local t=${EPOCHREALTIME/[.,]/}
+  echo "${t%???}"
+}
+start=$(( $(now_ms) + lead ))
 names=()
 cleanup() { docker rm -f "${names[@]}" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
@@ -375,7 +385,7 @@ trap cleanup EXIT
 # The container's CPU time and memory, once a second, in the background of
 # its script.
 cpu_log() {
-  echo "( while :; do echo \"\$(date +%s%3N) \$(sed -n 's/^usage_usec //p' /sys/fs/cgroup/cpu.stat) \$(cat /sys/fs/cgroup/memory.current)\"; sleep 1; done > /out/cpu-$1.log ) &"
+  echo "( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"\$t \$(sed -n 's/^usage_usec //p' /sys/fs/cgroup/cpu.stat) \$(cat /sys/fs/cgroup/memory.current)\"; sleep 1; done > /out/cpu-$1.log ) &"
 }
 hosts=""
 if [ "$browsers" = 1 ]; then
@@ -430,8 +440,8 @@ tc qdisc add dev ifbs root tbf rate ${slow}kbit burst 3028 limit $((slow * queue
   fi
   sample=""
   if [ "$i" -eq 0 ]; then
-    sample="( while :; do echo \"\$(date +%s%3N) \$(tc -s -j qdisc show dev eth0 | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &
-( while :; do echo \"@ \$(date +%s%3N)\"; ss -tin state established; sleep $ss_every; done > /out/ss-$i.log ) &"
+    sample="( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"\$t \$(tc -s -j qdisc show dev eth0 | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &
+( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"@ \$t\"; ss -tin state established; sleep $ss_every; done > /out/ss-$i.log ) &"
   fi
   if [ "${PCAP:-0}" = 1 ]; then
     shape="ip link add ifbo type ifb && ip link set ifbo up
@@ -504,11 +514,11 @@ if [ -n "$steps" ]; then
       # The delay is ahead of the shaper: what the seed sends from the
       # step's time on reaches it that much later.
       ms=$(awk "BEGIN { printf \"%d\", $start + $at * 1000 + $seed_delay }")
-      wait=$(( ms - $(date +%s%3N) ))
+      wait=$(( ms - $(now_ms) ))
       if [ "$wait" -gt 0 ]; then sleep "$(awk "BEGIN { print $wait / 1000 }")"; fi
       limit=$(awk "BEGIN { printf \"%d\", $rate * $queue * 125 }")
       docker exec tb-0 bash -c "$(link_change "$(link_of 0)" "$rate" "$seed_burst" "$limit" "$seed_peak" "$seed_up")"
-      echo "$(date +%s%3N) $rate" >> "$out/steps.log"
+      echo "$(now_ms) $rate" >> "$out/steps.log"
     done
   ) &
 fi
@@ -526,16 +536,16 @@ exec iperf3 -s" >/dev/null
       at=${flow%%:*}
       dur=${flow#*:}
       ms=$(awk "BEGIN { printf \"%d\", $start + $at * 1000 }")
-      wait=$(( ms - $(date +%s%3N) ))
+      wait=$(( ms - $(now_ms) ))
       if [ "$wait" -gt 0 ]; then sleep "$(awk "BEGIN { print $wait / 1000 }")"; fi
-      echo "$(date +%s%3N) $at $dur" >> "$out/compete.log"
+      echo "$(now_ms) $at $dur" >> "$out/compete.log"
       docker exec tb-0 iperf3 -c "$sink" -t "$dur" -i 1 -C cubic -J \
         > "$out/compete-$at.json" 2>&1 || true
     done
   ) &
 fi
 
-wait_ms=$(( start + (secs + 15) * 1000 - $(date +%s%3N) ))
+wait_ms=$(( start + (secs + 15) * 1000 - $(now_ms) ))
 echo "testbed: $n nodes, stream of $secs s; results in $out"
 for name in "${names[@]}"; do
   docker wait "$name" >/dev/null &
