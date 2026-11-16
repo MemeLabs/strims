@@ -213,13 +213,13 @@
 # from each node, strims-testbed's node module; a browser's adds post_ms
 # and host_t_ms, testbed_browser's), node-<i>.err, cpu-<i>.log (the
 # container's CPU time and memory once a second: ms since the epoch, the
-# cgroup's usage_usec, and its memory.current in bytes), tc-0.log (the
-# seed's qdiscs on every device at 10 Hz: ms since the epoch, then `tc -s
+# cgroup's usage_usec, and its memory.current in bytes), tc-<i>.log (each
+# node's qdiscs on every device at 10 Hz: ms since the epoch, then `tc -s
 # -j qdisc show`'s JSON, each qdisc with its dev, which
 # hack/testbed/tcstats.py reads, finding the modem's 10: on eth0 or, with
 # slots, on ifbm: a checkout from before it, whose bench.py, twin.py and
 # hack/capture/analyze.py read tc's text, finds no queue in it and says
-# nothing) and ss-0.log (its sockets once a second), qdisc-<i>.txt (each
+# nothing), the seed's ss-0.log (its sockets once a second), qdisc-<i>.txt (each
 # node's qdiscs on every device as it shaped them, before the stream: `tc
 # -s -d qdisc show`, its modem with its size table, the delay's ifbd, the
 # slots' ifbm, the slow downlink's ifbs and PCAP's ifbo), steps.log (when
@@ -229,8 +229,12 @@
 # device whose root is its modem, as the parser gives it: `node <i> <spec>
 # <up_mbit> <delay_ms> <queue_ms> <modem_dev>`), a
 # trace link's link-<i>.log (tracelink's queue, packets, bytes and drops
-# every 100 ms) and link-<i>.err, and settings; while it runs, .ctl (its
-# control files, which go with it). With a browser node also
+# every 100 ms) and link-<i>.err, and settings: the settings given, and
+# QDISC, the shaping's qdisc tree (SHAPER below), so runs of one tree
+# pool apart from another's; while it runs, .ctl (its control files, which
+# go with it). A node's lines carry the records strims-sim's tables take
+# (`rec`), which strims-sim's testbed_tables example writes as a run's
+# tables. With a browser node also
 # node-relay.err, cpu-relay.log and hosts/ (each node's host id). With
 # MEDIA, each browser viewer's player-<i>.jsonl (its player's line a
 # second, testbed_browser's --player), and RECORD's record-<i>.bin.
@@ -533,8 +537,13 @@ nov6=(--sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv6.conf.default.d
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
+# The qdisc tree each node's shape (below) builds, by name: a change to
+# the tree changes it, so runs of two trees don't pool. Its root is the
+# node's access link class's (the `links` file names each node's).
+SHAPER="clsact>ifb-netem>root-class"
 env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
   > "$out/settings" || true
+echo "QDISC=$SHAPER" >> "$out/settings"
 
 # Milliseconds since the epoch, from bash's clock ($EPOCHREALTIME: seconds
 # and six digits of microseconds, no fork); the containers' samplers stamp
@@ -599,9 +608,9 @@ for i in $(seq 0 $((n - 1))); do
   node_slow=""
   if [ "$i" -eq 1 ]; then node_slow=$slow; fi
   shape=$(node_tree "$delay" "$i" "${PCAP:-0}" "$match" "$loss_every" "$node_slow" "$queue")
-  sample=""
+  sample="( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"\$t \$(tc -s -j qdisc show | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &"
   if [ "$i" -eq 0 ]; then
-    sample="( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"\$t \$(tc -s -j qdisc show | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &
+    sample="$sample
 ( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"@ \$t\"; ss -tin state established; sleep $ss_every; done > /out/ss-$i.log ) &"
   fi
   if [ "${PCAP:-0}" = 1 ]; then
