@@ -47,7 +47,7 @@
 //!   ([`Access::slots`](strims_wan::Access::slots): cable's grants); `off`,
 //!   none, the scenario's own included. Unset or blank, each scenario's.
 //! - `STRIMS_SIM_KNOWN_UPLINK=1` tells every WAN host the meter's truth
-//!   as it boots and at each of its stats samples
+//!   as it boots and ahead of each of its stats samples, which reads it
 //!   ([`HostSpec::upload_capacity_live`](crate::HostSpec::upload_capacity_live):
 //!   [`Report::upload_cap_at`](crate::Report::upload_cap_at) for the second
 //!   before, from the inputs the report takes it from), the oracle the

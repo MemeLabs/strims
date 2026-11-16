@@ -66,9 +66,10 @@ pub struct HostSpec {
     pub upload_capacity: Option<u64>,
     /// The live oracle: the node is told the meter's truth
     /// ([`Report::upload_cap_at`](crate::Report::upload_cap_at)) as it
-    /// boots and at each of its stats samples (`Node::set_upload_capacity`),
-    /// from the same inputs the run's report takes it from, in place of
-    /// `upload_capacity`.
+    /// boots and ahead of each of its stats samples
+    /// (`Node::set_upload_capacity`, the sample taken once its runner has
+    /// ticked, so the meter reads it there), from the same inputs the run's
+    /// report takes it from, in place of `upload_capacity`.
     pub upload_capacity_live: bool,
     pub max_peers: u32,
     /// vpn routing for this host; `None` uses [`Scenario::routing`].

@@ -520,6 +520,8 @@ pub(crate) struct HostStats {
     /// wrote, and the current one's so far ([`MeterSample::data_bytes`]).
     data_done: u64,
     data_now: u64,
+    /// What the live oracle told the node ahead of the next sample.
+    told: Option<u64>,
     /// Adaptive seeds by scenario swarm.
     seeds: BTreeMap<usize, SeedSample>,
     /// Their changes (see [`RunnerReport::seed_changes`]).
@@ -753,6 +755,7 @@ impl HostStats {
             }
         }
         let mut meter: Option<MeterSample> = None;
+        let told = self.told.take();
         self.data_now = m.runner.totals.outbound.wire_bytes();
         let data_bytes = self.data_done + self.data_now;
         for sw in &m.runner.swarms {
@@ -766,6 +769,7 @@ impl HostStats {
                     t,
                     data_bytes,
                     link_bytes,
+                    told,
                     bytes_written: m.driver.bytes_written,
                     rate: push.upload_rate,
                     busy_permille: push.upload_busy_permille,
@@ -880,12 +884,10 @@ impl HostStats {
         (last, it.next())
     }
 
-    /// Records that the live oracle told the node `told` at its latest
-    /// meter sample, taken at `t`.
-    pub fn told(&mut self, t: Duration, told: u64) {
-        if let Some(m) = self.meter.last_mut().filter(|m| m.t == t) {
-            m.told = Some(told);
-        }
+    /// Records that the live oracle told the node `told` ahead of its
+    /// next sample, which takes it ([`MeterSample::told`]).
+    pub fn told(&mut self, told: u64) {
+        self.told = Some(told);
     }
 
     /// The current incarnation ended.

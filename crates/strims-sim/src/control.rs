@@ -76,27 +76,39 @@ pub(crate) async fn controller(w: Rc<World>) -> turmoil::Result {
 /// leaves during the round and answers is folded, since its answer took
 /// its logs.
 async fn sample(w: &World, full: bool, last: bool) {
+    let asked = sim_now();
+    // A host the live oracle tells is told the truth for the second before
+    // now, and sampled once its runner has ticked (its schedulers take a
+    // capacity at their tick), so its reading at the sample is the truth
+    // there; it folds after the others, in host order too.
+    let tick = Duration::from_nanos(strims_ppspp::TICK_INTERVAL.as_nanos().unsigned_abs());
+    let ask = |h: HostIx, node: Node, told: Option<u64>| async move {
+        if let Some(c) = told {
+            let _ = tokio::time::timeout(CALL_TIMEOUT, node.set_upload_capacity(Some(c))).await;
+            let wait = (asked + tick + Duration::from_millis(1)).saturating_sub(sim_now());
+            tokio::time::sleep(wait).await;
+        }
+        (h, tokio::time::timeout(CALL_TIMEOUT, node.metrics()).await)
+    };
     let mut asks = FuturesOrdered::new();
+    let mut told = Vec::new();
     for h in 0..w.spec.hosts.len() {
         let Some(node) = w.node(h).filter(|_| !w.departed(h)) else {
             continue;
         };
-        asks.push_back(
-            async move { (h, tokio::time::timeout(CALL_TIMEOUT, node.metrics()).await) },
-        );
+        match w.oracle(h) {
+            Some(c) => told.push((h, node, c)),
+            None => asks.push_back(ask(h, node, None)),
+        }
+    }
+    for (h, node, c) in told {
+        asks.push_back(ask(h, node, Some(c)));
     }
     while let Some((h, answer)) = asks.next().await {
         let Ok(Ok(m)) = answer else {
             continue;
         };
-        w.observe_stats(h, &m);
-        if let Some(told) = w.oracle(h)
-            && let Some(node) = w.node(h)
-        {
-            spawn_local(async move {
-                let _ = node.set_upload_capacity(Some(told)).await;
-            });
-        }
+        w.observe_stats(h, &m, asked);
         if full {
             w.log("ctl", metrics_line(w.name(h), &m, last));
             w.log("ctl", runner_line(w.name(h), &m, &w.swarm_keys(h)));

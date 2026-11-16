@@ -1437,18 +1437,17 @@ impl World {
         crate::report::upload_truth(spec, last, prev, log, sim_now())
     }
 
-    /// The live oracle at a stats sample of host `h`: the truth it tells
-    /// the node now, recorded in the meter sample just taken; `None` for a
-    /// host it doesn't tell.
+    /// The live oracle as a stats sample of host `h` is asked for: the
+    /// truth it tells the node now, ahead of the sample, which records it;
+    /// `None` for a host it doesn't tell.
     pub fn oracle(&self, h: HostIx) -> Option<u64> {
         if !self.spec.hosts.get(h)?.upload_capacity_live {
             return None;
         }
         let told = self.upload_truth(h)?;
-        let now = sim_now();
         self.record(|st| {
             if let Some(hs) = st.hosts.get_mut(h) {
-                hs.stats.told(now, told);
+                hs.stats.told(told);
             }
         });
         Some(told)
@@ -1493,7 +1492,8 @@ impl World {
     /// Folds a stats sample of `h` into its [`HostStats`] and checks the
     /// runner invariants (see [`crate::Invariants`]). Each broken invariant
     /// is logged once per host.
-    pub fn observe_stats(&self, h: HostIx, m: &NodeMetrics) {
+    /// `asked` is when the controller asked for the sample, its time.
+    pub fn observe_stats(&self, h: HostIx, m: &NodeMetrics, asked: Duration) {
         self.observe_bins(h, m);
         self.take_parents();
         if self.spec.departures.is_some() {
@@ -1520,7 +1520,7 @@ impl World {
                 m,
                 &swarms,
                 &live,
-                now,
+                asked,
                 self.clock_at(h, now),
                 link_bytes,
                 hostile,

@@ -3762,7 +3762,7 @@ fn truth_run(name: &str, c: &Calibration, told: bool) -> Report {
 /// (`own_data_share`).
 fn seed_share(r: &Report, t: Duration) -> f64 {
     let m = &r.hosts[0].runner.meter;
-    let k = m.partition_point(|x| x.t <= t);
+    let k = m.partition_point(|x| x.t < t);
     strims_sim::report::own_data_share(
         k.checked_sub(1).and_then(|i| m.get(i)),
         k.checked_sub(2).and_then(|i| m.get(i)),
@@ -3808,23 +3808,29 @@ fn the_meters_truth_is_what_the_link_carries_in_data_bytes() {
     assert_eq!(at(&r, 8_000), (1514.0 * share) as u64);
 }
 
-/// The live oracle tells the seed the truth: at each of its meter samples
-/// what it was told is `Report::upload_cap_at` there, on an ATM link that
-/// steps down while a competing upload runs, and on a trace whose rate
-/// changes every second (12, 6, 3 and 9 Mbit/s).
+/// The live oracle tells the seed the truth before each of its meter
+/// samples, so the meter reads it there: at each sample what it was told
+/// is `Report::upload_cap_at` at the sample, and so is its reading but
+/// where the meter reads a saturated link lower (never higher), on an ATM
+/// link that steps down while a competing upload runs, and on a trace
+/// whose rate changes every second (12, 6, 3 and 9 Mbit/s).
 #[test]
 fn the_live_oracle_tells_the_truth() {
     let check = |r: &Report| {
-        let mut told = 0;
+        let (mut told, mut read) = (0, 0);
         let mut truths = Vec::new();
         for m in &r.hosts[0].runner.meter {
             if let Some(x) = m.told {
-                assert_eq!(Some(x), r.upload_cap_at(0, m.t), "at {:?}", m.t);
+                let truth = r.upload_cap_at(0, m.t);
+                assert_eq!(Some(x), truth, "told at {:?}", m.t);
+                assert!(m.capacity <= x, "read {} over {x} at {:?}", m.capacity, m.t);
                 told += 1;
+                read += usize::from(m.capacity == x);
                 truths.push(x);
             }
         }
         assert!(told >= 8, "{told} samples told");
+        assert!(read * 10 >= told * 9, "{read} of {told} read the truth");
         truths
     };
     let mut c = collapse_case(2, 10, 10);

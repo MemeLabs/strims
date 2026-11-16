@@ -1065,7 +1065,9 @@ impl Report {
     pub fn upload_cap_at(&self, h: HostIx, t: std::time::Duration) -> Option<u64> {
         let spec = self.scenario.hosts.get(h)?;
         let samples = self.hosts.get(h).map_or(&[][..], |r| &r.runner.meter[..]);
-        let k = samples.partition_point(|m| m.t <= t);
+        // The samples before `t`: the oracle tells a sample's truth before
+        // the sample is taken.
+        let k = samples.partition_point(|m| m.t < t);
         let last = k.checked_sub(1).and_then(|i| samples.get(i));
         let prev = k.checked_sub(2).and_then(|i| samples.get(i));
         let log = self
