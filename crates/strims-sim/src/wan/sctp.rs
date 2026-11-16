@@ -883,6 +883,9 @@ impl Scheduler {
             if let Some(d) = self.drops.get_mut(from) {
                 *d += 1;
             }
+            if let Some(d) = self.drop_packets.get_mut(from) {
+                *d += 1;
+            }
             None
         } else {
             let t = self.net.send(at, from, to, wire, 1, Carrier::Datagram);
@@ -971,6 +974,9 @@ impl Scheduler {
             let rate = self.net.site(to).map_or(u64::MAX, |s| s.profile.down);
             if overflows(self.net.down_free(to) - t, tx_time(wire, rate), cap) {
                 if let Some(d) = self.drops.get_mut(from) {
+                    *d += 1;
+                }
+                if let Some(d) = self.drop_packets.get_mut(from) {
                     *d += 1;
                 }
                 return;
@@ -1106,6 +1112,9 @@ impl Scheduler {
             )
         {
             if let Some(d) = self.drops.get_mut(to) {
+                *d += 1;
+            }
+            if let Some(d) = self.drop_packets.get_mut(to) {
                 *d += 1;
             }
             return;

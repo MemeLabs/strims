@@ -529,6 +529,9 @@ pub struct WanHostReport {
     /// take the uplink's time but aren't in `stats.up_bytes`. The tables'
     /// bins count the two kinds apart ([`crate::tables::ACK_COLS`]).
     pub queue_drops: u64,
+    /// The packets of those segments, as a queue of frames (Linux's tbf
+    /// behind a device that segments) counts its drops.
+    pub queue_drop_packets: u64,
     pub acks: u64,
     pub ack_bytes: u64,
     /// With the window model, the acknowledgements its TCP receivers sent

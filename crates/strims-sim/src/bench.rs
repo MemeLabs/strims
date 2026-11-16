@@ -842,6 +842,10 @@ pub struct BenchSite {
     /// `SEED_BURST` and `VIEWER_BURST`), which the sim's uplink takes with
     /// [`Bench::buckets`].
     pub burst: u64,
+    /// The rate its bucket sends at, bytes per second (`run.sh`'s
+    /// `SEED_PEAK_MBIT` and `VIEWER_PEAK_MBIT`, tbf's peakrate); `None`,
+    /// at once.
+    pub peak: Option<u64>,
 }
 
 /// A bench for [`simulate`].
@@ -862,8 +866,9 @@ pub struct Bench {
     pub send_buffer: SendBuffer,
     pub tcp_segment: Option<usize>,
     /// Each uplink has its testbed bucket ([`BenchSite::burst`]) in the sim
-    /// (`strims_wan::Bucket`, leaving at once, as a veth's tbf); without,
-    /// the sim's uplinks drain at their rates alone.
+    /// (`strims_wan::Bucket`, leaving at once as a veth's tbf, or at its
+    /// [`BenchSite::peak`]); without, the sim's uplinks drain at their
+    /// rates alone.
     pub buckets: bool,
     /// The links carry their records over WebRTC data channels (the
     /// nodes ran with `--webrtc`, in `run.sh`'s `NODE_ARGS`): the window
@@ -920,6 +925,15 @@ impl Bench {
                 .map_err(|e| format!("{key}: {e}"))
         };
         let mbit = |m: f64| (m * 125_000.0) as u64;
+        let peak = |key: &str| -> Result<Option<u64>, String> {
+            get(key)
+                .map(|m| {
+                    m.parse::<f64>()
+                        .map(mbit)
+                        .map_err(|e| format!("{key}: {e}"))
+                })
+                .transpose()
+        };
         let viewers = num("VIEWERS")? as usize;
         let queue_ms = num("QUEUE_MS")?;
         let slow = get("SLOW_DOWN_KBIT").map(|k| k.parse::<u64>().map_err(|e| e.to_string()));
@@ -930,17 +944,19 @@ impl Bench {
             .map_or(0.0, |p| p / 100.0);
         let sites = (0..=viewers)
             .map(|i| {
-                let (up, delay, burst) = if i == 0 {
+                let (up, delay, burst, peak) = if i == 0 {
                     (
                         num("SEED_UP_MBIT")?,
                         num("SEED_DELAY_MS")?,
                         num("SEED_BURST")?,
+                        peak("SEED_PEAK_MBIT")?,
                     )
                 } else {
                     (
                         num("VIEWER_UP_MBIT")?,
                         num("VIEWER_DELAY_MS")?,
                         num("VIEWER_BURST")?,
+                        peak("VIEWER_PEAK_MBIT")?,
                     )
                 };
                 Ok(BenchSite {
@@ -949,6 +965,7 @@ impl Bench {
                     delay_ms: delay,
                     loss: if i == 0 { seed_loss } else { 0.0 },
                     burst,
+                    peak,
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
@@ -1034,8 +1051,9 @@ impl BenchClock for SimBenchClock {
 
 /// Runs `bench` on the sim's sockets under the WAN model, with fixed
 /// delays and no jitter as the calibration scenarios have, and loss only
-/// at sites given some: a pair's paths take the mean of its two egress
-/// delays both ways. Returns each node's log lines.
+/// at sites given some: each direction of a pair's path takes its
+/// sender's egress delay, as the testbed's netem delays what a node sends.
+/// Returns each node's log lines.
 pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     let n = bench.sites.len();
     let mut spec = Scenario::new("bench");
@@ -1043,7 +1061,10 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
         let mut site = Site::new(City::Chicago, Access::Cable)
             .with_up(s.up)
             .with_loss(s.loss)
-            .with_bucket(bench.buckets.then(|| Bucket::of(s.burst)));
+            .with_bucket(bench.buckets.then_some(Bucket {
+                bytes: s.burst,
+                peak: s.peak,
+            }));
         if let Some(d) = s.down {
             site = site.with_down(d);
         }
@@ -1146,8 +1167,8 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
         let (Some(sa), Some(sb)) = (bench.sites.get(a), bench.sites.get(b)) else {
             return Err(format!("link {a} {b}: no such node"));
         };
-        let ms = (sa.delay_ms + sb.delay_ms) as f64 / 2.0;
-        sched.set_latency(a, b, Duration::from_micros((ms * 1000.0) as i64));
+        sched.set_latency_from(a, b, Duration::from_millis(sa.delay_ms as i64));
+        sched.set_latency_from(b, a, Duration::from_millis(sb.delay_ms as i64));
     }
     *wan.lock() = Some(sched);
     loop {
@@ -1172,9 +1193,10 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
             .collect();
         let waits = &h.ack_waits;
         l.push(format!(
-            r#"{{"ev":"drops","up_packets":{},"queue_drops":{},"competing_drops":{},"acks":{}{},"delack_mean_ms":{},"delack_p90_ms":{}}}"#,
+            r#"{{"ev":"drops","up_packets":{},"queue_drops":{},"queue_drop_packets":{},"competing_drops":{},"acks":{}{},"delack_mean_ms":{},"delack_p90_ms":{}}}"#,
             h.stats.up_bytes / 1500,
             h.queue_drops,
+            h.queue_drop_packets,
             h.competing_drops,
             h.acks,
             whys.concat(),

@@ -747,10 +747,11 @@ pub(crate) struct Scheduler {
     /// [`Scheduler::cross_sent`] is.
     cross_cwnd: Vec<Vec<(Duration, u64)>>,
     /// Per host, the window model's segments its connections lost to a
-    /// full access queue, the acknowledgements its uplink carried (pure
-    /// ACKs and SACKs alone) with their wire bytes, and the SACKs among
-    /// them with theirs.
+    /// full access queue and their packets, the acknowledgements its uplink
+    /// carried (pure ACKs and SACKs alone) with their wire bytes, and the
+    /// SACKs among them with theirs.
     drops: Vec<u64>,
+    drop_packets: Vec<u64>,
     acks: Vec<u64>,
     ack_bytes: Vec<u64>,
     sacks: Vec<u64>,
@@ -887,6 +888,7 @@ impl Scheduler {
             cross_sent: vec![Vec::new(); spec.hosts.len()],
             cross_cwnd: vec![Vec::new(); spec.hosts.len()],
             drops: vec![0; spec.hosts.len()],
+            drop_packets: vec![0; spec.hosts.len()],
             acks: vec![0; spec.hosts.len()],
             ack_bytes: vec![0; spec.hosts.len()],
             sacks: vec![0; spec.hosts.len()],
@@ -1096,6 +1098,9 @@ impl Scheduler {
                             if let Some(d) = self.drops.get_mut(from) {
                                 *d += 1;
                             }
+                            if let Some(d) = self.drop_packets.get_mut(from) {
+                                *d += u64::from(r.packets);
+                            }
                             self.sctp_lost(conn, seq);
                             continue;
                         }
@@ -1125,6 +1130,9 @@ impl Scheduler {
                     {
                         if let Some(d) = self.drops.get_mut(r.from) {
                             *d += 1;
+                        }
+                        if let Some(d) = self.drop_packets.get_mut(r.from) {
+                            *d += u64::from(r.packets);
                         }
                         if datagram {
                             r.state = State::Dropped;
@@ -1587,6 +1595,9 @@ impl Scheduler {
             if let Some(d) = self.drops.get_mut(from) {
                 *d += 1;
             }
+            if let Some(d) = self.drop_packets.get_mut(from) {
+                *d += u64::from(packets);
+            }
             self.dropped(at, conn, seq, id);
             return;
         }
@@ -1937,6 +1948,9 @@ impl Scheduler {
                 if let Some(d) = self.drops.get_mut(r.from) {
                     *d += 1;
                 }
+                if let Some(d) = self.drop_packets.get_mut(r.from) {
+                    *d += u64::from(r.packets);
+                }
                 r.state = State::Dropped;
                 self.records.dropped += 1;
                 return;
@@ -2083,6 +2097,13 @@ impl Scheduler {
         }
     }
 
+    /// The base latency from `a` to `b` alone becomes `d`.
+    pub fn set_latency_from(&mut self, a: HostIx, b: HostIx, d: Duration) {
+        if a != b {
+            self.net.set_one_way_from(a, b, Some(d));
+        }
+    }
+
     /// `h` lost power at `now`: its access links forget their queues.
     pub fn crashed(&mut self, h: HostIx, now: Time) {
         self.net.reset(h, now);
@@ -2154,6 +2175,7 @@ impl Scheduler {
                         up_queue: self.up_queue.get(h).cloned().unwrap_or_default(),
                         competing: self.cross_sent.get(h).cloned().unwrap_or_default(),
                         queue_drops: self.drops.get(h).copied().unwrap_or(0),
+                        queue_drop_packets: self.drop_packets.get(h).copied().unwrap_or(0),
                         acks: self.acks.get(h).copied().unwrap_or(0),
                         ack_bytes: self.ack_bytes.get(h).copied().unwrap_or(0),
                         ack_whys: self.ack_whys.get(h).copied().unwrap_or_default(),

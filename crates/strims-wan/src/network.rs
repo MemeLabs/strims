@@ -10,7 +10,8 @@
 //!
 //! - **Base latency** of a direction is the sender's last mile, half the
 //!   city pair's RTT and the receiver's last mile ([`Network::one_way`]),
-//!   unless [`Network::set_one_way`] overrides it.
+//!   unless [`Network::set_one_way`] (both ways) or
+//!   [`Network::set_one_way_from`] (one) overrides it.
 //! - **Jitter.** Each end adds an offset on its uplink and one on its
 //!   downlink. An offset holds for a [`JITTER_WINDOW`]: the offset of window
 //!   `k` is an exponential draw with the profile's mean jitter from an rng
@@ -519,8 +520,14 @@ impl Network {
     /// Overrides the base latency between `a` and `b`, both ways; `None`
     /// restores the sites' latency.
     pub fn set_one_way(&mut self, a: usize, b: usize, d: Option<Duration>) {
+        self.set_one_way_from(a, b, d);
+        self.set_one_way_from(b, a, d);
+    }
+
+    /// Overrides the base latency from `a` to `b` alone, as a delay on
+    /// `a`'s egress does; `None` restores the sites' latency.
+    pub fn set_one_way_from(&mut self, a: usize, b: usize, d: Option<Duration>) {
         self.dir_mut(a, b).one_way = d;
-        self.dir_mut(b, a).one_way = d;
     }
 
     /// From each of `steps`' times on, `h`'s uplink runs at that step's
@@ -751,6 +758,12 @@ mod tests {
         assert_eq!(n.one_way(1, 0), Duration::from_millis(5));
         n.set_one_way(1, 0, None);
         assert_eq!(n.one_way(0, 1), base);
+        // One direction alone, as an egress delay sets it.
+        n.set_one_way_from(0, 1, Some(Duration::from_millis(20)));
+        n.set_one_way_from(1, 0, Some(Duration::from_millis(10)));
+        assert_eq!(n.one_way(0, 1), Duration::from_millis(20));
+        assert_eq!(n.one_way(1, 0), Duration::from_millis(10));
+        assert_eq!(n.rtt(0, 1), Duration::from_millis(30));
     }
 
     #[test]
@@ -1095,26 +1108,38 @@ mod tests {
         assert_ne!(run(1), run(2));
     }
 
-    /// Linux's tbf without a peakrate, packet by packet, as
-    /// `net/sched/sch_tbf.c`'s `tbf_dequeue` keeps it: tokens are
-    /// nanoseconds of transmission at the rate, at most the buffer's
-    /// (`burst` at the rate); the head packet leaves once
-    /// `min(buffer, tokens + (now − t_c))` covers its own time, taking it.
+    /// Linux's tbf, packet by packet, as `net/sched/sch_tbf.c`'s
+    /// `tbf_dequeue` keeps it: tokens are nanoseconds of transmission at
+    /// the rate, at most the buffer's (`burst` at the rate); the head packet
+    /// leaves once `min(buffer, tokens + (now − t_c))` covers its own time,
+    /// taking it. With a peakrate, a second bucket of `mtu` at the peak
+    /// must cover it too.
     struct Tbf {
         rate: u64,
         buffer: i64,
         tokens: i64,
+        /// The peak and its bucket (`mtu` at the peak), and its tokens.
+        peak: Option<(u64, i64)>,
+        ptokens: i64,
         t_c: i64,
         last: i64,
     }
 
     impl Tbf {
         fn new(rate: u64, burst: u64) -> Tbf {
+            Tbf::with_peak(rate, burst, None)
+        }
+
+        /// tbf's `peakrate <peak> mtu 3028`, as `run.sh` sets it.
+        fn with_peak(rate: u64, burst: u64, peak: Option<u64>) -> Tbf {
             let buffer = Tbf::l2t(rate, burst as usize);
+            let peak = peak.map(|p| (p, Tbf::l2t(p, PEAK_MTU)));
             Tbf {
                 rate,
                 buffer,
                 tokens: buffer,
+                peak,
+                ptokens: peak.map_or(0, |(_, mtu)| mtu),
                 t_c: 0,
                 last: 0,
             }
@@ -1129,16 +1154,23 @@ mod tests {
         fn packet(&mut self, at: i64, len: usize) -> i64 {
             let cost = Tbf::l2t(self.rate, len);
             assert!(cost <= self.buffer, "a packet past the bucket");
-            let toks = |now: i64| (self.tokens + (now - self.t_c)).min(self.buffer);
             let mut now = at.max(self.last);
-            if toks(now) < cost {
-                // The watchdog fires once the deficit has refilled.
-                now = self.t_c + cost - self.tokens;
+            loop {
+                let elapsed = (now - self.t_c).min(self.buffer);
+                let toks = (self.tokens + elapsed).min(self.buffer) - cost;
+                let ptoks = self.peak.map_or(0, |(p, mtu)| {
+                    (self.ptokens + elapsed).min(mtu) - Tbf::l2t(p, len)
+                });
+                if toks >= 0 && ptoks >= 0 {
+                    self.tokens = toks;
+                    self.ptokens = ptoks;
+                    self.t_c = now;
+                    self.last = now;
+                    return now;
+                }
+                // The watchdog fires once both deficits have refilled.
+                now += (-toks).max(-ptoks);
             }
-            self.tokens = toks(now) - cost;
-            self.t_c = now;
-            self.last = now;
-            now
         }
     }
 
@@ -1233,6 +1265,82 @@ mod tests {
             let start = at.max(a.up_free(0));
             let d = a.send(at, 0, 1, wire, 1, Carrier::Stream).depart;
             assert_eq!(d, through(up, &[], start, wire));
+        }
+    }
+
+    /// The peak bucket `run.sh` gives tbf: two frames.
+    const PEAK_MTU: usize = 3028;
+
+    /// tbf's peakrate against the model's peak: an uplink of `rate` with a
+    /// `burst`-byte bucket sending at `peak`, messages of every size from
+    /// back to back to long idle. The model's message leaves with its last
+    /// bit on a line at the peak; tbf dequeues a packet once the peak's
+    /// bucket ([`PEAK_MTU`]) covers it, so a train its peak paces leaves
+    /// that bucket at the peak sooner there, and no more: the model is
+    /// never earlier, and later by at most the bucket. Departures the rate
+    /// paces are the same.
+    #[test]
+    fn a_peak_departs_as_tbf_peakrate_dequeues() {
+        for (rate, burst, peak) in [
+            (1_250_000, 65_536, 12_500_000), // 10 Mbit/s, 64 KB, 100 Mbit/s
+            (1_250_000, 312_500, 5_000_000), // 10, 312.5 KB, 40
+            (625_000, 312_500, 6_250_000),   // 5, 312.5 KB, 50
+        ] {
+            let site = Site::new(City::Frankfurt, Access::Cable)
+                .with_up(rate)
+                .with_bucket(Some(Bucket {
+                    bytes: burst,
+                    peak: Some(peak),
+                }));
+            let mut n = net(&[site, Site::new(City::Frankfurt, Access::Fiber)], QUIET);
+            let mut tbf = Tbf::with_peak(rate, burst, Some(peak));
+            let frame = tx_time(PEAK_MTU, peak);
+            let base = t(0).unix_nanos();
+            let mut rng = det_rng(11);
+            let mut at = 0;
+            let (mut paced, mut by_rate) = (0, 0);
+            for _ in 0..4_000 {
+                at += match unit(&mut rng) {
+                    x if x < 0.5 => 0,
+                    x if x < 0.8 => (unit(&mut rng) * 2e6) as i64,
+                    _ => (unit(&mut rng) * 300e6) as i64,
+                };
+                let wire = 40 + (unit(&mut rng) * 16.0 * 1514.0) as usize;
+                let sent = Time::from_unix_nanos(base + at);
+                let model = n
+                    .send(
+                        sent,
+                        0,
+                        1,
+                        wire,
+                        wire.div_ceil(1514) as u32,
+                        Carrier::Stream,
+                    )
+                    .depart;
+                let mut left = wire;
+                let mut out = 0;
+                while left > 0 {
+                    let len = left.min(1514);
+                    out = tbf.packet(at, len);
+                    left -= len;
+                }
+                let late = model - Time::from_unix_nanos(base + out);
+                assert!(
+                    late >= Duration::ZERO,
+                    "{rate} {burst} {peak}: {late:?} early"
+                );
+                assert!(late <= frame, "{rate} {burst} {peak}: {late:?} late");
+                if late == Duration::ZERO {
+                    by_rate += 1;
+                } else {
+                    paced += 1;
+                }
+            }
+            // Both regimes ran.
+            assert!(
+                paced > 20 && by_rate > 20,
+                "{rate} {burst} {peak}: {paced} {by_rate}"
+            );
         }
     }
 
