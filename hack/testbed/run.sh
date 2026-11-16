@@ -356,6 +356,7 @@ for i in $(seq 0 $((n - 1))); do
   esac
 done
 case $browser_links in ws|webrtc) ;; *) echo "BROWSER_LINKS: ws or webrtc" >&2; exit 1 ;; esac
+[ -x "$bin" ] || { echo "no testbed_node at $bin" >&2; exit 1; }
 # The seed's steps, and the highest rate its link runs at, which a peak is
 # over.
 for step in $steps; do
@@ -412,7 +413,6 @@ fi
 
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
-[ -x "$bin" ] || { echo "no testbed_node at $bin" >&2; exit 1; }
 docker build -q -t "$image" "$root/hack/testbed" >/dev/null
 if [ "$browsers" = 1 ]; then
   [ -x "$browser_bin" ] || { echo "no testbed_browser at $browser_bin" >&2; exit 1; }
