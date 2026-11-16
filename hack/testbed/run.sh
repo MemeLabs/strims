@@ -146,6 +146,12 @@
 #                          testbed_node && hack/testbed/stamp.py write
 #                          target/release/examples/testbed_node`, which
 #                          writes its stamp beside it
+#   TCSAMPLE_BIN=<path>, SSSAMPLE_BIN=<path>
+#                          the containers' samplers (hack/testbed/tcsample.c
+#                          and sssample.c, static); unset, run.sh builds
+#                          them with gcc into target/testbed, as it does
+#                          tracelink (a farm host has no gcc: the farm
+#                          ships them as artifacts)
 #   LINK_BIN=<path>        the link specs' parser (strims-wan's testbed_link
 #                          example); unset, run.sh builds it from its own
 #                          tree with cargo, into CARGO_TARGET_DIR (default
@@ -213,13 +219,18 @@
 # from each node, strims-testbed's node module; a browser's adds post_ms
 # and host_t_ms, testbed_browser's), node-<i>.err, cpu-<i>.log (the
 # container's CPU time and memory once a second: ms since the epoch, the
-# cgroup's usage_usec, and its memory.current in bytes), tc-<i>.log (each
-# node's qdiscs on every device at 10 Hz: ms since the epoch, then `tc -s
-# -j qdisc show`'s JSON, each qdisc with its dev, which
-# hack/testbed/tcstats.py reads, finding the modem's 10: on eth0 or, with
-# slots, on ifbm: a checkout from before it, whose bench.py, twin.py and
+# cgroup's usage_usec, and its memory.current in bytes, read with bash's
+# builtins), tc-<i>.log (each node's qdiscs on every device at 10 Hz,
+# tcsample's: ms since the epoch, then `tc -s -j qdisc show`'s JSON, each
+# qdisc with its dev, which hack/testbed/tcstats.py and strims-sim's
+# testbed module read, finding the modem's 10: on eth0 or, with slots, on
+# ifbm: a checkout from before it, whose bench.py, twin.py and
 # hack/capture/analyze.py read tc's text, finds no queue in it and says
-# nothing), the seed's ss-0.log (its sockets once a second), qdisc-<i>.txt (each
+# nothing), the seed's ss-0.log (its sockets every SS_EVERY, sssample's: `ss
+# -tin state established`'s text), tcsample-<i>.err and sssample-0.err
+# (their errors, each costing a sample), with PCAP pcap-<i>.end (when its
+# tcpdump exited while its node ran, and its exit status: none when it ran
+# to the end), qdisc-<i>.txt (each
 # node's qdiscs on every device as it shaped them, before the stream: `tc
 # -s -d qdisc show`, its modem with its size table, the delay's ifbd, the
 # slots' ifbm, the slow downlink's ifbs and PCAP's ifbo), steps.log (when
@@ -302,6 +313,8 @@ slow=${SLOW_DOWN_KBIT:-}
 steps=${SEED_UP_STEPS:-}
 compete=${COMPETE:-}
 ss_every=${SS_EVERY:-1}
+ss_ms=$(awk -v s="$ss_every" 'BEGIN { if (s <= 0) exit 1; printf "%d", s * 1000 + 0.5 }') \
+  || { echo "SS_EVERY=$ss_every: seconds, more than 0" >&2; exit 1; }
 seed_loss=${SEED_LOSS_PCT:-}
 loss_every=""
 if [ -n "$seed_loss" ]; then
@@ -419,6 +432,25 @@ for i in $(seq 0 $((n - 1))); do
     done
   fi
 done
+# The containers' samplers, one process each where a shell loop forks tc
+# or ss a sample (the testbed skill has their costs): static, mounted in.
+tcsample=${TCSAMPLE_BIN:-$root/target/testbed/tcsample}
+sssample=${SSSAMPLE_BIN:-$root/target/testbed/sssample}
+# Sampler $1 built at $2 from this tree's hack/testbed/$1.c, where it's
+# missing or older than its source.
+build_sampler() {
+  if [ ! -x "$2" ] || [ "$root/hack/testbed/$1.c" -nt "$2" ]; then
+    mkdir -p "$(dirname "$2")"
+    gcc -O2 -static -o "$2" "$root/hack/testbed/$1.c" \
+      || { echo "building $1 failed (or give ${1^^}_BIN)" >&2; exit 1; }
+  fi
+}
+[ -n "${TCSAMPLE_BIN:-}" ] || build_sampler tcsample "$tcsample"
+[ -n "${SSSAMPLE_BIN:-}" ] || build_sampler sssample "$sssample"
+for s in "$tcsample" "$sssample"; do
+  [ -x "$s" ] || { echo "no sampler at $s" >&2; exit 1; }
+done
+sampler_mounts=(-v "$tcsample:/tcsample:ro" -v "$sssample:/sssample:ro")
 tracelink=$root/target/testbed/tracelink
 if [ "$traces" = 1 ] && { [ ! -x "$tracelink" ] || [ "$root/hack/testbed/tracelink.c" -nt "$tracelink" ]; }; then
   mkdir -p "$(dirname "$tracelink")"
@@ -566,9 +598,11 @@ wait_start='until [ -s /ctl/start ]; do sleep 0.05; done
 start=$(cat /ctl/start)'
 
 # The container's CPU time and memory, once a second, in the background of
-# its script.
+# its script, with bash's builtins alone: a fork of sed, cat and sleep a
+# second cost 0.012 of a core, this nothing measurable (`read -t` on a pipe
+# no one writes waits the second).
 cpu_log() {
-  echo "( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"\$t \$(sed -n 's/^usage_usec //p' /sys/fs/cgroup/cpu.stat) \$(cat /sys/fs/cgroup/memory.current)\"; sleep 1; done > /out/cpu-$1.log ) &"
+  echo "( exec 3<> <(:); while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; { read -r _ u _; } < /sys/fs/cgroup/cpu.stat; read -r m < /sys/fs/cgroup/memory.current; echo \"\$t \$u \$m\"; read -t 1 -u 3 || true; done > /out/cpu-$1.log ) &"
 }
 hosts=""
 if [ "$browsers" = 1 ]; then
@@ -613,14 +647,17 @@ for i in $(seq 0 $((n - 1))); do
   node_slow=""
   if [ "$i" -eq 1 ]; then node_slow=$slow; fi
   shape=$(node_tree "$delay" "$i" "${PCAP:-0}" "$match" "$loss_every" "$node_slow" "$queue")
-  sample="( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"\$t \$(tc -s -j qdisc show | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &"
+  sample="/tcsample -i 100 > /out/tc-$i.log 2> /out/tcsample-$i.err &"
   if [ "$i" -eq 0 ]; then
     sample="$sample
-( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"@ \$t\"; ss -tin state established; sleep $ss_every; done > /out/ss-$i.log ) &"
+/sssample -i $ss_ms > /out/ss-$i.log 2> /out/sssample-$i.err &"
   fi
   if [ "${PCAP:-0}" = 1 ]; then
+    # A tcpdump that exits while its node runs says when (its node's
+    # container ending kills both, writing nothing), so the capture's
+    # columns end there, not at 0.
     sample="$sample
-( tcpdump -i eth0 -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i.pcap 2> /out/tcpdump-$i.err ) &
+( tcpdump -i eth0 -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i.pcap 2> /out/tcpdump-$i.err; e=\$?; t=\${EPOCHREALTIME/[.,]/}; echo \"\${t%???} \$e\" > /out/pcap-$i.end ) &
 ( tcpdump -i ifbo -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i-offered.pcap 2> /out/tcpdump-$i-offered.err ) &"
   fi
   capture=""
@@ -655,7 +692,7 @@ for i in $(seq 0 $((n - 1))); do
   docker rm -f "$name" >/dev/null 2>&1 || true
   if [ "$(kind_of "$i")" = native ]; then
     docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" "${nov6[@]}" \
-      --cap-add NET_ADMIN "${link_mounts[@]}" -v "$bin:/testbed_node:ro" -v "$out:/out" -v "$ctl:/ctl" "${media_mount[@]}" "$image" \
+      --cap-add NET_ADMIN "${link_mounts[@]}" "${sampler_mounts[@]}" -v "$bin:/testbed_node:ro" -v "$out:/out" -v "$ctl:/ctl" "${media_mount[@]}" "$image" \
       bash -c "set -e
 $shape
 tc -s -d qdisc show > /out/qdisc-$i.txt
@@ -676,7 +713,7 @@ exec /testbed_node --index $i --topology /out/topology --start \$start --secs $s
     # `default dev eth0`, would reach the host's own addresses off the
     # subnet, which it answers ARP for.)
     docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" "${nov6[@]}" \
-      --cap-add NET_ADMIN "${link_mounts[@]}" --shm-size 1g --tmpfs /tmp:size=1g \
+      --cap-add NET_ADMIN "${link_mounts[@]}" "${sampler_mounts[@]}" --shm-size 1g --tmpfs /tmp:size=1g \
       -v "$browser_bin:/testbed_browser:ro" \
       -v "$web:/web:ro" -v "$out:/out" -v "$ctl:/ctl" "$browser_image" \
       bash -c "set -e

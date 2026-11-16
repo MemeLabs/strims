@@ -10,11 +10,10 @@
 //
 // Each interval (100 ms by default) it dumps the qdiscs of the devices
 // named (every device's without one: eth0's and the ifbs') over rtnetlink
-// and writes a line, `<unix ms> <json>`, as shaping-review's run.sh
-// writes tc-<i>.log's lines from `tc -s -j qdisc show` (today's run.sh
-// writes `tc -s`'s text, which strims-sim's testbed module reads, until
-// run.sh takes this up): the JSON is tc's array, with the fields
-// hack/testbed/tcstats.py reads (kind, handle, dev, root or parent,
+// and writes a line, `<unix ms> <json>`, run.sh's tc-<i>.log line, as
+// its loop of `tc -s -j qdisc show` wrote it before: the JSON is tc's
+// array, with the fields hack/testbed/tcstats.py and strims-sim's
+// testbed module read (kind, handle, dev, root or parent,
 // options: a tbf's rate, a cake's bandwidth, atm, overhead, mpu and raw;
 // bytes, packets, drops, overlimits, requeues, backlog, qlen), rates in
 // bytes a second as tc's JSON has them. The stamp is the wall clock read

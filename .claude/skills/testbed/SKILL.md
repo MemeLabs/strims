@@ -136,20 +136,21 @@ a sizing decision rests on them.
 - Judge load from cpu-<i>.log and the host's idle, never from lag. A
   swarm can lag for protocol reasons with CPU to spare.
 - run.sh's samplers take their own share, in each container's cgroup (20 s
-  alone in the image, an idle container's 0.003 core taken off). The tc
-  loop (`tc -s qdisc show` at 10 Hz, a fork of tc and tr a sample) costs
-  0.08 core, more than a native node; hack/testbed/tcsample.c (one process,
-  rtnetlink, the same lines) 0.001. The cpu loop (date, sed and cat once a
-  second) costs 0.012; read with bash's builtins and `read -t` it costs
-  nothing measurable. The seed's ss loop costs 0.025 at 1 Hz, most of it
-  the kernel walking its whole established hash (every network
-  namespace's) for the dump, which ss and a sock_diag dump pay alike:
-  hack/testbed/sssample.c dumps only when the namespace has opened a TCP
-  connection since the last sample (/proc/net/snmp), and the sample
-  after, and asks for each known socket by address otherwise: 0.0016
-  with steady sockets, a new one in the first sample after its connect,
-  as ss's loop has it. With every node sampled, count the tc loop in a host's
-  `host_cores` until tcsample replaces it.
+  alone in the image, an idle container's 0.003 core taken off).
+  hack/testbed/tcsample.c samples every node's qdiscs at 10 Hz (one
+  process, rtnetlink, `tc -s -j qdisc show`'s JSON lines) for 0.004 core,
+  where a shell loop of tc and tr cost 0.08, more than a native node. The
+  cpu loop reads with bash's builtins and `read -t`, nothing measurable,
+  where date, sed and cat once a second cost 0.012. hack/testbed/sssample.c
+  samples the seed's sockets every SS_EVERY for 0.004 at 1 Hz, where ss's
+  loop cost 0.028: a dump walks the kernel's whole established hash
+  (every network namespace's), which ss and sock_diag pay alike, so it
+  dumps only when the namespace's ActiveOpens, PassiveOpens or CurrEstab
+  moved (/proc/net/snmp), on the sample after, and after a known socket
+  went, and asks for each known socket by address and cookie otherwise; a
+  new socket shows in the first sample after it established. run.sh
+  builds both with gcc into target/testbed (TCSAMPLE_BIN, SSSAMPLE_BIN
+  skip it); the farm ships them as artifacts, a host having no gcc.
 
 ## The device lab
 

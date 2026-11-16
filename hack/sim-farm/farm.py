@@ -432,7 +432,10 @@ is run again, as a failed job is.
 An arm whose tree has strims-wan's testbed_link example (run.sh's parser
 of its link specs) also builds it and packs it as the artifact LINK_BIN,
 unless [artifacts] gives LINK_BIN, so the bundle's run.sh parses its
-specs with its own tree's parser.
+specs with its own tree's parser. One whose tree has run.sh's samplers'
+sources (hack/testbed/tcsample.c, sssample.c) builds them (gcc -O2
+-static) as TCSAMPLE_BIN and SSSAMPLE_BIN the same way: a host has no
+gcc to build them with.
 
 A trace link class (run.sh's SEED_LINK, VIEWER_LINK or LINKS) runs on a
 local testbed alone: its tracelink and trace files don't reach a host, and
@@ -771,6 +774,10 @@ TESTBED = "hack/testbed"
 LINK_EXAMPLE = "crates/strims-wan/examples/testbed_link.rs"
 LINK_BUILD = "cargo build --release --locked -p strims-wan --example testbed_link"
 LINK_ARTIFACT = "$CARGO_TARGET_DIR/release/examples/testbed_link"
+# run.sh's samplers (TCSAMPLE_BIN, SSSAMPLE_BIN), which it builds with gcc
+# where they're not given and a host has none: built here, static, from
+# the arm's tree when it has their sources, as artifacts.
+SAMPLERS = {"TCSAMPLE_BIN": "tcsample", "SSSAMPLE_BIN": "sssample"}
 TESTBED_COLUMNS = ["wall_s:mean,max", "steal_pct:mean,max", "load_max:max", "node_lines_min:min"]
 # The keys only test matrices take.
 TEST_KEYS = {"package", "target", "test", "slot_mem_gib", "canary", "derive"}
@@ -1655,6 +1662,11 @@ def build_testbed(matrix: Matrix) -> None:
             if (src / LINK_EXAMPLE).is_file() and "LINK_BIN" not in artifacts:
                 commands.append(LINK_BUILD)
                 artifacts["LINK_BIN"] = LINK_ARTIFACT
+            for var, name in SAMPLERS.items():
+                if (src / TESTBED / f"{name}.c").is_file() and var not in artifacts:
+                    commands.append(f'mkdir -p "$CARGO_TARGET_DIR/testbed" && gcc -O2 -static -o '
+                                    f'"$CARGO_TARGET_DIR/testbed/{name}" {TESTBED}/{name}.c')
+                    artifacts[var] = f"$CARGO_TARGET_DIR/testbed/{name}"
             for cmd in commands:
                 if subprocess.run(["bash", "-c", cmd], cwd=src, env=env).returncode:
                     sys.exit(f"building {arm} ({commit[:12]}): `{cmd}` failed")
