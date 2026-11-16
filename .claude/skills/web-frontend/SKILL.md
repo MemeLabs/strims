@@ -100,9 +100,9 @@ one mode (`--theme`, `--device`).
   in flight with `net::ERR_NETWORK_CHANGED` when a host interface comes or
   goes, and testbed runs on the VM make and drop Docker networks all the
   time. A box's files (a harness script) must sit outside /tmp. Where bwrap
-  can't make the box, the run warns and shares the host's network. A load
-  of a build's file that fails is then the checker's failure, and the story
-  is captured again in a fresh browser.
+  can't make the box, the run warns and shares the host's network: a failed
+  load of a build's file is then retried in a fresh browser by a compare,
+  and fails the story in the plain check.
 - Test a change to what a compare skips or captures by the decision:
   `--list` dry runs, scope_test.py's fixture storybook
   (hack/storybook/testdata/scope) and report_test.py, each mechanism

@@ -643,6 +643,11 @@ def isolation_unavailable(exe):
     return None
 
 
+def interfaces():
+    """The network interfaces of this process's namespace."""
+    return {line.split(":")[0].strip() for line in Path("/proc/net/dev").read_text().splitlines()[2:]}
+
+
 def box_writable(args, work):
     """What a run writes, each made if missing, and those it made: its work
     dir, target/storybook (the bases' locks, the reports), and --report,
@@ -2496,18 +2501,17 @@ def recheck_of(nav, fresh):
     return {"kind": nav["kind"], "overturned": fresh["kind"] != nav["kind"], "detail": detail}
 
 
-def never_reported(expected, reported):
-    """The captures a run set out to make (`expected`, each a story or a
-    mode's story as text) that none of its results reports, each said on
-    stderr: a worker that ended early took them, and the run fails (exit 2)
-    rather than pass without them."""
-    missing = sorted(set(expected) - set(reported))
+def never_reported(missing, expected):
+    """Says on stderr which of the `expected` captures a run set out to make
+    none of its results reports (`missing`, each a story or a mode's story
+    as text): a worker that ended early took them, and the run fails (exit
+    2) rather than pass without them. Whether any are."""
     if missing:
-        print(f"check: {len(missing)} of {len(set(expected))} captures never reported (a worker ended before them):",
+        print(f"check: {len(missing)} of {expected} captures never reported (a worker ended before them):",
               file=sys.stderr)
         for m in missing:
             print(f"  {m}", file=sys.stderr)
-    return missing
+    return bool(missing)
 
 
 def leaves_state(r):
@@ -2672,6 +2676,9 @@ def write_report(path, results, builds, modes, args, elapsed):
     if holes:
         scoped += (f"<p class='note hole'>{len(holes)} holes in a manifest: " + "; ".join(
             f"{m} {esc(r.removeprefix('/storybook/'))} ({esc(w)})" for m, r, w in holes[:50]) + "</p>")
+    if missing := getattr(args, "missing", []):
+        scoped += (f"<p class='note hole'>{len(missing)} never reported (a worker ended before them): "
+                   + "; ".join(f"{m} {esc(r.removeprefix('/storybook/'))}" for m, r in missing[:50]) + "</p>")
     doc = f"""<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title>
@@ -2730,6 +2737,7 @@ details ul {{ margin: 4px 0 16px; }}
             "changed": [[input_name(k), k, len(v)] for k, v in sorted(sc["changed"].items(),
                                                                       key=lambda kv: (-len(kv[1]), kv[0]))]},
         "holes": [{"mode": m, "route": r, "what": w} for m, r, w in holes],
+        "never_reported": [{"mode": m, "route": r} for m, r in getattr(args, "missing", [])],
         "tolerance": args.tolerance, "modes": modes, "elapsed_s": round(elapsed, 1),
         "stories": [{k: v for k, v in r.items() if k not in ("shots", "diff")}
                     | {"status": {s: v["status"] for s, v in r.get("shots", {}).items()},
@@ -2886,6 +2894,11 @@ def summary_markdown(results, builds, modes, report, elapsed, args, limit=50):
     if holes:
         lines += ["", f"**Holes in a manifest** ({len(holes)}):"]
         lines += [f"- {m} · {story({'route': r})}: {code(w)}" for m, r, w in holes[:limit]]
+    missing = getattr(args, "missing", [])
+    if missing:
+        lines += ["", f"**Never reported** (a worker ended before them; {len(missing)}):"]
+        lines += [f"- {m} · {story({'route': r})}" for m, r in missing[:limit]]
+        lines += [f"- … and {len(missing) - limit} more"] if len(missing) > limit else []
     lines += ["", f"Report: `{report}`", ""]
     return "\n".join(lines)
 
@@ -3076,14 +3089,14 @@ def compare_main(args, exe, work):
         results += [{"mode": m, "route": r, "kind": "identical", "time": 0.0} for m in modes for r in sorted(identical)]
         results.sort(key=lambda r: (modes.index(r["mode"]), r["route"]))
         args.holes = manifest_holes(results, sc["identical"] if sc else set())
+        args.missing = sorted({(m, r) for m in modes for r in captured} - {(r["mode"], r["route"]) for r in results})
         report = write_report(report_dir, results, builds, modes, args, elapsed)
         print_compare(results, builds, modes, report, elapsed, mode_done, args)
-        missing = never_reported([f"{m} {r}" for m in modes for r in captured],
-                                 [f"{r['mode']} {r['route']}" for r in results])
+        never_reported([f"{m} {r}" for m, r in args.missing], len(modes) * len(captured))
         if args.summary:
             with open(args.summary, "a") as f:
                 f.write(summary_markdown(results, builds, modes, report, elapsed, args))
-        if any(r.get("checker") for r in results) or args.holes or missing:
+        if any(r.get("checker") for r in results) or args.holes or args.missing:
             return 2
         if args.fail_on_diff and any(r["kind"] not in ("unchanged", "skipped", "identical") for r in results):
             return 1
@@ -3177,6 +3190,11 @@ def main(argv=None):
         return 2
     if inside:
         # In the box (see ISOLATED), where the run outside made the builds.
+        # Its Chromium goes without its sandbox, which only a namespace with
+        # no network but loopback allows.
+        if others := interfaces() - {"lo"}:
+            sys.exit(f"check: {ISOLATED} is set, but this network namespace has {', '.join(sorted(others))}: "
+                     "the run's own box has only lo, and no Chromium runs without its sandbox outside it")
         exe = unwrapped(exe)
         CHROMIUM_FLAGS.append("--no-sandbox")
         args.build = args.rebuild_base = False
@@ -3212,7 +3230,8 @@ def main(argv=None):
         if why:
             print(f"check: warning: the run shares the host's network, {why}: an interface coming or going "
                   "(a Docker network's, a container's) fails what its browsers are loading "
-                  "(net::ERR_NETWORK_CHANGED), and those stories are captured again", file=sys.stderr)
+                  "(net::ERR_NETWORK_CHANGED); a compare captures those stories again in a fresh browser, "
+                  "the plain check fails them", file=sys.stderr)
     if comparing:
         try:
             return compare_main(args, exe, work)
@@ -3315,7 +3334,7 @@ def main(argv=None):
               f"(theme {args.theme}, device {args.device}); {time.monotonic() - started:.1f} s total, "
               f"{(sum(times) / len(times)) if times else 0:.1f} s a story on {jobs} browsers; {how}")
         print("\n".join(coverage_lines(index, args.files)))
-        if never_reported([s["route"] for s in stories], [r["route"] for r in results]):
+        if never_reported(sorted({s["route"] for s in stories} - {r["route"] for r in results}), len(stories)):
             return 2
         module_errors = [m for m in index["modules"] if m.get("error")]
         return 1 if failed or module_errors or catalog_failed(index, args) else 0
