@@ -14,7 +14,7 @@ import SettingsLayout from "../../../../../pages/Settings/Layout";
 import { createSettingsRoutes } from "../../../../../root/MainRouter";
 import ChatServerService from "../../../../mocks/chatserver/service";
 import NetworkService from "../../../../mocks/network/service";
-import { MockApi, StoryRouter } from "../../../../storybook";
+import { MockApi, StoryRouter, fixtures } from "../../../../storybook";
 
 // The settings nav asks whether the node has video ingress and HLS egress.
 class VideoIngressService extends UnimplementedVideoIngressService {
@@ -190,7 +190,7 @@ export const dropFiles = async (
   files: { name: string; url: string }[],
   dropped: (count: number) => boolean
 ): Promise<void> => {
-  const blobs = await Promise.all(files.map(async ({ url }) => (await fetch(url)).blob()));
+  const blobs = files.map(({ url }) => new Blob([fixtures.imageBytes(url)], { type: "image/png" }));
   for (let i = 0; i < files.length; i++) {
     const dt = new DataTransfer();
     dt.items.add(new File([blobs[i]], `${files[i].name}.png`, { type: "image/png" }));

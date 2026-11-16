@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import * as chatv1 from "../../../apis/strims/chat/v1/chat.pb";
+import { imageBytes } from "../images";
 import imgBONK from "./emotes/animated/BONK.png";
 import imgCinnabunny from "./emotes/animated/Cinnabunny.png";
 import imgComfyMoobers from "./emotes/animated/ComfyMoobers.png";
@@ -2968,34 +2969,30 @@ export const modifierNames = src.modifiers
   .sort((a, b) => a.localeCompare(b));
 export const emoteNames = src.emotes.map(({ name }) => name).sort((a, b) => a.localeCompare(b));
 
-export default async (): Promise<chatv1.AssetBundle> => {
-  return new chatv1.AssetBundle({
-    ...src,
-    isDelta: true,
-    emotes: await Promise.all(
-      src.emotes.map(async ({ id, images, ...emote }) => {
-        return new chatv1.Emote({
-          ...emote,
-          id: BigInt(id),
-          images: await Promise.all(
-            images.map(async ({ src, ...image }) => {
-              const res = await fetch(src);
-              return new chatv1.EmoteImage({
-                ...image,
-                data: new Uint8Array(await res.arrayBuffer()),
-              });
-            })
-          ),
-        });
-      })
-    ),
-    tags: src.tags.map(({ id, ...tag }) => ({
-      ...tag,
-      id: BigInt(id),
-    })),
-    modifiers: src.modifiers.map(({ id, ...modifier }) => ({
-      ...modifier,
-      id: BigInt(id),
-    })),
-  });
-};
+// The room's asset bundle, its emotes' images read from their inlined
+// imports (imageBytes), with no request.
+export default (): Promise<chatv1.AssetBundle> =>
+  Promise.resolve(
+    new chatv1.AssetBundle({
+      ...src,
+      isDelta: true,
+      emotes: src.emotes.map(
+        ({ id, images, ...emote }) =>
+          new chatv1.Emote({
+            ...emote,
+            id: BigInt(id),
+            images: images.map(
+              ({ src, ...image }) => new chatv1.EmoteImage({ ...image, data: imageBytes(src) })
+            ),
+          })
+      ),
+      tags: src.tags.map(({ id, ...tag }) => ({
+        ...tag,
+        id: BigInt(id),
+      })),
+      modifiers: src.modifiers.map(({ id, ...modifier }) => ({
+        ...modifier,
+        id: BigInt(id),
+      })),
+    })
+  );

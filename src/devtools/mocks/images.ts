@@ -68,3 +68,14 @@ const images = [
 ];
 
 export default images;
+
+// The bytes of a mock emote image, whose import is a base64 data URL
+// (webpack.config.js inlines them): the mocks serve their images with no
+// request, so no story waits on one or fails with it.
+export const imageBytes = (url: string): Uint8Array<ArrayBuffer> => {
+  const data = /^data:[^,]*;base64,/.exec(url);
+  if (!data) {
+    throw new Error(`imageBytes: ${url.slice(0, 64)} isn't an inlined image`);
+  }
+  return Uint8Array.from(atob(url.slice(data[0].length)), (c) => c.charCodeAt(0));
+};

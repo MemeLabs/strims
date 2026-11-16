@@ -105,11 +105,22 @@ module.exports = (env, argv) => {
     ],
   };
 
+  // The storybook's mock emote images, which the mocks hand the UI as bytes
+  // (an emote's, a network's icon), are inlined as data URLs, whose bytes
+  // the mocks read without a request (fixtures' imageBytes).
+  const mockEmotes = path.resolve(__dirname, "src", "devtools", "mocks", "chat", "emotes");
+
   const sharedRules = [
     scriptModuleRule,
     styleModuleRule,
     {
+      test: /\.png$/i,
+      include: [mockEmotes],
+      type: "asset/inline",
+    },
+    {
       test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg)$/i,
+      exclude: [mockEmotes],
       type: "asset/resource",
     },
     {

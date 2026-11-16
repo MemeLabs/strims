@@ -21,6 +21,7 @@ import { emoteNames, modifierNames } from "../../../mocks/chat/assetBundle";
 import imgBrick from "../../../mocks/chat/emotes/static/Brick.png";
 import { chatMessage } from "../../../mocks/chat/messages";
 import ChatService from "../../../mocks/chat/service";
+import { imageBytes } from "../../../mocks/images";
 import { Story, useMockService } from "../../../storybook";
 
 const animatedNames = [
@@ -177,19 +178,15 @@ const Tester: React.FC = () => {
   const [formData, setFormData] = useState<ChatEmoteFormData>(null);
 
   useEffect(() => {
-    void fetch(imgBrick)
-      .then((res) => res.arrayBuffer())
-      .then((data) =>
-        setFormData({
-          ...emptyFormData,
-          image: {
-            data: Base64.fromUint8Array(new Uint8Array(data)),
-            type: "image/png",
-            height: 128,
-            width: 168,
-          },
-        })
-      );
+    setFormData({
+      ...emptyFormData,
+      image: {
+        data: Base64.fromUint8Array(imageBytes(imgBrick)),
+        type: "image/png",
+        height: 128,
+        width: 168,
+      },
+    });
   }, []);
 
   const handleChange = (next: ChatEmoteFormData) =>

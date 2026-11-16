@@ -10,7 +10,7 @@ import {
 } from "../../../apis/strims/network/v1/directory/directory_rpc.pb";
 import { ImageType } from "../../../apis/strims/type/image.pb";
 import { listingItem, listingsNetwork } from "../../storybook/fixtures/listings";
-import images from "../images";
+import images, { imageBytes } from "../images";
 import events from "./events";
 
 export default class DirectoryService
@@ -65,8 +65,7 @@ export default class DirectoryService
   getListing(req: directoryv1.FrontendGetListingRequest) {
     const query = req.query?.query;
     const item =
-      (query?.case === directoryv1.ListingQuery_QueryCase.ID && listingItem(query.id)) ||
-      events[0];
+      (query?.case === directoryv1.ListingQuery_QueryCase.ID && listingItem(query.id)) || events[0];
     return new directoryv1.FrontendGetListingResponse({
       ...item,
       moderation: {},
@@ -124,27 +123,23 @@ export default class DirectoryService
     return ch;
   }
 
-  // Icons for networks 1..images.length, the network fixtures' ids.
+  // Icons for networks 1..images.length, the network fixtures' ids, in
+  // that order.
   watchAssetBundles() {
     const ch = new PassThrough({ objectMode: true });
 
     images.forEach((url, i) => {
-      void (async () => {
-        const res = await fetch(url);
-        const buf = await res.arrayBuffer();
-
-        ch.push(
-          new directoryv1.FrontendWatchAssetBundlesResponse({
-            networkId: BigInt(i + 1),
-            assetBundle: {
-              icon: {
-                type: ImageType.IMAGE_TYPE_PNG,
-                data: new Uint8Array(buf),
-              },
+      ch.push(
+        new directoryv1.FrontendWatchAssetBundlesResponse({
+          networkId: BigInt(i + 1),
+          assetBundle: {
+            icon: {
+              type: ImageType.IMAGE_TYPE_PNG,
+              data: imageBytes(url),
             },
-          })
-        );
-      })();
+          },
+        })
+      );
     });
 
     return ch;
