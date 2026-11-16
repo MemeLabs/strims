@@ -1026,7 +1026,7 @@ class TabReports(unittest.TestCase):
         page = "http://127.0.0.1:8086/devtools.html#/console/"
         r = self.put("a", page + "tree", focused=True, at=1000)
         self.assertEqual((r.status, r.body), (200, {"id": "a", "url": page + "tree", "focused": True, "visible": True,
-                                                    "last_seen": 0, "focused_ago": 0}))
+                                                    "last_seen": 0, "focused_ago": 0, "goto": None}))
         self.put("b", page + "scorecard", at=1010)
         self.put("c", page + "run_timeline", focused=True, at=1020)
         self.assertEqual([t["id"] for t in self.listed()], ["c", "a", "b"])
@@ -1060,11 +1060,161 @@ class TabReports(unittest.TestCase):
             self.assertEqual(call("GET", "/console/tabs", headers=headers).status, status, headers)
         self.assertEqual(call("PUT", "/console/tabs/x", json.dumps(good).encode(), type="text/plain").status, 415)
         for id, body in [("a.b", good), ("a" * 65, good), ("x", {**good, "url": None}), ("x", {**good, "focused": 1}),
-                         ("x", {"url": "u", "focused": True}), ("x", [good])]:
+                         ("x", {"url": "u", "focused": True}), ("x", [good]), ("x", {**good, "took": -1}),
+                         ("x", {**good, "took": True}), ("x", {**good, "took": "1"}), ("x", {**good, "took": 1.5})]:
             with self.subTest(id=id, body=body):
                 self.assertEqual(call("PUT", f"/console/tabs/{id}", body).status, 400)
         self.assertEqual([t["url"] for t in self.listed()], [good["url"]])
         self.assertEqual(call("POST", "/console/tabs", good).status, 404)
+
+
+class TabGotos(unittest.TestCase):
+    """POST /console/tabs/ID/goto and the tab's stream, the tab played by
+    the test: it holds the stream, or reports, and reports with `took`
+    once it has gone to an address."""
+    PAGE = "http://127.0.0.1:8086/devtools.html#/console/"
+
+    def setUp(self):
+        self.now = [1000.0]
+        saved = CONSOLE.tabs
+        CONSOLE.tabs = server.Tabs(clock=lambda: self.now[0], ping_s=0.1)
+        self.addCleanup(setattr, CONSOLE, "tabs", saved)
+
+    def put(self, id, url, took=0, visible=True):
+        body = {"url": url, "focused": True, "visible": visible}
+        if took is not None:
+            body["took"] = took
+        r = call("PUT", f"/console/tabs/{id}", body)
+        self.assertEqual(r.status, 200, r.body)
+        return r.body
+
+    def goto(self, id, url, wait_s=30):
+        """The goto, posted from a thread: its thread and a list that
+        gets its answer."""
+        out = []
+        t = threading.Thread(target=lambda: out.append(call("POST", f"/console/tabs/{id}/goto",
+                                                            {"url": url, "wait_s": wait_s})), daemon=True)
+        t.start()
+        self.addCleanup(t.join, 60)
+        return t, out
+
+    def answer(self, posted):
+        t, out = posted
+        t.join(60)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].status, 200, out[0].body)
+        return out[0].body
+
+    def stream(self, id, took=0):
+        """The tab's goto stream: a function giving its next line other
+        than a ping (None after `pings` pings in a row)."""
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=30)
+        self.addCleanup(c.close)
+        c.request("GET", f"/console/tabs/{id}/goto?took={took}")
+        r = c.getresponse()
+        self.assertEqual(r.status, 200)
+        self.assertTrue(r.headers["Content-Type"].startswith("application/x-ndjson"))
+
+        def next_line(pings=50):
+            for _ in range(pings):
+                line = json.loads(r.fp.readline())
+                if line != {"type": "ping"}:
+                    return line
+            return None
+        return next_line
+
+    def waiting(self, id):
+        """The address waiting for tab `id`, as its report's answer gives
+        it, once there is one."""
+        return until(lambda: CONSOLE.tabs._tabs.get(id, {}).get("goto"))
+
+    def test_a_goto_is_pushed_and_answers_at_the_tabs_report(self):
+        self.put("a", self.PAGE + "tree")
+        next_line = self.stream("a")
+        posted = self.goto("a", self.PAGE + "overhead?exp=e1")
+        got = next_line()
+        self.assertEqual(got, {"type": "goto", "seq": got["seq"], "url": self.PAGE + "overhead?exp=e1"})
+        # The tab went there: its report says so, and the goto answers with it.
+        self.assertEqual(self.put("a", self.PAGE + "overhead?exp=e1", took=got["seq"])["goto"], None)
+        a = self.answer(posted)
+        self.assertEqual((a["state"], a["tab"]["id"], a["tab"]["url"]), ("taken", "a", self.PAGE + "overhead?exp=e1"))
+        # The stream has nothing more for it.
+        self.assertIsNone(next_line(pings=3))
+
+    def test_an_address_waits_for_the_tab_until_it_reports_it_took_it(self):
+        # A tab in the background holds no stream: its report's answer gives the address.
+        self.put("b", self.PAGE + "tree", visible=False)
+        posted = self.goto("b", self.PAGE + "scorecard")
+        goto = self.waiting("b")
+        self.assertEqual(self.put("b", self.PAGE + "tree", visible=False)["goto"], goto)
+        # A stream opened since, or a stream that went with the address unread, gets it first.
+        self.assertEqual(self.stream("b")(), {"type": "goto", **goto})
+        self.assertEqual(self.stream("b", took=goto["seq"] - 1)(), {"type": "goto", **goto})
+        self.assertIsNone(self.stream("b", took=goto["seq"])(pings=3))
+        self.put("b", self.PAGE + "scorecard", took=goto["seq"], visible=False)
+        self.assertEqual(self.answer(posted)["state"], "taken")
+        self.assertIsNone(self.stream("b")(pings=3))
+
+    def test_a_goto_not_taken_in_its_wait_is_cancelled(self):
+        self.put("c", self.PAGE + "tree")
+        a = self.answer(self.goto("c", self.PAGE + "scorecard", wait_s=0.3))
+        self.assertEqual((a["state"], a["tab"]["url"]), ("missed", self.PAGE + "tree"))
+        self.assertIsNone(self.put("c", self.PAGE + "tree")["goto"])
+        self.assertIsNone(self.stream("c")(pings=3))
+
+    def test_a_later_goto_replaces_one_and_a_forgotten_tab_is_gone(self):
+        self.put("d", self.PAGE + "tree")
+        first = self.goto("d", self.PAGE + "scorecard")
+        one = self.waiting("d")
+        second = self.goto("d", self.PAGE + "overhead")
+        two = until(lambda: (g := CONSOLE.tabs._tabs["d"]["goto"]) and g["seq"] > one["seq"] and g)
+        self.assertEqual(self.answer(first)["state"], "replaced")
+        self.put("d", self.PAGE + "overhead", took=two["seq"])
+        self.assertEqual(self.answer(second)["state"], "taken")
+        gone = self.goto("d", self.PAGE + "tree")
+        self.waiting("d")
+        self.now[0] += server.TAB_TTL_S + 1
+        self.assertEqual(call("GET", "/console/tabs").body, [])
+        self.assertEqual(self.answer(gone), {"state": "gone", "tab": None})
+
+    def test_what_a_goto_refuses(self):
+        good = {"url": self.PAGE + "tree"}
+        self.assertEqual(call("POST", "/console/tabs/nope/goto", good).status, 404)
+        # A page that reports no `took` predates goto.
+        self.put("old", self.PAGE + "tree", took=None)
+        r = call("POST", "/console/tabs/old/goto", good)
+        self.assertEqual(r.status, 409)
+        self.assertIn("reload it on a current build (pnpm run console:build)", r.body["error"])
+        self.put("x", self.PAGE + "tree")
+        for body in [{"url": "http://127.0.0.1:8086/devtools.html#/watch/x"}, {"url": "https://evil.example/"},
+                     {"url": None}, [good], {**good, "wait_s": 0}, {**good, "wait_s": 121}, {**good, "wait_s": "5"},
+                     {**good, "wait_s": True}]:
+            with self.subTest(body=body):
+                self.assertEqual(call("POST", "/console/tabs/x/goto", body).status, 400)
+        self.assertEqual(call("POST", "/console/tabs/a.b/goto", good).status, 400)
+        self.assertEqual(call("POST", "/console/tabs/x/goto", json.dumps(good).encode(), type="text/plain").status, 415)
+        for took in ["-1", "x", "1.5"]:
+            self.assertEqual(call("GET", f"/console/tabs/x/goto?took={took}").status, 400, took)
+        self.assertEqual(call("GET", "/console/tabs/a.b/goto").status, 400)
+        for headers in [{"Host": "evil.example"}, {"Origin": "http://evil.example"}]:
+            self.assertEqual(call("POST", "/console/tabs/x/goto", good, headers=headers).status, 403, headers)
+            self.assertEqual(call("GET", "/console/tabs/x/goto", headers=headers).status, 403, headers)
+        self.assertIsNone(self.put("x", self.PAGE + "tree")["goto"])
+
+    def test_a_stream_ends_when_its_tab_goes(self):
+        before = set(threading.enumerate())
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=30)
+        c.request("GET", "/console/tabs/e/goto")
+        r = c.getresponse()
+        self.assertEqual(json.loads(r.fp.readline()), {"type": "ping"})
+        # The request's thread, which the stream holds.
+        mine = [t for t in set(threading.enumerate()) - before if "process_request_thread" in t.name]
+        self.assertEqual(len(mine), 1)
+        self.assertTrue(mine[0].is_alive())
+        r.close()
+        c.close()
+        mine[0].join(10)
+        self.assertFalse(mine[0].is_alive())
 
 
 class State(unittest.TestCase):

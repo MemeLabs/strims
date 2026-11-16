@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """The sim console's addresses from the shell (simlab.views): what a
 console graph draws and what the user selected on it, from a console URL
-or their open tab, the rows behind that selection, and links that open a
-view with a value or a time range highlighted.
+or their open tab, the rows behind that selection, links that open a
+view with a value or a time range highlighted, and sending their tab to
+one.
 
   python3 hack/console/ui.py describe [VIEW | URL | --tab [ID]]
   python3 hack/console/ui.py rows (URL | --tab [ID]) [--json] [--max-rows N]
@@ -12,6 +13,8 @@ view with a value or a time range highlighted.
   python3 hack/console/ui.py link VIEW [--param NAME=VALUE ...] [--sel JSON] [--check] [--base URL]
   python3 hack/console/ui.py link workbench (--sql SQL | --view NAME) [--chart MARK,x=F,y=F,color=F,logy]
                                 [--param NAME=VALUE ...] [--sel JSON] [--check] [--base URL]
+  python3 hack/console/ui.py go [VIEW | URL] [--tab ID] [--param NAME=VALUE ...] [--sel JSON | --sel null]
+                                [--sql SQL | --view NAME] [--chart ...] [--check] [--wait S]
 
 `describe VIEW` says what a saved view's graph draws: each panel's id
 (its title, else its index path), marks and channels, its time field
@@ -41,11 +44,23 @@ host of the latest focused tab, else the first running server's (in port
 order). For the workbench, `--chart` sets the auto-chart: a mark (line,
 point, bar, area, rect, tick), x=, y=, color= and logy.
 
+`go` sends a console tab (the latest focused, or `--tab ID`) to an
+address and waits for it to say it went there. The address is VIEW's (no
+params), the URL's, or with neither the tab's own, and then link's flags
+change it: each `--param` set (NAME= leaves it out), `--sel` in place of
+the selection (null drops it), the workbench's `--sql`, `--view` and
+`--chart`. It prints the address the tab then reports, and the one it
+left to stderr. The tab moves within its own page, a history entry its
+Back undoes: a tab in view at once, one in the background at its next
+report (up to a minute) or when it's shown. Past `--wait` seconds
+(default 60) the address is withdrawn and go fails; a tab whose page
+predates go fails at once (reload it on a current build).
+
 `describe VIEW`, `describe URL` and `link` without `--check` need neither
 the server nor the catalog. `rows` and `--check` read the catalog
-(simdb.py's, through the reader `simdb.py view` uses); `--tab` and `tabs`
-ask the console servers running (python3 hack/console/server.py, after
-pnpm run console:build).
+(simdb.py's, through the reader `simdb.py view` uses); `--tab`, `tabs`
+and `go` ask the console servers running (python3
+hack/console/server.py, after pnpm run console:build).
 """
 
 import argparse
@@ -54,6 +69,7 @@ import re
 import shlex
 import sys
 import textwrap
+import urllib.parse
 from pathlib import Path
 
 HACK = Path(__file__).resolve().parents[1]
@@ -71,6 +87,8 @@ UI = "python3 hack/console/ui.py"
 # The catalog's readers this CLI spills under, as simdb.py's commands do.
 READERS = "cli"
 PARAM = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# go's longest wait for its tab (server.py's GOTO_WAIT_MAX_S).
+MAX_WAIT_S = 120
 
 
 def param(text):
@@ -330,36 +348,117 @@ def chart(text):
     return out
 
 
-def cmd_link(a):
-    params = dict(a.param or [])
-    if a.name == views.WORKBENCH:
+def changes(a):
+    """Whether an invocation's flags change an address."""
+    return bool(a.param or a.chart) or any(x is not None for x in (a.sel, a.sql, a.view))
+
+
+def changed(a, name, params, sel, cmd):
+    """(params, sel) of view `name`'s address with an invocation's flags
+    applied: each --param set, the workbench's --sql or --view (each in
+    place of the other) and --chart, and --sel in place of the selection
+    (JSON null drops it)."""
+    params = dict(params)
+    params.update(a.param or [])
+    if name == views.WORKBENCH:
+        if a.sql is not None and a.view is None:
+            params.pop("view", None)
+        if a.view is not None and a.sql is None:
+            params.pop("sql", None)
         for k, v in (("sql", a.sql), ("view", a.view)):
             if v is not None:
                 params[k] = v
         params.update(a.chart or {})
     elif a.sql is not None or a.view is not None or a.chart:
-        sys.exit("link: --sql, --view and --chart are the workbench's")
-    sel = None
+        sys.exit(f"{cmd}: --sql, --view and --chart are the workbench's")
     if a.sel is not None:
         try:
             sel = json.loads(a.sel)
         except ValueError:
-            sys.exit(f"link: --sel isn't JSON: {a.sel}")
+            sys.exit(f"{cmd}: --sel isn't JSON: {a.sel}")
+    return params, sel
+
+
+def checked(name, params, sel, cmd):
+    """Exits with what's wrong with an address over the catalog
+    (views.check), when anything is."""
+    p = pool()
+    try:
+        problems = views.check(p, name, params, sel)
+    finally:
+        p.close()
+    if problems:
+        for x in problems:
+            print(f"{cmd}: {x}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_link(a):
+    params, sel = changed(a, a.name, {}, None, "link")
     try:
         url = views.link(a.name, params, sel, base=a.base)
     except ValueError as e:
         sys.exit(f"link: {e}")
     if a.check:
-        p = pool()
-        try:
-            problems = views.check(p, a.name, params, sel)
-        finally:
-            p.close()
-        if problems:
-            for x in problems:
-                print(f"link: {x}", file=sys.stderr)
-            sys.exit(1)
+        checked(a.name, params, sel, "link")
     print(url)
+
+
+def route(url):
+    """An address's route, its fragment: what a tab goes to."""
+    return urllib.parse.urlsplit(url).fragment
+
+
+def cmd_go(a):
+    if not 0 < a.wait <= MAX_WAIT_S:
+        sys.exit(f"go: --wait is seconds, more than 0 and at most {MAX_WAIT_S}")
+    try:
+        t = views.tab(a.tab or None)
+    except views.NoServer as e:
+        sys.exit(f"go: {e}")
+    except LookupError as e:
+        sys.exit(f"go: {e.args[0]}")
+    # The address it starts from: the URL's, VIEW's with no params, else the tab's own.
+    if a.target and ("#" in a.target or "://" in a.target):
+        name, params, sel = parsed(a.target, "go")
+    elif a.target:
+        name, params, sel = a.target, {}, None
+    elif changes(a):
+        name, params, sel = parsed(t["url"], "go")
+    else:
+        sys.exit("go: give a VIEW or a URL, or --param or --sel to change the tab's own address")
+    params, sel = changed(a, name, params, sel, "go")
+    try:
+        url = views.link(name, params, sel, base=views.origin(t["url"]))
+    except ValueError as e:
+        sys.exit(f"go: {e}")
+    if a.check:
+        checked(name, params, sel, "go")
+    if not t.get("visible"):
+        print(f"go: tab {t['id']} is in the background: it goes there at its next report (up to a minute) or when "
+              "it's shown", file=sys.stderr)
+    try:
+        r = views.goto(url, t["id"], wait_s=a.wait)
+    except views.NoServer as e:
+        sys.exit(f"go: {e}")
+    except (LookupError, ValueError) as e:
+        sys.exit(f"go: {e.args[0]}")
+    state = r.get("state")
+    if state == "taken":
+        now = r["tab"]["url"]
+        print(f"go: tab {t['id']} was at {t['url']}", file=sys.stderr)
+        if route(now) != route(url):
+            print(f"go: the tab shows {now}, not {url}", file=sys.stderr)
+        print(now)
+        return
+    if state == "replaced":
+        sys.exit(f"go: a later go to tab {t['id']} replaced this one")
+    if state == "gone":
+        sys.exit(f"go: tab {t['id']} went away (closed, or unheard from for 2 minutes)")
+    background = r.get("tab") and not r["tab"].get("visible")
+    sys.exit(f"go: tab {t['id']} didn't go there in {a.wait:g} s, so the address is withdrawn: "
+             + ("it's in the background; bring it up and go again" if background else
+                f"reload it on a current build ({views.BUILD})"))
 
 
 def main(argv=None):
@@ -377,16 +476,29 @@ def main(argv=None):
     sub.add_parser("tabs", help="the console tabs open in a browser, and their addresses")
     k = sub.add_parser("link", help="an address of a view or the workbench, with a selection")
     k.add_argument("name", help=f"a saved view, or {views.WORKBENCH}")
-    k.add_argument("--param", action="append", type=param, metavar="NAME=VALUE",
-                   help="the view's param NAME, as text (a seed's or number's its number)")
-    k.add_argument("--sel", metavar="JSON", help='the selection: {"panel": ID, "at": {FIELD: VALUE | [LO, HI]}}')
-    k.add_argument("--check", action="store_true", help="confirm it over the catalog first")
+    address_flags(k)
     k.add_argument("--base", metavar="URL", help="the host (default: SIM_CONSOLE_URL, else the latest tab's)")
-    k.add_argument("--sql", help="the workbench's statement")
-    k.add_argument("--view", help="the workbench's saved view (its statement and spec)")
-    k.add_argument("--chart", type=chart, metavar="MARK,x=F,y=F,color=F,logy", help="the workbench's auto-chart")
+    g = sub.add_parser("go", help="send a console tab to an address, and wait for it to go there")
+    g.add_argument("target", nargs="?", help=f"a saved view, {views.WORKBENCH} or a console URL (none: the tab's "
+                                             "own address)")
+    g.add_argument("--tab", nargs="?", const="", metavar="ID", help="the tab (default: the most recently focused)")
+    address_flags(g)
+    g.add_argument("--wait", type=float, default=views.GOTO_WAIT_S, metavar="S",
+                   help=f"how long it waits for the tab (default {views.GOTO_WAIT_S} s, at most {MAX_WAIT_S})")
     a = ap.parse_args(argv)
-    {"describe": cmd_describe, "rows": cmd_rows, "tabs": cmd_tabs, "link": cmd_link}[a.cmd](a)
+    {"describe": cmd_describe, "rows": cmd_rows, "tabs": cmd_tabs, "link": cmd_link, "go": cmd_go}[a.cmd](a)
+
+
+def address_flags(p):
+    """link's and go's flags for what an address holds."""
+    p.add_argument("--param", action="append", type=param, metavar="NAME=VALUE",
+                   help="the view's param NAME, as text (a seed's or number's its number; NAME= leaves it out)")
+    p.add_argument("--sel", metavar="JSON", help='the selection: {"panel": ID, "at": {FIELD: VALUE | [LO, HI]}}, '
+                                                 "or null for none")
+    p.add_argument("--check", action="store_true", help="confirm it over the catalog first")
+    p.add_argument("--sql", help="the workbench's statement")
+    p.add_argument("--view", help="the workbench's saved view (its statement and spec)")
+    p.add_argument("--chart", type=chart, metavar="MARK,x=F,y=F,color=F,logy", help="the workbench's auto-chart")
 
 
 if __name__ == "__main__":

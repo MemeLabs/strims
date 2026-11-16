@@ -4,7 +4,7 @@
 import "../styles/console.scss";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 
 import Nav from "../components/Nav";
 import Ask from "../components/console/Ask";
@@ -280,8 +280,14 @@ const Console: React.FC = () => {
   const [sel, setSel] = useSelection();
   const location = useLocation();
   const name = (useParams()["*"] ?? "").split("/")[0];
-  // The tab tells the console server its address, for hack/console/ui.py.
-  useEffect(startTabReports, []);
+  // The tab tells the console server its address, for hack/console/ui.py, and goes where ui.py go
+  // sends it. navigate is a new function at each path, and the reports start once.
+  const navigate = useNavigate();
+  const navigateNow = useRef(navigate);
+  useEffect(() => {
+    navigateNow.current = navigate;
+  }, [navigate]);
+  useEffect(() => startTabReports((route) => void navigateNow.current(route)), []);
   useEffect(() => void reportTab(), [location.pathname, location.search]);
   const load = useCallback(() => {
     getSchema().then(setSchema, (e: unknown) =>

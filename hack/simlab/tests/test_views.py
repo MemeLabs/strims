@@ -13,7 +13,7 @@ console's addresses:
               (selection.ts) and the workbench's marks as views.py's;
               what a link leaves out, its encoding, its numbers, its
               host; what it refuses; the servers' state files and their
-              tabs
+              tabs, each with its server, and a goto sent to that server
   Filters     every saved spec's filter transforms translate to SQL, and
               keep the rows JavaScript keeps; the forms that don't say why
   Graphs      every saved view's panels, time fields, encoded columns and
@@ -37,6 +37,7 @@ console's addresses:
   python3 hack/simlab/tests/test_views.py [--write-panels]
 """
 
+import io
 import json
 import os
 import re
@@ -44,6 +45,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
@@ -515,6 +517,60 @@ class Addresses(unittest.TestCase):
             self.assertEqual(views.server_states(), [])
             with self.assertRaisesRegex(views.NoServer, "no console server is running"):
                 views.tabs()
+
+    def test_a_tab_is_listed_with_its_server_and_a_goto_goes_there(self):
+        class Answer(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        sent = []
+
+        def urlopen(req, timeout):
+            if isinstance(req, str):
+                sent.append(("GET", req, None, timeout))
+                return Answer(json.dumps([{"id": "a", "url": "u1"}]).encode())
+            sent.append((req.get_method(), req.full_url, json.loads(req.data), timeout))
+            return Answer(json.dumps({"state": "taken", "tab": {"id": "t2"}}).encode())
+
+        with mock.patch.object(views.urllib.request, "urlopen", urlopen):
+            self.assertEqual(views.tabs("http://127.0.0.1:8087/"),
+                             [{"id": "a", "url": "u1", "server": "http://127.0.0.1:8087"}])
+        # The tab named, else the latest focused, at the server it was listed at.
+        listed = [{"id": "t1", "url": "u1", "server": "http://127.0.0.1:9000"},
+                  {"id": "t2", "url": "u2", "server": "http://127.0.0.1:8087"}]
+        url = views.link("overhead", {"exp": "e1"}, base="http://blinky.local:8086")
+        sent.clear()
+        with mock.patch.object(views, "tabs", lambda server_url=None: listed), \
+                mock.patch.object(views.urllib.request, "urlopen", urlopen):
+            self.assertEqual(views.goto(url, "t2", wait_s=7), {"state": "taken", "tab": {"id": "t2"}})
+            views.goto(url)
+        self.assertEqual(sent, [("POST", "http://127.0.0.1:8087/console/tabs/t2/goto", {"url": url, "wait_s": 7},
+                                 7 + views.TAB_TIMEOUT_S),
+                                ("POST", "http://127.0.0.1:9000/console/tabs/t1/goto",
+                                 {"url": url, "wait_s": views.GOTO_WAIT_S}, views.GOTO_WAIT_S + views.TAB_TIMEOUT_S)])
+
+        # An address of no view goes nowhere; the server's refusals as LookupError and ValueError.
+        sent.clear()
+        with mock.patch.object(views, "tabs", lambda server_url=None: listed), \
+                mock.patch.object(views.urllib.request, "urlopen", urlopen):
+            with self.assertRaisesRegex(ValueError, "not a console address"):
+                views.goto("http://blinky.local:8086/devtools.html#/watch/x")
+            with self.assertRaisesRegex(ValueError, "the console's ask page"):
+                views.goto("http://blinky.local:8086/devtools.html#/console/ask")
+            with self.assertRaisesRegex(LookupError, "no tab 'nope'"):
+                views.goto(url, "nope")
+        self.assertEqual(sent, [])
+        for code, error in [(404, LookupError), (409, LookupError), (400, ValueError), (500, views.NoServer)]:
+            def refused(req, timeout, code=code):
+                raise urllib.error.HTTPError(req.full_url, code, "no", {},
+                                             io.BytesIO(json.dumps({"error": f"said {code}"}).encode()))
+            with self.subTest(code=code), mock.patch.object(views, "tabs", lambda server_url=None: listed), \
+                    mock.patch.object(views.urllib.request, "urlopen", refused), \
+                    self.assertRaisesRegex(error, f"said {code}"):
+                views.goto(url)
 
     def test_panels_by_id_or_index_path(self):
         rt = views.get("run_timeline")

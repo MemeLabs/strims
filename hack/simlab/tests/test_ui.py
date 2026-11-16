@@ -10,12 +10,17 @@ on a free port, its state file in the fixture's checkout):
             catalog; link's refusals
   Catalog   rows of a URL, as a table and as JSON; link --check passing,
             and refusing a bad cell; rows with no catalog
-  NoServer  tabs, describe --tab and rows --tab say how to start the
+  NoServer  tabs, describe --tab, rows --tab and go say how to start the
             server, with no state file and with a stale one
   Server    tabs; describe --tab and rows --tab of the latest focused tab
             and of a tab by its id; a link's host the server's, then the
             latest focused tab's; a second server's own state file, its
             tabs among the first's, and the first's file left at its exit
+  Go        go over a server of its own, its tabs played as the page
+            plays one (Page): to a view's address, checked, and a URL;
+            the tab's own address changed and its selection dropped; a
+            tab in the background at its next report; a page that
+            predates go, one that never takes it, a tab that isn't there
 
   python3 hack/simlab/tests/test_ui.py
 """
@@ -27,8 +32,10 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
+import urllib.parse
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -169,7 +176,7 @@ class Catalog(unittest.TestCase):
 
 
 def no_server(test, root):
-    for args in (["tabs"], ["describe", "--tab"], ["rows", "--tab"], ["describe", "--tab", "t1"]):
+    for args in (["tabs"], ["describe", "--tab"], ["rows", "--tab"], ["describe", "--tab", "t1"], ["go", "overhead"]):
         with test.subTest(args=args):
             code, out, err = ui(*args, root=root)
             test.assertEqual((code, out), (1, ""))
@@ -213,6 +220,130 @@ def start_server():
 def stop_server(proc):
     proc.send_signal(signal.SIGTERM)
     proc.wait(timeout=60)
+
+
+class Page:
+    """A console tab as api.ts plays one, at server `port`: it reports its
+    address every `every` s (with `took`, but for a page that predates go,
+    took None), holds its goto stream while in view, and goes to each
+    address it's sent (on its own host), then reports with its seq; in the
+    background it takes one from its report's answer. One that doesn't
+    `take` (a page stuck) holds no stream and takes none."""
+
+    def __init__(self, test, port, id, url, visible=True, took=0, takes=True, every=0.5):
+        self.port, self.id, self.url, self.visible, self.took = port, id, url, visible, took
+        self.takes = takes
+        self.lock = threading.Lock()
+        self.report()
+        stop = threading.Event()
+        test.addCleanup(stop.set)
+
+        def reports():
+            while not stop.wait(every):
+                self.report()
+        threading.Thread(target=reports, daemon=True).start()
+        if visible and takes:
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=120)
+            c.request("GET", f"/console/tabs/{id}/goto?took={took or 0}")
+            r = c.getresponse()
+            test.assertEqual(r.status, 200)
+            threading.Thread(target=self.follow, args=(r,), daemon=True).start()
+            test.addCleanup(c.close)
+
+    def follow(self, r):
+        try:
+            for line in r.fp:
+                got = json.loads(line)
+                if got.get("type") == "goto":
+                    self.take(got)
+        except (OSError, ValueError):
+            pass
+
+    def take(self, goto):
+        with self.lock:
+            if goto["seq"] <= self.took:
+                return
+            self.url = self.url.partition("#")[0] + "#" + urllib.parse.urlsplit(goto["url"]).fragment
+            self.took = goto["seq"]
+        self.report()
+
+    def report(self):
+        with self.lock:
+            body = {"url": self.url, "focused": True, "visible": self.visible}
+            if self.took is not None:
+                body["took"] = self.took
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
+        try:
+            c.request("PUT", f"/console/tabs/{self.id}", json.dumps(body), {"Content-Type": "application/json"})
+            answer = json.loads(c.getresponse().read())
+        except (OSError, ValueError):
+            return
+        finally:
+            c.close()
+        if answer.get("goto") and self.took is not None and self.takes:
+            self.take(answer["goto"])
+
+
+class Go(unittest.TestCase):
+    """go over a server of its own (its tabs gone with it), the tabs Page's."""
+    HOST = "http://blinky.local:8086"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.proc, cls.state = start_server()
+        cls.port = json.loads(cls.state.read_text())["port"]
+
+    @classmethod
+    def tearDownClass(cls):
+        stop_server(cls.proc)
+
+    def test_a_tab_goes_to_an_address_and_changes_its_own(self):
+        grid = views.link("collapse_grid", {"exp": "sf0001"}, base=self.HOST)
+        page = Page(self, self.port, "g1", grid)
+        want = URL.replace(views.BASE, self.HOST)
+        code, out, err = ui("go", "run_timeline", *RUN, "--sel", json.dumps(STALL_SEL), "--tab", "g1", "--check")
+        self.assertEqual((code, out, err), (0, want + "\n", f"go: tab g1 was at {grid}\n"))
+        self.assertEqual(page.url, want)
+        # With no VIEW, the tab's own address changes: a param set, the selection replaced, then dropped.
+        code, out, err = ui("go", "--tab", "g1", "--param", "seed=2002", "--sel", '{"panel": "2", "at": {"t_s": [30, 31]}}')
+        self.assertEqual((code, err), (0, f"go: tab g1 was at {want}\n"))
+        name, params, sel = views.parse(out)
+        self.assertEqual((name, params["cell"], params["seed"], sel),
+                         ("run_timeline", "star-5", "2002", {"panel": test_views.STALLS, "at": {"t_s": [30, 31]}}))
+        self.assertEqual(page.url, out.strip())
+        code, out, err = ui("go", "--tab", "g1", "--sel", "null")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(views.parse(out)[1:], (params, None))
+        self.assertEqual(page.url, out.strip())
+        # A URL as given; the address checked first, a bad one going nowhere.
+        self.assertEqual(ui("go", grid, "--tab", "g1")[:2], (0, grid + "\n"))
+        code, out, err = ui("go", "run_timeline", *RUN, "--param", "cell=star-9", "--check", "--tab", "g1")
+        self.assertEqual((code, out, err), (1, "", "go: sf0001 has no cell 'star-9': its cells are halve-5, star-5\n"))
+        self.assertEqual(page.url, grid)
+        self.assertEqual(ui("go", "--tab", "g1"), (1, "", "go: give a VIEW or a URL, or --param or --sel to change "
+                                                           "the tab's own address\n"))
+        code, out, err = ui("go", "overhead", "--tab", "nope")
+        self.assertEqual((code, out), (1, ""))
+        self.assertTrue(err.startswith("go: no tab 'nope': the tabs are "), err)
+
+    def test_a_tab_in_the_background_and_ones_that_cant_go(self):
+        grid = views.link("collapse_grid", {"exp": "sf0001"}, base=self.HOST)
+        overhead = views.link("overhead", {"exp": "sf0001"}, base=self.HOST)
+        page = Page(self, self.port, "bg", grid, visible=False)
+        code, out, err = ui("go", "overhead", "--param", "exp=sf0001", "--tab", "bg")
+        self.assertEqual((code, out, err), (0, overhead + "\n", "go: tab bg is in the background: it goes there at "
+                                                                 "its next report (up to a minute) or when it's shown\n"
+                                                                 f"go: tab bg was at {grid}\n"))
+        self.assertEqual(page.url, overhead)
+        Page(self, self.port, "old", grid, took=None)
+        self.assertEqual(ui("go", "overhead", "--tab", "old"), (1, "", "go: tab old's page predates goto: reload it on "
+                                                                       "a current build (pnpm run console:build)\n"))
+        Page(self, self.port, "frozen", grid, takes=False)
+        self.assertEqual(ui("go", "overhead", "--tab", "frozen", "--wait", "1"),
+                         (1, "", "go: tab frozen didn't go there in 1 s, so the address is withdrawn: reload it on a "
+                                 "current build (pnpm run console:build)\n"))
+        self.assertEqual(ui("go", "overhead", "--wait", "0")[2],
+                         "go: --wait is seconds, more than 0 and at most 120\n")
 
 
 class Server(unittest.TestCase):

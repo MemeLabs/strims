@@ -192,20 +192,31 @@ export const fetchData = async (
     const body = (await res.json()) as { error?: string };
     throw new ApiError(body.error ?? `fetch answered ${res.status}`, res.status);
   }
-  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-  let rest = "";
   let last: FetchLine = {};
+  await readLines<FetchLine>(res.body, (l) => {
+    last = l;
+    onLine(l);
+  });
+  return last;
+};
+
+/**
+ * Hands each line of an NDJSON body to `onLine`, parsed, until the body ends.
+ *
+ * @param body - the response's body
+ * @param onLine - takes each line
+ * @returns once the body has ended
+ */
+const readLines = async <T>(body: NonNullable<Response["body"]>, onLine: (line: T) => void) => {
+  const reader = body.pipeThrough(new TextDecoderStream()).getReader();
+  let rest = "";
   for (;;) {
     const { value, done } = await reader.read();
-    if (done) break;
+    if (done) return;
     const lines = (rest + value).split("\n");
     rest = lines.pop() ?? "";
-    for (const l of lines.filter(Boolean)) {
-      last = JSON.parse(l) as FetchLine;
-      onLine(last);
-    }
+    for (const l of lines.filter(Boolean)) onLine(JSON.parse(l) as T);
   }
-  return last;
 };
 
 export const regenerate = (args: {
@@ -334,15 +345,7 @@ export const askStream = async (
     const b = (await res.json()) as { error?: string };
     throw new ApiError(b.error ?? `ask answered ${res.status}`, res.status);
   }
-  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-  let rest = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    const lines = (rest + value).split("\n");
-    rest = lines.pop() ?? "";
-    for (const l of lines.filter(Boolean)) onEvent(JSON.parse(l) as AskEvent);
-  }
+  await readLines<AskEvent>(res.body, onEvent);
 };
 
 export interface Spend {
@@ -398,12 +401,74 @@ export const tabId = (): string => {
   return tab;
 };
 
+/** An address the console server sends this tab to (hack/console/ui.py go), and its seq. */
+export interface Goto {
+  seq: number;
+  url: string;
+}
+
+/** A line of the tab's goto stream (GET /console/tabs/ID/goto). */
+type GotoLine = ({ type: "goto" } & Goto) | { type: "ping" };
+
+/** How long a tab waits to open its goto stream again: once it ends, once it fails, and after a server without one. */
+const GOTO_AGAIN_MS = 1_000;
+const GOTO_RETRY_MS = 5_000;
+const GOTO_NONE_MS = 30_000;
+
+/** The seq of the last address the server sent this tab that it took (0: none), which its reports carry. */
+let took = 0;
+/** What takes this tab to a console route, while startTabReports runs. */
+let goTo: ((route: string) => void) | null = null;
+
 /**
- * Reports this tab's address, and whether it is focused and visible, to the console server (PUT
- * /console/tabs/ID), which keeps each tab's last report for hack/console/ui.py: what the user means
- * by "my selection". A failed report is dropped.
+ * The console route an address names: its fragment, when that is /console or a route under it
+ * (server.py console_route's test).
  *
- * @returns once it's sent or failed
+ * @param url - the address
+ * @returns its route, else null
+ */
+export const routeOf = (url: string): string | null => {
+  const i = url.indexOf("#");
+  if (i < 0) return null;
+  const route = url.slice(i + 1);
+  const path = route.split("?")[0];
+  return path === "/console" || path.startsWith("/console/") ? route : null;
+};
+
+/**
+ * What a tab that last took `last` does with an address the server sent it: nothing for one it
+ * took already (its seq no later), else it takes its seq and goes to its route (none for an address
+ * outside the console, which it takes without going anywhere).
+ *
+ * @param last - the seq of the last address the tab took
+ * @param goto - the address sent
+ * @returns the seq it now took and the route it goes to, or null for nothing
+ */
+export const gotoOf = (last: number, goto: Goto): { took: number; route: string | null } | null =>
+  goto.seq > last ? { took: goto.seq, route: routeOf(goto.url) } : null;
+
+/**
+ * Takes this tab to an address the server sent it (gotoOf), then reports, which tells the server
+ * it took it.
+ *
+ * @param goto - the address, if any
+ */
+const take = (goto: Goto | null | undefined): void => {
+  if (!goto || !goTo) return;
+  const next = gotoOf(took, goto);
+  if (!next) return;
+  took = next.took;
+  if (next.route !== null) goTo(next.route);
+  void reportTab();
+};
+
+/**
+ * Reports this tab's address, whether it is focused and visible, and the last address it was sent
+ * and took, to the console server (PUT /console/tabs/ID), which keeps each tab's last report for
+ * hack/console/ui.py: what the user means by "my selection". An address the answer says waits for
+ * the tab, it goes to: how a tab in the background takes one. A failed report is dropped.
+ *
+ * @returns once it's sent and answered, or failed
  */
 export const reportTab = (): Promise<void> =>
   fetch(`/console/tabs/${tabId()}`, {
@@ -413,30 +478,95 @@ export const reportTab = (): Promise<void> =>
       url: window.location.href,
       focused: document.hasFocus(),
       visible: document.visibilityState === "visible",
+      took,
     }),
     keepalive: true,
-  }).then(
-    () => undefined,
-    () => undefined
-  );
+  })
+    .then(async (res) => {
+      if (res.ok) take(((await res.json()) as { goto?: Goto | null }).goto);
+    })
+    .catch(() => undefined);
+
+const pause = (ms: number, signal: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(t);
+        resolve();
+      },
+      { once: true }
+    );
+  });
 
 /**
- * Reports this tab on each focus, blur and visibility change, and every 30 s; the page reports its
- * address's changes itself (reportTab).
+ * Holds this tab's goto stream (GET /console/tabs/ID/goto) until `signal` aborts, taking each
+ * address it pushes: the server pushes one as ui.py go posts it. It opens the stream again once it
+ * ends.
  *
- * @returns what stops the reports
+ * @param signal - what ends it
  */
-export const startTabReports = (): (() => void) => {
+const followGotos = async (signal: AbortSignal): Promise<void> => {
+  while (!signal.aborted) {
+    let wait = GOTO_AGAIN_MS;
+    try {
+      const res = await fetch(`/console/tabs/${tabId()}/goto?took=${took}`, { signal });
+      if (res.ok && res.body) {
+        await readLines<GotoLine>(res.body, (l) => {
+          if (l.type === "goto") take(l);
+        });
+      } else {
+        void res.body?.cancel();
+        wait = res.status === 404 ? GOTO_NONE_MS : GOTO_RETRY_MS;
+      }
+    } catch {
+      wait = GOTO_RETRY_MS;
+    }
+    await pause(wait, signal);
+  }
+};
+
+/**
+ * Reports this tab on each focus, blur and visibility change, and every 30 s (the page reports its
+ * address's changes itself: reportTab), and while it is visible holds its goto stream: each address
+ * hack/console/ui.py go sends it to, it goes to with `go`. A tab in the background holds no stream
+ * (a browser's few connections to a host are the page's queries'); it takes an address from its
+ * next report's answer, or when it's shown.
+ *
+ * @param go - takes the tab to a console route
+ * @returns what stops the reports and the stream
+ */
+export const startTabReports = (go: (route: string) => void): (() => void) => {
+  goTo = go;
+  let following: AbortController | null = null;
+  const follow = () => {
+    const visible = document.visibilityState === "visible";
+    if (visible && !following) {
+      following = new AbortController();
+      void followGotos(following.signal);
+    } else if (!visible && following) {
+      following.abort();
+      following = null;
+    }
+  };
   const report = () => void reportTab();
+  const shown = () => {
+    follow();
+    report();
+  };
   window.addEventListener("focus", report);
   window.addEventListener("blur", report);
-  document.addEventListener("visibilitychange", report);
+  document.addEventListener("visibilitychange", shown);
   const timer = setInterval(report, TAB_EVERY_MS);
+  follow();
   return () => {
     window.removeEventListener("focus", report);
     window.removeEventListener("blur", report);
-    document.removeEventListener("visibilitychange", report);
+    document.removeEventListener("visibilitychange", shown);
     clearInterval(timer);
+    following?.abort();
+    goTo = null;
   };
 };
 

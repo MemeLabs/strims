@@ -107,13 +107,25 @@ BASE/devtools.html#/console/NAME?QUERY and the workbench at
                                    file whose process is gone none
   tabs(server_url=None) -> [dict]  the open console tabs' last reports
                                    ({id, url, focused, visible,
-                                   last_seen, focused_ago}), the latest
-                                   focused first, from every running
-                                   server (else SIM_CONSOLE_URL's), or
-                                   `server_url`'s: NoServer when none
+                                   last_seen, focused_ago, server}, server
+                                   the URL of the server it reports to),
+                                   the latest focused first, from every
+                                   running server (else SIM_CONSOLE_URL's),
+                                   or `server_url`'s: NoServer when none
                                    answers
   tab(id=None, server_url=None) -> dict
                                    one of them, the first by default
+  goto(url, id=None, wait_s=GOTO_WAIT_S, server_url=None) -> dict
+                                   sends tab `id` (the latest focused by
+                                   default) to console address `url`,
+                                   through the server it reports to, and
+                                   waits up to wait_s for it to say it
+                                   went there: {state, tab} (POST
+                                   /console/tabs/ID/goto), state taken,
+                                   replaced, gone or missed; ValueError for
+                                   an address of no view, LookupError for
+                                   no such tab or one whose page predates
+                                   goto
   base() -> str                    the host links are on: SIM_CONSOLE_URL,
                                    else the origin of the latest focused
                                    tab's address on any running server,
@@ -401,6 +413,10 @@ VOCAB_SECTIONS = ("phases", "episodes", "reasons", "run_states")
 SERVER = "python3 hack/console/server.py"
 BUILD = "pnpm run console:build"
 TAB_TIMEOUT_S = 5
+# How long goto waits for its tab to take an address by default: a tab in
+# the background takes it at its next report, which a browser's timer
+# throttling can hold to a minute (server.py's GOTO_WAIT_S).
+GOTO_WAIT_S = 60
 
 
 def form(s):
@@ -1454,7 +1470,7 @@ def _tabs_at(at):
     at = at.rstrip("/")
     try:
         with urllib.request.urlopen(f"{at}/console/tabs", timeout=TAB_TIMEOUT_S) as r:
-            return json.loads(r.read().decode("utf-8"))
+            return [{**t, "server": at} for t in json.loads(r.read().decode("utf-8"))]
     except urllib.error.HTTPError as e:
         raise NoServer(f"the console server at {at} answers {e.code} to GET /console/tabs: restart it ({SERVER}) "
                        "for the tab reports") from None
@@ -1466,10 +1482,11 @@ def _tabs_at(at):
 def tabs(server_url=None):
     """The open console tabs' last reports (GET /console/tabs) at
     `server_url`, else at every server servers() names: [{id, url,
-    focused, visible, last_seen, focused_ago}], last_seen the seconds
-    since its report and focused_ago since it last said it was focused
-    (None: never), the latest focused first (then the latest seen). A
-    server that doesn't answer is left out; NoServer when none does."""
+    focused, visible, last_seen, focused_ago, server}], last_seen the
+    seconds since its report and focused_ago since it last said it was
+    focused (None: never), server the URL it was listed at, the latest
+    focused first (then the latest seen). A server that doesn't answer is
+    left out; NoServer when none does."""
     if server_url:
         return _tabs_at(server_url)
     got, answered, failed = [], False, None
@@ -1503,6 +1520,42 @@ def tab(id=None, server_url=None):
         if t.get("id") == id:
             return t
     raise LookupError(f"no tab {id!r}: the tabs are {', '.join(t.get('id', '?') for t in got)}")
+
+
+def goto(url, id=None, wait_s=GOTO_WAIT_S, server_url=None):
+    """Sends tab `id` (else the latest focused) to console address `url`,
+    through the server it reports to, and waits up to `wait_s` seconds for
+    the tab to report it went there: the server's {state, tab}, state
+    "taken" (tab its report then), "replaced" (by a later goto), "gone"
+    (the tab forgotten, tab None) or "missed" (the address no longer
+    waits for it). The tab goes to the address's route on its own host, a
+    history entry its Back undoes. ValueError for an address of no view
+    (parse), LookupError for no such tab or one whose page predates goto
+    (the server's 404 and 409), NoServer as tabs()."""
+    parse(url)
+    t = tab(id, server_url)
+    at = (t.get("server") or server_url).rstrip("/")
+    req = urllib.request.Request(f"{at}/console/tabs/{urllib.parse.quote(t['id'], safe='')}/goto",
+                                 data=json.dumps({"url": url, "wait_s": wait_s}).encode("utf-8"),
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=wait_s + TAB_TIMEOUT_S) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        with e:
+            try:
+                message = json.loads(e.read().decode("utf-8"))["error"]
+            except (OSError, ValueError, KeyError, TypeError):
+                message = f"{e.code} {e.reason}"
+        if e.code in (404, 409):
+            raise LookupError(message) from None
+        if e.code == 400:
+            raise ValueError(message) from None
+        raise NoServer(f"the console server at {at} answers {e.code} to POST /console/tabs/ID/goto ({message}): "
+                       f"restart it ({SERVER}) for goto") from None
+    except (OSError, ValueError) as e:
+        raise NoServer(f"no console server answers at {at} ({getattr(e, 'reason', e)}): start one with {SERVER} "
+                       f"(after {BUILD})") from None
 
 
 def base():

@@ -1,6 +1,6 @@
 ---
 name: sim-console
-description: "The sim console's addresses: reading what the user has selected on a console graph (a clicked value or a brushed time range, from their open tab or a pasted console URL), and giving them links that open a view with a value or time range highlighted. Use when the user refers to their selection, chart, console tab or a console URL, or asks to be shown a result or given a link to one. For computing or checking results, use sim-lab."
+description: "The sim console's addresses: reading what the user has selected on a console graph (a clicked value or a brushed time range, from their open tab or a pasted console URL), giving them links that open a view with a value or time range highlighted, and sending their open console tab to one. Use when the user refers to their selection, chart, console tab or a console URL, asks to be shown a result or given a link to one, or asks you to show something on their console or move their tab. For computing or checking results, use sim-lab."
 ---
 
 # The sim console's addresses
@@ -52,9 +52,29 @@ chart.
   sets the host.
   Otherwise the host is the one the user's latest tab reached.
 
+## Moving the user's tab
+
+    python3 hack/console/ui.py go VIEW --param exp=… --param cell=… --sel '{"panel": "ID", "at": {"t_s": [38, 46]}}' --check
+    python3 hack/console/ui.py go --sel '{"panel": "ID", "at": {"t_s": [50, 60]}}'   # the tab's own address, its selection replaced
+    python3 hack/console/ui.py go --param seed=2002 --sel null                       # a param changed, the selection dropped
+    python3 hack/console/ui.py go 'URL' --tab ID
+
+- Move a tab only when the user asks to see something there; otherwise
+  give a link. Moving replaces what they're looking at, though their
+  Back button undoes it.
+- `go` takes `link`'s flags, and with no VIEW or URL it changes the
+  tab's current address. It goes to the latest focused tab unless
+  `--tab ID` names another (`tabs` lists them). Pass `--check`, as with
+  links.
+- It waits for the tab to report the new address and prints it, and
+  says on stderr which address the tab left. A tab in the background
+  takes the address at its next report (up to a minute) or when it's
+  shown. A page built before `go` fails at once: the user rebuilds
+  (`pnpm run console:build`) and reloads the tab.
+
 ## The server
 
-`--tab` and `tabs` need the console server. When it isn't running, tell
+`--tab`, `tabs` and `go` need the console server. When it isn't running, tell
 the user to start it rather than starting it yourself:
 `python3 hack/console/server.py`, after `pnpm run console:build`, then
 http://127.0.0.1:8086/. The page's Ask panel answers questions there.

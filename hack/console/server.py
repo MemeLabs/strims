@@ -70,13 +70,29 @@ they were opened at.
                              ping every 15 s, done last). The client going cancels it.
   GET  /console/ask/ID       a conversation's questions and their events
   GET  /console/spend        what the questions cost, per day and per question (?day=YYYY-MM-DD)
-  PUT  /console/tabs/ID      {url, focused, visible}: a console tab's address and state, which it
-                             reports on each change and every 30 s; kept in memory, the last
-                             report of each tab, a tab unseen for 2 minutes forgotten
+  PUT  /console/tabs/ID      {url, focused, visible, took?}: a console tab's address and state,
+                             which it reports on each change and every 30 s; kept in memory, the
+                             last report of each tab, a tab unseen for 2 minutes forgotten.
+                             `took` is the seq of the last address it was sent and went to (0
+                             for none; a page without it predates goto). Returns its listing
+                             and `goto`, the address waiting for it ({seq, url}) or null
   GET  /console/tabs         the tabs' reports, [{id, url, focused, visible, last_seen,
                              focused_ago}] (seconds since its last report, and since it last
                              said it was focused, or null), the latest focused first: what
                              hack/console/ui.py reads (simlab.views.tabs)
+  POST /console/tabs/ID/goto {url, wait_s?}: sends the tab to a console address (its fragment
+                             #/console/…), and returns once the tab reports it took it, or
+                             after wait_s (default 60, at most 120): {state, tab}, state taken
+                             (tab its report then), replaced (by a later goto), gone (the tab
+                             forgotten) or missed (the goto is cancelled); 404 for no such tab,
+                             409 for one whose page predates goto. hack/console/ui.py go
+                             (simlab.views.goto)
+  GET  /console/tabs/ID/goto?took=SEQ
+                             the addresses sent to the tab after SEQ, pushed as NDJSON lines
+                             {type: goto, seq, url} as each is posted (the one waiting first),
+                             {type: ping} every 15 s: what a visible tab holds open. An address
+                             waits until the tab's report says it took it, so one pushed into a
+                             closed stream comes again on the next stream or report
 
 While it runs, target/console/servers/PORT.json in the main checkout says
 where ({pid, port, urls}: its loopback URL, then those for the network),
@@ -174,6 +190,11 @@ TAB_TTL_S = 120
 MAX_TABS = 256
 TAB_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 MAX_URL = 1 << 20
+# How long a goto waits for its tab to take it, by default and at most:
+# a tab in the background takes it at its next report, which a browser's
+# timer throttling can hold to a minute.
+GOTO_WAIT_S = 60
+GOTO_WAIT_MAX_S = 120
 FORKSERVER = multiprocessing.get_context("forkserver")
 
 
@@ -423,35 +444,66 @@ def fetched_lines(r):
 # --- the tabs' reports ----------------------------------------------------------------------------
 
 
+def tab_id(id):
+    """`id` checked as a tab's: 400 for one that isn't."""
+    if not TAB_ID.fullmatch(id):
+        raise HttpError(400, f"a tab's id is ^{TAB_ID.pattern}$")
+    return id
+
+
+def console_route(url):
+    """Whether `url`'s fragment is one of the console's routes (/console
+    or /console/…), the only addresses a tab is sent to."""
+    path = urllib.parse.urlsplit(url).fragment.partition("?")[0]
+    return path == "/console" or path.startswith("/console/")
+
+
 class Tabs:
     """Each console tab's last report (PUT /console/tabs/ID), in memory: a
     tab unseen for `ttl` seconds is forgotten, and past MAX_TABS the
     longest unseen go. `clock` is monotonic seconds (tests give their
-    own)."""
+    own).
 
-    def __init__(self, clock=time.monotonic, ttl=TAB_TTL_S):
+    It also holds the address a goto sends each tab to ({seq, url}, seq
+    one counter's across the tabs), until the tab's report says it took
+    it (`took` at least its seq), a later goto replaces it, or the goto's
+    wait ends without it. A tab's goto stream (follow) pushes it, and so
+    does its next report's answer. A goto's and a stream's waits are the
+    machine's monotonic time, `ping_s` a stream's gap between lines."""
+
+    def __init__(self, clock=time.monotonic, ttl=TAB_TTL_S, ping_s=PING_S):
         self.clock = clock
         self.ttl = ttl
+        self.ping_s = ping_s
         self._tabs = {}
-        self._lock = threading.Lock()
+        self._seq = 0
+        self._changed = threading.Condition()
 
     def report(self, id, body):
-        """Keeps tab `id`'s report {url, focused, visible}; returns it as
-        listed."""
-        if not TAB_ID.fullmatch(id):
-            raise HttpError(400, f"a tab's id is ^{TAB_ID.pattern}$")
+        """Keeps tab `id`'s report {url, focused, visible, took?}; returns
+        it as listed, with `goto` the address waiting for it ({seq, url},
+        or None)."""
+        tab_id(id)
         if not isinstance(body, dict) or not isinstance(body.get("url"), str) or not all(
                 isinstance(body.get(k), bool) for k in ("focused", "visible")):
-            raise HttpError(400, "{url: string, focused: boolean, visible: boolean}")
+            raise HttpError(400, "{url: string, focused: boolean, visible: boolean, took?: integer}")
+        took = body.get("took")
+        if took is not None and (not isinstance(took, int) or isinstance(took, bool) or took < 0):
+            raise HttpError(400, "took: the seq of the last address the tab took, an integer from 0")
         if len(body["url"]) > MAX_URL:
             raise HttpError(413, f"a tab's url is at most {MAX_URL:,} characters")
         now = self.clock()
-        with self._lock:
+        with self._changed:
             old = self._tabs.pop(id, None)
+            goto = old and old["goto"]
+            if goto and took is not None and took >= goto["seq"]:
+                goto = None
             self._tabs[id] = {"url": body["url"], "focused": body["focused"], "visible": body["visible"], "seen": now,
-                              "focused_at": now if body["focused"] else old and old["focused_at"]}
+                              "focused_at": now if body["focused"] else old and old["focused_at"], "took": took,
+                              "goto": goto, "posted": old["posted"] if old else 0}
             self._forget(now)
-            return self._listed(id, self._tabs[id], now)
+            self._changed.notify_all()
+            return {**self._listed(id, self._tabs[id], now), "goto": dict(goto) if goto else None}
 
     def list(self):
         """The tabs' reports, the latest focused first (a tab never
@@ -459,17 +511,93 @@ class Tabs:
         visible, last_seen, focused_ago}], last_seen the seconds since its
         report, focused_ago since its last focused one (None: never)."""
         now = self.clock()
-        with self._lock:
+        with self._changed:
             self._forget(now)
             order = sorted(self._tabs.items(), key=lambda kv: (kv[1]["focused_at"] is not None,
                                                                kv[1]["focused_at"] or 0, kv[1]["seen"]), reverse=True)
             return [self._listed(id, t, now) for id, t in order]
 
+    def goto(self, id, body):
+        """Sends tab `id` to body's `url` and waits up to its `wait_s`
+        (GOTO_WAIT_S by default) for the tab to report it took it: {state,
+        tab}, state "taken" (tab its report then), "replaced" (a later
+        goto's), "gone" (the tab forgotten, tab None) or "missed" (the
+        address no longer waits for it; tab its last report). 404 for a
+        tab that hasn't reported, 409 for one whose page predates goto."""
+        tab_id(id)
+        if not isinstance(body, dict) or not isinstance(body.get("url"), str):
+            raise HttpError(400, "{url: string, wait_s?: number}")
+        url = body["url"]
+        if len(url) > MAX_URL:
+            raise HttpError(413, f"a tab's url is at most {MAX_URL:,} characters")
+        if not console_route(url):
+            raise HttpError(400, f"not a console address (…/devtools.html#/console/VIEW?…): {url[:200]}")
+        wait_s = body.get("wait_s", GOTO_WAIT_S)
+        if isinstance(wait_s, bool) or not isinstance(wait_s, (int, float)) or not 0 < wait_s <= GOTO_WAIT_MAX_S:
+            raise HttpError(400, f"wait_s: seconds, more than 0 and at most {GOTO_WAIT_MAX_S}")
+        with self._changed:
+            self._forget(self.clock())
+            t = self._tabs.get(id)
+            if t is None:
+                raise HttpError(404, f"no tab {id!r} has reported in the last {self.ttl:g} s")
+            if t["took"] is None:
+                raise HttpError(409, f"tab {id}'s page predates goto: reload it on a current build ({views.BUILD})")
+            self._seq += 1
+            seq = self._seq
+            t["goto"], t["posted"] = {"seq": seq, "url": url}, seq
+            self._changed.notify_all()
+            deadline = time.monotonic() + wait_s
+            while True:
+                now = self.clock()
+                self._forget(now)
+                t = self._tabs.get(id)
+                if t is None:
+                    return {"state": "gone", "tab": None}
+                if t["posted"] > seq:
+                    return {"state": "replaced", "tab": self._listed(id, t, now)}
+                if t["took"] is not None and t["took"] >= seq:
+                    return {"state": "taken", "tab": self._listed(id, t, now)}
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    if t["goto"] and t["goto"]["seq"] == seq:
+                        t["goto"] = None
+                    return {"state": "missed", "tab": self._listed(id, t, now)}
+                self._changed.wait(left)
+
+    def follow(self, id, took=0):
+        """Tab `id`'s goto stream: each address sent to it with a seq past
+        `took`, as {type: "goto", seq, url}, as it's posted (the one
+        waiting first), and {type: "ping"} after `ping_s` without one. A
+        tab that hasn't reported yet is followed all the same."""
+        tab_id(id)
+        while True:
+            with self._changed:
+                deadline = time.monotonic() + self.ping_s
+                while True:
+                    t = self._tabs.get(id)
+                    goto = t and t["goto"]
+                    if goto and goto["seq"] > took:
+                        break
+                    left = deadline - time.monotonic()
+                    if left <= 0:
+                        goto = None
+                        break
+                    self._changed.wait(left)
+            if goto:
+                took = goto["seq"]
+                yield {"type": "goto", **goto}
+            else:
+                yield {"type": "ping"}
+
     def _forget(self, now):
-        for id in [id for id, t in self._tabs.items() if now - t["seen"] > self.ttl]:
+        gone = [id for id, t in self._tabs.items() if now - t["seen"] > self.ttl]
+        for id in gone:
             del self._tabs[id]
         while len(self._tabs) > MAX_TABS:
-            del self._tabs[min(self._tabs, key=lambda id: self._tabs[id]["seen"])]
+            gone.append(min(self._tabs, key=lambda id: self._tabs[id]["seen"]))
+            del self._tabs[gone[-1]]
+        if gone:
+            self._changed.notify_all()
 
     @staticmethod
     def _listed(id, t, now):
@@ -702,6 +830,13 @@ class Console:
             return self.send(h, 200, self.tabs.report(urllib.parse.unquote(m[1]), self.body(h)))
         if route == "GET /console/tabs":
             return self.send(h, 200, self.tabs.list())
+        if m := re.fullmatch(r"POST /console/tabs/([^/]+)/goto", route):
+            return self.send(h, 200, self.tabs.goto(urllib.parse.unquote(m[1]), self.body(h)))
+        if m := re.fullmatch(r"GET /console/tabs/([^/]+)/goto", route):
+            took = urllib.parse.parse_qs(url.query).get("took", ["0"])[0]
+            if not re.fullmatch(r"[0-9]{1,18}", took, re.A):
+                raise HttpError(400, "took: the seq of the last address the tab took, an integer from 0")
+            return self.stream(h, self.tabs.follow(tab_id(urllib.parse.unquote(m[1])), int(took)))
         raise HttpError(404, f"no {route}")
 
     def body(self, h):

@@ -3,7 +3,7 @@
 
 import assert from "assert";
 
-import { newResults } from "./api";
+import { gotoOf, newResults, routeOf } from "./api";
 
 const at = "2026-11-11T21:22:00+00:00";
 
@@ -28,5 +28,54 @@ describe("newResults", () => {
     assert.strictEqual(newResults({ id: 321, at }, null), false);
     assert.strictEqual(newResults({ id: 321, at }, undefined), false);
     assert.strictEqual(newResults(null, null), false);
+  });
+});
+
+describe("routeOf", () => {
+  const page = "http://blinky.local:8086/devtools.html";
+
+  it("is a console address's fragment", () => {
+    assert.strictEqual(
+      routeOf(`${page}#/console/tree?exp=e1&sel=%7B%7D`),
+      "/console/tree?exp=e1&sel=%7B%7D"
+    );
+    assert.strictEqual(routeOf(`${page}#/console`), "/console");
+    assert.strictEqual(routeOf(`${page}#/console?exp=e1`), "/console?exp=e1");
+  });
+
+  it("is none for an address outside the console", () => {
+    assert.strictEqual(routeOf(`${page}#/watch/x`), null);
+    assert.strictEqual(routeOf(`${page}#/consoles/x`), null);
+    assert.strictEqual(routeOf(`${page}#console/tree`), null);
+    assert.strictEqual(routeOf(page), null);
+    assert.strictEqual(routeOf("https://evil.example/"), null);
+  });
+});
+
+describe("gotoOf", () => {
+  const url = "http://127.0.0.1:8086/devtools.html#/console/overhead?exp=e1";
+
+  it("takes an address sent after the last it took, and goes to its route", () => {
+    assert.deepStrictEqual(gotoOf(0, { seq: 3, url }), {
+      took: 3,
+      route: "/console/overhead?exp=e1",
+    });
+    assert.deepStrictEqual(gotoOf(3, { seq: 4, url }), {
+      took: 4,
+      route: "/console/overhead?exp=e1",
+    });
+  });
+
+  it("does nothing with one it took already", () => {
+    // The stream pushes it, and report answers give it again until the server hears it was taken.
+    assert.strictEqual(gotoOf(3, { seq: 3, url }), null);
+    assert.strictEqual(gotoOf(5, { seq: 3, url }), null);
+  });
+
+  it("takes one outside the console without going anywhere", () => {
+    assert.deepStrictEqual(gotoOf(0, { seq: 2, url: "http://h/devtools.html#/watch/x" }), {
+      took: 2,
+      route: null,
+    });
   });
 });
