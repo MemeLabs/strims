@@ -420,10 +420,14 @@ them into its store as a test job's (worker.py), so they flush to S3 and
 `simdb.py pull --run RUN` brings them into the cache: each run a job of
 sim `testbed` and test calibration_star, its key, env (its twin's knobs)
 and row testbed_tables' (with the host's numbers below), its cell the
-matrix's `cell` (else the matrix's name), its arm the job's, and its seed
-its repeat, so a run pairs with its twin's seed of that number. The run
-needs the S3 bucket then, as a test run does. A run whose tables
-testbed_tables can't write still succeeds, with its out dir.
+matrix's `cell` (else the matrix's name; the index names it again by the
+run's knobs, simlab.testbed.cell_sql, as it names a local ingest's), its
+arm the job's, its commit and binary_sha256 its arm's commit and bundle's
+sha256, and its seed its repeat, so a run pairs with its twin's seed of
+that number; a farm run's testbed runs are an experiment, farm/RUN. The
+run needs the S3 bucket then, as a test run does. A run whose tables
+testbed_tables can't write (one that didn't stream) fails, and is run
+again, as a failed job is.
 
 An arm whose tree has strims-wan's testbed_link example (run.sh's parser
 of its link specs) also builds it and packs it as the artifact LINK_BIN,
