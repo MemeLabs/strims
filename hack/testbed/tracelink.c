@@ -6,8 +6,8 @@
 //
 //   tracelink --dev eth0 --parent 10: --trace FILE [--format mm|us]
 //             [--opp-bytes N] [--scale X] [--limit BYTES] [--start-ms MS]
-//             [--offset-s S] [--delay FILE --delay-step-ms MS]
-//             [--log FILE] [--samples FILE]
+//             [--start-file FILE] [--offset-s S]
+//             [--delay FILE --delay-step-ms MS] [--log FILE] [--samples FILE]
 //
 // A trace is a list of delivery opportunities: times within a period and
 // the bytes each may carry. `mm` is Mahimahi's format (Winstein et al.,
@@ -58,7 +58,12 @@
 // it holds, as at a modem. The prio's enqueue runs under its root lock,
 // so the program's state needs no atomics.
 // --start-ms puts the trace's time 0 (or --offset-s into it) at that time
-// since the epoch, repeating it back to before the program loads.
+// since the epoch, repeating it back to before the program loads. With
+// --start-file, once its maps are filled (it logs `# loaded`), it waits for
+// FILE to hold a time, ms since the epoch, and puts the trace's time 0
+// --start-ms after it: run.sh starts the stream once every link has
+// loaded, however long its trace took. It attaches the classifier then,
+// and logs `# base` (the base, the period and the trace's totals).
 //
 // Build: gcc -O2 -static -o target/testbed/tracelink hack/testbed/tracelink.c.
 // Needs CAP_BPF, CAP_PERFMON and CAP_NET_ADMIN.
@@ -594,7 +599,8 @@ static uint64_t avail_at(uint64_t now, int64_t base, uint64_t period) {
 }
 
 int main(int argc, char **argv) {
-  const char *dev = "eth0", *trace = NULL, *logpath = NULL, *delay_path = NULL, *samples_path = NULL;
+  const char *dev = "eth0", *trace = NULL, *logpath = NULL, *delay_path = NULL, *samples_path = NULL,
+             *start_file = NULL;
   uint32_t parent = 0;
   int us = 0;
   double opp_bytes = 1514, scale = 1, offset_s = 0, delay_step_ms = 0;
@@ -616,6 +622,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--scale")) scale = atof(v);
     else if (!strcmp(a, "--limit")) limit = strtoull(v, NULL, 10);
     else if (!strcmp(a, "--start-ms")) start_ms = strtoull(v, NULL, 10);
+    else if (!strcmp(a, "--start-file")) start_file = v;
     else if (!strcmp(a, "--offset-s")) offset_s = atof(v);
     else if (!strcmp(a, "--delay")) delay_path = v;
     else if (!strcmp(a, "--delay-step-ms")) delay_step_ms = atof(v);
@@ -657,6 +664,30 @@ int main(int argc, char **argv) {
   for (uint64_t i = 0; i < nopps; i++) map_set(trace_fd, (uint32_t)i, &opps[i]);
   for (uint64_t i = 0; i < ndelays; i++) map_set(delay_fd, (uint32_t)i, &delays[i]);
 
+  FILE *log = logpath ? fopen(logpath, "w") : stdout;
+  if (!log) die(logpath);
+  signal(SIGTERM, on_signal);
+  signal(SIGINT, on_signal);
+  if (start_file) {
+    fprintf(log, "# loaded opportunities %llu\n", (unsigned long long)nopps);
+    fflush(log);
+    for (;;) {
+      unsigned long long t = 0;
+      FILE *f = fopen(start_file, "r");
+      if (f) {
+        if (fscanf(f, "%llu", &t) != 1) t = 0;
+        fclose(f);
+      }
+      if (t) {
+        start_ms += t;
+        break;
+      }
+      if (stop) return 0;
+      struct timespec ts = {0, 10000000};
+      nanosleep(&ts, NULL);
+    }
+  }
+
   // The base: the trace's time 0 at --start-ms (less --offset-s), moved
   // back by whole periods to before now.
   uint64_t mono = clock_ns(CLOCK_MONOTONIC), real = clock_ns(CLOCK_REALTIME);
@@ -686,8 +717,6 @@ int main(int argc, char **argv) {
   int pfd = prog_load();
   attach(dev, parent, pfd);
 
-  FILE *log = logpath ? fopen(logpath, "w") : stdout;
-  if (!log) die(logpath);
   FILE *samples = samples_path ? fopen(samples_path, "w") : NULL;
   if (samples_path && !samples) die(samples_path);
   int64_t to_unix = (int64_t)real - (int64_t)mono;
@@ -700,8 +729,6 @@ int main(int argc, char **argv) {
           (unsigned long long)limit, (long long)((int64_t)real - ((int64_t)mono - dbase)));
   fprintf(log, "# unix_ms queued_bytes pkts bytes drops max_queued\n");
   fflush(log);
-  signal(SIGTERM, on_signal);
-  signal(SIGINT, on_signal);
   while (!stop) {
     map_get(state_fd, 0, st);
     uint64_t now = clock_ns(CLOCK_MONOTONIC);
