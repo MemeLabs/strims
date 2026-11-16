@@ -59,8 +59,9 @@ publishes the same chunks: two streams, a chunk of each every 250 ms from
   Units        arm unit's run, worked by hand: its interval the gap
                between a stream's publications, not between its chunks,
                and the late chunks and the latency section by it
-  Once         arm once's run: no interval, so its held chunks are
-               neither late nor on time, and unclassed
+  Once         arm once's run: no interval, so its chunks, held or
+               never, are neither late nor on time, unclassed and without
+               causes, with a warning
   Cli        simdb.py coverage-report's tables and JSON, as a caller runs
                it, the seed log's sections among them, and a section the
                catalog can't answer yet
@@ -362,12 +363,13 @@ def unit_arrivals():
 
 
 def once_arrivals():
-    """Arm once's holds: the seed (0) publishes chunks 0 and 1, one of each
-    stream, at 20 s and nothing after; host 1, the seed's child, holds
-    each 40 ms after by its push, and host 2, host 1's child, 80 ms after."""
-    rows = [(20000, SEED, -1, q, "own", -1, -1, None, 0) for q in (0, 1)]
+    """Arm once's holds: the seed (0) publishes chunks 0-3, two of each
+    stream, all at 20 s and nothing after; host 1, the seed's child, holds
+    0-2 40 ms after by its push, and host 2, host 1's child, 80 ms after;
+    no host holds 3."""
+    rows = [(20000, SEED, -1, q, "own", -1, -1, None, 0) for q in range(4)]
     return rows + [(20000 + after, node, node - 1, q, "push", node - 1, node - 1, None, 0)
-                   for q in (0, 1) for node, after in ((1, 40), (2, 80))]
+                   for q in range(3) for node, after in ((1, 40), (2, 80))]
 
 
 ASK_COLS = [("t_ms", "BIGINT"), ("node", "BIGINT"), ("honest", "BOOLEAN"), ("ask", "BIGINT"), ("round", "VARCHAR"),
@@ -1172,20 +1174,30 @@ class Once(Fixture):
     """Arm once's run (ONCE's source): one publication of each stream, so
     its interval is unknown."""
 
-    def test_a_held_chunk_of_no_interval_is_neither_late_nor_classed(self):
+    WARNING = ("coverage: 1 runs have no publication interval (each stream published at one ms): their chunks are "
+               "neither late nor on time, left out of the late share and of the late and attribution sections")
+
+    def test_a_chunk_of_no_interval_is_neither_late_nor_classed(self):
         with forecast.connected() as c:
-            coverage.prepare(c, ONCE_SEL)
+            said = coverage.prepare(c, ONCE_SEL)
             jobs = c.execute("SELECT streams, interval_ms, parents_rows > 0 FROM cv_jobs").fetchall()
-            chunks = c.execute("SELECT seq, pub_ms, latency_ms, judged, late, children, class FROM cv_chunks "
+            chunks = c.execute("SELECT seq, pub_ms, latency_ms, route, judged, late, children, class FROM cv_chunks "
                                "ORDER BY seq").fetchall()
         self.assertEqual(jobs, [(2, None, True)])
-        # Held 40 ms after, judged, with a seed child: late NULL, no class.
-        self.assertEqual(chunks, [(0, 20000, 40, True, None, None, None), (1, 20000, 40, True, None, None, None)])
-        got = {s: r.records() for s, r in coverage.report(ONCE_SEL, ["latency", "late"], warn=[].append).items()}
+        self.assertIn(self.WARNING, said)
+        # Held 40 ms after, or never held, judged, with a seed child: late
+        # NULL, no class; the never-held one never all the same.
+        self.assertEqual(chunks, [(q, 20000, 40, "push", True, None, None, None) for q in range(3)]
+                         + [(3, 20000, None, "never", True, None, None, None)])
+        warned = []
+        got = {s: r.records() for s, r in coverage.report(ONCE_SEL, ["latency", "late", "attribution"],
+                                                          warn=warned.append).items()}
         (r,) = got["latency"]
         self.assertEqual((r["phase"], r["chunks"], r["held"], r["never"], r["late"], r["late_share"]),
-                         ("startup", 2, 2, 0, 0, None))
-        self.assertEqual(got["late"], [])
+                         ("startup", 4, 3, 1, 0, None))
+        self.assertAlmostEqual(r["never_share"], 0.25)
+        self.assertEqual((got["late"], got["attribution"]), ([], []))
+        self.assertIn(self.WARNING, warned)
 
 
 class Cli(Fixture):

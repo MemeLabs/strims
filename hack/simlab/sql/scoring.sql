@@ -817,11 +817,12 @@ CREATE OR REPLACE MACRO seed_children_of(jobs) AS TABLE
 -- budget's most, before its run's end: every other chunk, held or not,
 -- is censored), late (never held, or held more than its run's interval
 -- (one publication interval of its stream) after its publication; NULL
--- for a held chunk of a run whose interval is unknown, each stream
--- published at one ms: neither late nor on time) and, for a judged late
--- chunk of a run with parents rows (NULL for the others, a chunk whose
--- late is NULL among them), the seed's children of its stream at its
--- publication
+-- for every chunk of a run whose interval is unknown, each stream
+-- published at one ms: lateness is against the interval, so its chunks
+-- are neither late nor on time, a never-held one `never` all the same)
+-- and, for a judged late chunk of a run with parents rows (NULL for the
+-- others, every chunk of a run of no interval among them), the seed's
+-- children of its stream at its publication
 -- (seed_children_in's, no dishonest viewer): children (how many),
 -- dishonest_children (how many dishonest viewers were subscribed to the
 -- seed on its stream then, seed_subscriptions_in's),
@@ -855,7 +856,7 @@ CREATE OR REPLACE MACRO coverage_chunks_in(runs) AS TABLE
                     WHEN dp.node IS NOT NULL THEN 'dishonest' WHEN f.h.peer >= 0 THEN 'peer' ELSE 'unnamed' END
                    AS source,
                r.interval_ms, p.pub_ms + @{delay_max_ms} <= r.end_ms AS judged,
-               CASE WHEN f.h IS NULL THEN true WHEN r.interval_ms IS NULL THEN NULL
+               CASE WHEN r.interval_ms IS NULL THEN NULL WHEN f.h IS NULL THEN true
                     ELSE f.h.t_ms - p.pub_ms > r.interval_ms END AS late,
                r.parents_rows > 0 AS parented
         FROM cv_pub p JOIN cv_r r USING (k, src) LEFT JOIN cv_first f USING (k, src, seq)
@@ -1059,7 +1060,8 @@ CREATE OR REPLACE MACRO seed_declines_of(jobs) AS TABLE
 
 -- Why each late chunk was late, in the runs `runs` (coverage_runs_of's
 -- rows): each judged late chunk of a run with parents rows and a seed log
--- (seed_writes_in's), a row a chunk: k, src, seq, stream, pub_ms, phase,
+-- (seed_writes_in's; a run whose interval is unknown has none, its chunks'
+-- late NULL), a row a chunk: k, src, seq, stream, pub_ms, phase,
 -- children and dishonest_children (seed_writes_in's), matches (every cause
 -- of the tree below that holds, in its order; ['other'] for none) and
 -- cause (the first, matches[1]):

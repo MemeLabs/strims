@@ -84,9 +84,11 @@ catalog's indexer had. A chunk at a time:
              down
   late       a judged chunk held more than its run's interval (one
              publication interval of its stream) after its publication,
-             or never; for a held chunk of a run whose interval is
+             or never; for every chunk of a run whose interval is
              unknown (each stream published at one ms) neither: late is
-             NULL, the late share leaves it out, and it has no class
+             NULL, the late share leaves it out (a never-held one counts
+             in never all the same), and it has no class or cause; the
+             report warns of each such run
   phase      the run's phase of its publication second (verdict_seconds,
              the run's own windows: startup is the run's first 25 s, its
              seconds 0-24, so a chunk published at exactly 25 s is
@@ -130,9 +132,11 @@ sections, and the report warns of it. A run without a seed log (it
 wrote none, or the catalog lacks the seed log's tables) has its I2, I3
 and its late chunks' causes NULL: the invariants section leaves them
 empty for a group of no run with one, the attribution section leaves the
-run out, and for those sections the report warns of it. The warnings go
-to `warn`: simdb.py prints them on stderr, and its `--json` carries them
-as `warnings`.
+run out, and for those sections the report warns of it. A run whose
+interval is unknown (each stream published at one ms) has no chunk late
+or on time: the late share, the late section and the attribution leave
+it out, and the report warns of it. The warnings go to `warn`: simdb.py
+prints them on stderr, and its `--json` carries them as `warnings`.
 
 The sections (SECTIONS), each grouped by arm, cell, collapsed (the run's
 verdict: collapsed runs apart) and phase, a row each phase kept, and a
@@ -387,7 +391,8 @@ def prepare(conn, sel, sections=SECTIONS):
     its session (scoring.load), and returns the report's warnings. A run
     without arrivals has no chunks: it is left out of every section, and
     the selection refused (query.Refused) when no run of it has them. A
-    run without a seed log is warned of where `sections` read it."""
+    run without a seed log is warned of where `sections` read it, and a
+    run whose interval is unknown always."""
     from . import query, scoring
 
     scoring.load(conn)
@@ -416,6 +421,11 @@ def prepare(conn, sel, sections=SECTIONS):
     if unparented:
         said.append(f"coverage: {unparented} runs have no parents rows (no push trees): their I1, I2 and their late "
                     "chunks' classes and causes are NULL")
+    untimed = conn.execute("SELECT count(*) FROM cv_runs WHERE interval_ms IS NULL").fetchone()[0]
+    if untimed:
+        said.append(f"coverage: {untimed} runs have no publication interval (each stream published at one ms): their "
+                    "chunks are neither late nor on time, left out of the late share and of the late and attribution "
+                    "sections")
     unlogged = conn.execute(f"SELECT count(*) FROM cv_runs r WHERE NOT ({LOGGED_RUN})").fetchone()[0]
     if unlogged and any(s in LOGGED for s in sections):
         said.append(f"coverage: {unlogged} runs have no seed log (seed_decisions, seed_sends: "
