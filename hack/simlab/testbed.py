@@ -65,6 +65,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -416,13 +417,21 @@ def cores(kind, viewers):
     return next(c for v, c in HOST_CORES[kind] if viewers <= v)
 
 
+def run_sh_stamps():
+    """The clock run.sh says it stamps from (the STAMPS its settings get):
+    `clock`, or `date` (uutils' late one), whose runs key apart."""
+    m = re.search(r'echo "STAMPS=(\w+)"', (ROOT / "hack" / "testbed" / "run.sh").read_text())
+    return m.group(1) if m else "date"
+
+
 def tier_matrices(dest, repeats=2, ref="main"):
     """The testbed tier as farm testbed matrices in `dest`, one a cell
     (testbed-<kind>-<cell>.toml), each naming its tier cell (`cell`) and its
     arrivals' knob (`knobs`), each repeat its own draw of a trickle's or an
     event's joins ([repeat_env] JOINS: random.Random(cell, kind, repeat)),
     at the arm `ref`; returns their paths. A twin's seed r pairs with
-    repeat r - 1's run."""
+    repeat r - 1's run. While run.sh stamps from `date` (run_sh_stamps),
+    each one's header says its runs key apart."""
     import random
 
     dest = Path(dest)
@@ -434,6 +443,9 @@ def tier_matrices(dest, repeats=2, ref="main"):
         viewers = int(env["VIEWERS"])
         lines = [f"# The testbed tier's {cell['name']} ({kind}): {cell['why']}, honest, against its twin",
                  "# (simlab.testbed.tier_matrices writes it).", "",
+                 *(["# Not yet: run.sh writes STAMPS=date, so every run keys apart (TESTBED_STAMPS) and has no",
+                    "# twin until run.sh stamps from its clock (STAMPS=clock). Don't run it on the farm before then.",
+                    ""] if run_sh_stamps() != "clock" else []),
                  'kind = "testbed"', f"repeats = {repeats}", f"host_cores = {cores(kind, viewers)}",
                  f'cell = "{cell["name"]}"']
         builds = ["cargo build --release --locked -p strims-sim --example testbed_node --example testbed_tables"]
