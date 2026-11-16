@@ -141,7 +141,9 @@ pub struct Calibration {
     /// Bulk uploads from the seed's host, from given seconds of stream on
     /// for given seconds (`<s>:<d> ...`), to a sink 30 ms away (the seed's
     /// delay and the testbed sink's). They need the window model
-    /// (`STRIMS_SIM_TCP=1`).
+    /// (`STRIMS_SIM_TCP=1`). `STRIMS_SIM_CAL_COMPETE_MS=<ms>:<d> ...`, a
+    /// testbed run's recorded starts (its iperf3 reports' timestamps, ms
+    /// of stream), takes the place of `STRIMS_SIM_CAL_COMPETE`'s.
     pub compete: Vec<(f64, f64)>,
     /// The seed's and the viewers' uplink buckets, in bytes; `None`, none.
     pub seed_burst: Option<u64>,
@@ -206,7 +208,14 @@ impl Calibration {
             rate_limit_pct: value(&get, "STRIMS_SIM_CAL_RATE_LIMIT_PCT"),
             window: false,
             chunks: None,
-            compete: pairs(&get, "STRIMS_SIM_CAL_COMPETE"),
+            compete: {
+                let ms = pairs(&get, "STRIMS_SIM_CAL_COMPETE_MS");
+                if ms.is_empty() {
+                    pairs(&get, "STRIMS_SIM_CAL_COMPETE")
+                } else {
+                    ms.into_iter().map(|(at, d)| (at / 1000.0, d)).collect()
+                }
+            },
             seed_burst: value(&get, "STRIMS_SIM_CAL_SEED_BURST"),
             viewer_burst: value(&get, "STRIMS_SIM_CAL_VIEWER_BURST"),
             seed_peak_mbit: value(&get, "STRIMS_SIM_CAL_SEED_PEAK_MBIT"),
@@ -289,13 +298,12 @@ fn pairs(get: &impl Fn(&str) -> Option<String>, name: &str) -> Vec<(f64, f64)> {
 /// `STRIMS_SIM_CAL_RATE_LIMIT_PCT` sets them; send buffers.
 pub fn calibration_star(c: &Calibration) -> Scenario {
     let mut s = Scenario::new("calibration_star");
-    let link = |i: usize| {
-        c.links
-            .get(i)
-            .cloned()
-            .flatten()
-            .map(|spec| crate::link::TestbedLink::parse(&spec).unwrap_or_else(|e| panic!("{e}")))
-    };
+    let link =
+        |i: usize| {
+            c.links.get(i).cloned().flatten().map(|spec| {
+                crate::link::TestbedLink::parse(&spec).unwrap_or_else(|e| panic!("{e}"))
+            })
+        };
     // The highest rate a node's uplink runs at, which a peak is over: the
     // seed's steps' too.
     let top = |i: usize, mbit: u64| {

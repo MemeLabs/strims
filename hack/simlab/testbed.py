@@ -90,6 +90,11 @@ TESTBED_FIXED = ("STRIMS_SIM_CLOCK_SKEW", "STRIMS_SIM_CAL_SEED_BURST", "STRIMS_S
 # tier cell's don't: as the buckets, it isn't the cell's to differ in.
 DEFAULT_LINK = "tbf"
 JOB_KNOBS = ("STRIMS_SIM_JOB", "STRIMS_SIM_SERIES", "STRIMS_SIM_SEED", "STRIMS_SIM_OUT")
+# What a testbed run recorded for its twin, not configured: its competing
+# uploads' starts (each iperf3 report's timestamp, ms of stream), which
+# differ by tens of ms from run to run. The keying sets them aside, and a
+# cell's twin takes their median over its runs (twin_cells).
+MEASURED = ("STRIMS_SIM_CAL_COMPETE_MS",)
 
 
 def tables(run_dir, binary=None, knobs=None):
@@ -118,8 +123,9 @@ CELL_TIERS = ("robust", "browsers")
 
 def cell_sql(tiers, temp=False):
     """The keying of a testbed run's cell, as SQL: the macros
-    testbed_comparable(env) (`env` less TESTBED_FIXED, the job keys, the
-    TESTBED_ settings and link specs of DEFAULT_LINK alone) and
+    testbed_comparable(env) (`env` less TESTBED_FIXED, the job keys, what
+    it MEASURED, the TESTBED_ settings and link specs of DEFAULT_LINK
+    alone) and
     testbed_cell(env), over `tiers` (a table of tier, cell, test and env,
     as the catalog's raw.tier_cells): `<tier>:<cell>@<tree>` where the
     run's knobs are a calibration_star tier cell's env but for those
@@ -129,12 +135,12 @@ def cell_sql(tiers, temp=False):
     `<tree>` that tree's last stage (TESTBED_QDISC: root-class): the
     cell's testbed variant, whose twin runs the cell's env
     with what the testbed sets (one clock, its buckets, its link class);
-    else `tb-<hash>` of its knobs but the job keys. The index names every
+    else `tb-<hash>` of its knobs but the job keys and what it MEASURED. The index names every
     testbed job's cell by it (catalog.JOBS_SQL) and ingest, twins and the
     tests by cells_of, so a run's cell is one function's on every path."""
     t = "TEMP " if temp else ""
-    fixed = "[" + ", ".join(store_host.q(k) for k in (*TESTBED_FIXED, *JOB_KNOBS)) + "]"
-    jobs = "[" + ", ".join(store_host.q(k) for k in JOB_KNOBS) + "]"
+    fixed = "[" + ", ".join(store_host.q(k) for k in (*TESTBED_FIXED, *JOB_KNOBS, *MEASURED)) + "]"
+    jobs = "[" + ", ".join(store_host.q(k) for k in (*JOB_KNOBS, *MEASURED)) + "]"
     link = store_host.q(DEFAULT_LINK)
     order = " ".join(f"WHEN {store_host.q(x)} THEN {i}" for i, x in enumerate(CELL_TIERS))
     return f"""
@@ -237,17 +243,42 @@ def twin_cells(rows):
     rows: refused where a cell holds runs of two knobs (what the keying
     sets aside, two buckets, say), which one twin can't stand for, or a run
     holds a TESTBED_ setting other than its qdisc tree, which no twin knob
-    takes (a refused link, a seed's loss, run.sh's late date stamps)."""
-    out = {}
+    takes (a refused link, a seed's loss, run.sh's late date stamps). What
+    the runs MEASURED is each cell's median over them (median_measured)."""
+    out, measured = {}, {}
     for cell, env in rows:
         odd = sorted(k for k in env if k.startswith("TESTBED_") and k != "TESTBED_QDISC")
         if odd:
             raise ValueError(f"cell {cell}: {', '.join(odd)}, which no twin knob takes: no twin")
+        env = dict(env)
+        got = {k: env.pop(k) for k in MEASURED if k in env}
         if cell in out and out[cell] != env:
             diff = sorted(k for k in {*out[cell], *env} if out[cell].get(k) != env.get(k))
             raise ValueError(f"cell {cell} holds runs of two knobs ({', '.join(diff)}): no one twin")
         out[cell] = env
+        for k, v in got.items():
+            measured.setdefault(cell, {}).setdefault(k, []).append(v)
+    for cell, ks in measured.items():
+        for k, values in ks.items():
+            out[cell][k] = median_measured(cell, k, values)
     return dict(sorted(out.items()))
+
+
+def median_measured(cell, knob, values):
+    """The median of a MEASURED knob's `<ms>:<secs> ...` values over a
+    cell's runs, each upload's ms alone (the middle one, or the two middle
+    ones' mean, to the ms); refused where the runs hold two counts of
+    uploads or two lengths."""
+    runs = [[p.split(":", 1) for p in v.split()] for v in values]
+    if len({len(r) for r in runs}) != 1 or len({tuple(s for _, s in r) for r in runs}) != 1:
+        raise ValueError(f"cell {cell}: its runs' {knob} hold two sets of uploads ({', '.join(values)}): no one twin")
+    out = []
+    for i, (_, secs) in enumerate(runs[0]):
+        ms = sorted(float(r[i][0]) for r in runs)
+        mid = len(ms) // 2
+        med = ms[mid] if len(ms) % 2 else (ms[mid - 1] + ms[mid]) / 2
+        out.append(f"{round(med)}:{secs}")
+    return " ".join(out)
 
 
 def cells_in(src_like, kind="one", arm="one"):

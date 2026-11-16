@@ -147,6 +147,20 @@ class Joins(unittest.TestCase):
             testbed.joins_of("trickle:2", 3, 60, random.Random(1))
 
 
+class Measured(unittest.TestCase):
+    def test_a_runs_recorded_starts_neither_key_it_nor_split_its_twin(self):
+        base = {"STRIMS_SIM_CAL_VIEWERS": "15", "STRIMS_SIM_CAL_COMPETE": "10:20", "TESTBED_QDISC": "a>root-class"}
+        runs = [{**base, "STRIMS_SIM_CAL_COMPETE_MS": "10201:20"}, {**base, "STRIMS_SIM_CAL_COMPETE_MS": "10164:20"}]
+        a, b = testbed.cells_of(runs)
+        self.assertEqual(a, b)
+        twin = testbed.twin_cells([("c", runs[0]), ("c", runs[1])])
+        self.assertEqual(twin["c"]["STRIMS_SIM_CAL_COMPETE_MS"], "10182:20")
+        runs.append({**base, "STRIMS_SIM_CAL_COMPETE_MS": "10170:20"})
+        self.assertEqual(testbed.twin_cells([("c", r) for r in runs])["c"]["STRIMS_SIM_CAL_COMPETE_MS"], "10170:20")
+        with self.assertRaisesRegex(ValueError, "two sets of uploads"):
+            testbed.twin_cells([("c", runs[0]), ("c", {**base, "STRIMS_SIM_CAL_COMPETE_MS": "10201:30"})])
+
+
 class Tier(unittest.TestCase):
     def test_the_binary_is_where_cargo_writes_it(self):
         # $CARGO_TARGET_DIR, relative to the checkout or absolute, else

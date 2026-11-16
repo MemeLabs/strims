@@ -548,6 +548,17 @@ impl Run {
         if let Some(why) = off_schedule(dir, &settings, start_ms) {
             knobs.insert("TESTBED_SCHEDULE".to_owned(), why);
         }
+        // The competing uploads' starts as recorded, for the twin: each
+        // client's (its report's timestamp), ms of stream; the twin adds
+        // the setup's round trips. The keying sets them aside (simlab's
+        // testbed MEASURED).
+        let competing: Vec<String> = competing_starts(dir)
+            .iter()
+            .map(|c| format!("{}:{}", c.client().saturating_sub(start_ms), c.secs))
+            .collect();
+        if !competing.is_empty() {
+            knobs.insert("STRIMS_SIM_CAL_COMPETE_MS".to_owned(), competing.join(" "));
+        }
         Ok(Run {
             dir: dir.to_owned(),
             settings,
@@ -621,21 +632,20 @@ impl Run {
                 })
                 .collect();
         }
-        if let Some(text) = self.file("compete.log")
+        // Each competing upload from its first data (Started::data), for
+        // as long as it was asked: what the seed's link carried of it.
+        let starts = competing_starts(&self.dir);
+        if !starts.is_empty()
             && let Some(h) = s.hosts.get_mut(seed)
         {
             let rtt = h.competing.first().map(|c| c.rtt).unwrap_or_default();
-            h.competing = text
-                .lines()
-                .filter_map(|l| {
-                    let mut w = l.split_whitespace();
-                    let ms: u64 = w.next()?.parse().ok()?;
-                    let _at = w.next()?;
-                    let secs: f64 = w.next()?.parse().ok()?;
-                    let start = self.at(ms)?;
+            h.competing = starts
+                .iter()
+                .filter_map(|c| {
+                    let start = self.at(c.data(rtt))?;
                     Some(Competing {
                         start,
-                        stop: start + Duration::from_secs_f64(secs),
+                        stop: start + Duration::from_secs_f64(c.secs),
                         rtt,
                     })
                 })
@@ -1023,12 +1033,14 @@ fn off_schedule(dir: &Path, settings: &BTreeMap<String, String>, start_ms: u64) 
             },
         )
     };
-    for (what, key, file, extra) in [
-        ("step", "SEED_UP_STEPS", "steps.log", delay),
-        ("competing upload", "COMPETE", "compete.log", 0),
+    // A competing upload is on time by its client's start (its report's
+    // timestamp), which its twin starts at.
+    let competing: Vec<u64> = competing_starts(dir).iter().map(Started::client).collect();
+    for (what, key, got, extra) in [
+        ("step", "SEED_UP_STEPS", logged("steps.log"), delay),
+        ("competing upload", "COMPETE", competing, 0),
     ] {
         let due = ats(key);
-        let got = logged(file);
         for (i, at) in due.iter().enumerate() {
             let due = start_ms + (at * 1000.0) as u64 + extra;
             let Some(&t) = got.get(i) else {
@@ -1043,6 +1055,88 @@ fn off_schedule(dir: &Path, settings: &BTreeMap<String, String>, start_ms: u64) 
         }
     }
     None
+}
+
+/// The smallest TCP payload a competing upload's data segment carries:
+/// iperf3's control messages (its cookie, its parameters' JSON) are under
+/// it, its data's full segments over it.
+const COMPETE_DATA_PAYLOAD: u64 = 512;
+
+/// iperf3's setup ahead of its data, in its path's round trips: its data
+/// stream's handshake and the server's TEST_START and TEST_RUNNING (the
+/// bench measured 93-178 ms, 2.4-3.1 of them).
+const COMPETE_SETUP_TRIPS: u32 = 3;
+
+/// One competing upload of a testbed run, as it was recorded: when run.sh
+/// launched it, when iperf3's report says it started, when its first data
+/// left (Unix ms), and the seconds it was asked to send.
+struct Started {
+    launch: u64,
+    report: Option<u64>,
+    data: Option<u64>,
+    secs: f64,
+}
+
+impl Started {
+    /// When the upload's client started: its report's timestamp, else its
+    /// launch. A twin starts its competitor there and adds the setup's
+    /// round trips itself (`STRIMS_SIM_CAL_COMPETE_MS`), and the schedule
+    /// is judged by it.
+    fn client(&self) -> u64 {
+        self.report.unwrap_or(self.launch)
+    }
+
+    /// When its data started: its first data segment, else its client's
+    /// start and the setup's round trips of `rtt`.
+    fn data(&self, rtt: Duration) -> u64 {
+        self.data
+            .unwrap_or_else(|| self.client() + (rtt * COMPETE_SETUP_TRIPS).as_millis() as u64)
+    }
+}
+
+/// Each competing upload in out dir `dir` (compete.log's lines, run.sh's
+/// launch of each, `<unix ms> <at> <secs>`), as recorded: iperf3's
+/// report's timestamp (compete-<at>.json's start.timestamp.timemillisecs:
+/// the client's start, 150-215 ms after the launch, before its setup's
+/// round trips) and, with PCAP, its first data, the seed's capture's
+/// first segment to the sink of at least COMPETE_DATA_PAYLOAD bytes after
+/// the launch (pcap-0.pcap).
+fn competing_starts(dir: &Path) -> Vec<Started> {
+    let Ok(log) = std::fs::read_to_string(dir.join("compete.log")) else {
+        return Vec::new();
+    };
+    let pcap = std::fs::read(dir.join("pcap-0.pcap"))
+        .ok()
+        .and_then(|b| packets(&b))
+        .unwrap_or_default();
+    let seed = u8::try_from(10).ok();
+    log.lines()
+        .filter_map(|l| {
+            let mut w = l.split_whitespace();
+            let launch: u64 = w.next()?.parse().ok()?;
+            let at = w.next()?;
+            let secs: f64 = w.next()?.parse().ok()?;
+            let data = pcap
+                .iter()
+                .find(|p| {
+                    p.us >= launch * 1000
+                        && p.src == seed
+                        && p.dst == Some(SINK)
+                        && p.payload >= COMPETE_DATA_PAYLOAD
+                })
+                .map(|p| p.us / 1000);
+            let report = std::fs::read_to_string(dir.join(format!("compete-{at}.json")))
+                .ok()
+                .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+                .and_then(|v| v.pointer("/start/timestamp/timemillisecs")?.as_u64());
+            Some(Started {
+                launch,
+                report,
+                data,
+                secs,
+            })
+        })
+        .collect()
 }
 
 /// Whether a sampler's stamps in out dir `dir` go back (a tc-<i>.log
@@ -1167,15 +1261,18 @@ fn sockets_of(run: &Run, node: HostIx, text: &str) -> Vec<SocketSample> {
 }
 
 /// One packet a node's capture holds: when (Unix µs), its source and
-/// destination's last octets in the testbed's subnet, its IP length, and
+/// destination's last octets in the testbed's subnet, its IP length,
 /// whether it is a pure TCP acknowledgement (no payload, no SYN, FIN or
-/// RST).
+/// RST), its transport's payload bytes (TCP's or UDP's), and a TCP
+/// segment's ports and sequence number.
 struct Packet {
     us: u64,
     src: Option<u8>,
     dst: Option<u8>,
     ip_len: u64,
     pure_ack: bool,
+    payload: u64,
+    tcp: Option<(u16, u16, u32)>,
 }
 
 /// A libpcap file's IPv4 packets over Ethernet; `None` for another
@@ -1234,12 +1331,35 @@ fn packets(bytes: &[u8]) -> Option<Vec<Packet>> {
                     let thl = u64::from(off >> 4) * 4;
                     ip_len == ihl as u64 + thl && flags & 0x07 == 0 && flags & 0x10 != 0
                 });
+        let be16 = |at: usize| {
+            ip.get(at..at + 2)
+                .and_then(|b| <[u8; 2]>::try_from(b).ok())
+                .map(u16::from_be_bytes)
+        };
+        let (payload, tcp) = match proto {
+            6 => {
+                let thl = ip.get(ihl + 12).map_or(0, |&off| u64::from(off >> 4) * 4);
+                let seq = ip
+                    .get(ihl + 4..ihl + 8)
+                    .and_then(|b| <[u8; 4]>::try_from(b).ok())
+                    .map(u32::from_be_bytes);
+                let ports = be16(ihl).zip(be16(ihl + 2));
+                (
+                    ip_len.saturating_sub(ihl as u64 + thl),
+                    ports.zip(seq).map(|((a, b), q)| (a, b, q)),
+                )
+            }
+            17 => (ip_len.saturating_sub(ihl as u64 + 8), None),
+            _ => (0, None),
+        };
         out.push(Packet {
             us,
             src: host(12),
             dst: host(16),
             ip_len,
             pure_ack,
+            payload,
+            tcp,
         });
     }
     Some(out)
@@ -2222,6 +2342,50 @@ mod tests {
             Run::read(&dir, &BTreeMap::new()).unwrap().knobs["TESTBED_STAMPS"],
             "back"
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_competing_upload_starts_at_its_recorded_times() {
+        let dir = fixture("compete-start");
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        std::fs::write(dir.join("settings"), format!("{settings}COMPETE=3:2\n")).unwrap();
+        // Launched 3 s in; iperf3's report 180 ms later; its first data in
+        // the seed's capture (a control message's 100 bytes first) 120 ms
+        // after that.
+        std::fs::write(dir.join("compete.log"), format!("{} 3 2\n", START + 3000)).unwrap();
+        std::fs::write(
+            dir.join("compete-3.json"),
+            format!(
+                "{{\"start\":{{\"timestamp\":{{\"timemillisecs\":{}}}}}}}",
+                START + 3180
+            ),
+        )
+        .unwrap();
+        let us = |ms: u64| (START + ms) * 1000;
+        let capture = pcap(&[
+            (us(3200), tcp(10, 250, 100, 0x18)),
+            (us(3300), tcp(10, 250, 1448, 0x10)),
+        ]);
+        std::fs::write(dir.join("pcap-0.pcap"), &capture).unwrap();
+        let c = competing_starts(&dir);
+        assert_eq!(
+            (c[0].launch, c[0].report, c[0].data, c[0].secs),
+            (START + 3000, Some(START + 3180), Some(START + 3300), 2.0)
+        );
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap();
+        // The twin's: the client's start, in ms of stream (it adds the
+        // setup's round trips).
+        assert_eq!(r.knobs["STRIMS_SIM_CAL_COMPETE_MS"], "3180:2");
+        assert!(!r.knobs.contains_key("TESTBED_SCHEDULE"));
+        // The run's own: its first data, else its client's start and three
+        // of its round trips.
+        let start = |r: &Run| r.scenario().hosts[0].competing[0].start;
+        assert_eq!(start(&r), r.at(START + 3300).unwrap());
+        std::fs::remove_file(dir.join("pcap-0.pcap")).unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap();
+        let rtt = r.scenario().hosts[0].competing[0].rtt;
+        assert_eq!(start(&r), r.at(START + 3180).unwrap() + rtt * 3);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
