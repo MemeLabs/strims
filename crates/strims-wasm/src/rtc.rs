@@ -315,6 +315,7 @@ impl SignalPort {
             leftover: Vec::new(),
             notsent_lowat: None,
             rtc: Some(RtcConn(conn)),
+            in_process: false,
         };
         let _ = inputs.send(msg).await;
     }

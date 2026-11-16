@@ -770,6 +770,20 @@ impl Net for SimNet {
             .is_some_and(|p| self.open_channel_as(stream, cap as u64, p, true).is_some())
     }
 
+    /// str0m's channels stand for a native node's in-process ones. Its
+    /// links hold a stream's burst below the runner (two 64 KiB MTUs each,
+    /// past QoS), and the node writes each link's share into its channel in
+    /// one go, link after link. On the testbed a native seed behind 20
+    /// Mbit/s reads a busy share of 0-1 permille, its 250-ms writes leave
+    /// it as one block of 280-310 kB within 5 ms, and its uplink's full
+    /// queue drops the tail: the last links' channels lose whole bursts and
+    /// wait out sctp-proto's timeout, a second, and their viewers prune the
+    /// seed. A browser's buffers (one MTU and one message, two messages a
+    /// pass) hold the burst in the runner and cut it finer.
+    fn channels_in_process(&self) -> bool {
+        self.rtc_stack.is_some_and(|p| p.native())
+    }
+
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send {
         TurmoilNet.udp_bind(addr)
     }

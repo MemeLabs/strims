@@ -2528,6 +2528,17 @@ impl State {
             .collect()
     }
 
+    /// Each stream link's write buffers.
+    pub(crate) fn test_write_buffers(&self) -> Vec<usize> {
+        self.links
+            .values()
+            .filter_map(|l| match &l.io {
+                LinkTransport::Stream(io) => Some(io.write_buffers),
+                LinkTransport::DataChannel(_) => None,
+            })
+            .collect()
+    }
+
     /// Hands the runner's events to the readers, as a pass does.
     pub(crate) fn test_process_events(&mut self, now: Time) {
         self.process_events(now);

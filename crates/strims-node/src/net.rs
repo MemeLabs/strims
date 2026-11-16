@@ -82,6 +82,16 @@ pub trait Net: Clone + Send + Sync + 'static {
         false
     }
 
+    /// Whether the modelled channels stand for a native node's in-process
+    /// ones (str0m's, written by the node task), not a browser's (written
+    /// by the driver from its write buffers): the driver then hands their
+    /// links an MTU of messages a pass, as the node task writes an
+    /// in-process channel (`Input::Connected`'s `in_process`). The
+    /// default: a browser's.
+    fn channels_in_process(&self) -> bool {
+        false
+    }
+
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send;
 
     fn udp_send_to<'a>(

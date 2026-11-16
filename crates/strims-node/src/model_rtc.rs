@@ -6,7 +6,10 @@
 //! browser worker's is, and [`run`] plays the window: each connection is a
 //! stream of the net, carried as a modelled channel ([`Net::open_channel`],
 //! of `WebRtcConfig::max_buffered_amount`), and attached as the
-//! connection's link (`Input::Connected` with `LinkConfig::webrtc`).
+//! connection's link (`Input::Connected` with `LinkConfig::webrtc`). The
+//! driver writes it as a browser's link, or, where the channels stand for
+//! a native node's ([`Net::channels_in_process`]), as the node task writes
+//! an in-process channel: an MTU of messages at once.
 //!
 //! - **Descriptions.** An offer is `strims-model <address> <token>`: the
 //!   node's channel listener, TCP at its first WebRTC listen address and
@@ -96,8 +99,14 @@ async fn signal<T>(inputs: &Inputs<T>, conn: RtcConn, signal: RtcSignal) {
     let _ = inputs.send(Input::Signal(RtcInput { conn, signal })).await;
 }
 
-/// Reports `conn` up and hands `stream` to the node as its link.
-async fn attach<N: Net>(stream: N::TcpStream, conn: RtcConn, inputs: &Inputs<Transport<N>>) {
+/// Reports `conn` up and hands `stream` to the node as its link, buffered
+/// in vnic as the stack it stands for buffers ([`Net::channels_in_process`]).
+async fn attach<N: Net>(
+    net: &N,
+    stream: N::TcpStream,
+    conn: RtcConn,
+    inputs: &Inputs<Transport<N>>,
+) {
     signal(inputs, conn, RtcSignal::Connected).await;
     let _ = inputs
         .send(Input::Connected {
@@ -107,6 +116,7 @@ async fn attach<N: Net>(stream: N::TcpStream, conn: RtcConn, inputs: &Inputs<Tra
             leftover: Vec::new(),
             notsent_lowat: None,
             rtc: Some(conn),
+            in_process: net.channels_in_process(),
         })
         .await;
 }
@@ -131,7 +141,7 @@ async fn answer<N: Net>(
         Ok(s)
     };
     match linked.await {
-        Ok(s) => attach::<N>(s, conn, &inputs).await,
+        Ok(s) => attach(&net, s, conn, &inputs).await,
         Err(e) => {
             signal(
                 &inputs,
@@ -245,7 +255,7 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
             continue;
         };
         match s.write_all(&[1]).await {
-            Ok(()) => attach::<N>(s, conn, &inputs).await,
+            Ok(()) => attach(&net, s, conn, &inputs).await,
             Err(e) => {
                 signal(
                     &inputs,

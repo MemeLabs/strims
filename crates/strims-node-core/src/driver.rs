@@ -142,6 +142,17 @@ pub enum Input<T> {
         /// are cut to it.
         notsent_lowat: Option<u32>,
         rtc: Option<RtcConn>,
+        /// The data channel stands for an in-process one (a simulated
+        /// native node's: `strims_node`'s model_rtc). The node task writes
+        /// an in-process channel's pending messages in one go, link after
+        /// link, out of a vnic buffer of two MTUs (`State::rtc_open`),
+        /// where a channel the driver writes takes its two write buffers'
+        /// messages a pass. One that stands for an in-process channel gets
+        /// as many write buffers as fill an MTU, so a pass hands it an MTU
+        /// of messages at once and its vnic and write buffers hold about
+        /// the in-process link's two MTUs. `false` for every real
+        /// transport.
+        in_process: bool,
     },
     DialFailed {
         dial: DialId,
@@ -637,12 +648,14 @@ impl<I: NodeIo> NodeTask<I> {
                 mut leftover,
                 notsent_lowat,
                 rtc,
+                in_process,
             } => self.attach(
                 dial,
                 rtc,
                 transport,
                 config,
                 notsent_lowat,
+                in_process,
                 &mut leftover,
                 now,
             ),
@@ -672,6 +685,8 @@ impl<I: NodeIo> NodeTask<I> {
     /// Bytes in the link's write buffers and in vnic's link buffer are past
     /// QoS. A socket with a bound on its unsent bytes therefore gets writes
     /// of that size, and vnic keeps at most one MTU plus one write for it.
+    /// A channel `in_process` (see [`Input::Connected`]) gets as many write
+    /// buffers as fill an MTU.
     #[allow(clippy::too_many_arguments)]
     fn attach(
         &mut self,
@@ -680,6 +695,7 @@ impl<I: NodeIo> NodeTask<I> {
         transport: I::Transport,
         mut config: LinkConfig,
         notsent_lowat: Option<u32>,
+        in_process: bool,
         leftover: &mut [u8],
         now: Time,
     ) {
@@ -704,6 +720,13 @@ impl<I: NodeIo> NodeTask<I> {
         if max_write < config.mtu {
             config.send_buffer = config.mtu.saturating_add(max_write);
         }
+        let write_buffers = if in_process && rtc.is_some() {
+            self.buffers
+                .write_buffers
+                .max(config.mtu / max_write.max(1))
+        } else {
+            self.buffers.write_buffers
+        };
         config.echo_greed = self.state.echo_greed;
         let link = match self.state.vnic.add_link(now, config) {
             Ok(l) => l,
@@ -717,24 +740,25 @@ impl<I: NodeIo> NodeTask<I> {
                 return;
             }
         };
-        let io = self.spawn_link_io(link, transport, max_write, rtc.is_some());
+        let io = self.spawn_link_io(link, transport, max_write, write_buffers, rtc.is_some());
         self.state.insert_link(link, kind, io, dial, rtc);
         if !leftover.is_empty() {
             self.state.handle_read(link, now, leftover);
         }
     }
 
-    /// Sets up the link's buffers and has the driver spawn its reader, then
-    /// its writer.
+    /// Sets up the link's buffers, `write_buffers` of `max_write` bytes for
+    /// its writes, and has the driver spawn its reader, then its writer.
     fn spawn_link_io(
         &mut self,
         link: LinkKey,
         transport: I::Transport,
         max_write: usize,
+        write_buffers: usize,
         messages: bool,
     ) -> LinkIo {
         let b = self.buffers;
-        let (nr, nw) = (b.read_buffers.max(1), b.write_buffers.max(1));
+        let (nr, nw) = (b.read_buffers.max(1), write_buffers.max(1));
         let (write_tx, write_rx) = mpsc::channel(nw);
         let (read_free_tx, read_free_rx) = mpsc::channel(nr);
         for _ in 0..nr {
@@ -959,6 +983,11 @@ mod tests {
 
     /// The driver's data channel for `conn` opened.
     fn connected(s: &mut Side, conn: RtcConn) {
+        connected_as(s, conn, false);
+    }
+
+    /// [`connected`], the channel standing for an in-process one or not.
+    fn connected_as(s: &mut Side, conn: RtcConn, in_process: bool) {
         s.task.handle_input(Input::Connected {
             dial: None,
             transport: (),
@@ -966,7 +995,40 @@ mod tests {
             leftover: Vec::new(),
             notsent_lowat: None,
             rtc: Some(conn),
+            in_process,
         });
+    }
+
+    /// vnic keeps one MTU and one message for a data channel the driver
+    /// writes, which takes two write buffers of a message; one that stands
+    /// for an in-process channel takes an MTU of messages, so its buffers
+    /// together hold about an in-process link's two MTUs.
+    #[test]
+    fn a_channel_standing_for_an_in_process_one_takes_an_mtu_a_pass() {
+        let m = crate::config::WebRtcConfig::default().max_message;
+        let mtu = LinkConfig::webrtc().mtu;
+        let driver = BufferConfig::default().write_buffers;
+        for (in_process, buffers) in [(false, driver), (true, mtu / m)] {
+            let x = ExchangeId::from(KeyData::from_ffi(1));
+            let mut a = browser(1);
+            let conn = exchange(&mut a, x, SdpType::Answer);
+            connected_as(&mut a, conn, in_process);
+            let link = a.task.io.links[0].0;
+            let ctx = format!("in_process {in_process}");
+            assert_eq!(
+                a.task.state.vnic.link_send_buffer(link),
+                Some(mtu + m),
+                "{ctx}"
+            );
+            assert_eq!(a.task.state.test_max_writes(), [m], "{ctx}");
+            assert_eq!(a.task.state.test_write_buffers(), [buffers], "{ctx}");
+        }
+        let held = mtu + m + mtu / m * m;
+        let in_process = LinkConfig::webrtc().send_buffer;
+        assert!(
+            held.abs_diff(in_process) <= m,
+            "{held} against {in_process}"
+        );
     }
 
     /// Moves `from`'s link bytes into `to`'s link. Returns whether any

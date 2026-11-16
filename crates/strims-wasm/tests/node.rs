@@ -552,6 +552,7 @@ async fn a_transferred_channel_becomes_a_link() {
             leftover,
             notsent_lowat: None,
             rtc: Some(c),
+            in_process: false,
         } => {
             assert_eq!(c, conn);
             assert_eq!(config.mtu, 16384);

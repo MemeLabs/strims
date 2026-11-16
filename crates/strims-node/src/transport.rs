@@ -69,6 +69,7 @@ pub(crate) async fn dial<N: Net>(
             leftover: Vec::new(),
             notsent_lowat,
             rtc: None,
+            in_process: false,
         },
         Err(error) => Input::DialFailed { dial, error },
     };
@@ -210,6 +211,7 @@ async fn tcp_accept<N: Net>(
             leftover,
             notsent_lowat,
             rtc: None,
+            in_process: false,
         },
         Err(error) => Input::AcceptFailed { error },
     };
@@ -311,6 +313,7 @@ async fn ws_accept<N: Net>(
             leftover: Vec::new(),
             notsent_lowat,
             rtc: None,
+            in_process: false,
         },
         Some(Err(error)) => Input::AcceptFailed { error },
         None => Input::AcceptFailed {

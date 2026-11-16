@@ -220,6 +220,12 @@ impl SctpProfile {
         ..SctpProfile::CHROMIUM
     };
 
+    /// Whether this is a native node's stack (str0m's), whose channels the
+    /// node writes in process, rather than a browser's.
+    pub fn native(&self) -> bool {
+        self.stack == Stack::SctpProto
+    }
+
     /// A packet of one chunk of `len` bytes, on the wire.
     pub(crate) fn data_wire(&self, len: usize) -> usize {
         self.packet_overhead + COMMON_HEADER + chunk_size(len)

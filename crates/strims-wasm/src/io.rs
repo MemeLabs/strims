@@ -227,6 +227,7 @@ async fn dial_ws(
             leftover: Vec::new(),
             notsent_lowat: None,
             rtc: None,
+            in_process: false,
         },
         Err(error) => Input::DialFailed { dial, error },
     };
