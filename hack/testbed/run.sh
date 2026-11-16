@@ -13,11 +13,14 @@
 #
 # Every container is its own network namespace with a veth on the bridge.
 # Each shapes its egress with netem (a fixed one-way delay) over a tbf
-# (the access link's rate and queue):
+# (the access link's rate, its bucket and queue):
 #
 #   tc qdisc replace dev eth0 root handle 1: netem delay <d>ms limit 100000
 #   tc qdisc add dev eth0 parent 1:1 handle 10: tbf rate <up>mbit \
-#       burst 3028 limit <up x queue x 125 bytes>
+#       burst <bucket> limit <up x queue x 125 bytes>
+#
+# The bucket, what leaves at the line's rate once the link has idled, is
+# 3028 bytes (two full frames); the seed's is SEED_BURST.
 #
 # netem stays at the root with a delay of at least 1 ms: it releases the
 # socket's memory for the packets it holds, so TCP Small Queues doesn't
@@ -42,6 +45,8 @@
 #   SEED_UP_MBIT=<m>       the seed's uplink (default 10)
 #   VIEWER_UP_MBIT=<m>     each viewer's uplink (default 20)
 #   QUEUE_MS=<ms>          every uplink's queue (default 100)
+#   SEED_BURST=<bytes>     the seed's tbf bucket (default 3028; at least a
+#                          full frame, 1514)
 #   SEED_DELAY_MS=<ms>     the seed's one-way delay (default 20)
 #   VIEWER_DELAY_MS=<ms>   each viewer's (default 10)
 #   SECS=<s>               the stream's length (default 180)
@@ -153,6 +158,7 @@ viewers=${VIEWERS:-3}
 seed_up=${SEED_UP_MBIT:-10}
 viewer_up=${VIEWER_UP_MBIT:-20}
 queue=${QUEUE_MS:-100}
+seed_burst=${SEED_BURST:-3028}
 seed_delay=${SEED_DELAY_MS:-20}
 viewer_delay=${VIEWER_DELAY_MS:-10}
 secs=${SECS:-180}
@@ -259,7 +265,7 @@ docker network inspect "$net" >/dev/null 2>&1 \
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|TRAIN_MS|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|TRAIN_MS|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
   > "$out/settings" || true
 
 # The containers start one after another before the stream does, and
@@ -292,11 +298,11 @@ exec /testbed_node --relay-only --topology /out/topology --start $start --secs $
 fi
 
 for i in $(seq 0 $((n - 1))); do
-  if [ "$i" -eq 0 ]; then up=$seed_up; delay=$seed_delay; else up=$viewer_up; delay=$viewer_delay; fi
+  if [ "$i" -eq 0 ]; then up=$seed_up; delay=$seed_delay; burst=$seed_burst; else up=$viewer_up; delay=$viewer_delay; burst=3028; fi
   limit=$((up * queue * 125))
   shape="ethtool -K eth0 tso off gso off gro off >/dev/null 2>&1 || true
 tc qdisc replace dev eth0 root handle 1: netem delay ${delay}ms limit 100000
-tc qdisc add dev eth0 parent 1:1 handle 10: tbf rate ${up}mbit burst 3028 limit $limit"
+tc qdisc add dev eth0 parent 1:1 handle 10: tbf rate ${up}mbit burst $burst limit $limit"
   ingress=""
   if [ -n "$loss_every" ]; then
     # The seed loses what it receives; a viewer, what the seed sends it.
@@ -393,7 +399,7 @@ if [ -n "$steps" ]; then
       if [ "$wait" -gt 0 ]; then sleep "$(awk "BEGIN { print $wait / 1000 }")"; fi
       limit=$(awk "BEGIN { printf \"%d\", $rate * $queue * 125 }")
       docker exec tb-0 tc qdisc change dev eth0 parent 1:1 handle 10: \
-        tbf rate "${rate}mbit" burst 3028 limit "$limit"
+        tbf rate "${rate}mbit" burst "$seed_burst" limit "$limit"
       echo "$(date +%s%3N) $rate" >> "$out/steps.log"
     done
   ) &
