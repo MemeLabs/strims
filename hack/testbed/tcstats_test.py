@@ -8,6 +8,8 @@ standing.
     python3 hack/testbed/tcstats_test.py
 """
 
+import contextlib
+import io
 import os
 import sys
 import tempfile
@@ -224,6 +226,10 @@ class Uplink(unittest.TestCase):
             self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=CABLE)))
             self.assertFalse(bench.frames(run_dir(d, None, [], qdisc=NETEM_ROOT)))
             self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=ALL_DEVICES)))
+            # A file cut short takes its text's word for it, and says so.
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=CABLE[:CABLE.index("qdisc pie") + 30])))
+            self.assertIn("NOTE: ", err.getvalue())
 
     def test_every_device_s_qdiscs_name_their_device(self):
         qs = tcstats.parse_text(ALL_DEVICES)
