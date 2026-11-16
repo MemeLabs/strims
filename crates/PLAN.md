@@ -12,20 +12,9 @@ on it is in `CONVENTIONS.md`.
 - The UI warns a user whose device clock is set far enough wrong to break
   links and records, judged against the server's or peers' time, and says
   how to fix it.
-- Check the layout's back-swipe guard (`src/components/Layout/backSwipeGuard.ts`)
-  on the device lab's iPhone, Safari in a tab, and set its band from it:
-  1. Has iOS's TouchEvent a legacy `pageX` (did the guard before it fire)?
-  2. How far from the left edge does Safari's back swipe begin?
-  3. Does a touchstart cancelled in the 34 px band stop it?
-  4. Does a tap in the band (a nav item, the swapped closed drawer's arrow)
-     activate once?
-  5. Does a swipe from the swapped drawer's strip open the drawer, neither
-     going back nor toggling it shut?
-  6. What does the band cost: a scroll, a long press or a text selection
-     begun in it?
-  7. Does a tap on the open drawer's composer in the band focus it?
-  8. In the home screen app, where the guard is off, does an edge swipe do
-     anything to the page?
+- Measure Safari's edge back swipe on the device lab's iPhone (a tab,
+  portrait and landscape, swapped and not) and set the layout's back-swipe
+  guard from it: its band, or no guard.
 
 ### Video
 - **Services.**

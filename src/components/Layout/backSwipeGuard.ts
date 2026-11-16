@@ -4,7 +4,8 @@
 /**
  * How near the page's left edge a touch starts that the guard cancels: the
  * outer 34 px of the network nav, or of the swapped drawer's 50 px strip,
- * where Safari's back swipe begins.
+ * where Safari's back swipe begins. Neither the band nor whether a cancelled
+ * touchstart stops the gesture is measured on a device.
  */
 export const BACK_SWIPE_EDGE_PX = 34;
 
