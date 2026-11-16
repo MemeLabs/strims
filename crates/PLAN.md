@@ -255,6 +255,12 @@ and dropped are in `TRIED.md`.
      error against true holds (`simdb.py forecast-report`), and fit the
      requests to the one-window answer cap (`max_pending_requests`).
      Tune the collapse cures (first waves, repair stalls) only after.
+     At the lines' next rebase onto main (decl, p4tf), keep
+     `timeouts_honest` (and `seed_timeouts`, `timeouts_dishonest`) at
+     main's meaning, give the lines' inclusive total of timed-out and
+     speculative requests a name of its own, and suffix its parts
+     (`request_timeouts`, `timeouts_spec_*`) `_honest`, each declared on
+     main with `sims = []`.
    - Give the seed a meter that reads a bucketed uplink's sustained rate,
      scored with realistic buckets on (`STRIMS_SIM_UPLINK_BURST=profiles`).
      Settle what a seed should read under cross traffic, the whole link or
