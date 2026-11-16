@@ -130,16 +130,18 @@ a sizing decision rests on them.
   swarm can lag for protocol reasons with CPU to spare.
 - run.sh's samplers take their own share, in each container's cgroup (20 s
   alone in the image, an idle container's 0.003 core taken off). The tc
-  loop (`tc -s -j qdisc show` at 10 Hz, a fork of tc and tr a sample) costs
+  loop (`tc -s qdisc show` at 10 Hz, a fork of tc and tr a sample) costs
   0.08 core, more than a native node; hack/testbed/tcsample.c (one process,
   rtnetlink, the same lines) 0.001. The cpu loop (date, sed and cat once a
   second) costs 0.012; read with bash's builtins and `read -t` it costs
   nothing measurable. The seed's ss loop costs 0.025 at 1 Hz, most of it
   the kernel walking its whole established hash (every network
   namespace's) for the dump, which ss and a sock_diag dump pay alike:
-  hack/testbed/sssample.c dumps every 5th sample and asks for each known
-  socket by address in between, 0.004 (a socket opened since shows from
-  the next dump). With every node sampled, count the tc loop in a host's
+  hack/testbed/sssample.c dumps only when the namespace has opened a TCP
+  connection since the last sample (/proc/net/snmp), and the sample
+  after, and asks for each known socket by address otherwise: 0.0016
+  with steady sockets, a new one in the first sample after its connect,
+  as ss's loop has it. With every node sampled, count the tc loop in a host's
   `host_cores` until tcsample replaces it.
 
 ## The device lab

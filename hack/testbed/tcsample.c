@@ -10,16 +10,20 @@
 //
 // Each interval (100 ms by default) it dumps the qdiscs of the devices
 // named (every device's without one: eth0's and the ifbs') over rtnetlink
-// and writes a line, `<unix ms> <json>`, as run.sh's tc-<i>.log holds
-// them: the JSON is `tc -s -j qdisc show`'s array, with the fields
+// and writes a line, `<unix ms> <json>`, as shaping-review's run.sh
+// writes tc-<i>.log's lines from `tc -s -j qdisc show` (today's run.sh
+// writes `tc -s`'s text, which strims-sim's testbed module reads, until
+// run.sh takes this up): the JSON is tc's array, with the fields
 // hack/testbed/tcstats.py reads (kind, handle, dev, root or parent,
 // options: a tbf's rate, a cake's bandwidth, atm, overhead, mpu and raw;
 // bytes, packets, drops, overlimits, requeues, backlog, qlen), rates in
 // bytes a second as tc's JSON has them. The stamp is the wall clock read
 // once at the start, advanced by the monotonic clock as each dump is
 // asked for, so a stamp neither jumps with the wall clock nor depends on a
-// date command's formatting. A line is written whole, at once. Build it
-// static (gcc -O2 -static), as run.sh builds tracelink, and mount it in.
+// date command's formatting. A line is written whole, at once. An error
+// (the socket's or the kernel's) costs the sample: none is written, and
+// the next opens the socket again. Build it static (gcc -O2 -static), as
+// run.sh builds tracelink, and mount it in.
 
 #define _GNU_SOURCE
 #include <errno.h>
@@ -125,7 +129,8 @@ static void options(struct buf *b, const char *kind, struct rtattr *opt) {
             put(b, "%s\"overhead\":%d", sep, (int32_t)u32_of(tb[TCA_CAKE_OVERHEAD]));
             sep = ",";
         }
-        if (tb[TCA_CAKE_MPU]) {
+        // tc shows an mpu only where it isn't 0.
+        if (tb[TCA_CAKE_MPU] && u32_of(tb[TCA_CAKE_MPU])) {
             put(b, "%s\"mpu\":%u", sep, u32_of(tb[TCA_CAKE_MPU]));
             sep = ",";
         }
@@ -230,6 +235,16 @@ static int dump(int fd, uint32_t seq, struct buf *b, char **devs, int ndevs) {
     }
 }
 
+static int open_route(void) {
+    int fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
+    struct sockaddr_nl sa = {.nl_family = AF_NETLINK};
+    if (fd >= 0 && bind(fd, (struct sockaddr *)&sa, sizeof sa) < 0) {
+        close(fd);
+        fd = -1;
+    }
+    return fd;
+}
+
 static int64_t ns_of(clockid_t c) {
     struct timespec ts;
     clock_gettime(c, &ts);
@@ -247,9 +262,8 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: tcsample [-i <interval ms>] [<dev> ...]\n");
         return 2;
     }
-    int fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
-    struct sockaddr_nl sa = {.nl_family = AF_NETLINK};
-    if (fd < 0 || bind(fd, (struct sockaddr *)&sa, sizeof sa) < 0) {
+    int fd = open_route();
+    if (fd < 0) {
         perror("tcsample: netlink");
         return 1;
     }
@@ -263,11 +277,16 @@ int main(int argc, char **argv) {
         int64_t mono = ns_of(CLOCK_MONOTONIC);
         b.len = 0;
         put(&b, "%lld ", (long long)((wall0 + (mono - mono0)) / 1000000));
-        if (dump(fd, seq, &b, argv + at, argc - at) < 0) {
-            perror("tcsample: dump");
-            return 1;
+        if (fd < 0 || dump(fd, seq, &b, argv + at, argc - at) < 0) {
+            // The sample goes unwritten; the next opens the socket again.
+            perror("tcsample: dump (again next sample)");
+            if (fd >= 0)
+                close(fd);
+            fd = open_route();
+            b.len = 0;
+        } else {
+            put(&b, "\n");
         }
-        put(&b, "\n");
         for (size_t off = 0; off < b.len;) {
             ssize_t w = write(1, b.p + off, b.len - off);
             if (w < 0) {

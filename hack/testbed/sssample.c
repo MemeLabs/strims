@@ -22,17 +22,24 @@
 // minrtt; times in ms, as ss prints them). A dump of every socket walks
 // the kernel's whole established hash, every network namespace's (about
 // 10 ms of a core a family on the dev VM, which ss's dump pays too), so
-// it dumps every `-r` samples (5 by default) and between asks for each
-// socket the last dump found by its address and cookie, a hash lookup: a
-// socket opened since shows from the next dump on, one closed goes. The
-// stamp is tcsample's: the
-// wall clock read once at the start, advanced by the monotonic clock as
-// each dump is asked for. A sample is written whole, at once. Build it
-// static (gcc -O2 -static), as run.sh builds tracelink, and mount it in.
+// it dumps only when the network namespace has opened a TCP connection
+// since the last sample (/proc/net/snmp's ActiveOpens and PassiveOpens,
+// read through a held fd), and on the sample after (an accepted child may
+// have been in SYN_RECV still), and every `-r` samples where -r is given
+// (0, never, by default). Otherwise it asks for each socket the last dump
+// found by its address and cookie, a hash lookup; one closed, or out of
+// established, goes. Without /proc/net/snmp it dumps every sample. An
+// error (the socket's or the kernel's) costs the sample: none is written,
+// and the next sample opens the socket again and dumps. The stamp is
+// tcsample's: the wall clock read once at the start, advanced by the
+// monotonic clock as each dump is asked for. A sample is written whole,
+// at once. Build it static (gcc -O2 -static), as run.sh builds tracelink,
+// and mount it in.
 
 #define _GNU_SOURCE
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <linux/inet_diag.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
@@ -231,6 +238,42 @@ static int ask(int fd, uint32_t seq, int family, const struct inet_diag_sockid *
     }
 }
 
+// The network namespace's TCP connections opened (/proc/net/snmp's Tcp
+// ActiveOpens and PassiveOpens, by their header's names), or -1.
+static long long opens(int fd) {
+    static char text[16384];
+    ssize_t n = fd < 0 ? -1 : pread(fd, text, sizeof text - 1, 0);
+    if (n <= 0)
+        return -1;
+    text[n] = 0;
+    char *head = strstr(text, "Tcp:");
+    char *vals = head ? strstr(head + 4, "Tcp:") : NULL;
+    if (!vals)
+        return -1;
+    char *hs = NULL, *vs = NULL;
+    char *h = strtok_r(head + 4, " \n", &hs);
+    char *v = strtok_r(vals + 4, " \n", &vs);
+    long long sum = 0;
+    int found = 0;
+    for (; h && v && strcmp(h, "Tcp:"); h = strtok_r(NULL, " \n", &hs), v = strtok_r(NULL, " \n", &vs)) {
+        if (!strcmp(h, "ActiveOpens") || !strcmp(h, "PassiveOpens")) {
+            sum += atoll(v);
+            found++;
+        }
+    }
+    return found == 2 ? sum : -1;
+}
+
+static int open_diag(void) {
+    int fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_SOCK_DIAG);
+    struct sockaddr_nl sa = {.nl_family = AF_NETLINK};
+    if (fd >= 0 && bind(fd, (struct sockaddr *)&sa, sizeof sa) < 0) {
+        close(fd);
+        fd = -1;
+    }
+    return fd;
+}
+
 static int64_t ns_of(clockid_t c) {
     struct timespec ts;
     clock_gettime(c, &ts);
@@ -238,7 +281,7 @@ static int64_t ns_of(clockid_t c) {
 }
 
 int main(int argc, char **argv) {
-    int64_t every = 1000, refresh = 5;
+    int64_t every = 1000, refresh = 0;
     for (int i = 1; i < argc; i += 2) {
         if (i + 1 < argc && !strcmp(argv[i], "-i"))
             every = atoll(argv[i + 1]);
@@ -247,16 +290,18 @@ int main(int argc, char **argv) {
         else
             every = 0;
     }
-    if (every <= 0 || refresh <= 0) {
+    if (every <= 0 || refresh < 0) {
         fprintf(stderr, "usage: sssample [-i <interval ms>] [-r <samples>]\n");
         return 2;
     }
-    int fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_SOCK_DIAG);
-    struct sockaddr_nl sa = {.nl_family = AF_NETLINK};
-    if (fd < 0 || bind(fd, (struct sockaddr *)&sa, sizeof sa) < 0) {
+    int fd = open_diag();
+    if (fd < 0) {
         perror("sssample: sock_diag");
         return 1;
     }
+    int snmp = open("/proc/net/snmp", O_RDONLY | O_CLOEXEC);
+    long long seen = -1;
+    int dump_next = 1;
     int64_t wall0 = ns_of(CLOCK_REALTIME), mono0 = ns_of(CLOCK_MONOTONIC);
     struct buf b = {malloc(4096), 0, 4096};
     if (!b.p)
@@ -269,11 +314,18 @@ int main(int argc, char **argv) {
         b.len = 0;
         put(&b, "@ %lld\nRecv-Q Send-Q Local Address:Port Peer Address:Port\n",
             (long long)((wall0 + (mono - mono0)) / 1000000));
-        int err = 0;
-        if (sample % refresh == 0) {
+        int err = fd < 0;
+        // A dump where a connection opened since the last sample, on the
+        // sample after one, every -r samples, or without the counters.
+        long long now_opens = opens(snmp);
+        int opened = now_opens < 0 || now_opens != seen;
+        seen = now_opens;
+        int dump = opened || dump_next || (refresh && sample % refresh == 0);
+        dump_next = opened;
+        if (!err && dump) {
             nknown = 0;
             err = ask(fd, ++seq, AF_INET, NULL, &b) < 0 || ask(fd, ++seq, AF_INET6, NULL, &b) < 0;
-        } else {
+        } else if (!err) {
             size_t kept = 0;
             for (size_t i = 0; i < nknown && !err; i++) {
                 int r = ask(fd, ++seq, known[i].family, &known[i].id, &b);
@@ -284,8 +336,14 @@ int main(int argc, char **argv) {
             nknown = kept;
         }
         if (err) {
-            perror("sssample: sock_diag");
-            return 1;
+            // The sample goes unwritten; the next opens the socket again
+            // and dumps.
+            perror("sssample: sock_diag (again next sample)");
+            if (fd >= 0)
+                close(fd);
+            fd = open_diag();
+            dump_next = 1;
+            b.len = 0;
         }
         for (size_t off = 0; off < b.len;) {
             ssize_t w = write(1, b.p + off, b.len - off);
