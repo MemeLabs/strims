@@ -288,9 +288,10 @@ if variant == "fail":
     sys.exit("no row")
 out = os.environ["STRIMS_SIM_OUT"]
 assert os.environ["STRIMS_SIM_SPEC"] == "1" and os.environ["STRIMS_SIM_BIN_NODES"] == "1"
-rtt = 21 if variant == "moved" and seed == 2 else 20
+rtt = 21 if variant in ("moved", "rows") and seed == 2 else 20
+moved = (5, 7) if variant == "rows" else (5,)
 with open(os.path.join(out, "asks.csv"), "w") as f:
-    f.write("t_ms,node,rtt_ms\\n" + "".join(f"{{t}},1,{{rtt if t == 5 else 20}}\\n" for t in range(10)))
+    f.write("t_ms,node,rtt_ms\\n" + "".join(f"{{t}},1,{{rtt if t in moved else 20}}\\n" for t in range(10)))
 open(os.path.join(out, "series_meta.json"), "w").write(json.dumps({{"seed": seed}}))
 timeouts = "timeouts_all" if variant == "renamed" else "timeouts"
 print("ROW " + json.dumps({{"trace": f"t{{seed}}", "reads_hash": "r", timeouts: seed, "wall_secs": 0.1}}))
@@ -377,6 +378,14 @@ class Check(unittest.TestCase):
         self.assertEqual((j["renamed"], j["unused_renamed"]),
                          ({"timeouts": "timeouts_all", "lost": "lost_all"}, ["lost=lost_all"]))
         self.assertRaises(ValueError, self.check, renamed=["timeouts"])
+
+    def test_rows_moved(self):
+        """An unexpected move of several rows lists the rows past its
+        first."""
+        (self.bins["b" * 40] / "VARIANT").write_text("rows")
+        text = self.check().text()
+        self.assertIn("UNEXPECTED asks.rtt_ms: 2 of 10 rows differ", text)
+        self.assertIn("row 7: 20 -> 21", text)
 
     def test_failed_run(self):
         (self.bins["b" * 40] / "VARIANT").write_text("fail")

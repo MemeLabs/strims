@@ -1050,12 +1050,12 @@ class Report:
                     if len(ms) == 1:
                         out.append(f"    expected {ms[0].text}")
                         continue
-                    shown = []
+                    parts = []
                     for m in ms[:6]:
                         what, _, how = m.text.partition(": ")
-                        shown.append(f"{what.split('.', 1)[-1]} {how}".strip())
+                        parts.append(f"{what.split('.', 1)[-1]} {how}".strip())
                     more = f"; and {len(ms) - 6} more" if len(ms) > 6 else ""
-                    out.append(f"    expected {table}, {len(ms)} moved: {'; '.join(shown)}{more}")
+                    out.append(f"    expected {table}, {len(ms)} moved: {'; '.join(parts)}{more}")
             moved = len(p.runs) - same_n
             out.append(f"  {len(p.runs)} runs: {same_n} the same, {moved} moved, {p.unexpected()} unexpected moves")
         out.append("")
