@@ -2255,6 +2255,7 @@ impl Scheduler {
                         stats: self.net.stats(h),
                         up_queue: self.up_queue.get(h).cloned().unwrap_or_default(),
                         up_backlog: self.up_backlog.get(h).cloned().unwrap_or_default(),
+                        up_queue_until: None,
                         competing: self.cross_sent.get(h).cloned().unwrap_or_default(),
                         competing_log: self.cross_log.get(h).cloned().unwrap_or_default(),
                         queue_drops: self.drops.get(h).copied().unwrap_or(0),

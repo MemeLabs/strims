@@ -3369,11 +3369,15 @@ pub(crate) mod cols {
         /// None is written as -1.
         ViewerOvh,
         /// Bytes through the honest viewers present's uplinks in the bin, as
-        /// their links charged them (`EndStats::up_bytes`: each message's IP
-        /// bytes and its packets' framing at a site that charges it,
-        /// `STRIMS_SIM_FRAMING` or a link class), pure acknowledgements
-        /// (`up_ack_bytes`, `up_sack_bytes`) and competing uploads apart (WAN
-        /// mode).
+        /// their links charged them (WAN mode). A sim's twin counts
+        /// `EndStats::up_bytes`: each message's IP bytes and its packets'
+        /// framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link
+        /// class (the testbed's tbf class an Ethernet header, 14 bytes), pure
+        /// acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing
+        /// uploads apart; a testbed run counts each packet's IP length from its
+        /// capture, its pure TCP ACKs apart, a data channel's SACKs with its
+        /// data (inside DTLS: its up_sack columns empty). The queries convert
+        /// by the class (scoring.sql's link_overhead).
         ///
         /// Unit: bytes. None is written as -1.
         ViewerUpBytes,
@@ -3420,10 +3424,15 @@ pub(crate) mod cols {
         /// None is written as -1.
         SeedOvh,
         /// Bytes through the seed's uplink in the bin, as its link charged them
-        /// (`EndStats::up_bytes`: each message's IP bytes and its packets'
-        /// framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link
-        /// class), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and
-        /// competing uploads apart (WAN mode).
+        /// (WAN mode). A sim's twin counts `EndStats::up_bytes`: each message's
+        /// IP bytes and its packets' framing at a site that charges it,
+        /// `STRIMS_SIM_FRAMING` or a link class (the testbed's tbf class an
+        /// Ethernet header, 14 bytes), pure acknowledgements (`up_ack_bytes`,
+        /// `up_sack_bytes`) and competing uploads apart; a testbed run counts
+        /// each packet's IP length from its capture, its pure TCP ACKs apart, a
+        /// data channel's SACKs with its data (inside DTLS: its up_sack columns
+        /// empty). The queries convert by the class (scoring.sql's
+        /// link_overhead).
         ///
         /// Unit: bytes. None is written as -1.
         SeedUpBytes,
@@ -3889,10 +3898,15 @@ pub(crate) mod cols {
         /// bin.
         Ovh,
         /// Bytes through the node's uplink in the bin, as its link charged them
-        /// (`EndStats::up_bytes`: each message's IP bytes and its packets'
-        /// framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link
-        /// class), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and
-        /// competing uploads apart (WAN mode).
+        /// (WAN mode). A sim's twin counts `EndStats::up_bytes`: each message's
+        /// IP bytes and its packets' framing at a site that charges it,
+        /// `STRIMS_SIM_FRAMING` or a link class (the testbed's tbf class an
+        /// Ethernet header, 14 bytes), pure acknowledgements (`up_ack_bytes`,
+        /// `up_sack_bytes`) and competing uploads apart; a testbed run counts
+        /// each packet's IP length from its capture, its pure TCP ACKs apart, a
+        /// data channel's SACKs with its data (inside DTLS: its up_sack columns
+        /// empty). The queries convert by the class (scoring.sql's
+        /// link_overhead).
         ///
         /// Unit: bytes.
         UpBytes,

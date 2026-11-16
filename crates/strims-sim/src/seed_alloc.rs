@@ -706,6 +706,7 @@ mod tests {
             wire_bins: Vec::new(),
             wire_unmeasured: Vec::new(),
             sim: "strims-sim",
+            wire_ends: std::collections::BTreeMap::new(),
             sockets: Vec::new(),
             parent_losses: Vec::new(),
             parent_changes: Vec::new(),

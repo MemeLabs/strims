@@ -455,7 +455,9 @@ impl Report {
     /// mode, and for a counter its network didn't measure
     /// ([`Report::wire_unmeasured`]).
     fn wire_delta(&self, h: HostIx, k: usize, f: usize) -> Option<i64> {
-        if self.wire_unmeasured.contains(&f) {
+        if self.wire_unmeasured.contains(&f)
+            || self.wire_ends.get(&(h, f)).is_some_and(|&end| k + 1 > end)
+        {
             return None;
         }
         let (a, b) = (
@@ -960,7 +962,8 @@ impl Report {
 
     /// Host `h`'s uplink queue at `at` (time since the start): its latest
     /// sample at or before it ([`WanHostReport::up_queue`], `up_backlog`),
-    /// in ms and in bytes, each `None` outside WAN mode or before a sample.
+    /// in ms and in bytes, each `None` outside WAN mode, before a sample or
+    /// past `up_queue_until`.
     ///
     /// [`WanHostReport::up_queue`]: crate::report::WanHostReport::up_queue
     fn up_queue_at(&self, h: HostIx, at: Duration) -> (Option<i64>, Option<i64>) {
@@ -973,6 +976,9 @@ impl Report {
             return (None, None);
         };
         let at = strims_base::time::Duration::from(at);
+        if w.up_queue_until.is_some_and(|u| at > u) {
+            return (None, None);
+        }
         let last = |i: usize| i.checked_sub(1);
         let wait = last(w.up_queue.partition_point(|&(t, _)| t <= at))
             .and_then(|i| w.up_queue.get(i))

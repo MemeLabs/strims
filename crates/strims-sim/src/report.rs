@@ -480,6 +480,10 @@ pub struct WanHostReport {
     /// bytes). A testbed run measures them (its tbf's backlog); the sim
     /// derives them as the wait times the uplink's rate then.
     pub up_backlog: Vec<(strims_base::time::Duration, u64)>,
+    /// Past this time the uplink queue is unmeasured (a testbed run's tbf
+    /// sampler that stopped: its last sample and one interval more); `None`
+    /// sampled to the end, as a sim's.
+    pub up_queue_until: Option<strims_base::time::Duration>,
     /// With competing uploads
     /// ([`HostSpec::competing`](crate::spec::HostSpec::competing)), the
     /// wire bytes they have sent, every 100 ms: (time since the start,
@@ -590,6 +594,11 @@ pub struct Report {
     /// The sim its tables say wrote them (`series_meta.json`'s `sim`):
     /// strims-sim's runs', a testbed run's [`crate::testbed::SIM`].
     pub sim: &'static str,
+    /// Where a (host, uplink counter) of `wire_bins` stopped being measured
+    /// before the run's end: its last edge (a testbed run's tbf sampler that
+    /// stopped). Past it the tables leave its bins empty, not flat. None of
+    /// a sim's.
+    pub wire_ends: std::collections::BTreeMap<(HostIx, usize), usize>,
     /// A testbed run's TCP sockets, sample by sample ([`SocketSample`]):
     /// empty in a sim run, whose tables then hold no `sockets`.
     pub sockets: Vec<SocketSample>,

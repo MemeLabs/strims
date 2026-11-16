@@ -18,18 +18,22 @@
 //!   its parent changes, and every frame it read, which each viewer's
 //!   [`ViewerStats`] takes as a simulated viewer's does
 //!   ([`ViewerStats::record`]).
-//! - **The network.** The sim's network model counts each uplink's wire
-//!   bytes as each packet's IP length (`strims_wan::wire`: no link
-//!   framing), its pure acknowledgements apart (the WAN columns,
-//!   [`crate::tables::UP_COUNTERS`]). A testbed run counts the same from
-//!   each node's capture of its egress (`PCAP=1`: `pcap-<i>.pcap`, after the
-//!   queue), and its queue drops from its tbf's counter (`tc-<i>.log`). What
-//!   a capture can't tell (retransmits, the window's cuts and timeouts, a
-//!   data channel's SACKs inside DTLS) is left empty. The uplink's rate is
-//!   its tbf's, as configured: tbf charges each packet its IP length and its
-//!   14-byte Ethernet header, which the sim's bytes leave out. The
-//!   competing upload's wire bytes are its packets' to the sink, from the
-//!   seed's capture.
+//! - **The network.** The WAN columns ([`crate::tables::UP_COUNTERS`])
+//!   count each uplink's packets and bytes, its pure acknowledgements and
+//!   a data channel's SACKs apart. The twin counts its bytes as its access
+//!   link charges them (`strims_wan::framing`: under the testbed's tbf
+//!   class, each packet's IP length and an Ethernet header). A testbed run
+//!   counts each packet's IP length from its node's capture of its egress
+//!   to the swarm's nodes (`PCAP=1`: `pcap-<i>.pcap`, after the queue), and
+//!   its queue drops and backlog from its tbf (`tc-<i>.log`), whose rate,
+//!   as each sample shows it, is the uplink's; the queries convert between
+//!   the two by the link class (scoring.sql's link_overhead). What a
+//!   capture can't tell (retransmits, the window's cuts and timeouts, a
+//!   data channel's SACKs inside DTLS, which it counts with the data) is
+//!   left empty, and a sampler that stopped before the run's end leaves its
+//!   columns empty past it (`Report::wire_ends`,
+//!   `WanHostReport::up_queue_until`). The competing upload's bytes are its
+//!   packets' to the sink, from the seed's capture.
 //!
 //! A run's lines name the seed's stream start (`t_ms - rel_ms`), which every
 //! container's clock shares.
@@ -67,7 +71,8 @@ pub const TEST: &str = "calibration_star";
 /// The sim name a testbed run's records go under.
 pub const SIM: &str = "testbed";
 /// The settings that only record or capture: no knob of the twin's.
-const RECORDING: [&str; 9] = [
+const RECORDING: [&str; 10] = [
+    "STAMPS",
     "CAPTURE",
     "PCAP",
     "PCAP_SNAPLEN",
@@ -107,6 +112,15 @@ const TWIN_SETTINGS: [&str; 24] = [
     "LINKS",
 ];
 
+/// The clock a run's settings name (`STAMPS`) where run.sh stamps its logs
+/// and reckons its waits from bash's clock, which nothing makes late.
+const STAMP_CLOCK: &str = "clock";
+
+/// How far from its schedule a step or a competing upload may land: a
+/// `tc qdisc change` or an iperf3's start through `docker exec`, not a
+/// wait fired early.
+const SCHEDULE_SLACK_MS: u64 = 2000;
+
 /// The qdisc trees of the runs from before run.sh named its tree
 /// (`QDISC`): a netem root delaying what a tbf child then shaped; then an
 /// ifb's netem ahead of a root tbf; then (with a `links` file) the access
@@ -117,8 +131,8 @@ const CLASS_QDISC: &str = "clsact>ifb-netem>root-class";
 
 /// The qdisc tree that shaped a run: settings' `QDISC`, else the tree its
 /// out dir `dir` shows (a `links` file: the access link classes'; the
-/// seed's tc-0.log dump with a clsact: an ifb ahead of a root tbf; one
-/// with a netem alone: the old netem root), else none known.
+/// seed's tc-0.log dump with a tbf 10: at its root: an ifb ahead of it;
+/// one with a netem root: the old tree), else none known.
 fn qdisc_of(settings: &BTreeMap<String, String>, dir: &Path) -> Result<String, String> {
     if let Some(q) = settings.get("QDISC").filter(|q| !q.is_empty()) {
         return Ok(q.clone());
@@ -126,9 +140,11 @@ fn qdisc_of(settings: &BTreeMap<String, String>, dir: &Path) -> Result<String, S
     if dir.join("links").exists() {
         return Ok(CLASS_QDISC.to_owned());
     }
+    // The root qdisc tells the two trees apart: an old netem-root run with
+    // PCAP=1 has a clsact too (its capture's mirror).
     match std::fs::read_to_string(dir.join("tc-0.log")) {
-        Ok(t) if t.contains("clsact") => Ok(IFB_TBF_QDISC.to_owned()),
-        Ok(t) if t.contains("netem") => Ok(OLD_QDISC.to_owned()),
+        Ok(t) if t.contains("qdisc tbf 10: root") => Ok(IFB_TBF_QDISC.to_owned()),
+        Ok(t) if t.contains("qdisc netem") => Ok(OLD_QDISC.to_owned()),
         _ => Err(
             "no QDISC, links file or tc-0.log dump: the qdisc tree that shaped it is unknown"
                 .to_owned(),
@@ -266,11 +282,26 @@ pub fn knobs_of(
         ("VIEWER_UP_MBIT", "20"),
         ("SEED_DELAY_MS", "20"),
         ("VIEWER_DELAY_MS", "10"),
-        ("JOIN_AT", "0"),
         ("SLOW_DOWN_KBIT", ""),
     ] {
         if let Some(v) = get(k).filter(|&v| v != default) {
             put(&format!("STRIMS_SIM_CAL_{k}"), v.to_owned());
+        }
+    }
+    // When the viewers join, in whole seconds as the tiers' cells give it,
+    // else in ms (the twin takes both).
+    if let Some(v) = get("JOIN_AT").filter(|&v| v != "0" && !v.is_empty()) {
+        let s: f64 = v.parse().map_err(|e| format!("JOIN_AT={v}: {e}"))?;
+        if !s.is_finite() || s < 0.0 {
+            return Err(format!("JOIN_AT={v}: seconds, 0 or more"));
+        }
+        if s.fract() == 0.0 {
+            put("STRIMS_SIM_CAL_JOIN_AT", num(s));
+        } else {
+            put(
+                "STRIMS_SIM_CAL_JOIN_AT_MS",
+                ((s * 1000.0).round() as u64).to_string(),
+            );
         }
     }
     if let Some(steps) = get("SEED_UP_STEPS").filter(|s| !s.trim().is_empty()) {
@@ -374,17 +405,17 @@ pub fn knobs_of(
     let kinds: Vec<&str> = get("KINDS").unwrap_or("").split_whitespace().collect();
     let kind = |i: usize| kinds.get(i).copied().unwrap_or("native");
     let browsers = (0..=viewers).any(|i| kind(i) != "native");
-    for (f, args) in [("--chunk", &node), ("--munro", &node)].into_iter().chain(
-        browsers
-            .then_some([("--chunk", &browser), ("--munro", &browser)])
-            .into_iter()
-            .flatten(),
-    ) {
-        let ours = node.get(f);
-        if args.get(f) != ours {
-            return Err(format!("NODE_ARGS and BROWSER_ARGS differ on {f}"));
+    let natives = (0..=viewers).any(|i| kind(i) == "native");
+    // The chunks and munros: the native nodes' (NODE_ARGS) and the
+    // browsers' (BROWSER_ARGS), one where the run has both kinds.
+    if natives && browsers {
+        for f in ["--chunk", "--munro"] {
+            if browser.get(f) != node.get(f) {
+                return Err(format!("NODE_ARGS and BROWSER_ARGS differ on {f}"));
+            }
         }
     }
+    let shape = if natives { &node } else { &browser };
     for (name, args) in [("NODE_ARGS", &node), ("BROWSER_ARGS", &browser)] {
         if let Some(extra) = args
             .keys()
@@ -393,7 +424,7 @@ pub fn knobs_of(
             return Err(format!("{name} {extra}: the twin has no knob for it"));
         }
     }
-    if let (Some(c), Some(m)) = (node.get("--chunk"), node.get("--munro")) {
+    if let (Some(c), Some(m)) = (shape.get("--chunk"), shape.get("--munro")) {
         put("STRIMS_SIM_CHUNK", c.clone());
         put("STRIMS_SIM_MUNRO", m.clone());
     }
@@ -445,17 +476,23 @@ impl Run {
         let links = std::fs::read_to_string(dir.join("links")).ok();
         let mut knobs = knobs_of(&settings, &read("topology")?, links.as_deref(), dir)?;
         knobs.extend(extra.iter().map(|(k, v)| (k.clone(), v.clone())));
-        // run.sh stamped its own logs (tc-<i>.log, ss-<i>.log, steps.log,
-        // compete.log) with uutils' `date +%s%3N`, which drops the
-        // nanoseconds' leading zeros: in a second's first 100 ms a stamp
-        // reads 90-900 ms late, and a step's or a competing upload's wait,
-        // reckoned from one, fires as early. No reading repairs them (a
-        // 1 Hz sampler's late stamps come in runs that look even), so such
-        // a run keys apart, its stamped columns as read: TESTBED_STAMPS=date
-        // pairs it with no cell. A sampler's stamps going back tell it; a
-        // clock's never do.
-        if late_stamps(dir) {
-            knobs.insert("TESTBED_STAMPS".to_owned(), "date".to_owned());
+        // run.sh stamps its own logs (tc-<i>.log, ss-<i>.log, steps.log,
+        // compete.log) and reckons its steps' and competing uploads' waits
+        // from a clock its settings name (STAMPS). Before it named one it
+        // read uutils' `date +%s%3N`, which drops the nanoseconds' leading
+        // zeros: in a second's first 100 ms a stamp reads 90-900 ms late,
+        // and a wait reckoned from one fires as early. No reading repairs
+        // them, so a run that doesn't name the clock (STAMPS=clock), or
+        // whose stamps go back anyway, keys apart, its stamped columns as
+        // read: TESTBED_STAMPS pairs it with no cell.
+        let stamps = settings.get("STAMPS").map(String::as_str);
+        if stamps != Some(STAMP_CLOCK) {
+            knobs.insert(
+                "TESTBED_STAMPS".to_owned(),
+                stamps.unwrap_or("date").to_owned(),
+            );
+        } else if late_stamps(dir) {
+            knobs.insert("TESTBED_STAMPS".to_owned(), "back".to_owned());
         }
         // Each viewer's join (JOINS) is a draw of an arrivals profile where
         // the caller names it (STRIMS_SIM_ARRIVALS, as a tier matrix's
@@ -477,33 +514,30 @@ impl Run {
                 .lines()
                 .filter_map(|l| serde_json::from_str::<Value>(l).ok())
                 .collect::<Vec<_>>();
-            // A run that didn't stream has no tables: one would read as a
-            // swarm without its silent nodes, every lag measure empty and
-            // its row's lag the best there is. A node that never ran (its
-            // arguments refused, a crash at start) leaves no lines; one
-            // from before the records (`rec`) leaves none of them; a viewer
-            // that read no frame didn't stream.
-            let err = || {
-                let why = read(&format!("node-{i}.err")).unwrap_or_default();
-                why.lines()
-                    .find(|l| !l.trim().is_empty())
-                    .unwrap_or("no node-<i>.err")
-                    .to_owned()
-            };
+            // A run with a node that never ran has no tables: it would read
+            // as a swarm without that node. Such a node leaves no lines (its
+            // arguments refused, a crash at start), none of the records
+            // (`rec`: a node from before them), or its harness's error
+            // (testbed_node's or testbed_browser's last words). A viewer that
+            // ran and read nothing is a result, not one of these.
+            let err = read(&format!("node-{i}.err")).unwrap_or_default();
+            let fatal = err
+                .lines()
+                .find(|l| l.starts_with("testbed_node: ") || l.starts_with("testbed_browser: "));
+            if let Some(why) = fatal {
+                return Err(format!("node {i}'s harness failed: {why}"));
+            }
             if lines.is_empty() {
-                return Err(format!("node-{i}.jsonl has no lines: {}", err()));
+                let why = err.lines().find(|l| !l.trim().is_empty());
+                return Err(format!(
+                    "node-{i}.jsonl has no lines: {}",
+                    why.map_or_else(|| format!("node-{i}.err says nothing"), str::to_owned)
+                ));
             }
             if !lines.iter().any(|l| l.get("rec").is_some()) {
                 return Err(format!(
                     "node-{i}.jsonl has no records (`rec`): a node from before them"
                 ));
-            }
-            let reads = lines
-                .iter()
-                .filter_map(|l| l.get("rec")?.get("reads")?.as_array().map(Vec::len))
-                .sum::<usize>();
-            if i > 0 && reads == 0 {
-                return Err(format!("viewer {i} read no frame: {}", err()));
             }
             nodes.push(lines);
         }
@@ -513,6 +547,9 @@ impl Run {
             .find_map(|l| Some(l.get("t_ms")?.as_i64()? - l.get("rel_ms")?.as_i64()?))
             .and_then(|s| u64::try_from(s).ok())
             .ok_or("no node line names the stream's start")?;
+        if let Some(why) = off_schedule(dir, &settings, start_ms) {
+            knobs.insert("TESTBED_SCHEDULE".to_owned(), why);
+        }
         Ok(Run {
             dir: dir.to_owned(),
             settings,
@@ -765,6 +802,7 @@ impl Run {
             wan: Some(net.wan),
             wire_bins: net.bins,
             wire_unmeasured: net.unmeasured,
+            wire_ends: net.ends,
             sim: SIM,
             sockets: (0..self.nodes.len())
                 .flat_map(|i| {
@@ -957,6 +995,56 @@ fn ss_rate(v: &str) -> Option<u64> {
         _ => (v, 1.0),
     };
     Some((n.parse::<f64>().ok()? * mult) as u64)
+}
+
+/// Why a run's steps or competing uploads came off their schedule, if they
+/// did: each one's logged time (steps.log's, compete.log's) against run.sh's
+/// stream start plus its seconds (and the seed's delay, a step's), early
+/// at all (a wait fired from a late clock) or late by more than
+/// SCHEDULE_SLACK_MS, or not logged. Such a run keys apart
+/// (TESTBED_SCHEDULE), as its twin's schedule isn't the run's.
+fn off_schedule(dir: &Path, settings: &BTreeMap<String, String>, start_ms: u64) -> Option<String> {
+    let delay: u64 = settings
+        .get("SEED_DELAY_MS")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(20);
+    let ats = |key: &str| -> Vec<f64> {
+        settings.get(key).map_or_else(Vec::new, |v| {
+            v.split_whitespace()
+                .filter_map(|p| p.split_once(':')?.0.parse().ok())
+                .collect()
+        })
+    };
+    let logged = |name: &str| -> Vec<u64> {
+        std::fs::read_to_string(dir.join(name)).map_or_else(
+            |_| Vec::new(),
+            |t| {
+                t.lines()
+                    .filter_map(|l| l.split_whitespace().next()?.parse().ok())
+                    .collect()
+            },
+        )
+    };
+    for (what, key, file, extra) in [
+        ("step", "SEED_UP_STEPS", "steps.log", delay),
+        ("competing upload", "COMPETE", "compete.log", 0),
+    ] {
+        let due = ats(key);
+        let got = logged(file);
+        for (i, at) in due.iter().enumerate() {
+            let due = start_ms + (at * 1000.0) as u64 + extra;
+            let Some(&t) = got.get(i) else {
+                return Some(format!("{what} {} not logged", i + 1));
+            };
+            if t < due {
+                return Some(format!("{what} {} {} ms early", i + 1, due - t));
+            }
+            if t > due + SCHEDULE_SLACK_MS {
+                return Some(format!("{what} {} {} ms late", i + 1, t - due));
+            }
+        }
+    }
+    None
 }
 
 /// Whether a sampler's stamps in out dir `dir` go back (a tc-<i>.log
@@ -1205,6 +1293,7 @@ struct Network {
     wan: WanReport,
     bins: Vec<Vec<[u64; UP_COUNTERS.len()]>>,
     unmeasured: Vec<usize>,
+    ends: BTreeMap<(HostIx, usize), usize>,
 }
 
 impl Network {
@@ -1224,6 +1313,7 @@ impl Network {
         .to_vec();
         let (mut have_pcap, mut have_tc) = (true, true);
         let mut wan = WanReport::default();
+        let mut ends = BTreeMap::new();
         for (h, spec) in s.hosts.iter().enumerate() {
             let Some(site) = spec.site else {
                 continue;
@@ -1234,6 +1324,7 @@ impl Network {
                 stats: Default::default(),
                 up_queue: Vec::new(),
                 up_backlog: Vec::new(),
+                up_queue_until: None,
                 competing: Vec::new(),
                 competing_log: Vec::new(),
                 queue_drops: 0,
@@ -1321,6 +1412,25 @@ impl Network {
                             *x = last;
                         }
                     }
+                    // A sampler that stopped before the run's end leaves its
+                    // columns unmeasured past its last sample, not flat: the
+                    // drops past the first edge after it, the queue past it
+                    // and an interval (the median gap) more.
+                    if let Some(&(t_last, ..)) = samples.last() {
+                        if let Some(end) =
+                            (0..bins.len()).find(|&k| edge_us(k as u64) > t_last * 1000)
+                        {
+                            ends.insert((h, up("drops")), end);
+                        }
+                        let mut gaps: Vec<u64> = samples
+                            .iter()
+                            .zip(samples.iter().skip(1))
+                            .map(|(a, b)| b.0.saturating_sub(a.0))
+                            .collect();
+                        gaps.sort_unstable();
+                        let gap = gaps.get(gaps.len() / 2).copied().unwrap_or(0);
+                        w.up_queue_until = run.at(t_last + gap).map(Into::into);
+                    }
                     w.queue_drops = samples
                         .last()
                         .zip(samples.first())
@@ -1377,6 +1487,7 @@ impl Network {
             wan,
             bins,
             unmeasured,
+            ends,
         }
     }
 }
@@ -1560,7 +1671,7 @@ mod tests {
         let w = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
         w(
             "settings",
-            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-class\n",
+            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\n",
         );
         w(
             "topology",
@@ -1680,6 +1791,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(of(none, None).unwrap()["TESTBED_QDISC"], "netem>tbf");
+        // An old netem-root run with PCAP=1 has a clsact for its mirror.
+        std::fs::write(
+            dir.join("tc-0.log"),
+            "1 qdisc netem 1: root qdisc tbf 10: parent 1:1 qdisc clsact ffff: parent ffff:fff1\n",
+        )
+        .unwrap();
+        assert_eq!(of(none, None).unwrap()["TESTBED_QDISC"], "netem>tbf");
         std::fs::write(dir.join("links"), "node 0 tbf 10 20 100\n").unwrap();
         assert_eq!(
             of(none, None).unwrap()["TESTBED_QDISC"],
@@ -1711,6 +1829,26 @@ mod tests {
             (k["STRIMS_SIM_CHUNK"].as_str(), k["STRIMS_SIM_RTC"].as_str()),
             ("4096", "str0m,chromium,firefox")
         );
+        // An all-browser run's chunks are its BROWSER_ARGS'.
+        let all = format!(
+            "{base}KINDS=chromium firefox chromium\nBROWSER_ARGS=--chunk 1024 --munro 8192\n"
+        );
+        assert_eq!(of(&all, None).unwrap()["STRIMS_SIM_CHUNK"], "1024");
+        // A join in whole seconds, as the tiers' cells give it, else in ms.
+        assert_eq!(
+            of(&format!("{base}JOIN_AT=3\n"), None).unwrap()["STRIMS_SIM_CAL_JOIN_AT"],
+            "3"
+        );
+        let k = of(&format!("{base}JOIN_AT=2.5\n"), None).unwrap();
+        assert_eq!(k["STRIMS_SIM_CAL_JOIN_AT_MS"], "2500");
+        assert!(!k.contains_key("STRIMS_SIM_CAL_JOIN_AT"));
+        let cal = Calibration::from_knobs(|n| k.get(n).cloned());
+        assert_eq!(cal.join_at_ms, Some(2500));
+        assert!(
+            of(&format!("{base}JOIN_AT=soon\n"), None)
+                .unwrap_err()
+                .contains("JOIN_AT=soon")
+        );
         // Another topology keys by its links, not by its file.
         let line = "node 0 10.77.0.10:4000\nnode 1 10.77.0.11:4000\nnode 2 10.77.0.12:4000\nlink 0 1\nlink 1 2\n";
         let k = knobs_of(&settings_of(base), line, None, &dir).unwrap();
@@ -1737,6 +1875,41 @@ mod tests {
         let drawn = BTreeMap::from([("STRIMS_SIM_ARRIVALS".to_owned(), "trickle".to_owned())]);
         let run = Run::read(&dir, &drawn).unwrap();
         assert_eq!(run.knobs.get("TESTBED_JOINS"), None);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_sampler_that_stopped_leaves_its_columns_unmeasured_past_it() {
+        let dir = fixture("stopped");
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        // tc-0.log's last sample is 450 ms in: the drops end at the first
+        // edge after it, the queue an interval (the median gap) on.
+        let end = r.wire_ends[&(0, up("drops"))];
+        assert!(end < r.wire_bins.len() - 1, "{end}");
+        let w = &r.wan.as_ref().unwrap().hosts[0];
+        assert_eq!(
+            w.up_queue_until.unwrap().as_millis(),
+            (LEAD + Duration::from_millis(450 + 200)).as_millis() as i64
+        );
+        let out = dir.join("tables");
+        r.write_tables(&out, Duration::from_millis(100), true)
+            .unwrap();
+        let bins = crate::tables::read_table(&out, "bins").unwrap();
+        let head: Vec<&str> = bins.lines().next().unwrap().split(',').collect();
+        let col = |name: &str| head.iter().position(|c| *c == name).unwrap();
+        let (t, drops, queue) = (col("t_ms"), col("seed_drops"), col("seed_up_queue_ms"));
+        let (mut before, mut after) = (0, 0);
+        for l in bins.lines().skip(1) {
+            let f: Vec<&str> = l.split(',').collect();
+            let ms: i64 = f[t].parse().unwrap();
+            if ms > 1000 {
+                assert_eq!((f[drops], f[queue]), ("", ""), "{l}");
+                after += 1;
+            } else if ms < 400 && !f[drops].is_empty() {
+                before += 1;
+            }
+        }
+        assert!(before > 0 && after > 0, "{before} {after}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1776,18 +1949,71 @@ mod tests {
     }
 
     #[test]
-    fn a_run_whose_stamps_go_back_keys_apart() {
+    fn a_run_not_stamped_by_the_clock_keys_apart() {
         let dir = fixture("stamps");
         let run = Run::read(&dir, &BTreeMap::new()).unwrap();
         assert_eq!(run.knobs.get("TESTBED_STAMPS"), None);
-        // uutils' date: 1.048 prints 1.481, after 1.000's sample.
+        // Settings that name no clock, or another: run.sh's date stamps.
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        std::fs::write(dir.join("settings"), settings.replace("STAMPS=clock\n", "")).unwrap();
+        assert_eq!(
+            Run::read(&dir, &BTreeMap::new()).unwrap().knobs["TESTBED_STAMPS"],
+            "date"
+        );
+        std::fs::write(
+            dir.join("settings"),
+            settings.replace("STAMPS=clock", "STAMPS=uutils"),
+        )
+        .unwrap();
+        assert_eq!(
+            Run::read(&dir, &BTreeMap::new()).unwrap().knobs["TESTBED_STAMPS"],
+            "uutils"
+        );
+        // The clock's, but a sampler's stamps go back all the same.
+        std::fs::write(dir.join("settings"), &settings).unwrap();
         let tc = std::fs::read_to_string(dir.join("tc-1.log")).unwrap();
         let first = tc.lines().next().unwrap();
         let (ms, rest) = first.split_once(' ').unwrap();
         let ms: u64 = ms.parse().unwrap();
         std::fs::write(dir.join("tc-1.log"), format!("{} {rest}\n{tc}", ms + 433)).unwrap();
-        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
-        assert_eq!(run.knobs["TESTBED_STAMPS"], "date");
+        assert_eq!(
+            Run::read(&dir, &BTreeMap::new()).unwrap().knobs["TESTBED_STAMPS"],
+            "back"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_step_or_upload_off_its_schedule_keys_the_run_apart() {
+        let dir = fixture("schedule");
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}SEED_UP_MBIT=10\nSEED_UP_STEPS=2:5\nCOMPETE=3:2\n"),
+        )
+        .unwrap();
+        // Due at start + 2 s + the seed's 20 ms, and at start + 3 s.
+        let step = |ms: u64| format!("{} 5\n", START + ms);
+        let compete = |ms: u64| format!("{} 3 2\n", START + ms);
+        let read = |s: &str, c: &str| {
+            std::fs::write(dir.join("steps.log"), s).unwrap();
+            std::fs::write(dir.join("compete.log"), c).unwrap();
+            Run::read(&dir, &BTreeMap::new())
+                .unwrap()
+                .knobs
+                .get("TESTBED_SCHEDULE")
+                .cloned()
+        };
+        assert_eq!(read(&step(2100), &compete(3050)), None);
+        assert_eq!(
+            read(&step(1700), &compete(3050)).unwrap(),
+            "step 1 320 ms early"
+        );
+        assert_eq!(
+            read(&step(2100), &compete(6000)).unwrap(),
+            "competing upload 1 3000 ms late"
+        );
+        assert_eq!(read("", &compete(3050)).unwrap(), "step 1 not logged");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1803,10 +2029,13 @@ mod tests {
         let err = Run::read(&dir, &BTreeMap::new()).err().unwrap();
         assert_eq!(
             err,
-            "node-1.jsonl has no lines: testbed_node: --join-at: invalid digit found in string"
+            "node 1's harness failed: testbed_node: --join-at: invalid digit found in string"
         );
-        // A viewer that ran but read nothing, and a node from before the
-        // records, didn't stream either.
+        std::fs::write(dir.join("node-1.err"), "").unwrap();
+        let err = Run::read(&dir, &BTreeMap::new()).err().unwrap();
+        assert_eq!(err, "node-1.jsonl has no lines: node-1.err says nothing");
+        // A viewer that ran but read nothing is a result; a node from
+        // before the records never ran as one.
         let line = |rec: &str| {
             format!(
                 "{{\"t_ms\":{},\"rel_ms\":1000,\"transfers\":{{}}{rec}}}\n",
@@ -1818,8 +2047,7 @@ mod tests {
             line(",\"rec\":{\"meter\":null,\"seed\":null,\"bins\":[],\"parents\":[],\"parents_lost\":0,\"reads\":[]}"),
         )
         .unwrap();
-        let err = Run::read(&dir, &BTreeMap::new()).err().unwrap();
-        assert!(err.starts_with("viewer 1 read no frame: "), "{err}");
+        assert!(Run::read(&dir, &BTreeMap::new()).is_ok());
         std::fs::write(dir.join("node-1.jsonl"), line("")).unwrap();
         let err = Run::read(&dir, &BTreeMap::new()).err().unwrap();
         assert_eq!(

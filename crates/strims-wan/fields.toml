@@ -2438,7 +2438,7 @@ sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
 none = "-1"
-description = "Bytes through the honest viewers present's uplinks in the bin, as their links charged them (`EndStats::up_bytes`: each message's IP bytes and its packets' framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link class), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing uploads apart (WAN mode)."
+description = "Bytes through the honest viewers present's uplinks in the bin, as their links charged them (WAN mode). A sim's twin counts `EndStats::up_bytes`: each message's IP bytes and its packets' framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link class (the testbed's tbf class an Ethernet header, 14 bytes), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing uploads apart; a testbed run counts each packet's IP length from its capture, its pure TCP ACKs apart, a data channel's SACKs with its data (inside DTLS: its up_sack columns empty). The queries convert by the class (scoring.sql's link_overhead)."
 
 [columns.bins.viewer_up_packets]
 sims = ["strims-sim"]
@@ -2499,7 +2499,7 @@ sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
 none = "-1"
-description = "Bytes through the seed's uplink in the bin, as its link charged them (`EndStats::up_bytes`: each message's IP bytes and its packets' framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link class), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing uploads apart (WAN mode)."
+description = "Bytes through the seed's uplink in the bin, as its link charged them (WAN mode). A sim's twin counts `EndStats::up_bytes`: each message's IP bytes and its packets' framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link class (the testbed's tbf class an Ethernet header, 14 bytes), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing uploads apart; a testbed run counts each packet's IP length from its capture, its pure TCP ACKs apart, a data channel's SACKs with its data (inside DTLS: its up_sack columns empty). The queries convert by the class (scoring.sql's link_overhead)."
 
 [columns.bins.seed_up_packets]
 sims = ["strims-sim"]
@@ -2750,7 +2750,7 @@ description = "Bytes the node wrote to its links that weren't chunk data, in the
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
-description = "Bytes through the node's uplink in the bin, as its link charged them (`EndStats::up_bytes`: each message's IP bytes and its packets' framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link class), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing uploads apart (WAN mode)."
+description = "Bytes through the node's uplink in the bin, as its link charged them (WAN mode). A sim's twin counts `EndStats::up_bytes`: each message's IP bytes and its packets' framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link class (the testbed's tbf class an Ethernet header, 14 bytes), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing uploads apart; a testbed run counts each packet's IP length from its capture, its pure TCP ACKs apart, a data channel's SACKs with its data (inside DTLS: its up_sack columns empty). The queries convert by the class (scoring.sql's link_overhead)."
 
 [columns.node_bins.up_packets]
 sims = ["strims-sim"]
@@ -4061,6 +4061,7 @@ sims = ["strims-sim"]
 grain = "node, transfer sample and peer: each peer's channel of the first swarm at each of the node's stats samples"
 keys = "k, node, t_ms, peer"
 joins = "viewers USING (k, src, node)"
+knobs = ["BIN_NODES"]
 sample = false
 zstd = true
 description = "Each node's channels with its peers in the first swarm, sample by sample, as its transfers count them (`TransferSample::peers`): data each way, requests each way, its data queues, and its request window toward the peer."
