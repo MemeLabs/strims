@@ -201,7 +201,9 @@ def frames(run):
     if not os.path.exists(p):
         return False
     with open(p) as f:
-        q = tcstats.find(tcstats.parse_text(f.read()), "10:")
+        qs = tcstats.parse_text(f.read())
+    # Every device's (`tc -s -d qdisc show`), or eth0's and the ifb's before.
+    q = tcstats.find(qs, "10:", dev="eth0") or tcstats.find(qs, "10:")
     return q is not None and q.parent is None
 
 

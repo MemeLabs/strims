@@ -30,8 +30,9 @@ RATE_UNIT = {"": 1, "K": 1e3, "M": 1e6, "G": 1e9, "T": 1e12}
 class Qdisc(NamedTuple):
     """One qdisc's statistics: its kind and handle, its parent (None at the
     root), what it sent (bytes, packets), dropped and holds (bytes,
-    packets), and its shaping rate in bytes a second where it has one
-    (tbf's rate, cake's bandwidth)."""
+    packets), its shaping rate in bytes a second where it has one (tbf's
+    rate, cake's bandwidth), and its device where tc named it (a show of
+    every device's, as qdisc-<i>.txt is)."""
 
     kind: str
     handle: str
@@ -43,6 +44,7 @@ class Qdisc(NamedTuple):
     backlog: int
     qlen: int
     rate: Optional[float]
+    dev: Optional[str] = None
 
 
 def size(s):
@@ -63,7 +65,7 @@ def rate(s):
 
 
 # One qdisc in tc's text: its header, then its stats lines.
-HEAD = re.compile(r"qdisc (\S+) ([0-9a-f]+:)(?: (root)| parent (\S+))?")
+HEAD = re.compile(r"qdisc (\S+) ([0-9a-f]+:)(?: dev (\S+))?(?: (root)| parent (\S+))?")
 SENT = re.compile(r"Sent (\d+) bytes (\d+) pkt \(dropped (\d+), overlimits (\d+)")
 BACKLOG = re.compile(r"backlog ([\d.]+[KMG]?b) (\d+)p")
 SHAPE = re.compile(r" (?:rate|bandwidth) ([\d.]+[KMGT]?bit)")
@@ -86,7 +88,7 @@ def parse_text(text):
         out.append(Qdisc(
             kind=head[1],
             handle=head[2],
-            parent=None if head[3] else head[4],
+            parent=None if head[4] else head[5],
             sent=int(sent[1]),
             packets=int(sent[2]),
             drops=int(sent[3]),
@@ -94,6 +96,7 @@ def parse_text(text):
             backlog=size(backlog[1]),
             qlen=int(backlog[2]),
             rate=rate(shape[1]) if shape else None,
+            dev=head[3],
         ))
     return out
 
@@ -115,6 +118,7 @@ def parse_json(text):
             backlog=q.get("backlog", 0),
             qlen=q.get("qlen", 0),
             rate=float(r) if isinstance(r, (int, float)) else None,
+            dev=q.get("dev"),
         ))
     return out
 
@@ -142,10 +146,11 @@ def samples(path):
     return out
 
 
-def find(qdiscs, handle, kind=None):
-    """The qdisc with `handle` (and of `kind`, if given), or None."""
+def find(qdiscs, handle, kind=None, dev=None):
+    """The qdisc with `handle` (of `kind` and on `dev`, if given), or
+    None."""
     for q in qdiscs:
-        if q.handle == handle and (kind is None or q.kind == kind):
+        if q.handle == handle and kind in (None, q.kind) and dev in (None, q.dev):
             return q
     return None
 

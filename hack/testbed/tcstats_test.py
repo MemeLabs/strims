@@ -131,6 +131,27 @@ qdisc tbf 10: parent 1:1 rate 10Mbit burst 3028b lat 99.9ms
 """
 
 
+# qdisc-<i>.txt: every device's qdiscs in detail (`tc -s -d qdisc show`),
+# eth0's root with its size table, the delay's ifb and the slow downlink's.
+ALL_DEVICES = """qdisc noqueue 0: dev lo root refcnt 2
+ Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
+ backlog 0b 0p requeues 0
+qdisc tbf 10: dev eth0 root refcnt 2 rate 10Mbit burst 3028b/1 mpu 0b lat 21.6ms linklayer ethernet
+ overhead 4 mpu 64 mtu 2048 tsize 2048
+ Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
+ backlog 0b 0p requeues 0
+qdisc clsact ffff: dev eth0 parent ffff:fff1
+ Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
+ backlog 0b 0p requeues 0
+qdisc netem 8001: dev ifbd root refcnt 2 limit 100000 delay 20ms
+ Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
+ backlog 0b 0p requeues 0
+qdisc tbf 857b: dev ifbs root refcnt 2 rate 1Mbit burst 3028b/1 mpu 0b lat 75.8ms linklayer ethernet
+ Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
+ backlog 0b 0p requeues 0
+"""
+
+
 def run_dir(d, links, lines, qdisc=None):
     if links is not None:
         with open(os.path.join(d, "links"), "w") as f:
@@ -185,6 +206,15 @@ class Uplink(unittest.TestCase):
             self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=CAKE)))
             self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=CABLE)))
             self.assertFalse(bench.frames(run_dir(d, None, [], qdisc=NETEM_ROOT)))
+            self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=ALL_DEVICES)))
+
+    def test_every_device_s_qdiscs_name_their_device(self):
+        qs = tcstats.parse_text(ALL_DEVICES)
+        self.assertEqual([(q.dev, q.kind, q.handle, q.parent) for q in qs], [
+            ("lo", "noqueue", "0:", None), ("eth0", "tbf", "10:", None), ("eth0", "clsact", "ffff:", "ffff:fff1"),
+            ("ifbd", "netem", "8001:", None), ("ifbs", "tbf", "857b:", None)])
+        self.assertEqual(tcstats.find(qs, "857b:", dev="ifbs").rate, 125000)
+        self.assertIsNone(tcstats.find(qs, "10:", dev="ifbs"))
 
 
 if __name__ == "__main__":
