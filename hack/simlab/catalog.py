@@ -1449,7 +1449,8 @@ def index(workers=None, progress=None, wait=True):
         for line in kept_lines(mine):
             say("index", line)
         if not (gone or changed or new or ins_changed or need_verdicts) and (
-                info.get("verdict_version") == version or not mine["verdicts"]):
+                info.get("verdict_version") == version or not mine["verdicts"]) and (
+                info.get("main_version") == main_version()):
             cols = lake_columns()
             scoring, sv = lake_scoring(cols) if mine["scoring"] else ([], None)
             moved = ({"scoring_version": sv} if sv and (info.get("scoring_version") != sv or info.get("scoring_behind"))
@@ -2280,6 +2281,18 @@ def sim_tables(cols):
     return {t: (t if t not in OWN else f"sim_{t}") for t in sorted(cols) if t not in META}
 
 
+def main_version():
+    """The main tables' version: a digest of the SQL that makes the jobs and
+    the experiments (JOBS_SQL, EXPERIMENTS_SQL, STREAMED, the testbed
+    keying) and of the tiers' cells it keys testbed runs by, so a change to
+    any makes them again at the next index, the data unchanged."""
+    from . import testbed
+
+    text = "\n".join([JOBS_SQL, EXPERIMENTS_SQL, STREAMED, testbed.cell_sql("raw.tier_cells"),
+                      json.dumps(tier_cells(), sort_keys=True)])
+    return hashlib.sha256(text.encode()).hexdigest()[:12]
+
+
 def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None, hidden=None):
     """The main tables, made again, and the views; the doc tables as
     `docs` (docs_of's, with the catalog_info it read, `info`, and whether
@@ -2316,7 +2329,7 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None, hidden
             out.append(f"CREATE OR REPLACE VIEW main.{t}_all AS SELECT x.* {canon(t)};")
             out.append(f"CREATE OR REPLACE VIEW main.{t} AS SELECT * FROM main.{t}_all "
                        f"WHERE verdict_version = (SELECT value FROM raw.info WHERE key = 'verdict_version');")
-    info = {"catalog_version": str(CATALOG_VERSION), "verdict_version": version,
+    info = {"catalog_version": str(CATALOG_VERSION), "verdict_version": version, "main_version": main_version(),
             "analyze_verdict_version": verdict.VERDICT_VERSION, "duckdb_version": store_host.DUCKDB_VERSION,
             "ducklake_version": EXTENSIONS["ducklake"], "sqlite_version": EXTENSIONS["sqlite_scanner"],
             "indexed_at": iso(time.time())}

@@ -1404,16 +1404,30 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, frame_bytes :
     WHERE value IS NOT NULL;
 
 -- The testbed runs whose source matches the LIKE pattern src_like (a
--- farm run's farm/<run>/%, a local ingest's testbed/<name>), of nodes of
--- `kind`: 'native', 'browsers' (STRIMS_SIM_RTC set) or 'any', as a side:
+-- farm run's farm/<run>/%, a local ingest's testbed/<name>), as a side:
 -- {cell, seed, k, src}, a run's seed its repeat (a twin's seed pairs with
--- the run of its number).
--- needs: jobs.sim jobs.env
-CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'any') AS (
-    SELECT coalesce(list({'cell': stored_cell, 'seed': seed, 'k': k, 'src': src} ORDER BY stored_cell, seed), [])
-    FROM jobs
-    WHERE sim = 'testbed' AND src LIKE src_like
-      AND (kind = 'any' OR (env['STRIMS_SIM_RTC'] IS NOT NULL) = (kind = 'browsers')));
+-- the run of its number). `kind` keeps 'native' or 'browsers' runs
+-- (STRIMS_SIM_RTC set), and `arm` one arm's (jobs.stored_arm); 'one', each
+-- one's default, takes the runs as they are but fails where they hold two
+-- kinds or two arms, which a side mustn't pool; 'any' pools them.
+-- needs: jobs.sim jobs.env jobs.stored_arm
+CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
+    WITH r AS (
+        SELECT stored_cell, seed, k, src, stored_arm, env['STRIMS_SIM_RTC'] IS NOT NULL AS browsers
+        FROM jobs
+        WHERE sim = 'testbed' AND src LIKE src_like
+          AND (kind IN ('one', 'any') OR browsers = (kind = 'browsers'))
+          AND (arm IN ('one', 'any') OR stored_arm = arm))
+    SELECT CASE
+        WHEN kind = 'one' AND kinds > 1
+            THEN error('testbed_side: native and browser runs; name a kind (native, browsers or any)')
+        WHEN arm = 'one' AND arms > 1
+            THEN error('testbed_side: runs of ' || arms || ' arms; name an arm, or any')
+        ELSE side END
+    FROM (SELECT count(DISTINCT browsers) AS kinds, count(DISTINCT stored_arm) AS arms,
+                 coalesce(list({'cell': stored_cell, 'seed': seed, 'k': k, 'src': src} ORDER BY stored_cell, seed),
+                          []) AS side
+          FROM r));
 
 -- A testbed side against its twin's (twin_runs_of over both, `a_jobs` the
 -- twin's, `b_jobs` the testbed's): each cell and measure both sides have,

@@ -112,11 +112,13 @@ def cell_sql(tiers, temp=False):
     testbed_comparable(env) (`env` less TESTBED_FIXED, the job keys, the
     TESTBED_ settings and link specs of DEFAULT_LINK alone) and
     testbed_cell(env), over `tiers` (a table of tier, cell, test and env,
-    as the catalog's raw.tier_cells): `<cell>@<tree>` where the run's
-    knobs are a calibration_star tier cell's env but for those (CELL_TIERS'
-    first, else the first tier by name) and it holds no TESTBED_ setting
-    but its qdisc tree, `<tree>` that tree's last stage (TESTBED_QDISC:
-    root-class): the cell's testbed variant, whose twin runs the cell's env
+    as the catalog's raw.tier_cells): `<tier>:<cell>@<tree>` where the
+    run's knobs are a calibration_star tier cell's env but for those
+    (CELL_TIERS' first, else the first tier by name; the tier in the name,
+    as two tiers hold cells of one name: robust's native star-3-10 and
+    browsers') and it holds no TESTBED_ setting but its qdisc tree,
+    `<tree>` that tree's last stage (TESTBED_QDISC: root-class): the
+    cell's testbed variant, whose twin runs the cell's env
     with what the testbed sets (one clock, its buckets, its link class);
     else `tb-<hash>` of its knobs but the job keys. The index names every
     testbed job's cell by it (catalog.JOBS_SQL) and ingest, twins and the
@@ -133,7 +135,7 @@ CREATE OR REPLACE {t}MACRO testbed_comparable(env) AS map_from_entries(list_filt
     OR (e.key = 'STRIMS_SIM_CAL_LINKS' AND list_bool_and(list_transform(string_split(trim(e.value), ' '),
                                                                         lambda x: split_part(x, ':', 2) = {link}))))));
 CREATE OR REPLACE {t}MACRO testbed_cell(knobs) AS coalesce(
-    (SELECT arg_min(c.cell, (CASE c.tier {order} ELSE {len(CELL_TIERS)} END, c.tier))
+    (SELECT arg_min(c.tier || ':' || c.cell, (CASE c.tier {order} ELSE {len(CELL_TIERS)} END, c.tier))
      FROM {tiers} c
      WHERE c.test = 'calibration_star'
        AND list_sort(map_entries(testbed_comparable(c.env))) = list_sort(map_entries(testbed_comparable(knobs)))
@@ -209,12 +211,20 @@ def export(src, jobs):
 
 def cells_in(src):
     """The cells of a testbed source's runs, {cell: env}: their twins'
-    knobs, each cell its runs' (cells_of)."""
+    knobs, each cell its runs' (cells_of); runs of one cell but two knobs
+    (two buckets: what the keying sets aside) are refused, as one twin
+    can't stand for both."""
     runs = store_host.cache_root() / "cache" / src / "runs.parquet"
     rows = store_host.duck(f"SELECT DISTINCT env FROM read_parquet({store_host.q(runs)}) "
                            "WHERE sim = 'testbed' ORDER BY env;")
     envs = [json.loads(r["env"]) for r in rows]
-    return dict(sorted(zip(cells_of(envs), envs)))
+    out = {}
+    for cell, env in zip(cells_of(envs), envs):
+        if cell in out and out[cell] != env:
+            diff = sorted(k for k in {*out[cell], *env} if out[cell].get(k) != env.get(k))
+            raise ValueError(f"{src}: cell {cell} holds runs of two knobs ({', '.join(diff)}): no one twin")
+        out[cell] = env
+    return dict(sorted(out.items()))
 
 
 def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8):
