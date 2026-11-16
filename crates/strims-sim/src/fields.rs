@@ -3382,12 +3382,21 @@ pub(crate) mod cols {
         /// Unit: bytes. None is written as -1.
         ViewerUpBytes,
         /// Packets through the honest viewers present's uplinks in the bin (WAN
-        /// mode).
+        /// mode). A sim's twin counts its data packets, its pure ACKs and a
+        /// data channel's SACK datagrams apart (the up_ack and up_sack
+        /// columns); a testbed run counts each packet its capture saw to a
+        /// swarm node, its pure TCP ACKs apart, a data channel's SACK datagrams
+        /// with its data (inside DTLS: its up_sack columns empty).
         ///
         /// None is written as -1.
         ViewerUpPackets,
         /// Small packets through the honest viewers present's uplinks in the
-        /// bin (WAN mode).
+        /// bin (WAN mode). A sim's twin counts a data message's last packet of
+        /// 256 wire bytes or less (strims_wan::wire::small_packets), its pure
+        /// ACKs and a data channel's SACK datagrams apart; a testbed run counts
+        /// each packet of 256 IP bytes or less its capture saw to a swarm node,
+        /// its pure TCP ACKs apart, a data channel's SACK datagrams with its
+        /// data.
         ///
         /// None is written as -1.
         ViewerSmallPackets,
@@ -3436,11 +3445,21 @@ pub(crate) mod cols {
         ///
         /// Unit: bytes. None is written as -1.
         SeedUpBytes,
-        /// Packets through the seed's uplink in the bin (WAN mode).
+        /// Packets through the seed's uplink in the bin (WAN mode). A sim's
+        /// twin counts its data packets, its pure ACKs and a data channel's
+        /// SACK datagrams apart (the up_ack and up_sack columns); a testbed run
+        /// counts each packet its capture saw to a swarm node, its pure TCP
+        /// ACKs apart, a data channel's SACK datagrams with its data (inside
+        /// DTLS: its up_sack columns empty).
         ///
         /// None is written as -1.
         SeedUpPackets,
-        /// Small packets through the seed's uplink in the bin (WAN mode).
+        /// Small packets through the seed's uplink in the bin (WAN mode). A
+        /// sim's twin counts a data message's last packet of 256 wire bytes or
+        /// less (strims_wan::wire::small_packets), its pure ACKs and a data
+        /// channel's SACK datagrams apart; a testbed run counts each packet of
+        /// 256 IP bytes or less its capture saw to a swarm node, its pure TCP
+        /// ACKs apart, a data channel's SACK datagrams with its data.
         ///
         /// None is written as -1.
         SeedSmallPackets,
@@ -3910,9 +3929,19 @@ pub(crate) mod cols {
         ///
         /// Unit: bytes.
         UpBytes,
-        /// Packets through the node's uplink in the bin (WAN mode).
+        /// Packets through the node's uplink in the bin (WAN mode). A sim's
+        /// twin counts its data packets, its pure ACKs and a data channel's
+        /// SACK datagrams apart (the up_ack and up_sack columns); a testbed run
+        /// counts each packet its capture saw to a swarm node, its pure TCP
+        /// ACKs apart, a data channel's SACK datagrams with its data (inside
+        /// DTLS: its up_sack columns empty).
         UpPackets,
-        /// Small packets through the node's uplink in the bin (WAN mode).
+        /// Small packets through the node's uplink in the bin (WAN mode). A
+        /// sim's twin counts a data message's last packet of 256 wire bytes or
+        /// less (strims_wan::wire::small_packets), its pure ACKs and a data
+        /// channel's SACK datagrams apart; a testbed run counts each packet of
+        /// 256 IP bytes or less its capture saw to a swarm node, its pure TCP
+        /// ACKs apart, a data channel's SACK datagrams with its data.
         SmallPackets,
         /// The window model's window falls on the node's links in the bin.
         WindowCuts,

@@ -2444,13 +2444,13 @@ description = "Bytes through the honest viewers present's uplinks in the bin, as
 sims = ["strims-sim"]
 type = "int"
 none = "-1"
-description = "Packets through the honest viewers present's uplinks in the bin (WAN mode)."
+description = "Packets through the honest viewers present's uplinks in the bin (WAN mode). A sim's twin counts its data packets, its pure ACKs and a data channel's SACK datagrams apart (the up_ack and up_sack columns); a testbed run counts each packet its capture saw to a swarm node, its pure TCP ACKs apart, a data channel's SACK datagrams with its data (inside DTLS: its up_sack columns empty)."
 
 [columns.bins.viewer_small_packets]
 sims = ["strims-sim"]
 type = "int"
 none = "-1"
-description = "Small packets through the honest viewers present's uplinks in the bin (WAN mode)."
+description = "Small packets through the honest viewers present's uplinks in the bin (WAN mode). A sim's twin counts a data message's last packet of 256 wire bytes or less (strims_wan::wire::small_packets), its pure ACKs and a data channel's SACK datagrams apart; a testbed run counts each packet of 256 IP bytes or less its capture saw to a swarm node, its pure TCP ACKs apart, a data channel's SACK datagrams with its data."
 
 [columns.bins.capacity]
 sims = ["strims-sim"]
@@ -2505,13 +2505,13 @@ description = "Bytes through the seed's uplink in the bin, as its link charged t
 sims = ["strims-sim"]
 type = "int"
 none = "-1"
-description = "Packets through the seed's uplink in the bin (WAN mode)."
+description = "Packets through the seed's uplink in the bin (WAN mode). A sim's twin counts its data packets, its pure ACKs and a data channel's SACK datagrams apart (the up_ack and up_sack columns); a testbed run counts each packet its capture saw to a swarm node, its pure TCP ACKs apart, a data channel's SACK datagrams with its data (inside DTLS: its up_sack columns empty)."
 
 [columns.bins.seed_small_packets]
 sims = ["strims-sim"]
 type = "int"
 none = "-1"
-description = "Small packets through the seed's uplink in the bin (WAN mode)."
+description = "Small packets through the seed's uplink in the bin (WAN mode). A sim's twin counts a data message's last packet of 256 wire bytes or less (strims_wan::wire::small_packets), its pure ACKs and a data channel's SACK datagrams apart; a testbed run counts each packet of 256 IP bytes or less its capture saw to a swarm node, its pure TCP ACKs apart, a data channel's SACK datagrams with its data."
 
 [columns.bins.budget_capacity]
 sims = ["strims-sim"]
@@ -2755,12 +2755,12 @@ description = "Bytes through the node's uplink in the bin, as its link charged t
 [columns.node_bins.up_packets]
 sims = ["strims-sim"]
 type = "int"
-description = "Packets through the node's uplink in the bin (WAN mode)."
+description = "Packets through the node's uplink in the bin (WAN mode). A sim's twin counts its data packets, its pure ACKs and a data channel's SACK datagrams apart (the up_ack and up_sack columns); a testbed run counts each packet its capture saw to a swarm node, its pure TCP ACKs apart, a data channel's SACK datagrams with its data (inside DTLS: its up_sack columns empty)."
 
 [columns.node_bins.small_packets]
 sims = ["strims-sim"]
 type = "int"
-description = "Small packets through the node's uplink in the bin (WAN mode)."
+description = "Small packets through the node's uplink in the bin (WAN mode). A sim's twin counts a data message's last packet of 256 wire bytes or less (strims_wan::wire::small_packets), its pure ACKs and a data channel's SACK datagrams apart; a testbed run counts each packet of 256 IP bytes or less its capture saw to a swarm node, its pure TCP ACKs apart, a data channel's SACK datagrams with its data."
 
 [columns.node_bins.window_cuts]
 sims = ["strims-sim"]
