@@ -897,6 +897,28 @@ class SharedKeys(unittest.TestCase):
                          sorted((j.id, j.arm, j.commit) for j in m2.jobs()))
         self.assertEqual({r.get("from") for r in got}, {"k-00"})
 
+    def test_a_verify_copy_whose_trace_differs_is_a_mismatch(self):
+        first = self.run_of(self.ms)
+        self.finish(first, self.todo(first), 0)
+        self.finish(first, self.todo(first), 1)
+        run = self.run_of(self.ms)
+        verify = self.todo(run, "v")
+        self.assertTrue(verify)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for item in verify:
+                run.store(self.host, item, {"row": {"trace": "t-other", "reads_hash": "r2"}, "wall_s": 1.0,
+                                            "flush": 2})
+        self.assertEqual((run.verified, run.mismatches), (0, len(verify)))
+        said = [line for line in out.getvalue().splitlines() if "MISMATCH" in line]
+        self.assertEqual(len(said), len(verify))
+        for line, item in zip(said, verify):
+            self.assertIn(f"MISMATCH: job {item.job.id} ", line)
+            self.assertIn(f"trace {run.rows[item.job.id]['row']['trace']} reads None on local, trace t-other reads r2 "
+                          "on local", line)
+        got = self.fp.read_jsonl(self.fp.FARM / "k-00" / "mismatches.jsonl")
+        self.assertEqual({r["again"]["row"]["trace"] for r in got}, {"t-other"})
+
     def test_a_job_whose_binary_isnt_built_runs_as_its_own(self):
         # An estimate's: its key is unknown.
         for b in self.bins[1:]:

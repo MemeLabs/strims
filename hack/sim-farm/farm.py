@@ -2732,17 +2732,18 @@ class Run:
         first = self.rows.setdefault(item.job.id, rec)
         self.release(item.job.id)
         if first is not rec:
+            trace = lambda r: r["row"].get("trace")
             reads = lambda r: r["row"].get("reads_hash")
             same_reads = not (reads(first) and reads(rec)) or reads(first) == reads(rec)
-            if first["row"].get("trace") == rec["row"].get("trace") and same_reads:
+            if trace(first) == trace(rec) and same_reads:
                 self.verified += 1
             else:
                 self.mismatches += 1
                 for m, r in recs:
                     append_jsonl(m.state / "mismatches.jsonl", [{"first": first, "again": r}])
                 log(f"MISMATCH: job {item.job.id} ({item.job.arm} {dict(item.job.env)}): "
-                    f"{key(first)} reads {reads(first)} on {first['host']}, "
-                    f"{key(rec)} reads {reads(rec)} on {host.id}")
+                    f"trace {trace(first)} reads {reads(first)} on {first['host']}, "
+                    f"trace {trace(rec)} reads {reads(rec)} on {host.id}")
 
     def flush_rows(self) -> None:
         """Writes the lines stored since the last flush, one append a file."""
