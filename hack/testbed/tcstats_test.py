@@ -109,8 +109,9 @@ class Parse(unittest.TestCase):
                 f.write('1794840471800 [{"kind":"tbf","handle"\n')
                 f.write("1794840471900 qdisc tbf 10: root refcnt 2 rate 1Mbit burst\n")
             got = tcstats.samples(p)
-            self.assertEqual([t for t, _ in got], [1794840471604, 1794840471700])
-            self.assertEqual([tcstats.find(qs, "10:").backlog for _, qs in got], [2048, 3072])
+            # File order, whatever the stamps say.
+            self.assertEqual([t for t, _ in got], [1794840471700, 1794840471604])
+            self.assertEqual([tcstats.find(qs, "10:").backlog for _, qs in got], [3072, 2048])
 
 
 # The trace class's tree: tracelink's program drops in the prio and holds

@@ -399,7 +399,7 @@ def cmd_socks(args):
             continue
         kinds.add(f"{spec}: {got[-1][1].kind} 10:" if got else spec)
         cut = [q.drops for t, q in got if lo * 1000 <= t - off < hi * 1000]
-        drops.append(cut[-1] - cut[0] if cut else 0)
+        drops.append(max(cut) - min(cut) if cut else 0)
     print(f"{n} viewers, the testbed seed's sockets in the cut ({arm}), p10/p50/p90/p99")
     for (cls, k), xs in sorted(agg.items()):
         unit = {"rtt": "ms", "notsent": "KiB", "cwnd": "pkts"}[k]

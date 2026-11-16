@@ -130,8 +130,11 @@ def parse(text):
 
 
 def samples(path):
-    """tc-<i>.log's samples, [(unix ms, [Qdisc])], in time order; a line
-    cut short (the run's end) is skipped."""
+    """tc-<i>.log's samples, [(unix ms, [Qdisc])], in file order, which is
+    time order: a run from before run.sh took its stamps from bash's clock
+    has some up to 900 ms late (`date +%s%3N` under uutils), so the stamps
+    may run backwards and a reader mustn't sort by them. A line cut short
+    (the run's end) is skipped."""
     out = []
     with open(path) as f:
         for line in f:
@@ -142,7 +145,6 @@ def samples(path):
                 out.append((int(t), parse(rest)))
             except (ValueError, KeyError):
                 continue
-    out.sort(key=lambda s: s[0])
     return out
 
 
