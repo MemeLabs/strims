@@ -23,6 +23,28 @@ export interface DeviceTouch {
   standalone?: boolean;
 }
 
+// Insets from a viewport's edges, in CSS px.
+export interface Insets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+// What the device's screen hides of a page that fills it: its rounded
+// corners and its notch, centred on the device's top edge, in CSS px.
+export interface DeviceScreen {
+  cornerRadius: number;
+  notch?: {
+    /** Along the top edge. */
+    width: number;
+    /** Into the screen from the top edge. */
+    depth: number;
+    /** Of its two corners inside the screen. */
+    radius: number;
+  };
+}
+
 export interface DeviceShape {
   width: number;
   height: number;
@@ -36,6 +58,16 @@ export interface DeviceShape {
   userAgent: string;
   /** None: the realm's own navigator (the phone frames have kept it). */
   touch?: DeviceTouch;
+  /**
+   * env(safe-area-inset-*) as the device's Safari reports it for a page
+   * that fills the screen (viewport-fit=cover). The styles read these
+   * through --safe-area-inset-*, which the frame's preload sets
+   * (webpack/SafeAreaInsets.ts). None means 0 on every side, as the
+   * browser running the storybook reports.
+   */
+  safeArea?: Insets;
+  /** None: nothing is drawn over the page. */
+  screen?: DeviceScreen;
 }
 
 export type Turn = "ccw" | "cw";
@@ -50,6 +82,20 @@ export const LANDSCAPE_ORIENTATIONS: Partial<Record<Device, Record<Turn, number>
   ipad_landscape: { ccw: 90, cw: -90 },
   tablet_landscape: { ccw: 0, cw: 180 },
 };
+
+// The landscape phone frame's screen, an iPhone 13's or 14's (390 by 844),
+// with its notch's width and depth approximate, and its safe area. iOS
+// insets a landscape page by the notch's depth on both sides, whichever side
+// the notch is turned to, and above the home indicator; the layout pads only
+// the notch's side (layout--landscape_ccw, layout--landscape_cw). The
+// portrait frame has neither: the page starts below the status bar (the app
+// sets no apple-mobile-web-app-status-bar-style), so the notch never covers
+// it, and its bottom inset is 0 above Safari's toolbar.
+const IPHONE_SCREEN: DeviceScreen = {
+  cornerRadius: 47,
+  notch: { width: 162, depth: 33, radius: 20 },
+};
+const IPHONE_LANDSCAPE_SAFE_AREA: Insets = { top: 0, right: 47, bottom: 21, left: 47 };
 
 // An iPhone's Safari, so lib/userAgent (and the libraries that sniff it)
 // see a phone.
@@ -81,6 +127,8 @@ export const DEVICES: Record<Device, DeviceShape | null> = {
     height: 390,
     orientation: 90,
     userAgent: PHONE_USER_AGENT,
+    safeArea: IPHONE_LANDSCAPE_SAFE_AREA,
+    screen: IPHONE_SCREEN,
   },
   ipad_portrait: {
     width: 820,

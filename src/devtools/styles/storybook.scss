@@ -175,6 +175,48 @@ $chrome-border: #ccc;
   }
 }
 
+// What a device frame's screen hides, drawn over the story (StoryView's
+// ScreenMask). The shadow outside its rounded border fills the corners the
+// radius cuts out of the viewport.
+.storybook_screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  border-radius: var(--screen-corner-radius);
+  box-shadow: 0 0 0 var(--screen-corner-radius) black;
+
+  &__notch {
+    position: absolute;
+    background: black;
+
+    &--top {
+      top: 0;
+      left: calc(50% - var(--screen-notch-width) / 2);
+      width: var(--screen-notch-width);
+      height: var(--screen-notch-depth);
+      border-radius: 0 0 var(--screen-notch-radius) var(--screen-notch-radius);
+    }
+
+    &--left,
+    &--right {
+      top: calc(50% - var(--screen-notch-width) / 2);
+      width: var(--screen-notch-depth);
+      height: var(--screen-notch-width);
+    }
+
+    &--left {
+      left: 0;
+      border-radius: 0 var(--screen-notch-radius) var(--screen-notch-radius) 0;
+    }
+
+    &--right {
+      right: 0;
+      border-radius: var(--screen-notch-radius) 0 0 var(--screen-notch-radius);
+    }
+  }
+}
+
 .storybook_crash {
   margin: 1rem;
   padding: 1rem;

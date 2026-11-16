@@ -23,7 +23,7 @@ import { DEVICE_TYPE } from "../../../lib/userAgent";
 import type { Story } from "../types";
 import StoryErrorBoundary from "./ErrorBoundary";
 import { loadModule } from "./catalog";
-import { Device, LANDSCAPE_ORIENTATIONS } from "./devices";
+import { DEVICES, Device, LANDSCAPE_ORIENTATIONS } from "./devices";
 import { setFrameOrientation } from "./preload";
 import { Session } from "./recorder";
 
@@ -145,6 +145,46 @@ export interface StoryViewProps {
   session: Session;
 }
 
+// The edge of the viewport the device's top edge is turned to, keyed by the
+// screenOrientation value of a device whose natural orientation is
+// portrait (the phone frames).
+const TOP_EDGE: Record<number, string> = { 0: "top", 90: "left", [-90]: "right" };
+
+interface ScreenMaskProps {
+  device: Device;
+  orientation: number;
+}
+
+// What the device's screen hides of the story (DeviceScreen): its rounded
+// corners, and its notch on the edge the device's top is turned to. This is
+// drawn over the story, so it shows in hack/storybook/check.py's captures.
+// It is the story root's sibling, so a story that renders nothing still
+// leaves the root empty.
+const ScreenMask: React.FC<ScreenMaskProps> = ({ device, orientation }) => {
+  const screen = DEVICES[device]?.screen;
+  if (!screen) {
+    return null;
+  }
+  const { cornerRadius, notch } = screen;
+  const style = {
+    "--screen-corner-radius": `${cornerRadius}px`,
+    ...(notch && {
+      "--screen-notch-width": `${notch.width}px`,
+      "--screen-notch-depth": `${notch.depth}px`,
+      "--screen-notch-radius": `${notch.radius}px`,
+    }),
+  } as React.CSSProperties;
+  return (
+    <div className="storybook_screen" style={style} aria-hidden="true">
+      {notch && (
+        <div
+          className={`storybook_screen__notch storybook_screen__notch--${TOP_EDGE[orientation] ?? "top"}`}
+        />
+      )}
+    </div>
+  );
+};
+
 // A story in its frame, its errors caught and recorded into `session`. A
 // landscape frame is turned the way its story says (Story.landscape) before
 // the story renders.
@@ -161,13 +201,16 @@ export const StoryView: React.FC<StoryViewProps> = ({ moduleKey, name, device, s
     })
   );
   return (
-    <Frame device={device} orientation={orientation} session={session}>
-      <StoryErrorBoundary onError={(text) => session.crash(text)}>
-        <Suspense fallback={<LoadingMessage />}>
-          <View name={name} session={session} />
-          <Mounted session={session} />
-        </Suspense>
-      </StoryErrorBoundary>
-    </Frame>
+    <>
+      <Frame device={device} orientation={orientation} session={session}>
+        <StoryErrorBoundary onError={(text) => session.crash(text)}>
+          <Suspense fallback={<LoadingMessage />}>
+            <View name={name} session={session} />
+            <Mounted session={session} />
+          </Suspense>
+        </StoryErrorBoundary>
+      </Frame>
+      <ScreenMask device={device} orientation={orientation} />
+    </>
   );
 };

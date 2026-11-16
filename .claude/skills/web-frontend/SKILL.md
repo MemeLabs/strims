@@ -54,6 +54,11 @@ catalog's covered, skipped and missing files.
   call with no mock, or a mock returning a plain object, fails the story;
   a mock's rejected promise is the call's RPC error. Extend the module,
   not one story.
+- Device frames (host/devices.ts) mimic a device's user agent, orientation
+  and touch screen. The landscape phone frame also draws an iPhone's notch
+  and corners on the side the story's turn (`landscape: "cw"`) puts them,
+  and has its safe area. Styles keep writing `env(safe-area-inset-*)`;
+  webpack/SafeAreaInsets.ts makes the frame's values reach them.
 - A story fails on a crash or an empty root at `--timeout`. It also fails
   on any error no allow list (`allowErrors`) covers: an uncaught error or
   rejection, or a console.error such as a React warning or a translation

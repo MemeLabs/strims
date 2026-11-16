@@ -5,8 +5,9 @@
 // makes this realm the device's before any app module evaluates. The app
 // reads the device type from the user agent once, at load (lib/userAgent:
 // SwipablePanel, ChatBar, Footer or Header, ...), so a device frame reports
-// its device's user agent, window.orientation and screen.orientation as the
-// device has them, and a tablet's touch screen as its browser does.
+// its device's user agent, window.orientation, screen.orientation and safe
+// area as the device has them, and a tablet's touch screen as its browser
+// does.
 
 import { DEVICES, Device, DeviceTouch, isDevice } from "./devices";
 import { FRAME_ROOT, INDEX_ROUTE, ROOT, Theme } from "./protocol";
@@ -96,6 +97,12 @@ if (shape) {
   });
   if (shape.touch) {
     fakeTouch(shape.touch);
+  }
+  // The styles' env(safe-area-inset-*), as webpack/SafeAreaInsets.ts has
+  // them read it. These are on <html>, so a portal outside the story's root
+  // gets them too.
+  for (const [side, px] of Object.entries(shape.safeArea ?? {})) {
+    document.documentElement.style.setProperty(`--safe-area-inset-${side}`, `${px}px`);
   }
 }
 

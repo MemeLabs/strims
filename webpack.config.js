@@ -9,6 +9,7 @@ const webpack = require("webpack");
 const JSON5 = require("json5");
 const { ChunkManifestPlugin } = require("./webpack/lib/ChunkManifestPlugin");
 const { PwaManifestPlugin } = require("./webpack/lib/PwaManifestPlugin");
+const { safeAreaInsets } = require("./webpack/lib/SafeAreaInsets");
 const { StorybookManifestPlugin } = require("./webpack/lib/StorybookManifestPlugin");
 
 module.exports = (env, argv) => {
@@ -86,7 +87,7 @@ module.exports = (env, argv) => {
         options: {
           sourceMap: true,
           postcssOptions: {
-            plugins: ["autoprefixer"],
+            plugins: ["autoprefixer", safeAreaInsets],
           },
         },
       },
