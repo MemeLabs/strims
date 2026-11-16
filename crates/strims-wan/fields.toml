@@ -4064,7 +4064,7 @@ joins = "viewers USING (k, src, node)"
 sample = false
 zstd = true
 description = "Each node's channels with its peers in the first swarm, sample by sample, as its transfers count them (`TransferSample::peers`): data each way, requests each way, its data queues, and its request window toward the peer."
-notes.strims-sim = "A host's samples are its stats ticks' (`Scenario::transfer_samples`, each `Scenario::stats_every`, on with the tables), its incarnations' in order, from the stream's start; a testbed run's are its nodes' line timers' (`crate::testbed`). The counters are cumulative per channel and restart with it."
+notes.strims-sim = "Written with each node's bins (`STRIMS_SIM_BIN_NODES=1`, as twins and testbed runs write them), as it scales with nodes, peers and seconds. A host's samples are its stats ticks' (`Scenario::transfer_samples`, each `Scenario::stats_every`, on with the tables), its incarnations' in order, from the stream's start; a testbed run's are its nodes' line timers' (`crate::testbed`). The counters are cumulative per channel and restart with it."
 
 [columns.peer_samples.t_ms]
 sims = ["strims-sim"]

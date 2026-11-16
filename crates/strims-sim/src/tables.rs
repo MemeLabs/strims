@@ -4,8 +4,9 @@
 //! A run's tables (`STRIMS_SIM_OUT=<dir>`, [`Report::write_tables`]): its
 //! first swarm second by second, every read and its viewers' stalls, its
 //! push trees' changes, finer bins with the uplinks' queues, its hosts'
-//! upload meter samples beside their uplinks, their channels with each peer
-//! at each transfer sample (`peer_samples`), its timed events and its
+//! upload meter samples beside their uplinks, with `nodes` each node's bins
+//! (`node_bins`) and channels with each peer at each transfer sample
+//! (`peer_samples`), its timed events and its
 //! forecast logs, and a testbed run's TCP sockets (`sockets`,
 //! [`Report::sockets`], which a sim run has none of), as CSV files
 //! each with a `<table>.schema.json` of its columns'
@@ -599,7 +600,10 @@ impl Report {
         }
         self.meter_samples_table(dir, &hosts, spec.seed, start)?
             .finish()?;
-        if self.scenario.transfer_samples {
+        // Each node's channels, as its bins, with `nodes` alone: a sim
+        // matrix's data stays as it was (it scales with nodes, peers and
+        // seconds).
+        if nodes && self.scenario.transfer_samples {
             self.peer_samples_table(dir, &hosts, start)?.finish()?;
         }
         if !self.sockets.is_empty() {

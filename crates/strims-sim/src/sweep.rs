@@ -148,7 +148,8 @@
 //!   when the sweep runs more than one seed; it samples transfers as
 //!   `STRIMS_SIM_SERIES=1` does. `STRIMS_SIM_BIN_MS=<ms>` (default 100)
 //!   sets the width of the `bins` table's bins ([`Scenario::wire_bins`]),
-//!   `STRIMS_SIM_BIN_NODES=1` adds each node's bins (`node_bins`), and
+//!   `STRIMS_SIM_BIN_NODES=1` adds each node's bins (`node_bins`) and
+//!   channels with each peer (`peer_samples`), and
 //!   `STRIMS_SIM_FORECAST=1` the nodes' forecast logs (`forecast`, large:
 //!   [`Scenario::forecast_log`]), `STRIMS_SIM_SPEC=1` their request logs
 //!   (`arrivals`, `haves`, `asks`, large: [`Scenario::request_logs`]).
