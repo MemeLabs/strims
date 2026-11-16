@@ -3001,6 +3001,9 @@ TEMP = re.compile(r"^CREATE OR REPLACE (MACRO|TABLE|VIEW) ", re.M)
 # tables (table, or table.column) it reads that a catalog indexed by older
 # code may lack.
 NEEDS = re.compile(r"needs: (.+)")
+# A scoring.sql statement's end: the `;` ending a line (one inside a
+# string, an error's text, ends none).
+STATEMENT_END = re.compile(r";[ \t]*$", re.M)
 # A table macro's columns where its needs are missing: no rows of them,
 # its `-- else none:` lines' columns in order.
 ELSE_NONE = re.compile(r"else none: (.+)")
@@ -3044,7 +3047,7 @@ def needed(text, have):
         missing = [n for n in needs if lacks(n)]
         if not missing or m.group(1) != "MACRO":
             continue
-        end = text.find(";", m.end())
+        end = STATEMENT_END.search(text, m.end()).start()
         why = q(f"{m.group(2)} reads {', '.join(missing)}, which this catalog lacks: index it with this checkout")
         table = " AS TABLE" in text[m.end():m.end() + 20]
         none = ", ".join(x.group(1) for line in comment_above(text, m.start()) if (x := ELSE_NONE.match(line)))

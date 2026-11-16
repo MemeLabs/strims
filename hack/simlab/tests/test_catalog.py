@@ -2277,5 +2277,18 @@ class Commands(Fixture):
         self.assertTrue(err.startswith("describe: no topic 'verdict' (did you mean verdicts"), err)
 
 
+class Needed(unittest.TestCase):
+    def test_a_stub_ends_where_its_statement_does(self):
+        # A macro whose body holds a `;` in a string becomes one stub, and
+        # the next statement stays whole.
+        text = ("-- needs: t\nCREATE OR REPLACE MACRO m(x) AS (SELECT error('a; b') FROM t);\n\n"
+                "CREATE OR REPLACE MACRO n(x) AS x + 1;\n")
+        got = catalog.needed(text, {"u": set()})
+        self.assertEqual(got.count("CREATE OR REPLACE MACRO"), 2)
+        self.assertIn("m reads t, which this catalog lacks", got)
+        self.assertNotIn("a; b", got)
+        self.assertIn("CREATE OR REPLACE MACRO n(x) AS x + 1;", got)
+
+
 if __name__ == "__main__":
     unittest.main()
