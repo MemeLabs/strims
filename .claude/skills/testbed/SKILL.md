@@ -128,6 +128,15 @@ a sizing decision rests on them.
   disk stalled other containers by up to 160 ms.
 - Judge load from cpu-<i>.log and the host's idle, never from lag. A
   swarm can lag for protocol reasons with CPU to spare.
+- run.sh's samplers take their own share, in each container's cgroup (20 s
+  alone in the image, an idle container's 0.003 core taken off). The tc
+  loop (`tc -s -j qdisc show` at 10 Hz, a fork of tc and tr a sample) costs
+  0.08 core, more than a native node; hack/testbed/tcsample.c (one process,
+  rtnetlink, the same lines) 0.001. The cpu loop (date, sed and cat once a
+  second) costs 0.012; read with bash's builtins and `read -t` it costs
+  nothing measurable. The seed's ss loop costs 0.024. With every node
+  sampled, count the tc loop in a host's `host_cores` until tcsample
+  replaces it.
 
 ## The device lab
 
