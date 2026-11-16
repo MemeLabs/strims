@@ -427,7 +427,20 @@ def views(sel, derived=True, fetch=True, say=None):
                      f"'\"MAP(VARCHAR, VARCHAR)\"')) ELSE r.cell END AS cell) FROM {read_runs} r WHERE {ran})")
     where = []
     if sel.cell:
-        where.append("(" + " OR ".join(f"cell GLOB {q(c)} OR split_part(cell, '@', 1) GLOB {q(c)}"
+        # A testbed run's cell is its tier's and its name's
+        # (robust:halve-15-10@root-class): the name alone matches it where
+        # the selection's runs hold it in one tier, and is refused where
+        # they hold it in two.
+        named = "split_part(split_part(cell, '@', 1), ':', 2)"
+        for c in sel.cell:
+            tiers = [r["tier"] for r in records(
+                "\n".join(keying) + f"\nSELECT DISTINCT split_part(cell, ':', 1) AS tier FROM {read_runs} "
+                f"WHERE contains(split_part(cell, '@', 1), ':') AND {named} GLOB {q(c)} ORDER BY tier;")]
+            if len(tiers) > 1:
+                raise Refused(f"--cell {c} names a testbed cell of {len(tiers)} tiers ("
+                              + ", ".join(f"{t}:{c}" for t in tiers) + "): name the one")
+        where.append("(" + " OR ".join(f"cell GLOB {q(c)} OR split_part(cell, '@', 1) GLOB {q(c)} "
+                                       f"OR (contains(split_part(cell, '@', 1), ':') AND {named} GLOB {q(c)})"
                                        for c in sel.cell) + ")")
     if sel.arm:
         where.append("(" + " OR ".join(f"arm GLOB {q(x)}" for x in sel.arm) + ")")

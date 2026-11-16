@@ -609,7 +609,8 @@ def main():
     qs["rows"].add_argument("--fields", help="the row's fields to print, comma-separated (all by default)")
     for x in qs.values():
         x.add_argument("--src", action="append", help="cache sources, globs (suite/WT/INV, farm/RUN/...)")
-        x.add_argument("--cell", action="append", help="cells, globs")
+        x.add_argument("--cell", action="append", help="cells, globs; a testbed cell (TIER:NAME@TREE) also by its "
+                       "NAME where one tier holds it")
         x.add_argument("--arm", action="append", help="arms, globs")
         x.add_argument("--seed", action="append", type=int)
         x.add_argument("--bin", type=int, default=1000, help="ms")
