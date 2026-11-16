@@ -163,6 +163,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "hack"))
+sys.path.insert(0, str(REPO / "hack" / "testbed"))
 
 from simlab.verdict import (  # noqa: E402
     ABSORB_SECS, COLLAPSED_SECS, DELIVERY_MAX_MS, DELIVERY_SECS, DELIVERY_SHARE, DELIVERY_TARGET_MS, E2E_MAX_MS,
@@ -171,6 +172,7 @@ from simlab.verdict import (  # noqa: E402
     TREES_SMOOTH, VERDICT_VERSION, acf, collapsed, episodes, events, feasible, lags, measures, med, phase_lags, phases,
     presence, quantile, run_metrics, run_startup, runs_of, slope, startup, steps, timeline, verdict, verdict_version,
 )
+import tcstats  # noqa: E402
 
 # The rows `reduce` keeps.
 TYPES = "decisions,samples,DATA,REQUEST,STREAM_*"
@@ -630,23 +632,13 @@ QUEUE_DELAY_THRESHOLD_MS = 80
 
 
 def tc_queue(path):
-    """(wall ms, ms to drain the tbf backlog at its rate) per line of a
+    """(wall ms, ms to drain the tbf backlog at its rate) per sample of a
     testbed tc log (run.sh's tc-0.log)."""
-    import re
-
-    unit = {"": 1, "K": 1024, "M": 1024 * 1024, "G": 1024 ** 3}
-    rate_unit = {"": 1, "K": 1e3, "M": 1e6, "G": 1e9}
     out = []
-    for line in path.read_text().splitlines():
-        t, _, rest = line.partition(" ")
-        tbf = rest.partition("qdisc tbf")[2]
-        b = re.search(r"backlog ([\d.]+)([KMG]?)b", tbf)
-        r = re.search(r"rate ([\d.]+)([KMG]?)bit", tbf)
-        if not (t.isdigit() and b and r):
-            continue
-        backlog = float(b[1]) * unit[b[2]]
-        rate = float(r[1]) * rate_unit[r[2]] / 8
-        out.append((int(t), 1000 * backlog / rate))
+    for t, qs in tcstats.samples(path):
+        tbf = tcstats.find(qs, "10:", "tbf")
+        if tbf and tbf.rate:
+            out.append((t, 1000 * tbf.backlog / tbf.rate))
     return out
 
 

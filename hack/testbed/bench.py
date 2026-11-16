@@ -49,6 +49,9 @@ import re
 import sys
 from collections import defaultdict
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tcstats  # noqa: E402
+
 
 def quantiles(xs, qs=(0.1, 0.5, 0.9, 0.99)):
     if not xs:
@@ -114,11 +117,6 @@ def classes(sched):
     return names
 
 
-# The seed's tbf in a tc-0.log sample (`tc -s qdisc show dev eth0` on one
-# line): its drops and backlog, by its handle wherever run.sh put it.
-TBF = re.compile(r"qdisc tbf 10: .*?dropped (\d+),.*?backlog (\d+)b")
-
-
 def tc_queue(run, start_ms, s):
     """The seed's tbf queue in ms, [(t_us, ms)], from tc-0.log."""
     p = os.path.join(run, "tc-0.log")
@@ -130,20 +128,18 @@ def tc_queue(run, start_ms, s):
         a, _, m = st.partition(":")
         steps.append((float(a), float(m)))
     out = []
-    for line in open(p):
-        w = line.split()
-        if not w:
-            continue
-        t = (int(w[0]) - start_ms) * 1000
-        tbf = TBF.search(line)
+    for ms, qs in tcstats.samples(p):
+        t = (ms - start_ms) * 1000
+        # The seed's tbf, by its handle wherever run.sh put it.
+        tbf = tcstats.find(qs, "10:", "tbf")
         if not tbf:
             continue
         rate = up
         for a, m in steps:
             if t >= a * 1e6:
                 rate = m
-        out.append((t, int(tbf.group(2)) * 8 / (rate * 1e6) * 1000))
-    return sorted(out)
+        out.append((t, tbf.backlog * 8 / (rate * 1e6) * 1000))
+    return out
 
 
 def tc_drops(run):
@@ -151,9 +147,9 @@ def tc_drops(run):
     p = os.path.join(run, "tc-0.log")
     if not os.path.exists(p):
         return None
-    last = max(open(p), key=lambda l: int(l.split()[0]) if l.split() else 0)
-    tbf = TBF.search(last)
-    return int(tbf.group(1)) if tbf else None
+    got = tcstats.samples(p)
+    tbf = tcstats.find(got[-1][1], "10:", "tbf") if got else None
+    return tbf.drops if tbf else None
 
 
 def tc_compete(run, start_ms):

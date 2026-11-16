@@ -173,7 +173,9 @@
 # and host_t_ms, testbed_browser's), node-<i>.err, cpu-<i>.log (the
 # container's CPU time and memory once a second: ms since the epoch, the
 # cgroup's usage_usec, and its memory.current in bytes), tc-<i>.log (the
-# seed's tbf backlog at 10 Hz) and ss-<i>.log (its sockets once a second),
+# seed's eth0 qdiscs at 10 Hz: ms since the epoch, then `tc -s -j qdisc
+# show`'s JSON, which hack/testbed/tcstats.py reads) and ss-<i>.log (its
+# sockets once a second),
 # steps.log (when each of SEED_UP_STEPS applied, ms since the epoch, and
 # its rate), compete-<s>.json (each upload's iperf3 report) and
 # compete.log (when each started), links (each node's link spec, rate,
@@ -413,7 +415,7 @@ tc qdisc add dev ifbs root tbf rate ${slow}kbit burst 3028 limit $((slow * queue
   fi
   sample=""
   if [ "$i" -eq 0 ]; then
-    sample="( while :; do echo \"\$(date +%s%3N) \$(tc -s qdisc show dev eth0 | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &
+    sample="( while :; do echo \"\$(date +%s%3N) \$(tc -s -j qdisc show dev eth0 | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &
 ( while :; do echo \"@ \$(date +%s%3N)\"; ss -tin state established; sleep $ss_every; done > /out/ss-$i.log ) &"
   fi
   if [ "${PCAP:-0}" = 1 ]; then

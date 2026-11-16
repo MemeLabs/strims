@@ -64,6 +64,9 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import tcstats  # noqa: E402
+
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 PH = {"before": (35, 60), "cut": (60, 180), "after": (180, 238)}
 
@@ -388,9 +391,8 @@ def cmd_socks(args):
                 tot[1] += (b[1] - a[1]) / (t1 - t0)
                 tot[2] += ((b[2] - a[2]) - (b[1] - a[1])) / (t1 - t0)
         flows.append(tot)
-        pat = re.compile(r"qdisc tbf 10:.*?dropped (\d+),")
-        cut = sorted(int(pat.search(x).group(1)) for x in open(os.path.join(d, "tc-0.log"))
-                     if pat.search(x) and lo * 1000 <= int(x.split()[0]) - off < hi * 1000)
+        cut = [tbf.drops for t, qs in tcstats.samples(os.path.join(d, "tc-0.log"))
+               if lo * 1000 <= t - off < hi * 1000 and (tbf := tcstats.find(qs, "10:", "tbf"))]
         drops.append(cut[-1] - cut[0] if cut else 0)
     print(f"{n} viewers, the testbed seed's sockets in the cut ({arm}), p10/p50/p90/p99")
     for (cls, k), xs in sorted(agg.items()):
@@ -413,7 +415,6 @@ def tb_bytes(d):
     """A testbed run's uplinks over 5-60 s: frame bytes over driver bytes, the
     pure ACKs' and small packets' shares of the packets, and packets a
     second per node (the seed first)."""
-    sys.path.insert(0, HERE)
     import pcap
 
     n = sum(1 for x in os.listdir(d) if re.fullmatch(r"node-\d+\.jsonl", x))
