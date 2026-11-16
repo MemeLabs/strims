@@ -135,7 +135,7 @@ their joins.
 - The Docker testbed (hack/testbed) is one configuration: it checks that
   a mechanism exists on a real stack and that a fix does no harm there,
   never effect sizes or rankings, which the sims' breadth decides. A gap
-  to its sim twin (hack/testbed/twin.py) is the sim model's to fix.
+  to its sim twin (`twin_fit_of`, the testbed skill) is the sim model's to fix.
 - Report dynamics, not a bare p99. Lead with steady state and joins into
   a running swarm (most cells' viewers trickle in, `suite.TRICKLE`; the
   audience cells burst into a warm swarm): every viewer starting with

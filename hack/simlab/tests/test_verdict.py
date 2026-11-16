@@ -27,7 +27,7 @@ import goldens  # noqa: E402
 from simlab import verdict, vocab  # noqa: E402
 
 # The names analyze.py's importers read (simdb.py, catalog.py, suite.py,
-# sim-suite's golden.py, the testbed's twin.py, scripts): its verdicts.
+# sim-suite's golden.py, scripts): its verdicts.
 NAMES = (
     "E2E_TARGET_MS", "E2E_MAX_MS", "PIPELINE_MS", "DELIVERY_TARGET_MS", "DELIVERY_MAX_MS", "TREES_SHARE",
     "TREES_SMOOTH", "TREES_SECS", "DELIVERY_SHARE", "DELIVERY_SECS", "LAG_PERCENTILE", "LAG_HIGH_MS", "LAG_HIGH_SECS",

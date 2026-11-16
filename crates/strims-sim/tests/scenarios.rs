@@ -3428,128 +3428,19 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
     calibration::calibration_star(c)
 }
 
-/// The seed's meter, the upload it had, its push subscribers, its
-/// adaptive budget and copies and its true uplink queue per sample, the
-/// segments its uplink dropped and the pure acknowledgements it carried
-/// over the run, the viewers' p99 lag per second of stream, and every
-/// node's transfers per sample (`[s, transfers]` lists by host, the
-/// testbed's `transfers`), as one JSON object (`SERIES {json}`).
-fn calibration_series(r: &Report) -> String {
-    let spec = &r.scenario.swarms[0];
-    let seed = spec.seed;
-    let up = r.upload_cap(seed).unwrap_or(0);
-    let queue: Vec<(Duration, u32)> = r
-        .wan
-        .as_ref()
-        .and_then(|w| w.hosts.iter().find(|h| h.name == r.scenario.name_of(seed)))
-        .map(|h| {
-            h.up_queue
-                .iter()
-                .filter_map(|&(t, w)| {
-                    Some((
-                        t.to_std()?,
-                        u32::try_from(w.as_millis().max(0)).unwrap_or(u32::MAX),
-                    ))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let seed_state = |t: Duration| {
-        r.hosts[seed]
-            .runner
-            .seed_changes
-            .iter()
-            .rev()
-            .find(|(at, sw, _)| *sw == 0 && *at <= t)
-            .map_or((0, 0), |(_, _, x)| (x.budget, x.copies))
-    };
-    let mut rows = Vec::new();
-    for m in &r.hosts[seed].runner.meter {
-        if m.t < spec.start || m.t > spec.stop {
-            continue;
-        }
-        let (budget, copies) = seed_state(m.t);
-        let q = queue
-            .iter()
-            .filter(|(t, _)| t.abs_diff(m.t) <= Duration::from_millis(500))
-            .map(|&(_, w)| f64::from(w))
-            .collect::<Vec<_>>();
-        let q = if q.is_empty() {
-            "null".to_owned()
-        } else {
-            format!("{:.1}", q.iter().sum::<f64>() / q.len() as f64)
-        };
-        rows.push(format!(
-            "{{\"s\":{:.1},\"rate\":{},\"busy\":{},\"capacity\":{},\"avail\":{},\"children\":{},\"budget\":{budget},\"copies\":{copies},\"qd\":{},\"q\":{q}}}",
-            (m.t - spec.start).as_secs_f64(),
-            m.rate,
-            m.busy_permille,
-            m.capacity,
-            r.upload_cap_at(seed, m.asked).unwrap_or(0),
-            m.children.get(&0).copied().unwrap_or(0),
-            m.queue_delay_ms
-                .map_or("null".to_owned(), |d| d.to_string()),
-        ));
-    }
-    let secs_n = spec.stop.saturating_sub(spec.start).as_secs();
-    let lags: Vec<String> = (0..secs_n)
-        .map(|k| {
-            let a = spec.start + Duration::from_secs(k);
-            let p = r.lag_between(0, a, a + Duration::from_secs(1));
-            format!("[{k},{}]", p.p99)
-        })
-        .collect();
-    let stream_secs = spec.stop.saturating_sub(spec.start).as_secs_f64();
-    let waits: Vec<String> = queue
-        .iter()
-        .filter(|(t, _)| *t >= spec.start && *t <= spec.stop)
-        .map(|&(t, w)| format!("[{:.1},{w}]", (t - spec.start).as_secs_f64()))
-        .collect();
-    let transfers: Vec<String> = r
-        .hosts
-        .iter()
-        .map(|h| {
-            let xs: Vec<String> = h
-                .transfers
-                .iter()
-                .filter(|(t, s, _)| *s == 0 && *t >= spec.start && *t <= spec.stop)
-                .map(|(t, _, x)| format!("[{:.1},{}]", (*t - spec.start).as_secs_f64(), x.json()))
-                .collect();
-            format!("[{}]", xs.join(","))
-        })
-        .collect();
-    let (drops, acks) = r
-        .wan
-        .as_ref()
-        .and_then(|w| w.hosts.iter().find(|h| h.name == r.scenario.name_of(seed)))
-        .map_or((0, 0), |h| (h.queue_drops, h.acks));
-    format!(
-        "{{\"up\":{up},\"goodput\":{:.0},\"drops\":{drops},\"acks\":{acks},\"seed\":[{}],\"lag_p99\":[{}],\"queue\":[{}],\"transfers\":[{}]}}",
-        r.hosts[seed].uploaded as f64 / stream_secs,
-        rows.join(","),
-        lags.join(","),
-        waits.join(","),
-        transfers.join(",")
-    )
-}
-
 #[test]
 #[ignore = "calibration against hack/testbed; run in release with --include-ignored"]
 fn calibration_star() {
     let c = calibration_settings();
-    // A measurement: it checks nothing beyond the replay.
-    let reports = sweep_n(
+    // A measurement: it checks nothing beyond the replay. Its tables
+    // (STRIMS_SIM_OUT) are what a testbed run's compare with
+    // (strims_sim::testbed).
+    sweep_n(
         "calibration_star",
         1,
         |s| calibration_star_scenario(s, &c),
         |_| Ok(()),
     );
-    // A farm job's row carries the run's seconds (`Report::series_data`).
-    if !knob::<String>("STRIMS_SIM_JOB").is_some_and(|j| j == "1") {
-        for r in &reports {
-            println!("SERIES {}", calibration_series(r));
-        }
-    }
 }
 
 // 11b. Collapse modes: fixed cases of `calibration_star` in which an

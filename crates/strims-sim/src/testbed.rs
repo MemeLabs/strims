@@ -168,7 +168,7 @@ fn num(x: f64) -> String {
 
 /// The knobs of a testbed run's twin, from its `settings` and its
 /// `topology` file: strims-sim's `STRIMS_SIM_*` settings that make
-/// `calibration_star` the run's configuration (`twin.py run`'s).
+/// `calibration_star` the run's configuration.
 ///
 /// The window model (`STRIMS_SIM_TCP=1`), honest viewers
 /// (`STRIMS_SIM_HOSTILE=off`) and one clock (`STRIMS_SIM_CLOCK_SKEW=off`)
@@ -275,12 +275,12 @@ pub fn knobs_of(
             // the run keeps it as TESTBED_LINKS, its twin knobs none.
             let refused: Vec<String> = specs
                 .iter()
-                .filter(|(_, spec)| crate::link::TestbedLink::parse(spec, 1).is_err())
+                .filter(|(_, spec)| crate::link::TestbedLink::parse(spec).is_err())
                 .map(|(i, spec)| format!("{i}:{spec}"))
                 .collect();
             if !refused.is_empty() {
                 put("TESTBED_LINKS", refused.join(" "));
-                specs.retain(|_, spec| crate::link::TestbedLink::parse(spec, 1).is_ok());
+                specs.retain(|_, spec| crate::link::TestbedLink::parse(spec).is_ok());
             }
             if let Some(seed) = specs.get(&0) {
                 put("STRIMS_SIM_CAL_SEED_LINK", (*seed).to_owned());
@@ -685,8 +685,11 @@ impl Run {
                 .filter_map(|(s, v)| Some((s.parse().ok()?, v.as_u64()?)))
                 .collect()
         };
+        let t = self.at(u("t_ms")?)?;
+        // A node is sampled at its line: its truth is read there.
         Some(MeterSample {
-            t: self.at(u("t_ms")?)?,
+            t,
+            asked: t,
             rate: u("rate")?,
             busy_permille: n("busy_permille"),
             queue_delay_ms: o("queue_delay_ms"),
@@ -705,6 +708,7 @@ impl Run {
             lazy_out: n("lazy_out"),
             lazy_in: n("lazy_in"),
             bytes_written: u("bytes_written").unwrap_or(0),
+            ..MeterSample::default()
         })
     }
 
@@ -966,6 +970,7 @@ impl Network {
                 stats: Default::default(),
                 up_queue: Vec::new(),
                 competing: Vec::new(),
+                competing_log: Vec::new(),
                 queue_drops: 0,
                 queue_drop_packets: 0,
                 acks: 0,

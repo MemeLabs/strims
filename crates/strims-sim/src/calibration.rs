@@ -92,7 +92,7 @@ fn value<T: std::str::FromStr>(get: &impl Fn(&str) -> Option<String>, name: &str
 ///   give the seed's and each viewer's uplink a shaper bucket that size
 ///   (`strims_wan::Bucket`, leaving at once), as `run.sh`'s `SEED_BURST`
 ///   and `VIEWER_BURST` set its tbf's; unset, none (the testbed's
-///   defaults, 3028 each, are `twin.py run`'s).
+///   defaults, 3028 each, are a testbed run's: `testbed::knobs_of`).
 ///   `STRIMS_SIM_CAL_SEED_PEAK_MBIT=<m>` and `STRIMS_SIM_CAL_VIEWER_PEAK_MBIT=<m>`
 ///   send that bucket at that rate (`Bucket::peak`), as `run.sh`'s
 ///   `SEED_PEAK_MBIT` and `VIEWER_PEAK_MBIT` set its tbf's peakrate; a

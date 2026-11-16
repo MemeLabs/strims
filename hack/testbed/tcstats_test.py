@@ -25,7 +25,6 @@ from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(HERE, "..", "capture"))
 import bench  # noqa: E402
 import tcstats  # noqa: E402
 
@@ -244,18 +243,6 @@ class Readers(unittest.TestCase):
                 self.assertIsNone(bench.tc_drops(d))
                 self.assertEqual(bench.tc_queue(d, 0), [])
             self.assertEqual(err.getvalue().count("NOTE: "), 2)
-
-    def test_analyze_s_delays_say_so_for_a_trace(self):
-        import analyze
-
-        with tempfile.TemporaryDirectory() as d:
-            run_dir(d, "node 0 trace,file=slow.us 0.1 20 100\n", [(2000, fixture("trace.json"))])
-            with contextlib.redirect_stderr(io.StringIO()) as err:
-                self.assertEqual(analyze.tc_queue(Path(d)), [])
-            self.assertIn("no delay fields", err.getvalue())
-            run_dir(d, "node 0 cable 0.1 20 100\n", [(2000, fixture("cable.json"))])
-            q = tcstats.find(tcstats.parse(fixture("cable.json")), "10:")
-            self.assertEqual(analyze.tc_queue(Path(d)), [(2000, 1000 * q.held / q.rate)])
 
     def test_the_bench_takes_frames_where_the_class_s_qdisc_is_the_root(self):
         netem_root = fixture("tbf.txt").replace("qdisc tbf 10: root", "qdisc tbf 10: parent 1:1")

@@ -96,12 +96,12 @@ Runs, second by second (no capture needed):
 
 RUNS are farm matrix dirs (`target/sim-farm/<matrix>`: a test matrix's
 index.jsonl, whose jobs' tables hack/sim-db pulls into its cache and
-reads, the rows and series there; a testbed matrix's rows.jsonl and run
-dirs), index.jsonl or rows.jsonl files, or testbed run dirs
-(`hack/testbed/run.sh`'s out dir). A sim run's series is its tables'
-(`seconds` and `viewer_seconds`, which `Report::series_data` documents), with
-`STRIMS_SIM_SERIES=1` (where `calibration_star` always has it); a
-testbed run's comes from its nodes' lines. `--where` keeps the runs whose
+reads, the rows and series there), index.jsonl or rows.jsonl files. A
+run's series is its tables' (`seconds` and `viewer_seconds`, which
+`Report::series_data` documents), with `STRIMS_SIM_SERIES=1` (where
+`calibration_star` always has it). A testbed run is in the lake as a sim
+run is (`simdb.py testbed`, simlab.testbed), its verdicts and rows with
+it. `--where` keeps the runs whose
 env (or row field) has the value (a blank value matches a setting the run
 lacks); keys match with or without the STRIMS_SIM_CAL_ or STRIMS_SIM_
 prefix.
@@ -142,10 +142,7 @@ prefix.
             (qdv) and its queued bytes over the delivery rate (qdb), the
             median over runs of the reading's median error in ms, its false
             positives and false negatives (`Report::queue_delay_accuracy`),
-            at seeds and at forwarders. A sim row has them; a testbed run's
-            are its seed's lines against its uplink queue (tc-0.log: its
-            link class's queue over its rate; none for a trace link) over
-            the stream, at the same threshold and window
+            at seeds and at forwarders, as the runs' rows have them
 
 The verdicts that `collapse`, `map`, `pair` and the rest judge runs by,
 and the measures over time behind hack/sim-db's tables, are
@@ -164,7 +161,6 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "hack"))
-sys.path.insert(0, str(REPO / "hack" / "testbed"))
 
 from simlab.verdict import (  # noqa: E402
     ABSORB_SECS, COLLAPSED_SECS, DELIVERY_MAX_MS, DELIVERY_SECS, DELIVERY_SHARE, DELIVERY_TARGET_MS, E2E_MAX_MS,
@@ -173,7 +169,6 @@ from simlab.verdict import (  # noqa: E402
     TREES_SMOOTH, VERDICT_VERSION, acf, collapsed, episodes, events, feasible, lags, measures, med, phase_lags, phases,
     presence, quantile, run_metrics, run_startup, runs_of, slope, startup, steps, timeline, verdict, verdict_version,
 )
-import tcstats  # noqa: E402
 
 # The rows `reduce` keeps.
 TYPES = "decisions,samples,DATA,REQUEST,STREAM_*"
@@ -482,70 +477,6 @@ def short(k):
     return k
 
 
-def settings(path):
-    """A testbed run's `settings` (run.sh's variables that were set)."""
-    env = {}
-    if path.exists():
-        for line in path.read_text().splitlines():
-            k, _, v = line.partition("=")
-            env[k] = v
-    return env
-
-
-def node_arg(args, flag, default):
-    a = args.split()
-    return int(a[a.index(flag) + 1]) if flag in a else default
-
-
-def testbed_series(d, env):
-    """A testbed run dir's series, in `Report::series_data`'s fields."""
-    env = {**settings(d / "settings"), **env}
-    viewers = int(env.get("VIEWERS", 3))
-    args = env.get("NODE_ARGS", "")
-    rate = node_arg(args, "--rate", 256 * 1024)
-    chunk = node_arg(args, "--chunk", 1024)
-    secs = int(env.get("SECS", 180))
-    seed_up = float(env.get("SEED_UP_MBIT", 10)) * 125000
-    steps = [[float(a), float(m) * 125000] for a, m in (p.split(":") for p in env.get("SEED_UP_STEPS", "").split())]
-    nodes = []
-    for i in range(viewers + 1):
-        f = d / f"node-{i}.jsonl"
-        lines = [json.loads(x) for x in f.read_text().splitlines() if x.startswith("{")] if f.exists() else []
-        # A line covers the second before it; one without transfers comes
-        # before the node joined the swarm.
-        nodes.append({round(r["rel_ms"] / 1000) - 1: r for r in lines if r.get("transfers")})
-    n = secs + 5
-    ks = range(n)
-    s = {
-        "rate": rate, "chunk": chunk, "frame": 1024, "secs": secs,
-        "seed_up": [[0, seed_up]] + steps,
-        "viewer_up": viewers * float(env.get("VIEWER_UP_MBIT", 20)) * 125000,
-        "lag": [[v[k]["lag_p99_ms"] if k in v and v[k]["frames"] else -1 for k in ks] for v in nodes[1:]],
-        "frames": [[v[k]["frames"] if k in v else 0 for k in ks] for v in nodes[1:]],
-        "present": [sum(k in v for v in nodes[1:]) for k in ks],
-    }
-
-    def delta(v, k, f):
-        if k not in v or k - 1 not in v:
-            return 0
-        a, b = v[k]["transfers"][f], v[k - 1]["transfers"][f]
-        return a - b if a >= b else a
-
-    for f in ("hits", "misses", "pruned"):
-        s[f] = [sum(delta(v, k, f) for v in nodes[1:]) for k in ks]
-    parents = lambda k: med([v[k]["transfers"]["parents"] for v in nodes[1:] if k in v])
-    s["parents"] = [-1 if parents(k) is None else parents(k) for k in ks]
-    seed = nodes[0]
-    s["capacity"] = [seed[k]["capacity"] if k in seed else -1 for k in ks]
-    s["busy"] = [seed[k]["busy_permille"] if k in seed else -1 for k in ks]
-    s["copies"] = [seed[k]["seed_copies"] if k in seed else -1 for k in ks]
-    s["sent"] = [delta(seed, k, "chunks_sent") for k in ks]
-    s["pushed"] = [delta(seed, k, "pushed_chunks") for k in ks]
-    up = lambda k: [u for t, u in s["seed_up"] if t <= k + 0.5][-1]
-    s["avail"] = [up(k) for k in ks]
-    return s
-
-
 def query():
     """simlab.query: the farm's tables, in hack/sim-db's cache (the duckdb
     module's: VERDICT_COMMANDS run under the engine)."""
@@ -581,9 +512,6 @@ def line_env(r):
 def runs(paths):
     """(label, env, row, series) per run in `paths` (see the module docs)."""
     for p in map(Path, paths):
-        if p.is_dir() and (p / "node-0.jsonl").exists():
-            yield p.name, {}, {}, testbed_series(p, {})
-            continue
         if (index := index_of(p)) is not None:
             for r, row, s in index_rows(index):
                 yield r["id"], line_env(r), row, s
@@ -607,10 +535,7 @@ def runs(paths):
                         "commit": r.get("commit", "")[:8],
                         "test": r.get("test", ""),
                     }
-                    if r.get("kind") == "testbed":
-                        env["repeat"] = r.get("repeat")
-                        yield r["id"], env, r["row"], testbed_series(rows.parent / r["run_dir"], r.get("env", {}))
-                    elif "series" in r["row"]:
+                    if "series" in r["row"]:
                         yield r["id"], env, r["row"], r["row"]["series"]
                 elif "series" in r:
                     yield f"{r.get('test', r.get('scenario'))} seed {r.get('seed')}", {"seed": r.get("seed")}, r, r["series"]
@@ -627,66 +552,9 @@ DELAY_READINGS = (
     ("qdbi", "path_queued_ms", True),
     ("qdl", "path_latest_ms", True),
 )
-STANDING_MS = 3000
-SATURATED_STANDING_MS = 5
-QUEUE_DELAY_THRESHOLD_MS = 80
-
-
-def tc_queue(d):
-    """(wall ms, ms to drain the seed's uplink queue at its rate) per sample
-    of a testbed run's tc-0.log: its link class's queue (tcstats.uplink),
-    none for a class whose queue has no rate (a trace's), which it says."""
-    try:
-        spec, got = tcstats.uplink(d, 0)
-    except LookupError as e:
-        tcstats.note(f"{e}: no delay fields")
-        return []
-    if got and got[-1][1].rate is None:
-        tcstats.note(f"{d}: the seed's {spec} link's queue ({got[-1][1].kind} 10:) has no rate to time it by:"
-                     " no delay fields")
-    return [(t, 1000 * q.held / q.rate) for t, q in got if q.rate]
-
-
-def testbed_delays(d):
-    """A testbed run's `<reading>_{err,fp,fn}_seeds*` fields: its seed's
-    lines against tc's standing queue, or its wait at the moment, over the
-    stream."""
-    env = settings(d / "settings")
-    secs = int(env.get("SECS", 180))
-    queue = tc_queue(d)
-    lines = [json.loads(x) for x in (d / "node-0.jsonl").read_text().splitlines() if x.startswith("{")]
-    out = {}
-    for name, field, instant in DELAY_READINGS:
-        errs, neg, pos_ = [], [0, 0], [0, 0]
-        for ln in lines:
-            v = ln.get(field)
-            if v is None or not 0 <= ln["rel_ms"] <= secs * 1000:
-                continue
-            window = [w for t, w in queue if ln["t_ms"] - STANDING_MS <= t <= ln["t_ms"]]
-            if not window:
-                continue
-            wait = window[-1] if instant else min(window)
-            errs.append(abs(v - wait))
-            if wait < (QUEUE_DELAY_THRESHOLD_MS if instant else SATURATED_STANDING_MS):
-                neg[1] += 1
-                neg[0] += v >= QUEUE_DELAY_THRESHOLD_MS
-            else:
-                pos_[1] += 1
-                pos_[0] += v < QUEUE_DELAY_THRESHOLD_MS
-        if errs:
-            out[f"{name}_err_seeds_ms"] = med(errs)
-            out[f"{name}_fp_seeds"] = neg[0] / neg[1] if neg[1] else 0.0
-            out[f"{name}_fn_seeds"] = pos_[0] / pos_[1] if pos_[1] else 0.0
-    return out
-
-
 def delay_rows(paths):
-    """(env, row) per run in `paths`: sim rows as they are, testbed runs
-    with the fields `testbed_delays` gives."""
+    """(env, row) per run in `paths`."""
     for p in map(Path, paths):
-        if p.is_dir() and (p / "node-0.jsonl").exists():
-            yield settings(p / "settings"), testbed_delays(p)
-            continue
         if (index := index_of(p)) is not None:
             for r, row, _ in index_rows(index):
                 yield line_env(r), row
@@ -709,11 +577,7 @@ def delay_rows(paths):
                         "commit": r.get("commit", "")[:8],
                         "test": r.get("test", ""),
                     }
-                    if r.get("kind") == "testbed":
-                        env["repeat"] = r.get("repeat")
-                        yield env, testbed_delays(rows.parent / r["run_dir"])
-                    else:
-                        yield env, r["row"]
+                    yield env, r["row"]
                 else:
                     yield {"seed": r.get("seed"), "test": r.get("test", "")}, r
 

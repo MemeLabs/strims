@@ -354,16 +354,30 @@ class FarmNames(unittest.TestCase):
         self.assertEqual(sorted(set(defaults) - self.rows), [])
         matrices = sorted((FARM / "matrices").glob("*.toml"))
         self.assertTrue(matrices)
-        tests = 0
+        worker = farm_module("worker")
+        tests = testbeds = 0
         for path in matrices:
             m = farm.Matrix(str(path))
-            # A testbed matrix's rows are the testbed harness's, not a sim's.
-            if m.kind != "test":
-                continue
-            tests += 1
+            # A testbed job's row is its run's (strims-sim's testbed module's
+            # ROW) and the worker's host fields.
+            known = self.rows | (set(worker.HOST_FIELDS) if m.kind == "testbed" else set())
+            tests += m.kind == "test"
+            testbeds += m.kind == "testbed"
             with self.subTest(matrix=path.name):
-                self.assertEqual(sorted(set(m.row_fields()) - self.rows), [])
+                fields = set(m.row_fields())
+                self.assertEqual(sorted(fields - known), [])
         self.assertGreater(tests, 10)
+        self.assertGreater(testbeds, 3)
+
+    def test_the_testbeds_row(self):
+        # The fields a testbed run's report keeps of its row
+        # (crates/strims-sim/src/testbed.rs's ROW) are declared rows.
+        text = (HACK.parent / "crates" / "strims-sim" / "src" / "testbed.rs").read_text()
+        block = re.search(r"pub const ROW: &\[&str\] = &\[(.*?)\];", text, re.S)
+        self.assertIsNotNone(block)
+        names = re.findall(r'"([a-z0-9_]+)"', block.group(1))
+        self.assertIn("lag_p99_ms", names)
+        self.assertEqual(sorted(set(names) - self.rows), [])
 
     def test_the_controller_reads_a_renamed_field_by_its_current_name(self):
         farm = farm_module("farm")

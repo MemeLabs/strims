@@ -1188,3 +1188,182 @@ CREATE OR REPLACE MACRO coverage_causes_in(runs) AS TABLE
 -- needs: arrivals arrivals.released_ms arrivals.incarnation parents seed_decisions seed_sends events
 CREATE OR REPLACE MACRO coverage_causes_of(jobs) AS TABLE
     FROM coverage_causes_in((SELECT list(cv_run) FROM coverage_runs_of(jobs) cv_run));
+
+-- The testbed and its twin (simlab.testbed): each run of the jobs `jobs`
+-- (a side: structs of a job's `k`, its `cell` and `seed`) over the stream's
+-- seconds [lo_s, hi_s), one row a measure, the same SQL over a testbed
+-- run's tables and a sim run's: k, src, sim, cell, seed, measure, value.
+-- A measure a run's tables lack is left out. The measures:
+--   over_target_s       seconds in which an honest viewer lags past
+--                       @{delay_target_ms} ms (viewer_lag_of's lag,
+--                       carried across a second without reads)
+--   lag_p99_ms          the p99 of the honest viewers' lag over their
+--                       seconds (the same lag)
+--   seed_upload         the seed's wire bytes (each packet's IP length:
+--                       bins' seed_up_bytes and a data channel's SACKs,
+--                       seed_up_sack_bytes, which a testbed run's captures
+--                       count in seed_up_bytes; TCP's pure ACKs apart) over
+--                       its uplink's rate (its uplink_rate levels) times
+--                       the window
+--   seed_charged        what the seed's shaper charged over its rate: a
+--                       testbed run's tbf charges each packet its IP
+--                       length and frame_bytes more (Ethernet's header,
+--                       14), its pure ACKs too; a sim's bucket each
+--                       packet's IP length alone
+--   seed_busy_permille  the seed meter's busy share (seconds' busy)
+--   seed_copies         an adaptive seed's copies (seconds' copies)
+--   seed_pushes_s, seed_answers_s
+--                       the seed's chunks pushed, and sent otherwise, a
+--                       second
+--   viewer_hits_s, viewer_misses_s, viewer_pruned_s, viewer_switched_s,
+--   viewer_shed_s       the honest viewers' pushes in time, deadlines
+--                       released to pull, parents pruned, replaced and
+--                       lost to a shed, a second (summed)
+--   meter_p10, meter_p50, meter_p90
+--                       the seed's meter samples' capacity over what it
+--                       could upload then (meter_samples: avail_bps), as
+--                       the row's meter_seed_p* takes them
+--   seed_drops_s        packets the seed's uplink queue dropped a second
+--   seed_pps            packets the seed's uplink carried a second, pure
+--                       ACKs in
+--   seed_ack_share      of those, the pure ACKs' share
+--   seed_small_share    of the others, the small ones' (<= 256 bytes)
+--   viewer_up_bps       the honest viewers' wire bytes a second (summed)
+--   competitor_share    over the seconds a competing upload ran (its
+--                       competing_start to its competing_stop), the mean
+--                       share of the seed's uplink rate it took (1 -
+--                       seconds' avail over the rate): its wire bytes, IP
+--                       lengths, on both sides
+--   competitor_charged  the same as the seed's shaper charged it: a
+--                       testbed run's tbf charges frame_bytes more a
+--                       packet, here at full packets (full_packet bytes
+--                       each); a sim's bucket the share itself
+--   seed_wire_per_written
+--                       the seed's uplink wire bytes, pure ACKs and SACKs
+--                       in, over the bytes its driver wrote (node_bins:
+--                       data_bytes and ovh)
+-- needs: seconds bins node_bins meter_samples viewer_seconds viewers events
+CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, frame_bytes := 14, full_packet := 1500) AS TABLE
+    WITH j AS (
+        SELECT DISTINCT u.cell, u.seed::BIGINT AS seed, b.k, b.src, b.sim, b.bin_ms
+        FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k),
+    lag AS (
+        SELECT l.k, l.src, l.sec, max(l.lag_ms) AS lag_ms
+        FROM viewer_lag_of(jobs) l WHERE l.sec >= lo_s AND l.sec < hi_s GROUP BY ALL),
+    lags AS (
+        SELECT k, src, count(*) FILTER (WHERE lag_ms > @{delay_target_ms}) AS over_target_s FROM lag GROUP BY ALL),
+    p99 AS (
+        SELECT l.k, l.src, sketch_quantile(l.lag_ms, 99) AS lag_p99_ms
+        FROM viewer_lag_of(jobs) l WHERE l.sec >= lo_s AND l.sec < hi_s GROUP BY ALL),
+    sec AS (
+        SELECT s.k, s.src, count(*) AS n, avg(s.busy) AS seed_busy_permille, avg(s.copies) AS seed_copies,
+               avg(s.pushed) AS seed_pushes_s, avg(s.sent - s.pushed) AS seed_answers_s,
+               avg(s.hits) AS viewer_hits_s, avg(s.misses) AS viewer_misses_s, avg(s.pruned) AS viewer_pruned_s
+        FROM seconds s SEMI JOIN j USING (k, src) WHERE s.sec >= lo_s AND s.sec < hi_s GROUP BY ALL),
+    rate AS (
+        SELECT e.k, e.src, e.t_us, e.value AS rate
+        FROM events e SEMI JOIN j USING (k, src) WHERE e.kind = 'uplink_rate' AND e.node = 0),
+    bin AS (
+        SELECT b.k, b.src, r.rate, b.seed_up_bytes + coalesce(b.seed_up_sack_bytes, 0) AS seed_up_bytes,
+               b.seed_up_packets + coalesce(b.seed_up_sack_packets, 0) AS seed_up_packets, b.seed_small_packets,
+               b.seed_up_ack_packets, b.seed_drops,
+               b.viewer_up_bytes + coalesce(b.viewer_up_sack_bytes, 0) AS viewer_up_bytes, b.viewer_switched,
+               b.viewer_shed, j.bin_ms, j.sim
+        FROM bins b JOIN j USING (k, src)
+        ASOF LEFT JOIN rate r ON r.k = b.k AND r.src = b.src AND b.t_ms * 1000 >= r.t_us
+        WHERE b.t_ms >= lo_s * 1000 AND b.t_ms < hi_s * 1000),
+    wire AS (
+        SELECT k, src, count(*) * any_value(bin_ms) / 1000.0 AS secs,
+               sum(seed_up_bytes) / sum(rate * bin_ms / 1000.0) AS seed_upload,
+               (sum(seed_up_bytes) + CASE WHEN any_value(sim) = 'testbed'
+                                          THEN frame_bytes * (sum(seed_up_packets) + sum(seed_up_ack_packets))
+                                          ELSE 0 END) / sum(rate * bin_ms / 1000.0) AS seed_charged,
+               sum(seed_drops) / (count(*) * any_value(bin_ms) / 1000.0) AS seed_drops_s,
+               (sum(seed_up_packets) + sum(seed_up_ack_packets)) / (count(*) * any_value(bin_ms) / 1000.0) AS seed_pps,
+               sum(seed_up_ack_packets) / nullif(sum(seed_up_packets) + sum(seed_up_ack_packets), 0) AS seed_ack_share,
+               sum(seed_small_packets) / nullif(sum(seed_up_packets), 0) AS seed_small_share,
+               sum(viewer_up_bytes) / (count(*) * any_value(bin_ms) / 1000.0) AS viewer_up_bps,
+               sum(viewer_switched) / (count(*) * any_value(bin_ms) / 1000.0) AS viewer_switched_s,
+               sum(viewer_shed) / (count(*) * any_value(bin_ms) / 1000.0) AS viewer_shed_s
+        FROM bin GROUP BY ALL),
+    meter AS (
+        SELECT m.k, m.src, sketch_quantiles(m.capacity_bps / m.avail_bps, [10, 50, 90]) AS q
+        FROM meter_samples m SEMI JOIN j USING (k, src)
+        WHERE m.role = 'seed' AND m.t_ms >= lo_s * 1000 AND m.t_ms < hi_s * 1000 AND m.capacity_bps > 0
+          AND m.avail_bps > 0
+        GROUP BY ALL),
+    competing AS (
+        SELECT e.k, e.src, e.t_us AS start_us,
+               lead(e.t_us) OVER (PARTITION BY e.k, e.src ORDER BY e.t_us, e.kind) AS stop_us, e.kind
+        FROM events e SEMI JOIN j USING (k, src)
+        WHERE e.node = 0 AND e.kind IN ('competing_start', 'competing_stop')),
+    comp AS (
+        SELECT s.k, s.src, avg(1 - s.avail / r.rate) AS competitor_share,
+               avg(1 - s.avail / r.rate) * CASE WHEN any_value(j.sim) = 'testbed'
+                                                THEN (full_packet + frame_bytes) / full_packet ELSE 1 END
+                   AS competitor_charged
+        FROM seconds s JOIN j USING (k, src)
+        JOIN competing c ON c.k = s.k AND c.src = s.src AND c.kind = 'competing_start'
+         AND (s.sec + 0.5) * 1e6 >= c.start_us AND (s.sec + 0.5) * 1e6 < c.stop_us
+        ASOF JOIN rate r ON r.k = s.k AND r.src = s.src AND (s.sec + 0.5) * 1e6 >= r.t_us
+        WHERE s.sec >= lo_s AND s.sec < hi_s AND s.avail >= 0
+        GROUP BY ALL),
+    nb AS (
+        SELECT n.k, n.src,
+               sum(n.up_bytes + coalesce(n.up_sack_bytes, 0) + n.up_ack_bytes) / nullif(sum(n.data_bytes + n.ovh), 0)
+                   AS seed_wire_per_written
+        FROM node_bins n SEMI JOIN j USING (k, src)
+        WHERE n.node = 0 AND n.t_ms >= lo_s * 1000 AND n.t_ms < hi_s * 1000 GROUP BY ALL),
+    wide AS (
+        SELECT j.k, j.src, j.sim, j.cell, j.seed, lags.over_target_s::DOUBLE AS over_target_s,
+               p99.lag_p99_ms::DOUBLE AS lag_p99_ms, sec.* EXCLUDE (k, src, n), wire.* EXCLUDE (k, src, secs),
+               meter.q[1] AS meter_p10, meter.q[2] AS meter_p50, meter.q[3] AS meter_p90,
+               comp.competitor_share, comp.competitor_charged, nb.seed_wire_per_written
+        FROM j LEFT JOIN lags USING (k, src) LEFT JOIN p99 USING (k, src) LEFT JOIN sec USING (k, src)
+        LEFT JOIN wire USING (k, src) LEFT JOIN meter USING (k, src) LEFT JOIN comp USING (k, src)
+        LEFT JOIN nb USING (k, src))
+    SELECT k, src, sim, cell, seed, measure, value::DOUBLE AS value
+    FROM (UNPIVOT wide ON COLUMNS(* EXCLUDE (k, src, sim, cell, seed)) INTO NAME measure VALUE value)
+    WHERE value IS NOT NULL;
+
+-- The testbed runs whose source matches the LIKE pattern src_like (a
+-- farm run's farm/<run>/%, a local ingest's testbed/<name>), of nodes of
+-- `kind`: 'native', 'browsers' (STRIMS_SIM_RTC set) or 'any', as a side:
+-- {cell, seed, k, src}, a run's seed its repeat (a twin's seed pairs with
+-- the run of its number).
+CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'any') AS (
+    SELECT coalesce(list({'cell': stored_cell, 'seed': seed, 'k': k, 'src': src} ORDER BY stored_cell, seed), [])
+    FROM jobs
+    WHERE sim = 'testbed' AND src LIKE src_like
+      AND (kind = 'any' OR (env['STRIMS_SIM_RTC'] IS NOT NULL) = (kind = 'browsers')));
+
+-- A testbed side against its twin's (twin_runs_of over both, `a_jobs` the
+-- twin's, `b_jobs` the testbed's): each cell and measure both sides have,
+-- a_runs and b_runs, a_median and b_median (sketch_quantile's p50 over
+-- each side's runs), ratio (b_median / a_median); and over the cells, a
+-- row of cell NULL per measure: cells, corr (Pearson's, of the cells'
+-- medians), rank_corr (Spearman's: of their ranks) and ratio (the
+-- geometric mean of the cells' ratios). How well the twin follows the
+-- testbed across cells is the fidelity a model change is judged by.
+-- needs: seconds bins node_bins meter_samples viewer_seconds viewers events
+CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 0, hi_s := 1e9, frame_bytes := 14, full_packet := 1500) AS TABLE
+    WITH a AS (FROM twin_runs_of(a_jobs, lo_s := lo_s, hi_s := hi_s, frame_bytes := frame_bytes,
+                                 full_packet := full_packet)),
+    b AS (FROM twin_runs_of(b_jobs, lo_s := lo_s, hi_s := hi_s, frame_bytes := frame_bytes,
+                                 full_packet := full_packet)),
+    am AS (SELECT cell, measure, count(*) AS runs, sketch_quantile(value, 50) AS m FROM a GROUP BY ALL),
+    bm AS (SELECT cell, measure, count(*) AS runs, sketch_quantile(value, 50) AS m FROM b GROUP BY ALL),
+    c AS (
+        SELECT cell, measure, am.runs AS a_runs, bm.runs AS b_runs, am.m AS a_median, bm.m AS b_median,
+               CASE WHEN am.m <> 0 THEN bm.m / am.m END AS ratio
+        FROM am JOIN bm USING (cell, measure)),
+    ranked AS (
+        SELECT *, rank() OVER (PARTITION BY measure ORDER BY a_median) AS ra,
+               rank() OVER (PARTITION BY measure ORDER BY b_median) AS rb FROM c)
+    SELECT cell, measure, a_runs, b_runs, a_median, b_median, ratio, NULL::BIGINT AS cells, NULL::DOUBLE AS corr,
+           NULL::DOUBLE AS rank_corr
+    FROM c
+    UNION ALL
+    SELECT NULL, measure, sum(a_runs), sum(b_runs), NULL, NULL,
+           exp(avg(ln(ratio)) FILTER (WHERE ratio > 0)), count(*), corr(a_median, b_median), corr(ra, rb)
+    FROM ranked GROUP BY measure;
