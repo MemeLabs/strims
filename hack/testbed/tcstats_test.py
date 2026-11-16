@@ -4,9 +4,11 @@
 """tcstats and its readers on tc's output as iproute2 6.19 (the testbed
 image's) prints it. testdata/tc holds captures (testdata/tc/capture.sh) of
 each link class's tree as run.sh builds a node's, at 100 kbit/s under a
-UDP flood so its queue stands and drops: `tc -s qdisc show dev eth0`
-(<class>.txt), its JSON (<class>.json) and every device's detailed text
-(<class>.all, qdisc-<i>.txt's form); tbf-kib, a tbf at 1 Mbit/s whose
+UDP flood so its queue stands and drops: `tc -s qdisc show dev <modem's>`
+(<class>.txt: eth0's, or ifbm's for a class with slots), its JSON
+(<class>.json), every device's JSON (<class>.every.json, tc-<i>.log's
+form) and every device's detailed text (<class>.all, qdisc-<i>.txt's
+form); tbf-kib, a tbf at 1 Mbit/s whose
 3 KiB backlog tc's text prints as 3Kb; and dsl-cake-flood.json, a dsl
 router's cake at 1 Mbit/s 2 s into a flood of 1400-byte payloads.
 
@@ -90,16 +92,24 @@ class Parse(unittest.TestCase):
         self.assertEqual((tbf.backlog, tbf.qlen, tbf.drops), (child.backlog, child.qlen, child.drops))
 
     def test_every_device_s_detailed_qdiscs_name_their_device(self):
-        for name in CLASSES:
+        for name, spec in CLASSES.items():
             with self.subTest(name):
-                qs = tcstats.parse_text(fixture(f"{name}.all"))
-                self.assertEqual({q.dev for q in qs}, {"lo", "eth0", "ifbd"})
-                q = tcstats.find(qs, "10:", dev="eth0")
-                self.assertIsNone(q.parent)
-                self.assertIsNone(tcstats.find(qs, "10:", dev="ifbd"))
+                dev = tcstats.modem_dev(spec)
+                for form in ("all", "every.json"):
+                    qs = tcstats.parse(fixture(f"{name}.{form}"))
+                    devs = {"lo", "eth0", "ifbd"} | ({"ifbm"} if dev == "ifbm" else set())
+                    self.assertEqual({q.dev for q in qs}, devs)
+                    q = tcstats.find(qs, "10:", dev=dev)
+                    self.assertIsNone(q.parent)
+                    self.assertEqual(q.kind, tcstats.queue_kind(spec))
+                    self.assertEqual([x for x in qs if x.handle == "10:"], [q])
+        # A class with slots: eth0's root is the prio that marks and hands
+        # the shaper on ifbm what the delay returns.
+        qs = tcstats.parse(fixture("cable.every.json"))
+        self.assertEqual([(q.kind, q.handle) for q in qs if q.dev == "eth0"][:2], [("prio", "1:"), ("netem", "30:")])
         # -d adds a class's size table, which leaves the stats alone.
         qs = tcstats.parse_text(fixture("cable.all"))
-        self.assertIn("overhead 4 mpu 64 mtu 2048 tsize 2048", fixture("cable.all"))
+        self.assertIn("overhead 4 mpu 64 mtu 2047 tsize 2048", fixture("cable.all"))
         self.assertEqual(tcstats.find(qs, "10:").rate, 12500)
 
     def test_a_backlog_in_kib_reads_as_its_bytes(self):
@@ -157,16 +167,33 @@ class Uplink(unittest.TestCase):
 
     def test_each_class_s_queue_is_read_from_its_links_line(self):
         for name, spec in CLASSES.items():
-            with self.subTest(name), tempfile.TemporaryDirectory() as d:
-                run_dir(d, f"node 0 {spec} 10 20 100\nnode 1 tbf 20 10 100\n", [(1000, fixture(f"{name}.json"))])
-                got_spec, got = tcstats.uplink(d, 0)
-                self.assertEqual((got_spec, got[0][1].kind), (spec, tcstats.queue_kind(spec)))
-                self.assertEqual(tcstats.link_spec(d, 1), "tbf")
+            # tc-<i>.log's every device, and an older run's one device.
+            for form in ("every.json", "json"):
+                with self.subTest(f"{name}.{form}"), tempfile.TemporaryDirectory() as d:
+                    run_dir(d, f"node 0 {spec} 10 20 100\nnode 1 tbf 20 10 100\n", [(1000, fixture(f"{name}.{form}"))])
+                    got_spec, got = tcstats.uplink(d, 0)
+                    self.assertEqual((got_spec, got[0][1].kind), (spec, tcstats.queue_kind(spec)))
+                    if form == "every.json":
+                        self.assertEqual(got[0][1].dev, tcstats.modem_dev(spec))
+                    self.assertEqual(tcstats.link_spec(d, 1), "tbf")
+
+    def test_the_modem_is_on_ifbm_with_slots(self):
+        for spec, dev in (("tbf", "eth0"), ("cable", "ifbm"), ("cable,slot=off", "eth0"),
+                          ("cable,aqm=fifo", "ifbm"), ("tbf,slot=1-3", "ifbm"), ("dsl", "eth0"),
+                          ("fiber,slot=off", "eth0"), ("trace,file=x,slot=2", "ifbm")):
+            self.assertEqual(tcstats.modem_dev(spec), dev, spec)
+        # A slotted class's 10: on a device that isn't its modem's isn't its
+        # queue.
+        with tempfile.TemporaryDirectory() as d:
+            qs = fixture("tbf.every.json").replace('"dev":"eth0"', '"dev":"ifbx"')
+            run_dir(d, "node 0 tbf 10 20 100\n", [(1000, qs)])
+            with self.assertRaisesRegex(LookupError, "tbf link has no tbf 10: on eth0"):
+                tcstats.uplink(d, 0)
 
     def test_a_log_without_the_class_s_queue_is_an_error(self):
         with tempfile.TemporaryDirectory() as d:
             run_dir(d, "node 0 cable,router=cake 10 20 100\n", [(1000, fixture("tbf.json"))])
-            with self.assertRaisesRegex(LookupError, "cable,router=cake link has no cake 10:"):
+            with self.assertRaisesRegex(LookupError, "cable,router=cake link has no cake 10: on ifbm"):
                 tcstats.uplink(d, 0)
 
     def test_a_run_before_the_links_file_had_a_tbf(self):
@@ -191,7 +218,9 @@ class Readers(unittest.TestCase):
             self.assertIn("NOTE: ", err.getvalue())
             self.assertIn("has no rate", err.getvalue())
             # Its drops are the prio's.
-            self.assertEqual(bench.tc_drops(d), 35064)
+            prio = tcstats.find(tcstats.parse(fixture("trace.json")), "10:", "prio")
+            self.assertGreater(prio.drops, 0)
+            self.assertEqual(bench.tc_drops(d), prio.drops)
 
     def test_a_reader_says_so_where_the_log_lacks_the_class_s_queue(self):
         with tempfile.TemporaryDirectory() as d:
@@ -229,6 +258,8 @@ class Readers(unittest.TestCase):
             for name in CLASSES:
                 for form in ("txt", "all"):
                     text = fixture(f"{name}.{form}")
+                    if "\nqdisc " not in text[text.index(" 10: "):]:
+                        continue  # the modem's device holds the root alone
                     # Cut in the qdisc after the root, past its header.
                     second = text.index("\nqdisc ", text.index(" 10: ")) + 1
                     cut = text[:text.index("\n", second) + 1] + " Sent 1"

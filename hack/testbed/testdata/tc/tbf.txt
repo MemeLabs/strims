@@ -1,6 +1,6 @@
 qdisc tbf 10: root refcnt 2 rate 100Kbit burst 3028b lat 2.16s 
- Sent 16146 bytes 13 pkt (dropped 20370, overlimits 20414 requeues 0) 
+ Sent 19872 bytes 16 pkt (dropped 22439, overlimits 22489 requeues 0) 
  backlog 29808b 24p requeues 0
 qdisc clsact ffff: parent ffff:fff1 
- Sent 50690988 bytes 40814 pkt (dropped 0, overlimits 0 requeues 0) 
+ Sent 55837836 bytes 44958 pkt (dropped 0, overlimits 0 requeues 0) 
  backlog 0b 0p requeues 0

@@ -1,18 +1,24 @@
 qdisc noqueue 0: dev lo root refcnt 2 
  Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0) 
  backlog 0b 0p requeues 0
-qdisc tbf 10: dev eth0 root refcnt 2 rate 95Kbit burst 1748b/1 mpu 0b lat 2.38s linklayer ethernet 
- overhead 4 mpu 64 mtu 2048 tsize 2048 
- Sent 23674 bytes 19 pkt (dropped 24468, overlimits 34738 requeues 0) 
- backlog 12755302b 10237p requeues 0
-qdisc fq_codel 20: dev eth0 parent 10:1 limit 10240p flows 1024 quantum 1514 target 5ms interval 100ms memory_limit 32Mb ecn drop_batch 64 
- Sent 24920 bytes 20 pkt (dropped 24468, overlimits 0 requeues 0) 
- backlog 12755302b 10237p requeues 0
-  maxpacket 1246 drop_overlimit 24460 new_flow_count 1025 ecn_mark 0 memory_used 23583744
-  new_flows_len 1015 old_flows_len 9
-qdisc clsact ffff: dev eth0 parent ffff:fff1 
- Sent 86254416 bytes 69448 pkt (dropped 0, overlimits 0 requeues 0) 
+qdisc prio 1: dev eth0 root refcnt 2 bands 2 priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+ Sent 23598 bytes 19 pkt (dropped 0, overlimits 0 requeues 0) 
  backlog 0b 0p requeues 0
-qdisc netem 8624: dev ifbd root refcnt 2 limit 100000 delay 1ms seed 15491902368429900936
- Sent 43127208 bytes 34724 pkt (dropped 0, overlimits 0 requeues 0) 
+qdisc netem 30: dev eth0 parent 1:2 limit 100000 slot 2ms 8ms seed 8598393137797400911
+ Sent 23598 bytes 19 pkt (dropped 0, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0
+qdisc clsact ffff: dev eth0 parent ffff:fff1 
+ Sent 76679838 bytes 61739 pkt (dropped 0, overlimits 0 requeues 0) 
+ backlog 0b 0p requeues 0
+qdisc tbf 10: dev ifbm root refcnt 2 rate 95Kbit burst 1748b/1 mpu 0b lat 2.38s linklayer ethernet 
+ overhead 4 mpu 64 mtu 2047 tsize 2048 
+ Sent 23674 bytes 19 pkt (dropped 20607, overlimits 30875 requeues 0) 
+ backlog 12751564b 10234p requeues 0
+qdisc fq_codel 20: dev ifbm parent 10:1 limit 10240p flows 1024 quantum 1514 target 5ms interval 100ms memory_limit 32Mb ecn drop_batch 64 
+ Sent 24920 bytes 20 pkt (dropped 20607, overlimits 0 requeues 0) 
+ backlog 12751564b 10234p requeues 0
+  maxpacket 1246 drop_overlimit 20599 new_flow_count 1025 ecn_mark 0 memory_used 23576832
+  new_flows_len 1015 old_flows_len 9
+qdisc netem 88cb: dev ifbd root refcnt 2 limit 100000 delay 1ms seed 2165852749676133791
+ Sent 38328120 bytes 30860 pkt (dropped 0, overlimits 0 requeues 0) 
  backlog 0b 0p requeues 0

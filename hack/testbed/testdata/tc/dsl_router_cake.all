@@ -2,7 +2,7 @@ qdisc noqueue 0: dev lo root refcnt 2
  Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0) 
  backlog 0b 0p requeues 0
 qdisc cake 10: dev eth0 root refcnt 2 bandwidth 95Kbit diffserv3 triple-isolate nonat nowash no-ack-filter split-gso rtt 100ms atm overhead 40 
- Sent 19872 bytes 16 pkt (dropped 32422, overlimits 34267 requeues 0) 
+ Sent 19872 bytes 16 pkt (dropped 26720, overlimits 28571 requeues 0) 
  backlog 2260440b 1820p requeues 0
  memory used: 4195584b of 4Mb
  capacity estimate: 95Kbit
@@ -14,16 +14,16 @@ qdisc cake 10: dev eth0 root refcnt 2 bandwidth 95Kbit diffserv3 triple-isolate 
   thresh        5936bit       95Kbit     23744bit
   target          3.06s        191ms        765ms
   interval        6.12s        382ms        1.53s
-  pk_delay          0us        148ms          0us
-  av_delay          0us       5.38ms          0us
-  sp_delay          0us       4.87ms          0us
+  pk_delay          0us        196ms          0us
+  av_delay          0us        7.1ms          0us
+  sp_delay          0us        7.1ms          0us
   backlog            0b     2260440b           0b
-  pkts                0        34258            0
-  bytes               0     42548436            0
+  pkts                0        28556            0
+  bytes               0     35466552            0
   way_inds            0            0            0
   way_miss            0         1024            0
-  way_cols            0        33234            0
-  drops               0        32422            0
+  way_cols            0        27532            0
+  drops               0        26720            0
   marks               0            0            0
   ack_drop            0            0            0
   sp_flows            0         1009            0
@@ -33,8 +33,8 @@ qdisc cake 10: dev eth0 root refcnt 2 bandwidth 95Kbit diffserv3 triple-isolate 
   quantum           300          300          300
 
 qdisc clsact ffff: dev eth0 parent ffff:fff1 
- Sent 85096872 bytes 68516 pkt (dropped 0, overlimits 0 requeues 0) 
+ Sent 70933104 bytes 57112 pkt (dropped 0, overlimits 0 requeues 0) 
  backlog 0b 0p requeues 0
-qdisc netem 8625: dev ifbd root refcnt 2 limit 100000 delay 1ms seed 14184984255370094558
- Sent 42548436 bytes 34258 pkt (dropped 0, overlimits 0 requeues 0) 
+qdisc netem 88cc: dev ifbd root refcnt 2 limit 100000 delay 1ms seed 16064502774491487912
+ Sent 35466552 bytes 28556 pkt (dropped 0, overlimits 0 requeues 0) 
  backlog 0b 0p requeues 0

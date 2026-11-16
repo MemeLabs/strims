@@ -2,11 +2,11 @@ qdisc noqueue 0: dev lo root refcnt 2
  Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0) 
  backlog 0b 0p requeues 0
 qdisc tbf 10: dev eth0 root refcnt 2 rate 100Kbit burst 3028b/1 mpu 0b lat 2.16s linklayer ethernet 
- Sent 16146 bytes 13 pkt (dropped 20370, overlimits 20414 requeues 0) 
+ Sent 19872 bytes 16 pkt (dropped 22439, overlimits 22489 requeues 0) 
  backlog 29808b 24p requeues 0
 qdisc clsact ffff: dev eth0 parent ffff:fff1 
- Sent 50690988 bytes 40814 pkt (dropped 0, overlimits 0 requeues 0) 
+ Sent 55837836 bytes 44958 pkt (dropped 0, overlimits 0 requeues 0) 
  backlog 0b 0p requeues 0
-qdisc netem 861e: dev ifbd root refcnt 2 limit 100000 delay 1ms seed 337331734124198921
- Sent 25345494 bytes 20407 pkt (dropped 0, overlimits 0 requeues 0) 
+qdisc netem 88c5: dev ifbd root refcnt 2 limit 100000 delay 1ms seed 15514782651863118033
+ Sent 27918918 bytes 22479 pkt (dropped 0, overlimits 0 requeues 0) 
  backlog 0b 0p requeues 0

@@ -3,47 +3,55 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 # tcstats_test.py's captures: each link class's tree as run.sh builds a
-# node's (links.sh's link_root on eth0, a dummy here; the delay's ifb
-# behind eth0's clsact redirect), at 100 kbit/s under a UDP flood so a
-# queue stands and drops, then tc's text, its JSON and every device's
-# detailed text, read a moment apart (a packet leaves every ~100 ms), into
-# OUT. From the repo's root, with tracelink built (run.sh builds it):
+# node's (links.sh's node_tree on eth0, a dummy here, from what
+# testbed_link parses the class's spec to), at 100 kbit/s under a UDP flood
+# so a queue stands and drops, then the modem's device's tc text and JSON
+# (eth0's, or ifbm's for a class with slots), every device's JSON (what
+# run.sh's tc-0.log samples) and every device's detailed text
+# (qdisc-<i>.txt's), read a moment apart (a packet leaves every ~100 ms),
+# into OUT. From the repo's root, with tracelink and testbed_link built
+# (run.sh builds both):
 #
 #   docker run --rm --network none --cap-add NET_ADMIN --cap-add BPF \
 #     --cap-add PERFMON -v $PWD/hack/testbed/links.sh:/links.sh:ro \
 #     -v $PWD/target/testbed/tracelink:/tracelink:ro \
+#     -v $PWD/target/release/examples/testbed_link:/testbed_link:ro \
 #     -v $PWD/hack/testbed/testdata/tc/capture.sh:/c.sh:ro \
 #     -v $PWD/hack/testbed/testdata/tc:/out strims-testbed bash /c.sh
 set -u
 source /links.sh
+link_bin=/testbed_link
 payload=$(head -c 1200 /dev/zero | tr '\0' a)
 flood() { local end=$(( SECONDS + 2 )); while [ $SECONDS -lt $end ]; do printf %s "$payload" > /dev/udp/10.99.0.2/9 2>/dev/null; done; }
-{ echo "# period_us 1000000"; for t in $(seq 100000 100000 1000000); do echo "$t 1514"; done; } > /tmp/slow.us
+mkdir -p /tmp/links /out /ctl
+{ echo "# period_us 1000000"; for t in $(seq 100000 100000 1000000); do echo "$t 1514"; done; } > /tmp/links/trace
 for spec in tbf cable cable,aqm=fifo dsl dsl,line=vdsl fiber cable,router=fq_codel dsl,router=cake trace; do
-  ip link del eth0 2>/dev/null; ip link del ifbd 2>/dev/null
+  for d in eth0 ifbd ifbm; do ip link del "$d" 2>/dev/null; done
   ip link add eth0 type dummy && ip link set eth0 up && ip addr add 10.99.0.1/24 dev eth0
-  ip link add ifbd type ifb && ip link set ifbd up
   name=$(echo "$spec" | tr ',=' '__')
-  mkdir -p /tmp/links /out
   if [ "$spec" = trace ]; then
-    cp /tmp/slow.us /tmp/links/
-    root=$(link_root "trace,file=slow.us,format=us" 0.1 3028 30000 "" "$(( ${EPOCHREALTIME/[.,]/} / 1000 ))" 0 \
-      | sed -e 's|/links/|/tmp/links/|g' -e 's|/out/link-0|/tmp/link-0|g')
+    link_eval "trace,file=slow.us,format=us" 0.1 3028 30000
+    # The stream's start is now: the trace's time 0.
+    t=${EPOCHREALTIME/[.,]/}
+    echo "${t%???}" > /ctl/start
   else
-    root=$(link_root "$spec" 0.1 3028 30000 "" 0 0)
+    link_eval "$spec" 0.1 3028 30000
   fi
-  eval "$root"
-  tc qdisc add dev ifbd root netem delay 1ms limit 100000
-  tc qdisc add dev eth0 clsact
-  tc filter add dev eth0 egress matchall action mirred egress redirect dev ifbd
+  tracelink=""
+  eval "$(node_tree 1 0 0 "" "" "" "" | sed -e 's|/links/|/tmp/links/|g' -e 's|/out/link-0|/tmp/link-0|g')"
+  eval "$(link_attached 0 | sed -e 's|/out/link-0|/tmp/link-0|g')"
   flood
+  dev=$(link_dev)
   for _ in 1 2 3 4 5; do
-    a=$(tc -s qdisc show dev eth0); j=$(tc -s -j qdisc show dev eth0); b=$(tc -s qdisc show dev eth0)
+    a=$(tc -s qdisc show dev "$dev"); j=$(tc -s -j qdisc show dev "$dev"); all=$(tc -s -j qdisc show)
+    b=$(tc -s qdisc show dev "$dev")
     [ "$a" = "$b" ] && break
   done
   printf '%s\n' "$a" > "/out/$name.txt"
   printf '%s\n' "$j" > "/out/$name.json"
+  printf '%s\n' "$all" > "/out/$name.every.json"
   tc -s -d qdisc show > "/out/$name.all"
   pkill tracelink 2>/dev/null
+  rm -f /ctl/start
   tc qdisc del dev eth0 root 2>/dev/null
 done

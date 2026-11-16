@@ -13,14 +13,23 @@
 #
 # Every container is its own network namespace with a veth on the bridge.
 # Each shapes its egress as a host behind an access modem: eth0's clsact
-# hands every packet it sends to an ifb whose netem holds it for the
-# one-way delay, and the ifb hands it back to eth0, whose root tbf is the
-# modem (the access link's rate, its bucket and queue):
+# hands every packet it sends to an ifb (ifbd) whose netem holds it for
+# the one-way delay, and the ifb hands it back to eth0, whose root is the
+# modem, the node's access link class (hack/testbed/links.sh's node_tree).
+# The default, tbf, is a tbf of the link's rate, its bucket and queue:
 #
 #   tc qdisc replace dev eth0 root handle 10: tbf rate <up>mbit \
-#       burst <bucket> limit <up x queue x 125 bytes> [peakrate <p>mbit mtu 3028]
+#       burst <bucket> limit <up x queue x 125 bytes> \
+#       [peakrate <p>mbit mtu <two of the class's largest frames>]
 #   tc qdisc add dev ifbd root netem delay <d>ms limit 100000
 #   tc filter add dev eth0 egress matchall action mirred egress redirect dev ifbd
+#
+# The other classes put a size table for their framing on that root, a
+# queue under it (cable's DOCSIS-PIE, a DSL modem's FIFO), a home router's
+# AQM in its place, or tracelink's classifier; a class with slots (cable's
+# grants, slot=) moves the modem, handle 10:, to a second ifb (ifbm), to
+# which eth0's root hands what the delay returns, and holds what comes
+# back from it in a netem of slots alone: delay, shaper, slots.
 #
 # The bucket, what leaves at once (or at the peak rate) once the link has
 # idled, is 3028 bytes (two full frames) unless SEED_BURST (the seed's) or
@@ -43,10 +52,12 @@
 # one after it would, so a rate step applies the delay after its time.
 # Offloads are off on eth0 and on the ifb, which so cuts TCP's GSO
 # buffers (TCP always builds them) into the frames a modem would take:
-# tbf shapes real packets. A peak's bucket holds two frames: tbf wakes
-# for each frame its peak paces some 25 us late on this host, which a
-# one-frame bucket would lose (100 Mbit/s read 86), and two frames back to
-# back at most is what a line at the peak sends in 0.24 ms at 100 Mbit/s.
+# tbf shapes real packets. A peak's bucket holds two of the class's
+# largest frames (3028 bytes under tbf, 3036 under cable's and fiber's
+# 18-byte framing): tbf wakes for each frame its peak paces some 25 us
+# late on this host, which a one-frame bucket would lose (100 Mbit/s read
+# 86), and two frames back to back at most is what a line at the peak
+# sends in 0.24 ms at 100 Mbit/s.
 # One viewer can get a slow downlink (an ifb device with a tbf, on eth0's
 # ingress).
 #
@@ -68,24 +79,31 @@
 #   SEED_UP_MBIT=<m>       the seed's uplink (default 10)
 #   VIEWER_UP_MBIT=<m>     each viewer's uplink (default 20)
 #   QUEUE_MS=<ms>          every uplink's queue (default 100)
-#   SEED_BURST=<bytes>     the seed's tbf bucket (default 3028; at least a
-#                          full frame, 1514)
+#   SEED_BURST=<bytes>     the seed's tbf bucket (default 3028; at least its
+#                          link's largest frame: 1514 under tbf, 1518 under
+#                          fiber's framing, which a shaper charges a full
+#                          packet)
 #   VIEWER_BURST=<bytes>   each viewer's tbf bucket (default 3028; at least
-#                          a full frame)
+#                          its link's largest frame)
 #   SEED_PEAK_MBIT=<m>     the rate the seed's bucket sends at, its line's
-#                          own (tbf's peakrate; more than its uplink's
-#                          rate, its steps' too); unset, at once
+#                          own (tbf's peakrate, which must be over its
+#                          uplink's rate and every step's: run.sh refuses
+#                          one that isn't); unset, at once
 #   VIEWER_PEAK_MBIT=<m>   each viewer's
 #   SEED_LINK=<spec>       the seed's access link class (default tbf: the
 #                          tbf above): `<class>[,<key>=<value>...]`, tbf,
 #                          cable, dsl, fiber or trace (hack/testbed/links.sh,
 #                          which documents each class, its keys and
 #                          defaults); a class's rate is SEED_UP_MBIT, its
-#                          queue QUEUE_MS, a tbf's or fiber's bucket
-#                          SEED_BURST and a tbf's peak SEED_PEAK_MBIT. A
+#                          queue QUEUE_MS (a FIFO's bytes, cable's
+#                          DOCSIS-PIE's full frames; a router's fq_codel and
+#                          cake keep their own limits), a tbf's or fiber's
+#                          bucket SEED_BURST and peak SEED_PEAK_MBIT. A
 #                          trace's time 0 is the stream's start (its
 #                          packets reach the shaper SEED_DELAY_MS later),
-#                          and its files are mounted from the host
+#                          and its files are mounted from the host: a trace
+#                          link runs on a local testbed alone (a farm
+#                          testbed matrix refuses one)
 #   VIEWER_LINK=<spec>     each viewer's (default tbf)
 #   LINKS="<i>:<spec> ..." node i's link, in place of SEED_LINK or
 #                          VIEWER_LINK
@@ -125,6 +143,12 @@
 #                          testbed_node && hack/testbed/stamp.py write
 #                          target/release/examples/testbed_node`, which
 #                          writes its stamp beside it
+#   LINK_BIN=<path>        the link specs' parser (strims-wan's testbed_link
+#                          example); unset, run.sh builds it from its own
+#                          tree with cargo, into CARGO_TARGET_DIR (default
+#                          target/), so NODE_BIN may be another commit's;
+#                          the build waits for any other cargo build on that
+#                          dir (cargo says so), which LINK_BIN avoids
 #   RATE=<bytes/s>         the stream's rate, at every node (default
 #                          strims-testbed's RATE, 256 KiB/s)
 #   MEDIA=<flv file>       the seed streams the file's H.264 and AAC in the
@@ -186,15 +210,16 @@
 # from each node, strims-testbed's node module; a browser's adds post_ms
 # and host_t_ms, testbed_browser's), node-<i>.err, cpu-<i>.log (the
 # container's CPU time and memory once a second: ms since the epoch, the
-# cgroup's usage_usec, and its memory.current in bytes), tc-<i>.log (the
-# seed's eth0 qdiscs at 10 Hz: ms since the epoch, then `tc -s -j qdisc
-# show`'s JSON, which hack/testbed/tcstats.py reads: a checkout from
-# before it, whose bench.py, twin.py and hack/capture/analyze.py read tc's
-# text, finds no queue in it and says nothing) and ss-<i>.log (its sockets
-# once a second), qdisc-<i>.txt (each node's qdiscs on every device as it
-# shaped them, before the stream: `tc -s -d qdisc show`, its eth0 root
-# with its size table, the delay's ifbd, the slow downlink's ifbs and
-# PCAP's ifbo), steps.log (when each of SEED_UP_STEPS applied, ms since
+# cgroup's usage_usec, and its memory.current in bytes), tc-0.log (the
+# seed's qdiscs on every device at 10 Hz: ms since the epoch, then `tc -s
+# -j qdisc show`'s JSON, each qdisc with its dev, which
+# hack/testbed/tcstats.py reads, finding the modem's 10: on eth0 or, with
+# slots, on ifbm: a checkout from before it, whose bench.py, twin.py and
+# hack/capture/analyze.py read tc's text, finds no queue in it and says
+# nothing) and ss-0.log (its sockets once a second), qdisc-<i>.txt (each
+# node's qdiscs on every device as it shaped them, before the stream: `tc
+# -s -d qdisc show`, its modem with its size table, the delay's ifbd, the
+# slots' ifbm, the slow downlink's ifbs and PCAP's ifbo), steps.log (when each of SEED_UP_STEPS applied, ms since
 # the epoch, and its rate), compete-<s>.json (each upload's iperf3 report)
 # and compete.log (when each started), links (each node's link spec, rate,
 # delay and queue: `node <i> <spec> <up_mbit> <delay_ms> <queue_ms>`), a
@@ -203,6 +228,14 @@
 # node-relay.err, cpu-relay.log and hosts/ (each node's host id). With
 # MEDIA, each browser viewer's player-<i>.jsonl (its player's line a
 # second, testbed_browser's --player), and RECORD's record-<i>.bin.
+#
+# The stream starts once every node's link is up (each container marks it
+# when it has shaped its link, a trace's link once it has loaded its
+# trace). The run fails, removing its containers, if a node's link fails
+# to build (a tc error, a missing module, a tracelink that fails), a node
+# exits with an error, or a step fails to apply. However it ends, it ends
+# its steps and uploads, and those check the run is theirs before they
+# act on a container.
 #
 # Images: strims-testbed (Dockerfile) for native nodes, the relay and the
 # sink, and strims-testbed-browser (browser.Dockerfile) for browser nodes,
@@ -222,15 +255,15 @@
 # Needs Docker (the user's docker group) and the kernel modules the links
 # are shaped with, which links.sh's link_modules lists (every run's netem,
 # tbf, ifb, clsact and redirect, SEED_LOSS_PCT's filter, and the link
-# classes' qdiscs and classifiers). If tc can't load them, run once (a farm
-# host's boot loads them and builds each class's tree as linkcheck.sh
-# renders it)
+# classes' qdiscs, classifiers and marks). If tc can't load them, run once
+# (a farm host's boot loads them and builds each class's tree as
+# linkcheck.sh renders it)
 #
 #   sudo modprobe -a $(. hack/testbed/links.sh; link_modules)
 #
-# A trace link's container also
-# gets CAP_BPF and CAP_PERFMON, and run.sh builds tracelink
-# (hack/testbed/tracelink.c, into target/testbed) with gcc.
+# A trace link's container also gets CAP_BPF and CAP_PERFMON, and run.sh
+# builds tracelink (hack/testbed/tracelink.c, into target/testbed) with
+# gcc.
 
 set -euo pipefail
 
@@ -320,19 +353,54 @@ for i in $(seq 0 $((n - 1))); do
   esac
 done
 case $browser_links in ws|webrtc) ;; *) echo "BROWSER_LINKS: ws or webrtc" >&2; exit 1 ;; esac
+# The seed's steps, and the highest rate its link runs at, which a peak is
+# over.
+for step in $steps; do
+  [[ $step =~ ^[0-9]+(\.[0-9]+)?:[0-9]+(\.[0-9]+)?$ ]] \
+    || { echo "SEED_UP_STEPS: $step isn't <s>:<mbit>" >&2; exit 1; }
+done
+seed_top=$(awk -v u="$seed_up" -v s="$steps" 'BEGIN {
+  t = u; n = split(s, a, " ")
+  for (i = 1; i <= n; i++) { split(a[i], p, ":"); if (p[2] + 0 > t) t = p[2] + 0 }
+  print t }')
+# Every node's link spec, parsed before any container starts by this
+# tree's parser (strims-wan's testbed module, the twins' too), whatever
+# commit NODE_BIN is, and the seed's at each of its steps.
+link_bin=${LINK_BIN:-}
+if [ -z "$link_bin" ]; then
+  echo "run.sh: building testbed_link from this tree (LINK_BIN skips it)" >&2
+  cargo build --release --locked --manifest-path "$root/Cargo.toml" \
+    -p strims-wan --example testbed_link \
+    || { echo "building testbed_link failed (or give LINK_BIN)" >&2; exit 1; }
+  link_bin=${CARGO_TARGET_DIR:-$root/target}/release/examples/testbed_link
+fi
+[ -x "$link_bin" ] || { echo "no testbed_link at $link_bin" >&2; exit 1; }
 traces=0
+step_cmds=()
 for i in $(seq 0 $((n - 1))); do
-  link_check "$(link_of "$i")" || exit 1
-  if [ "$(link_class "$(link_of "$i")")" = trace ]; then
+  if [ "$i" -eq 0 ]; then up=$seed_up; burst=$seed_burst; peak=$seed_peak; top=$seed_top
+  else up=$viewer_up; burst=$viewer_burst; peak=$viewer_peak; top=""; fi
+  link_eval "$(link_of "$i")" "$up" "$burst" $((up * queue * 125)) "$peak" "" "$top" \
+    || { echo "node $i: link $(link_of "$i") refused" >&2; exit 1; }
+  if [ "$LINK_CLASS" = trace ]; then
     traces=1
-    while read -r f; do
-      [ -f "$f" ] || { echo "node $i: no link file at $f" >&2; exit 1; }
-    done < <(link_files "$(link_of "$i")")
+    for f in $LINK_FILES; do
+      [ -f "${f%%:*}" ] || { echo "node $i: no link file at ${f%%:*}" >&2; exit 1; }
+    done
+    if [ "$i" -eq 0 ] && [ -n "$steps" ]; then
+      echo "SEED_UP_STEPS: a trace link takes no steps" >&2; exit 1
+    fi
+  fi
+  if [ "$i" -eq 0 ]; then
+    for step in $steps; do
+      rate=${step#*:}
+      link_eval "$(link_of 0)" "$rate" "$seed_burst" \
+        "$(awk "BEGIN { printf \"%d\", $rate * $queue * 125 }")" "$seed_peak" "$seed_up" "$seed_top" \
+        || { echo "SEED_UP_STEPS: link $(link_of 0) refused at step $step" >&2; exit 1; }
+      step_cmds+=("$(link_change)")
+    done
   fi
 done
-if [ -n "$steps" ] && [ "$(link_class "$(link_of 0)")" = trace ]; then
-  echo "SEED_UP_STEPS: a trace link takes no steps" >&2; exit 1
-fi
 tracelink=$root/target/testbed/tracelink
 if [ "$traces" = 1 ] && { [ ! -x "$tracelink" ] || [ "$root/hack/testbed/tracelink.c" -nt "$tracelink" ]; }; then
   mkdir -p "$(dirname "$tracelink")"
@@ -387,8 +455,34 @@ for nw in "$old_net" "$net"; do
   fi
 done
 names=()
+# The run's control files, apart from the out dir: each node's mark that
+# its link is up (/ctl/ready-<i>), the stream's start (/ctl/start, which
+# the containers wait for), each container's exit code, and what failed
+# while the stream ran.
+ctl=$(mktemp -d "${TMPDIR:-/tmp}/testbed-ctl.XXXXXX")
+chmod 755 "$ctl"
+# The run's id, in its control files (/ctl/run), which a step or an upload
+# checks in tb-0 before it acts: one left from another run then acts on
+# nothing.
+run_id=${ctl##*/}
+echo "$run_id" > "$ctl/run"
+ours="[ \"\$(cat /ctl/run 2>/dev/null)\" = $run_id ] || exit 3"
+# The run's background work (its steps, uploads and container waits),
+# which ends with it, however it ends.
+bg=()
+kill_tree() {
+  local kids c
+  kids=$(pgrep -P "$1" 2>/dev/null || true)
+  kill "$1" 2>/dev/null || true
+  for c in $kids; do kill_tree "$c"; done
+}
+# The run's background work, its containers, its control files and its
+# network, in that order.
 cleanup() {
+  local p
+  for p in "${bg[@]}"; do kill_tree "$p"; done
   docker rm -f "${names[@]}" >/dev/null 2>&1 || true
+  rm -rf "$ctl"
   docker network rm "$net" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -428,12 +522,6 @@ nov6=(--sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv6.conf.default.d
 env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
   > "$out/settings" || true
 
-# The containers start one after another before the stream does, and
-# browsers then load the page and compile its wasm.
-lead=$(( 8000 + 1500 * (n > 4 ? n - 4 : 0) ))
-if [ "$browsers" = 1 ]; then
-  lead=$(( lead + 20000 + 1000 * nbrowsers ))
-fi
 # Milliseconds since the epoch, from bash's clock ($EPOCHREALTIME: seconds
 # and six digits of microseconds, no fork); the containers' samplers stamp
 # their lines the same way (`t=${EPOCHREALTIME/[.,]/}; t=${t%???}`). The
@@ -444,7 +532,10 @@ now_ms() {
   local t=${EPOCHREALTIME/[.,]/}
   echo "${t%???}"
 }
-start=$(( $(now_ms) + lead ))
+# What a container waits for before its node starts: the stream's start,
+# which run.sh writes once every node's link is up.
+wait_start='until [ -s /ctl/start ]; do sleep 0.05; done
+start=$(cat /ctl/start)'
 
 # The container's CPU time and memory, once a second, in the background of
 # its script.
@@ -459,9 +550,10 @@ if [ "$browsers" = 1 ] && [ "$relay_on" = 1 ]; then
   names+=(tb-relay)
   docker rm -f tb-relay >/dev/null 2>&1 || true
   docker run -d --name tb-relay --network "$net" --ip "$relay" "${nov6[@]}" \
-    -v "$bin:/testbed_node:ro" -v "$out:/out" "$image" \
+    -v "$bin:/testbed_node:ro" -v "$out:/out" -v "$ctl:/ctl" "$image" \
     bash -c "$(cpu_log relay)
-exec /testbed_node --relay-only --topology /out/topology --start $start --secs $secs 2> /out/node-relay.err" >/dev/null
+$wait_start
+exec /testbed_node --relay-only --topology /out/topology --start \$start --secs $secs 2> /out/node-relay.err" >/dev/null
 fi
 
 : > "$out/links"
@@ -470,14 +562,20 @@ for i in $(seq 0 $((n - 1))); do
   else up=$viewer_up; delay=$viewer_delay; burst=$viewer_burst; peak=$viewer_peak; fi
   limit=$((up * queue * 125))
   link=$(link_of "$i")
+  top=""
+  if [ "$i" -eq 0 ]; then top=$seed_top; fi
+  link_eval "$link" "$up" "$burst" "$limit" "$peak" "" "$top"
   echo "node $i $link $up $delay $queue" >> "$out/links"
+  # A previous run's link log would pass for this one's.
+  rm -f "$out/link-$i.log" "$out/link-$i.err"
   # A trace link's files, and the capabilities its classifier needs.
   link_mounts=()
-  if [ "$(link_class "$link")" = trace ]; then
+  if [ "$LINK_CLASS" = trace ]; then
     link_mounts=(--cap-add BPF --cap-add PERFMON -v "$tracelink:/tracelink:ro")
-    while read -r f; do
-      link_mounts+=(-v "$(cd "$(dirname "$f")" && pwd)/$(basename "$f"):/links/$(basename "$f"):ro")
-    done < <(link_files "$link")
+    for f in $LINK_FILES; do
+      h=${f%%:*}
+      link_mounts+=(-v "$(cd "$(dirname "$h")" && pwd)/$(basename "$h"):${f#*:}:ro")
+    done
   fi
   # The node's link (links.sh's node_tree, which linkcheck.sh checks on
   # a farm host): the seed loses what it receives, a viewer what the seed
@@ -485,11 +583,10 @@ for i in $(seq 0 $((n - 1))); do
   if [ "$i" -eq 0 ]; then match=matchall; else match="protocol ip u32 match ip src $subnet.10/32"; fi
   node_slow=""
   if [ "$i" -eq 1 ]; then node_slow=$slow; fi
-  shape=$(node_tree "$link" "$up" "$burst" "$limit" "$peak" $((start + delay)) "$i" "$delay" \
-    "${PCAP:-0}" "$match" "$loss_every" "$node_slow" "$queue")
+  shape=$(node_tree "$delay" "$i" "${PCAP:-0}" "$match" "$loss_every" "$node_slow" "$queue")
   sample=""
   if [ "$i" -eq 0 ]; then
-    sample="( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"\$t \$(tc -s -j qdisc show dev eth0 | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &
+    sample="( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"\$t \$(tc -s -j qdisc show | tr '\n' ' ')\"; sleep 0.1; done > /out/tc-$i.log ) &
 ( while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; echo \"@ \$t\"; ss -tin state established; sleep $ss_every; done > /out/ss-$i.log ) &"
   fi
   if [ "${PCAP:-0}" = 1 ]; then
@@ -529,13 +626,16 @@ for i in $(seq 0 $((n - 1))); do
   docker rm -f "$name" >/dev/null 2>&1 || true
   if [ "$(kind_of "$i")" = native ]; then
     docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" "${nov6[@]}" \
-      --cap-add NET_ADMIN "${link_mounts[@]}" -v "$bin:/testbed_node:ro" -v "$out:/out" "${media_mount[@]}" "$image" \
+      --cap-add NET_ADMIN "${link_mounts[@]}" -v "$bin:/testbed_node:ro" -v "$out:/out" -v "$ctl:/ctl" "${media_mount[@]}" "$image" \
       bash -c "set -e
 $shape
 tc -s -d qdisc show > /out/qdisc-$i.txt
+: > /ctl/ready-$i
 $sample
 $(cpu_log "$i")
-exec /testbed_node --index $i --topology /out/topology --start $start --secs $secs --join-at $join $rate_arg $units_arg $media_arg $record_arg $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+$wait_start
+$(link_attached "$i")
+exec /testbed_node --index $i --topology /out/topology --start \$start --secs $secs --join-at $join $rate_arg $units_arg $media_arg $record_arg $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   else
     # The browser runs as the image's unprivileged user, after root has
     # shaped the link. Its profile, in /tmp, stays in memory, so its
@@ -549,19 +649,49 @@ exec /testbed_node --index $i --topology /out/topology --start $start --secs $se
     docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" "${nov6[@]}" \
       --cap-add NET_ADMIN "${link_mounts[@]}" --shm-size 1g --tmpfs /tmp:size=1g \
       -v "$browser_bin:/testbed_browser:ro" \
-      -v "$web:/web:ro" -v "$out:/out" "$browser_image" \
+      -v "$web:/web:ro" -v "$out:/out" -v "$ctl:/ctl" "$browser_image" \
       bash -c "set -e
 $shape
 ip route add default via $unused dev eth0
 tc -s -d qdisc show > /out/qdisc-$i.txt
+: > /ctl/ready-$i
 $sample
 $(cpu_log "$i")
-exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start $start --secs $secs --join-at $join $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+$wait_start
+$(link_attached "$i")
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start \$start --secs $secs --join-at $join $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   fi
 done
 
+# A container whose link failed to build (a tc error, a missing module,
+# a tracelink that failed) ends before its node starts: the run fails.
+for i in $(seq 0 $((n - 1))); do
+  until [ -e "$ctl/ready-$i" ]; do
+    if [ "$(docker inspect -f '{{.State.Running}}' "tb-$i" 2>/dev/null)" != true ]; then
+      # It may have ended since, its node having started.
+      [ -e "$ctl/ready-$i" ] && break
+      echo "node $i: its link failed:" >&2
+      cat "$out/link-$i.err" >&2 2>/dev/null || true
+      docker logs "tb-$i" >&2 2>&1 || true
+      exit 1
+    fi
+    sleep 0.2
+  done
+done
+# The stream starts once every link is up (a trace's having loaded its
+# trace, however long), its classifier going in at the start: the nodes
+# start then, and browsers load the page and compile its wasm.
+lead=$(( 3000 + 100 * (n > 4 ? n - 4 : 0) ))
+if [ "$browsers" = 1 ]; then
+  lead=$(( lead + 20000 + 1000 * nbrowsers ))
+fi
+start=$(( $(now_ms) + lead ))
+echo "$start" > "$ctl/start.tmp"
+mv "$ctl/start.tmp" "$ctl/start"
+
 if [ -n "$steps" ]; then
   (
+    k=0
     for step in $steps; do
       at=${step%%:*}
       rate=${step#*:}
@@ -570,11 +700,18 @@ if [ -n "$steps" ]; then
       ms=$(awk "BEGIN { printf \"%d\", $start + $at * 1000 + $seed_delay }")
       wait=$(( ms - $(now_ms) ))
       if [ "$wait" -gt 0 ]; then sleep "$(awk "BEGIN { print $wait / 1000 }")"; fi
-      limit=$(awk "BEGIN { printf \"%d\", $rate * $queue * 125 }")
-      docker exec tb-0 bash -c "$(link_change "$(link_of 0)" "$rate" "$seed_burst" "$limit" "$seed_peak" "$seed_up")"
+      [ -e "$ctl/run" ] || exit 0
+      err=$(docker exec tb-0 bash -c "$ours; ${step_cmds[k]}" 2>&1) && rc=0 || rc=$?
+      [ "$rc" = 3 ] && exit 0
+      if [ "$rc" != 0 ]; then
+        echo "SEED_UP_STEPS: the step $step failed: $err" > "$ctl/failed"
+        exit 1
+      fi
       echo "$(now_ms) $rate" >> "$out/steps.log"
+      k=$((k + 1))
     done
   ) &
+  bg+=($!)
 fi
 
 if [ -n "$compete" ]; then
@@ -592,22 +729,52 @@ exec iperf3 -s" >/dev/null
       ms=$(awk "BEGIN { printf \"%d\", $start + $at * 1000 }")
       wait=$(( ms - $(now_ms) ))
       if [ "$wait" -gt 0 ]; then sleep "$(awk "BEGIN { print $wait / 1000 }")"; fi
+      [ -e "$ctl/run" ] || exit 0
       echo "$(now_ms) $at $dur" >> "$out/compete.log"
-      docker exec tb-0 iperf3 -c "$sink" -t "$dur" -i 1 -C cubic -J \
+      docker exec tb-0 bash -c "$ours; exec iperf3 -c $sink -t $dur -i 1 -C cubic -J" \
         > "$out/compete-$at.json" 2>&1 || true
     done
   ) &
+  bg+=($!)
 fi
 
-wait_ms=$(( start + (secs + 15) * 1000 - $(now_ms) ))
+end_ms=$(( start + (secs + 15) * 1000 ))
 echo "testbed: $n nodes, stream of $secs s; results in $out"
 for name in "${names[@]}"; do
-  docker wait "$name" >/dev/null &
+  ( docker wait "$name" > "$ctl/exit-$name" 2>/dev/null || true ) &
+  bg+=($!)
 done
-sleep $(( wait_ms / 1000 + 1 ))
+# Until the stream has ended and the nodes have had 15 s to write their
+# last lines, a step fails, or a node exits with an error.
+failing() {
+  local f
+  [ -s "$ctl/failed" ] && return 0
+  for f in "$ctl"/exit-*; do
+    if [ -s "$f" ] && [ "$(cat "$f")" != 0 ]; then return 0; fi
+  done
+  return 1
+}
+while [ "$(now_ms)" -lt "$end_ms" ] && ! failing; do
+  sleep 1
+done
 for i in $(seq 0 $((n - 1))); do
   docker logs "tb-$i" > "$out/docker-$i.log" 2>&1 || true
 done
 if [ "$browsers" = 1 ] && [ "$relay_on" = 1 ]; then
   docker logs tb-relay > "$out/docker-relay.log" 2>&1 || true
 fi
+if [ -s "$ctl/failed" ]; then
+  cat "$ctl/failed" >&2
+  exit 1
+fi
+# A node that exited with an error (one that never started, or failed
+# while the stream ran) fails the run.
+failed=0
+for name in "${names[@]}"; do
+  code=$(cat "$ctl/exit-$name" 2>/dev/null || true)
+  if [ -n "$code" ] && [ "$code" != 0 ]; then
+    echo "$name exited with $code (its docker-<i>.log and node-<i>.err)" >&2
+    failed=1
+  fi
+done
+[ "$failed" = 0 ] || exit 1

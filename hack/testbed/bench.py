@@ -195,8 +195,9 @@ def sim_compete(evs):
 
 def frames(run):
     """Whether the run's uplink queue took frames (run.sh's ifb segments
-    TCP's GSO buffers ahead of eth0's root, the link class's qdisc 10:), as
-    against GSO buffers (a netem root with a tbf child, before)."""
+    TCP's GSO buffers ahead of the modem, the link class's qdisc 10:, eth0's
+    root or with slots ifbm's), as against GSO buffers (a netem root with a
+    tbf child, before)."""
     p = os.path.join(run, "qdisc-0.txt")
     if not os.path.exists(p):
         return False
@@ -206,9 +207,10 @@ def frames(run):
         qs = tcstats.parse_text(text)
     except ValueError as e:
         # A file cut short: a root 10:, of any class, as its header line
-        # shows one (`dev eth0` in it since qdisc-<i>.txt has every device).
+        # shows one (`dev eth0`, or a slotted class's `dev ifbm`, in it
+        # since qdisc-<i>.txt has every device).
         tcstats.note(f"{p}: {e}; taking a root 10: header in it for frames")
-        return re.search(r"^qdisc \S+ 10: (?:dev eth0 )?root\b", text, re.M) is not None
+        return re.search(r"^qdisc \S+ 10: (?:dev (?:eth0|ifbm) )?root\b", text, re.M) is not None
     # Every device's (`tc -s -d qdisc show`), or eth0's and the ifb's before.
     q = tcstats.find(qs, "10:", dev="eth0") or tcstats.find(qs, "10:")
     return q is not None and q.parent is None

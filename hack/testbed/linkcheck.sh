@@ -17,9 +17,12 @@
 #
 # and fails (and the launch with it) on what it can't render. A tree
 # stands for a node's link on a dummy eth0: links.sh's node_tree, as
-# run.sh builds it, with the loss filter and the slow downlink (its tc and
-# ip lines: a trace's tracelink and the offloads left out), then
-# link_change's step.
+# run.sh builds it from the class's spec as testbed_link parses it (the
+# bundle's LINK_BIN, which the controller runs; built from this tree as
+# run.sh builds it when unset), with the loss filter and the slow downlink
+# (its tc and ip lines: a trace's tracelink and the offloads left out),
+# then link_change's step. cable's tree is the slotted one: eth0's prio,
+# its fw filter and skbedit mark, and the modem on ifbm.
 #
 #   hack/testbed/linkcheck.sh
 
@@ -27,26 +30,31 @@ set -euo pipefail
 cd "$(dirname "$0")"
 # shellcheck source=hack/testbed/links.sh
 source ./links.sh
+link_bin=${LINK_BIN:-}
+if [ -z "$link_bin" ]; then
+  cargo build -q --release --locked --manifest-path ../../Cargo.toml -p strims-wan --example testbed_link \
+    || { echo "no LINK_BIN, and testbed_link doesn't build here" >&2; exit 1; }
+  link_bin=${CARGO_TARGET_DIR:-../../target}/release/examples/testbed_link
+fi
 
 modules=$(link_modules) || { echo "link_modules failed" >&2; exit 1; }
 [ -n "$modules" ] || { echo "link_modules lists no module" >&2; exit 1; }
 # shellcheck disable=SC2086 # one line, a module a word
 echo modules $modules dummy
 
-for spec in tbf tbf,slot=2-8 cable cable,aqm=fifo dsl dsl,line=vdsl fiber \
+for spec in tbf cable cable,aqm=fifo dsl dsl,line=vdsl fiber \
   cable,router=fq_codel dsl,router=fq_codel cable,router=cake dsl,router=cake trace,file=up.mm; do
-  link_check "$spec"
-  class=$(link_class "$spec")
   peak=""
-  [ "$class" = tbf ] && peak=100
-  root=$(link_root "$spec" 10 3028 125000 "$peak" 0 0)
+  [ "${spec%%,*}" = tbf ] && peak=100
+  link_eval "$spec" 10 3028 125000 "$peak" || { echo "link $spec: testbed_link refused it" >&2; exit 1; }
+  root=$(link_root 20 0)
   [ -n "$root" ] || { echo "link $spec: link_root gives no tree" >&2; exit 1; }
   echo "tree $spec"
   echo "ip link add eth0 type dummy"
   echo "ip link set eth0 up"
-  node_tree "$spec" 10 3028 125000 "$peak" 0 0 20 0 \
-    "protocol ip u32 match ip src 10.77.0.10/32" 100 1000 100 | grep -E '^(tc|ip) '
-  if [ "$class" != trace ]; then
-    link_change "$spec" 5 3028 62500 "$peak" 10
+  node_tree 20 0 0 "protocol ip u32 match ip src 10.77.0.10/32" 100 1000 100 | grep -E '^(tc|ip) '
+  if [ "$LINK_CLASS" != trace ]; then
+    link_eval "$spec" 5 3028 62500 "$peak" 10 || { echo "link $spec: testbed_link refused its step" >&2; exit 1; }
+    link_change
   fi
 done

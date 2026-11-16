@@ -4,17 +4,20 @@
 """tc's qdisc statistics as run.sh records them, for the tools that read a
 testbed run (hack/testbed/bench.py and twin.py, hack/capture/analyze.py).
 
-run.sh's tc-<i>.log holds a sample a line, `<unix ms> <qdiscs>`: the
-qdiscs of the node's eth0 as `tc -s -j qdisc show dev eth0` prints them,
-or, in runs before it recorded JSON, as `tc -s qdisc show dev eth0` does,
-its lines joined. tc's text rounds what it prints: a size within 16 bytes
+run.sh's tc-<i>.log holds a sample a line, `<unix ms> <qdiscs>`: every
+device's qdiscs as `tc -s -j qdisc show` prints them, each with its dev;
+in runs before, the node's eth0's as `tc -s -j qdisc show dev eth0` prints
+them (with no dev), or, before it recorded JSON, as `tc -s qdisc show dev
+eth0` does, its lines joined. tc's text rounds what it prints: a size within 16 bytes
 of a KiB multiple is `<n>Kb`, within a KiB of a MiB multiple `<n>Mb`
 (iproute2's sprint_size), and a rate is in SI units (`<n>Kbit`,
 `<n>Mbit`); its JSON has bytes, and rates in bytes a second.
 
-A node's access link queue is eth0's qdisc 10: in every link class's tree
-(uplink), its kind the class's (queue_kind), the class the run's `links`
-file names.
+A node's access link queue is the modem's qdisc 10: in every link class's
+tree (uplink): eth0's, or for a class with slots ifbm's, the ifb
+hack/testbed/links.sh moves the modem to ahead of the slots (modem_dev);
+its kind the class's (queue_kind), the class the run's `links` file
+names.
 """
 
 import json
@@ -207,9 +210,25 @@ def link_spec(run, node=0):
     raise LookupError(f"{p}: no node {node}")
 
 
+def has_slots(spec):
+    """Whether link `spec` has slots: cable's grants unless `slot=off`, or
+    any class's `slot=`."""
+    cls, *kvs = spec.split(",")
+    slot = dict(kv.partition("=")[::2] for kv in kvs).get("slot")
+    return cls == "cable" if slot is None else slot != "off"
+
+
+def modem_dev(spec):
+    """The device whose root is link `spec`'s modem, qdisc 10:: ifbm for a
+    class with slots (eth0's root then hands the shaper what the delay
+    returns, and holds what comes back for its slot), else eth0."""
+    return "ifbm" if has_slots(spec) else "eth0"
+
+
 def queue_kind(spec):
-    """The kind of eth0's qdisc 10:, the root of every class's tree and the
-    qdisc that holds its queue, for link `spec`: a cake router's cake; a
+    """The kind of the modem's qdisc 10: (modem_dev's root), the root of
+    every class's modem and the qdisc that holds its queue, for link
+    `spec`: a cake router's cake; a
     trace's prio, over the fq that tracelink's program holds packets in
     (its drops count in the prio); else the class's tbf, which counts what
     the qdisc under it holds and drops (cable's PIE, a router's
@@ -225,16 +244,23 @@ def queue_kind(spec):
 def uplink(run, node=0):
     """Node `node`'s access link queue over a run: its link spec and
     tc-<node>.log's samples of the qdisc that holds the queue,
-    [(unix ms, Qdisc)] (queue_kind). Its `rate` drains it, where it has one:
-    a trace's prio has none. Raises LookupError, naming the link, when the
-    log has samples but none of that qdisc."""
+    [(unix ms, Qdisc)] (queue_kind), on its modem's device (modem_dev; a
+    sample that names no device, an older run's of eth0 alone, is taken
+    as it comes). Its `rate` drains it, where it has one: a trace's prio
+    has none. Raises LookupError, naming the link, when the log has samples
+    but none of that qdisc."""
     spec = link_spec(run, node)
     kind = queue_kind(spec)
+    dev = modem_dev(spec)
     p = os.path.join(run, f"tc-{node}.log")
     got = samples(p) if os.path.exists(p) else []
-    out = [(t, q) for t, qs in got if (q := find(qs, "10:", kind))]
+
+    def modem(qs):
+        return next((q for q in qs if q.handle == "10:" and q.kind == kind and q.dev in (None, dev)), None)
+
+    out = [(t, q) for t, qs in got if (q := modem(qs))]
     if got and not out:
-        raise LookupError(f"{p}: node {node}'s {spec} link has no {kind} 10: in its samples")
+        raise LookupError(f"{p}: node {node}'s {spec} link has no {kind} 10: on {dev} in its samples")
     return spec, out
 
 

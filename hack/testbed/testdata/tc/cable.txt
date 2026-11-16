@@ -1,11 +1,8 @@
-qdisc tbf 10: root refcnt 2 rate 100Kbit burst 1562b peakrate 100Mbit minburst 3028b lat 2.28s 
- Sent 24920 bytes 20 pkt (dropped 25812, overlimits 35837 requeues 0) 
- backlog 12447540b 9990p requeues 0
-qdisc pie 20: parent 10:1 limit 10000p target 10ms tupdate 16ms alpha 2 beta 20 
- Sent 26166 bytes 21 pkt (dropped 25812, overlimits 0 requeues 0) 
- backlog 12447540b 9990p requeues 0
-  prob 0.198182 delay 1.87s
-  pkts_in 10010 overlimit 8406 dropped 25812 maxq 9999 ecn_mark 0
-qdisc clsact ffff: parent ffff:fff1 
- Sent 88981848 bytes 71644 pkt (dropped 0, overlimits 0 requeues 0) 
- backlog 0b 0p requeues 0
+qdisc tbf 10: root refcnt 2 rate 100Kbit burst 1563b peakrate 100Mbit minburst 3036b lat 2.27s 
+ Sent 24920 bytes 20 pkt (dropped 29738, overlimits 29783 requeues 0) 
+ backlog 12460b 10p requeues 0
+qdisc pie 20: parent 10:1 limit 20p target 10ms tupdate 16ms alpha 2 beta 20 
+ Sent 26166 bytes 21 pkt (dropped 29738, overlimits 0 requeues 0) 
+ backlog 12460b 10p requeues 0
+  prob 0.318172 delay 1.87s
+  pkts_in 30 overlimit 15276 dropped 29738 maxq 19 ecn_mark 0

@@ -5,10 +5,12 @@
 # farm.py's link check and user-data.sh's boot of a testbed host.
 #
 # The controller's side: link_check over testbeds made from this
-# checkout's hack/testbed: one renders this checkout's check; two of which
-# one's cake tree differs merge their modules and keep each distinct tree
-# once; one without linkcheck.sh is said to go unchecked; one whose
-# link_modules fails, or lists none, stops the run.
+# checkout's hack/testbed, with this checkout's testbed_link as their
+# LINK_BIN (LINK_BIN if given, else built as run.sh builds it): one
+# renders this checkout's check; two of which one's cake trees differ
+# merge their modules and keep each distinct tree once; one without
+# linkcheck.sh is said to go unchecked; one whose link_modules fails, or
+# lists none, stops the run.
 #
 # The host's side: user-data.sh filled in by user_data with this
 # checkout's check, booted in a container of the testbed's image
@@ -36,6 +38,13 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 fails=0
 fail() { echo "FAIL $*"; fails=$((fails + 1)); }
+# The testbeds' parser, as a bundle's LINK_BIN.
+if [ -z "${LINK_BIN:-}" ]; then
+  cargo build -q --release --locked --manifest-path "$repo/Cargo.toml" -p strims-wan --example testbed_link \
+    || { echo "FAIL building testbed_link"; exit 1; }
+  LINK_BIN=${CARGO_TARGET_DIR:-$repo/target}/release/examples/testbed_link
+fi
+export LINK_BIN
 
 # A testbed of this checkout's hack/testbed, whose links.sh gets a tail.
 testbed() { # dir, links.sh's tail
@@ -55,7 +64,8 @@ sys.stdout.write(farm.link_check({a.split("=")[0]: Path(a.split("=", 1)[1]) for 
 EOF
 }
 testbed "$work/a" ""
-testbed "$work/b" 'link_cake_overhead() { echo "overhead 20"; }'
+testbed "$work/b" 'eval "orig_$(declare -f link_eval)"
+link_eval() { orig_link_eval "$@" || return 1; LINK_SHAPER=${LINK_SHAPER/docsis/overhead 20}; LINK_SHAPER=${LINK_SHAPER/pppoe-llcsnap/overhead 20}; }'
 testbed "$work/none" ""
 rm "$work/none/hack/testbed/linkcheck.sh"
 testbed "$work/broken" 'link_modules() { return 3; }'
@@ -65,8 +75,8 @@ one=$(check_of "a=$work/a") || fail "link_check of this checkout failed"
 [ "$one" = "$(bash "$repo/hack/testbed/linkcheck.sh")" ] || fail "one testbed's check isn't its linkcheck.sh's"
 two=$(check_of "a=$work/a" "b=$work/b" "a again=$work/a")
 [ "$(grep -c '^modules ' <<< "$two")" = 1 ] || fail "two testbeds' check has $(grep -c '^modules ' <<< "$two") module lines"
-[ "$(grep -c '^tree ' <<< "$one")" = 12 ] || fail "this checkout's check has $(grep -c '^tree ' <<< "$one") trees"
-[ "$(grep -c '^tree ' <<< "$two")" = 14 ] || fail "two testbeds' check has $(grep -c '^tree ' <<< "$two") trees (12 and b's 2 cake trees)"
+[ "$(grep -c '^tree ' <<< "$one")" = 11 ] || fail "this checkout's check has $(grep -c '^tree ' <<< "$one") trees"
+[ "$(grep -c '^tree ' <<< "$two")" = 13 ] || fail "two testbeds' check has $(grep -c '^tree ' <<< "$two") trees (11 and b's 2 cake trees)"
 grep -q "cake bandwidth .*overhead 20" <<< "$two" || fail "b's cake tree is missing"
 out=$(check_of "none=$work/none" "a=$work/a" 2>&1 >/dev/null)
 grep -qx "log: none: its bundle has no hack/testbed/linkcheck.sh, so a host checks none of its links" <<< "$out" \
