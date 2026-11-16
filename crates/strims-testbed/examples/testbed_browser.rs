@@ -110,7 +110,8 @@ struct Args {
     secs: u64,
     start_ms: Option<u64>,
     rate: u64,
-    join_at: u64,
+    /// When a viewer joins, in ms after the start (`--join-at`, seconds).
+    join_at_ms: u64,
     hosts: Option<PathBuf>,
     capture: Option<PathBuf>,
     chunk: Option<u64>,
@@ -135,7 +136,7 @@ fn args() -> Result<Args, String> {
         secs: 180,
         start_ms: None,
         rate: RATE,
-        join_at: 0,
+        join_at_ms: 0,
         hosts: None,
         capture: None,
         chunk: None,
@@ -158,7 +159,7 @@ fn args() -> Result<Args, String> {
             "--secs" => a.secs = num(value()?)?,
             "--start" => a.start_ms = Some(num(value()?)?),
             "--rate" => a.rate = num(value()?)?,
-            "--join-at" => a.join_at = num(value()?)?,
+            "--join-at" => a.join_at_ms = secs_ms(&value()?)?,
             "--hosts" => a.hosts = Some(value()?.into()),
             "--capture" => a.capture = Some(value()?.into()),
             "--chunk" => a.chunk = Some(num(value()?)?),
@@ -756,7 +757,7 @@ async fn run() -> Result<(), String> {
                 }
             }
         }
-        let join = start_ms + a.join_at * 1000;
+        let join = start_ms + a.join_at_ms;
         tokio::time::sleep(Duration::from_millis(join.saturating_sub(now_ms()))).await;
         // Each exchange once, in plan order; those that didn't link are
         // tried again together, each second.
@@ -820,4 +821,13 @@ async fn run() -> Result<(), String> {
     }
     let _ = std::fs::remove_dir_all(&profile);
     Ok(())
+}
+
+/// A time in seconds (`2`, `0.5`) as whole ms.
+fn secs_ms(v: &str) -> Result<u64, String> {
+    let s: f64 = v.parse().map_err(|e| format!("{v}: {e}"))?;
+    if !s.is_finite() || s < 0.0 {
+        return Err(format!("{v}: seconds, 0 or more"));
+    }
+    Ok((s * 1000.0).round() as u64)
 }

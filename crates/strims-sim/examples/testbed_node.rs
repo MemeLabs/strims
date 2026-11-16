@@ -81,7 +81,8 @@ struct Args {
     units: Option<usize>,
     media: Option<String>,
     record: Option<String>,
-    join_at: u64,
+    /// When a viewer joins, in ms after the start (`--join-at`, seconds).
+    join_at_ms: u64,
     hosts: Option<PathBuf>,
     capture: Option<String>,
 }
@@ -102,7 +103,7 @@ fn args() -> Result<Args, String> {
         units: None,
         media: None,
         record: None,
-        join_at: 0,
+        join_at_ms: 0,
         hosts: None,
         capture: None,
     };
@@ -121,7 +122,7 @@ fn args() -> Result<Args, String> {
             "--units" => a.units = Some(num(value()?)? as usize),
             "--media" => a.media = Some(value()?),
             "--record" => a.record = Some(value()?),
-            "--join-at" => a.join_at = num(value()?)?,
+            "--join-at" => a.join_at_ms = secs_ms(&value()?)?,
             "--hosts" => a.hosts = Some(value()?.into()),
             "--capture" => a.capture = Some(value()?),
             _ => return Err(format!("unknown flag {flag}")),
@@ -294,7 +295,7 @@ async fn run() -> Result<(), String> {
         }
         if a.start_ms.is_some() {
             Native::default()
-                .sleep_until_ms(start_ms + a.join_at * 1000)
+                .sleep_until_ms(start_ms + a.join_at_ms)
                 .await;
         }
         for link in topo.plan(a.index) {
@@ -365,4 +366,13 @@ async fn relay(topo: &Topology, end_ms: u64) -> Result<(), String> {
     }
     let _ = node.shutdown().await;
     Ok(())
+}
+
+/// A time in seconds (`2`, `0.5`) as whole ms.
+fn secs_ms(v: &str) -> Result<u64, String> {
+    let s: f64 = v.parse().map_err(|e| format!("{v}: {e}"))?;
+    if !s.is_finite() || s < 0.0 {
+        return Err(format!("{v}: seconds, 0 or more"));
+    }
+    Ok((s * 1000.0).round() as u64)
 }

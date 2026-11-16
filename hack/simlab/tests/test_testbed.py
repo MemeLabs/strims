@@ -116,8 +116,7 @@ class Cells(unittest.TestCase):
 
 class Joins(unittest.TestCase):
     def parse(self, joins):
-        # A node's --join-at takes whole seconds.
-        return [(int(i), int(t)) for i, t in (p.split(":") for p in joins.split())]
+        return [(int(i), float(t)) for i, t in (p.split(":") for p in joins.split())]
 
     def test_a_trickle_joins_within_the_streams_first_third_soonest_first(self):
         js = self.parse(testbed.joins_of("trickle", 15, 60, random.Random(1)))
