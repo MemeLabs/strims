@@ -54,7 +54,8 @@ builds its own.
   (`hack/testbed/tracelink.c`, an EDT classifier over fq that run.sh
   builds with gcc), its files mounted from the host, so it runs on a
   local testbed alone: a farm testbed matrix refuses one. run.sh parses
-  every spec with strims-sim's link module (`testbed_node --link`), and
+  every spec with strims-wan's testbed module (its `testbed_link`
+  example, which run.sh builds from its own tree, or `LINK_BIN`), and
   calibration_star's `STRIMS_SIM_CAL_SEED_LINK` and the bench sim take
   the specs the WAN model can shape, refusing cable's default DOCSIS-PIE
   (give `aqm=fifo`), `router=`, `delay=` and `limit=`.

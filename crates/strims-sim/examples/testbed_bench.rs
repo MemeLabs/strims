@@ -11,12 +11,7 @@
 //!               [--web <dir>] [--browser-bin <path>]
 //! testbed_bench --sim <testbed run dir> --out <dir> [--window]
 //!               [--segment <bytes>] [--str0m] [--bucket]
-//! testbed_bench --link <spec> --up-mbit <m> --burst <bytes> --limit <bytes>
-//!               [--peak-mbit <m>] [--base-mbit <m>]
 //! ```
-//!
-//! `--link` parses a `run.sh` link spec and prints what `links.sh` builds
-//! it from (`strims_sim::link::cli`), as `testbed_node --link` does.
 //!
 //! On the testbed a node listens on its topology address, dials the nodes
 //! it links to with a lower index, runs the schedule from `--start` (all
@@ -438,19 +433,6 @@ async fn browser(
 }
 
 fn main() {
-    let argv: Vec<String> = std::env::args().skip(1).collect();
-    if argv.first().is_some_and(|a| a == "--link") {
-        // run.sh parses every node's link spec with this (strims-sim's
-        // link module) before any container starts.
-        match strims_sim::link::cli(&argv) {
-            Ok(sh) => print!("{sh}"),
-            Err(e) => {
-                eprintln!("testbed_bench: {e}");
-                std::process::exit(2);
-            }
-        }
-        return;
-    }
     // The sim runs its own runtimes.
     let res = args().and_then(|a| match &a.sim {
         Some(dir) => sim(dir, &a),

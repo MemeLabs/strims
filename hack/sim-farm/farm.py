@@ -403,6 +403,11 @@ matrix, the same for every arm, whose path may name the job's variables
 as ${VAR}: "topologies/mesh6-v${VIEWERS}") to the host's copy. A job's id
 hashes its source, build, files, environment and repeat.
 
+An arm whose tree has strims-wan's testbed_link example (run.sh's parser
+of its link specs) also builds it and packs it as the artifact LINK_BIN,
+unless [artifacts] gives LINK_BIN, so the bundle's run.sh parses its
+specs with its own tree's parser.
+
 A trace link class (run.sh's SEED_LINK, VIEWER_LINK or LINKS) runs on a
 local testbed alone: its tracelink and trace files don't reach a host, and
 a testbed matrix that gives one fails.
@@ -712,6 +717,11 @@ SEED_KEYS = {"STRIMS_SIM_SEED"}
 SOURCES = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates", "third_party"]
 # What a testbed arm's source always covers: run.sh and its images.
 TESTBED = "hack/testbed"
+# run.sh's parser of its link specs, which a testbed arm's bundle carries
+# as LINK_BIN when its tree has it.
+LINK_EXAMPLE = "crates/strims-wan/examples/testbed_link.rs"
+LINK_BUILD = "cargo build --release --locked -p strims-wan --example testbed_link"
+LINK_ARTIFACT = "$CARGO_TARGET_DIR/release/examples/testbed_link"
 TESTBED_COLUMNS = ["wall_s:mean,max", "steal_pct:mean,max", "load_max:max", "node_lines_min:min"]
 # The keys only test matrices take.
 TEST_KEYS = {"package", "target", "test", "slot_mem_gib", "canary", "derive"}
@@ -1577,12 +1587,19 @@ def build_testbed(matrix: Matrix) -> None:
                 **os.environ, "CARGO_TARGET_DIR": str(CARGO), "CARGO_INCREMENTAL": "0",
                 "STRIMS_ROOT": str(ROOT),
             }
-            for cmd in matrix.commands:
+            commands = list(matrix.commands)
+            artifacts = dict(matrix.artifacts)
+            # run.sh parses its link specs with its own tree's parser, which
+            # a host can't build.
+            if (src / LINK_EXAMPLE).is_file() and "LINK_BIN" not in artifacts:
+                commands.append(LINK_BUILD)
+                artifacts["LINK_BIN"] = LINK_ARTIFACT
+            for cmd in commands:
                 if subprocess.run(["bash", "-c", cmd], cwd=src, env=env).returncode:
                     sys.exit(f"building {arm} ({commit[:12]}): `{cmd}` failed")
             if not (src / TESTBED).is_dir():
                 sys.exit(f"{arm} ({commit[:12]}) has no {TESTBED}")
-            paths = {var: src / expand(spec, env) for var, spec in sorted(matrix.artifacts.items())}
+            paths = {var: src / expand(spec, env) for var, spec in sorted(artifacts.items())}
             for var, path in paths.items():
                 if not path.exists():
                     sys.exit(f"building {arm} ({commit[:12]}): no artifact {var} at {path}")

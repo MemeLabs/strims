@@ -14,12 +14,7 @@
 //!              [--record <file>] [--join-at <s>] [--hosts <dir>]
 //!              [--capture <dir>]
 //! testbed_node --relay-only --topology <file> [--secs <s>] [--start <unix ms>]
-//! testbed_node --link <spec> --up-mbit <m> --burst <bytes> --limit <bytes>
-//!              [--peak-mbit <m>] [--base-mbit <m>]
 //! ```
-//!
-//! `--link` parses a `run.sh` link spec and prints what `links.sh` builds
-//! it from (`strims_sim::link::cli`), or fails with what is wrong.
 //!
 //! The topology file ([`strims_testbed::topology`]) names the nodes, their
 //! links and the relay; node 0 seeds. A node listens on its own address
@@ -186,19 +181,6 @@ impl Runtime for Native {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.first().is_some_and(|a| a == "--link") {
-        // run.sh parses every node's link spec with this (strims-sim's
-        // link module) before any container starts.
-        match strims_sim::link::cli(&args) {
-            Ok(sh) => print!("{sh}"),
-            Err(e) => {
-                eprintln!("testbed_node: {e}");
-                std::process::exit(2);
-            }
-        }
-        return;
-    }
     if let Err(e) = run().await {
         eprintln!("testbed_node: {e}");
         std::process::exit(1);
