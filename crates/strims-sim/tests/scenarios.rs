@@ -3715,50 +3715,153 @@ fn the_twin_takes_the_testbeds_peak() {
     }
 }
 
-/// The meter's truth is what the seed's link carries, in the IP bytes it
-/// was handed (`Report::ip_share`, its IP bytes over its link's charge): an
-/// ATM link's rate less its cells, a trace's capacity over the second
-/// before less its Ethernet headers.
-#[test]
-fn the_meters_truth_is_what_the_link_carries_in_ip_bytes() {
-    let run = |link: String| {
-        let mut c = collapse_case(1, 10, 8);
-        c.links = vec![Some(link), None];
-        c.seed_burst = Some(3028);
-        let mut reports = sweep_n(
-            "the_meters_truth_is_what_the_link_carries_in_ip_bytes",
-            1,
-            |s| calibration_star_scenario(s, &c),
-            |_| Ok(()),
-        );
-        reports.remove(0)
-    };
-    let at = |r: &Report, ms: u64| r.upload_cap_at(0, Duration::from_millis(ms)).unwrap();
-    // ADSL: 10 Mbit/s of cells, the seed's packets' IP bytes their share.
-    let r = run("dsl".to_owned());
-    let share = r.ip_share(0);
-    assert!((0.5..0.9).contains(&share), "{share}");
-    assert_eq!(at(&r, 6_000), (1_250_000.0 * share) as u64);
-    // A trace of two 1514-byte opportunities a ms for a second, then none
-    // for a second, from the stream's start at 5 s; the opportunity at
-    // its period's end comes at each period's 0.
-    let dir = std::env::temp_dir().join(format!("strims-truth-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let trace = dir.join("t.up");
-    let mut text = String::new();
-    for ms in 1..=1000 {
-        text += &format!("{ms}\n{ms}\n");
+/// A trace file of Mahimahi lines, removed when dropped.
+struct TraceFile(std::path::PathBuf);
+
+impl TraceFile {
+    fn new(name: &str, lines: impl IntoIterator<Item = u64>) -> TraceFile {
+        let dir = std::env::temp_dir().join(format!("strims-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("t.up");
+        let text: String = lines.into_iter().map(|ms| format!("{ms}\n")).collect();
+        std::fs::write(&path, text).unwrap();
+        TraceFile(path)
     }
-    text += "2000\n";
-    std::fs::write(&trace, text).unwrap();
-    let r = run(format!("trace,file={}", trace.display()));
-    std::fs::remove_dir_all(&dir).unwrap();
-    let share = r.ip_share(0);
-    assert!((0.9..1.0).contains(&share), "{share}");
-    // 5-6 s: the opportunity at 0 and 999 ms of two; 6-7 s: the two at
-    // 1000 ms alone.
-    assert_eq!(at(&r, 6_000), (1514.0 * 1999.0 * share) as u64);
-    assert_eq!(at(&r, 7_000), (1514.0 * 2.0 * share) as u64);
+
+    fn spec(&self) -> String {
+        format!("trace,file={}", self.0.display())
+    }
+}
+
+impl Drop for TraceFile {
+    fn drop(&mut self) {
+        if let Some(dir) = self.0.parent() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+}
+
+/// Runs case `c` once, the seed told its uplink live
+/// (`HostSpec::upload_capacity_live`, `STRIMS_SIM_KNOWN_UPLINK=seed`) when
+/// `told`.
+fn truth_run(name: &str, c: &Calibration, told: bool) -> Report {
+    let mut reports = sweep_n(
+        name,
+        1,
+        |seed| {
+            let mut s = calibration_star_scenario(seed, c);
+            s.hosts[0].upload_capacity_live = told;
+            s
+        },
+        |_| Ok(()),
+    );
+    reports.remove(0)
+}
+
+/// The seed's data share at `t`, over its last two meter samples by then
+/// (`own_data_share`).
+fn seed_share(r: &Report, t: Duration) -> f64 {
+    let m = &r.hosts[0].runner.meter;
+    let k = m.partition_point(|x| x.t <= t);
+    strims_sim::report::own_data_share(
+        k.checked_sub(1).and_then(|i| m.get(i)),
+        k.checked_sub(2).and_then(|i| m.get(i)),
+    )
+}
+
+/// The meter's truth is what the seed's link carries over the second
+/// before, in the data bytes its runner writes (`own_data_share`, its
+/// runner's channel payload bytes over its link's charge of its messages):
+/// an ATM link's rate less its cells and the transports' framing, a
+/// trace's opportunities over the second before.
+#[test]
+fn the_meters_truth_is_what_the_link_carries_in_data_bytes() {
+    let mut c = collapse_case(1, 10, 8);
+    c.seed_burst = Some(3028);
+    let at = |r: &Report, ms: u64| r.upload_cap_at(0, Duration::from_millis(ms)).unwrap();
+    // ADSL: 10 Mbit/s of cells, the seed's data its share of them.
+    c.links = vec![Some("dsl".to_owned()), None];
+    let r = truth_run(
+        "the_meters_truth_is_what_the_link_carries_in_data_bytes",
+        &c,
+        false,
+    );
+    // Its samples come a ms past each second, the stream from 5 s.
+    let share = seed_share(&r, Duration::from_secs(8));
+    assert!((0.5..0.9).contains(&share), "{share}");
+    assert_eq!(at(&r, 8_000), (1_250_000.0 * share) as u64);
+    // Two 1514-byte opportunities a ms for a second, then none for two,
+    // from the stream's start at 5 s: (5, 6 s] carries 2000 of them,
+    // (6, 7 s] none, and (7, 8 s] the one at the period's end, 8 s.
+    let trace = TraceFile::new("truth", (1..=1000).flat_map(|ms| [ms, ms]).chain([3000]));
+    c.links = vec![Some(trace.spec()), None];
+    let r = truth_run(
+        "the_meters_truth_is_what_the_link_carries_in_data_bytes",
+        &c,
+        false,
+    );
+    let share = seed_share(&r, Duration::from_secs(6));
+    assert_eq!(at(&r, 6_000), (1514.0 * 2000.0 * share) as u64);
+    let share = seed_share(&r, Duration::from_secs(8));
+    assert_eq!(at(&r, 8_000), (1514.0 * share) as u64);
+}
+
+/// The live oracle tells the seed the truth: at each of its meter samples
+/// what it was told is `Report::upload_cap_at` there, on an ATM link that
+/// steps down while a competing upload runs, and on a trace whose rate
+/// changes every second (12, 6, 3 and 9 Mbit/s).
+#[test]
+fn the_live_oracle_tells_the_truth() {
+    let check = |r: &Report| {
+        let mut told = 0;
+        let mut truths = Vec::new();
+        for m in &r.hosts[0].runner.meter {
+            if let Some(x) = m.told {
+                assert_eq!(Some(x), r.upload_cap_at(0, m.t), "at {:?}", m.t);
+                told += 1;
+                truths.push(x);
+            }
+        }
+        assert!(told >= 8, "{told} samples told");
+        truths
+    };
+    let mut c = collapse_case(2, 10, 10);
+    c.seed_burst = Some(3028);
+    c.links = vec![Some("dsl".to_owned()), None, None];
+    c.seed_up_steps = vec![(4.0, 5.0)];
+    c.compete = vec![(2.0, 4.0)];
+    let r = truth_run("the_live_oracle_tells_the_truth", &c, true);
+    let truths = check(&r);
+    // The step and the upload move it: from about 1 MB/s to under half.
+    let (lo, hi) = (
+        truths.iter().copied().min().unwrap(),
+        truths.iter().copied().max().unwrap(),
+    );
+    assert!(hi > 900_000 && lo < hi / 2, "{lo} {hi}");
+    let pattern: [fn(u64) -> bool; 4] = [
+        |_| true,
+        |ms| ms % 2 == 0,
+        |ms| ms % 4 == 0,
+        |ms| ms % 4 != 0,
+    ];
+    let trace = TraceFile::new(
+        "oracle",
+        (0..4u64).flat_map(|s| {
+            (1..=1000u64)
+                .filter(move |&ms| pattern[s as usize](ms))
+                .map(move |ms| s * 1000 + ms)
+        }),
+    );
+    let mut c = collapse_case(2, 10, 12);
+    c.seed_burst = Some(3028);
+    c.links = vec![Some(trace.spec()), None, None];
+    let r = truth_run("the_live_oracle_tells_the_truth", &c, true);
+    let truths = check(&r);
+    let (lo, hi) = (
+        truths.iter().copied().min().unwrap(),
+        truths.iter().copied().max().unwrap(),
+    );
+    assert!(hi > 3 * lo, "{lo} {hi}");
 }
 
 /// A trace link takes no rate steps, in the sims as on the testbed.

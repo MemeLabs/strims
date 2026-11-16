@@ -228,14 +228,31 @@ impl Capacity {
         Time::from_unix_nanos(i64::try_from(ns).unwrap_or(i64::MAX))
     }
 
-    /// The mean rate from `from` to `to`, bytes per second (0 when `to`
-    /// isn't later).
+    /// The bytes of every opportunity at or before `t`, counted from the
+    /// origin as [`Capacity::before`] counts: what the schedule has carried
+    /// by `t`, its opportunity at `t` included.
+    pub fn through(&self, t: Time) -> i128 {
+        self.before(t + Duration::NANOSECOND)
+    }
+
+    /// The bytes of the opportunities after `from`, up to and including
+    /// `to`: what the schedule carried over `(from, to]`, 0 when `to` isn't
+    /// later.
+    pub fn bytes_between(&self, from: Time, to: Time) -> u64 {
+        if to <= from {
+            return 0;
+        }
+        u64::try_from(self.through(to) - self.through(from)).unwrap_or(0)
+    }
+
+    /// The mean rate over `(from, to]`, bytes per second
+    /// ([`Capacity::bytes_between`]; 0 when `to` isn't later).
     pub fn rate_between(&self, from: Time, to: Time) -> u64 {
         let span = (to - from).as_nanos();
         if span <= 0 {
             return 0;
         }
-        let bytes = self.before(to) - self.before(from);
+        let bytes = i128::from(self.bytes_between(from, to));
         u64::try_from(bytes * 1_000_000_000 / i128::from(span)).unwrap_or(0)
     }
 }
@@ -351,12 +368,18 @@ mod tests {
     }
 
     #[test]
-    fn the_rate_between_two_times_is_what_passed() {
+    fn the_rate_between_two_times_is_what_passed_after_the_first_up_to_the_second() {
         let c = Capacity::mahimahi("1\n1\n1\n500\n1000\n", 1500, 1.0)
             .unwrap()
             .starting(origin());
         assert_eq!(c.rate_between(t(0), t(1000)), 5 * 1500);
-        assert_eq!(c.rate_between(t(0), t(2)), 4 * 1500 * 500);
+        // (0, 2 ms]: the three at 1 ms, not the period's at 0.
+        assert_eq!(c.rate_between(t(0), t(2)), 3 * 1500 * 500);
+        assert_eq!(c.bytes_between(t(0), t(1)), 3 * 1500);
+        assert_eq!(c.bytes_between(t(999), t(1000)), 1500);
+        assert_eq!(c.bytes_between(t(-1), t(0)), 1500);
+        // From the origin: the period's at 0, then the three at 1 ms.
+        assert_eq!(c.through(t(1)), 4 * 1500);
         assert_eq!(c.rate_between(t(5), t(5)), 0);
     }
 }

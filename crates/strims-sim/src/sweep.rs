@@ -44,14 +44,17 @@
 //!   `<min>-<max>` ms; `profiles`, each host its access kind's
 //!   ([`Access::slots`](strims_wan::Access::slots): cable's grants); `off`,
 //!   none, the scenario's own included. Unset or blank, each scenario's.
-//! - `STRIMS_SIM_KNOWN_UPLINK=1` tells every WAN host its site's uplink
-//!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)) as it
-//!   is at each time, its steps included
-//!   ([`HostSpec::upload_capacity_steps`](crate::HostSpec::upload_capacity_steps)):
-//!   the oracle the upload meter is measured against. `=seed` tells only the
-//!   hosts that seed a swarm, `=viewers` only the others. With `-static`
-//!   (`=1-static`, `=seed-static`, `=viewers-static`) each is told only the
-//!   uplink it starts with.
+//! - `STRIMS_SIM_KNOWN_UPLINK=1` tells every WAN host the meter's truth
+//!   as it boots and at each of its stats samples
+//!   ([`HostSpec::upload_capacity_live`](crate::HostSpec::upload_capacity_live):
+//!   [`Report::upload_cap_at`](crate::Report::upload_cap_at) for the second
+//!   before, from the inputs the report takes it from), the oracle the
+//!   upload meter is measured against. `=seed` tells only the hosts that
+//!   seed a swarm, `=viewers` only the others. With `-static` (`=1-static`,
+//!   `=seed-static`, `=viewers-static`) each is told once, before it sends,
+//!   what its uplink carries (its rate, or its capacity schedule's mean) in
+//!   IP bytes at full-size packets
+//!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)).
 //! - `STRIMS_SIM_MINUTES=<m>` sets the stream length of the scenarios that
 //!   take one ([`stream_minutes`]).
 //! - `STRIMS_SIM_CHUNK=<bytes>` and `STRIMS_SIM_MUNRO=<bytes>` give every
@@ -770,7 +773,6 @@ fn sweep_seeds(
         }
         if let Some(which) = known_uplink.as_deref() {
             let seeds: Vec<HostIx> = spec.swarms.iter().map(|s| s.seed).collect();
-            let spec_secs = spec.duration.as_secs();
             let (which, live) = match which.strip_suffix("-static") {
                 Some(w) => (w, false),
                 None => (which, true),
@@ -784,41 +786,21 @@ fn sweep_seeds(
                     _ => false,
                 };
                 if told && let Some(site) = h.site {
-                    // What the link carries in IP bytes, at full-size
-                    // packets: the node is told before it sends any.
-                    let f = site.profile.framing;
-                    let ip = |r: u64| {
-                        if f == strims_wan::framing::Framing::NONE {
-                            r
+                    if live {
+                        h.upload_capacity_live = true;
+                    } else {
+                        // Told before it sends: what the link carries in
+                        // IP bytes, at full-size packets.
+                        let f = site.profile.framing;
+                        let link = h
+                            .up_capacity
+                            .as_ref()
+                            .map_or(site.profile.up, |c| c.mean_rate());
+                        h.upload_capacity = Some(if f == strims_wan::framing::Framing::NONE {
+                            link
                         } else {
-                            r * 1500 / f.packet(1500) as u64
-                        }
-                    };
-                    match &h.up_capacity {
-                        Some(c) => {
-                            h.upload_capacity = Some(ip(c.mean_rate()));
-                            if live {
-                                let secs = spec_secs;
-                                h.upload_capacity_steps = (1..=secs)
-                                    .map(|k| {
-                                        let to =
-                                            crate::wan::sim_time(std::time::Duration::from_secs(k));
-                                        let level = c.rate_between(
-                                            to - strims_base::time::Duration::SECOND,
-                                            to,
-                                        );
-                                        (std::time::Duration::from_secs(k), ip(level))
-                                    })
-                                    .collect();
-                            }
-                        }
-                        None => {
-                            h.upload_capacity = Some(ip(site.profile.up));
-                            if live {
-                                h.upload_capacity_steps =
-                                    h.up_steps.iter().map(|&(at, r)| (at, ip(r))).collect();
-                            }
-                        }
+                            link * 1500 / f.packet(1500) as u64
+                        });
                     }
                 }
             }

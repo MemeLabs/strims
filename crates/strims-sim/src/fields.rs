@@ -1977,9 +1977,10 @@ pub(crate) enum RowNum {
     /// never accepted one, a viewer's every sample counting; at each sample
     /// from the end of the startup phase to the stream's last write
     /// (`meter_seed_p*`'s window), the meter's capacity (the relay busy-time
-    /// reading, `PushStats::upload_capacity`) over what the viewer could
-    /// upload: their p10, p50 and p90 (`meter_accepting_p10`, ...,
-    /// `meter_others_p90`); left out without a sample.
+    /// reading, `PushStats::upload_capacity`) over what the viewer could upload
+    /// (the meter's truth, `Report::upload_cap_at`: see `meter_bucket_seeds`):
+    /// their p10, p50 and p90 (`meter_accepting_p10`, ..., `meter_others_p90`);
+    /// left out without a sample.
     ///
     /// strims-sim: Each viewer's samples with a capacity
     /// (`Report::populations`, `Report::window_readings`), over its
@@ -1987,7 +1988,8 @@ pub(crate) enum RowNum {
     MeterPopPP(u16),
     /// The first swarm's seed's upload meter: its capacity (the relay busy-time
     /// reading admission and shedding take, `PushStats::upload_capacity`) over
-    /// what the seed could upload, at each of its samples from the end of the
+    /// what the seed could upload (the meter's truth, `Report::upload_cap_at`:
+    /// see `meter_bucket_seeds`), at each of its samples from the end of the
     /// startup phase (`STARTUP_SECS`, vocab.toml's `start` horizon, after the
     /// stream's first write) to the stream's last write: their p10, p50 and p90
     /// (`meter_seed_p10`, `meter_seed_p50`, `meter_seed_p90`); left out without
@@ -1997,10 +1999,10 @@ pub(crate) enum RowNum {
     MeterSeedPP(u16),
     /// The first swarm's seed's budget reading: the capacity its latest
     /// allocation check measured its budget from
-    /// (`PushStats::seed_budget_capacity`) over what the seed could upload, at
-    /// each of `meter_seed_p*`'s samples once it was measured: their p10, p50
-    /// and p90; left out without one (a seed that isn't adaptive, or never
-    /// measured there).
+    /// (`PushStats::seed_budget_capacity`) over what the seed could upload (the
+    /// meter's truth), at each of `meter_seed_p*`'s samples once it was
+    /// measured: their p10, p50 and p90; left out without one (a seed that
+    /// isn't adaptive, or never measured there).
     MeterBudgetSeedPP(u16),
     /// Messages per channel payload, over the honest hosts' outbound ppspp
     /// (ChannelMetrics messages over payloads).
@@ -2727,14 +2729,23 @@ pub(crate) enum RowNums {
     MeterBucketPop(u16),
     /// **meter readings**: the upload meter's capacity, the relay busy-time
     /// reading admission and shedding take (`PushStats::upload_capacity`,
-    /// `MeterSample::capacity`), ÷ the host's uplink (what it carried at the
-    /// sample, `Report::upload_cap_at`, in IP bytes at the host's own packet
-    /// sizes, as the meter counts them): the seed's quantiles `meter_seed_p*`,
-    /// the populations' `meter_accepting_p*`, `meter_delivering_p*` and
-    /// `meter_others_p*`, its median per bucket over the seeds' samples
-    /// (`meter_bucket_seeds`) and the populations' (`meter_bucket_accepting`,
-    /// `meter_bucket_delivering`, `meter_bucket_others`), and how it tracked
-    /// changes (`off_{change}_{role}`).
+    /// `MeterSample::capacity`), ÷ the meter's truth (`Report::upload_cap_at`):
+    /// what the host could upload over the second before the sample, in the
+    /// meter's units, the data bytes its runner writes (`UploadInfo::rate`'s,
+    /// its channel payloads): what its uplink carries over that second (its
+    /// rate's mean, its steps' from their times; with a capacity schedule, its
+    /// opportunities in it) less what its link charged its competing uploads in
+    /// it, times its data share, the channel payload bytes its runner wrote
+    /// between its last two meter samples over what its link charged its own
+    /// messages then (pure acknowledgements and competing uploads apart; at
+    /// most 1, the share so far when it wrote nothing between them, and 1
+    /// before it sent any), within its rate limit: the seed's quantiles
+    /// `meter_seed_p*`, the populations' `meter_accepting_p*`,
+    /// `meter_delivering_p*` and `meter_others_p*`, its median per bucket over
+    /// the seeds' samples (`meter_bucket_seeds`) and the populations'
+    /// (`meter_bucket_accepting`, `meter_bucket_delivering`,
+    /// `meter_bucket_others`), and how it tracked changes
+    /// (`off_{change}_{role}`).
     MeterBucketSeeds,
     /// How the upload meter tracked each change of the host's available upload
     /// (a step of its uplink's rate, a competing upload's start or stop) while
@@ -3015,7 +3026,9 @@ pub(crate) mod cols {
         ///
         /// None is written as -1.
         Busy,
-        /// the uplink the seed had at the second's middle
+        /// the meter's truth for the seed at the second's middle
+        /// (`Report::upload_cap_at`: what it could upload over the second
+        /// before, in its meter's units)
         ///
         /// None is written as -1.
         Avail,
@@ -3964,14 +3977,19 @@ pub(crate) mod cols {
         ///
         /// Unit: bytes/s. None is written as an empty field.
         CapacityBps,
-        /// What the host could upload at the sample (`Report::upload_cap_at`),
-        /// in IP bytes at the host's own packet sizes (`Report::ip_share`: its
-        /// messages' IP bytes over what its link charged them, so a framed
-        /// link's truth is its rate less its framing): what its uplink carries
-        /// then (its rate and steps; with a capacity schedule, what the
-        /// schedule carried over the second before) less what its link charged
-        /// its competing uploads in the second before, within its rate limit;
-        /// empty with neither a site nor a limit.
+        /// What the host could upload at the sample, the meter's truth
+        /// (`Report::upload_cap_at`): what the host could upload over the
+        /// second before the sample, in the meter's units, the data bytes its
+        /// runner writes (`UploadInfo::rate`'s, its channel payloads): what its
+        /// uplink carries over that second (its rate's mean, its steps' from
+        /// their times; with a capacity schedule, its opportunities in it) less
+        /// what its link charged its competing uploads in it, times its data
+        /// share, the channel payload bytes its runner wrote between its last
+        /// two meter samples over what its link charged its own messages then
+        /// (pure acknowledgements and competing uploads apart; at most 1, the
+        /// share so far when it wrote nothing between them, and 1 before it
+        /// sent any), within its rate limit; empty with neither a site nor a
+        /// limit.
         ///
         /// Unit: bytes/s. None is written as an empty field.
         AvailBps,

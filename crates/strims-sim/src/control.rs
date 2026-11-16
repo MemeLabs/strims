@@ -90,6 +90,13 @@ async fn sample(w: &World, full: bool, last: bool) {
             continue;
         };
         w.observe_stats(h, &m);
+        if let Some(told) = w.oracle(h)
+            && let Some(node) = w.node(h)
+        {
+            spawn_local(async move {
+                let _ = node.set_upload_capacity(Some(told)).await;
+            });
+        }
         if full {
             w.log("ctl", metrics_line(w.name(h), &m, last));
             w.log("ctl", runner_line(w.name(h), &m, &w.swarm_keys(h)));

@@ -64,11 +64,12 @@ pub struct HostSpec {
     /// The upload capacity the node knows (`NodeConfig::upload_capacity`);
     /// `None` leaves ppspp to `uplink`, if set, and its measurement.
     pub upload_capacity: Option<u64>,
-    /// What the node learns of its upload capacity during the run: each
-    /// step's rate from its time on (`Node::set_upload_capacity`), as the
-    /// oracle follows the uplink's own [`up_steps`](Self::up_steps). Before
-    /// the first, `upload_capacity`.
-    pub upload_capacity_steps: Vec<(Duration, u64)>,
+    /// The live oracle: the node is told the meter's truth
+    /// ([`Report::upload_cap_at`](crate::Report::upload_cap_at)) as it
+    /// boots and at each of its stats samples (`Node::set_upload_capacity`),
+    /// from the same inputs the run's report takes it from, in place of
+    /// `upload_capacity`.
+    pub upload_capacity_live: bool,
     pub max_peers: u32,
     /// vpn routing for this host; `None` uses [`Scenario::routing`].
     pub routing: Option<Routing>,
@@ -120,20 +121,6 @@ pub struct HostSpec {
     /// window into its lag. `None`: with the run, reading as the swarm's
     /// options say.
     pub arrive_at: Option<Duration>,
-}
-
-impl HostSpec {
-    /// The upload capacity the node knows at `t` in the run: the latest of
-    /// [`upload_capacity_steps`](Self::upload_capacity_steps) by then, else
-    /// `upload_capacity`.
-    pub fn upload_capacity_at(&self, t: Duration) -> Option<u64> {
-        self.upload_capacity_steps
-            .iter()
-            .filter(|&&(at, _)| at <= t)
-            .max_by_key(|&&(at, _)| at)
-            .map(|&(_, rate)| rate)
-            .or(self.upload_capacity)
-    }
 }
 
 /// How long an arriving media viewer's join waits for its rewind to its
@@ -856,7 +843,7 @@ impl Scenario {
             class: HostClass::Honest,
             uplink,
             upload_capacity: None,
-            upload_capacity_steps: Vec::new(),
+            upload_capacity_live: false,
             max_peers: 64,
             routing: None,
             listen: true,

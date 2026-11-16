@@ -523,6 +523,9 @@ pub struct WanHostReport {
     /// wire bytes they have sent, every 100 ms: (time since the start,
     /// bytes).
     pub competing: Vec<(strims_base::time::Duration, u64)>,
+    /// The same after each walk of the run that moved it, stamped with the
+    /// walk's time: the truth's competing uploads ([`competing_before`]).
+    pub competing_log: Vec<(strims_base::time::Duration, u64)>,
     /// With the window model, the segments its connections lost to a full
     /// access queue, up or down, and the pure acknowledgements (SACKs alone
     /// on a data channel) its uplink carried, with the bytes its link
@@ -1025,49 +1028,13 @@ impl Report {
         }
     }
 
-    /// The share of what host `h`'s link charges that is the IP bytes it
-    /// was handed, at the host's own packet sizes: its messages' IP bytes
-    /// over what its link charged them (`EndStats::up_ip_bytes` over
-    /// `up_bytes`); 1 at a site that charges IP bytes alone, or before it
-    /// sent anything.
-    pub fn ip_share(&self, h: HostIx) -> f64 {
-        let Some(spec) = self.scenario.hosts.get(h) else {
-            return 1.0;
-        };
-        if spec
-            .site
-            .is_none_or(|s| s.profile.framing == strims_wan::framing::Framing::NONE)
-        {
-            return 1.0;
-        }
-        let Some(w) = self
-            .wan
-            .as_ref()
-            .and_then(|w| w.hosts.iter().find(|w| w.name == spec.name))
-        else {
-            return 1.0;
-        };
-        if w.stats.up_bytes == 0 {
-            return 1.0;
-        }
-        w.stats.up_ip_bytes as f64 / w.stats.up_bytes as f64
-    }
-
-    /// Link bytes a second (as host `h`'s link charges them) in IP bytes at
-    /// its own packet sizes ([`Report::ip_share`]).
-    fn as_ip(&self, h: HostIx, link: u64) -> u64 {
-        let share = self.ip_share(h);
-        if share == 1.0 {
-            link
-        } else {
-            (link as f64 * share) as u64
-        }
-    }
-
-    /// The most host `h` can upload, in IP bytes per second at its own
-    /// packet sizes: the smaller of its rate limit and what its site's
-    /// uplink carries (its rate, or its capacity schedule's mean). `None`
-    /// with neither.
+    /// The most host `h` can upload, the capacity it was given: the smaller
+    /// of its rate limit and what its site's uplink carries (its rate, or
+    /// its capacity schedule's mean), in IP bytes at full-size packets (a
+    /// 1500-byte packet's share of what its framing charges it), whatever
+    /// the host sent. `None` with neither. The meter's truth, what it could
+    /// upload over a second in its meter's units, is
+    /// [`Report::upload_cap_at`].
     pub fn upload_cap(&self, h: HostIx) -> Option<u64> {
         let spec = self.scenario.hosts.get(h)?;
         let site = spec.site.map(|s| {
@@ -1075,7 +1042,12 @@ impl Report {
                 .up_capacity
                 .as_ref()
                 .map_or(s.profile.up, |c| c.mean_rate());
-            self.as_ip(h, link)
+            let f = s.profile.framing;
+            if f == strims_wan::framing::Framing::NONE {
+                link
+            } else {
+                link * 1500 / f.packet(1500) as u64
+            }
         });
         match (spec.uplink, site) {
             (Some(a), Some(b)) => Some(a.min(b)),
@@ -1084,71 +1056,23 @@ impl Report {
         .filter(|&c| c > 0)
     }
 
-    /// The most host `h` can upload at `t` (time since the start), in IP
-    /// bytes per second at its own packet sizes ([`Report::ip_share`]): the
-    /// smaller of its rate limit and what its site's uplink carries then,
-    /// its rate ([`HostSpec::up_steps`]; with a capacity schedule,
-    /// [`HostSpec::up_capacity`], what the schedule carried over the second
-    /// before), less what its link charged its competing uploads in the
-    /// second before ([`HostSpec::competing`]). A bucket's bursts leave it
-    /// its rate. `None` with neither.
-    ///
-    /// [`HostSpec::up_steps`]: crate::spec::HostSpec::up_steps
-    /// [`HostSpec::up_capacity`]: crate::spec::HostSpec::up_capacity
-    /// [`HostSpec::competing`]: crate::spec::HostSpec::competing
+    /// The meter's truth: what host `h` could upload over the second
+    /// before `t` (time since the start), in its meter's units
+    /// ([`upload_truth`]), from its meter samples and its competing uploads'
+    /// log; `None` with neither a site nor a rate limit, or while it can
+    /// upload nothing.
     pub fn upload_cap_at(&self, h: HostIx, t: std::time::Duration) -> Option<u64> {
         let spec = self.scenario.hosts.get(h)?;
-        let site = spec.site.map(|s| {
-            let link = match &spec.up_capacity {
-                Some(c) => {
-                    let to = crate::wan::sim_time(t);
-                    c.rate_between(to - strims_base::time::Duration::SECOND, to)
-                }
-                None => spec
-                    .up_steps
-                    .iter()
-                    .filter(|&&(at, _)| at <= t)
-                    .max_by_key(|&&(at, _)| at)
-                    .map_or(s.profile.up, |&(_, rate)| rate),
-            };
-            let framing = s.profile.framing;
-            let cross = self.competing_rate(h, t);
-            let cross = if framing == strims_wan::framing::Framing::NONE {
-                cross
-            } else {
-                let w = crate::wan::CROSS_WIRE;
-                cross * framing.message(w, 2) as u64 / w as u64
-            };
-            self.as_ip(h, link.saturating_sub(cross))
-        });
-        match (spec.uplink, site) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
-        }
-        .filter(|&c| c > 0)
-    }
-
-    /// The wire rate of host `h`'s competing uploads over the second
-    /// before `t`, in bytes per second.
-    pub fn competing_rate(&self, h: HostIx, t: std::time::Duration) -> u64 {
-        let Some(name) = self.scenario.hosts.get(h).map(|s| s.name.as_str()) else {
-            return 0;
-        };
-        let Some(w) = self
+        let samples = self.hosts.get(h).map_or(&[][..], |r| &r.runner.meter[..]);
+        let k = samples.partition_point(|m| m.t <= t);
+        let last = k.checked_sub(1).and_then(|i| samples.get(i));
+        let prev = k.checked_sub(2).and_then(|i| samples.get(i));
+        let log = self
             .wan
             .as_ref()
-            .and_then(|w| w.hosts.iter().find(|w| w.name == name))
-        else {
-            return 0;
-        };
-        let sent = |t: strims_base::time::Duration| {
-            let i = w.competing.partition_point(|&(at, _)| at <= t);
-            i.checked_sub(1)
-                .and_then(|i| w.competing.get(i))
-                .map_or(0, |&(_, b)| b)
-        };
-        let t = strims_base::time::Duration::from(t);
-        sent(t).saturating_sub(sent(t - strims_base::time::Duration::from_secs(1)))
+            .and_then(|w| w.hosts.iter().find(|w| w.name == spec.name))
+            .map_or(&[][..], |w| &w.competing_log[..]);
+        upload_truth(spec, last, prev, log, t).filter(|&c| c > 0)
     }
 
     /// The upload meter's readings at `h` while a swarm was live, as
@@ -1618,6 +1542,135 @@ fn gini(sorted: &[u64]) -> f64 {
         .map(|(i, &x)| (i as f64 + 1.0) * x as f64)
         .sum();
     (2.0 * weighted) / (n * total) - (n + 1.0) / n
+}
+
+/// The truth's window: the second before the time it is read at.
+pub const TRUTH_WINDOW: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The meter's truth for host `spec` at `t` (time since the start): what
+/// it could upload over `(t - 1 s, t]` ([`TRUTH_WINDOW`]), in its meter's
+/// units, the data bytes its runner writes (`UploadInfo::rate`'s), within
+/// its rate limit; `None` with neither a site nor a limit. Over the
+/// window:
+///
+/// - what its uplink carries, in its link's bytes: its rate's mean over
+///   the window, its steps' from their times ([`HostSpec::up_steps`]), or
+///   with a capacity schedule ([`HostSpec::up_capacity`]) the bytes of
+///   its opportunities in the window ([`Capacity::bytes_between`]); a
+///   bucket's bursts leave it its rate;
+/// - less what its link charged its competing uploads
+///   ([`HostSpec::competing`]): their bytes sent in the window, from the
+///   walk-stamped log (`competing`, [`competing_before`]), at what the
+///   link charges a segment;
+/// - times the host's data share ([`own_data_share`]) over its last two meter
+///   samples at or before `t`, `last` and `prev`: the data bytes its runner
+///   wrote between them over what its link charged its own messages then.
+///
+/// The live oracle (`STRIMS_SIM_KNOWN_UPLINK`) tells the node this at each
+/// of its stats samples, from the same inputs.
+///
+/// [`HostSpec::up_steps`]: crate::spec::HostSpec::up_steps
+/// [`HostSpec::up_capacity`]: crate::spec::HostSpec::up_capacity
+/// [`HostSpec::competing`]: crate::spec::HostSpec::competing
+/// [`Capacity::bytes_between`]: strims_wan::capacity::Capacity::bytes_between
+pub(crate) fn upload_truth(
+    spec: &crate::spec::HostSpec,
+    last: Option<&crate::stats::MeterSample>,
+    prev: Option<&crate::stats::MeterSample>,
+    competing: &[(strims_base::time::Duration, u64)],
+    t: std::time::Duration,
+) -> Option<u64> {
+    use strims_base::time::Duration as D;
+    let to = D::from(t);
+    let from = to - D::from(TRUTH_WINDOW);
+    let site = spec.site.map(|s| {
+        let carried = match &spec.up_capacity {
+            Some(c) => {
+                let end = crate::wan::sim_time(t);
+                c.bytes_between(end - D::from(TRUTH_WINDOW), end)
+            }
+            None => mean_rate(s.profile.up, &spec.up_steps, from, to),
+        };
+        let framing = s.profile.framing;
+        let w = crate::wan::CROSS_WIRE as u64;
+        let cross = competing_before(competing, to) - competing_before(competing, from);
+        let cross = cross * framing.message(crate::wan::CROSS_WIRE, 2) as u64 / w;
+        (carried.saturating_sub(cross) as f64 * own_data_share(last, prev)) as u64
+    });
+    match (spec.uplink, site) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
+/// What an uplink of `rate` bytes per second with `steps` carries over
+/// `(from, to]`, one second of it: the window's mean rate.
+fn mean_rate(
+    rate: u64,
+    steps: &[(std::time::Duration, u64)],
+    from: strims_base::time::Duration,
+    to: strims_base::time::Duration,
+) -> u64 {
+    use strims_base::time::Duration as D;
+    let span = (to - from).as_nanos();
+    if span <= 0 {
+        return 0;
+    }
+    let mut steps: Vec<(D, u64)> = steps.iter().map(|&(at, r)| (D::from(at), r)).collect();
+    steps.sort_by_key(|&(at, _)| at);
+    let rate_at = |x: D| {
+        steps
+            .iter()
+            .take_while(|&&(at, _)| at <= x)
+            .last()
+            .map_or(rate, |&(_, r)| r)
+    };
+    let mut bytes: i128 = 0;
+    let mut a = from;
+    for &(at, _) in steps.iter().filter(|&&(at, _)| at > from && at < to) {
+        bytes += i128::from(rate_at(a)) * i128::from((at - a).as_nanos());
+        a = at;
+    }
+    bytes += i128::from(rate_at(a)) * i128::from((to - a).as_nanos());
+    u64::try_from(bytes / i128::from(span)).unwrap_or(0)
+}
+
+/// What a competing uploads' log (walk-stamped cumulative IP bytes, as
+/// [`WanHostReport::competing_log`] holds it) says they had sent before
+/// `t`: its last entry stamped before `t`, which the run had walked when a
+/// host's task read it at `t`.
+pub(crate) fn competing_before(
+    log: &[(strims_base::time::Duration, u64)],
+    t: strims_base::time::Duration,
+) -> u64 {
+    let i = log.partition_point(|&(at, _)| at < t);
+    i.checked_sub(1)
+        .and_then(|i| log.get(i))
+        .map_or(0, |&(_, b)| b)
+}
+
+/// The share of what a host's link charged its own messages that is the
+/// data its runner wrote (`MeterSample::data_bytes` over
+/// `MeterSample::link_bytes`), at most 1: between meter samples `prev`
+/// and `last`, or from the start to `last` without `prev` or when the
+/// runner wrote nothing between them; 1 when it has written nothing or its
+/// link charged it nothing.
+pub fn own_data_share(
+    last: Option<&crate::stats::MeterSample>,
+    prev: Option<&crate::stats::MeterSample>,
+) -> f64 {
+    let Some(k) = last else {
+        return 1.0;
+    };
+    let ratio = |d: u64, l: u64| (d > 0 && l > 0).then(|| (d as f64 / l as f64).min(1.0));
+    prev.and_then(|j| {
+        ratio(
+            k.data_bytes.saturating_sub(j.data_bytes),
+            k.link_bytes.saturating_sub(j.link_bytes),
+        )
+    })
+    .or_else(|| ratio(k.data_bytes, k.link_bytes))
+    .unwrap_or(1.0)
 }
 
 #[cfg(test)]

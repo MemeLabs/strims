@@ -170,7 +170,7 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
     let ms = u64::try_from(end.as_millis()).unwrap_or(u64::MAX);
     // Dropping the simulation drops every runtime, and with them the nodes.
     drop(sim);
-    w.observe_stopped(end, true);
+    w.observe_stopped(end, true, w.wan.lock().as_ref());
     let wan = w.wan.lock().take().map(|s| s.report(spec));
     for h in wan.iter().flat_map(|r| &r.hosts) {
         w.log_at(
@@ -227,14 +227,15 @@ fn cut_off(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, h: HostIx)
     for x in others(w, h) {
         sim.partition(w.name(h), w.name(x));
     }
-    if let Some(s) = wan {
+    let wan = wan.map(|s| {
         for x in others(w, h) {
             s.partition(h, x);
         }
         s.crashed(h, sim_time(sim.elapsed()));
-    }
+        &*s
+    });
     sim.crash(w.name(h));
-    w.observe_stopped(sim.elapsed(), false);
+    w.observe_stopped(sim.elapsed(), false, wan);
 }
 
 /// Applies a fault. In WAN mode the scheduler holds every link between

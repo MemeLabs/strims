@@ -375,6 +375,13 @@ impl PathOverhead {
 /// peer it asks for lazy HAVEs and whose peer asked them of it
 /// (`have_lazy_out`, `have_lazy_in`). And the bytes the node handed to
 /// vnic since the incarnation started (`DriverMetrics::bytes_written`).
+/// And what the meter's truth takes its data share from
+/// ([`crate::report::own_data_share`]): the channel payload bytes its runner
+/// has written since the run started, every incarnation (the bytes
+/// `UploadInfo::rate` counts, `ChannelMetrics::wire_bytes` of its
+/// outbound totals), and what its uplink has charged its own messages
+/// (`EndStats::up_bytes`; with no WAN, 0). With the live oracle, what it
+/// told the node then (`told`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MeterSample {
     /// Simulated time since the start of the run.
@@ -394,6 +401,9 @@ pub struct MeterSample {
     pub lazy_out: u32,
     pub lazy_in: u32,
     pub bytes_written: u64,
+    pub data_bytes: u64,
+    pub link_bytes: u64,
+    pub told: Option<u64>,
 }
 
 /// An adaptive seed's `PushStats` seed fields.
@@ -506,6 +516,10 @@ pub(crate) struct HostStats {
     /// The upload meter, one entry per sample (a run takes tens to
     /// hundreds).
     meter: Vec<MeterSample>,
+    /// The channel payload bytes the runners of finished incarnations
+    /// wrote, and the current one's so far ([`MeterSample::data_bytes`]).
+    data_done: u64,
+    data_now: u64,
     /// Adaptive seeds by scenario swarm.
     seeds: BTreeMap<usize, SeedSample>,
     /// Their changes (see [`RunnerReport::seed_changes`]).
@@ -637,6 +651,7 @@ impl HostStats {
     /// `live` says which scenario swarms stream at `t`. The gauges'
     /// invalid and rejected input leave out what peers `hostile` names
     /// sent ([`Invariants::clean_input`](crate::Invariants::clean_input)).
+    #[allow(clippy::too_many_arguments)]
     pub fn observe(
         &mut self,
         m: &NodeMetrics,
@@ -644,6 +659,7 @@ impl HostStats {
         live: &[bool],
         t: Duration,
         clock: Time,
+        link_bytes: u64,
         hostile: impl Fn(&HostId) -> bool,
     ) -> SampleGauges {
         let index = |k: SwarmKey| swarms.iter().position(|s| *s == Some(k));
@@ -737,6 +753,8 @@ impl HostStats {
             }
         }
         let mut meter: Option<MeterSample> = None;
+        self.data_now = m.runner.totals.outbound.wire_bytes();
+        let data_bytes = self.data_done + self.data_now;
         for sw in &m.runner.swarms {
             let (Some(s), Some(sched), Some(push)) = (index(sw.swarm), sw.scheduler, &sw.push)
             else {
@@ -746,6 +764,8 @@ impl HostStats {
                 // One meter per node: every hybrid swarm reads the same.
                 let ms = meter.get_or_insert_with(|| MeterSample {
                     t,
+                    data_bytes,
+                    link_bytes,
                     bytes_written: m.driver.bytes_written,
                     rate: push.upload_rate,
                     busy_permille: push.upload_busy_permille,
@@ -848,10 +868,31 @@ impl HostStats {
         g
     }
 
+    /// The last two meter samples, every incarnation's: what the meter's
+    /// truth takes its data share from ([`crate::report::upload_truth`]).
+    pub fn last_meter(&self) -> (Option<&MeterSample>, Option<&MeterSample>) {
+        let mut it = self
+            .meter
+            .iter()
+            .rev()
+            .chain(self.totals.meter.iter().rev());
+        let last = it.next();
+        (last, it.next())
+    }
+
+    /// Records that the live oracle told the node `told` at its latest
+    /// meter sample, taken at `t`.
+    pub fn told(&mut self, t: Duration, told: u64) {
+        if let Some(m) = self.meter.last_mut().filter(|m| m.t == t) {
+            m.told = Some(told);
+        }
+    }
+
     /// The current incarnation ended.
     pub fn retire(&mut self) {
         let r = self.current();
         self.totals.add(&r);
+        self.data_done += std::mem::take(&mut self.data_now);
         for (&k, t) in &self.messages {
             self.messages_done
                 .entry(k)

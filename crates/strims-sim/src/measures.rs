@@ -3299,16 +3299,20 @@ mod tests {
             66 => 600,
             _ => 1000,
         });
-        assert_eq!(r.upload_cap_at(0, Duration::from_secs(19)), Some(1000));
-        assert_eq!(r.upload_cap_at(0, Duration::from_secs(20)), Some(500));
+        // The truth is the second before's mean rate: the step at 20 s
+        // shows from then on.
+        let at = |ms: u64| r.upload_cap_at(0, Duration::from_millis(ms));
+        assert_eq!(at(20_000), Some(1000));
+        assert_eq!(at(20_500), Some(750));
+        assert_eq!(at(21_000), Some(500));
         let t = r.tracking(&r.seeds());
         assert_eq!(t.len(), 2);
-        // 20-29 of 20-59 read twice the half rate.
+        // 21-29 of 20-59 read twice the half rate.
         assert!(t[0].drop);
-        assert!((t[0].off - 0.25).abs() < 1e-9, "{}", t[0].off);
-        // 60-64 and 66 of 60-99 read off the full rate.
+        assert!((t[0].off - 0.225).abs() < 1e-9, "{}", t[0].off);
+        // 61-64 and 66 of 60-99 read off the full rate.
         assert!(!t[1].drop);
-        assert!((t[1].off - 0.15).abs() < 1e-9, "{}", t[1].off);
+        assert!((t[1].off - 0.125).abs() < 1e-9, "{}", t[1].off);
     }
 
     /// A seed (0), three honest viewers (1-3) and a hostile one (4) on a
@@ -3618,7 +3622,8 @@ mod tests {
     fn a_meter_that_never_follows_reads_off_throughout() {
         let r = seed_reading(|_| 1000);
         let t = r.tracking(&r.seeds());
-        assert!((t[0].off - 1.0).abs() < 1e-9);
-        assert!(t[1].off.abs() < 1e-9);
+        // The sample at each change's time reads the second before it.
+        assert!((t[0].off - 39.0 / 40.0).abs() < 1e-9, "{}", t[0].off);
+        assert!((t[1].off - 1.0 / 40.0).abs() < 1e-9, "{}", t[1].off);
     }
 }

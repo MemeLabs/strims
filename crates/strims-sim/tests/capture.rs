@@ -619,8 +619,9 @@ fn starved_wan() -> Scenario {
 /// how the trees changed ([`stalls_say_how_playout_went`],
 /// [`parents_say_how_the_trees_changed`]): stalls at the shorter delay.
 /// And its `meter_samples` say what the seed could upload at each sample
-/// ([`meter_samples_say_what_they_are`]): its site's rate, half the
-/// stream's while starved.
+/// ([`meter_samples_say_what_they_are`]): over the second before, its
+/// rate limit, or while starved half the stream's rate in its meter's units
+/// (its data share of it, `own_data_share`).
 #[test]
 fn a_starved_runs_stalls_are_its_reads_playout() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
@@ -642,17 +643,35 @@ fn a_starved_runs_stalls_are_its_reads_playout() {
         "{stalls} stalls, {short} at the shorter delay"
     );
     parents_say_how_the_trees_changed(&r, &dir);
-    // What the seed could upload is its cap (its rate limit, under its
-    // site's rate) but for the 3 s its site was starved, under the limit.
+    // What the seed could upload over the second before a sample is the
+    // smaller of its rate limit and its data share of its site's rate, and
+    // over a second its site was starved, its share of 32 KiB/s.
     let seed = r.scenario.swarms[0].seed;
     let up = r.upload_cap(seed).unwrap() as i64;
     assert!(up > 32 * 1024);
+    let limit = r.scenario.hosts[seed].uplink.unwrap() as i64;
+    let site_up = r.scenario.hosts[seed].site.unwrap().profile.up;
+    let meter = &r.hosts[seed].runner.meter;
+    let share = |t: Duration| {
+        let k = meter.partition_point(|m| m.t <= t);
+        strims_sim::report::own_data_share(
+            k.checked_sub(1).and_then(|i| meter.get(i)),
+            k.checked_sub(2).and_then(|i| meter.get(i)),
+        )
+    };
+    let secs = Duration::from_secs;
     let mut starved_samples = 0;
     for (t, row) in meter_samples_say_what_they_are(&r, &dir) {
-        let starved = t >= Duration::from_secs(4) && t < Duration::from_secs(7);
-        let want = if starved { 32 * 1024 } else { up };
+        let want = if t >= secs(5) && t <= secs(7) {
+            starved_samples += 1;
+            (32.0 * 1024.0 * share(t)) as i64
+        } else if t < secs(4) || t >= secs(8) {
+            limit.min((site_up as f64 * share(t)) as i64)
+        } else {
+            // A second that saw the step.
+            continue;
+        };
         assert_eq!(int(&row, "avail_bps"), Some(want), "at {t:?}");
-        starved_samples += usize::from(starved);
     }
     assert!(starved_samples > 0, "a sample while starved");
     let _ = std::fs::remove_dir_all(&dir);
@@ -907,6 +926,7 @@ fn meter_samples_say_what_they_are(
             assert_eq!(int(&row, "capacity_bps"), capacity, "{at}");
             if m.t <= swarm.stop
                 && let (Some(c), Some(a)) = (int(&row, "capacity_bps"), int(&row, "avail_bps"))
+                && a > 0
             {
                 readings.push((m.t, c as f64 / a as f64));
             }

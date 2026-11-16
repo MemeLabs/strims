@@ -743,6 +743,12 @@ pub(crate) struct Scheduler {
     /// Per host with competing uploads, [`Scheduler::cross_bytes`] every
     /// [`QUEUE_SAMPLE_EVERY`]: (time since the start, bytes).
     cross_sent: Vec<Vec<(Duration, u64)>>,
+    /// Per host with competing uploads, [`Scheduler::cross_bytes`] after
+    /// each walk that moved it, stamped with the walk's time: what they had
+    /// sent before a time is the last entry stamped before it, the same
+    /// during the run as after it (a host's task at a time runs before
+    /// that time's walk). Bound: one per walk while they run.
+    cross_log: Vec<Vec<(Duration, u64)>>,
     /// Per host with competing uploads, their windows summed, sampled as
     /// [`Scheduler::cross_sent`] is.
     cross_cwnd: Vec<Vec<(Duration, u64)>>,
@@ -895,6 +901,7 @@ impl Scheduler {
             cross,
             cross_bytes: vec![0; spec.hosts.len()],
             cross_sent: vec![Vec::new(); spec.hosts.len()],
+            cross_log: vec![Vec::new(); spec.hosts.len()],
             cross_cwnd: vec![Vec::new(); spec.hosts.len()],
             drops: vec![0; spec.hosts.len()],
             drop_packets: vec![0; spec.hosts.len()],
@@ -1008,7 +1015,29 @@ impl Scheduler {
                 }
             }
         }
+        for c in &self.cross {
+            let (Some(log), Some(&bytes)) =
+                (self.cross_log.get_mut(c.host), self.cross_bytes.get(c.host))
+            else {
+                continue;
+            };
+            if log.last().map_or(0, |&(_, b)| b) != bytes {
+                log.push((now - epoch(), bytes));
+            }
+        }
         Ok(())
+    }
+
+    /// Host `h`'s competing uploads' log ([`Scheduler::cross_log`]).
+    pub(crate) fn competing_log(&self, h: HostIx) -> &[(Duration, u64)] {
+        self.cross_log.get(h).map_or(&[][..], Vec::as_slice)
+    }
+
+    /// What host `h`'s uplink has charged its own messages so far, its
+    /// pure acknowledgements and competing uploads apart
+    /// ([`EndStats::up_bytes`](strims_wan::network::EndStats::up_bytes)).
+    pub(crate) fn own_up_bytes(&self, h: HostIx) -> u64 {
+        self.net.stats(h).up_bytes
     }
 
     /// Credits the segments admitted by `now` to their sockets and wakes
@@ -2190,6 +2219,7 @@ impl Scheduler {
                         stats: self.net.stats(h),
                         up_queue: self.up_queue.get(h).cloned().unwrap_or_default(),
                         competing: self.cross_sent.get(h).cloned().unwrap_or_default(),
+                        competing_log: self.cross_log.get(h).cloned().unwrap_or_default(),
                         queue_drops: self.drops.get(h).copied().unwrap_or(0),
                         queue_drop_packets: self.drop_packets.get(h).copied().unwrap_or(0),
                         acks: self.acks.get(h).copied().unwrap_or(0),

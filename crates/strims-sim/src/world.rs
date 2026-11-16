@@ -531,7 +531,11 @@ impl World {
         if self.spec.exp.contains("index-sample") {
             c.vpn.peer_index_answers = strims_vpn::IndexAnswers::Sample;
         }
-        c.upload_capacity = spec.upload_capacity_at(sim_now());
+        c.upload_capacity = if spec.upload_capacity_live {
+            self.upload_truth(h)
+        } else {
+            spec.upload_capacity
+        };
         c.vpn.routing = spec.routing.unwrap_or(self.spec.routing);
         if let (Some(width), Some(s)) = (self.spec.wire_bins, self.spec.swarms.first()) {
             c.stats_bins = Some(strims_node::config::StatsBins {
@@ -1369,7 +1373,13 @@ impl World {
     /// `ended` at `at` (the simulation dropped every node), those of the
     /// hosts that departed, which no sample asked since they left. The
     /// others' ran to the final sample, and what came past it is left out.
-    pub fn observe_stopped(&self, at: Duration, ended: bool) {
+    /// `wan` is the run's scheduler, which the caller may hold locked.
+    pub(crate) fn observe_stopped(
+        &self,
+        at: Duration,
+        ended: bool,
+        wan: Option<&crate::wan::Scheduler>,
+    ) {
         let stopped: Vec<(HostIx, NodeMetrics)> = self.stopped_rx.try_iter().collect();
         for (h, mut m) in stopped {
             if ended && !self.departed(h) {
@@ -1377,6 +1387,7 @@ impl World {
             }
             m.bins.clear();
             self.observe_bins(h, &m);
+            let link_bytes = wan.map_or(0, |s| s.own_up_bytes(h));
             let live: Vec<bool> = self
                 .spec
                 .swarms
@@ -1390,12 +1401,57 @@ impl World {
                 };
                 let swarms = std::mem::take(&mut hs.swarms);
                 let hostile = |id: &HostId| ids.get(id).is_some_and(|&p| self.is_hostile(p));
-                hs.stats
-                    .observe(&m, &swarms, &live, at, self.clock_at(h, at), hostile);
+                hs.stats.observe(
+                    &m,
+                    &swarms,
+                    &live,
+                    at,
+                    self.clock_at(h, at),
+                    link_bytes,
+                    hostile,
+                );
                 hs.swarms = swarms;
             });
             self.store_metrics(h, m);
         }
+    }
+
+    /// What host `h`'s uplink has charged its own messages so far (0
+    /// without the WAN).
+    fn own_up_bytes(&self, h: HostIx) -> u64 {
+        self.wan.lock().as_ref().map_or(0, |s| s.own_up_bytes(h))
+    }
+
+    /// The meter's truth for host `h` now ([`crate::report::upload_truth`]),
+    /// from its meter samples so far and its competing uploads' log: what
+    /// the live oracle tells it.
+    pub fn upload_truth(&self, h: HostIx) -> Option<u64> {
+        let spec = self.spec.hosts.get(h)?;
+        let wan = self.wan.lock();
+        let log = wan.as_ref().map_or(&[][..], |s| s.competing_log(h));
+        let st = self.st.borrow();
+        let (last, prev) = st
+            .hosts
+            .get(h)
+            .map_or((None, None), |hs| hs.stats.last_meter());
+        crate::report::upload_truth(spec, last, prev, log, sim_now())
+    }
+
+    /// The live oracle at a stats sample of host `h`: the truth it tells
+    /// the node now, recorded in the meter sample just taken; `None` for a
+    /// host it doesn't tell.
+    pub fn oracle(&self, h: HostIx) -> Option<u64> {
+        if !self.spec.hosts.get(h)?.upload_capacity_live {
+            return None;
+        }
+        let told = self.upload_truth(h)?;
+        let now = sim_now();
+        self.record(|st| {
+            if let Some(hs) = st.hosts.get_mut(h) {
+                hs.stats.told(now, told);
+            }
+        });
+        Some(told)
     }
 
     pub fn store_metrics(&self, h: HostIx, m: NodeMetrics) {
@@ -1445,6 +1501,7 @@ impl World {
         }
         let inv = &self.spec.invariants;
         let mut found = Vec::new();
+        let link_bytes = self.own_up_bytes(h);
         self.record(|st| {
             let ids = &st.ids;
             let Some(hs) = st.hosts.get_mut(h) else {
@@ -1459,9 +1516,15 @@ impl World {
                 .map(|s| now >= s.start && now <= s.stop)
                 .collect();
             let hostile = |id: &HostId| ids.get(id).is_some_and(|&p| self.is_hostile(p));
-            let g = hs
-                .stats
-                .observe(m, &swarms, &live, now, self.clock_at(h, now), hostile);
+            let g = hs.stats.observe(
+                m,
+                &swarms,
+                &live,
+                now,
+                self.clock_at(h, now),
+                link_bytes,
+                hostile,
+            );
             let linked = m.links.iter().filter_map(|l| l.host_id);
             let mut ns: Vec<HostIx> = linked.filter_map(|id| st.ids.get(&id).copied()).collect();
             ns.sort_unstable();
