@@ -416,7 +416,15 @@ impl Spec {
                     ))
                 ),
                 if self.class == Class::Cable && self.pie {
-                    "pie limit 10000 target 10ms tupdate 16ms".to_owned()
+                    // The modem's buffer, which DOCSIS's Buffer Control leaves
+                    // to the operator (CableLabs recommends 50 ms of the
+                    // rate, vendors 250 at most), is the run's queue, as a
+                    // FIFO's is: pie counts packets, so as many full frames
+                    // as it holds.
+                    format!(
+                        "pie limit {} target 10ms tupdate 16ms",
+                        run.limit.div_ceil(self.max_frame())
+                    )
                 } else {
                     String::new()
                 },
@@ -767,7 +775,7 @@ mod tests {
         );
         assert!(cable.contains("LINK_SHAPER='tbf rate 10000kbit burst 156250 limit 125000 peakrate 100mbit mtu 3036'"), "{cable}");
         assert!(
-            cable.contains("LINK_CHILD='pie limit 10000 target 10ms tupdate 16ms'"),
+            cable.contains("LINK_CHILD='pie limit 83 target 10ms tupdate 16ms'"),
             "{cable}"
         );
         assert!(cable.contains("LINK_SLOT='slot 2000us 8000us'"), "{cable}");
