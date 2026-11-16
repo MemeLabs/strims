@@ -253,7 +253,8 @@ def joins_of(arrivals, viewers, secs, rng):
     third; event:<warm %>:<at>:<window>: the warm share uniform before
     `at`, the rest uniform within `window` from it), the k-th soonest
     viewer k's, so the topology's order is the arrivals' as the twin lays
-    its links out."""
+    its links out. Each is its whole second (the draw's floor), as a
+    node's --join-at takes it."""
     parts = arrivals.split(":")
     if parts == ["trickle"]:
         times = [rng.uniform(0, secs / 3) for _ in range(viewers)]
@@ -263,7 +264,7 @@ def joins_of(arrivals, viewers, secs, rng):
         times = [rng.uniform(0, at) for _ in range(m)] + [at + rng.uniform(0, window) for _ in range(viewers - m)]
     else:
         raise ValueError(f"arrivals {arrivals}: the tier takes trickle and event profiles")
-    return " ".join(f"{i}:{t:.1f}" for i, t in enumerate(sorted(times), start=1))
+    return " ".join(f"{i}:{int(t)}" for i, t in enumerate(sorted(times), start=1))
 
 
 def num(x):

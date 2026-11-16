@@ -412,11 +412,22 @@ impl Run {
         let mut nodes = Vec::new();
         for i in 0..=viewers {
             let text = read(&format!("node-{i}.jsonl"))?;
-            nodes.push(
-                text.lines()
-                    .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-                    .collect::<Vec<_>>(),
-            );
+            let lines = text
+                .lines()
+                .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+                .collect::<Vec<_>>();
+            // A node that never ran (its arguments refused, a crash at
+            // start) leaves no lines, and its run would read as a swarm
+            // without it: no run's tables.
+            if lines.is_empty() {
+                let why = read(&format!("node-{i}.err")).unwrap_or_default();
+                let why = why
+                    .lines()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("no node-<i>.err");
+                return Err(format!("node-{i}.jsonl has no lines: {why}"));
+            }
+            nodes.push(lines);
         }
         let start_ms = nodes
             .iter()
@@ -1385,8 +1396,9 @@ mod tests {
     /// which read two frames; the seed's capture a data packet, a pure ACK,
     /// a packet to the competing upload's sink and one it received; both
     /// tbfs' counters.
-    fn fixture() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("strims-testbed-{}", std::process::id()));
+    fn fixture(name: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("strims-testbed-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let w = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
         w(
@@ -1472,8 +1484,25 @@ mod tests {
     /// IP lengths, the pure ACK apart, the competing upload's apart, the
     /// tbf's drops and backlog.
     #[test]
+    fn a_node_that_never_ran_refuses_the_run() {
+        let dir = fixture("silent");
+        std::fs::write(dir.join("node-1.jsonl"), "").unwrap();
+        std::fs::write(
+            dir.join("node-1.err"),
+            "testbed_node: --join-at: invalid digit found in string\n",
+        )
+        .unwrap();
+        let err = Run::read(&dir, &BTreeMap::new()).err().unwrap();
+        assert_eq!(
+            err,
+            "node-1.jsonl has no lines: testbed_node: --join-at: invalid digit found in string"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn a_testbed_runs_records_and_captures_read_as_a_sim_runs() {
-        let dir = fixture();
+        let dir = fixture("records");
         let run = Run::read(&dir, &BTreeMap::new()).unwrap();
         assert_eq!(run.knobs["STRIMS_SIM_CAL_VIEWERS"], "1");
         assert_eq!(run.knobs["TESTBED_QDISC"], "clsact>ifb-netem>root-tbf");

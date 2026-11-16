@@ -2943,6 +2943,11 @@ NEEDS = re.compile(r"needs: (.+)")
 # A table macro's columns where its needs are missing: no rows of them,
 # its `-- else none:` lines' columns in order.
 ELSE_NONE = re.compile(r"else none: (.+)")
+# The main tables an index makes by its own SQL whatever the raw tables
+# hold (JOBS_SQL's jobs, experiment_jobs), with the columns that SQL gives
+# them: a need of one holds where `have` doesn't list it, as an index's
+# (the raw tables' columns) doesn't, and is checked where `have` does.
+MADE = {"jobs", "experiment_jobs"}
 
 
 def comment_above(text, at):
@@ -2968,7 +2973,9 @@ def needed(text, have):
 
     def lacks(need):
         table, _, col = need.partition(".")
-        return table not in have or bool(col) and col not in have[table]
+        if table not in have:
+            return table not in MADE
+        return bool(col) and col not in have[table]
 
     out, at = [], 0
     for m in MACRO.finditer(text):
