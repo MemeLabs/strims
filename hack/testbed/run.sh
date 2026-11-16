@@ -229,12 +229,16 @@
 # device whose root is its modem, as the parser gives it: `node <i> <spec>
 # <up_mbit> <delay_ms> <queue_ms> <modem_dev>`), a
 # trace link's link-<i>.log (tracelink's queue, packets, bytes and drops
-# every 100 ms) and link-<i>.err, and settings: the settings given, and
+# every 100 ms) and link-<i>.err, and settings: the settings given,
 # QDISC, the shaping's qdisc tree (SHAPER below), so runs of one tree
-# pool apart from another's; while it runs, .ctl (its control files, which
-# go with it). A node's lines carry the records strims-sim's tables take
-# (`rec`), which strims-sim's testbed_tables example writes as a run's
-# tables. With a browser node also
+# pool apart from another's, and STAMPS, the clock its own logs' stamps
+# and its waits are read from (`clock`: bash's $EPOCHREALTIME, as now_ms
+# and every sampler read it; a run before run.sh named it, stamped by
+# uutils' `date +%s%3N`, which reads up to 900 ms late in a second's first
+# 100 ms, names none, and strims-sim's testbed module keys it apart); while
+# it runs, .ctl (its control files, which go with it). A node's lines
+# carry the records strims-sim's tables take (`rec`), which strims-sim's
+# testbed_tables example writes as a run's tables. With a browser node also
 # node-relay.err, cpu-relay.log and hosts/ (each node's host id). With
 # MEDIA, each browser viewer's player-<i>.jsonl (its player's line a
 # second, testbed_browser's --player), and RECORD's record-<i>.bin.
@@ -544,6 +548,7 @@ SHAPER="clsact>ifb-netem>root-class"
 env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
   > "$out/settings" || true
 echo "QDISC=$SHAPER" >> "$out/settings"
+echo "STAMPS=clock" >> "$out/settings"
 
 # Milliseconds since the epoch, from bash's clock ($EPOCHREALTIME: seconds
 # and six digits of microseconds, no fork); the containers' samplers stamp
