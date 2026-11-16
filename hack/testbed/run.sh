@@ -219,10 +219,12 @@
 # nothing) and ss-0.log (its sockets once a second), qdisc-<i>.txt (each
 # node's qdiscs on every device as it shaped them, before the stream: `tc
 # -s -d qdisc show`, its modem with its size table, the delay's ifbd, the
-# slots' ifbm, the slow downlink's ifbs and PCAP's ifbo), steps.log (when each of SEED_UP_STEPS applied, ms since
-# the epoch, and its rate), compete-<s>.json (each upload's iperf3 report)
-# and compete.log (when each started), links (each node's link spec, rate,
-# delay and queue: `node <i> <spec> <up_mbit> <delay_ms> <queue_ms>`), a
+# slots' ifbm, the slow downlink's ifbs and PCAP's ifbo), steps.log (when
+# each of SEED_UP_STEPS applied, ms since the epoch, and its rate),
+# compete-<s>.json (each upload's iperf3 report) and compete.log (when each
+# started), links (each node's link spec, rate, delay and queue, and the
+# device whose root is its modem, as the parser gives it: `node <i> <spec>
+# <up_mbit> <delay_ms> <queue_ms> <modem_dev>`), a
 # trace link's link-<i>.log (tracelink's queue, packets, bytes and drops
 # every 100 ms) and link-<i>.err, and settings. With a browser node also
 # node-relay.err, cpu-relay.log and hosts/ (each node's host id). With
@@ -565,7 +567,7 @@ for i in $(seq 0 $((n - 1))); do
   top=""
   if [ "$i" -eq 0 ]; then top=$seed_top; fi
   link_eval "$link" "$up" "$burst" "$limit" "$peak" "" "$top"
-  echo "node $i $link $up $delay $queue" >> "$out/links"
+  echo "node $i $link $up $delay $queue $LINK_DEV" >> "$out/links"
   # A previous run's link log would pass for this one's.
   rm -f "$out/link-$i.log" "$out/link-$i.err"
   # A trace link's files, and the capabilities its classifier needs.

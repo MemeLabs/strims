@@ -23,7 +23,7 @@
 #       highest, its start's or a step's (the higher of the two without),
 #       which a peak is over, with the run's bucket, queue limit and peak
 #       (tbf's and fiber's): LINK_CLASS, LINK_STAB, LINK_SHAPER,
-#       LINK_CHILD, LINK_SLOT, LINK_TRACE and LINK_FILES
+#       LINK_CHILD, LINK_SLOT, LINK_DEV, LINK_TRACE and LINK_FILES
 #   link_root DELAY_MS NODE
 #       the access link: the modem (handle 10: on eth0, or on ifbm with
 #       slots) and the slots; a trace's link loads its trace and waits for
@@ -76,7 +76,7 @@ link_eval() {
 }
 
 link_dev() {
-  if [ -n "$LINK_SLOT" ]; then echo ifbm; else echo eth0; fi
+  echo "$LINK_DEV"
 }
 
 link_root() {

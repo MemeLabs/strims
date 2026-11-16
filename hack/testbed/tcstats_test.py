@@ -30,6 +30,19 @@ import bench  # noqa: E402
 import tcstats  # noqa: E402
 
 DATA = os.path.join(HERE, "testdata", "tc")
+# Each capture's modem's device, as the run's `links` file names it (the
+# parser's LINK_DEV: ifbm with slots, cable's).
+DEV = {
+    "tbf": "eth0",
+    "cable": "ifbm",
+    "cable_aqm_fifo": "ifbm",
+    "dsl": "eth0",
+    "dsl_line_vdsl": "eth0",
+    "fiber": "eth0",
+    "cable_router_fq_codel": "ifbm",
+    "dsl_router_cake": "eth0",
+    "trace": "eth0",
+}
 # Each capture's spec, as the run's `links` file names it.
 CLASSES = {
     "tbf": "tbf",
@@ -94,7 +107,7 @@ class Parse(unittest.TestCase):
     def test_every_device_s_detailed_qdiscs_name_their_device(self):
         for name, spec in CLASSES.items():
             with self.subTest(name):
-                dev = tcstats.modem_dev(spec)
+                dev = DEV[name]
                 for form in ("all", "every.json"):
                     qs = tcstats.parse(fixture(f"{name}.{form}"))
                     devs = {"lo", "eth0", "ifbd"} | ({"ifbm"} if dev == "ifbm" else set())
@@ -170,30 +183,32 @@ class Uplink(unittest.TestCase):
             # tc-<i>.log's every device, and an older run's one device.
             for form in ("every.json", "json"):
                 with self.subTest(f"{name}.{form}"), tempfile.TemporaryDirectory() as d:
-                    run_dir(d, f"node 0 {spec} 10 20 100\nnode 1 tbf 20 10 100\n", [(1000, fixture(f"{name}.{form}"))])
+                    links = f"node 0 {spec} 10 20 100 {DEV[name]}\nnode 1 tbf 20 10 100 eth0\n"
+                    run_dir(d, links, [(1000, fixture(f"{name}.{form}"))])
                     got_spec, got = tcstats.uplink(d, 0)
                     self.assertEqual((got_spec, got[0][1].kind), (spec, tcstats.queue_kind(spec)))
                     if form == "every.json":
-                        self.assertEqual(got[0][1].dev, tcstats.modem_dev(spec))
-                    self.assertEqual(tcstats.link_spec(d, 1), "tbf")
+                        self.assertEqual(got[0][1].dev, DEV[name])
+                    self.assertEqual((tcstats.link_spec(d, 1), tcstats.link_dev(d, 1)), ("tbf", "eth0"))
 
-    def test_the_modem_is_on_ifbm_with_slots(self):
-        for spec, dev in (("tbf", "eth0"), ("cable", "ifbm"), ("cable,slot=off", "eth0"),
-                          ("cable,aqm=fifo", "ifbm"), ("tbf,slot=1-3", "ifbm"), ("dsl", "eth0"),
-                          ("fiber,slot=off", "eth0"), ("trace,file=x,slot=2", "ifbm")):
-            self.assertEqual(tcstats.modem_dev(spec), dev, spec)
-        # A slotted class's 10: on a device that isn't its modem's isn't its
-        # queue.
+    def test_the_modem_is_on_the_device_links_names(self):
+        # A 10: on a device that isn't the modem's isn't its queue.
         with tempfile.TemporaryDirectory() as d:
             qs = fixture("tbf.every.json").replace('"dev":"eth0"', '"dev":"ifbx"')
-            run_dir(d, "node 0 tbf 10 20 100\n", [(1000, qs)])
+            run_dir(d, "node 0 tbf 10 20 100 eth0\n", [(1000, qs)])
             with self.assertRaisesRegex(LookupError, "tbf link has no tbf 10: on eth0"):
                 tcstats.uplink(d, 0)
+        # A `links` line that names no device (a run from before it did)
+        # takes the 10: wherever it is.
+        with tempfile.TemporaryDirectory() as d:
+            run_dir(d, "node 0 cable 10 20 100\n", [(1000, fixture("cable.every.json"))])
+            self.assertIsNone(tcstats.link_dev(d, 0))
+            self.assertEqual(tcstats.uplink(d, 0)[1][0][1].dev, "ifbm")
 
     def test_a_log_without_the_class_s_queue_is_an_error(self):
         with tempfile.TemporaryDirectory() as d:
             run_dir(d, "node 0 cable,router=cake 10 20 100\n", [(1000, fixture("tbf.json"))])
-            with self.assertRaisesRegex(LookupError, "cable,router=cake link has no cake 10: on ifbm"):
+            with self.assertRaisesRegex(LookupError, "cable,router=cake link has no cake 10: in"):
                 tcstats.uplink(d, 0)
 
     def test_a_run_before_the_links_file_had_a_tbf(self):

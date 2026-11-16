@@ -299,6 +299,16 @@ impl Spec {
         }
     }
 
+    /// The device whose root is the link's modem on the testbed: ifbm for
+    /// a link with slots, eth0 otherwise (`LINK_DEV`).
+    pub fn modem_dev(&self) -> &'static str {
+        if self.slots().is_some() {
+            "ifbm"
+        } else {
+            "eth0"
+        }
+    }
+
     /// The link's largest frame, what it charges a full packet (1500 IP
     /// bytes): the least a bucket may hold, since a shaper drops a packet
     /// it can't cover whole.
@@ -400,10 +410,13 @@ impl Spec {
     /// `LINK_SHAPER`, the shaper qdisc (tbf, a peak's bucket two of the
     /// class's largest frames, or the router's); `LINK_CHILD`,
     /// the qdisc that holds its queue, if not tbf's own; `LINK_SLOT`,
-    /// netem's slot argument; `LINK_TRACE`, tracelink's arguments (its
-    /// trace at `/links/trace`, a delay trace at `/links/delay`: two files
-    /// may share a name); and `LINK_FILES`, the host files to mount there,
-    /// as `<host path>:<path>`. Fails on a bucket the shaper can't take: one under the
+    /// netem's slot argument; `LINK_DEV`, the device whose root is the
+    /// modem (eth0, or ifbm for a link with slots, ahead of which eth0's
+    /// root hands the modem what the delay returns and holds what comes
+    /// back for its slot); `LINK_TRACE`, tracelink's arguments (its trace
+    /// at `/links/trace`, a delay trace at `/links/delay`: two files may
+    /// share a name); and `LINK_FILES`, the host files to mount there, as
+    /// `<host path>:<path>`. Fails on a bucket the shaper can't take: one under the
     /// class's largest frame ([`Spec::check_bucket`]), or a peak at or
     /// under the link's highest rate ([`check_peak`]).
     pub fn shell(&self, run: &Run) -> Result<String, String> {
@@ -533,6 +546,7 @@ impl Spec {
             ("LINK_SHAPER", shaper),
             ("LINK_CHILD", child),
             ("LINK_SLOT", slot),
+            ("LINK_DEV", self.modem_dev().to_owned()),
             ("LINK_TRACE", trace),
             ("LINK_FILES", files),
         ]
@@ -764,7 +778,7 @@ mod tests {
         let sh = |spec: &str, run: &Run| Spec::parse(spec).unwrap().shell(run).unwrap();
         assert_eq!(
             sh("tbf", &run),
-            "LINK_CLASS='tbf'\nLINK_STAB=''\nLINK_SHAPER='tbf rate 10000kbit burst 3028 limit 125000'\nLINK_CHILD=''\nLINK_SLOT=''\nLINK_TRACE=''\nLINK_FILES=''\n"
+            "LINK_CLASS='tbf'\nLINK_STAB=''\nLINK_SHAPER='tbf rate 10000kbit burst 3028 limit 125000'\nLINK_CHILD=''\nLINK_SLOT=''\nLINK_DEV='eth0'\nLINK_TRACE=''\nLINK_FILES=''\n"
         );
         let cable = sh("cable", &run);
         assert!(
@@ -783,6 +797,11 @@ mod tests {
             "{cable}"
         );
         assert!(cable.contains("LINK_SLOT='slot 2000us 8000us'"), "{cable}");
+        // The modem's device: ifbm with slots, cable's by default.
+        assert!(cable.contains("LINK_DEV='ifbm'"), "{cable}");
+        assert!(sh("cable,slot=off", &run).contains("LINK_DEV='eth0'"));
+        assert!(sh("fiber,slot=1-3", &run).contains("LINK_DEV='ifbm'"));
+        assert!(sh("trace,file=x,slot=2", &run).contains("LINK_DEV='ifbm'"));
         assert!(
             sh("dsl,line=vdsl,router=cake", &run)
                 .contains("LINK_SHAPER='cake bandwidth 9500kbit pppoe-ptm'")
