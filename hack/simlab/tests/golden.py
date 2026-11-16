@@ -19,17 +19,31 @@ The sets, in order (check runs them all, and exits 1 if any fails):
   suite_test    hack/sim-suite/suite_test.py: the scorecards and arm scores
                 of its fixtures, as the Python scoring printed them
   simdb_test    hack/sim-db/simdb_test.py
-  engine        simlab's own tests (test_*.py here), under uv
+  engine        simlab's own tests (test_*.py here) but test_catalog's,
+                under uv
+  catalog       test_catalog.py, the catalog's index of scratch caches,
+                under uv
   scorecards    hack/sim-suite/golden.py check: the latest farm
                 experiments' scorecards and arm scores, the macros against
-                the Python scoring at its REFERENCE, over the catalog (about
-                6 minutes)
+                the Python scoring at its REFERENCE, over the catalog
 
-A set run as a script (suite_test, simdb_test, engine, scorecards) prints
-its last line. One that fails also prints the lines that name its
-failures (FAILURE: each failing test's, each experiment scored
-otherwise), else its last TAIL lines, and writes its whole output to
-target/simlab/golden/check/<set>.log, whose path it prints.
+The whole check takes about 25 minutes on the dev VM, past the 15 that a
+run may block, so run it as its groups (GROUPS), one at a time, each under
+`timeout 900`:
+
+  golden.py check --only cli,matrices,suite_test,simdb_test   about 7 min
+  golden.py check --only engine                                about 6 min
+  golden.py check --only catalog                               about 9 min
+  golden.py check --only scorecards                            about 6 min
+
+A set run as a script (suite_test, simdb_test, engine, catalog,
+scorecards) prints its last line. One that fails also prints the lines
+that name its failures (FAILURE: each failing test's, each experiment
+scored otherwise), else its last TAIL lines, and the traceback of a
+crash that no failure named holds (crashed), and writes its whole output
+to target/simlab/golden/check/<set>.log, whose path it prints. golden.py's
+own lines go out as each is printed, so a check killed part-way (by a
+`timeout`) has printed every set it finished.
 
 `capture` rewrites the goldens of cli and matrices from today's code, for
 a change meant to move what they print (say why in its commit).
@@ -59,11 +73,17 @@ import golden_cli
 import golden_suite
 import goldens
 
-HACK = Path(__file__).resolve().parents[2]
+HERE = Path(__file__).resolve().parent
+HACK = HERE.parents[1]
 REPO = HACK.parent
 SIMDB, ANALYZE = golden_cli.SIMDB, golden_cli.ANALYZE
-SETS = ("cli", "matrices", "suite_test", "simdb_test", "engine", "scorecards")
+SETS = ("cli", "matrices", "suite_test", "simdb_test", "engine", "catalog", "scorecards")
 CAPTURED = ("cli", "matrices")
+# The modules of simlab's tests that the catalog set runs, apart from the
+# engine set's: the longest of them.
+CATALOG_TESTS = ("test_catalog",)
+# The sets in groups that each run within 15 minutes (the module's docs).
+GROUPS = (("cli", "matrices", "suite_test", "simdb_test"), ("engine",), ("catalog",), ("scorecards",))
 sys.path.insert(0, str(HACK))
 from simlab import bootstrap  # noqa: E402
 
@@ -75,8 +95,12 @@ LOGS = REPO / "target" / "simlab" / "golden" / "check"
 # experiment's arm (or a local invocation) scored otherwise than the
 # reference.
 FAILURE = re.compile(r"^(?:FAIL|ERROR): |: DIFFERENT; ")
-# A failing set's lines printed when none names a failure (a crash).
+# A failing set's lines printed when none names a failure (a crash), and
+# the most of a crash's traceback printed beside the failures named.
 TAIL = 40
+# unittest's line closing its report: the failures' reports come before it.
+RAN = re.compile(r"^Ran \d+ tests? in ")
+TRACEBACK = "Traceback (most recent call last):"
 
 
 def failures(lines):
@@ -84,14 +108,27 @@ def failures(lines):
     return [line for line in lines if FAILURE.search(line)]
 
 
-def script(args, label):
-    """Whether a command exits 0; its output's last line, either way. A
-    failing one's whole output, stderr where it came, goes to
-    LOGS/<label>.log, its path printed after the lines that name its
-    failures, else its last TAIL lines."""
+def crashed(lines):
+    """The traceback `lines` end with that no failure they name holds: from
+    the last TRACEBACK past unittest's report (its RAN line, after the
+    reports of the tests that failed), or in output with no report, to the
+    end, at most its last TAIL lines; else []."""
+    starts = [i for i, line in enumerate(lines) if line.startswith(TRACEBACK)]
+    ran = max((i for i, line in enumerate(lines) if RAN.match(line)), default=-1)
+    if not starts or starts[-1] < ran:
+        return []
+    return lines[max(starts[-1], len(lines) - TAIL):]
+
+
+def script(args, label, env=None):
+    """Whether a command exits 0 (run with `env` added to this process's
+    environment); its output's last line, either way. A failing one's
+    whole output, stderr where it came, goes to LOGS/<label>.log, its path
+    printed after the lines that name its failures, else its last TAIL
+    lines."""
     t0 = time.time()
     p = subprocess.run(args, cwd=REPO, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                       text=True, env={**os.environ, "PYTHONUNBUFFERED": "1"})
+                       text=True, env={**os.environ, "PYTHONUNBUFFERED": "1", **(env or {})})
     lines = p.stdout.rstrip().splitlines()
     print(f"{label}: {'ok' if p.returncode == 0 else 'FAILED'} ({time.time() - t0:.0f} s): {(lines or [''])[-1]}")
     log = LOGS / f"{label}.log"
@@ -101,10 +138,19 @@ def script(args, label):
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(p.stdout)
     named = failures(lines)
-    print("".join(f"  {line}\n" for line in named or lines[-TAIL:]), end="")
+    crash = crashed(lines) if named else []
+    print("".join(f"  {line}\n" for line in (named + crash if named else lines[-TAIL:])), end="")
     told = f"{len(named)} failures named" if named else f"no failure named: its last {min(TAIL, len(lines))} lines"
+    if crash:
+        told += f", then a crash's traceback ({len(crash)} lines)"
     print(f"  {label}: {told}; all {len(lines)} lines in {log}")
     return False
+
+
+def unit_tests(name):
+    """The modules of simlab's tests (test_*.py here) that set `name`
+    runs: the catalog set CATALOG_TESTS, the engine set the others."""
+    return sorted(t.stem for t in HERE.glob("test_*.py") if (t.stem in CATALOG_TESTS) == (name == "catalog"))
 
 
 def run_set(name):
@@ -116,9 +162,8 @@ def run_set(name):
         return script([sys.executable, str(HACK / "sim-suite" / "suite_test.py")], name)
     if name == "simdb_test":
         return script([sys.executable, str(HACK / "sim-db" / "simdb_test.py")], name)
-    if name == "engine":
-        return script([*UV, "-m", "unittest", "discover", "-s", str(Path(__file__).parent), "-p", "test_*.py",
-                       "-t", str(Path(__file__).parent)], name)
+    if name in ("engine", "catalog"):
+        return script([*UV, "-m", "unittest", *unit_tests(name)], name, env={"PYTHONPATH": str(HERE)})
     if name == "scorecards":
         return script([sys.executable, str(HACK / "sim-suite" / "golden.py"), "check"], name)
     raise ValueError(name)
@@ -237,6 +282,8 @@ def main():
     ap.add_argument("--exps", help="real's experiments, comma-separated (default: chosen, see the docs)")
     ap.add_argument("--out", default=str(REPO / "target" / "simlab" / "golden"))
     a = ap.parse_args()
+    # Each line as it's printed, to a file or a pipe too.
+    sys.stdout.reconfigure(line_buffering=True)
     split = lambda s: [x.strip() for x in (s or "").split(",") if x.strip()]
     if a.cmd == "real":
         if not a.what:
@@ -253,6 +300,9 @@ def main():
                 sys.exit(f"{n} has no golden of its own to capture")
             {"cli": golden_cli.capture, "matrices": golden_suite.capture}[n]()
         return
+    if not a.only:
+        print("golden: the whole check takes about 25 minutes; each of its groups takes under 15: "
+              + ", ".join("--only " + ",".join(g) for g in GROUPS), file=sys.stderr)
     failed = [n for n in names if not run_set(n)]
     print(f"golden: {len(names) - len(failed)} of {len(names)} sets pass" + (f"; failed: {', '.join(failed)}"
                                                                               if failed else ""))

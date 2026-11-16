@@ -13,7 +13,13 @@ fixture sets, stdlib alone:
                a line an experiment, several scored otherwise: each of
                those named, none of those scored the same
   Crash        a set that names no failure (a traceback): its last TAIL
-               lines and its log
+               lines and its log; one that crashes after the failures it
+               names: those, then the crash's traceback
+  Groups       the groups, each under 15 minutes, hold every set once,
+               in order; simlab's tests split between the engine and the
+               catalog sets
+  Unbuffered   a check whose stdout is a pipe, killed part-way, has
+               printed the line of each set it finished
   Passing      a set that passes prints its last line alone and takes its
                set's log from an earlier failure away
 
@@ -22,9 +28,12 @@ fixture sets, stdlib alone:
 
 import contextlib
 import io
+import os
+import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -150,6 +159,73 @@ class Crash(Fixture):
         self.assertEqual(len(lines), 1 + golden.TAIL + 1)
         self.assertIn(f"fixture: no failure named: its last {golden.TAIL} lines; all ", lines[-1])
         self.assertIn("Traceback", self.log())
+
+    def test_a_crash_after_named_failures_prints_its_traceback_too(self):
+        ok, out = self.run_set(f"""
+            import unittest
+
+            class Cases(unittest.TestCase):
+                def test_fails(self):
+                    self.fail("it fails\\n" + {PAGE!r} * 40)
+
+            unittest.main(exit=False)
+            print({PAGE!r} * 100, end="")
+            raise RuntimeError("the set broke after its tests")
+        """)
+        self.assertFalse(ok)
+        lines = out.splitlines()
+        self.assertTrue(lines[1].startswith("  FAIL: test_fails"), lines[1])
+        self.assertEqual(lines[2], "  Traceback (most recent call last):")
+        self.assertEqual(lines[-2], "  RuntimeError: the set broke after its tests")
+        self.assertNotIn(PAGE.strip(), out)
+        self.assertIn("fixture: 1 failures named, then a crash's traceback (", lines[-1])
+        # A failing test's traceback, in unittest's report, is the failure's.
+        self.assertEqual(golden.crashed(["FAIL: x", "Traceback (most recent call last):", "  ...", "Ran 1 test in 0.1s",
+                                         "FAILED (failures=1)"]), [])
+
+
+class Groups(unittest.TestCase):
+    def test_the_groups_hold_every_set_once_in_order(self):
+        self.assertEqual([s for g in golden.GROUPS for s in g], list(golden.SETS))
+        # simlab's tests split between the engine set and the catalog's.
+        every = sorted(p.stem for p in HERE.glob("test_*.py"))
+        engine, catalog = golden.unit_tests("engine"), golden.unit_tests("catalog")
+        self.assertEqual(catalog, ["test_catalog"])
+        self.assertEqual(sorted(engine + catalog), every)
+        self.assertIn("test_golden", engine)
+
+
+class Unbuffered(Fixture):
+    def test_a_killed_check_has_printed_the_sets_it_finished(self):
+        # golden.py check of two sets, its stdout a pipe, killed during the
+        # second: the first's line is out.
+        script = self.dir / "check.py"
+        script.write_text(textwrap.dedent(f"""
+            import sys, time
+            sys.path.insert(0, {str(HERE)!r})
+            import golden
+
+            def run_set(name):
+                print(f"{{name}}: ok (0 s): done")
+                if name == "matrices":
+                    time.sleep(120)
+                return True
+
+            golden.run_set = run_set
+            sys.argv = ["golden.py", "check", "--only", "cli,matrices"]
+            golden.main()
+        """))
+        p = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                             env={k: v for k, v in os.environ.items() if k != "PYTHONUNBUFFERED"})
+        self.addCleanup(p.stdout.close)
+        self.addCleanup(p.wait)
+        self.addCleanup(p.kill)
+        got = []
+        reader = threading.Thread(target=lambda: got.append(p.stdout.readline()), daemon=True)
+        reader.start()
+        reader.join(60)
+        p.kill()
+        self.assertEqual(got, ["cli: ok (0 s): done\n"])
 
 
 class Passing(Fixture):

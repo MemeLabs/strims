@@ -164,3 +164,9 @@ their joins.
   and don't curl the console server. A new question over captures is a
   command of analyze.py (its fields the capture crate's), never a private
   script.
+- The lab's goldens (`python3 hack/simlab/tests/golden.py check`, which
+  a change to the lab's code passes) take about 25 minutes whole, past
+  the 15 a run may block: run them as golden.py's four groups, one at a
+  time, each under `timeout 900`: `--only
+  cli,matrices,suite_test,simdb_test`, `--only engine`, `--only catalog`
+  and `--only scorecards` (golden.py's docs, `golden.GROUPS`).
