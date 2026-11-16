@@ -110,7 +110,8 @@ route of its own, apart, beside them, and the late share counts it.
 
 The 25 s edge is the phases': a chunk published at 25.000 s is in second
 25, the first steady one, so a probe taking pub_ms > 25000 leaves out
-the chunks a run publishes then (one a stream). A job counts once in
+the chunks a run publishes then (a publication's: each stream's one or
+several). A job counts once in
 each cell and arm the selected experiments label it with
 (forecast.jobs_sql). The seeds are the selection's, pooled within a
 group with each run's spread beside: a cell some experiments ran at more
