@@ -26,22 +26,25 @@ its knobs (`tb-<hash>`).
                  checkout's release build), `knobs` added to its twin's
   cells_of(envs) -> [str], cell_of(env) -> str
                  each env's cell (see above; cell_sql's keying)
-  ingest(run_dirs, name, binary=None, cell=None, arm="testbed", knobs=None)
-        -> (src, [job])
+  ingest(run_dirs, name, binary=None, cell=None, arm="testbed", knobs=None,
+         replace=False) -> (src, [job])
                  the runs' tables folded into the cache as source
                  testbed/<name>; each run a job of `cell` (else
                  cell_of's) and `arm`, its seed its place among
                  the runs of its cell (1, 2, ...), as a twin's seeds pair
                  with it
-  twins(src, binary, name, seeds=8, arm="twin", env=None) -> (src, [job])
-                 each cell of testbed source `src`'s twin run at seeds
+  twins(src, binary, name, seeds=8, arm="twin", env=None, kind="one",
+        side_arm="one", replace=False) -> (src, [job])
+                 each cell's twin of the runs testbed_side(src, kind,
+                 side_arm) names (src a source's LIKE pattern) run at seeds
                  1..N (a scenarios test binary's calibration_star with the
                  cell's knobs and `env`'s), folded into the cache as
                  source testbed/<name>: the scoring macros then pair a
                  twin seed with a testbed run of its number (effects,
                  pairs: testbed/<name> arm `arm` against src arm testbed)
-  cells_in(src) -> {cell: env}
-                 a testbed source's cells and their twins' knobs
+  cells_in(src_like, kind="one", arm="one") -> {cell: env}
+                 a side's cells and their twins' knobs, from the catalog
+                 (twin_cells refuses what no one twin stands for)
   tier_cells() -> [(kind, cell)]
                  the testbed tier: the robust tier's calibration_star cells
                  a testbed hosts on native nodes and the browsers tier's on
@@ -181,20 +184,34 @@ def cell_of(env):
     return cells_of([env])[0]
 
 
-def ingest(run_dirs, name, binary=None, cell=None, arm="testbed", knobs=None):
+def ingest(run_dirs, name, binary=None, cell=None, arm="testbed", knobs=None, replace=False):
     """The runs folded into the cache as source testbed/<name> (see the
-    module docs); returns the source and the jobs."""
+    module docs); returns the source and the jobs. An existing source is
+    refused unless `replace` (its runs and seeds would go), and so is a
+    `cell` over runs of two knobs (the job keys aside), which one twin
+    can't stand for."""
     src = f"testbed/{name}"
+    refuse_existing(src, replace)
     jobs, seeds = [], {}
     for d in run_dirs:
         out = tables(d, binary, knobs)
         job = json.loads((out / "job.json").read_text())
-        c = cell or cell_of(job["env"])
+        jobs.append({**job, "dir": str(out), "arm": arm, "at": None, "wall_s": None, "rss_mb": None})
+    if cell is not None:
+        envs = {json.dumps({k: v for k, v in j["env"].items() if k not in JOB_KNOBS}, sort_keys=True) for j in jobs}
+        if len(envs) > 1:
+            raise ValueError(f"--cell {cell} over runs of {len(envs)} knobs: name each set its own cell")
+    for j, c in zip(jobs, [cell] * len(jobs) if cell else cells_of(j["env"] for j in jobs)):
         seeds[c] = seeds.get(c, 0) + 1
-        jobs.append({**job, "dir": str(out), "cell": c, "arm": arm, "seed": seeds[c],
-                     "at": None, "wall_s": None, "rss_mb": None})
+        j.update(cell=c, seed=seeds[c])
     export(src, jobs)
     return src, jobs
+
+
+def refuse_existing(src, replace):
+    """Refuses to write cache source `src` over one, unless `replace`."""
+    if (store_host.cache_root() / "cache" / src).exists() and not replace:
+        raise FileExistsError(f"{src} exists: its runs (and their seeds) would go; name another, or replace it")
 
 
 def export(src, jobs):
@@ -209,39 +226,60 @@ def export(src, jobs):
         shutil.rmtree(work, ignore_errors=True)
 
 
-def cells_in(src):
-    """The cells of a testbed source's runs, {cell: env}: their twins'
-    knobs, each cell its runs' (cells_of); runs of one cell but two knobs
-    (two buckets: what the keying sets aside) are refused, as one twin
-    can't stand for both."""
-    runs = store_host.cache_root() / "cache" / src / "runs.parquet"
-    rows = store_host.duck(f"SELECT DISTINCT env FROM read_parquet({store_host.q(runs)}) "
-                           "WHERE sim = 'testbed' ORDER BY env;")
-    envs = [json.loads(r["env"]) for r in rows]
+def twin_cells(rows):
+    """The cells a twin runs, {cell: env}, of testbed runs' (cell, env)
+    rows: refused where a cell holds runs of two knobs (what the keying
+    sets aside, two buckets, say), which one twin can't stand for, or a run
+    holds a TESTBED_ setting other than its qdisc tree, which no twin knob
+    takes (a refused link, a seed's loss, run.sh's late date stamps)."""
     out = {}
-    for cell, env in zip(cells_of(envs), envs):
+    for cell, env in rows:
+        odd = sorted(k for k in env if k.startswith("TESTBED_") and k != "TESTBED_QDISC")
+        if odd:
+            raise ValueError(f"cell {cell}: {', '.join(odd)}, which no twin knob takes: no twin")
         if cell in out and out[cell] != env:
             diff = sorted(k for k in {*out[cell], *env} if out[cell].get(k) != env.get(k))
-            raise ValueError(f"{src}: cell {cell} holds runs of two knobs ({', '.join(diff)}): no one twin")
+            raise ValueError(f"cell {cell} holds runs of two knobs ({', '.join(diff)}): no one twin")
         out[cell] = env
     return dict(sorted(out.items()))
 
 
-def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8):
-    """Each cell of testbed source `src`'s twin: strims-sim's
+def cells_in(src_like, kind="one", arm="one"):
+    """The cells of the testbed runs a side names (testbed_side(src_like,
+    kind, arm) over the catalog: a local ingest's testbed/<name>, a farm
+    run's farm/<run>/%), {cell: env}, their twins' knobs (twin_cells); the
+    catalog's, so `simdb.py index` first."""
+    from . import catalog
+
+    rows = catalog.lake(f"SELECT DISTINCT j.stored_cell AS cell, j.env FROM jobs j SEMI JOIN (SELECT unnest("
+                        f"testbed_side({store_host.q(src_like)}, kind := {store_host.q(kind)}, "
+                        f"arm := {store_host.q(arm)}), recursive := true)) s ON s.k = j.k ORDER BY 1;")
+    envs = [r["env"] if isinstance(r["env"], dict) else dict(r["env"]) for r in rows]
+    return twin_cells([(r["cell"], {k: v for k, v in e.items() if k not in JOB_KNOBS}) for r, e in zip(rows, envs)])
+
+
+def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8, kind="one", side_arm="one",
+          replace=False):
+    """Each cell's twin of the testbed runs side (src, kind, side_arm)
+    names (cells_in: `src` a source's LIKE pattern): strims-sim's
     calibration_star (the scenarios test binary `binary`) at seeds 1..N
-    with the cell's knobs (its TESTBED_ settings left out) and `env`'s,
-    one farm job's way each (STRIMS_SIM_JOB=1), their tables folded into
-    the cache as source testbed/<name>, each a job of its cell, `arm` and
-    seed. Returns the source and the jobs."""
+    with the cell's knobs (its TESTBED_QDISC left out) and `env`'s, one
+    farm job's way each (STRIMS_SIM_JOB=1), their tables folded into the
+    cache as source testbed/<name> (refused over one, unless `replace`),
+    each a job of its cell, `arm` and seed. Returns the source and the
+    jobs."""
     import concurrent.futures
 
     binary = Path(binary)
     with open(binary, "rb") as f:
         digest = hashlib.file_digest(f, "sha256").hexdigest()
+    refuse_existing(f"testbed/{name}", replace)
+    cells = cells_in(src, kind, side_arm)
+    if not cells:
+        raise ValueError(f"no testbed runs in {src} ({kind}, {side_arm}): simdb.py index takes a source in")
     work = Path(tempfile.mkdtemp(prefix="twins-", dir=ROOT / "target"))
     todo = []
-    for cell, knobs in cells_in(src).items():
+    for cell, knobs in cells.items():
         base = {k: v for k, v in knobs.items() if not k.startswith("TESTBED_")}
         for seed in range(1, seeds + 1):
             todo.append((cell, {**base, **(env or {}), "STRIMS_SIM_JOB": "1"}, seed))

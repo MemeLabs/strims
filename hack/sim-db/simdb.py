@@ -27,7 +27,9 @@
   hack/sim-db/simdb.py pull --run RUN [--reads [--cell C] [--arm A] [--seed N]] [--dry-run]
   hack/sim-db/simdb.py gc [--days N]
   hack/sim-db/simdb.py testbed RUN_DIR... --name NAME [--cell C] [--arm A] [--knob KEY=VALUE ...] [--bin PATH]
-  hack/sim-db/simdb.py twin SRC --name NAME --bin SCENARIOS [--seeds N] [--arm A] [--env KEY=VALUE ...]
+                       [--replace]
+  hack/sim-db/simdb.py twin SRC_LIKE --name NAME --bin SCENARIOS [--seeds N] [--arm A] [--kind K]
+                       [--side-arm A] [--env KEY=VALUE ...] [--replace]
   hack/sim-db/simdb.py testbed-tier DIR [--repeats N] [--ref REF]
 
 `describe`, `lake`, `view`, `index` and `fetch` are the catalog's
@@ -524,7 +526,8 @@ def cmd_testbed(a):
     from simlab import testbed
 
     knobs = dict(kv.split("=", 1) for kv in a.knob or [])
-    src, jobs = testbed.ingest(a.run_dirs, a.name, binary=a.bin, cell=a.cell, arm=a.arm, knobs=knobs)
+    src, jobs = testbed.ingest(a.run_dirs, a.name, binary=a.bin, cell=a.cell, arm=a.arm, knobs=knobs,
+                               replace=a.replace)
     for j in jobs:
         print(f"{src} {j['k']} {j['cell']} {j['arm']} seed {j['seed']}  {j['dir']}")
     print("simdb.py index takes them in")
@@ -541,7 +544,8 @@ def cmd_twin(a):
     from simlab import testbed
 
     env = dict(kv.split("=", 1) for kv in a.env or [])
-    src, jobs = testbed.twins(a.src, a.bin, a.name, seeds=a.seeds, arm=a.arm, env=env)
+    src, jobs = testbed.twins(a.src, a.bin, a.name, seeds=a.seeds, arm=a.arm, env=env, kind=a.kind,
+                              side_arm=a.side_arm, replace=a.replace)
     for j in jobs:
         print(f"{src} {j['k']} {j['cell']} {j['arm']} seed {j['seed']}")
     print("simdb.py index takes them in")
@@ -656,7 +660,9 @@ def main():
                        "testbed/NAME, each a run of its twin's cell (simlab.testbed)")
     t.add_argument("run_dirs", nargs="+")
     t.add_argument("--name", required=True, help="the source's name: testbed/NAME")
-    t.add_argument("--cell", help="every run's cell (default: the tier cell of its knobs, else its knobs' name)")
+    t.add_argument("--cell", help="every run's cell (default: its knobs', simlab.testbed.cell_sql); runs of one "
+                   "knobs alone")
+    t.add_argument("--replace", action="store_true", help="write over an existing testbed/NAME (its runs go)")
     t.add_argument("--arm", default="testbed")
     t.add_argument("--knob", action="append", help="a twin knob KEY=VALUE to add to the runs' (a trickle's "
                    "STRIMS_SIM_ARRIVALS, say)")
@@ -668,7 +674,11 @@ def main():
     tt.add_argument("--ref", default="main", help="the arm's git ref")
     w = sub.add_parser("twin", help="the twins of a testbed source's cells (strims-sim's calibration_star at seeds "
                        "1..N) into the cache as source testbed/NAME (simlab.testbed.twins)")
-    w.add_argument("src", help="the testbed source, testbed/NAME")
+    w.add_argument("src", help="the testbed runs' sources, a LIKE pattern (testbed_side's): testbed/NAME, "
+                   "farm/RUN/%%; from the catalog, so index first")
+    w.add_argument("--kind", default="one", help="native, browsers, any, or one (the runs' one kind)")
+    w.add_argument("--side-arm", default="one", help="the testbed runs' arm, any, or one (the runs' one arm)")
+    w.add_argument("--replace", action="store_true", help="write over an existing testbed/NAME")
     w.add_argument("--name", required=True)
     w.add_argument("--bin", required=True, help="a strims-sim scenarios test binary")
     w.add_argument("--seeds", type=int, default=8)
