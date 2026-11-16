@@ -113,7 +113,7 @@ const ListingMenuItem: React.FC<ListingMenuItemProps> = ({
       <SnippetImage className="search__menu__channel__logo" source={snippet.channelLogo} />
       <div className="search__menu__channel__label">
         {title && (
-          <span className="directory_grid__item__channel__title" title={title}>
+          <span className="search__menu__channel__title" title={title}>
             {title}
           </span>
         )}
