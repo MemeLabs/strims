@@ -148,6 +148,19 @@ class Joins(unittest.TestCase):
 
 
 class Tier(unittest.TestCase):
+    def test_the_binary_is_where_cargo_writes_it(self):
+        # $CARGO_TARGET_DIR, relative to the checkout or absolute, else
+        # the checkout's target/, as the engine set's build writes it.
+        def binary(env):
+            env = {k: v for k, v in os.environ.items() if k != "CARGO_TARGET_DIR"} | env
+            return subprocess.run([sys.executable, "-c", "from simlab import testbed; print(testbed.BINARY)"],
+                                  cwd=HACK, env=env, capture_output=True, text=True, check=True).stdout.strip()
+
+        root = HACK.parent
+        self.assertEqual(binary({}), str(root / "target/release/examples/testbed_tables"))
+        self.assertEqual(binary({"CARGO_TARGET_DIR": "/x/t"}), "/x/t/release/examples/testbed_tables")
+        self.assertEqual(binary({"CARGO_TARGET_DIR": "t2"}), str(root / "t2/release/examples/testbed_tables"))
+
     def test_the_tiers_cells_are_hostable_and_honest(self):
         cells = testbed.tier_cells()
         self.assertTrue(cells)

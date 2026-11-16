@@ -23,7 +23,8 @@ its knobs (`tb-<hash>`).
   tables(run_dir, binary=None, knobs=None) -> Path
                  the run's tables dir (<run_dir>/tables), written by the
                  testbed_tables binary (BINARY's, by default this
-                 checkout's release build), `knobs` added to its twin's
+                 checkout's release build, where cargo writes it:
+                 $CARGO_TARGET_DIR, else target/), `knobs` added to its twin's
   cells_of(envs) -> [str], cell_of(env) -> str
                  each env's cell (see above; cell_sql's keying)
   ingest(run_dirs, name, binary=None, arm="testbed", knobs=None,
@@ -74,7 +75,10 @@ from pathlib import Path
 from . import store_host
 
 ROOT = Path(__file__).resolve().parents[2]
-BINARY = ROOT / "target" / "release" / "examples" / "testbed_tables"
+# Where `cargo build --release -p strims-sim --example testbed_tables`
+# run in this checkout writes it: $CARGO_TARGET_DIR's (relative to the
+# checkout) where set, as cargo reads it, else the checkout's target/.
+BINARY = (ROOT / os.environ.get("CARGO_TARGET_DIR", "target")) / "release" / "examples" / "testbed_tables"
 # What a testbed run's knobs hold that its tier cell's env doesn't, or
 # holds otherwise: one clock (a cell draws real skew), its tbf's buckets
 # (a cell has none), honest viewers (a tier's mix or off), the qdisc tree
