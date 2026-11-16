@@ -58,16 +58,19 @@
       flex-direction: row;
     }
 
+    // The label's text and the switch share the first row, and the
+    // description, where there is one, runs under both at the label's
+    // width: beside the switch it had only the switch's.
     &.input_label--toggle {
-      flex-direction: row;
-      justify-content: space-between;
-
-      .input_label__text {
-        flex: 1;
-      }
+      display: grid;
+      grid-template-columns: 1fr auto;
 
       .input_label__body {
-        flex: 0;
+        display: contents;
+      }
+
+      .input_label__description {
+        grid-column: 1 / -1;
       }
     }
 
