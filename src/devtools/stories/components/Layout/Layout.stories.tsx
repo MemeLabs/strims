@@ -44,20 +44,25 @@ const CloseVideo: React.FC = () => {
   return null;
 };
 
-// Opens the composer's emote menu as its button does, once the chat has
-// its composer.
-const OpenEmoteMenu: React.FC = () => {
+// The drawer's chat's buttons that open its menus: the composer's emote
+// menu's, and the header's room menu's.
+const EMOTE_MENU_BUTTON = ".layout__chat .chat_composer__button";
+const ROOM_MENU_BUTTON =
+  ".layout__chat .layout_chat__header > .layout_chat__toggle:not(.layout_chat__toggle--off)";
+
+// Clicks `selector` as a tap on it does, once it is in the document.
+const ClickOnce: React.FC<{ selector: string }> = ({ selector }) => {
   useEffect(() => {
     let frame = 0;
-    const open = () => {
-      const button = document.querySelector<HTMLElement>(".layout__chat .chat_composer__button");
+    const click = () => {
+      const button = document.querySelector<HTMLElement>(selector);
       if (button) {
         button.click();
       } else {
-        frame = requestAnimationFrame(open);
+        frame = requestAnimationFrame(click);
       }
     };
-    frame = requestAnimationFrame(open);
+    frame = requestAnimationFrame(click);
     return () => cancelAnimationFrame(frame);
   }, []);
   return null;
@@ -80,8 +85,10 @@ interface ShellStoryProps {
   fullScreenChat?: boolean;
   /** The player closed once the drawer has opened on it (CloseVideo). */
   closeVideo?: boolean;
-  /** The composer's emote menu open (OpenEmoteMenu). */
+  /** The composer's emote menu open, as its button opens it. */
   emoteMenu?: boolean;
+  /** The chat's room menu open, as the header's button opens it. */
+  roomMenu?: boolean;
 }
 
 // The whole shell as the app mounts it (MainProvider's providers, the
@@ -102,6 +109,7 @@ const ShellStory: React.FC<ShellStoryProps> = ({
   fullScreenChat,
   closeVideo,
   emoteMenu,
+  roomMenu,
 }) => {
   const frame = useLayout();
   return (
@@ -122,7 +130,8 @@ const ShellStory: React.FC<ShellStoryProps> = ({
               />
               <FollowLayout frame={frame} />
               {closeVideo && <CloseVideo />}
-              {emoteMenu && <OpenEmoteMenu />}
+              {emoteMenu && <ClickOnce selector={EMOTE_MENU_BUTTON} />}
+              {roomMenu && <ClickOnce selector={ROOM_MENU_BUTTON} />}
               <LayoutBody />
             </Layout>
           }
@@ -156,6 +165,16 @@ const stories: Story[] = [
   // No room yet: the room menu fills the chat, its button in the strip.
   {
     name: "Home, swapped",
+    component: () => <ShellStory swap />,
+  },
+  {
+    name: "Home, landscape cw",
+    landscape: "cw",
+    component: () => <ShellStory />,
+  },
+  {
+    name: "Home, swapped, landscape cw",
+    landscape: "cw",
     component: () => <ShellStory swap />,
   },
   {
@@ -203,6 +222,21 @@ const stories: Story[] = [
     component: () => <ShellStory room open emoteMenu swap />,
   },
   {
+    name: "Chat open, emote menu, swapped, landscape cw",
+    landscape: "cw",
+    component: () => <ShellStory room open emoteMenu swap />,
+  },
+  // The room menu opened over a room's chat, from the header's button.
+  {
+    name: "Chat open, room menu",
+    component: () => <ShellStory room open roomMenu />,
+  },
+  {
+    name: "Chat open, room menu, landscape cw",
+    landscape: "cw",
+    component: () => <ShellStory room open roomMenu />,
+  },
+  {
     name: "Chat closed",
     component: () => <ShellStory room showChat={false} expandNav />,
   },
@@ -221,6 +255,11 @@ const stories: Story[] = [
   },
   {
     name: "Playing, swapped",
+    component: () => <ShellStory room source={EMBED} swap />,
+  },
+  {
+    name: "Playing, swapped, landscape cw",
+    landscape: "cw",
     component: () => <ShellStory room source={EMBED} swap />,
   },
   {
