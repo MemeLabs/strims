@@ -1189,29 +1189,50 @@ CREATE OR REPLACE MACRO coverage_causes_in(runs) AS TABLE
 CREATE OR REPLACE MACRO coverage_causes_of(jobs) AS TABLE
     FROM coverage_causes_in((SELECT list(cv_run) FROM coverage_runs_of(jobs) cv_run));
 
+-- The bytes an access link (`spec`, run.sh's class: strims-sim's link.rs)
+-- charges a packet past its IP bytes: tbf's and trace's an Ethernet header
+-- (14), fiber's 18; none without a spec (a sim's uplink charging IP bytes
+-- alone); NULL for cable (DOCSIS's 64-byte floor) and dsl (ATM's cells,
+-- PTM's code), which charge no fixed overhead a packet.
+CREATE OR REPLACE MACRO link_overhead(spec) AS
+    CASE split_part(coalesce(spec, ''), ',', 1) WHEN '' THEN 0 WHEN 'tbf' THEN 14 WHEN 'trace' THEN 14
+                                                 WHEN 'fiber' THEN 18 END;
+
+-- The viewers' link_overhead of a run's knobs (`env`): their one class's
+-- (STRIMS_SIM_CAL_VIEWER_LINK), or STRIMS_SIM_CAL_LINKS' where those give
+-- one overhead, else NULL.
+CREATE OR REPLACE MACRO viewers_link_overhead(env) AS
+    CASE WHEN env['STRIMS_SIM_CAL_LINKS'] IS NULL THEN link_overhead(env['STRIMS_SIM_CAL_VIEWER_LINK'])
+         WHEN len(list_distinct(list_transform(string_split(trim(env['STRIMS_SIM_CAL_LINKS']), ' '),
+                                               lambda x: link_overhead(split_part(x, ':', 2))))) = 1
+         THEN link_overhead(split_part(string_split(trim(env['STRIMS_SIM_CAL_LINKS']), ' ')[1], ':', 2)) END;
+
 -- The testbed and its twin (simlab.testbed): each run of the jobs `jobs`
 -- (a side: structs of a job's `k`, its `cell` and `seed`) over the stream's
 -- seconds [lo_s, hi_s), one row a measure, the same SQL over a testbed
 -- run's tables and a sim run's: k, src, sim, cell, seed, measure, value.
 -- A run whose viewers read no frame (viewer_seconds' frames) didn't
 -- stream and gives no measure at all, so each measure counts the same runs;
--- a measure a run's tables lack is left out. The measures:
+-- a measure a run's tables lack is left out. Bytes are in one of two
+-- units, each side's from what it records: IP bytes (each packet's IP
+-- length: a testbed capture's; a sim's link charge less its access link
+-- class's overhead a packet, link_overhead) and link bytes (what the
+-- access link charged: a sim's; a testbed capture's IP bytes and its
+-- class's overhead a packet). A class whose charge isn't a fixed overhead
+-- a packet (cable's floor, dsl's cells) leaves the side that would convert
+-- unmeasured. A data channel's SACKs, which a testbed capture can't tell
+-- from its data inside DTLS, count in the uplink's bytes, packets and
+-- small packets on both sides. The measures:
 --   over_target_s       seconds in which an honest viewer lags past
 --                       @{delay_target_ms} ms (viewer_lag_of's lag,
 --                       carried across a second without reads)
 --   lag_p99_ms          the p99 of the honest viewers' lag over their
 --                       seconds (the same lag)
---   seed_upload         the seed's wire bytes (each packet's IP length:
---                       bins' seed_up_bytes and a data channel's SACKs,
---                       seed_up_sack_bytes, which a testbed run's captures
---                       count in seed_up_bytes; TCP's pure ACKs apart) over
---                       its uplink's rate (its uplink_rate levels) times
---                       the window
---   seed_charged        what the seed's shaper charged over its rate: a
---                       testbed run's tbf charges each packet its IP
---                       length and frame_bytes more (Ethernet's header,
---                       14), its pure ACKs too; a sim's bucket each
---                       packet's IP length alone
+--   seed_upload         the seed's uplink IP bytes (bins' seed_up_bytes
+--                       and its SACKs; TCP's pure ACKs apart) over its
+--                       uplink's rate (its uplink_rate levels) times the
+--                       window
+--   seed_charged        its link bytes, its pure ACKs' too, over the same
 --   seed_busy_permille  the seed meter's busy share (seconds' busy)
 --   seed_copies         an adaptive seed's copies (seconds' copies)
 --   seed_pushes_s, seed_answers_s
@@ -1230,18 +1251,18 @@ CREATE OR REPLACE MACRO coverage_causes_of(jobs) AS TABLE
 --                       ACKs in
 --   seed_ack_share      of those, the pure ACKs' share
 --   seed_small_share    of the others, the small ones' (<= 256 bytes)
---   viewer_up_bps       the honest viewers' wire bytes a second (summed)
+--   viewer_up_bps       the viewers' uplink IP bytes a second (summed; a
+--                       mix of viewer classes of two overheads leaves the
+--                       sim's unmeasured)
 --   competitor_share    over the seconds a competing upload ran (its
 --                       competing_start to its competing_stop), the mean
 --                       share of the seed's uplink rate it took (1 -
---                       seconds' avail over the rate): its wire bytes, IP
---                       lengths, on both sides
---   competitor_charged  the same as the seed's shaper charged it: a
---                       testbed run's tbf charges frame_bytes more a
---                       packet, here at full packets (full_packet bytes
---                       each); a sim's bucket the share itself
+--                       seconds' avail over the rate): its IP bytes, which
+--                       both sides count it in
+--   competitor_charged  the same in link bytes: its class's overhead a
+--                       packet more, at full packets (full_packet bytes)
 --   seed_wire_per_written
---                       the seed's uplink wire bytes, pure ACKs and SACKs
+--                       the seed's uplink IP bytes, pure ACKs and SACKs
 --                       in, over the bytes its driver wrote (node_bins:
 --                       data_bytes and ovh)
 -- and over the seed's meter samples (meter_samples, every one):
@@ -1274,10 +1295,11 @@ CREATE OR REPLACE MACRO coverage_causes_of(jobs) AS TABLE
 -- needs: meter_samples.rate_bps meter_samples.busy_permille meter_samples.queue_delay_ms
 -- needs: meter_samples.path_latest_ms meter_samples.children meter_samples.requests_in meter_samples.budget
 -- needs: meter_samples.copies meter_samples.latest_floor_ms
-CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, frame_bytes := 14, full_packet := 1500,
+CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet := 1500,
                                      growth_x := 3.5) AS TABLE
     WITH j AS (
-        SELECT DISTINCT u.cell, u.seed::BIGINT AS seed, b.k, b.src, b.sim, b.bin_ms
+        SELECT DISTINCT u.cell, u.seed::BIGINT AS seed, b.k, b.src, b.sim, b.bin_ms,
+               link_overhead(b.env['STRIMS_SIM_CAL_SEED_LINK']) AS seed_ovh, viewers_link_overhead(b.env) AS viewer_ovh
         FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k
         WHERE EXISTS (SELECT 1 FROM viewer_seconds v WHERE v.k = b.k AND v.src = b.src AND v.frames > 0)),
     lag AS (
@@ -1298,27 +1320,39 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, frame_bytes :
         FROM events e SEMI JOIN j USING (k, src) WHERE e.kind = 'uplink_rate' AND e.node = 0),
     bin AS (
         SELECT b.k, b.src, r.rate, b.seed_up_bytes + coalesce(b.seed_up_sack_bytes, 0) AS seed_up_bytes,
-               b.seed_up_packets + coalesce(b.seed_up_sack_packets, 0) AS seed_up_packets, b.seed_small_packets,
-               b.seed_up_ack_packets, b.seed_drops,
-               b.viewer_up_bytes + coalesce(b.viewer_up_sack_bytes, 0) AS viewer_up_bytes, b.viewer_switched,
-               b.viewer_shed, j.bin_ms, j.sim
+               b.seed_up_packets + coalesce(b.seed_up_sack_packets, 0) AS seed_up_packets,
+               b.seed_small_packets + coalesce(b.seed_up_sack_packets, 0) AS seed_small_packets,
+               b.seed_up_ack_packets, b.seed_up_ack_bytes, b.seed_drops,
+               b.viewer_up_bytes + coalesce(b.viewer_up_sack_bytes, 0) AS viewer_up_bytes,
+               b.viewer_up_packets + coalesce(b.viewer_up_sack_packets, 0) AS viewer_up_packets, b.viewer_switched,
+               b.viewer_shed, j.bin_ms, j.sim, j.seed_ovh, j.viewer_ovh
         FROM bins b JOIN j USING (k, src)
         ASOF LEFT JOIN rate r ON r.k = b.k AND r.src = b.src AND b.t_ms * 1000 >= r.t_us
         WHERE b.t_ms >= lo_s * 1000 AND b.t_ms < hi_s * 1000),
+    -- Each side's bytes in IP bytes and link bytes (see the docs): a
+    -- testbed's recorded IP, a sim's link.
+    units AS (
+        SELECT *,
+               CASE WHEN sim = 'testbed' THEN seed_up_bytes ELSE seed_up_bytes - seed_ovh * seed_up_packets END
+                   AS seed_ip,
+               CASE WHEN sim = 'testbed'
+                    THEN seed_up_bytes + seed_up_ack_bytes + seed_ovh * (seed_up_packets + seed_up_ack_packets)
+                    ELSE seed_up_bytes + seed_up_ack_bytes END AS seed_link,
+               CASE WHEN sim = 'testbed' THEN viewer_up_bytes ELSE viewer_up_bytes - viewer_ovh * viewer_up_packets END
+                   AS viewer_ip
+        FROM bin),
     wire AS (
         SELECT k, src, count(*) * any_value(bin_ms) / 1000.0 AS secs,
-               sum(seed_up_bytes) / sum(rate * bin_ms / 1000.0) AS seed_upload,
-               (sum(seed_up_bytes) + CASE WHEN any_value(sim) = 'testbed'
-                                          THEN frame_bytes * (sum(seed_up_packets) + sum(seed_up_ack_packets))
-                                          ELSE 0 END) / sum(rate * bin_ms / 1000.0) AS seed_charged,
+               sum(seed_ip) / sum(rate * bin_ms / 1000.0) AS seed_upload,
+               sum(seed_link) / sum(rate * bin_ms / 1000.0) AS seed_charged,
                sum(seed_drops) / (count(*) * any_value(bin_ms) / 1000.0) AS seed_drops_s,
                (sum(seed_up_packets) + sum(seed_up_ack_packets)) / (count(*) * any_value(bin_ms) / 1000.0) AS seed_pps,
                sum(seed_up_ack_packets) / nullif(sum(seed_up_packets) + sum(seed_up_ack_packets), 0) AS seed_ack_share,
                sum(seed_small_packets) / nullif(sum(seed_up_packets), 0) AS seed_small_share,
-               sum(viewer_up_bytes) / (count(*) * any_value(bin_ms) / 1000.0) AS viewer_up_bps,
+               sum(viewer_ip) / (count(*) * any_value(bin_ms) / 1000.0) AS viewer_up_bps,
                sum(viewer_switched) / (count(*) * any_value(bin_ms) / 1000.0) AS viewer_switched_s,
                sum(viewer_shed) / (count(*) * any_value(bin_ms) / 1000.0) AS viewer_shed_s
-        FROM bin GROUP BY ALL),
+        FROM units GROUP BY ALL),
     -- The meter's truth, what the seed could upload at each sample: its
     -- meter_samples' avail_bps (Report::upload_cap_at's, on both sides).
     truth AS (
@@ -1335,9 +1369,7 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, frame_bytes :
         WHERE e.node = 0 AND e.kind IN ('competing_start', 'competing_stop')),
     comp AS (
         SELECT s.k, s.src, avg(1 - s.avail / r.rate) AS competitor_share,
-               avg(1 - s.avail / r.rate) * CASE WHEN any_value(j.sim) = 'testbed'
-                                                THEN (full_packet + frame_bytes) / full_packet ELSE 1 END
-                   AS competitor_charged
+               avg(1 - s.avail / r.rate) * (full_packet + any_value(j.seed_ovh)) / full_packet AS competitor_charged
         FROM seconds s JOIN j USING (k, src)
         JOIN competing c ON c.k = s.k AND c.src = s.src AND c.kind = 'competing_start'
          AND (s.sec + 0.5) * 1e6 >= c.start_us AND (s.sec + 0.5) * 1e6 < c.stop_us
@@ -1346,9 +1378,11 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, frame_bytes :
         GROUP BY ALL),
     nb AS (
         SELECT n.k, n.src,
-               sum(n.up_bytes + coalesce(n.up_sack_bytes, 0) + n.up_ack_bytes) / nullif(sum(n.data_bytes + n.ovh), 0)
-                   AS seed_wire_per_written
-        FROM node_bins n SEMI JOIN j USING (k, src)
+               sum(n.up_bytes + coalesce(n.up_sack_bytes, 0) + n.up_ack_bytes
+                   - CASE WHEN j.sim = 'testbed' THEN 0
+                          ELSE j.seed_ovh * (n.up_packets + coalesce(n.up_sack_packets, 0) + n.up_ack_packets) END)
+                   / nullif(sum(n.data_bytes + n.ovh), 0) AS seed_wire_per_written
+        FROM node_bins n JOIN j USING (k, src)
         WHERE n.node = 0 AND n.t_ms >= lo_s * 1000 AND n.t_ms < hi_s * 1000 GROUP BY ALL),
     ms AS (
         SELECT m.k, m.src, avg(m.rate_bps) AS seed_rate_bps, sketch_quantile(m.children, 50) AS seed_children,
@@ -1480,14 +1514,14 @@ CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
 -- needs: meter_samples.rate_bps meter_samples.busy_permille meter_samples.queue_delay_ms
 -- needs: meter_samples.path_latest_ms meter_samples.children meter_samples.requests_in meter_samples.budget
 -- needs: meter_samples.copies meter_samples.latest_floor_ms
-CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 0, hi_s := 1e9, frame_bytes := 14, full_packet := 1500,
+CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 0, hi_s := 1e9, full_packet := 1500,
                                     growth_x := 3.5) AS TABLE
     FROM twin_fit_rows(
         (SELECT coalesce(list({'cell': cell, 'measure': measure, 'k': k, 'value': value}),
                          []::STRUCT(cell VARCHAR, measure VARCHAR, k VARCHAR, value DOUBLE)[])
-         FROM twin_runs_of(a_jobs, lo_s := lo_s, hi_s := hi_s, frame_bytes := frame_bytes,
+         FROM twin_runs_of(a_jobs, lo_s := lo_s, hi_s := hi_s,
                            full_packet := full_packet, growth_x := growth_x)),
         (SELECT coalesce(list({'cell': cell, 'measure': measure, 'k': k, 'value': value}),
                          []::STRUCT(cell VARCHAR, measure VARCHAR, k VARCHAR, value DOUBLE)[])
-         FROM twin_runs_of(b_jobs, lo_s := lo_s, hi_s := hi_s, frame_bytes := frame_bytes,
+         FROM twin_runs_of(b_jobs, lo_s := lo_s, hi_s := hi_s,
                            full_packet := full_packet, growth_x := growth_x)));
