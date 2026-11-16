@@ -71,9 +71,15 @@
 //!   sent after it (RACK, `tcp_rack_mark_lost`, retransmissions' included),
 //!   a quarter of the least round trip later, or at once in a recovery or
 //!   once three packets past the gap are acknowledged; failing that from
-//!   its tail-loss probe's, two smoothed round trips after its last send
-//!   (and 200 ms more with one segment in flight) and a round trip on. A
-//!   retransmission no later segment shows lost waits for the
+//!   its tail-loss probe's, a round trip on. While anything is in flight
+//!   a transmit timer is armed, as Linux's: the tail-loss probe two
+//!   smoothed round trips after the last send (2 ms more, or `RTO_MIN`
+//!   more with one packet in flight), or in a recovery or the loss state
+//!   the retransmission timeout, which resending the oldest segment
+//!   re-arms; the probe or the retransmission it sends reaches the
+//!   receiver, which acknowledges at once what it owes. A spurious
+//!   timeout (nothing lost) cuts nothing, as F-RTO or an undo would take
+//!   it back. A retransmission no later segment shows lost waits for the
 //!   retransmission timeout, which backs off and restarts the window from
 //!   what is still in flight and a packet (Linux's loss state,
 //!   `tcp_enter_loss`). The lost segment goes to the front of its
@@ -267,7 +273,8 @@ enum Event {
     /// The message is through the receiver's downlink.
     Deliver,
     /// The window model: `conn`'s sender learns its segment `seq` was
-    /// lost, from later segments' acknowledgements or a tail-loss probe's.
+    /// lost, from later segments' acknowledgements or a tail-loss probe's,
+    /// unless a later acknowledgement marked it first.
     Lost {
         conn: (SocketAddr, SocketAddr),
         seq: u64,
@@ -278,8 +285,11 @@ enum Event {
         conn: (SocketAddr, SocketAddr),
         seq: u64,
     },
-    /// The window model: `conn`'s tail-loss probe is due.
+    /// The window model: `conn`'s transmit timer may be due.
     Probe { conn: (SocketAddr, SocketAddr) },
+    /// The window model: what `conn`'s transmit timer sent reaches its
+    /// receiver, which acknowledges at once what it owes.
+    Probed { conn: (SocketAddr, SocketAddr) },
     /// The window model: the bytes `from..from + len` of segment `seq` of
     /// `conn`, in `packets` frames (`wire` on the wire), reach host `to`'s
     /// downlink, or are `through` it; `whole` when they end the segment, as
@@ -449,14 +459,27 @@ struct Flow {
     /// When the flow last sent.
     last_send: Time,
     /// Segments the access queues dropped that the sender doesn't know of
-    /// yet, by sequence number (when they went out and a lost
-    /// retransmission's timeout), and those it retransmitted and hasn't
-    /// seen acknowledged; how often their timeout backed off, and whether
-    /// a tail-loss probe is pending. Bound: the segments in flight.
+    /// yet, by sequence number (when they went out, and when it learns of
+    /// the loss if a timer is to tell it: a lost retransmission's timeout,
+    /// RACK's reordering window, a tail-loss probe's round trip), and those
+    /// it retransmitted and hasn't seen acknowledged; and how often the
+    /// retransmission timeout backed off. A segment stays here until its
+    /// loss is learned, so a later segment's acknowledgement can mark it
+    /// lost before its timer ([`Event::Lost`]). Bound: the segments in
+    /// flight.
     lost: BTreeMap<u64, (Time, Option<Time>)>,
     retx: BTreeSet<u64>,
     backoff: u32,
-    probing: bool,
+    /// When the transmit timer fires as last armed ([`Flow::arm`],
+    /// [`Flow::rearm_rto`]), and whether it is the tail-loss probe or the
+    /// retransmission timeout; `NIL` with nothing in flight. While
+    /// anything is in flight a timer is armed, as Linux's
+    /// (`icsk_pending`), whatever was lost: data, a retransmission or an
+    /// acknowledgement. The earliest [`Event::Probe`] queued for it, `NIL`
+    /// without ([`Scheduler::watch`]).
+    timer_at: Time,
+    tlp: bool,
+    probe_at: Time,
     /// When the retransmission timeout last fired.
     timed_out: Time,
     /// Its recovery while one runs.
@@ -558,7 +581,9 @@ impl Default for Flow {
             lost: BTreeMap::new(),
             retx: BTreeSet::new(),
             backoff: 0,
-            probing: false,
+            timer_at: Time::NIL,
+            tlp: false,
+            probe_at: Time::NIL,
             timed_out: Time::NIL,
             recovery: None,
             loss_high: None,
@@ -575,12 +600,56 @@ impl Flow {
         self.srtt + (self.rttvar * 4).max(RTO_MIN)
     }
 
-    /// When the tail-loss probe is due, the path's round trip `base` (for
-    /// a flow with no round trip sampled yet): twice the smoothed round
-    /// trip after the last send, and a delayed acknowledgement's
-    /// [`RTO_MIN`] more with one segment in flight, as Linux's
-    /// `tcp_schedule_loss_probe`.
-    fn probe_at(&self, base: Duration) -> Time {
+    /// The retransmission timeout backed off as often as it fired since
+    /// new data was last acknowledged (`icsk_rto << icsk_backoff`).
+    fn rto_backed(&self) -> Duration {
+        self.rto() * (1i64 << self.backoff.min(6))
+    }
+
+    /// Arms the retransmission timeout at `now`, as `tcp_rearm_rto` does:
+    /// none with nothing in flight; what is left of the oldest outstanding
+    /// segment's (the retransmission queue's head, `tcp_rto_delta_us`)
+    /// where a tail-loss probe was pending, else a full one on.
+    fn rearm_rto(&mut self, now: Time) {
+        if self.in_flight == 0 {
+            self.timer_at = Time::NIL;
+            self.tlp = false;
+            return;
+        }
+        let rto = self.rto_backed();
+        let head = self.sent_at.first_key_value().map(|(_, &sent)| sent);
+        self.timer_at = match head {
+            Some(sent) if self.tlp => (sent + rto).max(now + Duration::from_micros(1)),
+            _ => now + rto,
+        };
+        self.tlp = false;
+    }
+
+    /// Arms the transmit timer at `now`, on a send of new data or
+    /// (`acked`) an acknowledgement of data, as Linux does
+    /// (`tcp_event_new_data_sent`, `tcp_schedule_loss_probe`,
+    /// `tcp_set_xmit_timer`): with nothing in flight none; in a recovery or
+    /// the loss state the retransmission timeout ([`Flow::rearm_rto`]),
+    /// which an acknowledgement re-arms and a send arms where none or a
+    /// tail-loss probe is pending; otherwise the tail-loss probe, due two
+    /// smoothed round trips on (the path's `base` before one is sampled),
+    /// [`RTO_MIN`] more with one packet in flight (a delayed
+    /// acknowledgement's) or 2 ms more with more, and no later than the
+    /// retransmission timeout: a full one from an acknowledgement, what
+    /// remains of the oldest outstanding segment's from a send.
+    fn arm(&mut self, now: Time, acked: bool, base: Duration) {
+        if self.in_flight == 0 {
+            self.timer_at = Time::NIL;
+            self.tlp = false;
+            return;
+        }
+        if self.recovery.is_some() || self.loss_high.is_some() {
+            if acked || self.timer_at.is_nil() || self.tlp {
+                self.rearm_rto(now);
+            }
+            return;
+        }
+        let rto = self.rto_backed();
         let srtt = if self.srtt > Duration::ZERO {
             self.srtt
         } else {
@@ -591,7 +660,21 @@ impl Flow {
         } else {
             Duration::from_millis(2)
         };
-        self.last_send + (srtt * 2).max(Duration::from_millis(10)) + extra
+        let mut timeout = srtt * 2 + extra;
+        let left = if acked {
+            rto
+        } else {
+            let oldest = self
+                .sent_at
+                .first_key_value()
+                .map_or(now, |(_, &sent)| sent);
+            rto - (now - oldest)
+        };
+        if left > Duration::ZERO {
+            timeout = timeout.min(left);
+        }
+        self.timer_at = now + timeout;
+        self.tlp = true;
     }
 
     /// A round-trip `sample` of the segment at `seq`: the smoothed round
@@ -837,6 +920,18 @@ impl Flow {
         self.in_flight > 0
             && (self.in_flight + len) as f64 > self.cwnd
             && self.recovery.is_none_or(|r| r.out > 0)
+    }
+
+    /// A loss a timer showed, RACK's or the tail-loss probe's, starts a
+    /// recovery at `now`, whose first step counts a packet delivered, and
+    /// arms the retransmission timeout where the probe was pending
+    /// (`tcp_rack_reo_timeout`'s `tcp_rearm_rto`).
+    fn recover_at(&mut self, now: Time) {
+        self.enter_recovery();
+        self.reduction(MSS as usize, false, true);
+        if self.tlp || self.timer_at.is_nil() {
+            self.rearm_rto(now);
+        }
     }
 
     /// The piece from byte `from` of segment `seq`, the leading frames the
@@ -1469,13 +1564,11 @@ impl Scheduler {
                     let Some(f) = self.flows.get_mut(&conn) else {
                         continue;
                     };
-                    if timeout {
-                        // Unless a later segment's acknowledgement told first.
-                        if f.lost.get(&seq).is_none_or(|&(_, due)| due != Some(t)) {
-                            continue;
-                        }
-                        f.lost.remove(&seq);
+                    // Unless a later segment's acknowledgement told first.
+                    if f.lost.get(&seq).is_none_or(|&(_, due)| due != Some(t)) {
+                        continue;
                     }
+                    f.lost.remove(&seq);
                     let len = f.outstanding(seq);
                     f.in_flight = f.in_flight.saturating_sub(len);
                     f.sent_at.remove(&seq);
@@ -1514,8 +1607,7 @@ impl Scheduler {
                         // A loss shown by RACK's timer or a tail-loss probe
                         // starts a recovery, whose first step counts a
                         // packet delivered (`tcp_rack_reo_timeout`).
-                        f.enter_recovery();
-                        f.reduction(MSS as usize, false, true);
+                        f.recover_at(t);
                         if let Some(n) = from.and_then(|h| self.cuts.get_mut(h)) {
                             *n += 1;
                         }
@@ -1531,6 +1623,12 @@ impl Scheduler {
                 }
                 Event::Probe { conn } => {
                     self.probe(t, conn);
+                    continue;
+                }
+                Event::Probed { conn } => {
+                    if let Some(a) = self.owed.get_mut(&conn).and_then(|o| o.probed(t)) {
+                        self.send_ack(t, conn, a);
+                    }
                     continue;
                 }
                 Event::DelAck { conn } => {
@@ -1659,6 +1757,7 @@ impl Scheduler {
                 | Event::Lost { .. }
                 | Event::Timeout { .. }
                 | Event::Probe { .. }
+                | Event::Probed { .. }
                 | Event::DelAck { .. }
                 | Event::CrossAck { .. }
                 | Event::CrossLost { .. }
@@ -1740,15 +1839,20 @@ impl Scheduler {
             let now = f.recovery.is_some() || f.sacked.len() >= 2;
             let reo = f.min_rtt / 4;
             for s in earlier {
-                if f.lost.remove(&s).is_some() {
-                    if now {
+                if now {
+                    if f.lost.remove(&s).is_some() {
                         marked.push(s);
-                    } else {
-                        let key = self.next;
-                        self.next += 1;
-                        self.events
-                            .insert((t + reo, key), Event::Lost { conn, seq: s });
                     }
+                } else if let Some(v) = f.lost.get_mut(&s)
+                    && v.1.is_none_or(|due| due > t + reo)
+                {
+                    // It stays pending until then; a later acknowledgement
+                    // may mark it first.
+                    v.1 = Some(t + reo);
+                    let key = self.next;
+                    self.next += 1;
+                    self.events
+                        .insert((t + reo, key), Event::Lost { conn, seq: s });
                 }
             }
         }
@@ -1781,6 +1885,10 @@ impl Scheduler {
             // SACK's alone.
             f.grow(t, len, base, f.srtt.max(base));
         }
+        // Data acknowledged at the cumulative point re-arms the timer.
+        if seq <= una || advanced {
+            f.arm(t, true, base);
+        }
         if self.tcp_trace.is_some() {
             if !was_recovering && in_recovery {
                 self.traced(t, conn, "rec", seq, 0);
@@ -1793,6 +1901,7 @@ impl Scheduler {
             }
             self.traced(t, conn, "ack", seq, len);
         }
+        self.watch(t, conn);
     }
 
     /// The access queues dropped segment `seq` of `conn` at `t`. Its
@@ -1801,7 +1910,6 @@ impl Scheduler {
     /// ([`Scheduler::probe`]); a lost retransmission fails over to the
     /// retransmission timeout, doubled for each time it backed off.
     fn dropped(&mut self, t: Time, conn: (SocketAddr, SocketAddr), seq: u64) {
-        let base = self.conn_rtt(conn);
         let f = self.flows.entry(conn).or_default();
         let sent = f.sent_at.get(&seq).copied().unwrap_or(t);
         if f.retx.contains(&seq) {
@@ -1813,56 +1921,116 @@ impl Scheduler {
             return;
         }
         f.lost.insert(seq, (sent, None));
-        if !f.probing {
-            f.probing = true;
-            let at = f.probe_at(base).max(t);
-            let key = self.next;
-            self.next += 1;
-            self.events.insert((at, key), Event::Probe { conn });
-        }
+        self.watch(t, conn);
     }
 
-    /// `conn`'s tail-loss probe is due at `t`: unless the flow sent since,
-    /// which moves it, the probe leaves now and its acknowledgement, a
-    /// round trip later, shows the segments lost.
-    fn probe(&mut self, t: Time, conn: (SocketAddr, SocketAddr)) {
-        let base = self.conn_rtt(conn);
+    /// Queues `conn`'s [`Event::Probe`] for its transmit timer, unless one
+    /// is queued at or before it: with anything in flight the timer fires,
+    /// so no loss, of data or of an acknowledgement, leaves the sender
+    /// waiting for good.
+    fn watch(&mut self, now: Time, conn: (SocketAddr, SocketAddr)) {
         let Some(f) = self.flows.get_mut(&conn) else {
             return;
         };
-        f.probing = false;
-        if f.lost.values().all(|&(_, due)| due.is_some()) {
+        if f.timer_at.is_nil() && f.in_flight > 0 {
+            f.rearm_rto(now);
+        }
+        let at = f.timer_at;
+        if at.is_nil() || (!f.probe_at.is_nil() && f.probe_at <= at) {
             return;
         }
-        let at = f.probe_at(base);
-        if at > t {
-            f.probing = true;
-            let key = self.next;
-            self.next += 1;
-            self.events.insert((at, key), Event::Probe { conn });
-            return;
-        }
-        let back = if f.srtt > Duration::ZERO {
-            f.srtt
-        } else {
-            base
+        f.probe_at = at;
+        let key = self.next;
+        self.next += 1;
+        self.events.insert((at, key), Event::Probe { conn });
+    }
+
+    /// `conn`'s transmit timer may be due at `t` ([`Scheduler::watch`]):
+    /// unless it moved later, which queues it again, it fires. The
+    /// tail-loss probe shows the data the access queues dropped and the
+    /// sender doesn't know of, its acknowledgement a round trip later; the
+    /// retransmission timeout, in a recovery or the loss state or once the
+    /// probe has gone, sends them to the loss state, and backs off where it
+    /// finds none (a spurious one, which Linux's F-RTO or an undo would
+    /// take back: the model cuts nothing for it). Either reaches the
+    /// receiver as a segment it has, which it acknowledges at once with
+    /// everything it owes ([`Event::Probed`]), so a lost acknowledgement
+    /// doesn't leave the sender waiting; then the retransmission timeout is
+    /// armed a full one on.
+    fn probe(&mut self, t: Time, conn: (SocketAddr, SocketAddr)) {
+        let base = self.conn_rtt(conn);
+        let reach = match (
+            self.ip_host.get(&conn.0.ip()),
+            self.ip_host.get(&conn.1.ip()),
+        ) {
+            (Some(&a), Some(&b)) => self.net.up_backlog(a, t) + self.net.one_way(a, b),
+            _ => base / 2,
         };
-        // The probe shows the original segments lost; retransmissions
-        // lost again wait for their timeout.
-        let found: Vec<u64> = f
+        let Some(f) = self.flows.get_mut(&conn) else {
+            return;
+        };
+        if f.probe_at == t {
+            f.probe_at = Time::NIL;
+        }
+        if f.in_flight == 0 {
+            f.timer_at = Time::NIL;
+            f.tlp = false;
+            return;
+        }
+        let at = f.timer_at;
+        if at.is_nil() || at > t {
+            self.watch(t, conn);
+            return;
+        }
+        let unknown: Vec<u64> = f
             .lost
             .iter()
             .filter(|(_, v)| v.1.is_none())
             .map(|(&s, _)| s)
             .collect();
-        for s in found {
-            if f.lost.remove(&s).is_some() {
-                let key = self.next;
-                self.next += 1;
-                self.events
-                    .insert((t + back, key), Event::Lost { conn, seq: s });
+        if f.recovery.is_some() || f.loss_high.is_some() || !f.tlp {
+            // The retransmission timeout: the segments lost and not yet
+            // known go to the loss state.
+            if unknown.is_empty() {
+                f.backoff = f.backoff.saturating_add(1);
+            }
+            for s in unknown {
+                if let Some(v) = f.lost.get_mut(&s) {
+                    v.1 = Some(t);
+                    let key = self.next;
+                    self.next += 1;
+                    self.events
+                        .insert((t, key), Event::Timeout { conn, seq: s });
+                }
+            }
+        } else {
+            let back = if f.srtt > Duration::ZERO {
+                f.srtt
+            } else {
+                base
+            };
+            // The probe shows the original segments lost a round trip on, as
+            // its acknowledgement's SACK would; retransmissions lost again
+            // wait for their timeout. The segments stay pending, as the
+            // probe leaves RACK alone in Linux: a later segment's
+            // acknowledgement before then marks them lost at once
+            // (`tcp_rack_detect_loss`).
+            for s in unknown {
+                if let Some(v) = f.lost.get_mut(&s) {
+                    v.1 = Some(t + back);
+                    let key = self.next;
+                    self.next += 1;
+                    self.events
+                        .insert((t + back, key), Event::Lost { conn, seq: s });
+                }
             }
         }
+        f.tlp = false;
+        f.rearm_rto(t);
+        let key = self.next;
+        self.next += 1;
+        self.events.insert((t + reach, key), Event::Probed { conn });
+        self.watch(t, conn);
     }
 
     /// Segment `seg` (its record, sequence number, length and packets) of
@@ -2203,9 +2371,16 @@ impl Scheduler {
                     if let Some(t) = f.tails.get_mut(&seq) {
                         t.resent = true;
                     }
+                    let head = f.snd_una() >= seq;
                     f.recovery_sent(len);
                     f.sent(at, len, f.srtt.max(rtt));
                     f.sent_at.insert(seq, at);
+                    // Resending the head re-arms the retransmission
+                    // timeout a full one on (`tcp_xmit_retransmit_queue`).
+                    if head || f.timer_at.is_nil() {
+                        f.tlp = false;
+                        f.timer_at = at + f.rto_backed();
+                    }
                     self.sending.push((conn, seq));
                     return true;
                 }
@@ -2291,6 +2466,7 @@ impl Scheduler {
                 );
                 f.recovery_sent(len);
                 f.sent(at, len, f.srtt.max(rtt));
+                f.arm(at, false, rtt);
                 f.sent_at.insert(seq, at);
                 self.sending.push((conn, seq));
                 true
@@ -2298,6 +2474,9 @@ impl Scheduler {
             for (conn, seq) in std::mem::take(&mut self.sending) {
                 self.transmit_window(at, conn, seq);
             }
+        }
+        for &conn in conns {
+            self.watch(at, conn);
         }
     }
 
@@ -3287,6 +3466,129 @@ mod tests {
             );
         }
         assert!(f.recovery.is_some());
+    }
+
+    #[test]
+    fn a_later_acknowledgement_shows_a_probes_loss_at_once() {
+        // A tail-loss probe finds segment 0 lost and learns so a round trip
+        // on, as its acknowledgement's SACK would; the acknowledgements of
+        // two segments sent after it, arriving before then, show it lost at
+        // once (RACK, `tcp_rack_detect_loss`) and start the recovery there.
+        let ms = |n: i64| Duration::from_millis(n);
+        let mut sim = build();
+        let sites = [
+            ("a", Site::new(City::Frankfurt, Access::Fiber)),
+            ("b", Site::new(City::Frankfurt, Access::Fiber)),
+        ];
+        sim.host("a", || async { Ok(()) });
+        sim.client("b", async { Ok(()) });
+        let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1, None).unwrap();
+        let conn: (SocketAddr, SocketAddr) = (
+            "192.0.2.1:9000".parse().unwrap(),
+            "192.0.2.2:40000".parse().unwrap(),
+        );
+        let seg = 2 * MSS as usize;
+        let t0 = Time::EPOCH + ms(1000);
+        let f = wan.flows.entry(conn).or_default();
+        f.srtt = ms(30);
+        f.rttvar = ms(5);
+        f.min_rtt = ms(30);
+        for (seq, at) in [(0, t0), (1, t0 + ms(1)), (2, t0 + ms(1))] {
+            f.sent(at, seg, ms(30));
+            f.sent_at.insert(seq, at);
+        }
+        f.arm(t0 + ms(1), false, ms(30));
+        assert!(f.tlp);
+        let probe = f.timer_at;
+        wan.dropped(t0, conn, 0);
+        wan.probe(probe, conn);
+        let f = wan.flows.get(&conn).unwrap();
+        assert!(f.recovery.is_none());
+        wan.acked(probe + ms(5), conn, 1, seg);
+        wan.acked(probe + ms(5), conn, 2, seg);
+        let f = wan.flows.get(&conn).unwrap();
+        assert!(
+            f.recovery.is_some(),
+            "no recovery at the later acknowledgements"
+        );
+        assert!(!f.lost.contains_key(&0) && f.resend.contains(&0));
+    }
+
+    #[test]
+    fn a_loss_a_timer_shows_arms_the_retransmission_timeout() {
+        // A burst arms the tail-loss probe 2 srtt + 2 ms on; a loss RACK's
+        // timer shows just before it starts a recovery, which arms the
+        // retransmission timeout from the oldest segment's send
+        // (`tcp_rearm_rto`), not the probe's time.
+        let ms = |n: i64| Duration::from_millis(n);
+        let t0 = Time::EPOCH + ms(1000);
+        let mut f = Flow {
+            srtt: ms(30),
+            rttvar: ms(5),
+            ..Flow::default()
+        };
+        for seq in 0..10 {
+            f.sent(t0, MSS as usize, ms(30));
+            f.sent_at.insert(seq, t0);
+        }
+        f.arm(t0, false, ms(30));
+        assert_eq!(f.timer_at, t0 + ms(62));
+        assert!(f.tlp);
+        f.recover_at(t0 + ms(61));
+        assert!(!f.tlp);
+        assert_eq!(f.timer_at, t0 + f.rto());
+    }
+
+    #[test]
+    fn the_transmit_timer_rearms_on_each_send_and_acknowledgement() {
+        // `tcp_schedule_loss_probe`: two smoothed round trips and 2 ms on
+        // from a send with more than a packet out, no later than what is
+        // left of the oldest segment's timeout; from an acknowledgement,
+        // RTO_MIN more with one packet out, no later than a full timeout.
+        let ms = |n: i64| Duration::from_millis(n);
+        let t0 = Time::EPOCH + ms(1000);
+        let mut f = Flow {
+            srtt: ms(100),
+            rttvar: ms(10),
+            ..Flow::default()
+        };
+        let rto = f.rto();
+        assert_eq!(rto, ms(300));
+        for seq in 0..2 {
+            f.sent(t0, MSS as usize, ms(30));
+            f.sent_at.insert(seq, t0);
+        }
+        f.arm(t0, false, ms(30));
+        assert_eq!(f.timer_at, t0 + ms(202));
+        // A send 250 ms on leaves the oldest segment's timeout 50 ms.
+        f.sent(t0 + ms(250), MSS as usize, ms(30));
+        f.sent_at.insert(2, t0 + ms(250));
+        f.arm(t0 + ms(250), false, ms(30));
+        assert_eq!(f.timer_at, t0 + ms(300));
+        // The first two acknowledged: one packet out, the timeout caps it.
+        f.in_flight -= 2 * MSS as usize;
+        f.sent_at.remove(&0);
+        f.sent_at.remove(&1);
+        f.arm(t0 + ms(260), true, ms(30));
+        assert_eq!(f.timer_at, t0 + ms(260) + rto);
+        // In a recovery an acknowledgement arms the timeout: what is left
+        // of the oldest segment's where the probe was pending
+        // (`tcp_rearm_rto`), a full one on after that; a send leaves it,
+        // unless none is pending.
+        f.enter_recovery();
+        f.arm(t0 + ms(270), true, ms(30));
+        assert_eq!(f.timer_at, t0 + ms(250) + rto);
+        f.arm(t0 + ms(275), true, ms(30));
+        assert_eq!(f.timer_at, t0 + ms(275) + rto);
+        f.arm(t0 + ms(280), false, ms(30));
+        assert_eq!(f.timer_at, t0 + ms(275) + rto);
+        f.timer_at = Time::NIL;
+        f.arm(t0 + ms(285), false, ms(30));
+        assert_eq!(f.timer_at, t0 + ms(285) + rto);
+        // With nothing in flight, none.
+        f.in_flight = 0;
+        f.arm(t0 + ms(290), true, ms(30));
+        assert!(f.timer_at.is_nil());
     }
 
     #[test]

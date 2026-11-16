@@ -297,6 +297,13 @@ impl Owed {
         Some(self.ack(t, AckWhy::Timer))
     }
 
+    /// A segment the receiver has reaches it again at `t` (its sender's
+    /// tail-loss probe or retransmission): it acknowledges at once what it
+    /// owes, if anything.
+    pub(super) fn probed(&mut self, t: Time) -> Option<Ack> {
+        (!self.waiting.is_empty()).then(|| self.ack(t, AckWhy::Now))
+    }
+
     /// The receiver sends data at `t`: the acknowledgement it carries, if
     /// it owes one.
     pub(super) fn data_sent(&mut self, t: Time) -> Option<Ack> {

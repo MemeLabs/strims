@@ -1661,4 +1661,32 @@ mod tests {
             "idle links' writes take {p50} µs at p50, {p90} at p90"
         );
     }
+
+    /// A retransmission timeout leaves the window at what is still in
+    /// flight and a packet (`tcp_enter_loss`), never a packet alone while
+    /// segments are out, which held their resends behind them: with the
+    /// timeout armed from the oldest segment's send, a link losing a tenth
+    /// of its packets times out with segments in flight.
+    #[test]
+    fn a_retransmission_timeout_keeps_the_flight_in_its_window() {
+        let mut bench = Bench::testbed(
+            "VIEWERS=1\nSECS=20\nSEED_LOSS_PCT=10",
+            "",
+            "burst 0 1 0 250 65536 16384",
+            true,
+        )
+        .unwrap();
+        let rtos: Vec<(i64, i64)> = tcp_events(&mut bench)
+            .iter()
+            .filter(|e| e["k"] == "rto")
+            .filter_map(|e| Some((e["cwnd"].as_i64()?, e["flight"].as_i64()?)))
+            .collect();
+        assert!(
+            rtos.iter().any(|&(_, flight)| flight > 0),
+            "no timeout with segments in flight: {rtos:?}"
+        );
+        for &(cwnd, flight) in &rtos {
+            assert_eq!(cwnd, flight + crate::wan::MSS as i64, "{rtos:?}");
+        }
+    }
 }
