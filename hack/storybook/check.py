@@ -586,29 +586,43 @@ def find_chromium(name):
 
 
 # A run's servers and browsers live in a box of their own (bwrap): network,
-# user and pid namespaces with only a loopback, so the host's interfaces
+# user, pid and IPC namespaces with only a loopback, so the host's interfaces
 # coming and going (a Docker network's bridge, a container's veth) can't reach
 # them. Chromium fails every request in flight with net::ERR_NETWORK_CHANGED
 # on such a change, loopback's too, and has no switch to stop it. bwrap's
 # AppArmor profile may create the user namespace that Ubuntu denies unshare.
 # The snap's Chromium can't start in a user namespace (snap-confine refuses),
 # so the snap's binary runs unwrapped, and without Chromium's sandbox, which
-# needs a user namespace or a setuid helper of its own there: the run's pages
-# are its builds' stories, with every request off its servers answered by
-# stub. The run goes on in the box as a child, ISOLATED set to its work dir
+# needs a user namespace or a setuid helper of its own there; so the box holds
+# what the sandbox would: the filesystem read-only but for what the run writes
+# (box_writable), /run (/var/run with it) and /tmp empty, so no Docker socket,
+# session bus or other socket of the user's, no capabilities, and a session of
+# its own. The run goes on in the box as a child, ISOLATED set to its work dir
 # (browser profiles, server logs), which the run outside holds (hold) and
 # removes once the box ends, ending the box at once when told to stop; the
 # kernel ends whatever runs in the box with its pid namespace.
 ISOLATED = "STORYBOOK_CHECK_ISOLATED"
+# The Python that runs hack/console/server.py in the box (server_python).
+SERVER_PYTHON = "STORYBOOK_CHECK_SERVER_PYTHON"
 SNAP_CHROMIUM = "/snap/chromium/current/usr/lib/chromium-browser/chrome"
 # Work dirs this old that no run holds were left by a run killed outright.
 STALE_S = 24 * 3600
 
 
-def bwrap():
-    """bwrap's command line for the box."""
-    return ["bwrap", "--dev-bind", "/", "/", "--proc", "/proc", "--unshare-user", "--unshare-net",
-            "--unshare-pid", "--die-with-parent", "--"]
+def bwrap(writable=()):
+    """bwrap's command line for the box, `writable` bound read-write. A read-
+    only mount still lets a process connect to a socket on it, so the dirs
+    that hold the host's sockets are left empty: /run, /tmp, the snaps' data
+    (CUPS's, hwctl's) and ibus's buses."""
+    cmd = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
+           "--unshare-user", "--unshare-net", "--unshare-pid", "--unshare-ipc", "--new-session",
+           "--die-with-parent", "--cap-drop", "ALL"]
+    for path in ["/run", "/tmp", "/var/snap", Path.home() / ".cache" / "ibus"]:
+        if Path(path).is_dir():
+            cmd += ["--tmpfs", str(path)]
+    for path in writable:
+        cmd += ["--bind", str(path), str(path)]
+    return [*cmd, "--"]
 
 
 def unwrapped(exe):
@@ -629,12 +643,53 @@ def isolation_unavailable(exe):
     return None
 
 
-def run_boxed(argv, work):
+def box_writable(args, work):
+    """What a run writes, each made if missing, and those it made: its work
+    dir, target/storybook (the bases' locks, the reports), and --report,
+    --screenshots and --summary where they're elsewhere."""
+    stories = ROOT / "target" / "storybook"
+    stories.mkdir(parents=True, exist_ok=True)
+    out, made = [work, stories], []
+    for d in (args.report, args.screenshots):
+        if d and not Path(d).resolve().is_relative_to(stories):
+            d = Path(d).resolve()
+            if not d.exists():
+                d.mkdir(parents=True)
+                made.append(d)
+            out.append(d)
+    if args.summary:
+        f = Path(args.summary).resolve()
+        if not f.exists():
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.touch()
+            made.append(f)
+        out.append(f)
+    return out, made
+
+
+def server_python():
+    """The Python to run hack/console/server.py with in the box: this one
+    when it has duckdb, else hack/'s uv venv's, which uv syncs here first.
+    In the box, where uv's cache is read-only, server.py's own re-exec
+    under uv (simlab.bootstrap) can't take uv's lock."""
+    sys.path.insert(0, str(ROOT / "hack"))
+    from simlab import bootstrap
+
+    uv = None if bootstrap.has_engine() else bootstrap.uv()
+    if not uv:
+        return sys.executable
+    res = subprocess.run([uv, "run", "--project", str(bootstrap.HACK), "--locked", "--quiet", "python", "-c",
+                          "import sys; print(sys.executable)"], stdin=subprocess.DEVNULL, capture_output=True,
+                         text=True)
+    return res.stdout.strip() if res.returncode == 0 and res.stdout.strip() else sys.executable
+
+
+def run_boxed(argv, work, writable):
     """This check again (`argv`) in its box, as a child: its exit code. Told
     to stop (SIGTERM, SIGINT, SIGHUP), the run ends the box, all of it,
     before it exits, so its cleanup finds nothing running."""
-    proc = subprocess.Popen([*bwrap(), sys.executable, str(Path(__file__).resolve()), *argv],
-                            env={**os.environ, ISOLATED: str(work)})
+    proc = subprocess.Popen([*bwrap(writable), sys.executable, str(Path(__file__).resolve()), *argv],
+                            env={**os.environ, ISOLATED: str(work), SERVER_PYTHON: server_python()})
     signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 
     def stop(n, _):
@@ -1023,7 +1078,8 @@ def start_server(port, log_dir, dist=None, log_name="server.log"):
         sys.exit(f"check: 127.0.0.1:{port} is taken (another server answers there)")
     log = open(log_dir / log_name, "wb")
     proc = subprocess.Popen(
-        [sys.executable, str(ROOT / "hack" / "console" / "server.py"), "--port", str(port),
+        [os.environ.get(SERVER_PYTHON) or sys.executable, str(ROOT / "hack" / "console" / "server.py"),
+         "--port", str(port),
          "--host", "127.0.0.1", "--no-index", *(["--dist", str(dist)] if dist else [])],
         cwd=ROOT, stdin=subprocess.DEVNULL, stdout=log, stderr=log)
     base = f"http://127.0.0.1:{port}"
@@ -3140,13 +3196,19 @@ def main(argv=None):
         held = hold(work)  # held while the run lasts
         why = isolation_unavailable(exe) if args.port else None
         if args.port and not why:
+            writable, made = box_writable(args, work)
             try:
                 # The base's install may need the registry: it builds out here.
                 if args.compare:
                     build_base(args.compare, args.rebuild_base)
-                return run_boxed(sys.argv[1:] if argv is None else argv, work)
+                return run_boxed(sys.argv[1:] if argv is None else argv, work, writable)
             finally:
                 remove_work(work)
+                for m in made:
+                    if m.is_dir() and not any(m.iterdir()):
+                        m.rmdir()
+                    elif m.is_file() and not m.stat().st_size:
+                        m.unlink()
         if why:
             print(f"check: warning: the run shares the host's network, {why}: an interface coming or going "
                   "(a Docker network's, a container's) fails what its browsers are loading "

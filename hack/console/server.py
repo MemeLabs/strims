@@ -1326,12 +1326,19 @@ def main(argv=None):
     state = views.state_path(port)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
-        write_state(state, port, urls)
+        try:
+            write_state(state, port, urls)
+        except OSError as e:
+            # A checkout mounted read-only, as in hack/storybook/check.py's
+            # box, whose network nothing outside it reaches: no state.
+            print(f"console: no state file ({e})", file=sys.stderr)
+            state = None
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        remove_state(state)
+        if state:
+            remove_state(state)
         server.server_close()
         console.close()
         if console.indexer.current or console._fetching.locked():
