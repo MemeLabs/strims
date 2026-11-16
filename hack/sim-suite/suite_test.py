@@ -654,6 +654,42 @@ class PhaseLags(unittest.TestCase):
                          self.verdict.quantile(self.verdict.phase_lags(self.s)["after_disruption"], 99))
 
 
+class TestbedSide(unittest.TestCase):
+    """testbed_side: one kind and one arm by default, a named kind or arm
+    checked, and no two runs at one cell, arm and seed."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+
+    @classmethod
+    def tearDownClass(cls):
+        scoring.SCORE_DB = None
+        cls.tmp.cleanup()
+
+    def side(self, rows, call):
+        db = Path(self.tmp.name) / f"side-{abs(hash((tuple(rows), call)))}.duckdb"
+        values = ", ".join(f"('{k}', 'testbed/x', 'testbed', MAP {{{env}}}::MAP(VARCHAR, VARCHAR), '{cell}', '{arm}', "
+                           f"{seed})" for k, env, cell, arm, seed in rows)
+        database(db, "CREATE TABLE jobs (k VARCHAR, src VARCHAR, sim VARCHAR, env MAP(VARCHAR, VARCHAR), "
+                     f"stored_cell VARCHAR, stored_arm VARCHAR, seed BIGINT); INSERT INTO jobs VALUES {values};")
+        return scored(f"SELECT {call} AS side;")[0]["side"]
+
+    def test_a_side_is_one_kind_one_arm_and_one_run_a_key(self):
+        rtc = "'STRIMS_SIM_RTC': 'chromium'"
+        runs = [("a", "", "c", "main", 1), ("b", "", "c", "main", 2), ("c", rtc, "c", "main", 1)]
+        with self.assertRaisesRegex(suite.simdb().DuckError, "native and browser runs"):
+            self.side(runs, "testbed_side('testbed/%')")
+        self.assertEqual([r["k"] for r in self.side(runs, "testbed_side('testbed/%', kind := 'native')")], ["a", "b"])
+        with self.assertRaisesRegex(suite.simdb().DuckError, "kind browser is none of"):
+            self.side(runs, "testbed_side('testbed/%', kind := 'browser')")
+        with self.assertRaisesRegex(suite.simdb().DuckError, "no testbed run of arm late"):
+            self.side(runs, "testbed_side('testbed/%', kind := 'any', arm := 'late')")
+        two = [("a", "", "c", "main", 1), ("b", "", "c", "main", 1)]
+        with self.assertRaisesRegex(suite.simdb().DuckError, "1 runs share a cell, arm and seed"):
+            self.side(two, "testbed_side('testbed/%')")
+
+
 class LagSince(unittest.TestCase):
     """A made-up experiment `since`, cell c, arm x, one strims-sim run k1:
     viewers 0 (node 1, lag 100 + its second, nothing read at 21 s), 1

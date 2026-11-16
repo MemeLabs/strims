@@ -1452,7 +1452,9 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
 -- the run of its number). `kind` keeps 'native' or 'browsers' runs
 -- (STRIMS_SIM_RTC set), and `arm` one arm's (jobs.stored_arm); 'one', each
 -- one's default, takes the runs as they are but fails where they hold two
--- kinds or two arms, which a side mustn't pool; 'any' pools them.
+-- kinds or two arms, which a side mustn't pool; 'any' pools them. Another
+-- kind, an arm with no run, and two runs at one cell, arm and seed (which
+-- twin_runs_of would pool) fail too.
 -- needs: jobs.sim jobs.env jobs.stored_arm
 CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
     WITH r AS (
@@ -1462,12 +1464,20 @@ CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
           AND (kind IN ('one', 'any') OR browsers = (kind = 'browsers'))
           AND (arm IN ('one', 'any') OR stored_arm = arm))
     SELECT CASE
+        WHEN kind NOT IN ('one', 'any', 'native', 'browsers')
+            THEN error('testbed_side: kind ' || kind || ' is none of one, any, native and browsers')
+        WHEN arm NOT IN ('one', 'any') AND runs = 0
+            THEN error('testbed_side: no testbed run of arm ' || arm || ' in ' || src_like)
         WHEN kind = 'one' AND kinds > 1
             THEN error('testbed_side: native and browser runs, name a kind (native, browsers or any)')
         WHEN arm = 'one' AND arms > 1
             THEN error('testbed_side: runs of ' || arms || ' arms, name an arm or any')
+        WHEN keys < runs
+            THEN error('testbed_side: ' || (runs - keys) || ' runs share a cell, arm and seed with another '
+                       || '(two matrices of one knobs, or settings the keying leaves out): narrow src_like')
         ELSE side END
-    FROM (SELECT count(DISTINCT browsers) AS kinds, count(DISTINCT stored_arm) AS arms,
+    FROM (SELECT count(DISTINCT browsers) AS kinds, count(DISTINCT stored_arm) AS arms, count(*) AS runs,
+                 count(DISTINCT (stored_cell, stored_arm, seed)) AS keys,
                  coalesce(list({'cell': stored_cell, 'seed': seed, 'k': k, 'src': src} ORDER BY stored_cell, seed),
                           []) AS side
           FROM r));
