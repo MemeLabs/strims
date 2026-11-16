@@ -1995,8 +1995,10 @@ WITH ej AS (
            list(DISTINCT e.arm_label ORDER BY e.arm_label) AS arm_labels,
            min(j.ran_at) FILTER (WHERE NOT e.reused) AS first_ran, max(j.ran_at) FILTER (WHERE NOT e.reused) AS last_ran
     FROM main.experiment_jobs e LEFT JOIN main.jobs j USING (k) GROUP BY e.exp_id),
-own AS (SELECT matrix, count(*) AS n FROM raw.farm_index
-        WHERE reused_from IS NULL OR reused_from = matrix GROUP BY matrix),
+-- A matrix's runs: its lines of the jobs that ran, those without `from`.
+-- A line with one is of a row another job ran, a matrix's own other arm's
+-- too (a key that arms whose binaries are the same bytes share runs once).
+own AS (SELECT matrix, count(*) AS n FROM raw.farm_index WHERE reused_from IS NULL GROUP BY matrix),
 runs AS (SELECT m.farm_run, m.matrix, coalesce(o.n, 0) AS n, sum(coalesce(o.n, 0)) OVER (PARTITION BY m.farm_run) AS total
          FROM raw.matrices m LEFT JOIN own o USING (matrix)),
 cost AS (SELECT run AS farm_run, sum(cost) AS cost FROM raw.costs GROUP BY ALL),
@@ -2447,7 +2449,8 @@ TABLE_DOCS = {
         "it (a --sets run's first set else); question "
         "(suite.py farm --question); pending: its index still waits for the farm to start it; farm_runs: the farm "
         "runs that ran its matrices; cost_usd and s3_usd: those runs' costs and S3 uses (s3's rows), each shared "
-        "out by the jobs its matrices ran of the run's."),
+        "out by the jobs its matrices ran of the run's (a key that arms whose binaries are the same bytes share ran "
+        "once, for the matrix of the job that ran it)."),
     "experiment_cells": (
         "table", "an experiment's cell", "exp_id, cell", "experiments USING (exp_id); experiment_jobs USING (exp_id, cell)",
         "A cell as the experiment ran it: sim, test, why, env (its settings), mem_gib (the farm slot's), and the "

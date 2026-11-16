@@ -1662,6 +1662,34 @@ class Catalog(unittest.TestCase):
         self.assertGreater(e["sa0001"]["s3_usd"], 0.08)
         self.assertEqual((e[L]["kind"], e[L]["jobs"]), ("local", 1))
 
+    def test_a_key_two_arms_share_costs_one_run(self):
+        # The run's other matrix, sr0001-00, a --refs run's: arms old and
+        # new, whose binaries are the same bytes, share kA and kB, which
+        # the run ran once, under old, new's lines naming their own matrix.
+        farm = self.root / "target" / "sim-farm"
+        (farm / "sa0001-00+1more-aaaa" / "matrices").write_text("sa0001-00\nsr0001-00\n")
+        (self.root / "target" / "sim-suite" / "farm-runs" / "sr0001.json").write_text(json.dumps({
+            "cells": [{"name": "star", "sim": "strims-sim", "test": "t", "why": "w", "env": {"STRIMS_SIM_TCP": "1"}}],
+            "arms": {"old": SHA, "new": SHA}, "seeds": [1, 2], "base": "old", "question": "same bytes?"}))
+        env = lambda seed: {"STRIMS_SIM_SEED": str(seed), "STRIMS_SIM_TCP": "1"}  # noqa: E731
+        line = lambda i, k, arm, seed, **kw: {"id": i, "key": k, "arm": arm, "commit": SHA, "binary": "b" * 64,  # noqa: E731
+                                              "test": "t", "env": env(seed), "src": F1, "wall_s": 1.5, "row": {}, **kw}
+        (farm / "sr0001-00").mkdir()
+        (farm / "sr0001-00" / "index.jsonl").write_text("".join(json.dumps(r) + "\n" for r in [
+            line("o1", "kA", "old", 1), line("n1", "kA", "new", 1, **{"from": "sr0001-00"}),
+            line("o2", "kB", "old", 2), line("n2", "kB", "new", 2, **{"from": "sr0001-00"})]))
+        self.index()
+        got = {(r["arm_label"], r["k"]): r["reused"] for r in self.q(
+            "SELECT * FROM experiment_jobs WHERE exp_id = 'sr0001'")}
+        self.assertEqual(got, {("old", "kA"): False, ("new", "kA"): False, ("old", "kB"): False,
+                               ("new", "kB"): False})
+        # Each matrix ran two of the run's four runs (sa0001-00's k9 is
+        # another run's): half its cost each.
+        e = {r["exp_id"]: r for r in self.q("SELECT exp_id, cost_usd, s3_usd FROM experiments")}
+        self.assertAlmostEqual(e["sr0001"]["cost_usd"], 0.75)
+        self.assertAlmostEqual(e["sa0001"]["cost_usd"], 0.75)
+        self.assertAlmostEqual(e["sr0001"]["s3_usd"], e["sa0001"]["s3_usd"])
+
     def test_the_views_normalize_the_sims_tables(self):
         self.index()
         v = {(r["k"], r["viewer"]): r for r in self.q("SELECT * FROM viewers")}
