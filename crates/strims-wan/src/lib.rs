@@ -36,6 +36,7 @@
 //! | [`network`] | uplink and downlink FIFOs, uplink buckets, paths, jitter, loss |
 //! | [`playout`] | a live player's stalls at a fixed delay |
 //! | [`sample`] | seeded draws |
+//! | [`slots`] | medium access in slots (a cable modem's grants, a Wi-Fi station's aggregates) |
 //! | [`wire`] | packet framing and serialization times |
 //! | [`vocab`] | the sims' event vocabulary (`vocab.toml`), and the kinds of their `events` tables |
 
@@ -47,6 +48,7 @@ pub mod live;
 pub mod network;
 pub mod playout;
 pub mod sample;
+pub mod slots;
 #[rustfmt::skip]
 pub mod vocab;
 pub mod wire;
