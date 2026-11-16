@@ -40,6 +40,19 @@ The policy file is {"data": policy, "samples": policy}, or {"dir": D2}
 to copy flushes into D2/<run>/<instance>/<seq>/ instead (--local: the
 cache's farm/ dir).
 
+A job whose own data won't fold fails alone (the store's FoldError). A
+fold that raises otherwise FOLD_TRIES times in a row has its batch's jobs
+folded one by one, those that raise again failing (counted, so a job that
+breaks every fold can't take host after host); where none folds, or a
+thread of the store dies, the store is broken (status.json's `broken`).
+Its jobs waiting to fold go back (a `requeue` result: no attempt spent),
+as do the running ones (killed) and the queued ones; it tells the
+controller (sync's `ending`) and its note says why; and once the
+controller has taken its results and its flushes are up, or
+BROKEN_GRACE_S on, it exits (powering the host off with --poweroff),
+whether or not the controller knows `broken` (farm.py then loses the
+host).
+
 With --end-at T (seconds since the epoch) it starts no job expected
 (`expected_s`) to end after T, and at T kills what still runs (requeued
 by the controller, `requeue`), flushes what it holds, and tells the
@@ -146,8 +159,12 @@ IMDS_URL = "http://169.254.169.254"
 # cut off.
 NOTICE_FINISH_S = 20
 NOTICE_ABORT_S = 5
-# How many times in a row a fold may fail before the store breaks.
+# How many times in a row a fold may fail before its jobs are folded one
+# by one, and the store breaks if none folds.
 FOLD_TRIES = 3
+# How long a worker whose store broke waits for the controller to take its
+# jobs back and for its flushes, before it shuts its host down.
+BROKEN_GRACE_S = 300
 # Finished jobs fold into the store this many a transaction.
 FOLD_BATCH = 32
 # DuckDB's share of the host while jobs run.
@@ -524,14 +541,13 @@ class Store:
         try:
             f()
         except Exception:
+            # A thread of it died: nothing more folds or lands.
             self.error = traceback.format_exc()[-1000:]
-            self.broken = self.error
-            with self.cv:
-                self.save()
+            self.break_down([])
 
     def folder(self) -> None:
         failures = 0
-        while True:
+        while not self.broken:
             with self.cv:
                 while not self.folds() and not self.want_rotate and not self.stopping:
                     self.cv.wait(1)
@@ -543,17 +559,25 @@ class Store:
                     self.fold(batch)
                     failures = 0
                 except Exception as e:
+                    # (A job's own data that won't fold raises FoldError,
+                    # which fold fails that job for: this is the rest.)
                     self.error = f"fold: {e}"[-1000:]
                     failures += 1
                     if failures >= FOLD_TRIES:
-                        # It would hold its jobs, and the host's next
-                        # testbed run (which waits for the store), while
-                        # the host bills: broken, it folds no more.
-                        self.broken = self.error
+                        # A job that breaks every fold it's in fails alone,
+                        # counted, so it can't take host after host: each
+                        # of the batch's jobs is folded on its own, those
+                        # that raise again failing. Where none folds, or
+                        # the batch was one job (failed so), the store is
+                        # broken: it would hold its jobs, and the host's
+                        # next testbed run (which waits for the store),
+                        # while the host bills.
+                        failures = 0
+                        if not self.fold_alone(batch):
+                            self.break_down(batch)
+                            return
                     with self.cv:
                         self.save()
-                    if self.broken:
-                        return
                     time.sleep(5)
                     continue
             with self.cv:
@@ -566,6 +590,61 @@ class Store:
                         self.open_jobs = 0
                         self.cv.notify_all()
                 self.save()
+
+    def fold_alone(self, wids: list[str]) -> bool:
+        """Folds each of `wids` on its own, failing those that raise (a
+        done result with no row and the error, as a failed job's: the
+        controller counts it); whether any folded. One job alone isn't
+        tried again: it fails."""
+        folded = False
+        for w in wids:
+            if len(wids) > 1:
+                try:
+                    self.fold([w])
+                    folded = True
+                    continue
+                except Exception as e:
+                    self.error = f"fold: {e}"[-1000:]
+            self.give_back([w], self.error, requeue=False)
+        return folded
+
+    def break_down(self, failed: list[str]) -> None:
+        """The store broken: no more folds, every job waiting to fold given
+        back uncounted (a requeue result: none of them failed, `failed`
+        having failed already), the open generation closed for the
+        flusher, and `broken` in status.json for the worker and the
+        controller."""
+        self.broken = self.error
+        self.give_back([w for w in self.folds() if w not in failed], f"its store is broken: {self.error}",
+                       requeue=True)
+        with self.cv:
+            if self.open_jobs:
+                self.closed.append(self.seq)
+                self.seq += 1
+                self.open_jobs = 0
+            self.save()
+            self.cv.notify_all()
+
+    def give_back(self, wids: list[str], why: str | None, requeue: bool) -> None:
+        """Jobs `wids` that wait to fold, each a done result with no row
+        and `why`: failed, or `requeue` (back to the controller's queue,
+        no attempt spent); their fold files go."""
+        for w in wids:
+            try:
+                res = json.loads((self.fold_dir / f"{w}.json").read_text())["result"]
+            except (OSError, ValueError, KeyError):
+                res = {"id": w}
+            res.update(row=None, error=why)
+            if requeue:
+                res["requeue"] = True
+            write_atomic(self.root / "done" / f"{w}.json", json.dumps(res))
+            remove(self.fold_dir / w, self.root)
+            (self.fold_dir / f"{w}.json").unlink(missing_ok=True)
+
+    def flushed(self) -> bool:
+        """No closed generation waiting for its upload or in it."""
+        with self.cv:
+            return not self.closed and self.flushing is None
 
     def size(self, seq: int) -> int:
         db = self.db(seq)
@@ -965,6 +1044,8 @@ def serve(args: argparse.Namespace) -> None:
     noticed: float | None = None
     deadline: float | None = None
     ending = False
+    # When the store was found broken (time.time()).
+    broken_at: float | None = None
     winding = False
     next_notice = 0.0
     stop = False
@@ -1060,6 +1141,29 @@ def serve(args: argparse.Namespace) -> None:
             noticed, deadline, winding = now, at, True
             if store is not None:
                 store.hurry(at - NOTICE_ABORT_S)
+        if store is not None and store.broken and broken_at is None:
+            # Its store can't fold, so nothing that ends here can land: it
+            # gives its jobs back (a requeue result each, no attempt spent:
+            # the running ones killed, the queued ones), stops taking more
+            # (`ending`, as at --end-at), and shuts its host down once the
+            # controller has taken its results and its flushes are up, or
+            # BROKEN_GRACE_S on. It doesn't wait for the controller to lose
+            # it: one older than `broken` doesn't, and the idle timeout
+            # counts from the last sync.
+            broken_at = time.time()
+            why = f"its store is broken: {store.broken.strip().splitlines()[-1]}"
+            for jid, r in list(running.items()):
+                end_job(jid, r, kill(r), None, now, killed=why)
+            give_back_queue(d, why, host)
+            write_atomic(root / "ending", str(broken_at + BROKEN_GRACE_S))
+            write_atomic(root / "note", why)
+        if broken_at is not None:
+            if broken_done(d, store, broken_at, time.time()):
+                if args.poweroff:
+                    subprocess.run(["sudo", "poweroff"], check=False)
+                break
+            time.sleep(1)
+            continue
         if args.end_at and noticed is None and not ending and time.time() >= args.end_at:
             # The controller takes it as an interruption due at the
             # shutdown, END_GRACE_S on, and gives back what's queued here.
@@ -1083,10 +1187,6 @@ def serve(args: argparse.Namespace) -> None:
 
         queued = sorted(d["queue"].glob("*.json"), key=queue_order)
         waits = None
-        if store is not None and store.broken:
-            # Its jobs couldn't land: the controller takes the host as lost.
-            waits = f"its store is broken: {store.broken.strip().splitlines()[-1]}"
-            queued = []
         while len(running) < args.slots and queued and noticed is None and not ending:
             q = queued[0]
             try:
@@ -1183,6 +1283,23 @@ def serve(args: argparse.Namespace) -> None:
         # until it's cut off, a stopped serve's for a minute.
         store.close(max(0.0, deadline - time.time()) if deadline else 60)
     pidfile.unlink(missing_ok=True)
+
+
+def give_back_queue(d: dict, why: str, host: str | None) -> None:
+    """The queued jobs back to the controller: a requeue result each (no
+    attempt spent), written before its queue file goes."""
+    for q in d["queue"].glob("*.json"):
+        write_atomic(d["done"] / q.name, json.dumps({"id": q.stem, "row": None, "error": why, "requeue": True,
+                                                     "host": host}))
+        q.unlink(missing_ok=True)
+
+
+def broken_done(d: dict, store, broken_at: float, now: float) -> bool:
+    """Whether a worker whose store broke at `broken_at` may shut its host
+    down: the controller has taken every result (done/ is empty) and the
+    store's flushes are up, or BROKEN_GRACE_S has passed."""
+    taken = not any(d["done"].glob("*.json")) and not any(d["queue"].glob("*.json"))
+    return (taken and store.flushed()) or now >= broken_at + BROKEN_GRACE_S
 
 
 def sync(args: argparse.Namespace) -> None:

@@ -1128,28 +1128,68 @@ class TestbedTables(unittest.TestCase):
         self.assertEqual(json.loads(runs[0]["row_json"]), {**full})
         self.assertTrue((flushed / "viewers.parquet").exists())
 
-    def test_a_store_whose_folds_keep_failing_breaks_and_its_host_is_lost(self):
+    def broken_store(self, fold, jobs, batch=None):
+        """A store whose fold is `fold`, given `jobs` to fold, run until it
+        breaks or every job has a done result; the store, and each job's
+        done result (None for none)."""
         root = self.host_root()
         (root / "policy.json").write_text(json.dumps({"dir": str(self.dir / "sink")}))
         args = mock.Mock(run="r1", instance="i-1", policy=str(root / "policy.json"), rotate_mb=100.0, duckdb=None)
-        out = root / "work" / "j9" / "out"
-        out.mkdir(parents=True)
         real_sleep = time.sleep
-        with mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(self.dir / "sim-db")}), \
-                mock.patch.object(self.worker.Store, "fold", side_effect=RuntimeError("disk full")) as fold, \
-                mock.patch.object(self.worker.time, "sleep", lambda s: real_sleep(0.01)):
+        patches = [mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(self.dir / "sim-db")}),
+                   mock.patch.object(self.worker.Store, "fold", autospec=True, side_effect=fold),
+                   mock.patch.object(self.worker.time, "sleep", lambda s: real_sleep(0.01))]
+        if batch:
+            patches.append(mock.patch.object(self.worker, "FOLD_BATCH", batch))
+        with contextlib.ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
             store = self.worker.Store(root, args)
-            store.add("j9", {"id": "j9", "kind": "testbed"}, {"id": "j9", "row": {"steal_pct": 0}}, {}, out)
+            with store.cv:
+                # All of them in place before the folder takes a batch.
+                for j in jobs:
+                    out = root / "work" / j / "out"
+                    out.mkdir(parents=True)
+                    store.add(j, {"id": j, "kind": "testbed"}, {"id": j, "row": {"steal_pct": 0}}, {}, out)
             deadline = time.monotonic() + 20
-            while store.broken is None and time.monotonic() < deadline:
+            while (store.broken is None and not all((root / "done" / f"{j}.json").exists() for j in jobs)
+                   and time.monotonic() < deadline):
                 real_sleep(0.05)
-            store.workers[0].join(5)
-            self.assertFalse(store.workers[0].is_alive())
-            self.assertEqual(fold.call_count, self.worker.FOLD_TRIES)
             store.close(0.1)
+        done = {j: json.loads(f.read_text()) if (f := root / "done" / f"{j}.json").exists() else None for j in jobs}
+        return root, store, done
+
+    def test_a_store_whose_folds_keep_failing_breaks_and_its_host_is_lost(self):
+        calls = []
+
+        def fold(store, wids):
+            calls.append(list(wids))
+            raise RuntimeError("disk full")
+
+        # One job a batch: j9 fails (counted), j8 behind it goes back.
+        root, store, done = self.broken_store(fold, ["j9", "j8"], batch=1)
+        self.assertEqual(calls, [["j8"]] * self.worker.FOLD_TRIES)
+        self.assertFalse(store.workers[0].is_alive())
+        self.assertIn("disk full", store.broken)
+        self.assertEqual((done["j8"]["row"], done["j8"].get("requeue")), (None, None))
+        self.assertIn("disk full", done["j8"]["error"])
+        self.assertEqual((done["j9"]["row"], done["j9"].get("requeue")), (None, True))
+        self.assertFalse(any((root / "fold").iterdir()))
         status = json.loads((root / "store" / "status.json").read_text())
         self.assertIn("disk full", status["broken"])
-        self.assertFalse((root / "done" / "j9.json").exists())
+        # The worker gives its queued jobs back and may shut its host down
+        # once they're taken and its flushes are up, or the grace is over.
+        d = self.worker.dirs(root)
+        (d["queue"] / "j7.json").write_text(json.dumps({"id": "j7"}))
+        self.worker.give_back_queue(d, "its store is broken: x", "i-1")
+        self.assertEqual(json.loads((d["done"] / "j7.json").read_text())["requeue"], True)
+        self.assertFalse((d["queue"] / "j7.json").exists())
+        now = time.time()
+        self.assertFalse(self.worker.broken_done(d, store, now, now))
+        self.assertTrue(self.worker.broken_done(d, store, now, now + self.worker.BROKEN_GRACE_S))
+        for f in d["done"].glob("*.json"):
+            f.unlink()
+        self.assertTrue(self.worker.broken_done(d, store, now, now))
         # The controller loses the host, whose jobs go back to the queue.
         fp = load_farm_py()
         host = fp.Host("i-1", "local", "-", fp.Spec(1, 1, 0, 1), 0.0, time.time(), state="ready")
@@ -1162,6 +1202,19 @@ class TestbedTables(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             fp.Run.absorb(run, host, {**reply, "store": {**status, "broken": None}})
         run.lose.assert_not_called()
+
+    def test_a_job_that_breaks_every_fold_fails_alone(self):
+        def fold(store, wids):
+            if "jA" in wids:
+                raise RuntimeError("poison")
+            for w in wids:
+                store.give_back([w], None, requeue=False)
+
+        _, store, done = self.broken_store(fold, ["jA", "jB"])
+        self.assertIsNone(store.broken)
+        self.assertIn("poison", done["jA"]["error"])
+        self.assertIsNone(done["jA"].get("requeue"))
+        self.assertIsNotNone(done["jB"])
 
     def test_a_stored_runs_tables_are_the_folders_and_their_failure_fails_it(self):
         root = self.host_root()
