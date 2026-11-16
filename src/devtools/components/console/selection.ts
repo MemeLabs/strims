@@ -178,12 +178,38 @@ export interface Options {
 }
 
 /**
- * The pickers' options for the selection's experiment, cell and arm.
+ * The query of the node picker's options for the selection's experiment, cell and arm, for a view
+ * whose pickers (`uses`, its selection keys; null for every picker) include the node's: the hosts
+ * the sims sampled the meter of (meter_samples), the seed by its role. A grouping of meter_samples,
+ * which no other view needs.
  *
  * @param sel - the selection
+ * @param uses - the selection keys the view takes, or null for all
+ * @returns its SQL and params, or null for none
+ */
+export const nodesQuery = (
+  sel: Pick<Selection, "exp" | "cell" | "arm">,
+  uses: Set<string> | null
+): { sql: string; params: Record<string, string> } | null =>
+  sel.exp && sel.cell && sel.arm && (!uses || uses.has("node"))
+    ? {
+        sql:
+          "SELECT m.node, bool_or(m.role = 'seed') AS seed " +
+          "FROM experiment_jobs e JOIN meter_samples m USING (k, src) " +
+          "WHERE e.exp_id = $exp AND e.cell = $cell AND e.arm_label = $arm GROUP BY m.node ORDER BY m.node",
+        params: { exp: sel.exp, cell: sel.cell, arm: sel.arm },
+      }
+    : null;
+
+/**
+ * The pickers' options for the selection's experiment, cell and arm: the nodes only for a view
+ * with a node picker (nodesQuery).
+ *
+ * @param sel - the selection
+ * @param uses - the selection keys the view takes, or null for all
  * @returns the cells, arms, seeds and nodes to pick from
  */
-export const useOptions = (sel: Selection): Options => {
+export const useOptions = (sel: Selection, uses: Set<string> | null): Options => {
   const [cells, setCells] = useState<string[]>([]);
   const [arms, setArms] = useState<string[]>([]);
   const [seeds, setSeeds] = useState<Options["seeds"]>([]);
@@ -210,7 +236,6 @@ export const useOptions = (sel: Selection): Options => {
   useEffect(() => {
     if (!sel.exp || !sel.cell || !sel.arm) {
       setSeeds([]);
-      setNodes([]);
       return;
     }
     runSql(
@@ -222,16 +247,21 @@ export const useOptions = (sel: Selection): Options => {
         setSeeds(r.rows.map(([s, c]) => ({ seed: s as number, collapsed: c as boolean | null }))),
       () => setSeeds([])
     );
-    // The hosts the sims sampled the meter of (the meter_samples table), the seed by its role.
-    runSql(
-      "SELECT m.node, bool_or(m.role = 'seed') AS seed " +
-        "FROM experiment_jobs e JOIN meter_samples m USING (k, src) " +
-        "WHERE e.exp_id = $exp AND e.cell = $cell AND e.arm_label = $arm GROUP BY m.node ORDER BY m.node",
-      { exp: sel.exp, cell: sel.cell, arm: sel.arm }
-    ).then(
+  }, [sel.exp, sel.cell, sel.arm]);
+  const wantsNodes = !uses || uses.has("node");
+  useEffect(() => {
+    const q = nodesQuery(
+      { exp: sel.exp, cell: sel.cell, arm: sel.arm },
+      wantsNodes ? null : new Set()
+    );
+    if (!q) {
+      setNodes([]);
+      return;
+    }
+    runSql(q.sql, q.params).then(
       (r) => setNodes(r.rows.map(([n, s]) => ({ node: n as number, seed: s === true }))),
       () => setNodes([])
     );
-  }, [sel.exp, sel.cell, sel.arm]);
+  }, [sel.exp, sel.cell, sel.arm, wantsNodes]);
   return { cells, arms, seeds, nodes };
 };

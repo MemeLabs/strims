@@ -124,7 +124,7 @@ interface PickersProps {
 }
 
 const Pickers: React.FC<PickersProps> = ({ schema, sel, setSel, uses }) => {
-  const options = useOptions(sel);
+  const options = useOptions(sel, uses);
   const shown = PICKERS.filter((p) => !uses || uses.has(p.key));
   if (shown.length === 0) return null;
   const select = (key: keyof Selection, values: { value: string; label: string }[]) => (
