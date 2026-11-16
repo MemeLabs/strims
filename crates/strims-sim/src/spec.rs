@@ -93,6 +93,11 @@ pub struct HostSpec {
     /// a while (`strims_wan::Network::set_up_steps`). Empty keeps the
     /// site's rate throughout.
     pub up_steps: Vec<(Duration, u64)>,
+    /// WAN mode: the site's uplink sends in this schedule's delivery
+    /// opportunities in place of its rate, bucket and steps
+    /// (`strims_wan::Network::set_up_capacity`), as a cellular or satellite
+    /// uplink grants them.
+    pub up_capacity: Option<std::sync::Arc<strims_wan::capacity::Capacity>>,
     /// WAN mode with [`SendBuffer::window`]: bulk uploads by other
     /// software on the host, which share its uplink with the node's
     /// traffic (see the WAN scheduler).
@@ -858,6 +863,7 @@ impl Scenario {
             rtc_stack: None,
             site: None,
             up_steps: Vec::new(),
+            up_capacity: None,
             competing: Vec::new(),
             serial_links: None,
             arrive_at: None,

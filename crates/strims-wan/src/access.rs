@@ -16,6 +16,8 @@ use core::fmt;
 use strims_base::time::Duration;
 
 use crate::city::City;
+use crate::framing::Framing;
+use crate::slots::Slots;
 
 /// Bytes per second in one Mbit/s.
 pub const MBIT: u64 = 125_000;
@@ -51,6 +53,14 @@ pub struct Profile {
     /// every [`Access::profile`]: the uplink drains at its rate alone.
     /// [`Access::bucket`] gives a kind's typical one.
     pub bucket: Option<Bucket>,
+    /// What the uplink charges a packet past its IP bytes.
+    /// [`Framing::NONE`] in every [`Access::profile`]; [`Access::framing`]
+    /// gives a kind's.
+    pub framing: Framing,
+    /// The uplink's medium access in slots, ahead of its shaper, if it has
+    /// any: `None` in every [`Access::profile`]; [`Access::slots`] gives a
+    /// kind's typical ones.
+    pub slots: Option<Slots>,
 }
 
 /// An uplink shaper's token bucket. Tokens fill at the uplink's rate (its
@@ -137,6 +147,8 @@ impl Access {
                 loss,
                 bursts: None,
                 bucket: None,
+                framing: Framing::NONE,
+                slots: None,
             }
         }
         const fn bursty(mut p: Profile, bursts: Bursts) -> Profile {
@@ -235,6 +247,62 @@ impl Access {
     }
 }
 
+/// A cable modem's upstream slots: an idle modem's request waits 2-8 ms
+/// for its grant (CableLabs, "Low Latency DOCSIS: Technology Overview",
+/// 2019, s3 and Fig 1; RFC 8034 s4.2 gives about 4-8 ms), and a loaded
+/// one's piggybacked requests cycle in about 5 ms (Cisco, "Upstream
+/// Scheduler Mode Configuration for the Cisco uBR CMTS"); half the cable
+/// links of Dischinger et al. (IMC 2007, Fig 12) sent 19 or more small
+/// packets in one upstream burst, their concatenation jitter about 5 ms on
+/// average.
+pub const CABLE_GRANTS: Slots = Slots {
+    min: Duration::from_millis(2),
+    max: Duration::from_millis(8),
+};
+
+impl Access {
+    /// What a link of this kind charges a packet past its IP bytes
+    /// (tc-cake(8)'s overhead keywords, which the Docker testbed's link
+    /// classes take, `hack/testbed/links.sh`):
+    ///
+    /// - **Cable**: a DOCSIS service flow counts the Ethernet frame through
+    ///   its CRC, 18 bytes, at least 64 ([`Framing::DOCSIS`]).
+    /// - **DSL**: ADSL's ATM cells under PPPoE over LLC/SNAP, 40 bytes padded
+    ///   to 48-byte payloads of 53-byte cells ([`Framing::ADSL_PPPOE`]): a
+    ///   64-byte IP packet costs 159 bytes, a 1500-byte one 1749.
+    /// - **Fibre**: the Ethernet frame with its FCS, 18 bytes; a GPON ONU
+    ///   adds a 5-byte GEM header (ITU-T G.984.3), whether its rate counts
+    ///   it or not.
+    /// - **LTE** and **Starlink**: their capacity traces count 1500-byte IP
+    ///   packets, which the testbed charges 1514, Ethernet's 14
+    ///   ([`Framing::ETHERNET`]).
+    /// - **Datacenter**: Ethernet on the wire, 38 bytes, at least 84
+    ///   ([`Framing::ETHERNET_WIRE`]).
+    pub const fn framing(self) -> Framing {
+        match self {
+            Access::Cable => Framing::DOCSIS,
+            Access::Dsl => Framing::ADSL_PPPOE,
+            Access::Fiber => Framing::bytes(18, 0),
+            Access::Lte | Access::Starlink => Framing::ETHERNET,
+            Access::Datacenter => Framing::ETHERNET_WIRE,
+        }
+    }
+
+    /// The slots a link of this kind sends its uplink in, if it has any it
+    /// is known to: cable's requests and grants ([`CABLE_GRANTS`]). A GPON
+    /// ONU's grants come every DBA cycle, simulated at 2-8 ms at most but
+    /// never measured on a residential link; LTE's and Starlink's grants
+    /// are in their capacity traces ([`crate::capacity`]).
+    pub const fn slots(self) -> Option<Slots> {
+        match self {
+            Access::Cable => Some(CABLE_GRANTS),
+            Access::Datacenter | Access::Fiber | Access::Dsl | Access::Lte | Access::Starlink => {
+                None
+            }
+        }
+    }
+}
+
 impl fmt::Display for Access {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())
@@ -275,6 +343,19 @@ impl Site {
     /// alone).
     pub const fn with_bucket(mut self, bucket: Option<Bucket>) -> Site {
         self.profile.bucket = bucket;
+        self
+    }
+
+    /// The same site with its uplink charging packets as `framing` says.
+    pub const fn with_framing(mut self, framing: Framing) -> Site {
+        self.profile.framing = framing;
+        self
+    }
+
+    /// The same site with its uplink's medium access in `slots` (`None`:
+    /// none).
+    pub const fn with_slots(mut self, slots: Option<Slots>) -> Site {
+        self.profile.slots = slots;
         self
     }
 
@@ -389,7 +470,12 @@ mod tests {
         }
         for a in Access::ALL {
             assert_eq!(a.profile().bucket, None, "{a}");
+            assert_eq!(a.profile().framing, Framing::NONE, "{a}");
+            assert_eq!(a.profile().slots, None, "{a}");
         }
+        assert_eq!(Access::Cable.slots(), Some(CABLE_GRANTS));
+        assert_eq!(Access::Dsl.framing().packet(1500), 1749);
+        assert_eq!(Access::Cable.framing().packet(40), 64);
         let s = Site::new(City::Chicago, Access::Cable).with_bucket(Access::Cable.bucket(up));
         assert_eq!(
             s.to_string(),

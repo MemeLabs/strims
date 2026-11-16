@@ -809,6 +809,9 @@ impl Scheduler {
                 let steps = hs.up_steps.iter().map(|&(at, rate)| (sim_time(at), rate));
                 net.set_up_steps(h, steps.collect());
             }
+            if let Some(cap) = &hs.up_capacity {
+                net.set_up_capacity(h, cap.clone());
+            }
         }
         let cross: Vec<Cross> = spec
             .hosts
@@ -1366,7 +1369,7 @@ impl Scheduler {
             return;
         }
         self.ack_counted(to, a.why, a.wait);
-        let depart = self.net.occupy_up(t, to, tcp_wire(0).0);
+        let depart = self.net.occupy_up(t, to, tcp_wire(0).0, 1);
         self.ack_sent(to, tcp_wire(0).0);
         self.acked_at(depart + self.net.one_way(to, from), conn, a.pieces);
     }
@@ -1492,7 +1495,8 @@ impl Scheduler {
             let id = self.next;
             self.next += 1;
             let wait = self.net.up_backlog(host, at);
-            if overflows(wait, tx_time(CROSS_WIRE, self.net.up_rate(host, at)), cap) {
+            let charged = self.net.up_charge(host, CROSS_WIRE, 2);
+            if overflows(wait, tx_time(charged, self.net.up_rate(host, at)), cap) {
                 if let Some(d) = self.cross_drops.get_mut(host) {
                     *d += 1;
                 }
@@ -1500,7 +1504,7 @@ impl Scheduler {
                     .insert((at + rtt + wait, id), Event::CrossLost { i, seq });
                 continue;
             }
-            let depart = self.net.occupy_up(at, host, CROSS_WIRE);
+            let depart = self.net.occupy_up(at, host, CROSS_WIRE, 2);
             if let Some(b) = self.cross_bytes.get_mut(host) {
                 *b += CROSS_WIRE as u64;
             }
@@ -1591,7 +1595,8 @@ impl Scheduler {
             self.admits.insert((at, id), (conn, len));
         }
         let wait = self.net.up_backlog(from, at);
-        if overflows(wait, tx_time(wire, self.net.up_rate(from, at)), cap) {
+        let charged = self.net.up_charge(from, wire, packets);
+        if overflows(wait, tx_time(charged, self.net.up_rate(from, at)), cap) {
             if let Some(d) = self.drops.get_mut(from) {
                 *d += 1;
             }
@@ -1944,7 +1949,8 @@ impl Scheduler {
             // A full queue drops a datagram as it does a segment; the
             // datagram's sender learns of it only from what it carries.
             let wait = self.net.up_backlog(r.from, at);
-            if overflows(wait, tx_time(r.wire, self.net.up_rate(r.from, at)), cap) {
+            let charged = self.net.up_charge(r.from, r.wire, r.packets);
+            if overflows(wait, tx_time(charged, self.net.up_rate(r.from, at)), cap) {
                 if let Some(d) = self.drops.get_mut(r.from) {
                     *d += 1;
                 }

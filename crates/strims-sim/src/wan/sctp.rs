@@ -157,6 +157,17 @@ const COMMON_HEADER: usize = 12;
 /// of a data channel's packets are small, so it costs a thin relay about
 /// 4 % of its uplink.
 const FRAMING: usize = 14;
+/// A datagram's bytes on its sender's uplink: past its IP bytes, the link
+/// charges the framing its site gives it, in place of [`FRAMING`] (see
+/// `strims_wan::network`).
+fn link_wire(net: &strims_wan::Network, h: usize, wire: usize) -> usize {
+    if net.up_framing(h) == strims_wan::framing::Framing::NONE {
+        wire
+    } else {
+        wire.saturating_sub(FRAMING)
+    }
+}
+
 /// IP and UDP's 28 bytes, the framing, and 37 of an AES-GCM DTLS 1.2
 /// record (str0m's).
 const DTLS12_OVERHEAD: usize = FRAMING + 28 + 37;
@@ -879,7 +890,9 @@ impl Scheduler {
             }
         }
         let wait = self.net.up_backlog(from, at);
-        let t = if overflows(wait, tx_time(wire, self.net.up_rate(from, at)), cap) {
+        let wire = link_wire(&self.net, from, wire);
+        let charged = self.net.up_charge(from, wire, 1);
+        let t = if overflows(wait, tx_time(charged, self.net.up_rate(from, at)), cap) {
             if let Some(d) = self.drops.get_mut(from) {
                 *d += 1;
             }
@@ -1102,12 +1115,15 @@ impl Scheduler {
         let Some(p) = self.receiver_profile(conn) else {
             return;
         };
-        let wire =
-            p.packet_overhead + COMMON_HEADER + SctpProfile::sack_chunk(gap_blocks(&sack.above));
+        let wire = link_wire(
+            &self.net,
+            to,
+            p.packet_overhead + COMMON_HEADER + SctpProfile::sack_chunk(gap_blocks(&sack.above)),
+        );
         if let Some(cap) = self.window()
             && overflows(
                 self.net.up_backlog(to, t),
-                tx_time(wire, self.net.up_rate(to, t)),
+                tx_time(self.net.up_charge(to, wire, 1), self.net.up_rate(to, t)),
                 cap,
             )
         {
@@ -1119,7 +1135,7 @@ impl Scheduler {
             }
             return;
         }
-        let depart = self.net.occupy_up(t, to, wire);
+        let depart = self.net.occupy_up(t, to, wire, 1);
         self.sack_sent(to, wire);
         let at = depart + self.net.one_way(to, from);
         self.sack_held(conn, sack, Some(at));

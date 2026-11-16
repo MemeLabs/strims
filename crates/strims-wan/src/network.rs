@@ -54,14 +54,39 @@
 //!   a link whose shaper lets no burst through. A rate step leaves the
 //!   tokens as they are (tbf's `change` refills its bucket; a real link's
 //!   rate changes don't).
+//! - **Framing.** An uplink charges each message what its site's
+//!   [`Framing`] says its packets cost past their IP bytes, its full TCP
+//!   packets and the rest ([`Framing::message`]): its serialization, its
+//!   bucket's tokens, its queue's bytes and its stats' `up_bytes` count
+//!   those. [`Framing::NONE`] charges the IP bytes alone.
+//! - **Slots.** An uplink whose site has [`Slots`] hands a message to its
+//!   shaper when the next slot opens ([`SlotState::depart`], netem's
+//!   `slot`): a slot opens `min` to `max` (uniformly, from an rng forked at
+//!   the network's construction for each such site) after the first
+//!   message ready past the last, and every message ready before it rides
+//!   it. The testbed's link classes put them ahead of the shaper, as its
+//!   delay's netem holds them.
+//! - **Capacity.** An uplink given a [`Capacity`] ([`Network::set_up_capacity`])
+//!   sends in its delivery opportunities, in place of its rate, bucket and
+//!   steps: a message's last bit leaves at the opportunity where the
+//!   uplink's [`Cursor`] ends once it has taken the message's bytes, capacity
+//!   that passed while nothing waited lost (`hack/testbed/tracelink.c`'s
+//!   model). Its queue's bytes are what the cursor holds past the
+//!   opportunities that came, counted at the site's rate
+//!   ([`Network::up_backlog`], [`Network::up_rate`]), as `run.sh` sets a
+//!   trace link's byte limit from the node's rate and queue.
 
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::{Duration, Time};
 
 use crate::access::{BURST_MAX, Bucket, Bursts, Site};
+use crate::capacity::{Capacity, Cursor};
+use crate::framing::Framing;
 use crate::sample::{exponential, unit};
+use crate::slots::{SlotState, Slots};
 use crate::wire::{small_packets, tx_time};
 
 /// How long an end's jitter offset holds.
@@ -263,6 +288,11 @@ struct End {
     /// byte-nanoseconds.
     tokens: i128,
     tokens_at: Time,
+    /// With slots, their state, and when the last message left them.
+    slots: Option<SlotState>,
+    slot_last: Time,
+    /// With a capacity schedule, it and the uplink's place in it.
+    capacity: Option<(Arc<Capacity>, Cursor)>,
     down_free: Time,
     up_jitter: Jitter,
     down_jitter: Jitter,
@@ -368,11 +398,32 @@ impl End {
         self.up_spans.push_back((start, self.up_free, wire));
     }
 
+    /// When a message of `wire` IP bytes in `packets` packets, handed to
+    /// the uplink at `sent`, starts through its shaper, and the bytes it
+    /// charges ([`Framing::message`]): once its slot opens, if the uplink
+    /// has slots, and everything before it has left.
+    fn admit(&mut self, sent: Time, wire: usize, packets: u32) -> (Time, usize) {
+        let charged = self.site.profile.framing.message(wire, packets);
+        let ready = match &mut self.slots {
+            Some(s) => {
+                let ready = s.depart(sent, sent.max(self.slot_last));
+                self.slot_last = ready;
+                ready
+            }
+            None => sent,
+        };
+        (ready.max(self.up_free), charged)
+    }
+
     /// When `wire` bytes that start through the uplink at `start`, no
     /// earlier than everything before them has left, are through: at the
     /// rate, or with a bucket what its tokens cover at once (or at its
-    /// peak) and the rest at the rate (see the module docs).
+    /// peak) and the rest at the rate, or in its capacity's opportunities
+    /// (see the module docs).
     fn serve(&mut self, start: Time, wire: usize) -> Time {
+        if let Some((cap, cursor)) = &mut self.capacity {
+            return cursor.take(cap, start, wire);
+        }
         let rate = self.site.profile.up;
         let Some(Bucket { bytes, peak }) = self.site.profile.bucket else {
             return through(rate, &self.up_steps, start, wire);
@@ -420,6 +471,7 @@ impl Network {
                     .profile
                     .bursts
                     .map(|b| BurstState::new(b, rng.next_u64()));
+                let slots = site.profile.slots.map(|s| SlotState::new(s, fork(rng)));
                 End {
                     site,
                     up_steps: Vec::new(),
@@ -427,6 +479,9 @@ impl Network {
                     up_spans: VecDeque::new(),
                     tokens: i128::from(site.profile.bucket.map_or(0, |b| b.bytes)) * NS,
                     tokens_at: Time::NIL,
+                    slots,
+                    slot_last: Time::NIL,
+                    capacity: None,
                     down_free: Time::NIL,
                     up_jitter: Jitter::new(up, site.profile.jitter),
                     down_jitter: Jitter::new(down, site.profile.jitter),
@@ -492,10 +547,41 @@ impl Network {
         self.end(h).up_free
     }
 
-    /// `h`'s uplink rate at `at`, in bytes per second.
+    /// `h`'s uplink rate at `at`, in bytes per second: with a capacity
+    /// schedule, its site's, which its queue's bytes count at.
     pub fn up_rate(&self, h: usize, at: Time) -> u64 {
         let end = self.end(h);
+        if end.capacity.is_some() {
+            return end.site.profile.up;
+        }
         rate_at(end.site.profile.up, &end.up_steps, at)
+    }
+
+    /// What `h`'s uplink charges for a message of `wire` IP bytes in
+    /// `packets` packets ([`Framing::message`]).
+    pub fn up_charge(&self, h: usize, wire: usize, packets: u32) -> usize {
+        self.end(h).site.profile.framing.message(wire, packets)
+    }
+
+    /// `h`'s uplink's framing.
+    pub fn up_framing(&self, h: usize) -> Framing {
+        self.end(h).site.profile.framing
+    }
+
+    /// `h`'s uplink sends in `capacity`'s delivery opportunities from now
+    /// on, in place of its rate, bucket and steps.
+    pub fn set_up_capacity(&mut self, h: usize, capacity: Arc<Capacity>) {
+        self.end_mut(h).capacity = Some((capacity, Cursor::default()));
+    }
+
+    /// `h`'s uplink's capacity schedule, if it has one.
+    pub fn up_capacity(&self, h: usize) -> Option<&Capacity> {
+        self.end(h).capacity.as_ref().map(|(c, _)| c.as_ref())
+    }
+
+    /// `h`'s uplink's slots, if it has any.
+    pub fn up_slots(&self, h: usize) -> Option<Slots> {
+        self.end(h).site.profile.slots
     }
 
     /// When `h`'s downlink has delivered everything that reached it so far.
@@ -551,10 +637,10 @@ impl Network {
         carrier: Carrier,
     ) -> Transit {
         let end = self.end_mut(a);
-        let start = sent.max(end.up_free);
-        end.up_free = end.serve(start, wire);
-        end.span(sent, start, wire);
-        end.stats.up_bytes = end.stats.up_bytes.saturating_add(wire as u64);
+        let (start, charged) = end.admit(sent, wire, packets);
+        end.up_free = end.serve(start, charged);
+        end.span(sent, start, charged);
+        end.stats.up_bytes = end.stats.up_bytes.saturating_add(charged as u64);
         end.stats.up_packets = end.stats.up_packets.saturating_add(u64::from(packets));
         end.stats.small_packets = end
             .stats
@@ -565,15 +651,15 @@ impl Network {
         self.transit(depart, a, b, packets, carrier)
     }
 
-    /// `wire` bytes of traffic that isn't between hosts, handed to `h`'s
-    /// uplink at `at`: they wait for the uplink and serialize at its rate
-    /// like a message, and count in no host's stats. Returns when their
-    /// last bit left.
-    pub fn occupy_up(&mut self, at: Time, h: usize, wire: usize) -> Time {
+    /// `wire` bytes in `packets` packets of traffic that isn't between
+    /// hosts, handed to `h`'s uplink at `at`: they wait for the uplink and
+    /// serialize at its rate like a message, and count in no host's stats.
+    /// Returns when their last bit left.
+    pub fn occupy_up(&mut self, at: Time, h: usize, wire: usize, packets: u32) -> Time {
         let end = self.end_mut(h);
-        let start = at.max(end.up_free);
-        end.up_free = end.serve(start, wire);
-        end.span(at, start, wire);
+        let (start, charged) = end.admit(at, wire, packets);
+        end.up_free = end.serve(start, charged);
+        end.span(at, start, charged);
         end.up_free
     }
 
@@ -588,6 +674,10 @@ impl Network {
         let end = self.end_mut(h);
         while end.up_spans.front().is_some_and(|&(_, done, _)| done <= at) {
             end.up_spans.pop_front();
+        }
+        if let Some((cap, cursor)) = &end.capacity {
+            let held = usize::try_from(cursor.held(cap, at)).unwrap_or(usize::MAX);
+            return tx_time(held, end.site.profile.up);
         }
         if end.site.profile.bucket.is_some() {
             let held: usize = end.up_spans.iter().map(|&(_, _, wire)| wire).sum();
@@ -692,6 +782,7 @@ impl Network {
         end.up_spans.clear();
         // What it forgets takes no tokens past `now`.
         end.tokens_at = end.tokens_at.min(now);
+        end.slot_last = end.slot_last.min(now);
         end.down_free = now;
         for x in 0..self.ends.len() {
             self.dir_mut(h, x).last_arrival = Time::NIL;
@@ -819,7 +910,7 @@ mod tests {
             Site::new(City::Frankfurt, Access::Fiber),
         ];
         let mut n = net(&sites, QUIET);
-        assert_eq!(n.occupy_up(t(0), 0, 1250), t(10));
+        assert_eq!(n.occupy_up(t(0), 0, 1250, 1), t(10));
         assert_eq!(n.send(t(0), 0, 1, 1250, 1, Carrier::Stream).depart, t(20));
         assert_eq!(n.stats(0).up_bytes, 1250);
     }
@@ -941,7 +1032,7 @@ mod tests {
         );
         // Two 3000-byte messages at 1 MB/s: 0-3 ms and 3-6 ms.
         n.send(t(0), 0, 1, 3000, 2, Carrier::Stream);
-        n.occupy_up(t(0), 0, 3000);
+        n.occupy_up(t(0), 0, 3000, 2);
         let ms = Duration::from_millis;
         // The first counts whole until its last bit is out at 3 ms.
         assert_eq!(n.up_backlog(0, t(1)), ms(6));
@@ -1395,7 +1486,7 @@ mod tests {
         // The first 3000 bytes leave on the bucket at once; the next 3000
         // wait for the rate, until 3 ms, and count whole till then.
         assert_eq!(n.send(t(0), 0, 1, 3000, 2, Carrier::Stream).depart, t(0));
-        assert_eq!(n.occupy_up(t(0), 0, 3000), t(3));
+        assert_eq!(n.occupy_up(t(0), 0, 3000, 2), t(3));
         assert_eq!(n.up_backlog(0, t(0)), ms(3));
         assert_eq!(n.up_backlog(0, t(2)), ms(3));
         assert_eq!(n.up_backlog(0, t(3)), Duration::ZERO);
@@ -1406,5 +1497,86 @@ mod tests {
         n.send(t(10), 0, 1, 3000, 2, Carrier::Stream);
         n.reset(0, t(11));
         assert_eq!(n.send(t(11), 0, 1, 1000, 1, Carrier::Stream).depart, t(12));
+    }
+
+    #[test]
+    fn an_uplink_charges_its_framing() {
+        use crate::framing::Framing;
+        let up = 1_514_000; // a 1514-byte frame a ms
+        let site = |f| {
+            Site::new(City::Dallas, Access::Fiber)
+                .with_up(up)
+                .with_framing(f)
+        };
+        let mut n = net(
+            &[
+                site(Framing::ETHERNET),
+                site(Framing::ADSL_PPPOE),
+                site(Framing::NONE),
+            ],
+            QUIET,
+        );
+        // Two full TCP packets: 2 x 1514 bytes of Ethernet, 2 x 1749 of
+        // cells, 3000 of IP.
+        assert_eq!(n.send(t(0), 0, 2, 3000, 2, Carrier::Stream).depart, t(2));
+        assert_eq!(n.up_charge(1, 3000, 2), 3498);
+        assert_eq!(n.stats(0).up_bytes, 3028);
+        n.send(t(0), 1, 2, 3000, 2, Carrier::Stream);
+        assert_eq!(n.up_free(1), t(0) + tx_time(3498, up));
+        assert_eq!(
+            n.send(t(10), 2, 0, 3000, 2, Carrier::Stream).depart,
+            t(10) + tx_time(3000, up)
+        );
+        // A queue's bytes are what it charges.
+        n.occupy_up(t(20), 1, 64, 1);
+        assert_eq!(n.up_backlog(1, t(20)), tx_time(159, up));
+    }
+
+    #[test]
+    fn slots_hold_what_is_ready_until_the_next_opens() {
+        use crate::slots::Slots;
+        let ms = Duration::from_millis;
+        let site = Site::new(City::Dallas, Access::Fiber)
+            .with_up(125_000_000)
+            .with_slots(Some(Slots {
+                min: ms(2),
+                max: ms(2),
+            }));
+        let mut n = net(&[site, Site::new(City::Dallas, Access::Fiber)], QUIET);
+        let at = |t: Time| t + tx_time(1500, 125_000_000);
+        // An idle link waits a slot; what is ready before it rides it.
+        assert_eq!(
+            n.send(t(0), 0, 1, 1500, 1, Carrier::Datagram).depart,
+            at(t(2))
+        );
+        assert_eq!(
+            n.send(t(1), 0, 1, 1500, 1, Carrier::Datagram).depart,
+            at(at(t(2)))
+        );
+        // Ready past it: the next, drawn when it is ready.
+        assert_eq!(
+            n.send(t(3), 0, 1, 1500, 1, Carrier::Datagram).depart,
+            at(t(5))
+        );
+        assert_eq!(n.up_slots(0).map(|s| s.min), Some(ms(2)));
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn a_capacity_schedule_replaces_the_rate() {
+        use crate::capacity::Capacity;
+        // A 1500-byte opportunity every 2 ms, from t(0).
+        let cap = Capacity::mahimahi("2\n4\n6\n8\n10\n", 1500, 1.0)
+            .unwrap()
+            .starting(t(0));
+        let site = Site::new(City::Dallas, Access::Fiber).with_up(1_000_000_000);
+        let mut n = net(&[site, Site::new(City::Dallas, Access::Fiber)], QUIET);
+        n.set_up_capacity(0, std::sync::Arc::new(cap));
+        assert_eq!(n.up_rate(0, t(0)), 1_000_000_000);
+        // At 1 ms the next opportunity is 2 ms; 3000 bytes take two.
+        assert_eq!(n.send(t(1), 0, 1, 3000, 2, Carrier::Stream).depart, t(4));
+        assert_eq!(n.up_backlog(0, t(1)), tx_time(3000, 1_000_000_000));
+        // The 6 and 8 ms opportunities pass unused while it idles.
+        assert_eq!(n.send(t(9), 0, 1, 100, 1, Carrier::Stream).depart, t(10));
     }
 }

@@ -3175,6 +3175,12 @@ fn wan_super_peer_adaptive_uncapped() {
 ///   waits and the seed's holders' weights apply. A rate limit is also the
 ///   capacity the upload meter knows, and it doesn't follow the uplink's
 ///   steps, as a user's setting wouldn't.
+/// - `STRIMS_SIM_CAL_SEED_LINK=<spec>`, `STRIMS_SIM_CAL_VIEWER_LINK=<spec>`
+///   and `STRIMS_SIM_CAL_LINKS="<i>:<spec> ..."` give the nodes `run.sh`'s
+///   access link classes (`strims_sim::link`): their framing, slots,
+///   buckets (over `STRIMS_SIM_CAL_SEED_BURST`'s, which `tbf` and `fiber`
+///   take) and traces, a trace's time 0 at the stream's start. Unset, the
+///   uplinks charge IP bytes alone, as before.
 struct Calibration {
     viewers: usize,
     seed_up_mbit: u64,
@@ -3211,6 +3217,8 @@ struct Calibration {
     /// The seed's and the viewers' uplink buckets, in bytes; `None`, none.
     seed_burst: Option<u64>,
     viewer_burst: Option<u64>,
+    /// Each node's testbed link spec (node 0 the seed), if any.
+    links: Vec<Option<String>>,
 }
 
 fn calibration_settings() -> Calibration {
@@ -3264,6 +3272,25 @@ fn calibration_settings() -> Calibration {
         compete: pairs_knob("STRIMS_SIM_CAL_COMPETE"),
         seed_burst: knob("STRIMS_SIM_CAL_SEED_BURST"),
         viewer_burst: knob("STRIMS_SIM_CAL_VIEWER_BURST"),
+        links: {
+            let each = knob::<String>("STRIMS_SIM_CAL_LINKS").unwrap_or_default();
+            (0..=viewers)
+                .map(|i| {
+                    each.split_whitespace()
+                        .find_map(|l| {
+                            let (n, spec) = l.split_once(':')?;
+                            (n.parse::<usize>().ok()? == i).then(|| spec.to_owned())
+                        })
+                        .or_else(|| {
+                            knob::<String>(if i == 0 {
+                                "STRIMS_SIM_CAL_SEED_LINK"
+                            } else {
+                                "STRIMS_SIM_CAL_VIEWER_LINK"
+                            })
+                        })
+                })
+                .collect()
+        },
     }
 }
 
@@ -3309,15 +3336,25 @@ fn pairs_knob(name: &str) -> Vec<(f64, f64)> {
 /// `STRIMS_SIM_CAL_RATE_LIMIT_PCT` sets them; send buffers.
 fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
     let mut s = Scenario::new("calibration_star");
-    let site = |mbit: u64, burst: Option<u64>| {
-        Site::new(City::Chicago, Access::Cable)
-            .with_up(mbit * 125_000)
-            .with_bucket(burst.map(Bucket::of))
+    let link = |i: usize, mbit: u64| {
+        c.links.get(i).cloned().flatten().map(|spec| {
+            strims_sim::link::TestbedLink::parse(&spec, mbit * 125_000)
+                .unwrap_or_else(|e| panic!("{e}"))
+        })
     };
-    let seed_host = s.host_at("seed", site(c.seed_up_mbit, c.seed_burst));
+    let site = |i: usize, mbit: u64, burst: Option<u64>| {
+        let st = Site::new(City::Chicago, Access::Cable)
+            .with_up(mbit * 125_000)
+            .with_bucket(burst.map(Bucket::of));
+        match link(i, mbit) {
+            Some(l) => l.site(st, burst.map(Bucket::of)),
+            None => st,
+        }
+    };
+    let seed_host = s.host_at("seed", site(0, c.seed_up_mbit, c.seed_burst));
     let vs: Vec<HostIx> = (0..c.viewers)
         .map(|i| {
-            let mut st = site(c.viewer_up_mbit, c.viewer_burst);
+            let mut st = site(i + 1, c.viewer_up_mbit, c.viewer_burst);
             if i == 0
                 && let Some(k) = c.slow_down_kbit
             {
@@ -3330,6 +3367,21 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
         h.uplink = c
             .rate_limit_pct
             .and_then(|pct| Some(h.site?.profile.up * pct / 100));
+    }
+    for (i, h) in std::iter::once(seed_host)
+        .chain(vs.iter().copied())
+        .enumerate()
+    {
+        let mbit = if i == 0 {
+            c.seed_up_mbit
+        } else {
+            c.viewer_up_mbit
+        };
+        if let Some(l) = link(i, mbit) {
+            s.hosts[h].up_capacity = l
+                .capacity(Duration::from_secs(5))
+                .unwrap_or_else(|e| panic!("{e}"));
+        }
     }
     s.hosts[seed_host].up_steps = c
         .seed_up_steps
@@ -3584,6 +3636,7 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
         compete: Vec::new(),
         seed_burst: None,
         viewer_burst: None,
+        links: Vec::new(),
     }
 }
 

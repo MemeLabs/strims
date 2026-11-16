@@ -136,6 +136,7 @@ mod fast_map;
 mod fields;
 mod host;
 mod hostile;
+pub mod link;
 pub mod loops;
 pub mod measures;
 pub mod memory;

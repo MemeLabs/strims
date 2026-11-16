@@ -827,7 +827,7 @@ async fn sampler<C: BenchClock>(
 }
 
 /// One node's access link in a simulated bench.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BenchSite {
     /// Uplink, bytes per second.
     pub up: u64,
@@ -846,6 +846,11 @@ pub struct BenchSite {
     /// `SEED_PEAK_MBIT` and `VIEWER_PEAK_MBIT`, tbf's peakrate); `None`,
     /// at once.
     pub peak: Option<u64>,
+    /// Its access link class (`run.sh`'s `SEED_LINK`, `VIEWER_LINK` and
+    /// `LINKS`), if the run gave one: its framing, slots, bucket and
+    /// trace in the sim ([`crate::link`]), which then takes the run's
+    /// bucket whatever [`Bench::buckets`] says.
+    pub link: Option<crate::link::TestbedLink>,
 }
 
 /// A bench for [`simulate`].
@@ -942,6 +947,16 @@ impl Bench {
             .map(|p| p.parse::<f64>().map_err(|e| format!("SEED_LOSS_PCT: {e}")))
             .transpose()?
             .map_or(0.0, |p| p / 100.0);
+        let links = get("LINKS").unwrap_or_default();
+        let link_of = |i: usize| {
+            links
+                .split_whitespace()
+                .find_map(|l| {
+                    let (n, spec) = l.split_once(':')?;
+                    (n.parse::<usize>().ok()? == i).then(|| spec.to_owned())
+                })
+                .or_else(|| get(if i == 0 { "SEED_LINK" } else { "VIEWER_LINK" }))
+        };
         let sites = (0..=viewers)
             .map(|i| {
                 let (up, delay, burst, peak) = if i == 0 {
@@ -959,6 +974,9 @@ impl Bench {
                         peak("VIEWER_PEAK_MBIT")?,
                     )
                 };
+                let link = link_of(i)
+                    .map(|spec| crate::link::TestbedLink::parse(&spec, mbit(up as f64)))
+                    .transpose()?;
                 Ok(BenchSite {
                     up: mbit(up as f64),
                     down: slow.filter(|_| i == 1).map(|k| k * 125),
@@ -966,6 +984,7 @@ impl Bench {
                     loss: if i == 0 { seed_loss } else { 0.0 },
                     burst,
                     peak,
+                    link,
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
@@ -1058,17 +1077,26 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     let n = bench.sites.len();
     let mut spec = Scenario::new("bench");
     for (i, s) in bench.sites.iter().enumerate() {
+        let run_bucket = Bucket {
+            bytes: s.burst,
+            peak: s.peak,
+        };
         let mut site = Site::new(City::Chicago, Access::Cable)
             .with_up(s.up)
             .with_loss(s.loss)
-            .with_bucket(bench.buckets.then_some(Bucket {
-                bytes: s.burst,
-                peak: s.peak,
-            }));
+            .with_bucket(bench.buckets.then_some(run_bucket));
+        if let Some(link) = &s.link {
+            site = link.site(site, Some(run_bucket));
+        }
         if let Some(d) = s.down {
             site = site.with_down(d);
         }
-        spec.host_at(&format!("n{i}"), site);
+        let h = spec.host_at(&format!("n{i}"), site);
+        if let Some(link) = &s.link
+            && let Some(hs) = spec.hosts.get_mut(h)
+        {
+            hs.up_capacity = link.capacity(SIM_START)?;
+        }
     }
     for (h, steps) in &bench.up_steps {
         if let Some(hs) = spec.hosts.get_mut(*h) {

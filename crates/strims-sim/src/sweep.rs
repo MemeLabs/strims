@@ -31,6 +31,19 @@
 //!   the scenario's own included. Unset or blank, each scenario keeps its
 //!   own: none, but `calibration_star`'s given `STRIMS_SIM_CAL_SEED_BURST`
 //!   or `STRIMS_SIM_CAL_VIEWER_BURST`.
+//! - `STRIMS_SIM_FRAMING=<framing>` charges every WAN host's uplink
+//!   packets their link's framing past their IP bytes
+//!   (`strims_wan::framing`): `ethernet`, Ethernet's 14 bytes (what the
+//!   testbed's tbf counts); `profiles`, each host its access kind's
+//!   ([`Access::framing`](strims_wan::Access::framing): DOCSIS's 18, ADSL's
+//!   cells, ...); `off`, IP bytes alone, the scenario's own included.
+//!   Unset or blank, each scenario keeps its own (IP bytes alone, but a
+//!   testbed link's, `STRIMS_SIM_CAL_SEED_LINK`).
+//! - `STRIMS_SIM_UPLINK_SLOTS=<slots>` hands every WAN host's uplink its
+//!   messages in slots ahead of its shaper (`strims_wan::slots`):
+//!   `<min>-<max>` ms; `profiles`, each host its access kind's
+//!   ([`Access::slots`](strims_wan::Access::slots): cable's grants); `off`,
+//!   none, the scenario's own included. Unset or blank, each scenario's.
 //! - `STRIMS_SIM_KNOWN_UPLINK=1` tells every WAN host its site's uplink
 //!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)) as it
 //!   is at each time, its steps included
@@ -480,6 +493,67 @@ fn parse_uplink_burst(v: &str) -> Result<Option<UplinkBurst>, String> {
     }
 }
 
+/// What `STRIMS_SIM_FRAMING` gives every WAN host's uplink.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FramingKnob {
+    Off,
+    Ethernet,
+    Profiles,
+}
+
+/// `STRIMS_SIM_FRAMING`, if set.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn framing_knob() -> Option<FramingKnob> {
+    match env("STRIMS_SIM_FRAMING").as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some("off") => Some(FramingKnob::Off),
+        Some("ethernet") => Some(FramingKnob::Ethernet),
+        Some("profiles") => Some(FramingKnob::Profiles),
+        Some(v) => panic!("STRIMS_SIM_FRAMING={v}: off, ethernet or profiles"),
+    }
+}
+
+/// What `STRIMS_SIM_UPLINK_SLOTS` gives every WAN host's uplink.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SlotsKnob {
+    Off,
+    Profiles,
+    Fixed(strims_wan::slots::Slots),
+}
+
+/// `STRIMS_SIM_UPLINK_SLOTS`'s forms: `off`, `profiles` or
+/// `<min>-<max>` ms; blank, none.
+fn parse_uplink_slots(v: &str) -> Result<Option<SlotsKnob>, String> {
+    let ms = |x: &str| {
+        x.trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|m| m.is_finite() && *m >= 0.0)
+            .map(|m| strims_base::time::Duration::from_nanos((m * 1e6) as i64))
+    };
+    match v.trim() {
+        "" => Ok(None),
+        "off" => Ok(Some(SlotsKnob::Off)),
+        "profiles" => Ok(Some(SlotsKnob::Profiles)),
+        r => match r.split_once('-').and_then(|(a, b)| Some((ms(a)?, ms(b)?))) {
+            Some((min, max)) if min <= max => {
+                Ok(Some(SlotsKnob::Fixed(strims_wan::slots::Slots {
+                    min,
+                    max,
+                })))
+            }
+            _ => Err(format!("{r}: off, profiles or <min>-<max> ms")),
+        },
+    }
+}
+
+/// `STRIMS_SIM_UPLINK_SLOTS` ([`parse_uplink_slots`]), if set.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn uplink_slots_knob() -> Option<SlotsKnob> {
+    let v = env("STRIMS_SIM_UPLINK_SLOTS")?;
+    parse_uplink_slots(&v).unwrap_or_else(|e| panic!("STRIMS_SIM_UPLINK_SLOTS={v}: {e}"))
+}
+
 /// `STRIMS_SIM_UPLINK_BURST` ([`parse_uplink_burst`]), if set.
 #[allow(clippy::panic)] // a mistyped setting fails its test
 fn uplink_burst_knob() -> Option<UplinkBurst> {
@@ -573,6 +647,8 @@ fn sweep_seeds(
     let send_buffer = env("STRIMS_SIM_SEND_BUFFER").and_then(|s| s.trim().parse::<u64>().ok());
     let known_uplink = env("STRIMS_SIM_KNOWN_UPLINK").map(|s| s.trim().to_owned());
     let uplink_burst = uplink_burst_knob();
+    let framing = framing_knob();
+    let uplink_slots = uplink_slots_knob();
     let rows = env("STRIMS_SIM_ROWS").is_some_and(|s| s.trim() == "1");
     let job = env("STRIMS_SIM_JOB").is_some_and(|s| s.trim() == "1");
     assert!(
@@ -672,6 +748,24 @@ fn sweep_seeds(
                     UplinkBurst::Profiles => site.access.bucket(site.profile.up),
                 };
                 *site = site.with_bucket(bucket);
+            }
+        }
+        if let Some(framing) = framing {
+            for site in spec.hosts.iter_mut().filter_map(|h| h.site.as_mut()) {
+                *site = site.with_framing(match framing {
+                    FramingKnob::Off => strims_wan::framing::Framing::NONE,
+                    FramingKnob::Ethernet => strims_wan::framing::Framing::ETHERNET,
+                    FramingKnob::Profiles => site.access.framing(),
+                });
+            }
+        }
+        if let Some(slots) = uplink_slots {
+            for site in spec.hosts.iter_mut().filter_map(|h| h.site.as_mut()) {
+                *site = site.with_slots(match slots {
+                    SlotsKnob::Off => None,
+                    SlotsKnob::Profiles => site.access.slots(),
+                    SlotsKnob::Fixed(s) => Some(s),
+                });
             }
         }
         if let Some(which) = known_uplink.as_deref() {
@@ -908,6 +1002,27 @@ mod tests {
         );
         for bad in ["0", "1513", "-3028", "3k", "on", "profile"] {
             assert!(parse_uplink_burst(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn uplink_slots_knob_takes_off_profiles_and_a_range() {
+        use strims_base::time::Duration;
+        assert_eq!(parse_uplink_slots(""), Ok(None));
+        assert_eq!(parse_uplink_slots("off"), Ok(Some(SlotsKnob::Off)));
+        assert_eq!(
+            parse_uplink_slots("profiles"),
+            Ok(Some(SlotsKnob::Profiles))
+        );
+        assert_eq!(
+            parse_uplink_slots("2-8"),
+            Ok(Some(SlotsKnob::Fixed(strims_wan::slots::Slots {
+                min: Duration::from_millis(2),
+                max: Duration::from_millis(8),
+            })))
+        );
+        for bad in ["8-2", "2", "a-b", "-1-2"] {
+            assert!(parse_uplink_slots(bad).is_err(), "{bad}");
         }
     }
 }
