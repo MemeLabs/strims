@@ -992,6 +992,8 @@ pub struct Bench {
     /// When each node's schedule is released ([`NodePlan::releases`]), by
     /// node; a node without its schedule's dues.
     pub releases: Vec<Releases>,
+    /// The sim's seed: the sites' loss draws, turmoil's and str0m's.
+    pub seed: u64,
 }
 
 /// The defaults of `hack/testbed/run.sh`.
@@ -1149,6 +1151,7 @@ impl Bench {
             buckets: false,
             trace_tcp: false,
             releases: Vec::new(),
+            seed: 1,
         })
     }
 }
@@ -1246,10 +1249,10 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     let segment = spec.segment();
     let end_us = i64::try_from(bench.secs).unwrap_or(0) * 1_000_000;
     // str0m draws ICE credentials and SCTP details from a thread-local rng.
-    strims_node::seed_str0m_thread_rng(1);
+    strims_node::seed_str0m_thread_rng(bench.seed);
     let mut builder = turmoil::Builder::new();
     builder
-        .rng_seed(1)
+        .rng_seed(bench.seed)
         .epoch(std::time::UNIX_EPOCH + StdDuration::from_millis(crate::EPOCH_MS.unsigned_abs()))
         .simulation_duration(SIM_START + StdDuration::from_secs(bench.secs) + LINGER * 2)
         .tick_duration(spec.tick);
@@ -1310,7 +1313,7 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
         jitter: false,
         loss: bench.sites.iter().any(|s| s.loss > 0.0),
     };
-    let mut sched = Scheduler::new(&sim, &spec, options, 1, Some(buffers))?;
+    let mut sched = Scheduler::new(&sim, &spec, options, bench.seed, Some(buffers))?;
     sched.sample_queues_every(Duration::from(QUEUE_EVERY));
     if bench.trace_tcp {
         sched.trace_tcp();
@@ -1594,6 +1597,23 @@ mod tests {
         assert_eq!(write(0, 500_000), Some(502_000));
         assert_eq!(write(1, 207_000), Some(208_000));
         assert_eq!(write(1, 407_000), Some(407_000));
+    }
+
+    /// A lossy bench's draws are its seed's: the same seed runs the same,
+    /// another loses other packets.
+    #[test]
+    fn a_lossy_bench_draws_from_its_seed() {
+        let mut bench = Bench::testbed(
+            "VIEWERS=1\nSECS=3\nSEED_LOSS_PCT=2",
+            "",
+            "burst 0 1 0 250 65536 16384\nprobe 0 1 3 10",
+            true,
+        )
+        .unwrap();
+        let first = simulate(&bench).unwrap();
+        assert_eq!(simulate(&bench).unwrap(), first);
+        bench.seed = 2;
+        assert_ne!(simulate(&bench).unwrap(), first);
     }
 
     /// On the testbed (`hack/testbed/bench/over.sched`) a socket asked for

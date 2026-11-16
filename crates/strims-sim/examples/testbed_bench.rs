@@ -11,6 +11,7 @@
 //!               [--web <dir>] [--browser-bin <path>]
 //! testbed_bench --sim <testbed run dir> --out <dir> [--window]
 //!               [--segment <bytes>] [--str0m] [--bucket] [--nominal]
+//!               [--seed <n>]
 //! ```
 //!
 //! On the testbed a node listens on its topology address, dials the nodes
@@ -44,7 +45,8 @@
 //! where the run has them. Each node releases its schedule's records when
 //! the run's node did ([`Releases`], from its log's writes), so the model
 //! takes the testbed node's timers and stalls as its input; with
-//! `--nominal` at their dues.
+//! `--nominal` at their dues. `--seed` sets the sim's draws (1 without):
+//! the sites' loss, whose testbed runs each draw their own.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -89,6 +91,7 @@ struct Args {
     bucket: bool,
     trace_tcp: bool,
     nominal: bool,
+    seed: Option<u64>,
     web: Option<PathBuf>,
     browser_bin: Option<PathBuf>,
 }
@@ -119,6 +122,7 @@ fn args() -> Result<Args, String> {
             "--bucket" => a.bucket = true,
             "--trace-tcp" => a.trace_tcp = true,
             "--nominal" => a.nominal = true,
+            "--seed" => a.seed = Some(num(value()?)?),
             "--web" => a.web = Some(value()?.into()),
             "--browser-bin" => a.browser_bin = Some(value()?.into()),
             "--join-at" | "--rate" | "--hosts" | "--capture" | "--units" | "--player" => {
@@ -236,6 +240,9 @@ fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
     bench.str0m = a.str0m;
     bench.buckets = a.bucket;
     bench.trace_tcp = a.trace_tcp;
+    if let Some(seed) = a.seed {
+        bench.seed = seed;
+    }
     let logs = simulate(&bench)?;
     std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
     for (i, lines) in logs.iter().enumerate() {
