@@ -621,7 +621,7 @@ fn starved_wan() -> Scenario {
 /// And its `meter_samples` say what the seed could upload at each sample
 /// ([`meter_samples_say_what_they_are`]): over the second before, its
 /// rate limit, or while starved half the stream's rate in its meter's units
-/// (its data share of it, `own_data_share`).
+/// (its share of its link, `own_share`).
 #[test]
 fn a_starved_runs_stalls_are_its_reads_playout() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
@@ -654,7 +654,8 @@ fn a_starved_runs_stalls_are_its_reads_playout() {
     let meter = &r.hosts[seed].runner.meter;
     let share = |t: Duration| {
         let k = meter.partition_point(|m| m.t < t);
-        strims_sim::report::own_data_share(
+        strims_sim::report::own_share(
+            &r.scenario.hosts[seed],
             k.checked_sub(1).and_then(|i| meter.get(i)),
             k.checked_sub(2).and_then(|i| meter.get(i)),
         )

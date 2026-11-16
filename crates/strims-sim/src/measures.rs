@@ -3299,12 +3299,15 @@ mod tests {
             66 => 600,
             _ => 1000,
         });
-        // The truth is the second before's mean rate: the step at 20 s
-        // shows from then on.
+        // The truth is the second before's mean rate, in a full TCP
+        // segment's share of it (no sample was near saturation): the step
+        // at 20 s shows from then on.
+        let share = crate::report::full_share(&r.scenario.hosts[0]);
         let at = |ms: u64| r.upload_cap_at(0, Duration::from_millis(ms));
-        assert_eq!(at(20_000), Some(1000));
-        assert_eq!(at(20_500), Some(750));
-        assert_eq!(at(21_000), Some(500));
+        let of = |rate: f64| Some((rate * share) as u64);
+        assert_eq!(at(20_000), of(1000.0));
+        assert_eq!(at(20_500), of(750.0));
+        assert_eq!(at(21_000), of(500.0));
         let t = r.tracking(&r.seeds());
         assert_eq!(t.len(), 2);
         // 21-29 of 20-59 read twice the half rate.

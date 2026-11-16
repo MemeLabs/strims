@@ -1033,6 +1033,12 @@ impl Scheduler {
         self.cross_log.get(h).map_or(&[][..], Vec::as_slice)
     }
 
+    /// What host `h`'s transports took of its messages that went to its
+    /// uplink so far ([`Scheduler::app_bytes`]).
+    pub(crate) fn own_app_bytes(&self, h: HostIx) -> u64 {
+        self.app_bytes.get(h).copied().unwrap_or(0)
+    }
+
     /// What host `h`'s uplink has charged its own messages so far, its
     /// pure acknowledgements and competing uploads apart
     /// ([`EndStats::up_bytes`](strims_wan::network::EndStats::up_bytes)).

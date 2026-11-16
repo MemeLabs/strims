@@ -2737,15 +2737,20 @@ pub(crate) enum RowNums {
     /// its channel payloads): what its uplink carries over that second (its
     /// rate's mean, its steps' from their times; with a capacity schedule, its
     /// opportunities in it) less what its link charged its competing uploads in
-    /// it, times its data share, the channel payload bytes its runner wrote
-    /// between its last two meter samples over what its link charged its own
-    /// messages then (pure acknowledgements and competing uploads apart; at
-    /// most 1, the share so far when it wrote nothing between them, and 1
-    /// before it sent any), within its rate limit: the seed's quantiles
-    /// `meter_seed_p*`, the populations' `meter_accepting_p*`,
-    /// `meter_delivering_p*` and `meter_others_p*`, its median per bucket over
-    /// the seeds' samples (`meter_bucket_seeds`) and the populations'
-    /// (`meter_bucket_accepting`, `meter_bucket_delivering`,
+    /// it, times its share of its link in channel bytes (`Report::own_share`, a
+    /// property of its link, its transports and vnic): the bytes its transports
+    /// took of its messages over what its link charged them as they went to it
+    /// (pure acknowledgements and competing uploads apart), over its sample
+    /// window before the sample when that was near saturation (its own charge
+    /// at least `NEAR_SATURATED`, 0.8, of what its link could carry for it),
+    /// else over its near-saturated windows so far, else a full message's (a
+    /// TCP segment of two full packets, or a data channel's full datagram, at
+    /// its framing); times its runner's channel bytes over what it handed vnic
+    /// over its near-saturated windows (1 before any); within its rate limit:
+    /// the seed's quantiles `meter_seed_p*`, the populations'
+    /// `meter_accepting_p*`, `meter_delivering_p*` and `meter_others_p*`, its
+    /// median per bucket over the seeds' samples (`meter_bucket_seeds`) and the
+    /// populations' (`meter_bucket_accepting`, `meter_bucket_delivering`,
     /// `meter_bucket_others`), and how it tracked changes
     /// (`off_{change}_{role}`).
     MeterBucketSeeds,
@@ -3998,12 +4003,18 @@ pub(crate) mod cols {
         /// runner writes (`UploadInfo::rate`'s, its channel payloads): what its
         /// uplink carries over that second (its rate's mean, its steps' from
         /// their times; with a capacity schedule, its opportunities in it) less
-        /// what its link charged its competing uploads in it, times its data
-        /// share, the channel payload bytes its runner wrote between its last
-        /// two meter samples over what its link charged its own messages then
-        /// (pure acknowledgements and competing uploads apart; at most 1, the
-        /// share so far when it wrote nothing between them, and 1 before it
-        /// sent any), within its rate limit; 0 over a second its link carries
+        /// what its link charged its competing uploads in it, times its share
+        /// of its link in channel bytes (`Report::own_share`, a property of its
+        /// link, its transports and vnic): the bytes its transports took of its
+        /// messages over what its link charged them as they went to it (pure
+        /// acknowledgements and competing uploads apart), over its sample
+        /// window before the sample when that was near saturation (its own
+        /// charge at least `NEAR_SATURATED`, 0.8, of what its link could carry
+        /// for it), else over its near-saturated windows so far, else a full
+        /// message's (a TCP segment of two full packets, or a data channel's
+        /// full datagram, at its framing); times its runner's channel bytes
+        /// over what it handed vnic over its near-saturated windows (1 before
+        /// any); within its rate limit; 0 over a second its link carries
         /// nothing for the host (an outage), and empty with neither a site nor
         /// a limit.
         ///

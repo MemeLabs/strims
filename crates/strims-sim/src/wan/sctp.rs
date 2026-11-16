@@ -177,6 +177,20 @@ const DTLS12_OVERHEAD: usize = FRAMING + 28 + 37;
 const DTLS13_OVERHEAD: usize = FRAMING + 28 + 22;
 
 impl SctpProfile {
+    /// The share of a full datagram's charge on a link of `framing` that is
+    /// the channel's bytes (a DATA chunk's payload, vnic's): its payload
+    /// over its SCTP, DTLS, UDP and IP headers and the link's framing
+    /// ([`FRAMING`] where the site charges none of its own).
+    pub(crate) fn full_share(&self, framing: strims_wan::framing::Framing) -> f64 {
+        let ip = (self.mtu + self.packet_overhead).saturating_sub(FRAMING);
+        let link = if framing == strims_wan::framing::Framing::NONE {
+            ip + FRAMING
+        } else {
+            framing.packet(ip)
+        };
+        self.max_payload as f64 / link.max(1) as f64
+    }
+
     /// sctp-proto 0.10 as str0m 0.24 runs it: 1150-byte datagrams, less
     /// str0m's allowances for DTLS (48) and SCTP (40), carry 1062 bytes of
     /// a chunk. RFC 4960's initial window (min(4 MTU, max(2 MTU, 4380))),

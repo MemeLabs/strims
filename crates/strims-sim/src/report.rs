@@ -1551,32 +1551,23 @@ fn gini(sorted: &[u64]) -> f64 {
 /// The truth's window: the second before the time it is read at.
 pub const TRUTH_WINDOW: std::time::Duration = std::time::Duration::from_secs(1);
 
+/// A sample window whose own link charge is at least this share of what
+/// the host's link could carry for it (`available`) is near saturation:
+/// its messages are full, and its share of the link is its transports'.
+pub const NEAR_SATURATED: f64 = 0.8;
+
 /// The meter's truth for host `spec` at `t` (time since the start): what
 /// it could upload over `(t - 1 s, t]` ([`TRUTH_WINDOW`]), in its meter's
-/// units, the data bytes its runner writes (`UploadInfo::rate`'s), within
-/// its rate limit; `None` with neither a site nor a limit, and 0 over a
-/// window its link carries nothing for it (an outage). Over the window:
+/// units, the channel bytes its runner writes (`UploadInfo::rate`'s),
+/// within its rate limit; `None` with neither a site nor a limit, and 0
+/// over a window its link carries nothing for it (an outage): what its
+/// link could carry for it over the window ([`available`]) times its
+/// share ([`own_share`]) at its meter samples before `t`, `last` and
+/// `prev`.
 ///
-/// - what its uplink carries, in its link's bytes: its rate's mean over
-///   the window, its steps' from their times ([`HostSpec::up_steps`]), or
-///   with a capacity schedule ([`HostSpec::up_capacity`]) the bytes of
-///   its opportunities in the window ([`Capacity::bytes_between`]); a
-///   bucket's bursts leave it its rate;
-/// - less what its link charged its competing uploads
-///   ([`HostSpec::competing`]): their bytes sent in the window, from the
-///   walk-stamped log (`competing`, [`competing_before`]), at what the
-///   link charges a segment;
-/// - times the host's data share ([`own_data_share`]) over its last two meter
-///   samples at or before `t`, `last` and `prev`: the data bytes its runner
-///   wrote between them over what its link charged its own messages then.
-///
-/// The live oracle (`STRIMS_SIM_KNOWN_UPLINK`) tells the node this at each
-/// of its stats samples, from the same inputs.
-///
-/// [`HostSpec::up_steps`]: crate::spec::HostSpec::up_steps
-/// [`HostSpec::up_capacity`]: crate::spec::HostSpec::up_capacity
-/// [`HostSpec::competing`]: crate::spec::HostSpec::competing
-/// [`Capacity::bytes_between`]: strims_wan::capacity::Capacity::bytes_between
+/// The live oracle (`STRIMS_SIM_KNOWN_UPLINK`) tells the node this as each
+/// of its stats samples is asked for, from the same inputs, ahead of the
+/// sample.
 pub(crate) fn upload_truth(
     spec: &crate::spec::HostSpec,
     last: Option<&crate::stats::MeterSample>,
@@ -1584,27 +1575,55 @@ pub(crate) fn upload_truth(
     competing: &[(strims_base::time::Duration, u64)],
     t: std::time::Duration,
 ) -> Option<u64> {
-    use strims_base::time::Duration as D;
-    let to = D::from(t);
-    let from = to - D::from(TRUTH_WINDOW);
-    let site = spec.site.map(|s| {
-        let carried = match &spec.up_capacity {
-            Some(c) => {
-                let end = crate::wan::sim_time(t);
-                c.bytes_between(end - D::from(TRUTH_WINDOW), end)
-            }
-            None => mean_rate(s.profile.up, &spec.up_steps, from, to),
-        };
-        let framing = s.profile.framing;
-        let w = crate::wan::CROSS_WIRE as u64;
-        let cross = competing_before(competing, to) - competing_before(competing, from);
-        let cross = cross * framing.message(crate::wan::CROSS_WIRE, 2) as u64 / w;
-        (carried.saturating_sub(cross) as f64 * own_data_share(last, prev)) as u64
+    let to = t;
+    let from = to.saturating_sub(TRUTH_WINDOW);
+    let site = spec.site.map(|_| {
+        let avail = available(spec, competing, from, to) as f64 * TRUTH_WINDOW.as_secs_f64()
+            / (to - from).as_secs_f64().max(1e-9);
+        (avail * own_share(spec, last, prev)) as u64
     });
     match (spec.uplink, site) {
         (Some(a), Some(b)) => Some(a.min(b)),
         (a, b) => a.or(b),
     }
+}
+
+/// What host `spec`'s link could carry for it over `(from, to]` (times
+/// since the start), in its link's bytes: what its uplink carries then (its
+/// rate's mean, its steps' from their times, [`HostSpec::up_steps`]; with a
+/// capacity schedule, [`HostSpec::up_capacity`], the bytes of its
+/// opportunities in the window, `Capacity::bytes_between`; a bucket's
+/// bursts leave it its rate), less what its link charged its competing
+/// uploads in it ([`HostSpec::competing`]: their bytes sent in the window,
+/// from the walk-stamped log `competing`, at what the link charges a
+/// segment). 0 without a site.
+///
+/// [`HostSpec::up_steps`]: crate::spec::HostSpec::up_steps
+/// [`HostSpec::up_capacity`]: crate::spec::HostSpec::up_capacity
+/// [`HostSpec::competing`]: crate::spec::HostSpec::competing
+pub(crate) fn available(
+    spec: &crate::spec::HostSpec,
+    competing: &[(strims_base::time::Duration, u64)],
+    from: std::time::Duration,
+    to: std::time::Duration,
+) -> u64 {
+    use strims_base::time::Duration as D;
+    let Some(s) = spec.site else {
+        return 0;
+    };
+    let (f, t) = (D::from(from), D::from(to));
+    let carried = match &spec.up_capacity {
+        Some(c) => c.bytes_between(crate::wan::sim_time(from), crate::wan::sim_time(to)),
+        None => {
+            let rate = mean_rate(s.profile.up, &spec.up_steps, f, t);
+            (rate as f64 * (to.saturating_sub(from)).as_secs_f64()) as u64
+        }
+    };
+    let framing = s.profile.framing;
+    let w = crate::wan::CROSS_WIRE as u64;
+    let cross = competing_before(competing, t) - competing_before(competing, f);
+    let cross = cross * framing.message(crate::wan::CROSS_WIRE, 2) as u64 / w;
+    carried.saturating_sub(cross)
 }
 
 /// What an uplink of `rate` bytes per second with `steps` carries over
@@ -1653,28 +1672,69 @@ pub(crate) fn competing_before(
         .map_or(0, |&(_, b)| b)
 }
 
-/// The share of what a host's link charged its own messages that is the
-/// data its runner wrote (`MeterSample::data_bytes` over
-/// `MeterSample::link_bytes`), at most 1: between meter samples `prev`
-/// and `last`, or from the start to `last` without `prev` or when the
-/// runner wrote nothing between them; 1 when it has written nothing or its
-/// link charged it nothing.
-pub fn own_data_share(
+/// The share of what host `spec`'s link charges it that is channel bytes,
+/// the meter's units, at its meter samples `last` and `prev`
+/// ([`channel_share`] times [`transport_share`]): a property of its link,
+/// its transports and vnic, taken where its link was near saturation
+/// ([`NEAR_SATURATED`]), whatever the host was sending since.
+pub fn own_share(
+    spec: &crate::spec::HostSpec,
     last: Option<&crate::stats::MeterSample>,
     prev: Option<&crate::stats::MeterSample>,
 ) -> f64 {
-    let Some(k) = last else {
-        return 1.0;
-    };
-    let ratio = |d: u64, l: u64| (d > 0 && l > 0).then(|| (d as f64 / l as f64).min(1.0));
-    prev.and_then(|j| {
-        ratio(
-            k.data_bytes.saturating_sub(j.data_bytes),
+    channel_share(last) * transport_share(spec, last, prev)
+}
+
+/// The share of what a host handed vnic that was its runner's channel
+/// bytes, over its near-saturated windows up to `last`
+/// ([`Gated`](crate::stats::Gated): `data` over `vnic`, at most 1); 1 before
+/// any, as vnic frames them (4 bytes a frame of up to 64 KiB).
+pub fn channel_share(last: Option<&crate::stats::MeterSample>) -> f64 {
+    last.map(|k| k.gated)
+        .filter(|g| g.data > 0 && g.vnic > 0)
+        .map_or(1.0, |g| (g.data as f64 / g.vnic as f64).min(1.0))
+}
+
+/// The share of what host `spec`'s link charged its messages that its
+/// transports took (vnic's bytes), counted as each message went to the
+/// link: over the window ending at `last`, from `prev`, when it was near
+/// saturation; else over its near-saturated windows so far; else a full
+/// message's ([`full_share`]). At most 1.
+pub fn transport_share(
+    spec: &crate::spec::HostSpec,
+    last: Option<&crate::stats::MeterSample>,
+    prev: Option<&crate::stats::MeterSample>,
+) -> f64 {
+    let ratio = |a: u64, l: u64| (a > 0 && l > 0).then(|| (a as f64 / l as f64).min(1.0));
+    if let (Some(k), Some(j)) = (last, prev)
+        && k.gated.window
+        && let Some(r) = ratio(
+            k.app_bytes.saturating_sub(j.app_bytes),
             k.link_bytes.saturating_sub(j.link_bytes),
         )
-    })
-    .or_else(|| ratio(k.data_bytes, k.link_bytes))
-    .unwrap_or(1.0)
+    {
+        return r;
+    }
+    last.and_then(|k| ratio(k.gated.app, k.gated.link))
+        .unwrap_or_else(|| full_share(spec))
+}
+
+/// What a full message of host `spec`'s transport carries of its link's
+/// charge: a data channel's full datagram with the window model's data
+/// channels ([`HostSpec::rtc_stack`]), else a TCP segment of two full
+/// packets (`WINDOW_SEGMENT`), each a full MSS under its IP and TCP
+/// headers, at its link's framing.
+///
+/// [`HostSpec::rtc_stack`]: crate::spec::HostSpec::rtc_stack
+pub fn full_share(spec: &crate::spec::HostSpec) -> f64 {
+    use strims_wan::wire::{MSS, TCP_HEADER};
+    let framing = spec
+        .site
+        .map_or(strims_wan::framing::Framing::NONE, |s| s.profile.framing);
+    match spec.rtc_stack {
+        Some(p) => p.full_share(framing),
+        None => (2 * MSS) as f64 / framing.message(2 * (MSS + TCP_HEADER), 2) as f64,
+    }
 }
 
 #[cfg(test)]

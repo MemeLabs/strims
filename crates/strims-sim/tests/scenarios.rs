@@ -3758,12 +3758,13 @@ fn truth_run(name: &str, c: &Calibration, told: bool) -> Report {
     reports.remove(0)
 }
 
-/// The seed's data share at `t`, over its last two meter samples by then
-/// (`own_data_share`).
+/// The seed's share of its link at `t`, from its last two meter samples
+/// before then (`own_share`).
 fn seed_share(r: &Report, t: Duration) -> f64 {
     let m = &r.hosts[0].runner.meter;
     let k = m.partition_point(|x| x.t < t);
-    strims_sim::report::own_data_share(
+    strims_sim::report::own_share(
+        &r.scenario.hosts[0],
         k.checked_sub(1).and_then(|i| m.get(i)),
         k.checked_sub(2).and_then(|i| m.get(i)),
     )
@@ -3806,6 +3807,44 @@ fn the_meters_truth_is_what_the_link_carries_in_data_bytes() {
     assert_eq!(at(&r, 7_000), 0);
     let share = seed_share(&r, Duration::from_secs(8));
     assert_eq!(at(&r, 8_000), (1514.0 * share) as u64);
+}
+
+/// A saturated seed's share of its link, measured where its link carried
+/// its messages over its near-saturated windows, is at most a full
+/// message's as the framing and TCP's headers give it (`full_share`), and
+/// within 15 % of it: under it by the segments a full queue made it
+/// resend and the messages short of two packets (0.892 against 0.956 on
+/// an Ethernet frame, 0.761 against 0.828 in ADSL's cells); and before its
+/// first such window the truth takes the full message's.
+#[test]
+fn a_saturated_links_share_is_a_full_messages() {
+    for link in ["tbf", "dsl"] {
+        let mut c = collapse_case(3, 2, 10);
+        c.seed_burst = Some(3028);
+        c.links = vec![Some(link.to_owned()), None, None, None];
+        let r = truth_run("a_saturated_links_share_is_a_full_messages", &c, false);
+        let spec = &r.scenario.hosts[0];
+        let full = strims_sim::report::full_share(spec);
+        let meter = &r.hosts[0].runner.meter;
+        let g = meter.last().unwrap().gated;
+        let windows = meter.iter().filter(|m| m.gated.window).count();
+        assert!(windows >= 5, "{link}: {windows} near-saturated windows");
+        let measured = g.app as f64 / g.link as f64;
+        assert!(
+            measured <= full * 1.001 && measured >= full * 0.85,
+            "{link}: measured {measured}, full {full}"
+        );
+        let first = meter.iter().position(|m| m.gated.link > 0).unwrap();
+        let before = &meter[..first];
+        assert!(!before.is_empty());
+        let k = before.len();
+        let share = strims_sim::report::transport_share(
+            spec,
+            before.get(k - 1),
+            k.checked_sub(2).and_then(|i| before.get(i)),
+        );
+        assert_eq!(share, full, "{link}");
+    }
 }
 
 /// The live oracle tells the seed the truth before each of its meter

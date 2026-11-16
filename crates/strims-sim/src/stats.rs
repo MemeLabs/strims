@@ -375,13 +375,14 @@ impl PathOverhead {
 /// peer it asks for lazy HAVEs and whose peer asked them of it
 /// (`have_lazy_out`, `have_lazy_in`). And the bytes the node handed to
 /// vnic since the incarnation started (`DriverMetrics::bytes_written`).
-/// And what the meter's truth takes its data share from
-/// ([`crate::report::own_data_share`]): the channel payload bytes its runner
+/// And what the meter's truth takes its share from
+/// ([`crate::report::own_share`]): the channel payload bytes its runner
 /// has written since the run started, every incarnation (the bytes
 /// `UploadInfo::rate` counts, `ChannelMetrics::wire_bytes` of its
-/// outbound totals), and what its uplink has charged its own messages
-/// (`EndStats::up_bytes`; with no WAN, 0). With the live oracle, what it
-/// told the node then (`told`).
+/// outbound totals), what its uplink has charged its own messages
+/// (`EndStats::up_bytes`; with no WAN, 0), and its transports' and vnic's
+/// bytes beside them. With the live oracle, what it told the node ahead
+/// of the sample (`told`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MeterSample {
     /// Simulated time since the start of the run.
@@ -404,6 +405,28 @@ pub struct MeterSample {
     pub data_bytes: u64,
     pub link_bytes: u64,
     pub told: Option<u64>,
+    /// What the host's transports took of its uplink's messages so far
+    /// (vnic's bytes, counted as each message went to the link), and what
+    /// it handed vnic, every incarnation's (`DriverMetrics::bytes_written`).
+    pub app_bytes: u64,
+    pub vnic_bytes: u64,
+    /// Its near-saturated windows so far ([`Gated`]).
+    pub gated: Gated,
+}
+
+/// A host's near-saturated sample windows up to a meter sample: those
+/// whose own link charge was at least [`crate::report::NEAR_SATURATED`] of
+/// what its link could carry for it, summed (the transports' bytes, the
+/// link's, the runner's channel payload bytes and vnic's), and whether the
+/// window ending at the sample was one. The meter's truth takes its share
+/// from them ([`crate::report::own_share`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Gated {
+    pub app: u64,
+    pub link: u64,
+    pub data: u64,
+    pub vnic: u64,
+    pub window: bool,
 }
 
 /// An adaptive seed's `PushStats` seed fields.
@@ -520,6 +543,9 @@ pub(crate) struct HostStats {
     /// wrote, and the current one's so far ([`MeterSample::data_bytes`]).
     data_done: u64,
     data_now: u64,
+    /// The same of vnic's bytes ([`MeterSample::vnic_bytes`]).
+    vnic_done: u64,
+    vnic_now: u64,
     /// What the live oracle told the node ahead of the next sample.
     told: Option<u64>,
     /// Adaptive seeds by scenario swarm.
@@ -662,6 +688,7 @@ impl HostStats {
         t: Duration,
         clock: Time,
         link_bytes: u64,
+        app_bytes: u64,
         hostile: impl Fn(&HostId) -> bool,
     ) -> SampleGauges {
         let index = |k: SwarmKey| swarms.iter().position(|s| *s == Some(k));
@@ -758,6 +785,8 @@ impl HostStats {
         let told = self.told.take();
         self.data_now = m.runner.totals.outbound.wire_bytes();
         let data_bytes = self.data_done + self.data_now;
+        self.vnic_now = m.driver.bytes_written;
+        let vnic_bytes = self.vnic_done + self.vnic_now;
         for sw in &m.runner.swarms {
             let (Some(s), Some(sched), Some(push)) = (index(sw.swarm), sw.scheduler, &sw.push)
             else {
@@ -770,6 +799,8 @@ impl HostStats {
                     data_bytes,
                     link_bytes,
                     told,
+                    app_bytes,
+                    vnic_bytes,
                     bytes_written: m.driver.bytes_written,
                     rate: push.upload_rate,
                     busy_permille: push.upload_busy_permille,
@@ -884,6 +915,52 @@ impl HostStats {
         (last, it.next())
     }
 
+    /// Marks the meter sample taken at `t`, if one was, as ending a
+    /// near-saturated window when the host's link charged it at least
+    /// [`crate::report::NEAR_SATURATED`] of what `available` says its link
+    /// could carry for it between its sample before and `t`, and sums its
+    /// bytes into its [`Gated`] windows.
+    pub fn gate(&mut self, t: Duration, available: impl FnOnce(Duration, Duration) -> u64) {
+        let n = self.meter.len();
+        let prev = n
+            .checked_sub(2)
+            .and_then(|i| self.meter.get(i))
+            .or_else(|| {
+                if n == 1 {
+                    self.totals.meter.last()
+                } else {
+                    None
+                }
+            })
+            .map(|p| {
+                (
+                    p.t,
+                    p.link_bytes,
+                    p.app_bytes,
+                    p.data_bytes,
+                    p.vnic_bytes,
+                    p.gated,
+                )
+            });
+        let Some(k) = self.meter.last_mut().filter(|m| m.t == t) else {
+            return;
+        };
+        let Some((at, link, app, data, vnic, mut g)) = prev else {
+            return;
+        };
+        let charged = k.link_bytes.saturating_sub(link);
+        g.window = at < t
+            && charged > 0
+            && charged as f64 >= crate::report::NEAR_SATURATED * available(at, t) as f64;
+        if g.window {
+            g.app += k.app_bytes.saturating_sub(app);
+            g.link += charged;
+            g.data += k.data_bytes.saturating_sub(data);
+            g.vnic += k.vnic_bytes.saturating_sub(vnic);
+        }
+        k.gated = g;
+    }
+
     /// Records that the live oracle told the node `told` ahead of its
     /// next sample, which takes it ([`MeterSample::told`]).
     pub fn told(&mut self, told: u64) {
@@ -895,6 +972,7 @@ impl HostStats {
         let r = self.current();
         self.totals.add(&r);
         self.data_done += std::mem::take(&mut self.data_now);
+        self.vnic_done += std::mem::take(&mut self.vnic_now);
         for (&k, t) in &self.messages {
             self.messages_done
                 .entry(k)

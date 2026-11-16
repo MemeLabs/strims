@@ -1387,7 +1387,9 @@ impl World {
             }
             m.bins.clear();
             self.observe_bins(h, &m);
-            let link_bytes = wan.map_or(0, |s| s.own_up_bytes(h));
+            let (link_bytes, app_bytes) =
+                wan.map_or((0, 0), |s| (s.own_up_bytes(h), s.own_app_bytes(h)));
+            let log = wan.map_or(&[][..], |s| s.competing_log(h));
             let live: Vec<bool> = self
                 .spec
                 .swarms
@@ -1408,18 +1410,17 @@ impl World {
                     at,
                     self.clock_at(h, at),
                     link_bytes,
+                    app_bytes,
                     hostile,
                 );
+                if let Some(spec) = self.spec.hosts.get(h) {
+                    hs.stats
+                        .gate(at, |from, to| crate::report::available(spec, log, from, to));
+                }
                 hs.swarms = swarms;
             });
             self.store_metrics(h, m);
         }
-    }
-
-    /// What host `h`'s uplink has charged its own messages so far (0
-    /// without the WAN).
-    fn own_up_bytes(&self, h: HostIx) -> u64 {
-        self.wan.lock().as_ref().map_or(0, |s| s.own_up_bytes(h))
     }
 
     /// The meter's truth for host `h` now ([`crate::report::upload_truth`]),
@@ -1501,7 +1502,11 @@ impl World {
         }
         let inv = &self.spec.invariants;
         let mut found = Vec::new();
-        let link_bytes = self.own_up_bytes(h);
+        let wan = self.wan.lock();
+        let (link_bytes, app_bytes) = wan
+            .as_ref()
+            .map_or((0, 0), |s| (s.own_up_bytes(h), s.own_app_bytes(h)));
+        let log = wan.as_ref().map_or(&[][..], |s| s.competing_log(h));
         self.record(|st| {
             let ids = &st.ids;
             let Some(hs) = st.hosts.get_mut(h) else {
@@ -1523,8 +1528,14 @@ impl World {
                 asked,
                 self.clock_at(h, now),
                 link_bytes,
+                app_bytes,
                 hostile,
             );
+            if let Some(spec) = self.spec.hosts.get(h) {
+                hs.stats.gate(asked, |from, to| {
+                    crate::report::available(spec, log, from, to)
+                });
+            }
             let linked = m.links.iter().filter_map(|l| l.host_id);
             let mut ns: Vec<HostIx> = linked.filter_map(|id| st.ids.get(&id).copied()).collect();
             ns.sort_unstable();
