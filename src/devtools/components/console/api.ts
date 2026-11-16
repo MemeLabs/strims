@@ -382,7 +382,10 @@ export type TabStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
  * The id a page takes from its tab's storage, which it then marks taken: the id kept there, unless
  * it is marked taken, else `fresh()`, which it keeps. A page unmarks its id as it goes
  * (releaseTabId), so a reload keeps the id; a duplicated tab starts with a copy of an open page's
- * storage, its id marked, and so takes one of its own.
+ * storage, its id marked, and so takes one of its own. Two rare paths miss: a page that ends
+ * without pagehide (a crash) leaves its mark, so the next page in its tab takes a fresh id, which
+ * the server treats as a new tab; and a tab duplicated while its original's page sits in the
+ * back-forward cache (its id unmarked) shares that id with it.
  *
  * @param store - the tab's storage
  * @param fresh - a new random id

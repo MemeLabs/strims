@@ -68,9 +68,10 @@ chart.
   (`tabs` lists them). Pass `--check`, as with links.
 - It waits for the tab to report the new address and prints it, and
   says on stderr which address the tab left. A tab in the background
-  takes the address at its next report (every 30 s, a minute once Chrome
-  throttles a hidden tab's timers), so go waits 120 s for one, or when
-  it's shown. A page built before `go` fails at once: the user rebuilds
+  takes the address when it's shown or at its next report: it reports
+  every 30 s, a minute once Chrome throttles a hidden tab's timers, so go
+  waits 120 s for a tab in the background. A page built before `go`
+  fails at once: the user rebuilds
   (`pnpm run console:build`) and reloads the tab. A go that times out
   says what the tab's last report gives of why (it left the console's
   pages, its stream or reports fail).

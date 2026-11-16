@@ -62,9 +62,9 @@ publishes the same chunks: two streams, a chunk of each every 250 ms from
   Once         arm once's run: no interval, so its chunks, held or
                never, are neither late nor on time, unclassed and without
                causes, with a warning
-  Cli        simdb.py coverage-report's tables and JSON, as a caller runs
-               it, the seed log's sections among them, and a section the
-               catalog can't answer yet
+  Cli          simdb.py coverage-report's tables and JSON, as a caller
+               runs it, the seed log's sections among them, and a section
+               the catalog can't answer yet
 
   python3 hack/simlab/tests/test_coverage.py
 """
@@ -1082,7 +1082,7 @@ class SeedLog(Fixture):
         # stays.
         with forecast.connected() as c:
             coverage.prepare(c, EARLY_SEL)
-            got ={r[0]: (r[1], r[2]) for r in c.execute(
+            got = {r[0]: (r[1], r[2]) for r in c.execute(
                 "SELECT seq, cause, matches FROM cv_causes WHERE seq IN (110, 112, 114) ORDER BY seq").fetchall()}
         self.assertEqual(got, {110: ("other", ["other"]), 112: ("written_late", ["written_late", "departed"]),
                                114: ("other", ["other"])})
