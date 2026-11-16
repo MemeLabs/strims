@@ -267,6 +267,9 @@ net=strims-testbed-sealed
 old_net=strims-testbed
 subnet=10.77.0
 relay=$subnet.5
+# An address on the subnet no container or host holds (the nodes are
+# .10 up, the relay .5, the sink .250, the bridge .1).
+unused=$subnet.254
 
 n=$((viewers + 1))
 kind_of() { echo "${kinds[$1]:-native}"; }
@@ -519,15 +522,17 @@ exec /testbed_node --index $i --topology /out/topology --start $start --secs $se
     # writes don't stall the other containers' on the host's disk. The
     # internal network has no default route, and Firefox gathers its ICE
     # candidates from the address a route lookup gives (none, and its
-    # links fail at once): an on-link one gives it eth0's, and carries
-    # nothing, as no name outside the network resolves.
+    # links fail at once): a default via an address on the subnet nothing
+    # holds ($unused) gives it eth0's, and reaches nothing. (One on-link,
+    # `default dev eth0`, would reach the host's own addresses off the
+    # subnet, which it answers ARP for.)
     docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" "${nov6[@]}" \
       --cap-add NET_ADMIN "${link_mounts[@]}" --shm-size 1g --tmpfs /tmp:size=1g \
       -v "$browser_bin:/testbed_browser:ro" \
       -v "$web:/web:ro" -v "$out:/out" "$browser_image" \
       bash -c "set -e
 $shape
-ip route add default dev eth0
+ip route add default via $unused dev eth0
 tc -s -d qdisc show > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
