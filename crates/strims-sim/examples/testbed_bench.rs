@@ -39,7 +39,9 @@
 //! data channels, or with `--str0m` str0m's stack on the sim's sockets.
 //! With `--bucket` each uplink has the tbf bucket the run's settings gave
 //! it (`SEED_BURST`, `VIEWER_BURST`; `run.sh`'s 3028 without), which the
-//! sim's uplinks otherwise lack.
+//! sim's uplinks otherwise lack. A competing upload starts when the run's
+//! iperf3 client did (`compete.log` and its `compete-<s>.json` report),
+//! where the run has them.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -146,6 +148,45 @@ fn read(path: &std::path::Path) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+/// Each competing upload starts when the run's iperf3 client did (its
+/// report's `start.timestamp`, from the run's start in node-0.jsonl), not
+/// when run.sh launched it (COMPETE's time): starting the process and its
+/// control connection took 150-200 ms. Runs without the reports keep
+/// COMPETE's times.
+fn competitor_starts(dir: &std::path::Path, bench: &mut Bench) -> Result<(), String> {
+    let Ok(log) = std::fs::read_to_string(dir.join("compete.log")) else {
+        return Ok(());
+    };
+    let Some(start_ms) = read(&dir.join("node-0.jsonl"))?.lines().find_map(|l| {
+        let v: serde_json::Value = serde_json::from_str(l).ok()?;
+        (v.get("ev")?.as_str()? == "start").then(|| v.get("ms")?.as_f64())?
+    }) else {
+        return Ok(());
+    };
+    for line in log.lines() {
+        let mut w = line.split_whitespace();
+        let (Some(_), Some(at)) = (w.next(), w.next()) else {
+            continue;
+        };
+        let Ok(report) = std::fs::read_to_string(dir.join(format!("compete-{at}.json"))) else {
+            continue;
+        };
+        let v: serde_json::Value =
+            serde_json::from_str(&report).map_err(|e| format!("compete-{at}.json: {e}"))?;
+        let (Some(ts), Ok(nominal)) = (
+            v.pointer("/start/timestamp/timemillisecs")
+                .and_then(serde_json::Value::as_f64),
+            at.parse::<f64>(),
+        ) else {
+            continue;
+        };
+        for c in bench.compete.iter_mut().filter(|c| c.0 == nominal) {
+            c.0 = (ts - start_ms) / 1000.0;
+        }
+    }
+    Ok(())
+}
+
 fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
     let out = a.out.clone().ok_or("--sim needs --out")?;
     let mut bench = Bench::testbed(
@@ -154,6 +195,7 @@ fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
         &read(&dir.join("schedule"))?,
         a.window,
     )?;
+    competitor_starts(dir, &mut bench)?;
     bench.tcp_segment = a.segment;
     bench.str0m = a.str0m;
     bench.buckets = a.bucket;

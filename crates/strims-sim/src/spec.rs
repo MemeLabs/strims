@@ -135,13 +135,22 @@ pub struct HostSpec {
 pub const ARRIVAL_REWIND: Duration = Duration::from_secs(10);
 
 /// A bulk upload that isn't the node's: a TCP connection that always has
-/// data, from `start` to `stop`, to a sink `rtt` away.
+/// data, to a sink `rtt` away. Its client starts at `start` and sends
+/// data after iperf3's setup ([`COMPETE_SETUP_TRIPS`] round trips through
+/// the uplink), for `stop - start`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Competing {
     pub start: Duration,
     pub stop: Duration,
     pub rtt: Duration,
 }
+
+/// The round trips an iperf3 client takes from its start to its first
+/// data: its data stream's handshake, its cookie on it, and the server's
+/// TEST_START and TEST_RUNNING on the control stream. On the testbed the
+/// gap from iperf3's report's timestamp to the upload's first data was
+/// 2.4-3.1 times the holders' smoothed round trip then (93-178 ms).
+pub const COMPETE_SETUP_TRIPS: u32 = 3;
 
 /// A link the `from` host dials (and redials while it is down).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

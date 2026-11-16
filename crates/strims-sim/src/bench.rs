@@ -1368,6 +1368,29 @@ mod tests {
             .collect()
     }
 
+    /// A competing upload on an idle uplink sends its first data
+    /// [`COMPETE_SETUP_TRIPS`](crate::spec::COMPETE_SETUP_TRIPS) round trips
+    /// (the sink's 10 ms and the seed's 20 ms) after its client starts.
+    #[test]
+    fn a_competing_upload_sends_its_first_data_after_its_setup() {
+        let mut bench = Bench::testbed(
+            "VIEWERS=1\nSECS=2\nCOMPETE=1:0.5",
+            "",
+            "probe 0 1 3 1000",
+            true,
+        )
+        .unwrap();
+        let first = tcp_events(&mut bench)
+            .iter()
+            .find(|e| e["k"] == "tx" && e["to"] == 2)
+            .and_then(|e| e["t"].as_i64())
+            .unwrap_or_default();
+        assert!(
+            (1_089_000..1_092_000).contains(&first),
+            "first data at {first} us"
+        );
+    }
+
     /// Writes the window holds back join the unsent tail of the write
     /// queue and go out as segments of the size goal: a 64 KiB burst of
     /// 4 KiB writes past its first window sends two-packet segments, not

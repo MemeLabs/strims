@@ -1042,8 +1042,12 @@ fn ip_key(ip: IpAddr) -> IpKey {
 /// One competing upload (see the module docs).
 struct Cross {
     host: HostIx,
+    /// When its client starts, and when it sends data from and to: from
+    /// the setup's round trips after the start, each of the uplink's
+    /// queue then and the path's round trip, for as long as it was asked.
     start: Time,
     stop: Time,
+    data_at: Time,
     rtt: Duration,
     flow: Flow,
     started: bool,
@@ -1256,6 +1260,7 @@ impl Scheduler {
                     host: h,
                     start: sim_time(c.start),
                     stop: sim_time(c.stop),
+                    data_at: Time::NIL,
                     rtt: Duration::from(c.rtt),
                     flow: Flow::default(),
                     started: false,
@@ -1396,13 +1401,31 @@ impl Scheduler {
         let now = sim_time(sim.elapsed());
         self.run_events(now);
         for i in 0..self.cross.len() {
-            if let Some(c) = self.cross.get_mut(i)
-                && !c.started
-                && now >= c.start
+            let Some(&Cross {
+                host,
+                start,
+                rtt,
+                started,
+                ..
+            }) = self.cross.get(i)
+            else {
+                continue;
+            };
+            if !started && now >= start {
+                let wait = self.net.up_backlog(host, start);
+                if let Some(c) = self.cross.get_mut(i) {
+                    c.started = true;
+                    c.data_at = start + (rtt + wait) * i64::from(crate::spec::COMPETE_SETUP_TRIPS);
+                    c.stop += c.data_at - c.start;
+                }
+            }
+            if let Some(c) = self.cross.get(i)
+                && c.started
+                && c.flow.last_send.is_nil()
+                && now >= c.data_at
             {
-                c.started = true;
-                let start = c.start;
-                self.cross_pump(start, i);
+                let at = c.data_at;
+                self.cross_pump(at, i);
             }
         }
         let fresh = self.match_queues(sim)?;
@@ -2286,7 +2309,7 @@ impl Scheduler {
                 None => (f.sent_end, CROSS_FRAMES),
             };
             let len = frames as usize * MSS as usize;
-            if at < c.start || at >= c.stop || f.holds(len) {
+            if !c.started || at < c.data_at || at >= c.stop || f.holds(len) {
                 return;
             }
             if c.resend.remove(&seq).is_none() {
