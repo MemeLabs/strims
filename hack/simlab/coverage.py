@@ -204,7 +204,9 @@ greatest over the group's runs, `*_runs`):
              seed's queue past the run's interval), delivered_late
              (written within the interval, its child's hold past the
              interval after the publication), departed (every child left,
-             a depart or crash event, before holding it) and other. A
+             a depart or crash event, before holding it and by the
+             chunk's due time, its publication plus the run's interval)
+             and other. A
              cause's row (breakdown NULL) gives its chunks, its share of
              the late chunks (late_share) and of the judged (share), and
              each run's spread of its late share (late_share_runs); the

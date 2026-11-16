@@ -17,7 +17,9 @@ in a cell of its own, star-5b; its seed 2 in star-5, as the first has
 it), a third invocation's (MIX) with arm mix's run, decl's seed 1
 with host 3 a dishonest viewer, a fourth's (LOG) with arm log's,
 mix's run with a seed log (seed_decisions, seed_sends), a few holds
-and push parents changed and a viewer's departure, a fifth's (UNIT)
+and push parents changed and a viewer's departure, its twin's (EARLY)
+with arm early's, log's run with that viewer leaving half a second
+sooner, a fifth's (UNIT)
 with arm unit's, decl's seed 1 with its chunks published several of a
 stream at once, and a sixth's (ONCE) with arm once's, one publication of
 each stream, indexed by the catalog. Every run but unit's and once's
@@ -51,7 +53,9 @@ publishes the same chunks: two streams, a chunk of each every 250 ms from
                late chunk's causes (every cause of the tree, the details
                of each) and the attribution section's rows; runs without a
                seed log, and a catalog without its tables, leave I2, I3
-               and the attribution empty, with a warning
+               and the attribution empty, with a warning; arm early's
+               run, whose child departs by a chunk's due time and after
+               another's
   Units        arm unit's run, worked by hand: its interval the gap
                between a stream's publications, not between its chunks,
                and the late chunks and the latency section by it
@@ -114,6 +118,11 @@ LOG = "suite/wt/cv-log"
 LOG_SEL = forecast.Selection(exp=[LOG], names={"strims-sim-log": "log"}, phases="all")
 DEPARTED = 4
 DEPART_MS = 34600
+# The source of arm early's run: arm log's with host 4's departure at
+# 34.1 s (EARLY_DEPART_MS), the seed losing it at 34.6 s all the same.
+EARLY = "suite/wt/cv-early"
+EARLY_SEL = forecast.Selection(exp=[EARLY], names={"strims-sim-early": "early"}, phases="all")
+EARLY_DEPART_MS = 34100
 # The source of arm unit's run, apart from the others: decl's seed 1 with
 # its chunks published four at one ms (unit_pub) and unit_arrivals' holds.
 UNIT = "suite/wt/cv-unit"
@@ -297,16 +306,16 @@ def log_sends():
            hold (not written; held at the cancel)
       108  written 10 ms after, and an answer at 240 ms (delivered late:
            host 1 holds it at 260)
-      112  to host 4 alone, written 350 ms after (written late, and
-           departed)
+      112  to host 4 alone, written 350 ms after (written late; host 4
+           departs 600 ms after, past the 250 the chunk was due in)
       114  to host 4 written 3 ms after, 2 ms before host 1's (other:
            the first written push, host 4's, never held, and host 1,
            which holds it late, stays)
 
     and the answers to nodes no child: host 2's of 101 at 290 ms and of
     106 at 690, host 1's of 110 at 390 (110: pushed to host 4 alone,
-    which departs: departed). An answer is ANSWER_BYTES, a written push
-    PUSH_BYTES."""
+    which departs 850 ms after, the chunk due in 250: other). An answer
+    is ANSWER_BYTES, a written push PUSH_BYTES."""
     special = {(2, 1): [],
                (100, 1): [("push", "stale", 0, 500, None)],
                (102, 1): [("push", "written", 0, 350, None)],
@@ -407,7 +416,8 @@ def build(root):
     # its series_meta, which records its seed and stream count; arm log's
     # too, with its seed log and host 4's departure.
     for arm, src, holds, trees in (("mix", MIX, mix_arrivals(), parents(1)),
-                                   ("log", LOG, log_arrivals(), log_parents())):
+                                   ("log", LOG, log_arrivals(), log_parents()),
+                                   ("early", EARLY, log_arrivals(), log_parents())):
         d = root / "jobs" / f"{arm}-1"
         rec = golden_cli.job_dir(d, (src, f"strims-sim-{arm}:star-5:1", "strims-sim", "calibration_star", "star-5",
                                      f"strims-sim-{arm}", 1, golden_cli.SS_ENV, golden_cli.T0, None))
@@ -423,11 +433,12 @@ def build(root):
         meta = json.loads((d / "series_meta.json").read_text())
         (d / "series_meta.json").write_text(json.dumps(meta | {"seed": SEED, "streams": 2,
                                                                "hostile": [DISHONEST - 1]}))
-        if arm == "log":
+        if arm in ("log", "early"):
             golden_cli.write_table(d, "seed_decisions", DECISION_COLS, log_decisions())
             golden_cli.write_table(d, "seed_sends", SEND_COLS, log_sends())
             head, *lines = (d / "events.csv").read_text().splitlines()
-            lines.append(f"{DEPART_MS * 1000},depart,{DEPARTED},-1,1,abrupt")
+            gone = DEPART_MS if arm == "log" else EARLY_DEPART_MS
+            lines.append(f"{gone * 1000},depart,{DEPARTED},-1,1,abrupt")
             lines.sort(key=lambda line: int(line.split(",")[0]))
             (d / "events.csv").write_text("\n".join([head, *lines]) + "\n")
         sm.fold(db, [rec], src)
@@ -1005,9 +1016,12 @@ class SeedLog(Fixture):
             106: (nw, [nw], None, None, None, None, ["push cancelled"], True, None, None, None, None, None),
             108: ("delivered_late", ["delivered_late"], None, None, None, None, ["answer written", "push written"],
                   None, 10, 250, 2 * a, 4 * PUSH_BYTES, 4),
-            110: ("departed", ["departed"], None, None, None, None, ["push written"], None, 5, None, 3 * a,
+            # Pushed to host 4 alone, which never holds it and departs
+            # 850 ms after (112: 600), past the 250 ms it was due in: not
+            # why it was late.
+            110: ("other", ["other"], None, None, None, None, ["push written"], None, 5, None, 3 * a,
                   5 * PUSH_BYTES, 5),
-            112: ("written_late", ["written_late", "departed"], None, None, None, None, ["push written"], None, 350,
+            112: ("written_late", ["written_late"], None, None, None, None, ["push written"], None, 350,
                   None, 4 * a, 8 * PUSH_BYTES, 8),
             # Its first written push host 4's, never held: no cause.
             114: ("other", ["other"], None, None, None, None, ["push written"], None, 3, None, 4 * a, 6 * PUSH_BYTES,
@@ -1025,10 +1039,8 @@ class SeedLog(Fixture):
             ("not_written", None, None, 3), ("not_written", "fates", "answer written, push cancelled", 1),
             ("not_written", "fates", "push cancelled", 1), ("not_written", "fates", "push stale", 1),
             ("not_written", "held_at_cancel", "false", 1), ("not_written", "held_at_cancel", "true", 1),
-            ("written_late", None, None, 2), ("written_late", "also", "departed", 1),
-            ("delivered_late", None, None, 1),
-            ("departed", None, None, 1),
-            ("other", None, None, 1), ("other", "fates", "push written", 1)])
+            ("written_late", None, None, 2), ("delivered_late", None, None, 1),
+            ("other", None, None, 2), ("other", "fates", "push written", 2)])
         for r in self.logged("attribution", phase="steady"):
             self.assertAlmostEqual(r["late_share"], r["chunks"] / 10)
             self.assertAlmostEqual(r["share"], r["chunks"] / 80)
@@ -1037,24 +1049,19 @@ class SeedLog(Fixture):
             "attribution", phase="steady", cause=cause, breakdown=breakdown)[0]
         # The first written push's wait and its child's hold after it, and
         # the second's sends before it (test_the_causes): 102 and 112
-        # written late; 108 delivered late; 110 pushed to host 4, gone;
-        # 114 pushed to host 4 first, which never holds it (two children).
-        late, also, delivered, gone, other = (row("written_late"), row("written_late", "also"),
-                                              row("delivered_late"), row("departed"), row("other"))
+        # written late; 108 delivered late; 110 pushed to host 4 alone,
+        # and 114 to host 4 first (two children), which never holds them.
+        late, delivered, other = row("written_late"), row("delivered_late"), row("other")
         self.assertEqual((late["children"], late["wait_ms"], late["delivery_ms"]),
                          (1.0, sketch.quantile([350, 350], 50), sketch.quantile([250], 50)))
         self.assertEqual((late["answer_bytes"], late["push_bytes"], late["pushes"]), (2.5 * ANSWER_BYTES, 5000.0, 5.0))
-        self.assertEqual((also["wait_ms"], also["delivery_ms"], also["answer_bytes"], also["pushes"]),
-                         (sketch.quantile([350], 50), None, 4.0 * ANSWER_BYTES, 8.0))
         self.assertEqual((delivered["children"], delivered["wait_ms"], delivered["delivery_ms"]),
                          (1.0, sketch.quantile([10], 50), sketch.quantile([250], 50)))
         self.assertEqual((delivered["answer_bytes"], delivered["push_bytes"], delivered["pushes"]),
                          (2.0 * ANSWER_BYTES, 4000.0, 4.0))
-        self.assertEqual((gone["wait_ms"], gone["delivery_ms"], gone["answer_bytes"], gone["pushes"]),
-                         (sketch.quantile([5], 50), None, 3.0 * ANSWER_BYTES, 5.0))
         self.assertEqual((other["children"], other["wait_ms"], other["delivery_ms"], other["answer_bytes"],
                           other["push_bytes"], other["pushes"]),
-                         (2.0, sketch.quantile([3], 50), None, 4.0 * ANSWER_BYTES, 6000.0, 6.0))
+                         (1.5, sketch.quantile([5, 3], 50), None, 3.5 * ANSWER_BYTES, 5500.0, 5.5))
         self.assertEqual([row(c)["wait_ms"] for c in ("uncovered", "not_written")], [None] * 2)
         # Startup: chunk 2, never pushed. The pooled row (NULL) pools
         # steady and after_departure (no late chunk), 88 judged.
@@ -1065,6 +1072,18 @@ class SeedLog(Fixture):
         self.assertEqual([(r["cause"], r["breakdown"], r["value"], r["chunks"]) for r in pooled], got)
         self.assertAlmostEqual(pooled[0]["share"], 1 / 88)
         self.assertEqual(self.logged("attribution", phase="after_departure"), [])
+
+    def test_a_child_departs_by_the_chunks_due_time(self):
+        # Arm early's: host 4 departs at 34.1 s, 350 ms after 110's
+        # publication (due in 250: not why it was late) and 100 ms after
+        # 112's (departed, beside written late); 114's other child, host 1,
+        # stays.
+        with forecast.connected() as c:
+            coverage.prepare(c, EARLY_SEL)
+            got ={r[0]: (r[1], r[2]) for r in c.execute(
+                "SELECT seq, cause, matches FROM cv_causes WHERE seq IN (110, 112, 114) ORDER BY seq").fetchall()}
+        self.assertEqual(got, {110: ("other", ["other"]), 112: ("written_late", ["written_late", "departed"]),
+                               114: ("other", ["other"])})
 
     def test_runs_without_a_seed_log(self):
         # SEL's runs have none: their I2 and I3 are empty, NULL, and they

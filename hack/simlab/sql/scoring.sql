@@ -1073,8 +1073,11 @@ CREATE OR REPLACE MACRO seed_declines_of(jobs) AS TABLE
 --                   after the publication
 --   departed        every child departed (an events row of kind
 --                   @{kind_depart} or @{kind_crash} naming it, at or after
---                   its subscription opened) before its first hold of
---                   the chunk, or without one
+--                   its subscription opened) by the chunk's due time (its
+--                   publication plus the run's interval, when it became
+--                   late) and before its first hold of the chunk, or
+--                   without one: a child there at the due time without
+--                   the chunk wasn't kept from it by leaving
 -- and of an uncovered chunk (NULL for the others): last_end (the reason
 -- the stream's last subscription to the seed, of any node, a dishonest
 -- viewer's too, ended at or before its publication,
@@ -1127,7 +1130,7 @@ CREATE OR REPLACE MACRO coverage_causes_in(runs) AS TABLE
         JOIN seed_declines_in(runs) d ON d.k = b.k AND d.src = b.src AND d.stream = b.stream AND NOT d.dishonest
                                       AND (b.close_ms IS NULL OR d.t_ms >= b.close_ms) AND d.t_ms <= b.pub_ms),
     cv_kids AS (
-        SELECT w.k, w.src, w.seq, s.node, s.open_ms FROM cv_w w
+        SELECT w.k, w.src, w.seq, s.node, s.open_ms, w.pub_ms + w.interval_ms AS due_ms FROM cv_w w
         JOIN seed_children_in(runs) s ON s.k = w.k AND s.src = w.src AND s.stream = w.stream
                                       AND s.open_ms <= w.pub_ms AND w.pub_ms < s.close_ms),
     cv_kid_holds AS (
@@ -1138,7 +1141,7 @@ CREATE OR REPLACE MACRO coverage_causes_in(runs) AS TABLE
         FROM cv_kids d LEFT JOIN cv_kid_holds h USING (k, src, node, seq)
         LEFT JOIN events e ON e.k = d.k AND e.src = d.src AND e.node = d.node
                            AND e.kind IN (@{kind_depart}, @{kind_crash}) AND e.t_ms >= d.open_ms
-                           AND (h.t_ms IS NULL OR e.t_ms < h.t_ms)
+                           AND e.t_ms <= d.due_ms AND (h.t_ms IS NULL OR e.t_ms < h.t_ms)
         GROUP BY ALL),
     cv_departed AS (
         SELECT k, src, seq, bool_and(gone) AS departed FROM cv_left GROUP BY ALL),
