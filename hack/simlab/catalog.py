@@ -1947,7 +1947,7 @@ SELECT k, nsim AS sim, coalesce(ctest, f.test) AS test,
            list_filter(map_entries(env), lambda e: NOT list_contains({job_keys}, e.key)),
            lambda e: e.key || '=' || e.value)), chr(10)))[1:16] AS env_hash,
        coalesce(ctrace, f.trace) AS trace, coalesce(creads, f.reads_hash) AS reads_hash,
-       coalesce(f.wall_s, cwall) AS wall_s, coalesce(f.rss_mb, crss) AS rss_mb,
+       cwall AS wall_s, crss AS rss_mb,
        coalesce(TRY_CAST(cat AS TIMESTAMPTZ), f.ran_at) AS ran_at,
        coalesce(csrc, f.src) AS src, split_part(coalesce(csrc, f.src), '/', 1) AS origin,
        split_part(coalesce(csrc, f.src), '/', 2) AS run, csrc IS NOT NULL AS cached,
@@ -2089,9 +2089,15 @@ SELECT * FROM (SELECT * FROM remote ANTI JOIN loc USING (k, tbl))
 QUALIFY row_number() OVER (PARTITION BY k, tbl ORDER BY state = 's3' DESC, bytes NULLS LAST, src) = 1;
 """
 
+# exp_runs' host numbers are the copy's in the job's flush, as job_runs
+# reads a copy (made later, with the scoring objects): the run its
+# experiment scores (arm_side's src).
 EXP_RUNS_SQL = """
 CREATE OR REPLACE VIEW main.exp_runs AS
-SELECT e.*, j.* EXCLUDE (k, seed, src) FROM main.experiment_jobs e JOIN main.jobs j USING (k);
+SELECT e.*, j.* EXCLUDE (k, seed, src) REPLACE (c.wall_s AS wall_s, c.rss_mb AS rss_mb)
+FROM main.experiment_jobs e JOIN main.jobs j USING (k)
+LEFT JOIN (SELECT k, src, wall_s, rss_mb FROM raw.runs QUALIFY row_number() OVER (PARTITION BY k, src ORDER BY cell) = 1) c
+    ON c.k = e.k AND c.src = e.flush;
 CREATE OR REPLACE VIEW main.catalog_info AS SELECT key, value FROM raw.info;
 """
 
@@ -2453,12 +2459,15 @@ TABLE_DOCS = {
         "The jobs an experiment scored, by cell, arm and seed. arm_label is the arm as suite.py and simdb.py name "
         "it (simdb.arm_label): a --sets run's set (the value the job's env gives the run's knob), else the matrix's "
         "arm (a --refs name); ref is the matrix's arm, knob_value the env's value of the knob; src the job's source "
-        "(jobs.src), which joins the result tables USING (k, src) and prunes their files. A job the farm reused "
+        "(jobs.src), which joins the result tables USING (k, src) and prunes their files; flush the source its "
+        "index line names (a local job's src), whose copy's host numbers (job_runs at flush) its experiment's "
+        "scores read (arm_side). A job the farm reused "
         "from another run or matrix (reused, its row from flush) counts in each experiment it was reused for, so "
         "a k can be in several experiments and cells. A farm job whose data left S3 stays listed (availability)."),
     "exp_runs": (
         "view", "an experiment's job", "exp_id, cell, arm_label, seed -> k", "as experiment_jobs",
-        "experiment_jobs with its jobs' columns (jobs, but k and seed)."),
+        "experiment_jobs with its jobs' columns (jobs, but k and seed), wall_s and rss_mb its copy's in flush "
+        "(job_runs'), which its experiment's scores read: none where the cache holds no copy there."),
     "jobs": (
         "table", "a job", "k", "every table USING (k, src); commits ON commits.sha = jobs.commit",
         "Every job the cache or the farm's indexes know but the ppspp sim's: sim ('strims-sim'), test, seed, commit (the "
@@ -2468,7 +2477,9 @@ TABLE_DOCS = {
         "(transport: 'tcp' or 'webrtc' (rtc_browsers the browsers) or NULL for the sim's own model; known_uplink, "
         "arrivals, depart and exp: the sim's STRIMS_SIM_* settings), env_hash (its settings but seed and "
         "output, so equal settings match across experiments), trace and reads_hash (the digests a rerun must "
-        "reproduce), wall_s and rss_mb (its host's), ran_at, and src: the cache source its tables come from "
+        "reproduce), wall_s and rss_mb (its host's numbers as src's copy holds them, job_runs at src, which "
+        "job_metrics scores; none where the cache holds no copy; raw.farm_index has its index lines' own), "
+        "ran_at, and src: the cache source its tables come from "
         "(simdb.py's source_ranks: the one holding the most tables, then the later flush, then the later seq), or "
         "the farm flush that holds them when the cache doesn't (cached false). tables: the tables src holds; "
         "stored_cell and stored_arm: the cell (a farm matrix, or a local cell) and arm its source stored it under; "
@@ -3202,7 +3213,10 @@ def scoring_docs():
              "joins": "jobs USING (k)",
              "description": "Every cache source's copy of a job (raw.runs): cell and arm as it stored them, seed, "
                             "trace, and its own run's wall_s and rss_mb, which another copy of the "
-                            "job (a rerun, a verify copy) needn't share."}]
+                            "job (a rerun, a verify copy) needn't share. A flush holds one copy of a key: of "
+                            "two runs of it on one host (a job and its verify copy, or two jobs of one key), "
+                            "the one folded last, while its matrix's index has a line of each run, with its "
+                            "own numbers (raw.farm_index: an id's last line)."}]
     consts = scoring_consts()
     text = CONST.sub(lambda m: str(consts[m.group(1)]), SCORING.read_text())
     header = []

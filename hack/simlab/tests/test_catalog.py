@@ -57,6 +57,11 @@ simlab.verdict's derive pool:
                catalog's ledger lacking line numbers read again
   Tiers        an experiment's tiers from its cells' names, tests and env,
                its index recording none
+  HostNumbers  a farm job's wall_s and rss_mb, where its matrix's index has
+               a line of the job and of its verify copy and a flush holds
+               one copy: jobs reads its src's copy, as job_metrics scores
+               it, and exp_runs its flush's, as the experiment's pairs
+               score it; raw.farm_index keeps each kept line's own
   Tables       a sim's tables the catalog has no code for (spec_requests,
                parks), folded by the store, as they are; arrivals' and
                haves' -1 for no node NULL; asks' and haves' truth, NULL
@@ -1137,6 +1142,83 @@ class Tiers(Fixture):
         rest = [x for x in suite.TIERS[t] if x["name"] != c["name"]][:2]
         self.experiment("sx0004", [c, *rest])
         self.assertEqual(self.tiers()["sx0004"], [t])
+
+
+class HostNumbers(Fixture):
+    """A farm run's host numbers: a job ran twice, the job and its verify
+    copy, and its matrix's index has a line of each, the job's last (the
+    one load_index keeps), while a flush holds one copy (store_host.fold
+    keeps its batch's last). k1's two ran on one host into one flush,
+    which holds the copy's numbers (s2e215's halve-15-10 off at seed 2005:
+    113.0 MB and 8.996 s in the flush, 113.5 and 9.193 on the kept line);
+    k2's on two hosts, the job's flush the later (jobs.src) and the kept
+    line the copy's, naming the other. jobs reads its src's copy, exp_runs
+    and the scores the experiment's copy (its flush), raw.farm_index each
+    line's own."""
+
+    RUN = "farm/sx0101-00+0more-hhhh"
+
+    def setUp(self):
+        super().setUp()
+        runs = self.root / "target" / "sim-suite" / "farm-runs"
+        (runs / "sx0101.json").write_text(json.dumps({"cells": [
+            {"name": "star-5", "sim": "strims-sim", "test": "calibration_star", "why": "w",
+             "env": golden_cli.STAR_ENV}]}))
+        flushes = {  # src -> (k, seed, wall_s, rss_mb, manifest's at): each flush's copy
+            f"{self.RUN}/i-1/0": [("k1", 2005, 8.996, 113.0, "2026-11-02T12:00:00Z"),
+                                  ("k2", 2006, 9.5, 120.0, "2026-11-02T12:00:00Z")],
+            f"{self.RUN}/i-2/0": [("k2", 2006, 9.9, 121.5, "2026-11-01T12:00:00Z")]}
+        for n, (src, copies) in enumerate(flushes.items()):
+            metas = []
+            for k, seed, wall, rss, _ in copies:
+                env = {**golden_cli.STAR_ENV, "STRIMS_SIM_SEED": str(seed)}
+                job = (src, k, "strims-sim:scenarios", "calibration_star", "sx0101-00", "main", seed, env,
+                       golden_cli.T0, None)
+                meta = golden_cli.job_dir(self.root / "host-jobs" / f"{n}-{k}", job)
+                metas.append({**meta, "wall_s": wall, "rss_mb": rss})
+            db = self.root / "host-jobs" / f"{n}.duckdb"
+            store_host.fold(db, metas, src)
+            dest = store_host.cache_root() / "cache" / src
+            store_host.export(db, dest)
+            m = json.loads((dest / "manifest.json").read_text())
+            (dest / "manifest.json").write_text(json.dumps({**m, "at": copies[0][4]}))
+        # The index: each job's verify copy's line, then its own (kept).
+        lines = [("id1", "k1", 2005, "v", "i-1", 8.996, 113.0), ("id1", "k1", 2005, "", "i-1", 9.193, 113.5),
+                 ("id2", "k2", 2006, "", "i-1", 9.5, 120.0), ("id2", "k2", 2006, "v", "i-2", 9.9, 121.5)]
+        d = self.root / "target" / "sim-farm" / "sx0101-00"
+        d.mkdir()
+        (d / "index.jsonl").write_text("".join(json.dumps({
+            "id": i, "key": k, "arm": "main", "commit": "1" * 40, "binary": "b" * 64, "test": "calibration_star",
+            "env": {**golden_cli.STAR_ENV, "STRIMS_SIM_SEED": str(seed)}, "copy": copy, "host": host,
+            "src": f"{self.RUN}/{host}/0", "at": golden_cli.AT, "wall_s": wall, "max_rss_mb": rss,
+            "row": {"trace": f"tr-{k}"}}) + "\n" for i, k, seed, copy, host, wall, rss in lines))
+        self.assertEqual(self.index()[0].failed, {})
+
+    def by_k(self, sql):
+        return {r.pop("k"): r for r in catalog.lake(sql)}
+
+    def test_each_reader_names_its_copy(self):
+        i1, i2 = f"{self.RUN}/i-1/0", f"{self.RUN}/i-2/0"
+        # The index's lines as written: the kept one of each job.
+        self.assertEqual(self.by_k("SELECT k, src, wall_s, rss_mb FROM raw.farm_index WHERE matrix = 'sx0101-00';"),
+                         {"k1": {"src": i1, "wall_s": 9.193, "rss_mb": 113.5},
+                          "k2": {"src": i2, "wall_s": 9.9, "rss_mb": 121.5}})
+        # A job's: its src's copy, which job_metrics scores.
+        self.assertEqual(self.by_k("SELECT k, src, wall_s, rss_mb FROM jobs WHERE k IN ('k1', 'k2');"),
+                         {"k1": {"src": i1, "wall_s": 8.996, "rss_mb": 113.0},
+                          "k2": {"src": i1, "wall_s": 9.5, "rss_mb": 120.0}})
+        metrics = "SELECT k, src, max(value) FILTER (WHERE metric = 'wall_s') AS wall_s, max(value) FILTER (WHERE " \
+                  "metric = 'rss_mb') AS rss_mb FROM {} WHERE k IN ('k1', 'k2') GROUP BY k, src;"
+        self.assertEqual(self.by_k(metrics.format("job_metrics")),
+                         self.by_k("SELECT k, src, wall_s, rss_mb FROM jobs WHERE k IN ('k1', 'k2');"))
+        # The experiment's: its flush's copy, which its scores read.
+        self.assertEqual(self.by_k("SELECT k, flush AS src, wall_s, rss_mb FROM exp_runs WHERE exp_id = 'sx0101';"),
+                         {"k1": {"src": i1, "wall_s": 8.996, "rss_mb": 113.0},
+                          "k2": {"src": i2, "wall_s": 9.9, "rss_mb": 121.5}})
+        self.assertEqual(self.by_k("SELECT a_k AS k, max(a_value) FILTER (WHERE metric = 'wall_s') AS wall_s, "
+                                   "max(a_value) FILTER (WHERE metric = 'rss_mb') AS rss_mb "
+                                   "FROM pairs('sx0101', 'main', 'sx0101', 'main') GROUP BY a_k;"),
+                         {"k1": {"wall_s": 8.996, "rss_mb": 113.0}, "k2": {"wall_s": 9.9, "rss_mb": 121.5}})
 
 
 class Tables(Fixture):
