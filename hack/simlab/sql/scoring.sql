@@ -84,11 +84,16 @@ CREATE OR REPLACE MACRO t975_at(df_) AS
 -- The sum of the DOUBLEs xs in their order as Python's sum() adds floats
 -- (3.12 on): Neumaier's compensated summation, each addition's rounding
 -- error carried apart and added to the sum once at the end, where it is
--- finite and not zero. The scoring's every sum is one, so its means, spreads
--- and geometric means are the Python scoring's bit for bit (golden.py's
--- reference): a left fold strays from it by last bits, which a value on a
--- tie at the places a scorecard prints shows. 0 for an empty list, NULL for
--- NULL or a NULL among xs.
+-- finite and not zero. The scorecards' sums are this: effects_of's means
+-- and the sums of squares under their intervals, arm_score_of's geometric
+-- means and fisher_p's sum, so those are the Python scoring's bit for bit
+-- (hack/sim-suite/golden.py's reference): a left fold strays from it by
+-- last bits, which a value on a tie at the places a scorecard prints shows.
+-- No other sum is: dynamics' means of the rows' playback fields are
+-- DuckDB's avg, the other macros' sums are of integers, and a metric's own
+-- SQL (metrics.toml's: depth_mean's six terms) adds as written, as the
+-- reference restates it. 0 for an empty list, NULL for NULL or a NULL
+-- among xs.
 CREATE OR REPLACE MACRO compensated_sum(xs) AS
     list_transform([list_reduce(list_transform(xs, lambda cs_x: {'s': cs_x::DOUBLE, 'c': 0.0::DOUBLE}),
                                 lambda cs_acc, cs_y: {'s': cs_acc.s + cs_y.s,
