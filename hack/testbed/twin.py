@@ -392,21 +392,27 @@ def cmd_socks(args):
                 tot[1] += (b[1] - a[1]) / (t1 - t0)
                 tot[2] += ((b[2] - a[2]) - (b[1] - a[1])) / (t1 - t0)
         flows.append(tot)
+        # The run's drops, or None (printed "-") where its log has none to
+        # read, so the lists stay a run apiece.
         try:
             spec, got = tcstats.uplink(d, 0)
         except LookupError as e:
             tcstats.note(f"{e}: its drops left out")
-            continue
-        kinds.add(f"{spec}: {got[-1][1].kind} 10:" if got else spec)
+            spec, got = None, []
+        if got:
+            kinds.add(f"{spec}: {got[-1][1].kind} 10:")
+        elif spec is not None:
+            tcstats.note(f"{d}: no tc-0.log samples: its drops left out")
         cut = [q.drops for t, q in got if lo * 1000 <= t - off < hi * 1000]
-        drops.append(max(cut) - min(cut) if cut else 0)
+        drops.append(max(cut) - min(cut) if cut else None)
     print(f"{n} viewers, the testbed seed's sockets in the cut ({arm}), p10/p50/p90/p99")
     for (cls, k), xs in sorted(agg.items()):
         unit = {"rtt": "ms", "notsent": "KiB", "cwnd": "pkts"}[k]
         print(f"  {cls:6} {k:8} {unit:4} " + "/".join(f"{q(xs, p):.0f}" for p in (.1, .5, .9, .99)))
     print(f"  per run: data segments in/s, data segments out/s, pure acks out/s: "
           + "  ".join(f"{a:.0f}/{b:.0f}/{c:.0f}" for a, b, c in flows))
-    print(f"  the seed's queue's drops in the cut per run ({'; '.join(sorted(kinds))}): {drops}")
+    print(f"  the seed's queue's drops in the cut per run ({'; '.join(sorted(kinds))}): "
+          + " ".join("-" if x is None else str(x) for x in drops))
     for t in tags:
         xs = twin_runs(tdir, t)
         if xs:
