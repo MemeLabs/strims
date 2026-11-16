@@ -196,10 +196,18 @@
 # (strims-testbed) and its subnet (10.77.0.0/24) are fixed: one testbed
 # per Docker host at a time.
 #
-# Needs Docker (the user's docker group) and the sch_netem, sch_tbf and
-# ifb modules (and sch_pie, sch_cake, sch_fq_codel, sch_prio and sch_fq for
-# the link classes that use them); if tc can't load them, run
-# `sudo modprobe sch_netem sch_tbf ifb` once. A trace link's container also
+# Needs Docker (the user's docker group) and the kernel modules the links
+# are shaped with: every run's sch_netem, sch_tbf, ifb, sch_ingress (eth0's
+# clsact), cls_matchall and act_mirred; the link classes' sch_pie (cable),
+# sch_fq_codel and sch_cake (router=), and sch_prio, sch_fq and cls_bpf
+# (trace); and SEED_LOSS_PCT's act_gact and cls_u32. If tc can't load
+# them, run once (hack/sim-farm/user-data.sh loads the same on a farm host)
+#
+#   sudo modprobe -a sch_netem sch_tbf ifb sch_ingress cls_matchall \
+#       act_mirred sch_pie sch_fq_codel sch_cake sch_prio sch_fq cls_bpf \
+#       act_gact cls_u32
+#
+# A trace link's container also
 # gets CAP_BPF and CAP_PERFMON, and run.sh builds tracelink
 # (hack/testbed/tracelink.c, into target/testbed) with gcc.
 
