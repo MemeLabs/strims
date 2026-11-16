@@ -237,6 +237,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -460,6 +461,9 @@ class Page:
         self.doc = None
         # Every URL asked for since the capture began (its targets' too).
         self.requested = []
+        # The requests that failed since the capture began, not canceled:
+        # (url, errorText).
+        self.failed = []
 
     def send(self, method, params=None, session=None):
         """A command whose result nobody waits for (to an attached target's
@@ -517,7 +521,9 @@ class Page:
                 self.inflight[p["requestId"]]["answered"] = True
         elif method in ("Network.loadingFinished", "Network.loadingFailed"):
             self.net_at = time.monotonic()
-            self.inflight.pop(p.get("requestId"), None)
+            r = self.inflight.pop(p.get("requestId"), None)
+            if method == "Network.loadingFailed" and r and not p.get("canceled"):
+                self.failed.append((r["url"], p.get("errorText") or p.get("blockedReason") or "failed"))
         elif method == "Fetch.requestPaused":
             self.stub(p)
         elif method == "Target.attachedToTarget":
@@ -568,6 +574,7 @@ class Page:
         self.stubbed.clear()
         self.exceptions = []
         self.requested = []
+        self.failed = []
         self.call("Page.navigate", {"url": url})
 
 
@@ -1441,8 +1448,9 @@ CAPTURE_SCRIPT = r"""(() => {
   // changes: its layout, observers and scroll events), then fires the
   // timers due first, each in a task of its own, if they're due now or,
   // with `advance` (the network quiet), nothing pending and no worker busy
-  // for `quietMs`, by `limit` (null: whenever); else, so, moves the clock
-  // to `limit`. `pending` lists what is still pending.
+  // for `quietMs`, by `limit` (null: whenever one is due; with none, the
+  // clock stays); else, so, moves the clock to `limit`. `pending` lists
+  // what is still pending.
   //
   // With `advance` and a `limit`, it then fires on, in the same step, the
   // timers those set (a chain of 0 ms timeouts each set by the one before,
@@ -1481,7 +1489,7 @@ CAPTURE_SCRIPT = r"""(() => {
     animate();
     const due = next();
     let fired = 0;
-    if (due <= now || (advance && due <= (limit ?? Infinity))) {
+    if (due <= now || (advance && Number.isFinite(due) && due <= (limit ?? Infinity))) {
       now = Math.max(now, due);
       const finished = animate();
       let laidOut = mutations;
@@ -1942,6 +1950,12 @@ def clock_step(page, limit, advance):
         return None
 
 
+class LoadFailed(ConnectionError):
+    """A capture whose document failed to load one of its build's files (a
+    chunk's script, a stylesheet): the checker's failure (its server's, or
+    the browser's), not the story's, which then never mounts."""
+
+
 class Stalled(TimeoutError):
     """A capture that still waited on a request (or on what its document
     has pending) at its --timeout: the checker's failure (its server's, or
@@ -1986,7 +2000,8 @@ def capture(browser, build, route, theme, device, masks, args, fresh):
     story recorded, allowed or not), png, time, rounds (FINISH_SCRIPT's),
     clock_ms, unstable (no two shots matched), inplace, requests (the
     build's files it asked for)}. Raises Stalled when --timeout s pass
-    with a request in flight or anything pending."""
+    with a request in flight or anything pending, and LoadFailed once a
+    request for one of the build's files fails."""
     page = browser.tab(build.name)
     start = time.monotonic()
     deadline = start + args.timeout
@@ -2001,6 +2016,7 @@ def capture(browser, build, route, theme, device, masks, args, fresh):
 
     page.doc = None
     page.requested = []
+    page.failed = []
     if inplace:
         # The compositor's image decodes outlive the story that drew them,
         # and a later draw of the image at another scale is resampled from
@@ -2023,6 +2039,9 @@ def capture(browser, build, route, theme, device, masks, args, fresh):
             return fail(f"timeout after {args.timeout} s ({phase}, clock at {now:.0f} ms)",
                         [f"timeout after {args.timeout} s ({phase})", *page.exceptions])
         page.drain()
+        failed = [f"{url}: {error}" for url, error in page.failed if url.startswith(build.url + "/")]
+        if failed:
+            raise LoadFailed(f"{failed[0]} ({build.name} build)")
         quiet = not page.inflight and time.monotonic() - page.net_at >= NET_QUIET_S
         r = clock_step(page, limit, quiet)
         if r is None:
@@ -2840,6 +2859,13 @@ def compare_main(args, exe, work):
                     except (RuntimeError, CDPError, TimeoutError, OSError) as e:
                         r["checker"] += f"; no fresh browser: {e}"
                         return r
+                except Exception as e:
+                    # The checker's own bug: its story fails, naming it, and
+                    # the rest of its batch still runs.
+                    error = f"checker: {type(e).__name__}: {e}"
+                    print(f"check: {mode} {route}: {traceback.format_exc()}", file=sys.stderr)
+                    return {"mode": mode, "route": route, "kind": "failing", "time": 0.0, "checker": error,
+                            "shots": {"head": {"status": "FAIL", "error": error, "errors": [error], "png": None}}}
             return r
 
         def worker(slot):
@@ -3031,6 +3057,12 @@ def main(argv=None):
             except (CDPError, TimeoutError, ConnectionError, json.JSONDecodeError) as e:
                 return {"route": story["route"], "status": "FAIL", "error": f"checker: {e}",
                         "errors": [f"checker: {e}"], "allowed": 0, "time": 0.0}
+            except Exception as e:
+                # The checker's own bug, as compare's attempt has it.
+                error = f"checker: {type(e).__name__}: {e}"
+                print(f"check: {story['route']}: {traceback.format_exc()}", file=sys.stderr)
+                return {"route": story["route"], "status": "FAIL", "error": error,
+                        "errors": [error], "allowed": 0, "time": 0.0}
 
         def worker(browser):
             while True:
