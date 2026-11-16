@@ -257,8 +257,10 @@ static void assemble(int state_fd, int trace_fd, int delay_fd, int samples_fd, u
   mov_reg(BPF_REG_7, BPF_REG_0);
   call(BPF_FUNC_ktime_get_ns);
   stx(BPF_DW, BPF_REG_10, BPF_REG_0, K_NOW);
+  // The base may lie before the clock's 0 (an offset past the host's
+  // uptime): the times compare signed and subtract modulo 2^64.
   ldx(BPF_DW, BPF_REG_1, BPF_REG_7, S_BASE);
-  jmp_reg(BPF_JLT, BPF_REG_0, BPF_REG_1, pass);
+  jmp_reg(BPF_JSLT, BPF_REG_0, BPF_REG_1, pass);
   alu_reg(BPF_SUB, BPF_REG_0, BPF_REG_1);
   ldx(BPF_DW, BPF_REG_2, BPF_REG_7, S_PERIOD);
   jmp_imm(BPF_JEQ, BPF_REG_2, 0, pass);
@@ -573,9 +575,9 @@ static void on_signal(int sig) {
   stop = 1;
 }
 
-static uint64_t avail_at(uint64_t now, uint64_t base, uint64_t period) {
-  if (now < base) return 0;
-  uint64_t rel = now - base, m = rel / period, r = rel - m * period;
+static uint64_t avail_at(uint64_t now, int64_t base, uint64_t period) {
+  if ((int64_t)now < base) return 0;
+  uint64_t rel = (uint64_t)((int64_t)now - base), m = rel / period, r = rel - m * period;
   uint64_t lo = 0, hi = nopps;
   while (lo < hi) {
     uint64_t mid = (lo + hi) / 2;
@@ -688,7 +690,7 @@ int main(int argc, char **argv) {
   while (!stop) {
     map_get(state_fd, 0, st);
     uint64_t now = clock_ns(CLOCK_MONOTONIC);
-    uint64_t avail = avail_at(now, (uint64_t)base, period);
+    uint64_t avail = avail_at(now, base, period);
     uint64_t cur = st[S_CURSOR / 8];
     fprintf(log, "%llu %llu %llu %llu %llu %llu\n", (unsigned long long)(clock_ns(CLOCK_REALTIME) / 1000000),
             (unsigned long long)(cur > avail ? cur - avail : 0), (unsigned long long)st[S_PKTS / 8],
