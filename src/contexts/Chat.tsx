@@ -421,7 +421,8 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
         state: thread ? ThreadInitState.OPEN : ThreadInitState.INITIALIZED,
         records: new Map(),
         messageStates: [],
-        visible: true,
+        // On screen once a view (Shell, a popout) shows it and reads it.
+        visible: false,
       }),
       mainTopics: [...state.mainTopics, topic],
       mainActiveTopic: topic,
@@ -595,11 +596,14 @@ const createGlobalActions = (client: FrontendClient, setState: StateDispatcher) 
   ): WhisperThreadState => {
     switch (res.body.case) {
       case WatchWhispersResponse_BodyCase.THREAD_UPDATE:
+        // A thread on screen stays read, as a room does: its view marked it
+        // read when it showed and marks each new whisper read, and an update
+        // the node sent before those marks can come after them.
         return {
           ...thread,
           thread: res.body.threadUpdate,
           label: res.body.threadUpdate.alias,
-          unreadCount: res.body.threadUpdate.unreadCount,
+          unreadCount: thread.visible ? 0 : res.body.threadUpdate.unreadCount,
           state: ThreadInitState.OPEN,
         };
       case WatchWhispersResponse_BodyCase.THREAD_DELETE:

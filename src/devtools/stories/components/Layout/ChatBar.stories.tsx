@@ -17,7 +17,7 @@ import {
 } from "../../../contexts/Chat";
 import { messages, replay } from "../../../mocks/chat/MessageEmitter";
 import { chatMessage } from "../../../mocks/chat/messages";
-import ChatService from "../../../mocks/chat/service";
+import ChatService, { MockWhisperThread } from "../../../mocks/chat/service";
 import { DesktopOnly, Story, fixtures } from "../../../storybook";
 
 const room: RoomTopic = { room: roomServerKey };
@@ -56,37 +56,51 @@ const Bar: React.FC<BarProps> = ({ onOpen, caption }) => {
 interface BarStoryProps extends BarProps {
   topics: (RoomTopic | WhisperTopic)[];
   popouts: number[];
+  /**
+   * The whisper thread's update from the node once the popouts are open
+   * (its unread count), as one sent before the popout's read can come.
+   */
+  threadUpdate?: Partial<MockWhisperThread>;
 }
 
 // Opens the topics, then pops some out once ChatBar has measured its room.
-const BarView: React.FC<BarStoryProps> = ({ topics, popouts, ...props }) => (
-  <MockChat
-    chat={() =>
-      new ChatService(replay(messages.slice(0, 40)), {
-        roomBundles: {
-          [Base64.fromUint8Array(otherRoom.room, true)]: { room: { name: "Comfy Corner" } },
-        },
-        whispers: [
-          {
-            alias: "soadsoap",
-            unreadCount: 1,
-            records: [
-              { message: chatMessage("soadsoap", "hey, you around tonight?") },
-              {
-                message: chatMessage("test_user", "yeah, after 9", undefined, {
-                  peerKey: fixtures.profileKey,
-                }),
-              },
-            ],
-          },
-        ],
-      })
+const BarView: React.FC<BarStoryProps> = ({ topics, popouts, threadUpdate, onOpen, ...props }) => {
+  const service = useRef<ChatService>(null);
+  const handleOpen = (el: HTMLElement) => {
+    onOpen?.(el);
+    if (threadUpdate) {
+      window.setTimeout(() => service.current.emitWhisperThread(0, threadUpdate), 100);
     }
-  >
-    <OpenTopics topics={topics} popouts={popouts} />
-    <Bar {...props} />
-  </MockChat>
-);
+  };
+  return (
+    <MockChat
+      chat={() =>
+        (service.current = new ChatService(replay(messages.slice(0, 40)), {
+          roomBundles: {
+            [Base64.fromUint8Array(otherRoom.room, true)]: { room: { name: "Comfy Corner" } },
+          },
+          whispers: [
+            {
+              alias: "soadsoap",
+              unreadCount: 1,
+              records: [
+                { message: chatMessage("soadsoap", "hey, you around tonight?") },
+                {
+                  message: chatMessage("test_user", "yeah, after 9", undefined, {
+                    peerKey: fixtures.profileKey,
+                  }),
+                },
+              ],
+            },
+          ],
+        }))
+      }
+    >
+      <OpenTopics topics={topics} popouts={popouts} />
+      <Bar {...props} onOpen={handleOpen} />
+    </MockChat>
+  );
+};
 
 // ChatBar renders nothing on portable devices.
 const BarStory: React.FC<BarStoryProps> = (props) => (
@@ -103,6 +117,19 @@ const stories: Story[] = [
         topics={[room, otherRoom, whisper]}
         popouts={[0, 2]}
         caption="a room and a whisper thread popped out (as many as fit)"
+      />
+    ),
+  },
+  // The whisper thread's update, unread, comes after its popout opened and
+  // read it: the open popout keeps it read.
+  {
+    name: "Popouts, thread updated once open",
+    component: () => (
+      <BarStory
+        topics={[room, otherRoom, whisper]}
+        popouts={[0, 2]}
+        threadUpdate={{ unreadCount: 1 }}
+        caption="the whisper thread's update, one unread, comes once its popout is open"
       />
     ),
   },
