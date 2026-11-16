@@ -3349,17 +3349,36 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
             strims_sim::link::TestbedLink::parse(&spec).unwrap_or_else(|e| panic!("{e}"))
         })
     };
+    // The highest rate a node's uplink runs at, which a peak is over: the
+    // seed's steps' too.
+    let top = |i: usize, mbit: u64| {
+        let start = mbit * 125_000;
+        if i > 0 {
+            return start;
+        }
+        c.seed_up_steps
+            .iter()
+            .map(|&(_, m)| (m * 125_000.0) as u64)
+            .fold(start, u64::max)
+    };
     let site = |i: usize, mbit: u64, burst: Option<u64>, peak: Option<f64>| {
         let bucket = burst.map(|bytes| Bucket {
             bytes,
             peak: peak.map(|m| (m * 125_000.0) as u64),
         });
+        let top = top(i, mbit);
         let st = Site::new(City::Chicago, Access::Cable)
             .with_up(mbit * 125_000)
             .with_bucket(bucket);
         match link(i) {
-            Some(l) => l.site(st, bucket).unwrap_or_else(|e| panic!("{e}")),
-            None => st,
+            Some(l) => l.site(st, bucket, top).unwrap_or_else(|e| panic!("{e}")),
+            None => {
+                if let Some(p) = bucket.and_then(|b| b.peak) {
+                    strims_wan::testbed::check_peak(p, top)
+                        .unwrap_or_else(|e| panic!("node {i}: {e}"));
+                }
+                st
+            }
         }
     };
     let seed_host = s.host_at(

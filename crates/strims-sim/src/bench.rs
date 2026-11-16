@@ -1082,12 +1082,23 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
             bytes: s.burst,
             peak: s.peak,
         };
+        // The highest rate its uplink runs at, which a peak is over.
+        let top = bench
+            .up_steps
+            .iter()
+            .filter(|(node, _)| *node == i)
+            .flat_map(|(_, steps)| steps.iter().map(|&(_, rate)| rate))
+            .fold(s.up, u64::max);
         let mut site = Site::new(City::Chicago, Access::Cable)
             .with_up(s.up)
             .with_loss(s.loss)
             .with_bucket(bench.buckets.then_some(run_bucket));
         if let Some(link) = &s.link {
-            site = link.site(site, Some(run_bucket))?;
+            site = link.site(site, Some(run_bucket), top)?;
+        } else if bench.buckets
+            && let Some(p) = s.peak
+        {
+            strims_wan::testbed::check_peak(p, top)?;
         }
         if let Some(d) = s.down {
             site = site.with_down(d);

@@ -15,9 +15,11 @@
 //!   `SEED_PEAK_MBIT`), Ethernet's 14 bytes a packet
 //!   ([`Framing::ETHERNET`], what a qdisc counts).
 //! - `cable`: a bucket of `burst=` bytes (125 ms of the starting rate
-//!   without) sent at `peak=` Mbit/s (100), `aqm=pie` (DOCSIS-PIE, the
-//!   default; the testbed's alone) or `aqm=fifo`, DOCSIS's framing, and
-//!   the upstream's slots ([`CABLE_GRANTS`] unless `slot=` says).
+//!   without) sent at `peak=` Mbit/s (100, a line's, which a link whose
+//!   rate reaches it at its start or a step goes without), `aqm=pie`
+//!   (DOCSIS-PIE, the default; the testbed's alone) or `aqm=fifo`,
+//!   DOCSIS's framing, and the upstream's slots ([`CABLE_GRANTS`] unless
+//!   `slot=` says).
 //! - `dsl`: a bucket of 3500 bytes, `line=adsl`'s ATM cells (the default)
 //!   or `line=vdsl`'s PTM ([`Framing::ADSL_PPPOE`],
 //!   [`Framing::VDSL_PPPOE`]).
@@ -34,6 +36,9 @@
 //! on any but a trace, `router=fq_codel|cake` (the
 //! testbed's alone) an SQM home router at `pct=` percent of the rate
 //! (default 95). A file's path takes letters, digits and `._/+-` alone.
+//! A peak given (`SEED_PEAK_MBIT` under tbf or fiber, cable's `peak=`) is
+//! over the link's rate at its start and at every step, as tbf takes a
+//! peakrate over its rate alone: both sides refuse one at or under it.
 //! The twins refuse a router, DOCSIS-PIE, a delay trace and a byte limit,
 //! and a trace link takes no rate steps on either side.
 
@@ -314,21 +319,54 @@ impl Spec {
     }
 
     /// The bucket the link's shaper has, its rate having started at
-    /// `base` bytes per second, given the run's `run` bucket (tbf's and
-    /// fiber's).
-    pub fn bucket(&self, base: u64, run: Bucket) -> Bucket {
+    /// `base` bytes per second and reaching `top` at its highest (its
+    /// start's or a step's), given the run's `run` bucket (tbf's and
+    /// fiber's); fails on a peak given at or under `top` (the run's, or
+    /// cable's `peak=`). Cable's default peak is a line's, which a link
+    /// whose rate reaches it goes without, its bucket leaving at once.
+    pub fn bucket(&self, base: u64, top: u64, run: Bucket) -> Result<Bucket, String> {
+        let given = |b: Bucket| match b.peak {
+            Some(p) => check_peak(p, top).map(|()| b),
+            None => Ok(b),
+        };
         match self.class {
             Class::Cable => {
-                let peak = mbit(self.peak.unwrap_or(100.0));
-                Bucket {
-                    bytes: self.burst.unwrap_or((base as f64 / 8.0).round() as u64),
-                    peak: (peak > base).then_some(peak),
+                let bytes = self.burst.unwrap_or((base as f64 / 8.0).round() as u64);
+                match self.peak {
+                    Some(p) => given(Bucket {
+                        bytes,
+                        peak: Some(mbit(p)),
+                    }),
+                    None => Ok(Bucket {
+                        bytes,
+                        peak: Some(CABLE_LINE).filter(|&p| p > top),
+                    }),
                 }
             }
-            Class::Dsl => Bucket::of(3500),
-            Class::Tbf | Class::Fiber | Class::Trace => run,
+            Class::Dsl => Ok(Bucket::of(3500)),
+            Class::Tbf | Class::Fiber => given(run),
+            Class::Trace => Ok(run),
         }
     }
+}
+
+/// Cable's default peak, a line's: four bonded DOCSIS 3.0 upstream
+/// channels ([`crate::access::CABLE_PEAK`]).
+const CABLE_LINE: u64 = crate::access::CABLE_PEAK;
+
+/// Fails on a bucket's peak, in bytes per second, at or under `top`, the
+/// highest rate its link runs at (its start's or a step's): tbf takes a
+/// peakrate over its rate alone, and a line's own rate is over what its
+/// shaper passes.
+pub fn check_peak(peak: u64, top: u64) -> Result<(), String> {
+    if peak <= top {
+        return Err(format!(
+            "a peak of {} Mbit/s isn't over the link's rate, {} Mbit/s at its highest (its start's or a step's)",
+            peak as f64 / 125_000.0,
+            top as f64 / 125_000.0
+        ));
+    }
+    Ok(())
 }
 
 fn mbit(m: f64) -> u64 {
@@ -338,9 +376,11 @@ fn mbit(m: f64) -> u64 {
 /// A node's settings in a run, for [`Spec::shell`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Run {
-    /// The link's rate now, and the rate it started at, in Mbit/s.
+    /// The link's rate now, the rate it started at, and its highest (its
+    /// start's or a step's), in Mbit/s.
     pub up_mbit: f64,
     pub base_mbit: f64,
+    pub top_mbit: f64,
     /// The run's bucket and peak (`SEED_BURST`, `SEED_PEAK_MBIT`).
     pub burst: u64,
     pub peak_mbit: Option<f64>,
@@ -361,8 +401,10 @@ impl Spec {
     /// the qdisc that holds its queue, if not tbf's own; `LINK_SLOT`,
     /// netem's slot argument; `LINK_TRACE`, tracelink's arguments (the
     /// files at `/links/<name>`); and `LINK_FILES`, the host files to
-    /// mount there.
-    pub fn shell(&self, run: &Run) -> String {
+    /// mount there. Fails on a bucket the shaper can't take: one under the
+    /// class's largest frame ([`Spec::check_bucket`]), or a peak at or
+    /// under the link's highest rate ([`check_peak`]).
+    pub fn shell(&self, run: &Run) -> Result<String, String> {
         let f = self.framing();
         let stab = if f == Framing::ETHERNET {
             String::new()
@@ -388,11 +430,25 @@ impl Spec {
         } else {
             1.0
         };
-        let bucket = self.bucket(mbit(run.base_mbit), Bucket::of(run.burst));
-        let peak = match self.class {
-            Class::Cable => bucket.peak.map(|p| p as f64 / 125_000.0),
-            Class::Tbf | Class::Fiber => run.peak_mbit,
-            Class::Dsl | Class::Trace => None,
+        // The modem's shaper, which a router or a trace replaces.
+        let (bytes, peak) = if self.router.is_none() && self.class != Class::Trace {
+            let bucket = self.bucket(
+                mbit(run.base_mbit),
+                mbit(run.top_mbit),
+                Bucket {
+                    bytes: run.burst,
+                    peak: run.peak_mbit.map(mbit),
+                },
+            )?;
+            self.check_bucket(bucket.bytes)?;
+            let peak = match self.class {
+                Class::Cable => bucket.peak.map(|p| p as f64 / 125_000.0),
+                Class::Tbf | Class::Fiber => run.peak_mbit,
+                Class::Dsl | Class::Trace => None,
+            };
+            (bucket.bytes, peak)
+        } else {
+            (run.burst, None)
         };
         let (shaper, child) = match self.router {
             None if self.class == Class::Trace => (String::new(), String::new()),
@@ -423,7 +479,7 @@ impl Spec {
                 format!(
                     "tbf rate {}kbit burst {} limit {}{}",
                     kbit(run.up_mbit * line),
-                    bucket.bytes,
+                    bytes,
                     run.limit,
                     peak.map_or(String::new(), |p| format!(
                         " peakrate {p}mbit mtu {}",
@@ -471,7 +527,7 @@ impl Spec {
             }
             None => (String::new(), String::new()),
         };
-        [
+        let sh = [
             ("LINK_CLASS", self.class.name().to_owned()),
             ("LINK_STAB", stab),
             ("LINK_SHAPER", shaper),
@@ -482,7 +538,8 @@ impl Spec {
         ]
         .iter()
         .map(|(k, v)| format!("{k}='{v}'\n"))
-        .collect()
+        .collect();
+        Ok(sh)
     }
 }
 
@@ -500,13 +557,15 @@ fn cake_overhead(spec: &Spec) -> &'static str {
 
 /// The `testbed_link` example's arguments:
 /// `--link <spec> --up-mbit <m> --burst <bytes> --limit <bytes>
-/// [--peak-mbit <m>] [--base-mbit <m>]` prints [`Spec::shell`] for a node
-/// whose link runs at `--up-mbit`, having started at `--base-mbit` (the
-/// same without), or fails with what is wrong.
+/// [--peak-mbit <m>] [--base-mbit <m>] [--top-mbit <m>]` prints
+/// [`Spec::shell`] for a node whose link runs at `--up-mbit`, having
+/// started at `--base-mbit` (`--up-mbit` without) and reaching
+/// `--top-mbit` at its highest, its start's or a step's (the higher of the
+/// two without), or fails with what is wrong.
 pub fn cli(args: &[String]) -> Result<String, String> {
     let mut it = args.iter();
-    let (mut spec, mut up, mut base, mut burst, mut limit, mut peak) =
-        (None, None, None, None, None, None);
+    let (mut spec, mut up, mut base, mut top, mut burst, mut limit, mut peak) =
+        (None, None, None, None, None, None, None);
     while let Some(a) = it.next() {
         let mut value = || {
             it.next()
@@ -523,6 +582,7 @@ pub fn cli(args: &[String]) -> Result<String, String> {
             "--link" => spec = Some(value()?),
             "--up-mbit" => up = Some(pos(value()?, a)?),
             "--base-mbit" => base = Some(pos(value()?, a)?),
+            "--top-mbit" => top = Some(pos(value()?, a)?),
             "--burst" => burst = Some(pos(value()?, a)? as u64),
             "--limit" => limit = Some(pos(value()?, a)? as u64),
             "--peak-mbit" => peak = Some(pos(value()?, a)?),
@@ -530,21 +590,23 @@ pub fn cli(args: &[String]) -> Result<String, String> {
         }
     }
     let (Some(spec), Some(up), Some(burst), Some(limit)) = (spec, up, burst, limit) else {
-        return Err("--link <spec> --up-mbit <m> --burst <bytes> --limit <bytes> [--peak-mbit <m>] [--base-mbit <m>]".to_owned());
+        return Err("--link <spec> --up-mbit <m> --burst <bytes> --limit <bytes> [--peak-mbit <m>] [--base-mbit <m>] [--top-mbit <m>]".to_owned());
     };
     let s = Spec::parse(&spec)?;
     let base = base.unwrap_or(up);
-    if s.router.is_none() && s.class != Class::Trace {
-        s.check_bucket(s.bucket(mbit(base), Bucket::of(burst)).bytes)
-            .map_err(|e| format!("link {spec}: {e}"))?;
+    let top = top.unwrap_or(up.max(base));
+    if top < up.max(base) {
+        return Err(format!("--top-mbit {top}: under --up-mbit or --base-mbit"));
     }
-    Ok(s.shell(&Run {
+    s.shell(&Run {
         up_mbit: up,
         base_mbit: base,
+        top_mbit: top,
         burst,
         peak_mbit: peak,
         limit,
-    }))
+    })
+    .map_err(|e| format!("link {spec}: {e}"))
 }
 
 #[cfg(test)]
@@ -626,16 +688,77 @@ mod tests {
         assert!(arg("cable,burst=x", "3028").is_err());
     }
 
+    /// `cli` at `up` Mbit/s, started at 10 and reaching `top`.
+    fn at(spec: &str, up: &str, top: &str, peak: Option<&str>) -> Result<String, String> {
+        let mut a = vec![
+            "--link",
+            spec,
+            "--up-mbit",
+            up,
+            "--base-mbit",
+            "10",
+            "--top-mbit",
+            top,
+            "--burst",
+            "3028",
+            "--limit",
+            "100000",
+        ];
+        if let Some(p) = peak {
+            a.extend(["--peak-mbit", p]);
+        }
+        cli(&a.into_iter().map(String::from).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn a_peak_is_over_every_rate_the_link_runs_at() {
+        // The run's peak, under tbf and fiber.
+        for class in ["tbf", "fiber"] {
+            assert!(at(class, "10", "10", Some("5")).is_err(), "{class}");
+            assert!(at(class, "10", "10", Some("10")).is_err(), "{class}");
+            assert!(at(class, "10", "10", Some("40")).is_ok(), "{class}");
+            // A step to 40 reaches it; one to 30 doesn't.
+            assert!(at(class, "10", "40", Some("40")).is_err(), "{class}");
+            let step = at(class, "30", "30", Some("40")).unwrap();
+            assert!(step.contains("rate 30000kbit"), "{step}");
+            assert!(step.contains("peakrate 40mbit"), "{step}");
+        }
+        // Cable's own: refused at or under a rate the link runs at.
+        assert!(at("cable,peak=15", "10", "20", None).is_err());
+        assert!(at("cable,peak=10", "20", "20", None).is_err());
+        assert!(
+            at("cable,peak=15", "10", "10", None)
+                .unwrap()
+                .contains("peakrate 15mbit")
+        );
+        // Cable's default, a line's 100 Mbit/s: none once a rate reaches it,
+        // at the start and at every step alike.
+        assert!(
+            at("cable", "50", "50", None)
+                .unwrap()
+                .contains("peakrate 100mbit")
+        );
+        for up in ["50", "120"] {
+            let sh = at("cable", up, "120", None).unwrap();
+            assert!(!sh.contains("peakrate"), "{sh}");
+        }
+        assert!(at("cable", "200", "200", None).is_ok());
+        // A router or a trace takes no peak.
+        assert!(at("tbf,router=cake", "10", "10", Some("5")).is_ok());
+        assert!(at("tbf", "20", "10", None).is_err());
+    }
+
     #[test]
     fn the_testbed_builds_the_class() {
         let run = Run {
             up_mbit: 10.0,
             base_mbit: 10.0,
+            top_mbit: 10.0,
             burst: 3028,
             peak_mbit: None,
             limit: 125_000,
         };
-        let sh = |spec: &str, run: &Run| Spec::parse(spec).unwrap().shell(run);
+        let sh = |spec: &str, run: &Run| Spec::parse(spec).unwrap().shell(run).unwrap();
         assert_eq!(
             sh("tbf", &run),
             "LINK_CLASS='tbf'\nLINK_STAB=''\nLINK_SHAPER='tbf rate 10000kbit burst 3028 limit 125000'\nLINK_CHILD=''\nLINK_SLOT=''\nLINK_TRACE=''\nLINK_FILES=''\n"

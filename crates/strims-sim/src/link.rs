@@ -66,12 +66,20 @@ impl TestbedLink {
     }
 
     /// `site` shaped as the link is: its framing, slots and bucket, the
-    /// run's `bucket` where the class takes it (`None`: none); fails on a
-    /// bucket smaller than the link's largest frame, as the testbed does.
-    pub fn site(&self, site: Site, bucket: Option<Bucket>) -> Result<Site, String> {
+    /// run's `bucket` where the class takes it (`None`: none), its rate
+    /// reaching `top` bytes per second at its highest (its start's or a
+    /// step's); fails as the testbed does on a bucket smaller than the
+    /// link's largest frame or a peak at or under `top`
+    /// ([`Spec::bucket`], which also drops cable's default peak at or
+    /// under it).
+    pub fn site(&self, site: Site, bucket: Option<Bucket>, top: u64) -> Result<Site, String> {
+        let up = site.profile.up;
         let bucket = match self.spec.class {
-            Class::Tbf | Class::Fiber | Class::Trace => bucket,
-            Class::Cable | Class::Dsl => Some(self.spec.bucket(site.profile.up, Bucket::of(0))),
+            Class::Tbf | Class::Fiber => {
+                bucket.map(|b| self.spec.bucket(up, top, b)).transpose()?
+            }
+            Class::Trace => bucket,
+            Class::Cable | Class::Dsl => Some(self.spec.bucket(up, top, Bucket::of(0))?),
         };
         if let Some(b) = bucket
             && self.spec.class != Class::Trace
@@ -119,14 +127,14 @@ mod tests {
         let base = Site::new(City::Chicago, Access::Cable).with_up(up);
         let run = Some(Bucket::of(3028));
         let tbf = TestbedLink::parse("tbf").unwrap();
-        assert_eq!(tbf.site(base, run).unwrap().profile.bucket, run);
+        assert_eq!(tbf.site(base, run, up).unwrap().profile.bucket, run);
         assert_eq!(
-            tbf.site(base, run).unwrap().profile.framing,
+            tbf.site(base, run, up).unwrap().profile.framing,
             Framing::ETHERNET
         );
         let cable = TestbedLink::parse("cable,aqm=fifo")
             .unwrap()
-            .site(base, run)
+            .site(base, run, up)
             .unwrap();
         assert_eq!(
             cable.profile.bucket,
@@ -137,15 +145,21 @@ mod tests {
         );
         assert_eq!(cable.profile.slots, Some(CABLE_GRANTS));
         assert_eq!(cable.profile.framing, Framing::DOCSIS);
-        let cable = TestbedLink::parse("cable,aqm=fifo,burst=10000,peak=10,slot=off")
+        let cable = TestbedLink::parse("cable,aqm=fifo,burst=10000,peak=40,slot=off")
             .unwrap()
-            .site(base, run)
+            .site(base, run, up)
             .unwrap();
-        assert_eq!(cable.profile.bucket, Some(Bucket::of(10_000)));
+        assert_eq!(
+            cable.profile.bucket,
+            Some(Bucket {
+                bytes: 10_000,
+                peak: Some(mbit(40.0))
+            })
+        );
         assert_eq!(cable.profile.slots, None);
         let dsl = TestbedLink::parse("dsl,line=vdsl")
             .unwrap()
-            .site(base, run)
+            .site(base, run, up)
             .unwrap();
         assert_eq!(dsl.profile.framing, Framing::VDSL_PPPOE);
         assert_eq!(dsl.profile.bucket, Some(Bucket::of(3500)));
@@ -158,10 +172,38 @@ mod tests {
         // Fibre's and cable's frames are 1518 bytes, as the testbed's
         // parser takes them (strims_wan::testbed's tests).
         let fiber = TestbedLink::parse("fiber").unwrap();
-        assert!(fiber.site(base, Some(Bucket::of(1517))).is_err());
-        assert!(fiber.site(base, Some(Bucket::of(1518))).is_ok());
+        assert!(fiber.site(base, Some(Bucket::of(1517)), up).is_err());
+        assert!(fiber.site(base, Some(Bucket::of(1518)), up).is_ok());
         let cable = TestbedLink::parse("cable,aqm=fifo,burst=1517").unwrap();
-        assert!(cable.site(base, None).is_err());
+        assert!(cable.site(base, None, up).is_err());
+    }
+
+    #[test]
+    fn a_peak_is_over_every_rate_on_both_sides() {
+        let site = |m: f64| Site::new(City::Chicago, Access::Cable).with_up(mbit(m));
+        let run = |peak: f64| {
+            Some(Bucket {
+                bytes: 3028,
+                peak: Some(mbit(peak)),
+            })
+        };
+        // The run's peak under tbf: over the start and every step, as
+        // strims_wan::testbed's cli takes it.
+        let tbf = TestbedLink::parse("tbf").unwrap();
+        assert!(tbf.site(site(10.0), run(5.0), mbit(10.0)).is_err());
+        assert!(tbf.site(site(10.0), run(40.0), mbit(40.0)).is_err());
+        assert!(tbf.site(site(10.0), run(40.0), mbit(30.0)).is_ok());
+        // Cable's peak=, and its default, which a step to 120 drops.
+        let cable = |spec: &str, top: f64| {
+            TestbedLink::parse(spec)
+                .unwrap()
+                .site(site(10.0), None, mbit(top))
+                .map(|s| s.profile.bucket.and_then(|b| b.peak))
+        };
+        assert!(cable("cable,aqm=fifo,peak=15", 20.0).is_err());
+        assert_eq!(cable("cable,aqm=fifo,peak=15", 10.0), Ok(Some(mbit(15.0))));
+        assert_eq!(cable("cable,aqm=fifo", 50.0), Ok(Some(mbit(100.0))));
+        assert_eq!(cable("cable,aqm=fifo", 120.0), Ok(None));
     }
 
     #[test]
