@@ -203,12 +203,12 @@ class FoldExport(Scratch):
     def jobs(self):
         """golden_cli's jobs, written as the sim writes them, with the
         meter samples', speculative requests', parks', arrivals', asks',
-        haves' and the seed log's tables golden_cli's don't write: the
-        suite's, then the farm's
-        (whose reads, asks and haves are zstd-compressed, `<table>.csv.zst`,
-        as the sim writes its large tables, and the seed log's too, so the
-        fold takes the tables registered last in either form), then a job
-        folded again."""
+        haves', the seed log's, the peer samples' and a testbed run's
+        sockets' tables golden_cli's don't write: the suite's, then the
+        farm's (whose reads, asks and haves are zstd-compressed,
+        `<table>.csv.zst`, as the sim writes its large tables, and the seed
+        log's, the peer samples' and the sockets' too, so the fold takes the
+        tables registered last in either form), then a job folded again."""
         jobs = [golden_cli.job_dir(self.dir / "jobs" / f"{i:02d}", j) for i, j in enumerate(golden_cli.JOBS)]
         for n, j in enumerate(jobs):
             d = Path(j["dir"])
@@ -238,8 +238,15 @@ class FoldExport(Scratch):
             golden_cli.write_table(d, "seed_sends", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
                                                      ("how", "VARCHAR"), ("seq", "BIGINT"), ("fate", "VARCHAR")],
                                    [(885 + n, 0, 1, "push", 6, "written")])
+            # The seed's channel to a viewer, and one to a peer it can't name.
+            golden_cli.write_table(d, "peer_samples", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
+                                                       ("sent_bytes", "BIGINT"), ("rtt_ms", "BIGINT")],
+                                   [(1000 + n, 0, 1, 40_960, 31), (1000 + n, 0, None, 0, 0)])
+            golden_cli.write_table(d, "sockets", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
+                                                  ("rtt_us", "BIGINT"), ("notsent_bytes", "BIGINT")],
+                                   [(1000 + n, 0, 1, 31_250, None)])
             if ":" in j["sim"]:
-                for t in ("reads", "asks", "haves", "seed_decisions", "seed_sends"):
+                for t in ("reads", "asks", "haves", "seed_decisions", "seed_sends", "peer_samples", "sockets"):
                     csv = d / f"{t}.csv"
                     (d / f"{t}.csv.zst").write_bytes(zstd.compress(csv.read_bytes()))
                     csv.unlink()
@@ -286,6 +293,12 @@ class FoldExport(Scratch):
         cols, rows = parquet(self.dir / "module" / "seed_decisions.parquet")
         self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(2 * list(runs["k"])))
         cols, rows = parquet(self.dir / "module" / "seed_sends.parquet")
+        self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(runs["k"]))
+        # Two peer samples and a socket a job, a peer left out NULL.
+        cols, rows = parquet(self.dir / "module" / "peer_samples.parquet")
+        self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(2 * list(runs["k"])))
+        self.assertIn(None, [r[[c for c, _ in cols].index("peer")] for r in rows])
+        cols, rows = parquet(self.dir / "module" / "sockets.parquet")
         self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(runs["k"]))
 
     def test_an_empty_store_exports_nothing(self):
