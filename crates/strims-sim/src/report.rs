@@ -1563,7 +1563,8 @@ pub const NEAR_SATURATED: f64 = 0.8;
 /// over a window its link carries nothing for it (an outage): what its
 /// link could carry for it over the window ([`available`]) times its
 /// share ([`own_share`]) at its meter samples before `t`, `last` and
-/// `prev`.
+/// `prev`, within its rate limit (QoS's, in vnic's bytes) in channel bytes
+/// ([`channel_share`]).
 ///
 /// The live oracle (`STRIMS_SIM_KNOWN_UPLINK`) tells the node this as each
 /// of its stats samples is asked for, from the same inputs, ahead of the
@@ -1582,7 +1583,9 @@ pub(crate) fn upload_truth(
             / (to - from).as_secs_f64().max(1e-9);
         (avail * own_share(spec, last, prev)) as u64
     });
-    match (spec.uplink, site) {
+    // The rate limit is QoS's, in what vnic hands the transports.
+    let limit = spec.uplink.map(|l| (l as f64 * channel_share(last)) as u64);
+    match (limit, site) {
         (Some(a), Some(b)) => Some(a.min(b)),
         (a, b) => a.or(b),
     }

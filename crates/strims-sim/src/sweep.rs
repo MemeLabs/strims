@@ -55,7 +55,8 @@
 //!   seed a swarm, `=viewers` only the others. With `-static` (`=1-static`,
 //!   `=seed-static`, `=viewers-static`) each is told once, before it sends,
 //!   what its uplink carries (its rate, or its capacity schedule's mean) in
-//!   IP bytes at full-size packets
+//!   channel bytes at a full message's share
+//!   ([`full_share`](crate::report::full_share)), within its rate limit
 //!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)).
 //! - `STRIMS_SIM_MINUTES=<m>` sets the stream length of the scenarios that
 //!   take one ([`stream_minutes`]).
@@ -825,17 +826,15 @@ fn sweep_seeds(
                         h.upload_capacity_live = true;
                     } else {
                         // Told before it sends: what the link carries in
-                        // IP bytes, at full-size packets.
-                        let f = site.profile.framing;
+                        // channel bytes, at a full message's share, within
+                        // its rate limit, as the truth before any of its
+                        // windows is near saturation.
                         let link = h
                             .up_capacity
                             .as_ref()
                             .map_or(site.profile.up, |c| c.mean_rate());
-                        h.upload_capacity = Some(if f == strims_wan::framing::Framing::NONE {
-                            link
-                        } else {
-                            link * 1500 / f.packet(1500) as u64
-                        });
+                        let full = (link as f64 * crate::report::full_share(h)) as u64;
+                        h.upload_capacity = Some(h.uplink.map_or(full, |l| l.min(full)));
                     }
                 }
             }
