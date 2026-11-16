@@ -30,11 +30,7 @@ pub(crate) async fn controller(w: Rc<World>) -> turmoil::Result {
         spawn_local(probes(w.clone(), p));
     }
     let end = w.spec.duration;
-    let every = w.spec.sample_every.max(Duration::from_millis(100));
-    let stats_every = w
-        .spec
-        .stats_every
-        .map_or(every, |d| d.clamp(Duration::from_millis(100), every));
+    let (every, stats_every) = w.spec.cadences();
     let (mut next_full, mut next_stats) = (every, stats_every);
     loop {
         let next = next_full.min(next_stats);
