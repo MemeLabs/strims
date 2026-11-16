@@ -180,8 +180,9 @@ export interface Options {
 /**
  * The query of the node picker's options for the selection's experiment, cell and arm, for a view
  * whose pickers (`uses`, its selection keys; null for every picker) include the node's: the hosts
- * the sims sampled the meter of (meter_samples), the seed by its role. A grouping of meter_samples,
- * which no other view needs.
+ * the sims sampled the meter of (meter_samples) as the seed or an honest viewer in some seed, as
+ * meter_error reads them, the seed by its role. A grouping of meter_samples, which no other view
+ * needs.
  *
  * @param sel - the selection
  * @param uses - the selection keys the view takes, or null for all
@@ -196,7 +197,8 @@ export const nodesQuery = (
         sql:
           "SELECT m.node, bool_or(m.role = 'seed') AS seed " +
           "FROM experiment_jobs e JOIN meter_samples m USING (k, src) " +
-          "WHERE e.exp_id = $exp AND e.cell = $cell AND e.arm_label = $arm GROUP BY m.node ORDER BY m.node",
+          "WHERE e.exp_id = $exp AND e.cell = $cell AND e.arm_label = $arm AND m.role <> 'hostile' " +
+          "GROUP BY m.node ORDER BY m.node",
         params: { exp: sel.exp, cell: sel.cell, arm: sel.arm },
       }
     : null;

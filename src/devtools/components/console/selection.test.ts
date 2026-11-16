@@ -17,6 +17,11 @@ describe("nodesQuery", () => {
     assert.deepStrictEqual(nodesQuery(sel, null), q);
   });
 
+  it("lists the nodes meter_error pools: the seed and the honest viewers", () => {
+    // meter_error.sql's: a node's seeds where it is hostile are left out.
+    assert.ok(nodesQuery(sel, null)?.sql.includes("AND m.role <> 'hostile' "));
+  });
+
   it("asks nothing until the experiment, cell and arm are picked", () => {
     for (const missing of ["exp", "cell", "arm"] as const) {
       assert.strictEqual(nodesQuery({ ...sel, [missing]: "" }, null), null, missing);

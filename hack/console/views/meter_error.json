@@ -1,6 +1,6 @@
 {
   "title": "Meter error",
-  "description": "One node of a cell and arm across its seeds: its upload meter's reading over the uplink it had (1 exact, under 1 low) each second as a spectrogram, the colour the share of the seeds whose reading fell in each band 0.05 wide (every reading of 2 or more in the top one), and the node's uplink across the seeds (p10–p90 band, p50 line, Mbit/s). Pick the node in its list, where the seed (the publisher) is marked. From the meter_samples table: runs from before it, or a node outside WAN mode without a rate limit, have none.",
+  "description": "One node of a cell and arm across its seeds: its upload meter's reading over the uplink it had (1 exact, under 1 low) each second as a spectrogram, the colour the share of the seeds whose reading fell in each band 0.05 wide (every reading of 2 or more in the top one), and the node's uplink across the seeds (p10–p90 band, p50 line, Mbit/s). Pick the node in its list, where the seed (the publisher) is marked; its seeds are those where it is the seed or an honest viewer, as the rows' meter scores read them (the dishonest mix picks its hostile viewers seed by seed). From the meter_samples table: runs from before it, or a node outside WAN mode without a rate limit, have none.",
   "params": [
     {
       "name": "exp",

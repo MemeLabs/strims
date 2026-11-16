@@ -1061,6 +1061,53 @@ class Overhead(unittest.TestCase):
                 self.assertAlmostEqual(want[(arm, cell, "wire/useful")], 2.0)
 
 
+class MeterError(unittest.TestCase):
+    """meter_error over golden_cli's fixture catalog given meter samples
+    (main.meter_samples) of one cell and arm's two runs, the second's
+    node 3 hostile: a node is pooled over the seeds where it is the seed
+    or an honest viewer, as the rows' meter scores read them."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory(prefix="simlab-views-meter-")
+        root = Path(cls.tmp.name)
+        lake = catalog_fixture(root / "fixture")
+        w = engine.writer(lake)
+        try:
+            ((cls.cell, cls.arm, ks, srcs),) = w.execute(
+                "SELECT cell, arm_label, list(k ORDER BY seed, k), list(src ORDER BY seed, k) FROM experiment_jobs "
+                "WHERE exp_id = 'sf0001' GROUP BY ALL HAVING count(*) >= 2 ORDER BY ALL LIMIT 1").fetchall()
+            # Node 3's meter reads its uplink exactly where it is honest
+            # (band 20, 1.00-1.05) and twice it where hostile (the top band);
+            # the seed, node 0, reads half (band 10) in both.
+            rows = [(k, src, t, node, role, cap, 1000)
+                    for i, (k, src) in enumerate(zip(ks[:2], srcs[:2])) for t in (500, 1500)
+                    for node, role, cap in ((0, "seed", 500), (3, ("honest", "hostile")[i], (1000, 2000)[i]))]
+            values = ", ".join(f"({engine.q(k)}, {engine.q(s)}, {t}, {n}, {engine.q(r)}, {c}, {a})"
+                               for k, s, t, n, r, c, a in rows)
+            w.execute("DROP VIEW IF EXISTS main.meter_samples; DROP TABLE IF EXISTS main.meter_samples; "
+                      "CREATE TABLE main.meter_samples AS SELECT * FROM (VALUES " + values + ") "
+                      "t(k, src, t_ms, node, role, capacity_bps, avail_bps);")
+        finally:
+            w.close()
+        cls.pool = engine.Pool(lake, root / "spill", size=1, guard=engine.Guard("1GB", 1, "1GiB"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.pool.close()
+        cls.tmp.cleanup()
+
+    def error(self, node):
+        params = {"exp": "sf0001", "cell": self.cell, "arm": self.arm, "node": str(node)}
+        got = views.run(self.pool, "meter_error", params).records()
+        return ([(r["t_s"], r["error"], r["seeds"], r["seeds_read"]) for r in got if r["track"] == "error"],
+                [(r["t_s"], r["seeds"]) for r in got if r["track"] == "uplink"])
+
+    def test_a_node_pools_the_seeds_it_is_honest_in(self):
+        self.assertEqual(self.error(3), ([(0.0, "1.00–1.05", 1, 1), (1.0, "1.00–1.05", 1, 1)], [(0.0, 1), (1.0, 1)]))
+        self.assertEqual(self.error(0), ([(0.0, "0.50–0.55", 2, 2), (1.0, "0.50–0.55", 2, 2)], [(0.0, 2), (1.0, 2)]))
+
+
 class Phases(unittest.TestCase):
     """viewer_phases_of over golden_cli's fixture catalog whose runs go on
     past the verdict's seconds (PAST): playback and p99_sources take each

@@ -3,7 +3,10 @@
 --
 -- One node of a cell and arm across the seeds: how far its upload meter
 -- read from the uplink it had, second by second, from meter_samples (the
--- samples the row's meter_seed_p* and meter_{pop}_p* score). Each seed
+-- samples the row's meter_seed_p* and meter_{pop}_p* score). The seeds
+-- are those where the node is the seed or an honest viewer, as those
+-- scores read them: the dishonest mix draws its hostile viewers seed by
+-- seed, so a node hostile in some seeds is left out of those. Each seed
 -- gives the node's last sample of each second; its error is the meter's
 -- capacity ÷ what the node could upload then (1 exact, under 1 low). Long
 -- form, `track` on every row, t_s to t2_s the second from the stream's
@@ -25,7 +28,7 @@ WITH runs AS (
     -- Each run's last sample of each second.
     SELECT k, t_ms // 1000 AS sec, capacity_bps, avail_bps
     FROM runs JOIN meter_samples USING (k, src)
-    WHERE node = $node
+    WHERE node = $node AND role <> 'hostile'
     QUALIFY row_number() OVER (PARTITION BY k, src, t_ms // 1000 ORDER BY t_ms DESC) = 1
 ), bands AS (
     -- In integers, so a reading exactly at a band's edge starts it.
