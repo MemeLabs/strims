@@ -81,15 +81,6 @@ interface Watched {
   mainFailure: string | null;
 }
 
-// The page's local storage, or none where the page may not use it.
-const storage = (): Storage | null => {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-};
-
 // The player's picture area in device pixels: the video's box, or the
 // screen's while it has none.
 const measure = (video: HTMLVideoElement | undefined) => {
@@ -174,7 +165,7 @@ export const useRendition = ({
   const candidatesKey = useMemo(() => JSON.stringify(candidates), [candidates]);
 
   const probes = useMemo(() => browserProbes(kind), [kind]);
-  const failures = useMemo(() => new RenditionFailures(storage(), navigator.userAgent), []);
+  const failures = useMemo(() => RenditionFailures.local(), []);
   const [assessed, setAssessed] = useState<{ main: string; assessed: Assessment[] } | null>(null);
   useEffect(() => {
     if (candidates.length < 2) return;

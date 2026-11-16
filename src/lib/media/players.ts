@@ -1,6 +1,7 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { localStorageOrNull } from "../storage";
 import { StreamFormat } from "./mime";
 
 /** How a stream plays. */
@@ -24,10 +25,11 @@ const preference = (value: string | null | undefined): PlayerPreference | null =
   value === "lowlatency" || value === "baseline" ? value : null;
 
 // The player a viewer prefers: `?player=lowlatency|baseline`, else the
-// `player` local storage setting, else the baseline.
+// `player` setting in `storage` (the page's local storage), else the
+// baseline.
 export const preferredPlayer = (
   search: string,
-  storage: Pick<Storage, "getItem"> | null
+  storage: Pick<Storage, "getItem"> | null = localStorageOrNull()
 ): PlayerPreference => {
   const param = preference(new URLSearchParams(search).get(PLAYER_PARAM));
   if (param) return param;

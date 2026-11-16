@@ -4,6 +4,7 @@
 import { ComponentProps, useEffect, useState } from "react";
 
 import { CUES_CHANGED, CueKind, cueKinds, cueTrack } from "../lib/media/textTracks";
+import { readItem, writeItem } from "../lib/storage";
 import useReady from "./useReady";
 
 export enum VideoReadyState {
@@ -30,21 +31,11 @@ const CAPTIONS_STORAGE_KEY = "captions";
 export type CaptionChoice = "off" | CueKind;
 
 const loadCaptions = (): CaptionChoice => {
-  try {
-    const saved = localStorage.getItem(CAPTIONS_STORAGE_KEY);
-    return saved === "subtitles" || saved === "captions" ? saved : "off";
-  } catch {
-    return "off";
-  }
+  const saved = readItem(CAPTIONS_STORAGE_KEY);
+  return saved === "subtitles" || saved === "captions" ? saved : "off";
 };
 
-const saveCaptions = (choice: CaptionChoice) => {
-  try {
-    localStorage.setItem(CAPTIONS_STORAGE_KEY, choice);
-  } catch {
-    // The choice lasts this page only.
-  }
-};
+const saveCaptions = (choice: CaptionChoice) => writeItem(CAPTIONS_STORAGE_KEY, choice);
 
 /** The kind of cues showing for `choice`, of the stream's `kinds`. */
 export const shownCues = (choice: CaptionChoice, kinds: CueKind[]): CueKind | null => {
@@ -115,7 +106,7 @@ const useVideo = (
   const [captionChoice, setCaptionChoice] = useState<CaptionChoice>(loadCaptions);
 
   useReady(() => {
-    const savedVolume = localStorage.getItem(VOLUME_STORAGE_KEY);
+    const savedVolume = readItem(VOLUME_STORAGE_KEY);
     if (savedVolume !== "") {
       const volume = parseFloat(savedVolume) || 0;
       ref.current.muted = volume === 0;
@@ -279,7 +270,7 @@ const useVideo = (
 
   const setVolume = (volume: number) => {
     const clampedVolume = Math.max(0, Math.min(1, volume));
-    localStorage.setItem(VOLUME_STORAGE_KEY, clampedVolume.toString());
+    writeItem(VOLUME_STORAGE_KEY, clampedVolume.toString());
 
     if (ref.current) {
       unsafelySetVolume(clampedVolume);

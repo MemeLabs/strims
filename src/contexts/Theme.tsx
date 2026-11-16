@@ -10,7 +10,17 @@ import React, {
   useState,
 } from "react";
 
+import { readItem, writeItem } from "../lib/storage";
+
 type ColorScheme = "dark" | "light";
+
+// The color scheme the device last chose, kept in local storage.
+const THEME_STORAGE_KEY = "theme";
+
+const storedColorScheme = (): ColorScheme | null => {
+  const stored = readItem(THEME_STORAGE_KEY);
+  return stored === "dark" || stored === "light" ? stored : null;
+};
 
 export interface ThemeState {
   colorScheme: ColorScheme;
@@ -63,8 +73,7 @@ interface ProviderProps {
 }
 
 export const Provider: React.FC<ProviderProps> = ({ children }) => {
-  const savedTheme = useMemo(() => window.localStorage.getItem("theme") as ColorScheme, []);
-  const [colorScheme, setColorScheme] = useState<ColorScheme>(savedTheme || "dark");
+  const [colorScheme, setColorScheme] = useState<ColorScheme>(() => storedColorScheme() ?? "dark");
 
   // if (!savedTheme && window.matchMedia) {
   //   useEffect(() => {
@@ -86,7 +95,7 @@ export const Provider: React.FC<ProviderProps> = ({ children }) => {
     () => ({
       colorScheme,
       setColorScheme: (v: ColorScheme) => {
-        window.localStorage.setItem("theme", v);
+        writeItem(THEME_STORAGE_KEY, v);
         setColorScheme(v);
       },
     }),

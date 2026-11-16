@@ -4,6 +4,8 @@
 // The UI's choices that belong to the device rather than the profile, kept
 // in the page's local storage: each device keeps its own.
 
+import { localStorageOrNull } from "./storage";
+
 export interface DevicePreferences {
   /**
    * The chat on the player's other side: on a desktop the chat on the left,
@@ -49,15 +51,6 @@ export const createDevicePreferenceStore = (
       }
     },
   };
-};
-
-// The page's local storage, or none where the page may not use it.
-const localStorageOrNull = (): Storage | null => {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
 };
 
 // The device's preferences in the page's local storage.

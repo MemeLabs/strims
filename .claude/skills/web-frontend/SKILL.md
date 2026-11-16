@@ -61,8 +61,9 @@ catalog's covered, skipped and missing files.
   webpack/SafeAreaInsets.ts makes the frame's values reach them.
 - A story frame's localStorage is an in-memory stub (host/preload.ts),
   empty for each story, so stories never read or write the origin's.
-  App code keeps storage out of components, in src/lib modules that
-  contexts' actions call.
+  Components, hooks and contexts reach local storage only through src/lib
+  modules (lib/storage's helpers, lib/devicePreferences), which take a
+  page without storage for one with nothing stored.
 - A story fails on a crash or an empty root at `--timeout`. It also fails
   on any error no allow list (`allowErrors`) covers: an uncaught error or
   rejection, or a console.error such as a React warning or a translation

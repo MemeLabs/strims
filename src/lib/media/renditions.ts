@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { ListingRendition } from "../../apis/strims/network/v1/directory/directory.pb";
+import { localStorageOrNull } from "../storage";
 import { UNITS_MIME_TYPE, mimeEssence } from "./mime";
 import { PlayerKind } from "./players";
 
@@ -456,6 +457,11 @@ interface StoredFailures {
  */
 export class RenditionFailures {
   private entries: Record<string, number> = {};
+
+  // The failures this browser recorded, in the page's local storage.
+  static local(): RenditionFailures {
+    return new RenditionFailures(localStorageOrNull(), navigator.userAgent);
+  }
 
   constructor(
     private readonly storage: Pick<Storage, "getItem" | "setItem"> | null,

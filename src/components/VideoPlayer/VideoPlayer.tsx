@@ -38,15 +38,6 @@ const swarmMedia: Record<PlayerKind, React.FC<SwarmMediaProps> | null> = {
   [PlayerKind.None]: null,
 };
 
-// The page's local storage, or none where the page may not use it.
-const storage = (): Storage | null => {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-};
-
 const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   networkKey,
   swarmUri,
@@ -77,7 +68,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
     () =>
       choosePlayer({
         format,
-        preference: preferredPlayer(location.search, storage()),
+        preference: preferredPlayer(location.search),
         lowLatency: lowLatencySupport(),
       }),
     [format]
