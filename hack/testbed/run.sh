@@ -72,6 +72,19 @@
 #                          own (tbf's peakrate; more than its uplink's
 #                          rate, its steps' too); unset, at once
 #   VIEWER_PEAK_MBIT=<m>   each viewer's
+#   SEED_LINK=<spec>       the seed's access link class (default tbf: the
+#                          tbf above): `<class>[,<key>=<value>...]`, tbf,
+#                          cable, dsl, fiber or trace (hack/testbed/links.sh,
+#                          which documents each class, its keys and
+#                          defaults); a class's rate is SEED_UP_MBIT, its
+#                          queue QUEUE_MS, a tbf's or fiber's bucket
+#                          SEED_BURST and a tbf's peak SEED_PEAK_MBIT. A
+#                          trace's time 0 is the stream's start (its
+#                          packets reach the shaper SEED_DELAY_MS later),
+#                          and its files are mounted from the host
+#   VIEWER_LINK=<spec>     each viewer's (default tbf)
+#   LINKS="<i>:<spec> ..." node i's link, in place of SEED_LINK or
+#                          VIEWER_LINK
 #   SEED_DELAY_MS=<ms>     the seed's one-way delay (default 20; at least 1)
 #   VIEWER_DELAY_MS=<ms>   each viewer's (default 10; at least 1)
 #   SECS=<s>               the stream's length (default 180)
@@ -163,7 +176,10 @@
 # seed's tbf backlog at 10 Hz) and ss-<i>.log (its sockets once a second),
 # steps.log (when each of SEED_UP_STEPS applied, ms since the epoch, and
 # its rate), compete-<s>.json (each upload's iperf3 report) and
-# compete.log (when each started), and settings. With a browser node also
+# compete.log (when each started), links (each node's link spec, rate,
+# delay and queue: `node <i> <spec> <up_mbit> <delay_ms> <queue_ms>`), a
+# trace link's link-<i>.log (tracelink's queue, packets, bytes and drops
+# every 100 ms) and link-<i>.err, and settings. With a browser node also
 # node-relay.err, cpu-relay.log and hosts/ (each node's host id). With
 # MEDIA, each browser viewer's player-<i>.jsonl (its player's line a
 # second, testbed_browser's --player), and RECORD's record-<i>.bin.
@@ -175,8 +191,11 @@
 # per Docker host at a time.
 #
 # Needs Docker (the user's docker group) and the sch_netem, sch_tbf and
-# (for a slow downlink) ifb modules; if tc can't load them, run
-# `sudo modprobe sch_netem sch_tbf ifb` once.
+# ifb modules (and sch_pie, sch_cake, sch_fq_codel, sch_prio and sch_fq for
+# the link classes that use them); if tc can't load them, run
+# `sudo modprobe sch_netem sch_tbf ifb` once. A trace link's container also
+# gets CAP_BPF and CAP_PERFMON, and run.sh builds tracelink
+# (hack/testbed/tracelink.c, into target/testbed) with gcc.
 
 set -euo pipefail
 
@@ -189,6 +208,9 @@ queue=${QUEUE_MS:-100}
 seed_burst=${SEED_BURST:-3028}
 viewer_burst=${VIEWER_BURST:-3028}
 seed_peak=${SEED_PEAK_MBIT:-}
+seed_link=${SEED_LINK:-tbf}
+viewer_link=${VIEWER_LINK:-tbf}
+read -r -a link_specs <<< "${LINKS:-}"
 viewer_peak=${VIEWER_PEAK_MBIT:-}
 seed_delay=${SEED_DELAY_MS:-20}
 viewer_delay=${VIEWER_DELAY_MS:-10}
@@ -230,6 +252,15 @@ relay=$subnet.5
 
 n=$((viewers + 1))
 kind_of() { echo "${kinds[$1]:-native}"; }
+# shellcheck source=hack/testbed/links.sh
+source "$root/hack/testbed/links.sh"
+link_of() {
+  local l
+  for l in "${link_specs[@]}"; do
+    if [ "${l%%:*}" = "$1" ]; then echo "${l#*:}"; return; fi
+  done
+  if [ "$1" -eq 0 ]; then echo "$seed_link"; else echo "$viewer_link"; fi
+}
 join_of() {
   local j
   for j in "${joins[@]}"; do
@@ -250,6 +281,24 @@ for i in $(seq 0 $((n - 1))); do
   esac
 done
 case $browser_links in ws|webrtc) ;; *) echo "BROWSER_LINKS: ws or webrtc" >&2; exit 1 ;; esac
+traces=0
+for i in $(seq 0 $((n - 1))); do
+  link_check "$(link_of "$i")" || exit 1
+  if [ "$(link_class "$(link_of "$i")")" = trace ]; then
+    traces=1
+    while read -r f; do
+      [ -f "$f" ] || { echo "node $i: no link file at $f" >&2; exit 1; }
+    done < <(link_files "$(link_of "$i")")
+  fi
+done
+if [ -n "$steps" ] && [ "$(link_class "$(link_of 0)")" = trace ]; then
+  echo "SEED_UP_STEPS: a trace link takes no steps" >&2; exit 1
+fi
+tracelink=$root/target/testbed/tracelink
+if [ "$traces" = 1 ] && { [ ! -x "$tracelink" ] || [ "$root/hack/testbed/tracelink.c" -nt "$tracelink" ]; }; then
+  mkdir -p "$(dirname "$tracelink")"
+  gcc -O2 -static -o "$tracelink" "$root/hack/testbed/tracelink.c"
+fi
 
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
@@ -292,7 +341,7 @@ docker network inspect "$net" >/dev/null 2>&1 \
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
   > "$out/settings" || true
 
 # The containers start one after another before the stream does, and
@@ -324,20 +373,30 @@ if [ "$browsers" = 1 ] && [ "$relay_on" = 1 ]; then
 exec /testbed_node --relay-only --topology /out/topology --start $start --secs $secs 2> /out/node-relay.err" >/dev/null
 fi
 
-peak_arg() { if [ -n "$1" ]; then echo " peakrate ${1}mbit mtu 3028"; fi; }
+: > "$out/links"
 for i in $(seq 0 $((n - 1))); do
   if [ "$i" -eq 0 ]; then up=$seed_up; delay=$seed_delay; burst=$seed_burst; peak=$seed_peak
   else up=$viewer_up; delay=$viewer_delay; burst=$viewer_burst; peak=$viewer_peak; fi
   limit=$((up * queue * 125))
+  link=$(link_of "$i")
+  echo "node $i $link $up $delay $queue" >> "$out/links"
+  # A trace link's files, and the capabilities its classifier needs.
+  link_mounts=()
+  if [ "$(link_class "$link")" = trace ]; then
+    link_mounts=(--cap-add BPF --cap-add PERFMON -v "$tracelink:/tracelink:ro")
+    while read -r f; do
+      link_mounts+=(-v "$(cd "$(dirname "$f")" && pwd)/$(basename "$f"):/links/$(basename "$f"):ro")
+    done < <(link_files "$link")
+  fi
   # The egress filter's actions: PCAP's mirror of what the node offers,
   # then the delay's redirect.
   offered=""
   if [ "${PCAP:-0}" = 1 ]; then offered="action mirred egress mirror dev ifbo "; fi
   shape="ethtool -K eth0 tso off gso off gro off >/dev/null 2>&1 || true
-tc qdisc replace dev eth0 root handle 10: tbf rate ${up}mbit burst $burst limit $limit$(peak_arg "$peak")
+$(link_root "$link" "$up" "$burst" "$limit" "$peak" $((start + delay)) "$i")
 ip link add ifbd type ifb && ip link set ifbd up
 ethtool -K ifbd tso off gso off >/dev/null 2>&1 || true
-tc qdisc add dev ifbd root netem delay ${delay}ms limit 100000
+tc qdisc add dev ifbd root netem delay ${delay}ms$(link_slot "$link") limit 100000
 tc qdisc add dev eth0 clsact
 tc filter add dev eth0 egress matchall ${offered}action mirred egress redirect dev ifbd"
   if [ -n "$loss_every" ]; then
@@ -396,7 +455,7 @@ $shape"
   docker rm -f "$name" >/dev/null 2>&1 || true
   if [ "$(kind_of "$i")" = native ]; then
     docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" \
-      --cap-add NET_ADMIN -v "$bin:/testbed_node:ro" -v "$out:/out" "${media_mount[@]}" "$image" \
+      --cap-add NET_ADMIN "${link_mounts[@]}" -v "$bin:/testbed_node:ro" -v "$out:/out" "${media_mount[@]}" "$image" \
       bash -c "set -e
 $shape
 { tc -s qdisc show dev eth0; tc -s qdisc show dev ifbd; } > /out/qdisc-$i.txt
@@ -408,7 +467,7 @@ exec /testbed_node --index $i --topology /out/topology --start $start --secs $se
     # shaped the link. Its profile, in /tmp, stays in memory, so its
     # writes don't stall the other containers' on the host's disk.
     docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" \
-      --cap-add NET_ADMIN --shm-size 1g --tmpfs /tmp:size=1g \
+      --cap-add NET_ADMIN "${link_mounts[@]}" --shm-size 1g --tmpfs /tmp:size=1g \
       -v "$browser_bin:/testbed_browser:ro" \
       -v "$web:/web:ro" -v "$out:/out" "$browser_image" \
       bash -c "set -e
@@ -431,9 +490,7 @@ if [ -n "$steps" ]; then
       wait=$(( ms - $(date +%s%3N) ))
       if [ "$wait" -gt 0 ]; then sleep "$(awk "BEGIN { print $wait / 1000 }")"; fi
       limit=$(awk "BEGIN { printf \"%d\", $rate * $queue * 125 }")
-      # shellcheck disable=SC2046 # the peak's words
-      docker exec tb-0 tc qdisc change dev eth0 root handle 10: \
-        tbf rate "${rate}mbit" burst "$seed_burst" limit "$limit" $(peak_arg "$seed_peak")
+      docker exec tb-0 bash -c "$(link_change "$(link_of 0)" "$rate" "$seed_burst" "$limit" "$seed_peak" "$seed_up")"
       echo "$(date +%s%3N) $rate" >> "$out/steps.log"
     done
   ) &
