@@ -766,6 +766,9 @@ pub(crate) struct Scheduler {
     /// left out: its wire bytes less these are the transports' framing and
     /// resends ([`Scheduler::sent`]).
     app_bytes: Vec<u64>,
+    /// Per host, what its link charged the window model's resends of its
+    /// own segments and chunks (a resent chunk's share of its packet).
+    resent_bytes: Vec<u64>,
     /// Per host, its competing uploads' segments lost to its full uplink.
     cross_drops: Vec<u64>,
     /// Per host, the window model's falls of its connections' windows on a
@@ -910,6 +913,7 @@ impl Scheduler {
             sacks: vec![0; spec.hosts.len()],
             sack_bytes: vec![0; spec.hosts.len()],
             app_bytes: vec![0; spec.hosts.len()],
+            resent_bytes: vec![0; spec.hosts.len()],
             cross_drops: vec![0; spec.hosts.len()],
             cuts: vec![0; spec.hosts.len()],
             rtos: vec![0; spec.hosts.len()],
@@ -1037,6 +1041,12 @@ impl Scheduler {
     /// uplink so far ([`Scheduler::app_bytes`]).
     pub(crate) fn own_app_bytes(&self, h: HostIx) -> u64 {
         self.app_bytes.get(h).copied().unwrap_or(0)
+    }
+
+    /// What host `h`'s link has charged its resends so far
+    /// ([`Scheduler::resent_bytes`]).
+    pub(crate) fn own_resent_bytes(&self, h: HostIx) -> u64 {
+        self.resent_bytes.get(h).copied().unwrap_or(0)
     }
 
     /// What host `h`'s uplink has charged its own messages so far, its
@@ -1650,6 +1660,9 @@ impl Scheduler {
         }
         let t = self.net.send(at, from, to, wire, packets, Carrier::Stream);
         self.sent(from, if resent { 0 } else { len });
+        if resent {
+            self.resent(from, charged);
+        }
         if t.retransmit > Duration::ZERO {
             // A packet of it was lost on the path: its sender learns so as
             // of a full queue's drop, and resends it.
@@ -2162,6 +2175,13 @@ impl Scheduler {
         self.owed.retain(|(src, dst), _| {
             ip_host.get(&src.ip()) != Some(&h) && ip_host.get(&dst.ip()) != Some(&h)
         });
+    }
+
+    /// `h`'s link charged `charge` bytes for what it resent.
+    fn resent(&mut self, h: usize, charge: usize) {
+        if let Some(b) = self.resent_bytes.get_mut(h) {
+            *b += charge as u64;
+        }
     }
 
     /// `h` sent `app` bytes its transport took from it.

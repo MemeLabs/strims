@@ -657,7 +657,6 @@ fn a_starved_runs_stalls_are_its_reads_playout() {
         strims_sim::report::own_share(
             &r.scenario.hosts[seed],
             k.checked_sub(1).and_then(|i| meter.get(i)),
-            k.checked_sub(2).and_then(|i| meter.get(i)),
         )
     };
     let secs = Duration::from_secs;

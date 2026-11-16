@@ -1069,13 +1069,12 @@ impl Report {
         // the sample is taken.
         let k = samples.partition_point(|m| m.asked < t);
         let last = k.checked_sub(1).and_then(|i| samples.get(i));
-        let prev = k.checked_sub(2).and_then(|i| samples.get(i));
         let log = self
             .wan
             .as_ref()
             .and_then(|w| w.hosts.iter().find(|w| w.name == spec.name))
             .map_or(&[][..], |w| &w.competing_log[..]);
-        upload_truth(spec, last, prev, log, t)
+        upload_truth(spec, last, log, t)
     }
 
     /// The upload meter's readings at `h` while a swarm was live, as
@@ -1565,8 +1564,8 @@ pub const NEAR_SATURATED: f64 = 0.8;
 /// within its rate limit; `None` with neither a site nor a limit, and 0
 /// over a window its link carries nothing for it (an outage): what its
 /// link could carry for it over the window ([`available`]) times its
-/// share ([`own_share`]) at its meter samples before `t`, `last` and
-/// `prev`, within its rate limit (QoS's, in vnic's bytes) in channel bytes
+/// share ([`own_share`]) as of `last`, its last meter sample asked for
+/// before `t`, within its rate limit (QoS's, in vnic's bytes) in channel bytes
 /// ([`channel_share`]).
 ///
 /// The live oracle (`STRIMS_SIM_KNOWN_UPLINK`) tells the node this as each
@@ -1575,7 +1574,6 @@ pub const NEAR_SATURATED: f64 = 0.8;
 pub(crate) fn upload_truth(
     spec: &crate::spec::HostSpec,
     last: Option<&crate::stats::MeterSample>,
-    prev: Option<&crate::stats::MeterSample>,
     competing: &[(strims_base::time::Duration, u64)],
     t: std::time::Duration,
 ) -> Option<u64> {
@@ -1584,7 +1582,7 @@ pub(crate) fn upload_truth(
     let site = spec.site.map(|_| {
         let avail = available(spec, competing, from, to) as f64 * TRUTH_WINDOW.as_secs_f64()
             / (to - from).as_secs_f64().max(1e-9);
-        (avail * own_share(spec, last, prev)) as u64
+        (avail * own_share(spec, last)) as u64
     });
     // The rate limit is QoS's, in what vnic hands the transports.
     let limit = spec.uplink.map(|l| (l as f64 * channel_share(last)) as u64);
@@ -1679,16 +1677,12 @@ pub(crate) fn competing_before(
 }
 
 /// The share of what host `spec`'s link charges it that is channel bytes,
-/// the meter's units, at its meter samples `last` and `prev`
-/// ([`channel_share`] times [`transport_share`]): a property of its link,
-/// its transports and vnic, taken where its link was near saturation
-/// ([`NEAR_SATURATED`]), whatever the host was sending since.
-pub fn own_share(
-    spec: &crate::spec::HostSpec,
-    last: Option<&crate::stats::MeterSample>,
-    prev: Option<&crate::stats::MeterSample>,
-) -> f64 {
-    channel_share(last) * transport_share(spec, last, prev)
+/// the meter's units, as of its meter sample `last` ([`channel_share`]
+/// times [`transport_share`]): a property of its link, its transports and
+/// vnic, taken over its windows near saturation ([`NEAR_SATURATED`]),
+/// whatever the host was sending since.
+pub fn own_share(spec: &crate::spec::HostSpec, last: Option<&crate::stats::MeterSample>) -> f64 {
+    channel_share(last) * transport_share(spec, last)
 }
 
 /// The share of what a host handed vnic that was its runner's channel
@@ -1701,28 +1695,23 @@ pub fn channel_share(last: Option<&crate::stats::MeterSample>) -> f64 {
         .map_or(1.0, |g| (g.data as f64 / g.vnic as f64).min(1.0))
 }
 
-/// The share of what host `spec`'s link charged its messages that its
-/// transports took (vnic's bytes), counted as each message went to the
-/// link: over the window ending at `last`, from `prev`, when it was near
-/// saturation; else over its near-saturated windows so far; else a full
-/// message's ([`full_share`]). At most 1.
+/// The share of what host `spec`'s link charged its messages' first
+/// transmissions that its transports took (vnic's bytes), counted as each
+/// message went to the link, over its near-saturated windows up to `last`
+/// ([`Gated`](crate::stats::Gated): its resends left out, which a full
+/// queue's congestion makes, not the link), else a full message's
+/// ([`full_share`]). At most 1. It is cumulative: one window's share would
+/// take that window's drops in.
 pub fn transport_share(
     spec: &crate::spec::HostSpec,
     last: Option<&crate::stats::MeterSample>,
-    prev: Option<&crate::stats::MeterSample>,
 ) -> f64 {
-    let ratio = |a: u64, l: u64| (a > 0 && l > 0).then(|| (a as f64 / l as f64).min(1.0));
-    if let (Some(k), Some(j)) = (last, prev)
-        && k.gated.window
-        && let Some(r) = ratio(
-            k.app_bytes.saturating_sub(j.app_bytes),
-            k.link_bytes.saturating_sub(j.link_bytes),
+    last.map(|k| k.gated)
+        .filter(|g| g.app > 0 && g.link > 0)
+        .map_or_else(
+            || full_share(spec),
+            |g| (g.app as f64 / g.link as f64).min(1.0),
         )
-    {
-        return r;
-    }
-    last.and_then(|k| ratio(k.gated.app, k.gated.link))
-        .unwrap_or_else(|| full_share(spec))
 }
 
 /// What a full message of host `spec`'s transport carries of its link's

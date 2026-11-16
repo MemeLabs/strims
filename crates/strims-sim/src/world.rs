@@ -1387,8 +1387,9 @@ impl World {
             }
             m.bins.clear();
             self.observe_bins(h, &m);
-            let (link_bytes, app_bytes) =
-                wan.map_or((0, 0), |s| (s.own_up_bytes(h), s.own_app_bytes(h)));
+            let (link_bytes, app_bytes, resent_bytes) = wan.map_or((0, 0, 0), |s| {
+                (s.own_up_bytes(h), s.own_app_bytes(h), s.own_resent_bytes(h))
+            });
             let log = wan.map_or(&[][..], |s| s.competing_log(h));
             let live: Vec<bool> = self
                 .spec
@@ -1412,6 +1413,7 @@ impl World {
                     self.clock_at(h, at),
                     link_bytes,
                     app_bytes,
+                    resent_bytes,
                     hostile,
                 );
                 if let Some(spec) = self.spec.hosts.get(h) {
@@ -1432,11 +1434,8 @@ impl World {
         let wan = self.wan.lock();
         let log = wan.as_ref().map_or(&[][..], |s| s.competing_log(h));
         let st = self.st.borrow();
-        let (last, prev) = st
-            .hosts
-            .get(h)
-            .map_or((None, None), |hs| hs.stats.last_meter());
-        crate::report::upload_truth(spec, last, prev, log, sim_now())
+        let last = st.hosts.get(h).and_then(|hs| hs.stats.last_meter());
+        crate::report::upload_truth(spec, last, log, sim_now())
     }
 
     /// The live oracle as a stats sample of host `h` is asked for: the
@@ -1505,9 +1504,9 @@ impl World {
         let inv = &self.spec.invariants;
         let mut found = Vec::new();
         let wan = self.wan.lock();
-        let (link_bytes, app_bytes) = wan
-            .as_ref()
-            .map_or((0, 0), |s| (s.own_up_bytes(h), s.own_app_bytes(h)));
+        let (link_bytes, app_bytes, resent_bytes) = wan.as_ref().map_or((0, 0, 0), |s| {
+            (s.own_up_bytes(h), s.own_app_bytes(h), s.own_resent_bytes(h))
+        });
         let log = wan.as_ref().map_or(&[][..], |s| s.competing_log(h));
         self.record(|st| {
             let ids = &st.ids;
@@ -1532,6 +1531,7 @@ impl World {
                 self.clock_at(h, now),
                 link_bytes,
                 app_bytes,
+                resent_bytes,
                 hostile,
             );
             if let Some(spec) = self.spec.hosts.get(h) {

@@ -918,6 +918,18 @@ impl Scheduler {
             let t = self.net.send(at, from, to, wire, 1, Carrier::Datagram);
             let app: usize = packet.iter().filter(|c| !c.resend).map(|c| c.len).sum();
             self.sent(from, app);
+            // The resent chunks' share of what the link charged the packet.
+            let size = |resend: bool| -> usize {
+                packet
+                    .iter()
+                    .filter(|c| c.resend == resend)
+                    .map(|c| chunk_size(c.len))
+                    .sum()
+            };
+            let (old, new) = (size(true), size(false));
+            if old > 0 {
+                self.resent(from, charged * old / (old + new));
+            }
             Some(t)
         };
         if let Some(sack) = sack {

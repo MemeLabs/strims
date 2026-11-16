@@ -3758,15 +3758,14 @@ fn truth_run(name: &str, c: &Calibration, told: bool) -> Report {
     reports.remove(0)
 }
 
-/// The seed's share of its link at `t`, from its last two meter samples
-/// before then (`own_share`).
+/// The seed's share of its link at `t`, as of its last meter sample asked
+/// for before then (`own_share`).
 fn seed_share(r: &Report, t: Duration) -> f64 {
     let m = &r.hosts[0].runner.meter;
     let k = m.partition_point(|x| x.asked < t);
     strims_sim::report::own_share(
         &r.scenario.hosts[0],
         k.checked_sub(1).and_then(|i| m.get(i)),
-        k.checked_sub(2).and_then(|i| m.get(i)),
     )
 }
 
@@ -3810,12 +3809,13 @@ fn the_meters_truth_is_what_the_link_carries_in_data_bytes() {
 }
 
 /// A saturated seed's share of its link, measured where its link carried
-/// its messages over its near-saturated windows, is at most a full
-/// message's as the framing and TCP's headers give it (`full_share`), and
-/// within 15 % of it: under it by the segments a full queue made it
-/// resend and the messages short of two packets (0.892 against 0.956 on
-/// an Ethernet frame, 0.761 against 0.828 in ADSL's cells); and before its
-/// first such window the truth takes the full message's.
+/// its messages' first transmissions over its near-saturated windows, is
+/// at most a full message's as the framing and TCP's headers give it
+/// (`full_share`) and within 2 % of it, under it by its messages short of
+/// two packets (0.950 against 0.956 on an Ethernet frame, 0.818 against
+/// 0.828 in ADSL's cells; with its resends after a full queue's drops in,
+/// 0.893 and 0.764); and before its first such window the truth takes the
+/// full message's.
 #[test]
 fn a_saturated_links_share_is_a_full_messages() {
     for link in ["tbf", "dsl"] {
@@ -3831,18 +3831,14 @@ fn a_saturated_links_share_is_a_full_messages() {
         assert!(windows >= 5, "{link}: {windows} near-saturated windows");
         let measured = g.app as f64 / g.link as f64;
         assert!(
-            measured <= full * 1.001 && measured >= full * 0.85,
+            measured <= full * 1.001 && measured >= full * 0.98,
             "{link}: measured {measured}, full {full}"
         );
         let first = meter.iter().position(|m| m.gated.link > 0).unwrap();
         let before = &meter[..first];
         assert!(!before.is_empty());
         let k = before.len();
-        let share = strims_sim::report::transport_share(
-            spec,
-            before.get(k - 1),
-            k.checked_sub(2).and_then(|i| before.get(i)),
-        );
+        let share = strims_sim::report::transport_share(spec, before.get(k - 1));
         assert_eq!(share, full, "{link}");
     }
 }

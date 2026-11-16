@@ -413,6 +413,9 @@ pub struct MeterSample {
     /// (vnic's bytes, counted as each message went to the link), and what
     /// it handed vnic, every incarnation's (`DriverMetrics::bytes_written`).
     pub app_bytes: u64,
+    /// What its link charged its transports' resends so far (the window
+    /// model's), which its share leaves out.
+    pub resent_bytes: u64,
     pub vnic_bytes: u64,
     /// Its near-saturated windows so far ([`Gated`]).
     pub gated: Gated,
@@ -421,7 +424,8 @@ pub struct MeterSample {
 /// A host's near-saturated sample windows up to a meter sample: those
 /// whose own link charge was at least [`crate::report::NEAR_SATURATED`] of
 /// what its link could carry for it, summed (the transports' bytes, the
-/// link's, the runner's channel payload bytes and vnic's), and whether the
+/// link's charge of its first transmissions, its resends left out, the
+/// runner's channel payload bytes and vnic's), and whether the
 /// window ending at the sample was one. The meter's truth takes its share
 /// from them ([`crate::report::own_share`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -694,6 +698,7 @@ impl HostStats {
         clock: Time,
         link_bytes: u64,
         app_bytes: u64,
+        resent_bytes: u64,
         hostile: impl Fn(&HostId) -> bool,
     ) -> SampleGauges {
         let index = |k: SwarmKey| swarms.iter().position(|s| *s == Some(k));
@@ -806,6 +811,7 @@ impl HostStats {
                     link_bytes,
                     told,
                     app_bytes,
+                    resent_bytes,
                     vnic_bytes,
                     bytes_written: m.driver.bytes_written,
                     rate: push.upload_rate,
@@ -909,16 +915,10 @@ impl HostStats {
         g
     }
 
-    /// The last two meter samples, every incarnation's: what the meter's
-    /// truth takes its data share from ([`crate::report::upload_truth`]).
-    pub fn last_meter(&self) -> (Option<&MeterSample>, Option<&MeterSample>) {
-        let mut it = self
-            .meter
-            .iter()
-            .rev()
-            .chain(self.totals.meter.iter().rev());
-        let last = it.next();
-        (last, it.next())
+    /// The last meter sample, every incarnation's: what the meter's truth
+    /// takes its share from (`crate::report::upload_truth`).
+    pub fn last_meter(&self) -> Option<&MeterSample> {
+        self.meter.last().or_else(|| self.totals.meter.last())
     }
 
     /// Marks the meter sample asked for at `t`, if one was, as ending a
@@ -942,6 +942,7 @@ impl HostStats {
                 (
                     p.asked,
                     p.link_bytes,
+                    p.resent_bytes,
                     p.app_bytes,
                     p.data_bytes,
                     p.vnic_bytes,
@@ -951,7 +952,7 @@ impl HostStats {
         let Some(k) = self.meter.last_mut().filter(|m| m.asked == t) else {
             return;
         };
-        let Some((at, link, app, data, vnic, mut g)) = prev else {
+        let Some((at, link, resent, app, data, vnic, mut g)) = prev else {
             return;
         };
         let charged = k.link_bytes.saturating_sub(link);
@@ -960,7 +961,7 @@ impl HostStats {
             && charged as f64 >= crate::report::NEAR_SATURATED * available(at, t) as f64;
         if g.window {
             g.app += k.app_bytes.saturating_sub(app);
-            g.link += charged;
+            g.link += charged.saturating_sub(k.resent_bytes.saturating_sub(resent));
             g.data += k.data_bytes.saturating_sub(data);
             g.vnic += k.vnic_bytes.saturating_sub(vnic);
         }
