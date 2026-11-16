@@ -20,7 +20,8 @@ The sets, in order (check runs them all, and exits 1 if any fails):
                 of its fixtures, as the Python scoring printed them
   simdb_test    hack/sim-db/simdb_test.py
   engine        simlab's own tests (test_*.py here) but test_catalog's,
-                under uv
+                under uv, after a build of strims-sim's testbed_tables
+                (test_testbed reads it)
   catalog       test_catalog.py, the catalog's index of scratch caches,
                 under uv
   scorecards    hack/sim-suite/golden.py check: the latest farm
@@ -168,6 +169,13 @@ def run_set(name):
         return script([sys.executable, str(HACK / "sim-suite" / "suite_test.py")], name)
     if name == "simdb_test":
         return script([sys.executable, str(HACK / "sim-db" / "simdb_test.py")], name)
+    if name == "engine":
+        # test_testbed reads tier runs' knobs through strims-sim's
+        # testbed_tables, this checkout's release build: built first (an
+        # incremental build), so the set tests it rather than skips it.
+        if not script(["cargo", "build", "--release", "--quiet", "-p", "strims-sim", "--example", "testbed_tables"],
+                      "engine-build"):
+            return False
     if name in ("engine", "catalog"):
         return script([*UV, "-m", "unittest", *unit_tests(name)], name, env=unit_env())
     if name == "scorecards":

@@ -89,29 +89,45 @@ class Cells(unittest.TestCase):
     def test_the_tiers_runs_name_their_cells_through_knobs_of(self):
         # run.sh's settings for each tier cell (run_env), read by
         # testbed_tables --knobs (strims-sim's knobs_of) as run.sh's out
-        # dir holds them, name that cell's testbed variant.
+        # dir holds them, its nodes' tc logs in it, name that cell's testbed
+        # variant where run.sh stamped them from its clock (STAMPS=clock);
+        # its date's stamps (STAMPS=date, or none named), or a clock's that
+        # go back, key the run apart.
         if not testbed.BINARY.exists():
             self.skipTest(f"no {testbed.BINARY}: cargo build --release -p strims-sim --example testbed_tables")
         matrices = HACK / "sim-farm" / "matrices"
-        envs, want = [], []
+        tc = ("{t} qdisc tbf 10: root refcnt 2 rate 10Mbit burst 3028b lat 99ms  Sent 0 bytes 0 pkt (dropped 0, "
+              "overlimits 0 requeues 0)  backlog 0b 0p requeues 0\n")
+        cases = {"clock": ("STAMPS=clock\n", [1000, 1100, 1200]), "date": ("STAMPS=date\n", [1000, 1100, 1200]),
+                 "none": ("", [1000, 1100, 1200]), "back": ("STAMPS=clock\n", [1000, 1481, 1100])}
+        got = {c: [] for c in cases}
+        want = []
         with tempfile.TemporaryDirectory() as d:
             for kind, cell in testbed.tier_cells():
                 settings, knobs, topology = testbed.run_env(kind, cell)
-                out = Path(d) / f"{kind}-{cell['name']}"
-                out.mkdir()
                 viewers = int(settings["VIEWERS"])
-                (out / "settings").write_text("".join(f"{k}={v}\n" for k, v in settings.items())
-                                              + "QDISC=clsact>ifb-netem>root-class\n")
-                links = ((matrices / "topologies" / topology).read_text() if topology else
-                         "".join(f"link 0 {v}\n" for v in range(1, viewers + 1)))
-                (out / "topology").write_text(links)
-                up = lambda i: settings["SEED_UP_MBIT"] if i == 0 else settings.get("VIEWER_UP_MBIT", "20")
-                (out / "links").write_text("".join(f"node {i} tbf {up(i)} 10 100\n" for i in range(viewers + 1)))
-                p = subprocess.run([str(testbed.BINARY), "--knobs", str(out)], capture_output=True, text=True)
-                self.assertEqual(p.returncode, 0, f"{kind} {cell['name']}: {p.stderr}")
-                envs.append({**json.loads(p.stdout), **knobs})
                 want.append(f"{'robust' if kind == 'native' else 'browsers'}:{cell['name']}@root-class")
-        self.assertEqual(testbed.cells_of(envs), want)
+                for case, (stamps, ts) in cases.items():
+                    out = Path(d) / f"{kind}-{cell['name']}-{case}"
+                    out.mkdir()
+                    (out / "settings").write_text("".join(f"{k}={v}\n" for k, v in settings.items())
+                                                  + "QDISC=clsact>ifb-netem>root-class\n" + stamps)
+                    links = ((matrices / "topologies" / topology).read_text() if topology else
+                             "".join(f"link 0 {v}\n" for v in range(1, viewers + 1)))
+                    (out / "topology").write_text(links)
+                    up = lambda i: settings["SEED_UP_MBIT"] if i == 0 else settings.get("VIEWER_UP_MBIT", "20")
+                    (out / "links").write_text("".join(f"node {i} tbf {up(i)} 10 100\n" for i in range(viewers + 1)))
+                    for i in range(viewers + 1):
+                        (out / f"tc-{i}.log").write_text("".join(tc.format(t=1794800000000 + t) for t in ts))
+                    p = subprocess.run([str(testbed.BINARY), "--knobs", str(out)], capture_output=True, text=True)
+                    self.assertEqual(p.returncode, 0, f"{kind} {cell['name']} {case}: {p.stderr}")
+                    got[case].append({**json.loads(p.stdout), **knobs})
+        self.assertEqual(testbed.cells_of(got["clock"]), want)
+        for case in ("date", "none", "back"):
+            with self.subTest(case=case):
+                stamps = {e.get("TESTBED_STAMPS") for e in got[case]}
+                self.assertEqual(stamps, {"back" if case == "back" else "date"})
+                self.assertTrue(all(c.startswith("tb-") for c in testbed.cells_of(got[case])))
 
 
 class Joins(unittest.TestCase):

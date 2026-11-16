@@ -455,6 +455,20 @@ pub fn knobs_of(
         );
     }
     put("TESTBED_QDISC", qdisc_of(settings, dir)?);
+    // run.sh stamps its own logs (tc-<i>.log, ss-<i>.log, steps.log,
+    // compete.log) and reckons its steps' and competing uploads' waits from
+    // a clock its settings name (STAMPS). Before it named one it read
+    // uutils' `date +%s%3N`, which drops the nanoseconds' leading zeros: in
+    // a second's first 100 ms a stamp reads 90-900 ms late, and a wait
+    // reckoned from one fires as early. No reading repairs them, so a run
+    // that doesn't name the clock (STAMPS=clock), or whose stamps go back
+    // anyway, keys apart, its stamped columns as read: TESTBED_STAMPS
+    // pairs it with no cell.
+    match get("STAMPS") {
+        Some(STAMP_CLOCK) if late_stamps(dir) => put("TESTBED_STAMPS", "back".to_owned()),
+        Some(STAMP_CLOCK) => {}
+        other => put("TESTBED_STAMPS", other.unwrap_or("date").to_owned()),
+    }
     for (k, v) in settings {
         let twin = RECORDING.contains(&k.as_str())
             || TWIN_SETTINGS.contains(&k.as_str())
@@ -476,24 +490,6 @@ impl Run {
         let links = std::fs::read_to_string(dir.join("links")).ok();
         let mut knobs = knobs_of(&settings, &read("topology")?, links.as_deref(), dir)?;
         knobs.extend(extra.iter().map(|(k, v)| (k.clone(), v.clone())));
-        // run.sh stamps its own logs (tc-<i>.log, ss-<i>.log, steps.log,
-        // compete.log) and reckons its steps' and competing uploads' waits
-        // from a clock its settings name (STAMPS). Before it named one it
-        // read uutils' `date +%s%3N`, which drops the nanoseconds' leading
-        // zeros: in a second's first 100 ms a stamp reads 90-900 ms late,
-        // and a wait reckoned from one fires as early. No reading repairs
-        // them, so a run that doesn't name the clock (STAMPS=clock), or
-        // whose stamps go back anyway, keys apart, its stamped columns as
-        // read: TESTBED_STAMPS pairs it with no cell.
-        let stamps = settings.get("STAMPS").map(String::as_str);
-        if stamps != Some(STAMP_CLOCK) {
-            knobs.insert(
-                "TESTBED_STAMPS".to_owned(),
-                stamps.unwrap_or("date").to_owned(),
-            );
-        } else if late_stamps(dir) {
-            knobs.insert("TESTBED_STAMPS".to_owned(), "back".to_owned());
-        }
         // Each viewer's join (JOINS) is a draw of an arrivals profile where
         // the caller names it (STRIMS_SIM_ARRIVALS, as a tier matrix's
         // knobs do), which the twin draws its own of; else the joins
@@ -1766,7 +1762,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let star = "node 0 10.77.0.10:4000\nnode 1 10.77.0.11:4000\nnode 2 10.77.0.12:4000\nlink 0 1\nlink 0 2\n";
         let of = |text: &str, links: Option<&str>| knobs_of(&settings_of(text), star, links, &dir);
-        let base = "VIEWERS=2\nSECS=30\nQDISC=clsact>ifb-netem>root-class\n";
+        let base = "VIEWERS=2\nSECS=30\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\n";
         let k = of(base, None).unwrap();
         assert_eq!(k["TESTBED_QDISC"], "clsact>ifb-netem>root-class");
         assert!(
