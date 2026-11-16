@@ -2377,6 +2377,20 @@ def recheck_of(nav, fresh):
     return {"kind": nav["kind"], "overturned": fresh["kind"] != nav["kind"], "detail": detail}
 
 
+def never_reported(expected, reported):
+    """The captures a run set out to make (`expected`, each a story or a
+    mode's story as text) that none of its results reports, each said on
+    stderr: a worker that ended early took them, and the run fails (exit 2)
+    rather than pass without them."""
+    missing = sorted(set(expected) - set(reported))
+    if missing:
+        print(f"check: {len(missing)} of {len(set(expected))} captures never reported (a worker ended before them):",
+              file=sys.stderr)
+        for m in missing:
+            print(f"  {m}", file=sys.stderr)
+    return missing
+
+
 def leaves_state(r):
     """A compared story after which no tab's document takes the next story
     in place: one whose captures recorded errors (allowed ones too: React
@@ -2889,13 +2903,6 @@ def compare_main(args, exe, work):
                     retried.append(f"{side}: {error}")
                     print(f"check: {mode} {route}: {side}: {error}"
                           + ("; trying again in a fresh browser" if not n else ""), file=sys.stderr)
-                    browsers[slot].close()
-                    try:
-                        browsers[slot] = start_browser(new_browser, slot)
-                        browsers[slot].enable_capture()
-                    except (RuntimeError, CDPError, TimeoutError, OSError) as e:
-                        r["checker"] += f"; no fresh browser: {e}"
-                        return r
                 except Exception as e:
                     # The checker's own bug: its story fails, naming it, and
                     # the rest of its batch still runs.
@@ -2903,6 +2910,18 @@ def compare_main(args, exe, work):
                     print(f"check: {mode} {route}: {traceback.format_exc()}", file=sys.stderr)
                     return {"mode": mode, "route": route, "kind": "failing", "time": 0.0, "checker": error,
                             "shots": {"head": {"status": "FAIL", "error": error, "errors": [error], "png": None}}}
+                # A fresh browser for the next try (or the next story): one
+                # that won't come up fails this story, whatever it raised.
+                try:
+                    browsers[slot].close()
+                    browsers[slot] = start_browser(new_browser, slot)
+                    browsers[slot].enable_capture()
+                except Exception as e:
+                    r["checker"] += f"; no fresh browser: {type(e).__name__}: {e}"
+                    # One half set up (its capture never enabled) takes no
+                    # story: the next one's capture fails, and starts another.
+                    browsers[slot].close()
+                    return r
             return r
 
         def worker(slot):
@@ -2940,10 +2959,12 @@ def compare_main(args, exe, work):
         args.holes = manifest_holes(results, sc["identical"] if sc else set())
         report = write_report(report_dir, results, builds, modes, args, elapsed)
         print_compare(results, builds, modes, report, elapsed, mode_done, args)
+        missing = never_reported([f"{m} {r}" for m in modes for r in captured],
+                                 [f"{r['mode']} {r['route']}" for r in results])
         if args.summary:
             with open(args.summary, "a") as f:
                 f.write(summary_markdown(results, builds, modes, report, elapsed, args))
-        if any(r.get("checker") for r in results) or args.holes:
+        if any(r.get("checker") for r in results) or args.holes or missing:
             return 2
         if args.fail_on_diff and any(r["kind"] not in ("unchanged", "skipped", "identical") for r in results):
             return 1
@@ -3167,6 +3188,8 @@ def main(argv=None):
               f"(theme {args.theme}, device {args.device}); {time.monotonic() - started:.1f} s total, "
               f"{(sum(times) / len(times)) if times else 0:.1f} s a story on {jobs} browsers; {how}")
         print("\n".join(coverage_lines(index, args.files)))
+        if never_reported([s["route"] for s in stories], [r["route"] for r in results]):
+            return 2
         module_errors = [m for m in index["modules"] if m.get("error")]
         return 1 if failed or module_errors or catalog_failed(index, args) else 0
     finally:
