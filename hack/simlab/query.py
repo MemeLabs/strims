@@ -308,11 +308,15 @@ def suite_cells(names):
 def reused(srcs, stored):
     """The rows the farm runs of sources `srcs` count by reference: the
     lines of their matrices' indexes (the main checkout's
-    target/sim-farm/<matrix>/index.jsonl) whose row ran for another matrix
-    (`from`: the farm reused a row of an earlier run, or of a matrix of its
-    own that shares the job), as SQL of (k, src, matrix, arm), else None;
-    and the sources holding those rows. A run's matrices are its state's
-    list, and the cells its rows in `srcs` were `stored` under."""
+    target/sim-farm/<matrix>/index.jsonl) whose row ran for another job
+    (`from` names the matrix of the job that ran it: an earlier run's, a
+    matrix of its own that shares the job, or, for another arm of the
+    matrix whose binary is the same bytes, the matrix itself, whose flush
+    stores the row under the arm that ran it), as SQL of (k, src, matrix,
+    arm), else None; and the sources holding those rows. A run's matrices
+    are its state's list, and the cells its rows in `srcs` were `stored`
+    under. A line of a row stored under its own cell and arm adds nothing:
+    the views count a key once a cell and arm."""
     farm = store_host.main_checkout() / "target" / "sim-farm"
     names = set(stored)
     for run in {s.split("/")[1] for s in srcs if s.startswith("farm/")}:
@@ -325,7 +329,7 @@ def reused(srcs, stored):
     cols = struct({"key": "VARCHAR", "src": "VARCHAR", "arm": "VARCHAR", "from": "VARCHAR"})
     sql = (f"(SELECT key AS k, src, {matrix} AS matrix, arm FROM read_json({plist(paths)}, "
            f"format='newline_delimited', columns={cols}, filename=true, ignore_errors=true) "
-           f"WHERE src IS NOT NULL AND \"from\" <> {matrix})")
+           f"WHERE src IS NOT NULL AND \"from\" IS NOT NULL)")
     held = [r["src"] for r in records(f"SELECT DISTINCT src FROM {sql};")]
     return (sql if held else None), held
 
@@ -417,10 +421,11 @@ def views(sel, derived=True, fetch=True, say=None):
         # USING (k, src) does.
         f"CREATE VIEW canon AS SELECT k, src FROM runs_all LEFT JOIN {rank} USING (src) "
         "QUALIFY row_number() OVER (PARTITION BY k ORDER BY coalesce(rank, -1) DESC) = 1;",
-        # A key in two cells (a job the farm reused) counts in each, with the
-        # cell's own row (its copy in the key's source, else its top one).
+        # A key in two cells (a job the farm reused) or two arms of one (arms
+        # whose binaries are the same bytes) counts in each, with its own
+        # row (its copy in the key's source, else its top one).
         f"CREATE VIEW runs AS SELECT * FROM (SELECT r.* REPLACE (c.src AS src) FROM runs_all r JOIN canon c USING (k) "
-        f"LEFT JOIN {rank} ON h.src = r.src QUALIFY row_number() OVER (PARTITION BY r.k, r.cell "
+        f"LEFT JOIN {rank} ON h.src = r.src QUALIFY row_number() OVER (PARTITION BY r.k, r.cell, r.arm "
         "ORDER BY r.src = c.src DESC, coalesce(h.rank, -1) DESC) = 1)"
         + (" WHERE " + " AND ".join(where) if where else "") + ";",
     ]

@@ -121,13 +121,14 @@ or by the cell alone, and by the arm suite.py names them by (arm_label):
 a `--sets` run's (its index has a knob) by its set, the value its env
 gives the knob, else by its matrix's arm, a `--refs` name. A farm run's
 cells hold every row it scored: also those the farm reused from other
-runs or matrices, by its matrices' indexes
+runs or matrices, and those of the arms whose binaries are the same
+bytes, which it ran once for all of them, by its matrices' indexes
 (target/sim-farm/<matrix>/index.jsonl), whose sources' tables join the
-selection (pulled when the cache lacks them). A key's tables come from
-one of its sources whatever cells it counts in (its copies are one
-job's): the one holding the most of them, then the later flush (its
-manifest's `at`), then a farm flush's later seq, by number
-(source_ranks).
+selection (pulled when the cache lacks them). A key counts once in each
+cell and arm that holds it, and its tables come from one of its sources
+whatever cells and arms it counts in (its copies are one job's): the one
+holding the most of them, then the later flush (its manifest's `at`),
+then a farm flush's later seq, by number (source_ranks).
 
   sql      a query over the views (runs, scalars, the sims' tables, the
            derived ones, and macros.sql's), their keys and joins below

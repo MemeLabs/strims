@@ -219,6 +219,23 @@ class Selection(unittest.TestCase):
         self.assertEqual(self.cells([f"{B}*"])["star-7-5@sb0001"], {("kz", "main")})
         self.assertNotIn("halve-7-10@sa0001", self.cells([f"{B}*"]))
 
+    def test_arms_sharing_a_key_each_hold_its_row(self):
+        # Arm main of sa0001-00 shares k1 with arm fix there, their binaries
+        # the same bytes: the farm ran it once, under main, whose flush
+        # stores it, and fix's line names its own matrix (`from`).
+        index = simdb.main_checkout() / "target" / "sim-farm" / "sa0001-00" / "index.jsonl"
+        with index.open("a") as f:
+            f.write("\n" + json.dumps({"key": "k1", "arm": "fix", "src": f"{A}/i-1/0", "from": "sa0001-00",
+                                       "row": {}}) + "\n")
+        for src in (None, [f"{A}*"], [f"{A}/i-1/0"]):
+            got = self.select(src, ["star-3-5@sa0001"], "SELECT k, arm, count(*) AS n FROM runs GROUP BY ALL")
+            self.assertEqual({(r["k"], r["arm"]): r["n"] for r in got},
+                             {("k1", "main"): 1, ("k1", "fix"): 1, ("k2", "fix"): 1}, src)
+            v, _ = views(argparse.Namespace(src=src, cell=None, arm=["fix"], seed=None), derived=False)
+            got = simdb.duck(v + "\nSELECT k, src FROM runs WHERE cell = 'star-3-5@sa0001' ORDER BY k;")
+            self.assertEqual([r["k"] for r in got], ["k1", "k2"], src)
+            self.assertEqual(got[0]["src"], f"{A}/i-1/0", src)
+
     def test_rows_prints_a_key_in_each_of_its_cells(self):
         # kr and kq: B's rows, which A's run reused; rows() gives a key's
         # row once, whatever cells it counts in.
