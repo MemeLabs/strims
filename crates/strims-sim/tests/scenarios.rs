@@ -3169,6 +3169,9 @@ fn wan_super_peer_adaptive_uncapped() {
 ///   (`strims_wan::Bucket`, leaving at once), as `run.sh`'s `SEED_BURST`
 ///   and `VIEWER_BURST` set its tbf's; unset, none (the testbed's
 ///   defaults, 3028 each, are `twin.py run`'s).
+///   `STRIMS_SIM_CAL_SEED_PEAK_MBIT=<m>` and `STRIMS_SIM_CAL_VIEWER_PEAK_MBIT=<m>`
+///   send that bucket at that rate (`Bucket::peak`), as `run.sh`'s
+///   `SEED_PEAK_MBIT` and `VIEWER_PEAK_MBIT` set its tbf's peakrate.
 /// - `STRIMS_SIM_CAL_RATE_LIMIT_PCT=<pct>` gives every node a rate limit
 ///   (`NodeConfig::rate_limit`) of `pct` percent of its starting uplink,
 ///   so the node's QoS, not the access link, is where its peers' data
@@ -3217,6 +3220,9 @@ struct Calibration {
     /// The seed's and the viewers' uplink buckets, in bytes; `None`, none.
     seed_burst: Option<u64>,
     viewer_burst: Option<u64>,
+    /// The rate those buckets send at, in Mbit/s; `None`, at once.
+    seed_peak_mbit: Option<f64>,
+    viewer_peak_mbit: Option<f64>,
     /// Each node's testbed link spec (node 0 the seed), if any.
     links: Vec<Option<String>>,
 }
@@ -3272,6 +3278,8 @@ fn calibration_settings() -> Calibration {
         compete: pairs_knob("STRIMS_SIM_CAL_COMPETE"),
         seed_burst: knob("STRIMS_SIM_CAL_SEED_BURST"),
         viewer_burst: knob("STRIMS_SIM_CAL_VIEWER_BURST"),
+        seed_peak_mbit: knob("STRIMS_SIM_CAL_SEED_PEAK_MBIT"),
+        viewer_peak_mbit: knob("STRIMS_SIM_CAL_VIEWER_PEAK_MBIT"),
         links: {
             let each = knob::<String>("STRIMS_SIM_CAL_LINKS").unwrap_or_default();
             (0..=viewers)
@@ -3342,19 +3350,26 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
                 .unwrap_or_else(|e| panic!("{e}"))
         })
     };
-    let site = |i: usize, mbit: u64, burst: Option<u64>| {
+    let site = |i: usize, mbit: u64, burst: Option<u64>, peak: Option<f64>| {
+        let bucket = burst.map(|bytes| Bucket {
+            bytes,
+            peak: peak.map(|m| (m * 125_000.0) as u64),
+        });
         let st = Site::new(City::Chicago, Access::Cable)
             .with_up(mbit * 125_000)
-            .with_bucket(burst.map(Bucket::of));
+            .with_bucket(bucket);
         match link(i, mbit) {
-            Some(l) => l.site(st, burst.map(Bucket::of)),
+            Some(l) => l.site(st, bucket),
             None => st,
         }
     };
-    let seed_host = s.host_at("seed", site(0, c.seed_up_mbit, c.seed_burst));
+    let seed_host = s.host_at(
+        "seed",
+        site(0, c.seed_up_mbit, c.seed_burst, c.seed_peak_mbit),
+    );
     let vs: Vec<HostIx> = (0..c.viewers)
         .map(|i| {
-            let mut st = site(i + 1, c.viewer_up_mbit, c.viewer_burst);
+            let mut st = site(i + 1, c.viewer_up_mbit, c.viewer_burst, c.viewer_peak_mbit);
             if i == 0
                 && let Some(k) = c.slow_down_kbit
             {
@@ -3636,7 +3651,40 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
         compete: Vec::new(),
         seed_burst: None,
         viewer_burst: None,
+        seed_peak_mbit: None,
+        viewer_peak_mbit: None,
         links: Vec::new(),
+    }
+}
+
+/// The twin's buckets send at the testbed's peak (`run.sh`'s
+/// `SEED_PEAK_MBIT`), its link classes' too, as `testbed_bench --sim` does.
+#[test]
+fn the_twin_takes_the_testbeds_peak() {
+    let mut c = collapse_case(2, 10, 10);
+    c.seed_burst = Some(65_536);
+    c.seed_peak_mbit = Some(100.0);
+    c.viewer_burst = Some(3028);
+    c.links = vec![None, Some("tbf".into()), None];
+    c.viewer_peak_mbit = Some(40.0);
+    let s = calibration_star_scenario(1, &c);
+    let bucket = |h: usize| s.hosts[h].site.and_then(|st| st.profile.bucket);
+    assert_eq!(
+        bucket(0),
+        Some(Bucket {
+            bytes: 65_536,
+            peak: Some(12_500_000)
+        })
+    );
+    for v in [1, 2] {
+        assert_eq!(
+            bucket(v),
+            Some(Bucket {
+                bytes: 3028,
+                peak: Some(5_000_000)
+            }),
+            "viewer {v}"
+        );
     }
 }
 
