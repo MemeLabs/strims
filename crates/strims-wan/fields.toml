@@ -1258,7 +1258,7 @@ notes.strims-sim = "The streams pushed to each neighbour at the seed's stats sam
 [rows.seed_timeouts]
 sims = ["strims-sim"]
 type = "int"
-description = "The seed's requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts) (Report::timeouts)."
+description = "The seed's requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts) (Report::timeouts). On the HAVE-removal lines (decl, p4tf), which send speculative requests, it also counts those that expired or that their holder answered NOT_YET, so it differs there from main's."
 
 [rows.seed_chunk_share]
 sims = ["strims-sim"]
@@ -1483,13 +1483,13 @@ description = "The sweep test the job ran (strims-sim's tests/scenarios.rs name)
 sims = ["strims-sim"]
 type = "int"
 aggregate = "count"
-description = "The honest viewers' requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts): every host but the seed and the dishonest ones."
+description = "The honest viewers' requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts): every host but the seed and the dishonest ones. On the HAVE-removal lines (decl, p4tf), which send speculative requests, it also counts those that expired or that their holder answered NOT_YET, so it differs there from main's: its parts there are `request_timeouts` (main's count), `timeouts_spec_expired` and `timeouts_spec_not_yet`."
 
 [rows.timeouts_dishonest]
 sims = ["strims-sim"]
 type = "int"
 aggregate = "count"
-description = "With dishonest peers, their requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts) (the hostile hosts'); left out without any."
+description = "With dishonest peers, their requests that ended without data, over every incarnation: those that timed out unanswered (SwarmCounters::timeouts) (the hostile hosts'); left out without any. On the HAVE-removal lines (decl, p4tf), which send speculative requests, it also counts those that expired or that their holder answered NOT_YET, so it differs there from main's."
 
 [rows.timeouts_spec_expired]
 sims = []

@@ -20,7 +20,8 @@ crates/strims-wan/fields.toml.
                entry or table no sim writes names its lines, its writers
                or the sims whose older runs hold it, and a writer's names
                (only) start with _
-  Populations  the population rule over the rows each sim writes: a
+  Populations  the population rule over the rows each sim writes, and
+               each line (main's sims' rows and its own): a
                quantity split into _honest and _dishonest declares its
                aggregate, a count or sum is written as its parts alone and
                any other kind beside its unsuffixed all-peer value (of the
@@ -200,14 +201,29 @@ class Populations(unittest.TestCase):
     POP = re.compile(r"_(honest|dishonest)$")
 
     def written(self):
-        """{sim: {name: its entry's aggregate}} of the rows each sim writes."""
+        """{who: {name: its entry's aggregate}} of the rows each sim writes,
+        and each line: main's sims' rows, and the line's own (an entry's
+        `lines`, a family's values keyed by the line in its params)."""
         from simlab import spec
-        out = {s: {} for s in spec.SIMS}
+        out = {s: {} for s in (*spec.SIMS, *spec.LINES)}
         for key, e in vocab.fields()["rows"].items():
             for s in e["sims"]:
                 for n in vocab.expand(key, e, s):
                     out[s][n] = e.get("aggregate")
+                    for line in spec.LINES:
+                        out[line][n] = e.get("aggregate")
+            for line in spec.LINES:
+                if line in e.get("lines", []) or e["sims"]:
+                    for n in vocab.expand(key, e, line):
+                        out[line][n] = e.get("aggregate")
         return out
+
+    def test_a_line_is_held_to_it_with_mains_rows(self):
+        w = self.written()
+        self.assertIn("timeouts_honest", w["decl"])
+        self.assertIn("timeouts_spec_expired", w["decl"])
+        self.assertNotIn("timeouts_spec_expired", w["strims-sim"])
+        self.assertNotIn("timeouts_spec_expired", w["attackers"])
 
     def test_a_split_quantity_is_its_parts_or_beside_its_whole(self):
         from simlab import spec

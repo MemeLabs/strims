@@ -947,7 +947,9 @@ pub(crate) enum RowInt {
     SeedRiseP99Ms,
     /// The seed's requests that ended without data, over every incarnation:
     /// those that timed out unanswered (SwarmCounters::timeouts)
-    /// (Report::timeouts).
+    /// (Report::timeouts). On the HAVE-removal lines (decl, p4tf), which send
+    /// speculative requests, it also counts those that expired or that their
+    /// holder answered NOT_YET, so it differs there from main's.
     SeedTimeouts,
     /// The scenario's send buffer's uplink queue, in ms
     /// (STRIMS_SIM_SEND_BUFFER, WAN mode); 0 without one.
@@ -1075,11 +1077,18 @@ pub(crate) enum RowInt {
     SwitchesDown,
     /// The honest viewers' requests that ended without data, over every
     /// incarnation: those that timed out unanswered (SwarmCounters::timeouts):
-    /// every host but the seed and the dishonest ones.
+    /// every host but the seed and the dishonest ones. On the HAVE-removal
+    /// lines (decl, p4tf), which send speculative requests, it also counts
+    /// those that expired or that their holder answered NOT_YET, so it differs
+    /// there from main's: its parts there are `request_timeouts` (main's
+    /// count), `timeouts_spec_expired` and `timeouts_spec_not_yet`.
     TimeoutsHonest,
     /// With dishonest peers, their requests that ended without data, over every
     /// incarnation: those that timed out unanswered (SwarmCounters::timeouts)
-    /// (the hostile hosts'); left out without any.
+    /// (the hostile hosts'); left out without any. On the HAVE-removal lines
+    /// (decl, p4tf), which send speculative requests, it also counts those that
+    /// expired or that their holder answered NOT_YET, so it differs there from
+    /// main's.
     TimeoutsDishonest,
     /// A media swarm's chunks per unit; left out without media.
     Unit,

@@ -119,6 +119,7 @@ name = "timeouts"
 sql = "r.timeouts_honest"
 better = "lower"
 score = { kind = "ratio", tie = 0.1 }
+note = "A HAVE-removal line's (decl, p4tf) against main's compares unlike counts: the line's timeouts_honest counts its speculative requests that expired or were answered NOT_YET too; request_timeouts is the like-for-like count."
 
 [[scored]]
 name = "request_timeouts"
