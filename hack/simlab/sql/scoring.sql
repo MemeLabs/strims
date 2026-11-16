@@ -811,9 +811,12 @@ CREATE OR REPLACE MACRO seed_children_of(jobs) AS TABLE
 -- run's), judged (published at least @{delay_max_ms} ms, the latency
 -- budget's most, before its run's end: every other chunk, held or not,
 -- is censored), late (never held, or held more than its run's interval
--- (one publication interval of its stream) after its publication) and,
--- for a judged late chunk of a run with parents rows (NULL for the
--- others), the seed's children of its stream at its publication
+-- (one publication interval of its stream) after its publication; NULL
+-- for a held chunk of a run whose interval is unknown, each stream
+-- published at one ms: neither late nor on time) and, for a judged late
+-- chunk of a run with parents rows (NULL for the others, a chunk whose
+-- late is NULL among them), the seed's children of its stream at its
+-- publication
 -- (seed_children_in's, no dishonest viewer): children (how many),
 -- dishonest_children (how many dishonest viewers were subscribed to the
 -- seed on its stream then, seed_subscriptions_in's),
@@ -847,7 +850,9 @@ CREATE OR REPLACE MACRO coverage_chunks_in(runs) AS TABLE
                     WHEN dp.node IS NOT NULL THEN 'dishonest' WHEN f.h.peer >= 0 THEN 'peer' ELSE 'unnamed' END
                    AS source,
                r.interval_ms, p.pub_ms + @{delay_max_ms} <= r.end_ms AS judged,
-               f.h IS NULL OR f.h.t_ms - p.pub_ms > r.interval_ms AS late, r.parents_rows > 0 AS parented
+               CASE WHEN f.h IS NULL THEN true WHEN r.interval_ms IS NULL THEN NULL
+                    ELSE f.h.t_ms - p.pub_ms > r.interval_ms END AS late,
+               r.parents_rows > 0 AS parented
         FROM cv_pub p JOIN cv_r r USING (k, src) LEFT JOIN cv_first f USING (k, src, seq)
         LEFT JOIN cv_dishonest dp ON dp.k = p.k AND dp.src = p.src AND dp.node = f.h.peer
         LEFT JOIN verdict_seconds v ON v.k = p.k AND v.src = p.src AND v.sec = p.pub_ms // 1000),
@@ -857,7 +862,7 @@ CREATE OR REPLACE MACRO coverage_chunks_in(runs) AS TABLE
         SELECT c.k, c.src, c.seq, s.node FROM cv_chunks_of c
         JOIN cv_subs s ON s.k = c.k AND s.src = c.src AND s.stream = c.stream AND s.open_ms <= c.pub_ms
                        AND c.pub_ms < s.close_ms
-        WHERE c.judged AND c.late),
+        WHERE c.judged AND c.late IS TRUE),
     cv_kid_holds AS (
         SELECT x.k, x.src, x.node, x.seq,
                arg_min({'how': x.how, 'peer': x.peer, 'released_ms': x.released_ms}, x.t_ms) AS h
@@ -871,17 +876,18 @@ CREATE OR REPLACE MACRO coverage_chunks_in(runs) AS TABLE
         SELECT c.k, c.src, c.seq, count(*) AS n FROM cv_chunks_of c
         JOIN cv_dishonest_subs s ON s.k = c.k AND s.src = c.src AND s.stream = c.stream AND s.open_ms <= c.pub_ms
                                  AND c.pub_ms < s.close_ms
-        WHERE c.judged AND c.late GROUP BY ALL),
+        WHERE c.judged AND c.late IS TRUE GROUP BY ALL),
     cv_ended AS (
         SELECT k, src, stream, close_ms, end_reason FROM cv_subs WHERE end_reason IS NOT NULL)
-    SELECT c.* EXCLUDE (parented),
-           CASE WHEN c.judged AND c.late AND c.parented THEN coalesce(d.children, 0) END AS children,
-           CASE WHEN c.judged AND c.late AND c.parented THEN coalesce(b.n, 0) END AS dishonest_children,
-           CASE WHEN NOT (c.judged AND c.late AND c.parented) THEN NULL WHEN d.children IS NULL THEN 'no_seed_child'
+    SELECT c.* EXCLUDE (parented, classed),
+           CASE WHEN c.classed THEN coalesce(d.children, 0) END AS children,
+           CASE WHEN c.classed THEN coalesce(b.n, 0) END AS dishonest_children,
+           CASE WHEN NOT c.classed THEN NULL WHEN d.children IS NULL THEN 'no_seed_child'
                 WHEN d.released THEN 'released' WHEN d.pushed THEN 'pushed_late'
                 WHEN d.never THEN 'child_never' ELSE 'other' END AS class,
-           CASE WHEN c.judged AND c.late AND c.parented AND d.children IS NULL THEN e.end_reason END AS after
-    FROM cv_chunks_of c LEFT JOIN cv_kid d USING (k, src, seq)
+           CASE WHEN c.classed AND d.children IS NULL THEN e.end_reason END AS after
+    FROM (SELECT *, coalesce(judged AND late AND parented, false) AS classed FROM cv_chunks_of) c
+    LEFT JOIN cv_kid d USING (k, src, seq)
     LEFT JOIN cv_dishonest_kids b ON b.k = c.k AND b.src = c.src AND b.seq = c.seq
     ASOF LEFT JOIN cv_ended e ON e.k = c.k AND e.src = c.src AND e.stream = c.stream AND c.pub_ms >= e.close_ms;
 

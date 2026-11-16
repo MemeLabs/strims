@@ -17,11 +17,12 @@ in a cell of its own, star-5b; its seed 2 in star-5, as the first has
 it), a third invocation's (MIX) with arm mix's run, decl's seed 1
 with host 3 a dishonest viewer, a fourth's (LOG) with arm log's,
 mix's run with a seed log (seed_decisions, seed_sends), a few holds
-and push parents changed and a viewer's departure, and a fifth's (UNIT)
+and push parents changed and a viewer's departure, a fifth's (UNIT)
 with arm unit's, decl's seed 1 with its chunks published several of a
-stream at once, indexed by the catalog. Every run but unit's publishes
-the same chunks: two streams, a chunk of each every 250 ms from 20 s to
-39.75 s of a 40 s run, so the last 4 s are censored.
+stream at once, and a sixth's (ONCE) with arm once's, one publication of
+each stream, indexed by the catalog. Every run but unit's and once's
+publishes the same chunks: two streams, a chunk of each every 250 ms from
+20 s to 39.75 s of a 40 s run, so the last 4 s are censored.
 
   Prepare      the measure's per-run facts: the seed, the streams, the
                interval, the run's end, the phases, the censored chunks,
@@ -54,7 +55,9 @@ the same chunks: two streams, a chunk of each every 250 ms from 20 s to
   Units        arm unit's run, worked by hand: its interval the gap
                between a stream's publications, not between its chunks,
                and the late chunks and the latency section by it
-  Cli         simdb.py coverage-report's tables and JSON, as a caller runs
+  Once         arm once's run: no interval, so its held chunks are
+               neither late nor on time, and unclassed
+  Cli        simdb.py coverage-report's tables and JSON, as a caller runs
                it, the seed log's sections among them, and a section the
                catalog can't answer yet
 
@@ -115,6 +118,10 @@ DEPART_MS = 34600
 # its chunks published four at one ms (unit_pub) and unit_arrivals' holds.
 UNIT = "suite/wt/cv-unit"
 UNIT_SEL = forecast.Selection(exp=[UNIT], names={"strims-sim-unit": "unit"}, phases="all")
+# The source of arm once's run, apart from the others: decl's seed 1 with
+# one publication of each stream (once_arrivals), so no interval.
+ONCE = "suite/wt/cv-once"
+ONCE_SEL = forecast.Selection(exp=[ONCE], names={"strims-sim-once": "once"}, phases="all")
 # The bytes of a written push and of a written answer in the seed log.
 PUSH_BYTES, ANSWER_BYTES = 1000, 1500
 # The warning of runs without a seed log, their count left to format.
@@ -345,6 +352,15 @@ def unit_arrivals():
     return rows
 
 
+def once_arrivals():
+    """Arm once's holds: the seed (0) publishes chunks 0 and 1, one of each
+    stream, at 20 s and nothing after; host 1, the seed's child, holds
+    each 40 ms after by its push, and host 2, host 1's child, 80 ms after."""
+    rows = [(20000, SEED, -1, q, "own", -1, -1, None, 0) for q in (0, 1)]
+    return rows + [(20000 + after, node, node - 1, q, "push", node - 1, node - 1, None, 0)
+                   for q in (0, 1) for node, after in ((1, 40), (2, 80))]
+
+
 ASK_COLS = [("t_ms", "BIGINT"), ("node", "BIGINT"), ("honest", "BOOLEAN"), ("ask", "BIGINT"), ("round", "VARCHAR"),
             ("peer", "BIGINT"), ("peer_honest", "BOOLEAN"), ("picked", "BOOLEAN"), ("stream", "BIGINT"),
             ("seq", "BIGINT")]
@@ -428,6 +444,18 @@ def build(root):
     (d / "series_meta.json").write_text(json.dumps(meta | {"seed": SEED, "streams": 2}))
     sm.fold(db, [rec], UNIT)
     sm.export(db, root / "target" / "sim-db" / "cache" / UNIT)
+    db.unlink()
+    # Arm once's run: decl's seed 1 with once_arrivals' holds, its
+    # series_meta recording its seed and stream count.
+    d = root / "jobs" / "once-1"
+    rec = golden_cli.job_dir(d, (ONCE, "strims-sim-once:star-5:1", "strims-sim", "calibration_star", "star-5",
+                                 "strims-sim-once", 1, golden_cli.SS_ENV, golden_cli.T0, None))
+    golden_cli.write_table(d, "arrivals", ARRIVAL_COLS, once_arrivals())
+    golden_cli.write_table(d, "parents", PARENT_COLS, parents(1))
+    meta = json.loads((d / "series_meta.json").read_text())
+    (d / "series_meta.json").write_text(json.dumps(meta | {"seed": SEED, "streams": 2}))
+    sm.fold(db, [rec], ONCE)
+    sm.export(db, root / "target" / "sim-db" / "cache" / ONCE)
     db.unlink()
     label = "strims-sim-decl"
     golden_cli.relabel(root, RELABEL, [
@@ -1119,6 +1147,26 @@ class Units(Fixture):
         # Its stream count is recorded, it has parents, and neither section
         # reads the seed log: no warning.
         self.assertEqual(self.unit_warned, [])
+
+
+class Once(Fixture):
+    """Arm once's run (ONCE's source): one publication of each stream, so
+    its interval is unknown."""
+
+    def test_a_held_chunk_of_no_interval_is_neither_late_nor_classed(self):
+        with forecast.connected() as c:
+            coverage.prepare(c, ONCE_SEL)
+            jobs = c.execute("SELECT streams, interval_ms, parents_rows > 0 FROM cv_jobs").fetchall()
+            chunks = c.execute("SELECT seq, pub_ms, latency_ms, judged, late, children, class FROM cv_chunks "
+                               "ORDER BY seq").fetchall()
+        self.assertEqual(jobs, [(2, None, True)])
+        # Held 40 ms after, judged, with a seed child: late NULL, no class.
+        self.assertEqual(chunks, [(0, 20000, 40, True, None, None, None), (1, 20000, 40, True, None, None, None)])
+        got = {s: r.records() for s, r in coverage.report(ONCE_SEL, ["latency", "late"], warn=[].append).items()}
+        (r,) = got["latency"]
+        self.assertEqual((r["phase"], r["chunks"], r["held"], r["never"], r["late"], r["late_share"]),
+                         ("startup", 2, 2, 0, 0, None))
+        self.assertEqual(got["late"], [])
 
 
 class Cli(Fixture):

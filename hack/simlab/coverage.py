@@ -84,7 +84,9 @@ catalog's indexer had. A chunk at a time:
              down
   late       a judged chunk held more than its run's interval (one
              publication interval of its stream) after its publication,
-             or never
+             or never; for a held chunk of a run whose interval is
+             unknown (each stream published at one ms) neither: late is
+             NULL, the late share leaves it out, and it has no class
   phase      the run's phase of its publication second (verdict_seconds,
              the run's own windows: startup is the run's first 25 s, its
              seconds 0-24, so a chunk published at exactly 25 s is
