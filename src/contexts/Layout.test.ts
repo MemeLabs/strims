@@ -68,24 +68,51 @@ describe("chatOnScreen", () => {
     showChat,
   });
 
+  // chatOnScreen over a run of layouts, from the chat off screen.
+  const run = (layouts: ReturnType<typeof layout>[], portable = true) => {
+    let shown = false;
+    return layouts.map((l) => (shown = chatOnScreen(shown, l, portable)));
+  };
+
   it("on a portable device, follows the drawer, not the panel", () => {
     // The closed drawer's peek shows none of the chat, its Shell mounted.
-    assert.strictEqual(chatOnScreen(layout(false, true), true), false);
-    assert.strictEqual(chatOnScreen(layout(true, true), true), true);
+    assert.deepStrictEqual(run([layout(false, true)]), [false]);
+    assert.deepStrictEqual(run([layout(true, true)]), [true]);
   });
 
-  it("on a portable device, waits for the drawer to settle open", () => {
+  it("on a portable device, changes only once the drawer settles", () => {
     // A drag reports the drawer open past 10 px and closed short of them.
-    const drag = [true, false, true, false, true].map((open) =>
-      chatOnScreen(layout(open, true, true), true)
-    );
-    assert.deepStrictEqual(drag, [false, false, false, false, false]);
-    assert.strictEqual(chatOnScreen(layout(true, true, false), true), true);
+    const drag = (opens: boolean[]) => opens.map((open) => layout(open, true, true));
+    // Dragged open, back and forth: shown once it settles open.
+    assert.deepStrictEqual(run([...drag([true, false, true]), layout(true, true)]), [
+      false,
+      false,
+      false,
+      true,
+    ]);
+    // The open drawer grabbed (a tap's few px, a wobble) and let go: shown
+    // throughout.
+    const open = layout(true, true);
+    assert.deepStrictEqual(run([open, ...drag([true, false, true]), open]), [
+      true,
+      true,
+      true,
+      true,
+      true,
+    ]);
+    // Dragged closed: shown until it settles closed.
+    assert.deepStrictEqual(run([open, ...drag([true, false]), layout(false, true)]), [
+      true,
+      true,
+      true,
+      false,
+    ]);
   });
 
   it("elsewhere, follows the chat panel", () => {
-    assert.strictEqual(chatOnScreen(layout(false, true), false), true);
-    assert.strictEqual(chatOnScreen(layout(true, false), false), false);
+    assert.deepStrictEqual(run([layout(false, true), layout(true, false)], false), [true, false]);
+    // Its drawer state, a portable device's, is no matter.
+    assert.deepStrictEqual(run([layout(false, true, true)], false), [true]);
   });
 });
 

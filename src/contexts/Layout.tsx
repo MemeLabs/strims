@@ -119,14 +119,17 @@ export const createPreferenceSaver = (
   };
 };
 
-// Whether the user can see the layout's chat: on a portable device the
-// drawer settled open (closed, its peek shows none of the chat; a drag
-// reports it open past 10 px and closed short of them, back and forth,
-// until it settles), else the chat panel shown.
+// Whether the user can see the layout's chat, given whether they could
+// (`was`): on a portable device, the drawer as it last settled, open (closed,
+// its peek shows none of the chat), since a drag, a tap's few px among them,
+// reports it open past 10 px and closed short of them until it settles: the
+// open drawer grabbed neither hides the chat nor reads it again, nor does a
+// drag show it until it settles open. Elsewhere, the chat panel shown.
 export const chatOnScreen = (
+  was: boolean,
   { overlayState, showChat }: Pick<LayoutState, "overlayState" | "showChat">,
   portable: boolean
-): boolean => (portable ? overlayState.open && !overlayState.transitioning : showChat);
+): boolean => (portable ? (overlayState.transitioning ? was : overlayState.open) : showChat);
 
 export interface WithRootRefProps {
   rootRef: RefCallback<HTMLElement>;
@@ -162,3 +165,14 @@ export const withLayoutContext = <T,>(
 };
 
 export const useLayout = (): LayoutContextProps => useContext(LayoutContext);
+
+// chatOnScreen over the layout's renders.
+export const useChatOnScreen = (portable: boolean): boolean => {
+  const layout = useLayout();
+  const [shown, setShown] = useState(() => chatOnScreen(false, layout, portable));
+  const next = chatOnScreen(shown, layout, portable);
+  if (next !== shown) {
+    setShown(next);
+  }
+  return next;
+};
