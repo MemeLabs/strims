@@ -113,11 +113,12 @@ no text caret and no smooth scrolling (CAPTURE_SCRIPT); the time zone is
 UTC, the locale en-US and the page always focused; requests off the
 build's server (https://, a third-party embed's iframe among them) get
 stubs, a grey page for a document. The clock moves only while the
-network (workers' requests included) has been quiet for NET_QUIET_S, the
-document has nothing pending (a script or stylesheet it inserted with no
-load or error event yet, a fetch unsettled, an XHR not ended: the page
-can ask for more between the checker's look at the network and the
-step, and a chunk's loader times out on the clock), and no worker is new
+network (workers' requests and blob: loads included) has been quiet for
+NET_QUIET_S, the document has nothing pending (a script or stylesheet it
+inserted with no load or error event yet, a fetch unsettled or its
+response's body still being read, an XHR not ended: the page can ask for
+more between the checker's look at the network and the step, and a
+chunk's loader times out on the clock), and no worker is new
 or has just exchanged a message, after the page has laid out what
 changed: to the next timer until the root leaves
 "loading", then on to `--settle` ms of clock time after it (and while
@@ -496,7 +497,10 @@ class Page:
             self.net_at = time.monotonic()
             url = p.get("request", {}).get("url", "")
             self.requested.append(url)
-            if not url.startswith(("data:", "blob:")) and p["requestId"] not in self.stubbed:
+            # A blob: load (an image of bytes the page holds: a chat
+            # emote's, a network's icon) is in flight until it finishes as
+            # any other; a data: one sends no event.
+            if not url.startswith("data:") and p["requestId"] not in self.stubbed:
                 self.inflight[p["requestId"]] = {"url": url, "at": self.net_at, "answered": False}
                 if m.get("sessionId") in self.sessions:
                     self.sessions[m["sessionId"]].add(p["requestId"])
@@ -1108,9 +1112,11 @@ CAPTURE_SCRIPT = r"""(() => {
     el.addEventListener("load", end);
     el.addEventListener("error", end);
   };
-  // So are its fetches, until their promise settles, and its XHRs, until
-  // their loadend: the checker's word that the network is quiet comes
-  // before the step, and the page may ask for more in between.
+  // So are its fetches, until their promise settles, and their responses'
+  // bodies, read after it (it settles with the headers), until the read
+  // settles; and its XHRs, until their loadend: the checker's word that the
+  // network is quiet comes before the step, and the page may ask for more
+  // in between, or still be taking in what the network finished sending.
   const ask = (url) => {
     const key = {};
     try {
@@ -1135,6 +1141,24 @@ CAPTURE_SCRIPT = r"""(() => {
         throw e;
       }
     };
+  }
+  if (window.Response) {
+    for (const name of ["arrayBuffer", "blob", "bytes", "formData", "json", "text"]) {
+      const read = Response.prototype[name];
+      if (typeof read !== "function") continue;
+      Response.prototype[name] = function (...args) {
+        // A Response the page made itself has no URL.
+        const done = this.url ? ask(this.url) : ask("about:blank#a-response-made-in-the-page");
+        try {
+          const p = read.apply(this, args);
+          p.then(done, done);
+          return p;
+        } catch (e) {
+          done();
+          throw e;
+        }
+      };
+    }
   }
   const xhrOpen = XMLHttpRequest.prototype.open;
   const xhrSend = XMLHttpRequest.prototype.send;
