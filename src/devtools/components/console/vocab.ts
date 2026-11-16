@@ -190,7 +190,7 @@ export const KINDS = [
     peer: "the second group's first host; -1 for every link of the node",
     value: "the one-way latency",
     unit: "ms",
-    notes: { "strims-sim": "Between two groups of hosts (`Fault::Latency`), `node` and `peer` the groups' first hosts. In WAN mode it replaces the paths' base latency, and jitter, loss and bandwidth still apply." },
+    notes: { "strims-sim": "Between two groups of hosts both ways (`Fault::Latency`), or from the first group to the second (`Fault::LatencyFrom`, WAN mode only), which sets only that direction; `node` and `peer` the groups' first hosts. In WAN mode it replaces the paths' base latency, and jitter, loss and bandwidth still apply." },
     phase: "after_disruption",
     horizon_s: 15,
   },

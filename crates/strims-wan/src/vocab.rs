@@ -162,7 +162,7 @@ phase = "after_disruption"
 horizon_s = 15
 
 [kinds.latency.notes]
-strims-sim = "Between two groups of hosts (`Fault::Latency`), `node` and `peer` the groups' first hosts. In WAN mode it replaces the paths' base latency, and jitter, loss and bandwidth still apply."
+strims-sim = "Between two groups of hosts both ways (`Fault::Latency`), or from the first group to the second (`Fault::LatencyFrom`, WAN mode only), which sets only that direction; `node` and `peer` the groups' first hosts. In WAN mode it replaces the paths' base latency, and jitter, loss and bandwidth still apply."
 
 [kinds.pause_reading]
 class = "scenario"
@@ -719,9 +719,11 @@ pub enum Kind {
     /// - `node`: the host, or the first group's first host
     /// - `peer`: the second group's first host; -1 for every link of the node
     /// - `value`: the one-way latency, ms
-    /// - strims-sim: Between two groups of hosts (`Fault::Latency`), `node` and
-    ///   `peer` the groups' first hosts. In WAN mode it replaces the paths'
-    ///   base latency, and jitter, loss and bandwidth still apply.
+    /// - strims-sim: Between two groups of hosts both ways (`Fault::Latency`),
+    ///   or from the first group to the second (`Fault::LatencyFrom`, WAN mode
+    ///   only), which sets only that direction; `node` and `peer` the groups'
+    ///   first hosts. In WAN mode it replaces the paths' base latency, and
+    ///   jitter, loss and bandwidth still apply.
     Latency,
     /// The host's swarm readers stop reading (`Fault::PauseReading`).
     ///
