@@ -33,16 +33,6 @@
 //!
 //! A run's lines name the seed's stream start (`t_ms - rel_ms`), which every
 //! container's clock shares.
-//!
-//! run.sh stamps its own logs (tc-<i>.log, ss-<i>.log, steps.log,
-//! compete.log) with `date +%s%3N`, and uutils' date drops the
-//! nanoseconds' leading zeros: a stamp in a second's first 100 ms reads
-//! its nanoseconds' first three digits as its ms, 90-900 ms late. A
-//! sampler's stamps are read in file order, their true order, each one
-//! that could be such a stamp taken as the one it could stand for that
-//! fits its neighbours' spacing best ([`repaired_stamps`]); a step's or a
-//! competing upload's stamp as the one nearest its schedule
-//! ([`nearest_stamp`]).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -415,6 +405,18 @@ impl Run {
         let links = std::fs::read_to_string(dir.join("links")).ok();
         let mut knobs = knobs_of(&settings, &read("topology")?, links.as_deref(), dir)?;
         knobs.extend(extra.iter().map(|(k, v)| (k.clone(), v.clone())));
+        // run.sh stamped its own logs (tc-<i>.log, ss-<i>.log, steps.log,
+        // compete.log) with uutils' `date +%s%3N`, which drops the
+        // nanoseconds' leading zeros: in a second's first 100 ms a stamp
+        // reads 90-900 ms late, and a step's or a competing upload's wait,
+        // reckoned from one, fires as early. No reading repairs them (a
+        // 1 Hz sampler's late stamps come in runs that look even), so such
+        // a run keys apart, its stamped columns as read: TESTBED_STAMPS=date
+        // pairs it with no cell. A sampler's stamps going back tell it; a
+        // clock's never do.
+        if late_stamps(dir) {
+            knobs.insert("TESTBED_STAMPS".to_owned(), "date".to_owned());
+        }
         let viewers: usize = knobs
             .get("STRIMS_SIM_CAL_VIEWERS")
             .and_then(|v| v.parse().ok())
@@ -512,42 +514,15 @@ impl Run {
             *sw = x;
         }
         let seed = s.swarms.first().map_or(0, |sw| sw.seed);
-        // Each step's and competing upload's stamp, nearest its schedule:
-        // run.sh's stream start, plus the step's seconds and the seed's
-        // delay (the step is due as the seed's sends from then on reach
-        // its shaper), or the upload's seconds.
-        let delay: u64 = self
-            .settings
-            .get("SEED_DELAY_MS")
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(20);
-        let due: Vec<Option<u64>> = self
-            .settings
-            .get("SEED_UP_STEPS")
-            .map(|v| {
-                v.split_whitespace()
-                    .map(|p| {
-                        let at: f64 = p.split_once(':')?.0.parse().ok()?;
-                        Some(self.start_ms + (at * 1000.0) as u64 + delay)
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
         if let Some(text) = self.file("steps.log")
             && let Some(h) = s.hosts.get_mut(seed)
         {
             h.up_steps = text
                 .lines()
-                .enumerate()
-                .filter_map(|(i, l)| {
+                .filter_map(|l| {
                     let mut w = l.split_whitespace();
                     let ms: u64 = w.next()?.parse().ok()?;
                     let mbit: f64 = w.next()?.parse().ok()?;
-                    let ms = due
-                        .get(i)
-                        .copied()
-                        .flatten()
-                        .map_or(ms, |d| nearest_stamp(ms, d));
                     Some((self.at(ms)?, (mbit * 125_000.0) as u64))
                 })
                 .collect();
@@ -561,9 +536,8 @@ impl Run {
                 .filter_map(|l| {
                     let mut w = l.split_whitespace();
                     let ms: u64 = w.next()?.parse().ok()?;
-                    let at: f64 = w.next()?.parse().ok()?;
+                    let _at = w.next()?;
                     let secs: f64 = w.next()?.parse().ok()?;
-                    let ms = nearest_stamp(ms, self.start_ms + (at * 1000.0) as u64);
                     let start = self.at(ms)?;
                     Some(Competing {
                         start,
@@ -925,88 +899,43 @@ fn ss_rate(v: &str) -> Option<u64> {
     Some((n.parse::<f64>().ok()? * mult) as u64)
 }
 
-/// The Unix ms a run.sh stamp `ms` may stand for: itself, and where its ms
-/// is 100 or more, the stamps in its second's first 100 ms whose
-/// nanoseconds, printed without their leading zeros, begin with its ms'
-/// digits (10-99 ms: the first two of them; 1-9 ms: the first; 0 ms).
-fn stamp_candidates(ms: u64) -> Vec<u64> {
-    let (sec, m) = (ms - ms % 1000, ms % 1000);
-    if m < 100 {
-        return vec![ms];
-    }
-    vec![ms, sec + m / 10, sec + m / 100, sec]
-}
-
-/// A sampler's stamps (`raw`, Unix ms, in file order: their true order),
-/// repaired: each stamp that could be a late one ([`stamp_candidates`]) is
-/// the candidate whose gaps to its neighbours (the one before as repaired,
-/// the one after as read) stand nearest the stamps' median gap, between
-/// them, itself on a tie. A late stamp reads 90 ms or more past its truth,
-/// so it leaves one gap long and the next short by as much, which its true
-/// stamp evens out; a stamp after a stall has a long gap before it alone.
-pub(crate) fn repaired_stamps(raw: &[u64]) -> Vec<u64> {
-    let mut gaps: Vec<u64> = raw
-        .iter()
-        .zip(raw.iter().skip(1))
-        .map(|(a, b)| b.saturating_sub(*a))
-        .collect();
-    gaps.sort_unstable();
-    let Some(&period) = gaps.get(gaps.len() / 2) else {
-        return raw.to_vec();
+/// Whether a sampler's stamps in out dir `dir` go back (a tc-<i>.log
+/// line's first word, an ss-<i>.log `@` line's), as run.sh's uutils
+/// `date +%s%3N` stamps do in about a tenth of a second's samples.
+fn late_stamps(dir: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
     };
-    // How far a gap from a to b stands from the period.
-    let off = |a: u64, b: u64| (i128::from(b) - i128::from(a) - i128::from(period)).unsigned_abs();
-    let mut out: Vec<u64> = Vec::with_capacity(raw.len());
-    for (i, &ms) in raw.iter().enumerate() {
-        let prev = out.last().copied();
-        let next = raw.get(i + 1).copied();
-        let cost = |c: u64| -> Option<u128> {
-            if prev.is_some_and(|p| c < p) || next.is_some_and(|n| c > n) {
-                return None;
-            }
-            Some(prev.map_or(0, |p| off(p, c)) + next.map_or(0, |n| off(c, n)))
-        };
-        let mut best = (cost(ms), ms);
-        for c in stamp_candidates(ms).into_iter().skip(1) {
-            if let Some(x) = cost(c)
-                && best.0.is_none_or(|b| x < b)
-            {
-                best = (Some(x), c);
-            }
+    entries.flatten().any(|e| {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let ss = name.starts_with("ss-");
+        if !(name.ends_with(".log") && (ss || name.starts_with("tc-"))) {
+            return false;
         }
-        out.push(best.1);
-    }
-    out
-}
-
-/// A logged action's stamp `ms` as the candidate ([`stamp_candidates`])
-/// nearest `expected`, the time run.sh scheduled it for, itself on a tie.
-fn nearest_stamp(ms: u64, expected: u64) -> u64 {
-    stamp_candidates(ms)
-        .into_iter()
-        .min_by_key(|&c| c.abs_diff(expected))
-        .unwrap_or(ms)
+        let Ok(text) = std::fs::read_to_string(e.path()) else {
+            return false;
+        };
+        let stamps: Vec<u64> = text
+            .lines()
+            .filter_map(|l| {
+                let l = if ss { l.strip_prefix("@ ")? } else { l };
+                l.split_whitespace().next()?.parse().ok()
+            })
+            .collect();
+        stamps.windows(2).any(|w| w.get(1) < w.first())
+    })
 }
 
 /// A node's TCP sockets as its ss log has them (`ss -tin` once a
-/// second, each sample after a `@ <Unix ms>` line, its stamps
-/// [`repaired_stamps`]), peers by their index in the testbed's subnet, the
-/// sink's and the relay's none.
+/// second, each sample after a `@ <Unix ms>` line), peers by their index in
+/// the testbed's subnet, the sink's and the relay's none.
 fn sockets_of(run: &Run, node: HostIx, text: &str) -> Vec<SocketSample> {
-    let stamps: Vec<u64> = text
-        .lines()
-        .filter_map(|l| l.strip_prefix("@ ")?.trim().parse().ok())
-        .collect();
-    let mut stamps = repaired_stamps(&stamps).into_iter();
     let mut out = Vec::new();
     let mut at = None;
     let mut peer = None;
     for line in text.lines() {
         if let Some(ms) = line.strip_prefix("@ ") {
-            at = match ms.trim().parse::<u64>() {
-                Ok(_) => stamps.next().and_then(|ms| run.at(ms)),
-                Err(_) => None,
-            };
+            at = ms.trim().parse::<u64>().ok().and_then(|ms| run.at(ms));
             continue;
         }
         if !line.starts_with(char::is_whitespace) {
@@ -1282,14 +1211,7 @@ impl Network {
             // A node shaped by no tbf of handle 10: has no counters here.
             let tbf = run
                 .file(&format!("tc-{h}.log"))
-                .map(|t| {
-                    let mut s = t.lines().filter_map(tbf_of).collect::<Vec<_>>();
-                    let stamps = repaired_stamps(&s.iter().map(|x| x.0).collect::<Vec<_>>());
-                    for (x, ms) in s.iter_mut().zip(stamps) {
-                        x.0 = ms;
-                    }
-                    s
-                })
+                .map(|t| t.lines().filter_map(tbf_of).collect::<Vec<_>>())
                 .filter(|s| !s.is_empty());
             match tbf {
                 Some(samples) => {
@@ -1617,54 +1539,20 @@ mod tests {
     /// the bins, the parents; and its captures in the sim's wire bytes:
     /// IP lengths, the pure ACK apart, the competing upload's apart, the
     /// tbf's drops and backlog.
-    /// A second's start, Unix ms.
-    const SEC: u64 = 1_700_000_000_000;
-
     #[test]
-    fn a_late_stamp_stands_for_the_stamps_its_digits_could_begin() {
-        // 48 ms reads 481, 4 ms reads 4xx, 0 ms any.
-        assert_eq!(
-            stamp_candidates(SEC + 481),
-            [SEC + 481, SEC + 48, SEC + 4, SEC]
-        );
-        assert_eq!(stamp_candidates(SEC + 99), [SEC + 99]);
-    }
-
-    #[test]
-    fn a_samplers_late_stamps_take_their_true_ones() {
-        // tc's 10 Hz: true 60 reads 604, true 50 (the last) 503.
-        let truth: Vec<u64> = (0..12).map(|k| SEC + 840 + 110 * k).collect();
-        assert_eq!(truth[2], SEC + 1060);
-        assert_eq!(truth[11], SEC + 2050);
-        let mut raw = truth.clone();
-        raw[2] = SEC + 1604;
-        raw[11] = SEC + 2503;
-        assert_eq!(repaired_stamps(&raw), truth);
-        // ss's 1 Hz: true 39 reads 391.
-        let truth: Vec<u64> = (0..6).map(|k| SEC + 1003 * k + 30).collect();
-        assert_eq!(truth[3], SEC + 3039);
-        let mut raw = truth.clone();
-        raw[3] = SEC + 3391;
-        assert_eq!(repaired_stamps(&raw), truth);
-        assert_eq!(repaired_stamps(&truth), truth);
-        // A stall leaves the stamp after it as read.
-        let stalled = [
-            SEC + 100,
-            SEC + 210,
-            SEC + 320,
-            SEC + 930,
-            SEC + 1040,
-            SEC + 1150,
-        ];
-        assert_eq!(repaired_stamps(&stalled), stalled);
-    }
-
-    #[test]
-    fn a_logged_actions_stamp_is_the_one_nearest_its_schedule() {
-        // Due at 40, applied at 48, read 481.
-        assert_eq!(nearest_stamp(SEC + 481, SEC + 40), SEC + 48);
-        // Applied at 350, read so.
-        assert_eq!(nearest_stamp(SEC + 350, SEC + 300), SEC + 350);
+    fn a_run_whose_stamps_go_back_keys_apart() {
+        let dir = fixture("stamps");
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs.get("TESTBED_STAMPS"), None);
+        // uutils' date: 1.048 prints 1.481, after 1.000's sample.
+        let tc = std::fs::read_to_string(dir.join("tc-1.log")).unwrap();
+        let first = tc.lines().next().unwrap();
+        let (ms, rest) = first.split_once(' ').unwrap();
+        let ms: u64 = ms.parse().unwrap();
+        std::fs::write(dir.join("tc-1.log"), format!("{} {rest}\n{tc}", ms + 433)).unwrap();
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs["TESTBED_STAMPS"], "date");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
