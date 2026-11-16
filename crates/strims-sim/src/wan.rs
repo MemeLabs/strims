@@ -48,10 +48,11 @@
 //! testbed's bare TCP bench, `hack/testbed/bench.sh`, checks it):
 //!
 //! - Writes are cut to [`WINDOW_SEGMENT`](crate::spec::WINDOW_SEGMENT)s.
-//!   A segment waits in its connection's queue while the bytes in flight
-//!   (sent, neither acknowledged nor known lost) and it would pass the
-//!   window; a connection with nothing in flight sends one anyway. A
-//!   connection writing sends what its window allows at once.
+//!   A segment waits in its connection's queue while the packets in flight
+//!   (sent, neither acknowledged nor known lost, each an MSS whatever its
+//!   bytes) and its own would pass the window; a connection with nothing
+//!   in flight sends one anyway. A connection writing sends what its
+//!   window allows at once.
 //! - The access queues hold `uplink_queue` of transmission time, up and
 //!   down. An uplink queue takes the leading frames of a segment that
 //!   fit in what it has left and loses the rest, as a byte-limited FIFO
@@ -103,7 +104,7 @@
 //!   its reader drains a short packet outside pingpong mode, else on its
 //!   delayed acknowledgement's timer, unless data it sends back carries the
 //!   acknowledgement first; pure ones take their turn on its uplink. The
-//!   window grows by the bytes acknowledged in slow start, which HyStart's
+//!   window grows by the packets acknowledged in slow start, which HyStart's
 //!   delay test ends, and as CUBIC (RFC 8312) past it, only while it
 //!   limits the connection and outside a recovery; a connection idle for
 //!   longer than its retransmission timeout restarts from a smaller one.
@@ -347,11 +348,21 @@ enum Event {
 
 /// The window model's segment size, for the window's growth.
 pub(crate) const MSS: f64 = 1448.0;
+
+/// What `len` bytes of a segment take of a window: Linux counts the
+/// window, what is in flight and what an acknowledgement delivers in
+/// packets (`tcp_skb_pcount`), each an MSS whatever its bytes, so a
+/// segment's short last packet takes a whole one.
+fn window_bytes(len: usize) -> usize {
+    len.div_ceil(MSS as usize) * MSS as usize
+}
+
 /// One event of the window model's TCP, traced for the bench
 /// ([`Scheduler::trace_tcp`]): at `t`, on the connection from host `from`
 /// to host `to`, `what` ("tx", "rtx", "drop", "ack", "lost", "rec",
 /// "end", "rto") of segment `seq` of `len` bytes, and the sender's window,
-/// threshold and bytes in flight after it.
+/// threshold and what the window counts in flight (its packets an MSS
+/// each) after it.
 #[derive(Clone, Debug)]
 pub(crate) struct TcpEvent {
     pub t: Time,
@@ -411,8 +422,11 @@ pub const UP_COUNTERS: [&str; 11] = [
 struct Flow {
     cwnd: f64,
     ssthresh: f64,
-    /// Bytes sent, neither acknowledged nor known lost.
+    /// What the window counts in flight ([`window_bytes`]: a packet an
+    /// MSS), and the bytes that are, sent and neither acknowledged nor
+    /// known lost (the link's samples report them).
     in_flight: usize,
+    out_bytes: usize,
     /// Data records not yet sent whole, in write order, and how many of
     /// their bytes are unsent: Linux's write queue, whose unsent tail a
     /// write adds to, so writes the window holds back go out together.
@@ -490,7 +504,7 @@ struct Flow {
     loss_high: Option<u64>,
     /// Segments acknowledged past the cumulative ack point (SACKed), by
     /// sequence number. Bound: the segments in flight.
-    sacked: BTreeSet<u64>,
+    sacked: BTreeMap<u64, usize>,
     /// Segments whose leading frames the uplink queue took and whose tail
     /// it dropped, by sequence number ([`Tail`]). Bound: the segments in
     /// flight.
@@ -556,6 +570,7 @@ impl Default for Flow {
             cwnd: INIT_WINDOW,
             ssthresh: f64::INFINITY,
             in_flight: 0,
+            out_bytes: 0,
             unsent: VecDeque::new(),
             segments: BTreeMap::new(),
             resend: BTreeSet::new(),
@@ -587,7 +602,7 @@ impl Default for Flow {
             timed_out: Time::NIL,
             recovery: None,
             loss_high: None,
-            sacked: BTreeSet::new(),
+            sacked: BTreeMap::new(),
             tails: BTreeMap::new(),
         }
     }
@@ -738,7 +753,8 @@ impl Flow {
             self.epoch = (self.epoch + (t - self.last_send)).min(t);
         }
         self.last_send = t;
-        self.in_flight += len;
+        self.in_flight += window_bytes(len);
+        self.out_bytes += len;
         if self.round.is_nil() || t - self.round >= rtt {
             self.flight_last = self.flight_now;
             self.flight_now = 0;
@@ -770,6 +786,7 @@ impl Flow {
     /// a round trip), or follows the window Reno would have after as many
     /// smoothed round trips, whichever is larger.
     fn grow(&mut self, t: Time, len: usize, base: Duration, srtt: Duration) {
+        let len = window_bytes(len);
         if self.cwnd < self.ssthresh {
             self.cwnd += len as f64;
             return;
@@ -886,8 +903,11 @@ impl Flow {
     /// The recovery's window on an acknowledgement of `acked` bytes, which
     /// `advanced` the cumulative ack point or not and marked segments lost
     /// or not: [`Recovery`]'s rate reduction, as `tcp_cwnd_reduction`
-    /// computes it, in bytes (the first segment of a recovery goes
-    /// whatever it allows: Linux's forced fast retransmit).
+    /// computes it, in packets (the threshold and the window before the
+    /// cut in whole ones, `snd_ssthresh` and `prior_cwnd`): above the
+    /// threshold the ceiling of its share of what was delivered, less what
+    /// went; at least one packet before anything went (the forced fast
+    /// retransmit) and never under what is in flight after.
     fn reduction(&mut self, acked: usize, advanced: bool, newly_lost: bool) {
         let Some(r) = self.recovery.as_mut() else {
             return;
@@ -895,30 +915,33 @@ impl Flow {
         if acked == 0 {
             return;
         }
+        let acked = window_bytes(acked);
         r.delivered += acked;
-        let ssthresh = self.ssthresh as i64;
-        let pipe = i64::try_from(self.in_flight).unwrap_or(i64::MAX);
+        let packets = |b: usize| i64::try_from(b / MSS as usize).unwrap_or(i64::MAX);
+        let ssthresh = (self.ssthresh / MSS + 1e-9).floor() as i64;
+        let pipe = packets(self.in_flight);
         let delta = ssthresh - pipe;
-        let (delivered, out) = (r.delivered as i64, r.out as i64);
+        let (delivered, out) = (packets(r.delivered), packets(r.out));
         let sndcnt = if delta < 0 {
-            let prior = (r.prior as i64).max(1);
+            let prior = ((r.prior / MSS + 1e-9).floor() as i64).max(1);
             (ssthresh * delivered + prior - 1) / prior - out
         } else {
             if advanced && !newly_lost {
-                r.bonus += acked.div_ceil(MSS as usize) * MSS as usize;
+                r.bonus += acked;
             }
-            (delivered + r.bonus as i64 - out)
-                .max(acked as i64)
+            (delivered + packets(r.bonus) - out)
+                .max(packets(acked))
                 .min(delta)
         };
-        self.cwnd = ((pipe + sndcnt) as f64).max(MSS);
+        let sndcnt = sndcnt.max(i64::from(out == 0));
+        self.cwnd = ((pipe + sndcnt) as f64 * MSS).max(MSS);
     }
 
     /// Whether the window holds back a segment of `len` bytes: past the
     /// window, unless nothing is in flight or it is a recovery's first.
     fn holds(&self, len: usize) -> bool {
         self.in_flight > 0
-            && (self.in_flight + len) as f64 > self.cwnd
+            && (self.in_flight + window_bytes(len)) as f64 > self.cwnd
             && self.recovery.is_none_or(|r| r.out > 0)
     }
 
@@ -953,14 +976,14 @@ impl Flow {
     /// from what remains in flight, so the loss frees no room by itself.
     fn lost_in_recovery(&mut self, len: usize) {
         if self.recovery.is_some() {
-            self.cwnd = (self.cwnd - len as f64).max(MSS);
+            self.cwnd = (self.cwnd - window_bytes(len) as f64).max(MSS);
         }
     }
 
     /// `len` bytes went out in a recovery.
     fn recovery_sent(&mut self, len: usize) {
         if let Some(r) = self.recovery.as_mut() {
-            r.out += len;
+            r.out += window_bytes(len);
         }
     }
 
@@ -979,7 +1002,7 @@ impl Flow {
         if self.loss_high.is_some_and(|h| una >= h) {
             self.loss_high = None;
         }
-        while self.sacked.first().is_some_and(|&s| s < una) {
+        while self.sacked.first_key_value().is_some_and(|(&s, _)| s < una) {
             self.sacked.pop_first();
         }
     }
@@ -1361,7 +1384,7 @@ impl Scheduler {
         ConnState {
             cwnd: flow.map(|f| f.cwnd as u64),
             ssthresh: flow.and_then(|f| f.ssthresh.is_finite().then_some(f.ssthresh as u64)),
-            in_flight: flow.map(|f| f.in_flight as u64),
+            in_flight: flow.map(|f| f.out_bytes as u64),
             pending,
             uplink_queue: host.map(|h| (self.net.up_free(h) - now).max(Duration::ZERO)),
             uplink_rate: host.map(|h| self.net.up_rate(h, now)),
@@ -1570,7 +1593,8 @@ impl Scheduler {
                     }
                     f.lost.remove(&seq);
                     let len = f.outstanding(seq);
-                    f.in_flight = f.in_flight.saturating_sub(len);
+                    f.in_flight = f.in_flight.saturating_sub(window_bytes(len));
+                    f.out_bytes = f.out_bytes.saturating_sub(len);
                     f.sent_at.remove(&seq);
                     f.retx.insert(seq);
                     f.resend.insert(seq);
@@ -1794,7 +1818,8 @@ impl Scheduler {
         if let Some(sent) = sent {
             f.sampled(seq, t - sent);
         }
-        f.in_flight = f.in_flight.saturating_sub(len);
+        f.in_flight = f.in_flight.saturating_sub(window_bytes(len));
+        f.out_bytes = f.out_bytes.saturating_sub(len);
         if let Some(g) = f.segments.get_mut(&seq) {
             g.acked += len;
             if g.acked >= g.len {
@@ -1821,7 +1846,7 @@ impl Scheduler {
         }
         let advanced = f.snd_una() > una;
         if seq > una {
-            f.sacked.insert(seq);
+            *f.sacked.entry(seq).or_insert(0) += window_bytes(len) / MSS as usize;
         }
         f.recovered();
         // RACK: the acknowledgement of a segment sent later shows the
@@ -1836,7 +1861,7 @@ impl Scheduler {
                 .filter(|(_, v)| v.0 < sent)
                 .map(|(&s, _)| s)
                 .collect();
-            let now = f.recovery.is_some() || f.sacked.len() >= 2;
+            let now = f.recovery.is_some() || f.sacked.values().sum::<usize>() >= 3;
             let reo = f.min_rtt / 4;
             for s in earlier {
                 if now {
@@ -1860,7 +1885,8 @@ impl Scheduler {
         let traced_lost = marked.clone();
         for s in marked {
             let l = f.outstanding(s);
-            f.in_flight = f.in_flight.saturating_sub(l);
+            f.in_flight = f.in_flight.saturating_sub(window_bytes(l));
+            f.out_bytes = f.out_bytes.saturating_sub(l);
             f.sent_at.remove(&s);
             f.retx.insert(s);
             f.resend.insert(s);
@@ -3451,19 +3477,15 @@ mod tests {
         f.in_flight -= seg;
         f.cwnd = 0.0;
         assert_eq!(send_allowed(&mut f, seg), 1);
-        let mut delivered = 0;
+        let mut delivered = 0usize;
         let mut out = 1;
         while f.in_flight - seg > f.ssthresh as usize {
             f.in_flight -= seg;
-            delivered += seg;
+            delivered += 1;
             f.reduction(seg, false, false);
             out += send_allowed(&mut f, seg);
-            let share = 0.7 * delivered as f64;
-            assert!(
-                (out * seg) as f64 <= share.max(seg as f64) + 1.0
-                    && (out * seg) as f64 > share - seg as f64,
-                "sent {out} segments of {delivered} bytes delivered"
-            );
+            let linux = (70 * delivered).div_ceil(100).max(1);
+            assert_eq!(out, linux, "sent after {delivered} packets delivered");
         }
         assert!(f.recovery.is_some());
     }
@@ -3515,6 +3537,45 @@ mod tests {
     }
 
     #[test]
+    fn a_recovery_sends_the_ceiling_of_its_share_from_the_first_packet() {
+        // Without the forced retransmission first: after k packets
+        // delivered past the threshold the sender has sent
+        // max(ceil(ssthresh * k / prior_cwnd), 1).
+        let seg = MSS as usize;
+        let mut f = recovering(100, seg);
+        f.in_flight -= seg;
+        let mut out = 0;
+        for k in 1..=20usize {
+            f.in_flight -= seg;
+            f.reduction(seg, false, false);
+            out += send_allowed(&mut f, seg);
+            assert_eq!(out, (70 * k).div_ceil(100).max(1), "after {k} delivered");
+        }
+    }
+
+    #[test]
+    fn a_recovery_never_sets_the_window_under_the_flight() {
+        // `sndcnt` is at least 0 once anything went (`prr_out`): a
+        // recovery whose forced retransmission is a two-packet segment,
+        // then an acknowledgement of one packet past the threshold.
+        let seg = MSS as usize;
+        let mut f = recovering(100, seg);
+        f.in_flight -= 2 * seg;
+        f.reduction(seg, false, true);
+        assert!(!f.holds(2 * seg), "the forced retransmission goes");
+        f.in_flight += 2 * seg;
+        f.recovery_sent(2 * seg);
+        f.in_flight -= seg;
+        f.reduction(seg, false, false);
+        assert!(
+            f.cwnd >= f.in_flight as f64,
+            "cwnd {} under the flight {}",
+            f.cwnd,
+            f.in_flight
+        );
+    }
+
+    #[test]
     fn a_loss_a_timer_shows_arms_the_retransmission_timeout() {
         // A burst arms the tail-loss probe 2 srtt + 2 ms on; a loss RACK's
         // timer shows just before it starts a recovery, which arms the
@@ -3537,6 +3598,27 @@ mod tests {
         f.recover_at(t0 + ms(61));
         assert!(!f.tlp);
         assert_eq!(f.timer_at, t0 + f.rto());
+    }
+
+    #[test]
+    fn a_window_counts_packets_whatever_their_bytes() {
+        // Linux's window of 10 packets lets 10 of a write's 1200-byte
+        // tails out, not the 12 its bytes would.
+        let mut f = Flow::default();
+        let mut sent = 0;
+        while !f.holds(1200) {
+            f.sent(Time::EPOCH, 1200, StdDuration::from_millis(30).into());
+            sent += 1;
+        }
+        assert_eq!(sent, 10);
+        // A two-packet segment takes two.
+        let mut f = Flow::default();
+        f.sent(
+            Time::EPOCH,
+            1448 + 1200,
+            StdDuration::from_millis(30).into(),
+        );
+        assert_eq!(f.in_flight, 2 * MSS as usize);
     }
 
     #[test]
