@@ -169,8 +169,9 @@ their joins.
   command of analyze.py (its fields the capture crate's), never a private
   script.
 - The lab's goldens (`python3 hack/simlab/tests/golden.py check`, which
-  a change to the lab's code passes) take about 25 minutes whole, past
-  the 15 a run may block: run them as golden.py's four groups, one at a
+  a change to the lab's code passes) take about 40 minutes whole, past
+  the 15 a run may block: run them as golden.py's five groups, one at a
   time, each under `timeout 900`: `--only
-  cli,matrices,suite_test,simdb_test`, `--only engine`, `--only catalog`
-  and `--only scorecards` (golden.py's docs, `golden.GROUPS`).
+  cli,matrices,suite_test,simdb_test`, `--only engine`, `--only catalog`,
+  `--only scorecards1` and `--only scorecards2` (golden.py's docs,
+  `golden.GROUPS`).

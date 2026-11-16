@@ -5,7 +5,7 @@
 Python scoring suite.py had before them: what both print for the latest
 farm experiments must be the same, line for line.
 
-  hack/sim-suite/golden.py check [--exps E,...] [--n N] [--local N] [--ref REV]
+  hack/sim-suite/golden.py check [--exps E,...] [--n N] [--part I/K] [--local N] [--ref REV]
   hack/sim-suite/golden.py fixtures [--exps E,...] [--n N] [--ref REV]
 
 `check` scores, for each experiment, every arm against its base three
@@ -326,7 +326,12 @@ def compared(a, ref):
     ok = True
     if a.local:
         ok &= check_local(ref, a.local)
-    for e in experiments(a.n, a.exps) if a.n or a.exps else ():
+    exps = experiments(a.n, a.exps) if a.n or a.exps else []
+    if a.part:
+        # Every K-th of them, from the I-th: K checks of about a K-th each.
+        i, k = a.part
+        exps = exps[i - 1::k]
+    for e in exps:
         ref_rows = ref.farm_rows(e["exp"], e["cells"], e["knob"])
         new = suite().farm_rows(e["exp"], e["cells"], e["knob"])
         ok &= compared_pinned(ref, e, ref_rows, new)
@@ -530,6 +535,18 @@ def write_fixtures(a, ref):
     print(f"{len(cases)} cases, {len(runs)} runs, {size / 1024:.0f} KiB in {FIXTURES}", file=sys.stderr)
 
 
+def part(text):
+    """--part's I/K, 1 <= I <= K."""
+    i, _, k = text.partition("/")
+    try:
+        i, k = int(i), int(k)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text}: I/K") from None
+    if not 1 <= i <= k:
+        raise argparse.ArgumentTypeError(f"{text}: 1 <= I <= K")
+    return i, k
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -541,6 +558,8 @@ def main():
         p.add_argument("--ref", default=REFERENCE, help="the reference suite.py's commit")
     sub.choices["check"].add_argument("--local", type=int, default=0,
                                       help="also the latest N local invocations of `run`")
+    sub.choices["check"].add_argument("--part", type=part, help="I/K: the I-th of K parts of the experiments, every "
+                                      "K-th of them from the I-th, as golden.py's scorecards sets split them")
     a = ap.parse_args()
     {"check": check, "fixtures": fixtures}[a.cmd](a)
 

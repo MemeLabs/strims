@@ -187,6 +187,10 @@ class Crash(Fixture):
 class Groups(unittest.TestCase):
     def test_the_groups_hold_every_set_once_in_order(self):
         self.assertEqual([s for g in golden.GROUPS for s in g], list(golden.SETS))
+        # An alias names sets, the scorecards' parts all of them.
+        self.assertTrue(all(set(v) <= set(golden.SETS) for v in golden.ALIASES.values()))
+        self.assertEqual(golden.ALIASES["scorecards"],
+                         tuple(f"scorecards{i}" for i in range(1, golden.SCORECARD_PARTS + 1)))
         # simlab's tests split between the engine set and the catalog's.
         every = sorted(p.stem for p in HERE.glob("test_*.py"))
         engine, catalog = golden.unit_tests("engine"), golden.unit_tests("catalog")

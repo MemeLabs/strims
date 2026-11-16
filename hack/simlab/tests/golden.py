@@ -24,21 +24,24 @@ The sets, in order (check runs them all, and exits 1 if any fails):
                 (test_testbed reads it)
   catalog       test_catalog.py, the catalog's index of scratch caches,
                 under uv
-  scorecards    hack/sim-suite/golden.py check: the latest farm
-                experiments' scorecards and arm scores, the macros against
-                the Python scoring at its REFERENCE, over the catalog
+  scorecards1, scorecards2
+                hack/sim-suite/golden.py check, half the experiments each
+                (--part): the latest farm experiments' scorecards and arm
+                scores, the macros against the Python scoring at its
+                REFERENCE, over the catalog (`scorecards` names both)
 
-The whole check takes about 25 minutes on the dev VM, past the 15 that a
+The whole check takes about 40 minutes on the dev VM, past the 15 that a
 run may block, so run it as its groups (GROUPS), one at a time, each under
 `timeout 900`:
 
-  golden.py check --only cli,matrices,suite_test,simdb_test   about 7 min
+  golden.py check --only cli,matrices,suite_test,simdb_test   about 5 min
   golden.py check --only engine                                about 6 min
-  golden.py check --only catalog                               about 9 min
-  golden.py check --only scorecards                            about 6 min
+  golden.py check --only catalog                               12-14 min
+  golden.py check --only scorecards1                           about 9 min
+  golden.py check --only scorecards2                           about 6 min
 
-A set run as a script (suite_test, simdb_test, engine, catalog,
-scorecards) prints its last line. One that fails also prints the lines
+A set run as a script (suite_test, simdb_test, engine, catalog, the
+scorecards') prints its last line. One that fails also prints the lines
 that name its failures (FAILURE: each failing test's, each experiment
 scored otherwise), else its last TAIL lines, and the traceback of a
 crash that no failure named holds (crashed), and writes its whole output
@@ -78,13 +81,19 @@ HERE = Path(__file__).resolve().parent
 HACK = HERE.parents[1]
 REPO = HACK.parent
 SIMDB, ANALYZE = golden_cli.SIMDB, golden_cli.ANALYZE
-SETS = ("cli", "matrices", "suite_test", "simdb_test", "engine", "catalog", "scorecards")
+SETS = ("cli", "matrices", "suite_test", "simdb_test", "engine", "catalog", "scorecards1", "scorecards2")
+# A set's other name: the sets it stands for.
+ALIASES = {"scorecards": ("scorecards1", "scorecards2")}
+# The scorecards sets' parts of the experiments (hack/sim-suite/golden.py
+# check --part): the check of all of them ran 895 s on the dev VM.
+SCORECARD_PARTS = 2
 CAPTURED = ("cli", "matrices")
 # The modules of simlab's tests that the catalog set runs, apart from the
 # engine set's: the longest of them.
 CATALOG_TESTS = ("test_catalog",)
 # The sets in groups that each run within 15 minutes (the module's docs).
-GROUPS = (("cli", "matrices", "suite_test", "simdb_test"), ("engine",), ("catalog",), ("scorecards",))
+GROUPS = (("cli", "matrices", "suite_test", "simdb_test"), ("engine",), ("catalog",), ("scorecards1",),
+          ("scorecards2",))
 sys.path.insert(0, str(HACK))
 from simlab import bootstrap  # noqa: E402
 
@@ -178,8 +187,9 @@ def run_set(name):
             return False
     if name in ("engine", "catalog"):
         return script([*UV, "-m", "unittest", *unit_tests(name)], name, env=unit_env())
-    if name == "scorecards":
-        return script([sys.executable, str(HACK / "sim-suite" / "golden.py"), "check"], name)
+    if name.startswith("scorecards"):
+        part = f"{name.removeprefix('scorecards')}/{SCORECARD_PARTS}"
+        return script([sys.executable, str(HACK / "sim-suite" / "golden.py"), "check", "--part", part], name)
     raise ValueError(name)
 
 
@@ -303,11 +313,13 @@ def main():
         if not a.what:
             sys.exit("real needs capture or check")
         sys.exit(0 if real(a.what, split(a.exps), a.out) else 1)
-    names = split(a.only) or list(CAPTURED if a.cmd == "capture" else SETS)
-    unknown = set(names) - set(SETS) | set(split(a.skip)) - set(SETS)
+    names = [m for n in split(a.only) for m in ALIASES.get(n, (n,))] or list(CAPTURED if a.cmd == "capture"
+                                                                            else SETS)
+    skip = {m for n in split(a.skip) for m in ALIASES.get(n, (n,))}
+    unknown = set(names) - set(SETS) | skip - set(SETS)
     if unknown:
         sys.exit(f"no set {', '.join(sorted(unknown))}: {', '.join(SETS)}")
-    names = [n for n in names if n not in split(a.skip)]
+    names = [n for n in names if n not in skip]
     if a.cmd == "capture":
         for n in names:
             if n not in CAPTURED:
@@ -315,7 +327,7 @@ def main():
             {"cli": golden_cli.capture, "matrices": golden_suite.capture}[n]()
         return
     if not a.only:
-        print("golden: the whole check takes about 25 minutes; each of its groups takes under 15: "
+        print("golden: the whole check takes about 40 minutes; each of its groups takes under 15: "
               + ", ".join("--only " + ",".join(g) for g in GROUPS), file=sys.stderr)
     failed = [n for n in names if not run_set(n)]
     print(f"golden: {len(names) - len(failed)} of {len(names)} sets pass" + (f"; failed: {', '.join(failed)}"
