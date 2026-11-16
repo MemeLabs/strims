@@ -226,7 +226,8 @@
 # device whose root is its modem, as the parser gives it: `node <i> <spec>
 # <up_mbit> <delay_ms> <queue_ms> <modem_dev>`), a
 # trace link's link-<i>.log (tracelink's queue, packets, bytes and drops
-# every 100 ms) and link-<i>.err, and settings. With a browser node also
+# every 100 ms) and link-<i>.err, and settings; while it runs, .ctl (its
+# control files, which go with it). With a browser node also
 # node-relay.err, cpu-relay.log and hosts/ (each node's host id). With
 # MEDIA, each browser viewer's player-<i>.jsonl (its player's line a
 # second, testbed_browser's --player), and RECORD's record-<i>.bin.
@@ -457,16 +458,20 @@ for nw in "$old_net" "$net"; do
   fi
 done
 names=()
-# The run's control files, apart from the out dir: each node's mark that
-# its link is up (/ctl/ready-<i>), the stream's start (/ctl/start, which
-# the containers wait for), each container's exit code, and what failed
-# while the stream ran.
-ctl=$(mktemp -d "${TMPDIR:-/tmp}/testbed-ctl.XXXXXX")
-chmod 755 "$ctl"
 # The run's id, in its control files (/ctl/run), which a step or an upload
 # checks in tb-0 before it acts: one left from another run then acts on
 # nothing.
-run_id=${ctl##*/}
+run_id=$(od -An -N8 -tx8 /dev/urandom | tr -d ' ')
+# The run's control files, in its out dir under its id (.ctl/<id>, which
+# goes with the run; what a run killed before its cleanup left goes with
+# the next run into the out dir, or with the out dir, and its own work
+# left running finds its dir gone): each node's mark that its link is up
+# (/ctl/ready-<i>), the stream's start (/ctl/start, which the containers
+# wait for), each container's exit code, and what failed while the stream
+# ran.
+rm -rf "$out/.ctl"
+ctl=$out/.ctl/$run_id
+mkdir -p -m 755 "$ctl"
 echo "$run_id" > "$ctl/run"
 ours="[ \"\$(cat /ctl/run 2>/dev/null)\" = $run_id ] || exit 3"
 # The run's background work (its steps, uploads and container waits),
@@ -485,6 +490,7 @@ cleanup() {
   for p in "${bg[@]}"; do kill_tree "$p"; done
   docker rm -f "${names[@]}" >/dev/null 2>&1 || true
   rm -rf "$ctl"
+  rmdir "$out/.ctl" 2>/dev/null || true
   docker network rm "$net" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
