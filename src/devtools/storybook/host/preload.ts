@@ -7,7 +7,7 @@
 // SwipablePanel, ChatBar, Footer or Header, ...), so a device frame reports
 // its device's user agent, window.orientation, screen.orientation and safe
 // area as the device has them, and a tablet's touch screen as its browser
-// does.
+// does. A story frame also gets a local storage of its own.
 
 import { DEVICES, Device, DeviceTouch, isDevice } from "./devices";
 import { FRAME_ROOT, INDEX_ROUTE, ROOT, Theme } from "./protocol";
@@ -45,6 +45,29 @@ export const parseFrameDocument = (fragment: string): FrameDocument | null => {
 
 /** This document's storybook role, if it is a storybook frame, as it loaded. */
 export const frameDocument = parseFrameDocument(location.hash);
+
+// An in-memory Storage, empty to begin with.
+const memoryStorage = (): Storage => {
+  const items = new Map<string, string>();
+  return {
+    get length() {
+      return items.size;
+    },
+    key: (index: number) => [...items.keys()][index] ?? null,
+    getItem: (key: string) => items.get(String(key)) ?? null,
+    setItem: (key: string, value: string) => void items.set(String(key), String(value)),
+    removeItem: (key: string) => void items.delete(String(key)),
+    clear: () => items.clear(),
+  };
+};
+
+// A story frame's local storage is its own, empty in each frame document
+// and emptied again at each switch in place (Frame's reset): a story reads
+// nothing an earlier one or the app stored on this origin, and stores
+// nothing there. The page and the devtools keep the origin's.
+if (frameDocument?.kind === "story") {
+  Object.defineProperty(window, "localStorage", { value: memoryStorage(), configurable: true });
+}
 
 const shape = frameDocument?.kind === "story" ? DEVICES[frameDocument.device] : null;
 

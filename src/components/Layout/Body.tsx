@@ -20,7 +20,7 @@ interface LayoutBodyProps {
 }
 
 export const LayoutBody: React.FC<LayoutBodyProps> = ({ children }) => {
-  const { showVideo, fullScreenChat, overlayState, setOverlayState } = useLayout();
+  const { showVideo, fullScreenChat, swapMainPanels, overlayState, setOverlayState } = useLayout();
 
   const handleDragStateChange = (state: DragState) => {
     setOverlayState({
@@ -54,9 +54,10 @@ export const LayoutBody: React.FC<LayoutBodyProps> = ({ children }) => {
             </Scrollbars>
           </div>
         )}
+        {/* On phones the drawer opens from the right edge, or swapped the left. */}
         <SwipablePanel
           className="foo_2"
-          direction="left"
+          direction={swapMainPanels ? "right" : "left"}
           open={open}
           onDragStateChange={handleDragStateChange}
           preventScroll={true}

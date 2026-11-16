@@ -12,6 +12,7 @@ import SettingsLayout from "../pages/Settings/Layout";
 
 const Network = lazy(() => import("../pages/Settings/Network"));
 const Profile = lazy(() => import("../pages/Settings/Profile"));
+const Appearance = lazy(() => import("../pages/Settings/Appearance"));
 const Bootstrap = lazy(() => import("../pages/Settings/Bootstrap"));
 const Chat = lazy(() => import("../pages/Settings/Chat"));
 const Video = lazy(() => import("../pages/Settings/Video"));
@@ -33,6 +34,7 @@ export const createSettingsRoutes = (layout: ReactElement) => (
   <Route path="settings" element={layout}>
     <Route index element={<Navigate replace to="profile" />} />
     <Route path="profile/*" element={<Profile />} />
+    <Route path="appearance" element={<Appearance />} />
     <Route path="networks/*" element={<Network />} />
     <Route path="bootstrap/*" element={<Bootstrap />} />
     <Route path="chat-servers/*" element={<Chat />} />

@@ -59,6 +59,10 @@ catalog's covered, skipped and missing files.
   and corners on the side the story's turn (`landscape: "cw"`) puts them,
   and has its safe area. Styles keep writing `env(safe-area-inset-*)`;
   webpack/SafeAreaInsets.ts makes the frame's values reach them.
+- A story frame's localStorage is an in-memory stub (host/preload.ts),
+  empty for each story, so stories never read or write the origin's.
+  App code keeps storage out of components, in src/lib modules that
+  contexts' actions call.
 - A story fails on a crash or an empty root at `--timeout`. It also fails
   on any error no allow list (`allowErrors`) covers: an uncaught error or
   rejection, or a console.error such as a React warning or a translation

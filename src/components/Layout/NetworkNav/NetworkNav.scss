@@ -217,6 +217,20 @@
         border-right-color: var(--color-background-network-nav-tooltip);
         border-left: none;
       }
+
+      // A phone's swapped nav is on the right edge: the tooltip opens on its
+      // left.
+      @at-root .layout--portable.layout--swap & {
+        left: auto;
+        right: calc(var(--layout-width) - var(--tooltip-anchor-x) + 10px);
+
+        &:before {
+          left: auto;
+          right: -6px;
+          border-right: none;
+          border-left: 6px solid var(--color-background-network-nav-tooltip);
+        }
+      }
     }
   }
 }

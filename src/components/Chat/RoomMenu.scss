@@ -17,6 +17,12 @@
     flex-direction: row;
     border-bottom: 1px solid var(--color-border-chat-tab);
     padding: 0.4rem 0.2rem 0.1rem;
+
+    // The close button on the menu's leading edge, whichever side it opens
+    // from.
+    @at-root .layout--swap & {
+      flex-direction: row-reverse;
+    }
   }
 
   &__toggle {
@@ -26,10 +32,12 @@
     border-radius: 3px;
     pointer-events: all;
 
-    @at-root .layout--swap & {
-      transform: scaleX(-1);
-    }
-    @at-root .layout--portable:not(.layout--meme_open) & {
+    // The arrow points the way the menu closes, and on a phone with the
+    // drawer closed the way the drawer opens: its button stands for the
+    // drawer's while the menu is all the chat has.
+    @at-root .layout--swap:not(.layout--portable) &,
+      .layout--portable.layout--swap.layout--meme_open &,
+      .layout--portable:not(.layout--swap):not(.layout--meme_open) & {
       transform: scaleX(-1);
     }
 

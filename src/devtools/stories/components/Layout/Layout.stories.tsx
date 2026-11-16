@@ -137,9 +137,9 @@ const ShellStory: React.FC<ShellStoryProps> = ({
 // On phones and Android tablets the player and chat are a drawer over the
 // content: closed, a sliver of it on the right; open (a swipe, or the
 // chat's arrow), the player at its size and the chat beside or below it, or
-// the chat alone. "Swapped" puts the chat on the player's other side, and
-// "landscape cw" turns a landscape frame the other way round (the frame's
-// own is ccw).
+// the chat alone. "Swapped" puts the chat on the player's other side, and on
+// phones the drawer on the left edge with the nav on the right; "landscape
+// cw" turns a landscape frame the other way round (the frame's own is ccw).
 const stories: Story[] = [
   {
     name: "Home",
@@ -148,6 +148,11 @@ const stories: Story[] = [
   {
     name: "Home, chat open",
     component: () => <ShellStory open />,
+  },
+  // No room yet: the room menu fills the chat, its button in the strip.
+  {
+    name: "Home, swapped",
+    component: () => <ShellStory swap />,
   },
   {
     name: "Chat room",
@@ -161,6 +166,11 @@ const stories: Story[] = [
     name: "Chat room, landscape cw",
     landscape: "cw",
     component: () => <ShellStory room />,
+  },
+  {
+    name: "Chat room, swapped, landscape cw",
+    landscape: "cw",
+    component: () => <ShellStory room swap />,
   },
   {
     name: "Chat open",

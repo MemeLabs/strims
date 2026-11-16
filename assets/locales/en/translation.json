@@ -120,6 +120,9 @@
   },
 
   "settings": {
+    "appearance.title": "Appearance Settings - Strims",
+    "appearance.chatOnLeft": "Chat on the left",
+    "appearance.chatOnLeftDescription": "On phones the chat drawer opens from the left edge, for one-handed use with the left hand.",
     "network.title": "Network Settings - Strims",
     "bootstrap.title": "Network Bootstrap Settings - Strims",
     "chat.title": "Chat Settings - Strims",

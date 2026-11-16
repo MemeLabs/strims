@@ -220,6 +220,40 @@ $chat-width-sm: 260px;
     }
   }
 
+  // Swapped, the drawer opens from the left edge, for a left thumb, and the
+  // network nav, and in landscape the footer, take the right edge. The notch
+  // padding follows: the footer pads on the notch's side, else the layout.
+  &.layout--swap {
+    .layout__body {
+      flex-direction: row-reverse;
+    }
+
+    .content_panel {
+      margin-right: 0;
+      margin-left: 60px;
+    }
+
+    &.layout--min_aspect_ratio_1_2 {
+      flex-direction: row;
+    }
+
+    &.layout--landscape_ccw {
+      padding-left: env(safe-area-inset-left);
+
+      .layout__footer {
+        padding-left: 0;
+      }
+    }
+
+    &.layout--landscape_cw {
+      padding-right: 0;
+
+      .layout__footer {
+        padding-right: env(safe-area-inset-right);
+      }
+    }
+  }
+
   &.layout--landscape_ccw:not(.layout--swap) .layout__video {
     padding-left: env(safe-area-inset-right);
   }

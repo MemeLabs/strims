@@ -102,8 +102,13 @@
     width: calc(100% - env(safe-area-inset-left));
   }
 
-  &.layout--meme_open .layout_chat__toggle {
-    transform: scaleX(-1);
+  // The arrow points the way the drawer moves: off its edge while closed,
+  // back to it while open.
+  &.layout--meme_open:not(.layout--swap),
+  &.layout--swap:not(.layout--meme_open) {
+    .layout_chat__toggle {
+      transform: scaleX(-1);
+    }
   }
 }
 
