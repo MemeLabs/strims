@@ -11,7 +11,7 @@
 //!   of what the twin schedules: the seed's uplink steps (steps.log), the
 //!   competing uploads' starts (compete.log) and each viewer's join
 //!   (`JOINS`). Time is the twin's: the stream starts 5 s into the run.
-//! - **The nodes.** Each node's lines (node-<i>.jsonl) carry its records
+//! - **The nodes.** Each node's lines (`node-<i>.jsonl`) carry its records
 //!   (`strims_testbed::node`'s `rec`, made by the functions strims-sim's
 //!   own nodes' samples go through, [`strims_testbed::record`]): its meter
 //!   samples and its adaptive seed's changes, its transfers, its stats bins,
@@ -22,8 +22,8 @@
 //!   bytes as each packet's IP length (`strims_wan::wire`: no link
 //!   framing), its pure acknowledgements apart (the WAN columns,
 //!   [`crate::tables::UP_COUNTERS`]). A testbed run counts the same from
-//!   each node's capture of its egress (`PCAP=1`: pcap-<i>.pcap, after the
-//!   queue), and its queue drops from its tbf's counter (tc-<i>.log). What
+//!   each node's capture of its egress (`PCAP=1`: `pcap-<i>.pcap`, after the
+//!   queue), and its queue drops from its tbf's counter (`tc-<i>.log`). What
 //!   a capture can't tell (retransmits, the window's cuts and timeouts, a
 //!   data channel's SACKs inside DTLS) is left empty. The uplink's rate is
 //!   its tbf's, as configured: tbf charges each packet its IP length and its
@@ -49,8 +49,8 @@ use strims_testbed::transfer::{PeerTransfer, TransferSample};
 
 use crate::calibration::{self, Calibration, WAN_RATE, calibration_star};
 use crate::report::{
-    ACK_WHYS, AckWaits, HostReport, NodeBinRecord, ParentRecord, Report, ViewerReport,
-    WanHostReport, WanReport,
+    ACK_WHYS, AckWaits, HostReport, NodeBinRecord, ParentRecord, Report, SocketSample,
+    ViewerReport, WanHostReport, WanReport,
 };
 use crate::spec::{Competing, Fault, HostIx, Scenario};
 use crate::stream::{SeqSet, ViewerStats};
@@ -666,7 +666,13 @@ impl Run {
             wan: Some(net.wan),
             wire_bins: net.bins,
             wire_unmeasured: net.unmeasured,
-            sockets: Vec::new(),
+            sockets: (0..self.nodes.len())
+                .flat_map(|i| {
+                    self.file(&format!("ss-{i}.log"))
+                        .map(|text| sockets_of(self, i, &text))
+                        .unwrap_or_default()
+                })
+                .collect(),
             parent_losses: Vec::new(),
             parent_changes,
             loops: None,
@@ -841,6 +847,107 @@ fn transfer_of(v: &Value) -> Option<TransferSample> {
     })
 }
 
+/// A rate as ss prints it (`93.9Mbps`, `3728280bps`), in bits per second.
+fn ss_rate(v: &str) -> Option<u64> {
+    let v = v.strip_suffix("bps")?;
+    let (n, mult) = match v.chars().last()? {
+        'K' => (v.get(..v.len() - 1)?, 1e3),
+        'M' => (v.get(..v.len() - 1)?, 1e6),
+        'G' => (v.get(..v.len() - 1)?, 1e9),
+        _ => (v, 1.0),
+    };
+    Some((n.parse::<f64>().ok()? * mult) as u64)
+}
+
+/// A node's TCP sockets as its ss log has them (`ss -tin` once a
+/// second, each sample after a `@ <Unix ms>` line), peers by their index in
+/// the testbed's subnet, the sink's and the relay's none.
+fn sockets_of(run: &Run, node: HostIx, text: &str) -> Vec<SocketSample> {
+    let mut out = Vec::new();
+    let mut at = None;
+    let mut peer = None;
+    for line in text.lines() {
+        if let Some(ms) = line.strip_prefix("@ ") {
+            at = ms.trim().parse::<u64>().ok().and_then(|ms| run.at(ms));
+            continue;
+        }
+        if !line.starts_with(char::is_whitespace) {
+            // A socket's line (`state established` leaves out the
+            // state): its queues, local and peer addresses.
+            let w: Vec<&str> = line.split_whitespace().collect();
+            let host = |a: &str| {
+                let ip = a.rsplit_once(':')?.0;
+                let o: Vec<u8> = ip.split('.').filter_map(|x| x.parse().ok()).collect();
+                (o.get(..3) == Some(&SUBNET[..]))
+                    .then(|| o.get(3).copied())
+                    .flatten()
+            };
+            peer = match (w.first().and_then(|x| x.parse::<u64>().ok()), w.get(3)) {
+                (Some(_), Some(p)) => {
+                    Some(host(p).and_then(|o| o.checked_sub(10)).map(usize::from))
+                }
+                _ => None,
+            };
+            continue;
+        }
+        let (Some(t), Some(peer)) = (at, peer.take()) else {
+            continue;
+        };
+        let mut kv: BTreeMap<&str, &str> = BTreeMap::new();
+        let words: Vec<&str> = line.split_whitespace().collect();
+        for (i, w) in words.iter().enumerate() {
+            match w.split_once(':') {
+                Some((k, v)) => {
+                    kv.insert(k, v);
+                }
+                None => {
+                    if let Some(v) = words.get(i + 1) {
+                        kv.insert(w, v);
+                    }
+                }
+            }
+        }
+        let n = |k: &str| kv.get(k).and_then(|v| v.parse::<u64>().ok());
+        let us = |v: &str| v.parse::<f64>().ok().map(|ms| (ms * 1000.0) as u64);
+        let (rtt, rttvar) = kv
+            .get("rtt")
+            .and_then(|v| v.split_once('/'))
+            .map_or((None, None), |(a, b)| (us(a), us(b)));
+        out.push(SocketSample {
+            t,
+            node,
+            peer: peer.filter(|&p| p < run.nodes.len()),
+            rtt_us: rtt,
+            rttvar_us: rttvar,
+            min_rtt_us: kv.get("minrtt").and_then(|v| us(v)),
+            cwnd_segments: n("cwnd"),
+            ssthresh_segments: n("ssthresh"),
+            bytes_sent: n("bytes_sent"),
+            bytes_acked: n("bytes_acked"),
+            bytes_received: n("bytes_received"),
+            notsent_bytes: n("notsent").or(Some(0)),
+            segs_out: n("segs_out"),
+            segs_in: n("segs_in"),
+            data_segs_out: n("data_segs_out"),
+            data_segs_in: n("data_segs_in"),
+            retrans_segments: kv
+                .get("retrans")
+                .and_then(|v| v.rsplit('/').next())
+                .and_then(|v| v.parse().ok())
+                .or(Some(0)),
+            delivery_rate_bps: kv
+                .get("delivery_rate")
+                .and_then(|v| ss_rate(v))
+                .map(|b| b / 8),
+            pacing_rate_bps: kv
+                .get("pacing_rate")
+                .and_then(|v| ss_rate(v))
+                .map(|b| b / 8),
+        });
+    }
+    out
+}
+
 /// One packet a node's capture holds: when (Unix µs), its source and
 /// destination's last octets in the testbed's subnet, its IP length, and
 /// whether it is a pure TCP acknowledgement (no payload, no SYN, FIN or
@@ -920,7 +1027,7 @@ fn packets(bytes: &[u8]) -> Option<Vec<Packet>> {
     Some(out)
 }
 
-/// A tc-<i>.log line's tbf: (Unix ms, packets dropped, backlog bytes).
+/// A `tc-<i>.log` line's tbf: (Unix ms, packets dropped, backlog bytes).
 fn tbf_of(line: &str) -> Option<(u64, u64, u64)> {
     let (ms, rest) = line.split_once(' ')?;
     let tbf = rest.split("qdisc tbf 10:").nth(1)?;
@@ -1071,6 +1178,7 @@ impl Network {
                         let wait = i64::try_from(backlog * 1_000_000 / rate).unwrap_or(i64::MAX);
                         w.up_queue
                             .push((t.into(), strims_base::time::Duration::from_micros(wait)));
+                        w.up_backlog.push((t.into(), backlog));
                     }
                 }
                 None => have_tc = false,
@@ -1194,7 +1302,7 @@ pub const ROW: &[&str] = &[
 /// queue (`Report::queue_delay_accuracy`: `{reading}_err_{role}_ms`,
 /// `{reading}_fp_{role}`, `{reading}_fn_{role}`) and the standing queue's
 /// share (`standing_{pop}`), whose truth is a testbed run's tbf backlog over
-/// its rate (tc-<i>.log) as it is a sim's model queue.
+/// its rate (`tc-<i>.log`) as it is a sim's model queue.
 pub const ROW_FAMILIES: &[&str] = &["qd_", "qdv_", "qdb_", "qdbi_", "qdl_", "standing_"];
 
 /// The testbed run's row: [`Report::row`]'s fields that [`ROW`] names or
@@ -1346,6 +1454,13 @@ mod tests {
                 START + 150
             )
         };
+        w(
+            "ss-0.log",
+            &format!(
+                "@ {}\nRecv-Q Send-Q Local Address:Port Peer Address:Port\n0      8607      10.77.0.10:4000   10.77.0.11:51216\n\t cubic rto:300 rtt:99.967/3.159 cwnd:33 ssthresh:29 bytes_sent:493341 bytes_acked:472403 segs_out:419 data_segs_out:375 pacing_rate 4588736bps delivery_rate 3728280bps retrans:0/13 notsent:1448 minrtt:20.5\n0      0      10.77.0.10:5201   10.77.0.250:40000\n\t cubic rtt:30/1 cwnd:10\n",
+                START + 1000
+            ),
+        );
         w("tc-0.log", &tc(4));
         w("tc-1.log", &tc(0));
         dir
@@ -1390,6 +1505,16 @@ mod tests {
         let w = &r.wan.as_ref().unwrap().hosts[0];
         assert_eq!(w.competing.last().unwrap().1, 1500);
         assert_eq!(w.up_queue[0].1.as_micros(), 1514 * 1_000_000 / 1_250_000);
+        assert_eq!(r.sockets.len(), 2);
+        let k = &r.sockets[0];
+        assert_eq!((k.node, k.peer), (0, Some(1)));
+        assert_eq!(k.rtt_us, Some(99_967));
+        assert_eq!(k.min_rtt_us, Some(20_500));
+        assert_eq!((k.cwnd_segments, k.retrans_segments), (Some(33), Some(13)));
+        assert_eq!(k.delivery_rate_bps, Some(3_728_280 / 8));
+        assert_eq!(k.notsent_bytes, Some(1448));
+        assert_eq!(r.sockets[1].peer, None);
+        assert_eq!(w.up_backlog[0].1, 1514);
         let out = dir.join("tables");
         r.write_tables(&out, Duration::from_millis(100), true)
             .unwrap();

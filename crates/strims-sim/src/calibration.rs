@@ -121,7 +121,7 @@ pub struct Calibration {
     /// negative); `None` with the seed, at the start of the run.
     pub join_at_ms: Option<i64>,
     /// The viewers make their links one at a time from the stream's start,
-    /// as the testbed's harness does ([`HostSpec::serial_links`]).
+    /// as the testbed's harness does ([`HostSpec::serial_links`](crate::spec::HostSpec::serial_links)).
     pub serial_links: bool,
     pub slow_down_kbit: Option<u64>,
     /// `link <a> <b>` lines, node 0 the seed and node `i` viewer `i - 1`;
