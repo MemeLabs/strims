@@ -296,34 +296,48 @@ class Timeout(Lake):
     def test_an_interrupt_never_reaches_the_next_query(self):
         # Timeouts about as long as the query itself: when one fires just
         # as its query ends, the next query on the connection must run.
+        # Passes of 300, each timed by the query just before it, until one
+        # has timed out (a minute at most): how soon a timer fires is the
+        # host's.
         c = engine.connect()
         sql = "SELECT sum(range) AS s FROM range(200000)"
-        took = []
-        for _ in range(5):
-            start = time.perf_counter()
-            engine.run(c, sql)
-            took.append(time.perf_counter() - start)
-        each = max(min(took), 0.0005)
-        timed_out = 0
-        for n in range(300):
-            try:
-                engine.run(c, sql, timeout_s=each * (0.5 + (n % 7) / 4))
-            except engine.QueryError as e:
-                self.assertEqual(e.status, 408)
-                timed_out += 1
-            self.assertEqual(engine.run(c, sql).values(), [[19999900000]])
+        timed_out, end = 0, time.monotonic() + 60
+        while not timed_out and time.monotonic() < end:
+            took = []
+            for _ in range(5):
+                start = time.perf_counter()
+                engine.run(c, sql)
+                took.append(time.perf_counter() - start)
+            each = max(min(took), 0.0005)
+            for n in range(300):
+                try:
+                    engine.run(c, sql, timeout_s=each * (0.5 + (n % 7) / 4))
+                except engine.QueryError as e:
+                    self.assertEqual(e.status, 408)
+                    timed_out += 1
+                self.assertEqual(engine.run(c, sql).values(), [[19999900000]])
         c.close()
         self.assertGreater(timed_out, 0)
 
     def test_a_closed_deadline_never_fires(self):
         c = engine.connect()
-        d = engine.Deadline(c, 0.05)
-        d.close()
-        time.sleep(0.1)
-        self.assertFalse(d.fired)
+        # Closed long before its time: close() stops its timer and returns.
+        d = engine.Deadline(c, 3600)
+        closing = threading.Thread(target=d.close, daemon=True)
+        closing.start()
+        closing.join(10)
+        self.assertFalse(closing.is_alive(), "close() waited for the timer")
         self.assertFalse(d._timer.is_alive())
+        self.assertFalse(d.fired)
+        # A timer that woke as close() ran finds the deadline closed.
+        d._fire()
+        self.assertFalse(d.fired)
+        # Past its time: it fires once its timer runs, and stays fired
+        # through close(); the connection's next query runs.
         d = engine.Deadline(c, 0.01)
-        time.sleep(0.05)
+        d._timer.join(10)
+        self.assertFalse(d._timer.is_alive(), "the timer never ran")
+        self.assertTrue(d.fired)
         d.close()
         self.assertTrue(d.fired)
         self.assertEqual(engine.run(c, "SELECT 1 AS x").values(), [[1]])
