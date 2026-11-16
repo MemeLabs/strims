@@ -4,7 +4,7 @@
 import assert from "assert";
 
 import { DevicePreferenceStore, DevicePreferences } from "../lib/devicePreferences";
-import { createLayoutActions, initialLayoutState } from "./Layout";
+import { createLayoutActions, createPreferenceSaver, initialLayoutState } from "./Layout";
 
 // A store that records what it is given.
 const recordingStore = () => {
@@ -18,7 +18,7 @@ const recordingStore = () => {
 
 describe("Layout actions", () => {
   it("toggle as useToggle does: a boolean sets, anything else flips", () => {
-    const { toggleShowChat } = createLayoutActions(recordingStore().store);
+    const { toggleShowChat } = createLayoutActions();
     const s = initialLayoutState;
     assert.strictEqual(toggleShowChat(s).showChat, false);
     assert.strictEqual(toggleShowChat(s, true).showChat, true);
@@ -27,25 +27,59 @@ describe("Layout actions", () => {
     assert.strictEqual(toggleShowChat(s, { type: "click" } as unknown as boolean).showChat, false);
   });
 
-  it("stores the swap, and nothing else", () => {
-    const { saved, store } = recordingStore();
-    const actions = createLayoutActions(store);
+  it("return the state they were given when a toggle changes nothing", () => {
+    const actions = createLayoutActions();
+    const s = initialLayoutState;
+    // The layout's toggleFullScreenChat(false) on each navigation.
+    assert.strictEqual(actions.toggleFullScreenChat(s, false), s);
+    assert.strictEqual(actions.toggleShowChat(s, true), s);
+    assert.strictEqual(actions.toggleSwapMainPanels(s, false), s);
+    assert.notStrictEqual(actions.toggleFullScreenChat(s, true), s);
+  });
+
+  it("toggle the swap without storing it", () => {
+    const actions = createLayoutActions();
     let s = actions.toggleSwapMainPanels(initialLayoutState);
     assert.strictEqual(s.swapMainPanels, true);
     s = actions.toggleSwapMainPanels(s, false);
     assert.strictEqual(s.swapMainPanels, false);
-    s = actions.toggleTheaterMode(s);
-    s = actions.toggleOverlayOpen(s, true);
-    assert.deepStrictEqual(saved, [{ swapMainPanels: true }, { swapMainPanels: false }]);
   });
 
-  it("sets the overlay from a value or an updater", () => {
-    const { setOverlayState, toggleOverlayOpen } = createLayoutActions(recordingStore().store);
+  it("set the overlay from a value or an updater", () => {
+    const { setOverlayState, toggleOverlayOpen } = createLayoutActions();
     let s = setOverlayState(initialLayoutState, { open: true, transitioning: true });
     assert.deepStrictEqual(s.overlayState, { open: true, transitioning: true });
     s = setOverlayState(s, ({ open }) => ({ open: !open, transitioning: false }));
     assert.deepStrictEqual(s.overlayState, { open: false, transitioning: false });
     s = toggleOverlayOpen(s, true);
     assert.deepStrictEqual(s.overlayState, { open: true, transitioning: false });
+  });
+});
+
+describe("Layout preference saver", () => {
+  it("stores the swap once each time it changes, and nothing else", () => {
+    const { saved, store } = recordingStore();
+    const save = createPreferenceSaver(store, { swapMainPanels: false });
+    const actions = createLayoutActions();
+    let s = initialLayoutState;
+    // The loaded state, as the provider's first effect sees it.
+    save(s);
+    s = actions.toggleSwapMainPanels(s);
+    // An effect run twice (StrictMode's) sees the same state again.
+    save(s);
+    save(s);
+    s = actions.toggleTheaterMode(s);
+    s = actions.toggleOverlayOpen(s, true);
+    save(s);
+    s = actions.toggleSwapMainPanels(s, false);
+    save(s);
+    assert.deepStrictEqual(saved, [{ swapMainPanels: true }, { swapMainPanels: false }]);
+  });
+
+  it("stores nothing for the swap it loaded", () => {
+    const { saved, store } = recordingStore();
+    const save = createPreferenceSaver(store, { swapMainPanels: true });
+    save({ ...initialLayoutState, swapMainPanels: true });
+    assert.deepStrictEqual(saved, []);
   });
 });
