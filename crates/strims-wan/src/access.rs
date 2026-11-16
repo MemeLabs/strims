@@ -9,8 +9,8 @@
 //! ([`Bursts`]: a fade, a handover, a satellite's reassignment) rather than
 //! packet by packet, and a run of losses costs a TCP sender one cut of its
 //! window where as many spread out cost one each. The rates, delays and
-//! loss are typical figures, not measured ones; the comments beside LTE's
-//! and Starlink's bursts give what was measured.
+//! loss are typical figures, not measured ones; [`Access::profile`] gives
+//! what was measured beside LTE's and Starlink's bursts.
 
 use core::fmt;
 
@@ -138,6 +138,23 @@ impl Access {
         }
     }
 
+    /// A kind's typical figures. LTE's and Starlink's loss bursts are
+    /// assumed:
+    ///
+    /// - **LTE**: 0.2 % on the whole, fades and handovers of 50 ms every
+    ///   4 s that lose 12 % of their packets. Measured: a handover
+    ///   interrupts 40-43 ms at the median, about 90 ms at p95 (Lauridsen
+    ///   et al., IEEE Comm. Mag. 2017; Kalntis et al., IMC 2024); how often
+    ///   one comes, and what an uplink loses past HARQ and RLC, no
+    ///   measurement found says.
+    /// - **Starlink**: 0.3 % on the whole, the satellites' reassignment
+    ///   every 15 s, at 12, 27, 42 and 57 s past each minute (measured:
+    ///   Tanveer et al., CoNEXT 2023 Companion; Mohan et al., WWW 2024),
+    ///   losing 30 % for 120 ms. Measured: a boundary's gap is 45-120 ms
+    ///   with its loss there (Lai et al., SIGCOMM 2025; StarQUIC, LEO-NET
+    ///   2024); the uplink loses 0.45 % lightly loaded and 1.96 % under a
+    ///   bulk upload, 85 % of its runs of loss a single packet (Michel et
+    ///   al., IMC 2022).
     pub const fn profile(self) -> Profile {
         const fn p(down: u64, up: u64, last_mile_us: i64, jitter_us: i64, loss: f64) -> Profile {
             Profile {
@@ -161,12 +178,6 @@ impl Access {
             Access::Fiber => p(500, 500, 2_000, 500, 0.000_05),
             Access::Cable => p(300, 20, 7_000, 3_000, 0.000_2),
             Access::Dsl => p(50, 10, 10_000, 2_000, 0.000_5),
-            // 0.2 % on the whole: fades and handovers of 50 ms every 4 s
-            // that lose 12 % of their packets. A handover interrupts
-            // 40-43 ms at the median, about 90 ms at p95 (Lauridsen et al.,
-            // IEEE Comm. Mag. 2017; Kalntis et al., IMC 2024); how often,
-            // and what an uplink loses past HARQ and RLC, no measurement
-            // found says.
             Access::Lte => bursty(
                 p(30, 8, 25_000, 12_000, 0.000_5),
                 Bursts {
@@ -176,13 +187,6 @@ impl Access {
                     loss: 0.12,
                 },
             ),
-            // 0.3 % on the whole: the satellites' reassignment every 15 s
-            // (12, 27, 42 and 57 s past each minute: Tanveer et al., CoNEXT
-            // 2023 Companion; Mohan et al., WWW 2024) loses 30 % for 120 ms.
-            // A boundary's gap is 45-120 ms with its loss there (Lai et al.,
-            // SIGCOMM 2025; StarQUIC, LEO-NET 2024); the uplink loses 0.45 %
-            // lightly loaded and 1.96 % under a bulk upload, 85 % of its
-            // runs of loss a single packet (Michel et al., IMC 2022).
             Access::Starlink => bursty(
                 p(100, 12, 15_000, 8_000, 0.000_5),
                 Bursts {
