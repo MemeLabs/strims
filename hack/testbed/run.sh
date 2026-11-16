@@ -178,20 +178,21 @@
 # container's CPU time and memory once a second: ms since the epoch, the
 # cgroup's usage_usec, and its memory.current in bytes), tc-<i>.log (the
 # seed's eth0 qdiscs at 10 Hz: ms since the epoch, then `tc -s -j qdisc
-# show`'s JSON, which hack/testbed/tcstats.py reads) and ss-<i>.log (its
-# sockets once a second), qdisc-<i>.txt (each node's qdiscs on every
-# device as it shaped them, before the stream: `tc -s -d qdisc show`, its
-# eth0 root with its size table, the delay's ifbd, the slow downlink's
-# ifbs and PCAP's ifbo), steps.log (when each of SEED_UP_STEPS applied, ms
-# since the epoch, and its rate), compete-<s>.json (each upload's iperf3
-# report) and compete.log (when each started), links (each node's link
-# spec, rate, delay and queue: `node <i> <spec> <up_mbit> <delay_ms>
-# <queue_ms>`), a trace link's link-<i>.log (tracelink's queue, packets,
-# bytes and drops every 100 ms) and link-<i>.err, and settings. With a
-# browser node also node-relay.err, cpu-relay.log and hosts/ (each node's
-# host id). With MEDIA, each browser viewer's player-<i>.jsonl (its
-# player's line a second, testbed_browser's --player), and RECORD's
-# record-<i>.bin.
+# show`'s JSON, which hack/testbed/tcstats.py reads: a checkout from
+# before it, whose bench.py, twin.py and hack/capture/analyze.py read tc's
+# text, finds no queue in it and says nothing) and ss-<i>.log (its sockets
+# once a second), qdisc-<i>.txt (each node's qdiscs on every device as it
+# shaped them, before the stream: `tc -s -d qdisc show`, its eth0 root
+# with its size table, the delay's ifbd, the slow downlink's ifbs and
+# PCAP's ifbo), steps.log (when each of SEED_UP_STEPS applied, ms since
+# the epoch, and its rate), compete-<s>.json (each upload's iperf3 report)
+# and compete.log (when each started), links (each node's link spec, rate,
+# delay and queue: `node <i> <spec> <up_mbit> <delay_ms> <queue_ms>`), a
+# trace link's link-<i>.log (tracelink's queue, packets, bytes and drops
+# every 100 ms) and link-<i>.err, and settings. With a browser node also
+# node-relay.err, cpu-relay.log and hosts/ (each node's host id). With
+# MEDIA, each browser viewer's player-<i>.jsonl (its player's line a
+# second, testbed_browser's --player), and RECORD's record-<i>.bin.
 #
 # Images: strims-testbed (Dockerfile) for native nodes, the relay and the
 # sink, and strims-testbed-browser (browser.Dockerfile) for browser nodes,
