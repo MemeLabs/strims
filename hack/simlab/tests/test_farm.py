@@ -1097,7 +1097,10 @@ class TestbedTables(unittest.TestCase):
         with mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(self.dir / "sim-db")}):
             store = self.worker.Store(root, args)
             row = {"steal_pct": 0.5, "node_lines_min": 40, "wall_s": 60.0}
-            full = {**meta["row"], **row}
+            full = self.worker.lake_row(meta["row"], row)
+            self.assertEqual({k: full[k] for k in ("_steal_share", "_node_lines_min")}, {"_steal_share": 0.005,
+                                                                                      "_node_lines_min": 40})
+            self.assertNotIn("_wall_s", full)
             tables = {k: meta[k] for k in ("k", "sim", "test", "env")}
             store.add("j1", {**job, "tables": tables}, {"id": "j1", "row": row, "key": meta["k"]}, full, dest)
             store.close(60)

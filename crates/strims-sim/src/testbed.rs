@@ -1183,13 +1183,22 @@ pub const ROW: &[&str] = &[
     "parent_changes_per_min",
 ];
 
-/// The testbed run's row: [`Report::row`]'s fields that [`ROW`] names.
+/// The families of row fields a testbed run's report writes beside
+/// [`ROW`]'s: the queueing delay readings' scores against the uplink's
+/// queue (`Report::queue_delay_accuracy`: `{reading}_err_{role}_ms`,
+/// `{reading}_fp_{role}`, `{reading}_fn_{role}`) and the standing queue's
+/// share (`standing_{pop}`), whose truth is a testbed run's tbf backlog over
+/// its rate (tc-<i>.log) as it is a sim's model queue.
+pub const ROW_FAMILIES: &[&str] = &["qd_", "qdv_", "qdb_", "qdbi_", "qdl_", "standing_"];
+
+/// The testbed run's row: [`Report::row`]'s fields that [`ROW`] names or
+/// [`ROW_FAMILIES`] holds.
 pub fn row(r: &Report) -> String {
     let full: serde_json::Map<String, Value> =
         serde_json::from_str(&r.row(TEST, None)).unwrap_or_default();
     let kept: serde_json::Map<String, Value> = full
         .into_iter()
-        .filter(|(k, _)| ROW.contains(&k.as_str()))
+        .filter(|(k, _)| ROW.contains(&k.as_str()) || ROW_FAMILIES.iter().any(|f| k.starts_with(f)))
         .collect();
     Value::Object(kept).to_string()
 }

@@ -139,12 +139,57 @@ consts.strims-sim = ["p"]
 description = "Over the first swarm's honest viewers' first joins (each one's first incarnation's): the ms from the join to its first frame read (`join_p50_ms`, `join_p90_ms`; `join_unread`, the joins that read nothing) and to its first read within the caught-up bound (`caught_up_p50_ms`, `caught_up_p90_ms`; `caught_up_never`), a join's clock starting at the join or the stream's start, whichever came later; a viewer's later joins are `rejoin_*`'s."
 notes.strims-sim = "With arrivals or departures (`Scenario::profiled`, `Report::joins`), a join's clock from its reader's start or the stream's, whichever came later, the bound `CAUGHT_UP_MS`. Older runs hold these names over every join, the later ones in."
 
+[rows._busy_share]
+sims = []
+writers = ["worker"]
+type = "num"
+unit = "fraction"
+description = "A testbed job's host while run.sh ran, as the farm's worker measured it from /proc (hack/sim-farm/worker.py's HOST_FIELDS, under a writer's name): the host's number, not the run's. Its CPUs' busy share of their time over the run."
+
+[rows._load_max]
+sims = []
+writers = ["worker"]
+type = "num"
+description = "A testbed job's host while run.sh ran, as the farm's worker measured it from /proc (hack/sim-farm/worker.py's HOST_FIELDS, under a writer's name): the host's number, not the run's. The 1-minute load average's largest sample, a second apart."
+
+[rows._load_mean]
+sims = []
+writers = ["worker"]
+type = "num"
+description = "A testbed job's host while run.sh ran, as the farm's worker measured it from /proc (hack/sim-farm/worker.py's HOST_FIELDS, under a writer's name): the host's number, not the run's. The 1-minute load average's mean over its samples, a second apart."
+
+[rows._node_lines]
+sims = []
+writers = ["worker"]
+type = "json"
+description = "A testbed job's host while run.sh ran, as the farm's worker measured it from /proc (hack/sim-farm/worker.py's HOST_FIELDS, under a writer's name): the host's number, not the run's. Each node-<i>.jsonl's line count, by node index."
+
+[rows._node_lines_min]
+sims = []
+writers = ["worker"]
+type = "int"
+description = "A testbed job's host while run.sh ran, as the farm's worker measured it from /proc (hack/sim-farm/worker.py's HOST_FIELDS, under a writer's name): the host's number, not the run's. The fewest lines a node-<i>.jsonl holds."
+
 [rows._rss_mb]
 sims = []
 writers = ["suite"]
 type = "int"
 unit = "MB"
 description = "The job's peak resident memory in MiB, as suite.py's local run measured it (its process's maxrss, or /usr/bin/time's where it timed the run): the host's number, not the sim's. The fold keeps it as the run's rss_mb (job_runs), not as a column of rows."
+
+[rows._steal_share]
+sims = []
+writers = ["worker"]
+type = "num"
+unit = "fraction"
+description = "A testbed job's host while run.sh ran, as the farm's worker measured it from /proc (hack/sim-farm/worker.py's HOST_FIELDS, under a writer's name): the host's number, not the run's. The share of its CPUs' time the hypervisor stole over the run."
+
+[rows._steal_peak_share]
+sims = []
+writers = ["worker"]
+type = "num"
+unit = "fraction"
+description = "A testbed job's host while run.sh ran, as the farm's worker measured it from /proc (hack/sim-farm/worker.py's HOST_FIELDS, under a writer's name): the host's number, not the run's. Steal's share over its worst 10 s."
 
 [rows._wall_s]
 sims = []

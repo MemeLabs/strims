@@ -29,9 +29,12 @@
         },
         "writers": {
           "default": [],
-          "description": "The lab's programs that add it to a sim's row, no sim writing it: suite (hack/simlab/suite.py's local runs). Its name starts with an underscore, which a sim's never does.",
+          "description": "The lab's programs that add it to a sim's row, no sim writing it: suite (hack/simlab/suite.py's local runs), worker (the farm's worker.py, a testbed job's host). Its name starts with an underscore, which a sim's never does.",
           "items": {
-            "const": "suite",
+            "enum": [
+              "suite",
+              "worker"
+            ],
             "type": "string"
           },
           "title": "Writers",

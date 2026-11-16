@@ -29,8 +29,9 @@ LINES = ("decl", "p4tf", "attackers")
 Sim = Literal["strims-sim"]
 Line = Literal["decl", "p4tf", "attackers"]
 # The lab's programs that add a field to a sim's row, its name an
-# underscore's: suite (hack/simlab/suite.py's local runs).
-Writer = Literal["suite"]
+# underscore's: suite (hack/simlab/suite.py's local runs) and worker (the
+# farm's hack/sim-farm/worker.py, a testbed job's host).
+Writer = Literal["suite", "worker"]
 TYPES = ("int", "num", "text", "bool", "ints", "nums", "json")
 Type = Literal["int", "num", "text", "bool", "ints", "nums", "json"]
 NONES = ("empty", "-1", "0", "negative")
@@ -57,7 +58,8 @@ class Entry(BaseModel):
     lines: list[Line] = Field([], description="The lines that write it where main doesn't; a family's values a "
                                               "line adds are keyed by the line in its params.")
     writers: list[Writer] = Field([], description="The lab's programs that add it to a sim's row, no sim writing it: "
-                                                  "suite (hack/simlab/suite.py's local runs). Its name starts with "
+                                                  "suite (hack/simlab/suite.py's local runs), worker (the farm's worker.py, a "
+                                                  "testbed job's host). Its name starts with "
                                                   "an underscore, which a sim's never does.")
     retired: list[Sim] = Field([], description="The sims whose older runs hold it, which no sim writes now: a "
                                                "retired name, kept so their rows and tables still read.")

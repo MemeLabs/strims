@@ -813,6 +813,25 @@ def finish_testbed(root: Path, r: Running, work: Path, ok: bool) -> dict:
     return {**res, "row": row}
 
 
+# The host's percentages, as the lake's rows name them: a share, a hundredth.
+LAKE_SHARES = {"steal_pct": "_steal_share", "steal_peak_pct": "_steal_peak_share", "busy_pct": "_busy_share"}
+
+
+def lake_row(run_row: dict, host: dict) -> dict:
+    """A testbed job's row as its tables fold: its run's (tables/job.json's)
+    and the host's numbers (HOST_FIELDS) under a writer's names, the
+    host's and not the run's (`_load_mean`; a percentage as a share,
+    LAKE_SHARES: `_steal_share`), but its wall time, the job's own
+    (wall_s)."""
+    out = dict(run_row)
+    for k, v in host.items():
+        if k in LAKE_SHARES:
+            out[LAKE_SHARES[k]] = None if v is None else v / 100
+        elif k != "wall_s":
+            out[f"_{k}"] = v
+    return out
+
+
 def testbed_tables(root: Path, job: dict, out: Path) -> tuple[Path | None, dict | None, str | None]:
     """A finished testbed run's tables, written by its bundle's TABLES_BIN
     into out/tables (the module docs): the dir and its job.json, or why
@@ -905,7 +924,8 @@ def serve(args: argparse.Namespace) -> None:
         keep = (*THIN, *HOST_FIELDS, *r.job.get("fields", ()))
         result["key"] = meta.get("k")
         job = {**r.job, "tables": {k: meta.get(k) for k in ("k", "sim", "test", "env")}}
-        store.add(jid, job, {**result, "row": {k: full[k] for k in keep if k in full}}, full, dest)
+        store.add(jid, job, {**result, "row": {k: full[k] for k in keep if k in full}},
+                  lake_row(meta.get("row", {}), row), dest)
         return True
 
     def end_job(jid: str, r: Running, status: int, usage, now: float, timed_out: bool = False,
