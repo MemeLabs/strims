@@ -72,6 +72,15 @@ describe("gotoOf", () => {
     assert.strictEqual(gotoOf(5, { seq: 3, url }), null);
   });
 
+  it("takes a restarted server's first address after one it took from the server before", () => {
+    // A seq is the goto's time in ms (server.py Tabs): the new server's pass the old one's.
+    const before = Date.UTC(2026, 10, 16, 12, 0, 0);
+    assert.deepStrictEqual(gotoOf(before, { seq: before + 60_000, url }), {
+      took: before + 60_000,
+      route: "/console/overhead?exp=e1",
+    });
+  });
+
   it("takes one outside the console without going anywhere", () => {
     assert.deepStrictEqual(gotoOf(0, { seq: 2, url: "http://h/devtools.html#/watch/x" }), {
       took: 2,

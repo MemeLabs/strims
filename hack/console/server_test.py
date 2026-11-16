@@ -1155,6 +1155,51 @@ class TabGotos(unittest.TestCase):
         self.assertEqual(self.answer(posted)["state"], "taken")
         self.assertIsNone(self.stream("b")(pings=3))
 
+    def test_a_restarted_servers_seqs_pass_those_an_open_tab_took(self):
+        # The tab took an address from the server before, which sent it a
+        # minute before this one started; the tab's page keeps its took.
+        wall = [1_000_000.0]
+        CONSOLE.tabs = server.Tabs(clock=lambda: self.now[0], ping_s=0.1, wall=lambda: wall[0])
+        self.put("r", self.PAGE + "tree")
+        posted = self.goto("r", self.PAGE + "scorecard")
+        before = self.waiting("r")
+        self.put("r", self.PAGE + "scorecard", took=before["seq"])
+        self.assertEqual(self.answer(posted)["state"], "taken")
+        wall[0] += 60
+        CONSOLE.tabs = server.Tabs(clock=lambda: self.now[0], ping_s=0.1, wall=lambda: wall[0])
+        self.put("r", self.PAGE + "scorecard", took=before["seq"])
+        posted = self.goto("r", self.PAGE + "overhead")
+        after = self.waiting("r")
+        # Past the seq the tab took, so the page takes it (api.ts gotoOf),
+        # and the goto waits for the tab to say it did.
+        self.assertGreater(after["seq"], before["seq"])
+        self.assertEqual(self.stream("r", took=before["seq"])(), {"type": "goto", **after})
+        self.assertEqual(self.put("r", self.PAGE + "scorecard", took=before["seq"])["goto"], after)
+        self.put("r", self.PAGE + "overhead", took=after["seq"])
+        self.assertEqual(self.answer(posted)["state"], "taken")
+        # Two gotos in one ms: one seq past the other.
+        posted = self.goto("r", self.PAGE + "tree")
+        first = until(lambda: (g := CONSOLE.tabs._tabs["r"]["goto"]) and g["seq"] > after["seq"] and g)
+        second = self.goto("r", self.PAGE + "playback")
+        until(lambda: CONSOLE.tabs._tabs["r"]["goto"]["seq"] == first["seq"] + 1)
+        self.assertEqual(self.answer(posted)["state"], "replaced")
+        self.put("r", self.PAGE + "playback", took=first["seq"] + 1)
+        self.assertEqual(self.answer(second)["state"], "taken")
+
+    def test_a_late_report_leaves_the_seq_a_later_one_took(self):
+        self.put("s", self.PAGE + "tree")
+        posted = self.goto("s", self.PAGE + "scorecard", wait_s=2)
+        goto = self.waiting("s")
+        tabs = CONSOLE.tabs
+        body = lambda took: {"url": self.PAGE + "scorecard", "focused": True, "visible": True, "took": took}  # noqa: E731
+        # The report saying the tab took it, then one the tab sent before
+        # it, answered later, both before the goto looks again.
+        with tabs._changed:
+            tabs.report("s", body(goto["seq"]))
+            tabs.report("s", body(goto["seq"] - 1))
+        self.assertEqual(self.answer(posted)["state"], "taken")
+        self.assertIsNone(self.put("s", self.PAGE + "scorecard", took=0)["goto"])
+
     def test_a_goto_not_taken_in_its_wait_is_cancelled(self):
         self.put("c", self.PAGE + "tree")
         a = self.answer(self.goto("c", self.PAGE + "scorecard", wait_s=0.3))

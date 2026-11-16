@@ -74,8 +74,10 @@ they were opened at.
                              which it reports on each change and every 30 s; kept in memory, the
                              last report of each tab, a tab unseen for 2 minutes forgotten.
                              `took` is the seq of the last address it was sent and went to (0
-                             for none; a page without it predates goto). Returns its listing
-                             and `goto`, the address waiting for it ({seq, url}) or null
+                             for none; a page without it predates goto): a goto's time in ms,
+                             so a restarted server's seqs pass those it took before. Returns
+                             its listing and `goto`, the address waiting for it ({seq, url}) or
+                             null
   GET  /console/tabs         the tabs' reports, [{id, url, focused, visible, last_seen,
                              focused_ago}] (seconds since its last report, and since it last
                              said it was focused, or null), the latest focused first: what
@@ -464,17 +466,22 @@ class Tabs:
     longest unseen go. `clock` is monotonic seconds (tests give their
     own).
 
-    It also holds the address a goto sends each tab to ({seq, url}, seq
-    one counter's across the tabs), until the tab's report says it took
-    it (`took` at least its seq), a later goto replaces it, or the goto's
-    wait ends without it. A tab's goto stream (follow) pushes it, and so
-    does its next report's answer. A goto's and a stream's waits are the
-    machine's monotonic time, `ping_s` a stream's gap between lines."""
+    It also holds the address a goto sends each tab to ({seq, url}),
+    until the tab's report says it took it (`took` at least its seq), a
+    later goto replaces it, or the goto's wait ends without it. A tab's
+    goto stream (follow) pushes it, and so does its next report's answer.
+    A seq is the goto's time in ms since the epoch by `wall` (seconds), or
+    one past the last one sent where that's no later: so a restarted
+    server's seqs pass those its predecessors sent, which an open tab's
+    `took` may hold, unless the clock went back by more than the time
+    between. A goto's and a stream's waits are the machine's monotonic
+    time, `ping_s` a stream's gap between lines."""
 
-    def __init__(self, clock=time.monotonic, ttl=TAB_TTL_S, ping_s=PING_S):
+    def __init__(self, clock=time.monotonic, ttl=TAB_TTL_S, ping_s=PING_S, wall=time.time):
         self.clock = clock
         self.ttl = ttl
         self.ping_s = ping_s
+        self.wall = wall
         self._tabs = {}
         self._seq = 0
         self._changed = threading.Condition()
@@ -482,7 +489,9 @@ class Tabs:
     def report(self, id, body):
         """Keeps tab `id`'s report {url, focused, visible, took?}; returns
         it as listed, with `goto` the address waiting for it ({seq, url},
-        or None)."""
+        or None). A tab's took is the most any of its reports gave, so a
+        report answered after a later one leaves it; a report without one
+        (a page that predates goto) clears it."""
         tab_id(id)
         if not isinstance(body, dict) or not isinstance(body.get("url"), str) or not all(
                 isinstance(body.get(k), bool) for k in ("focused", "visible")):
@@ -496,6 +505,8 @@ class Tabs:
         with self._changed:
             old = self._tabs.pop(id, None)
             goto = old and old["goto"]
+            if took is not None and old and old["took"] is not None:
+                took = max(took, old["took"])
             if goto and took is not None and took >= goto["seq"]:
                 goto = None
             self._tabs[id] = {"url": body["url"], "focused": body["focused"], "visible": body["visible"], "seen": now,
@@ -542,8 +553,7 @@ class Tabs:
                 raise HttpError(404, f"no tab {id!r} has reported in the last {self.ttl:g} s")
             if t["took"] is None:
                 raise HttpError(409, f"tab {id}'s page predates goto: reload it on a current build ({views.BUILD})")
-            self._seq += 1
-            seq = self._seq
+            self._seq = seq = max(self._seq + 1, int(self.wall() * 1000))
             t["goto"], t["posted"] = {"seq": seq, "url": url}, seq
             self._changed.notify_all()
             deadline = time.monotonic() + wait_s
