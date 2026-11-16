@@ -115,11 +115,13 @@ BASE/devtools.html#/console/NAME?QUERY and the workbench at
                                    answers
   tab(id=None, server_url=None) -> dict
                                    one of them, the first by default
-  goto(url, id=None, wait_s=GOTO_WAIT_S, server_url=None) -> dict
+  goto(url, id=None, wait_s=None, server_url=None) -> dict
                                    sends tab `id` (the latest focused by
                                    default) to console address `url`,
                                    through the server it reports to, and
-                                   waits up to wait_s for it to say it
+                                   waits up to wait_s (GOTO_WAIT_S, for a
+                                   tab in the background
+                                   GOTO_HIDDEN_WAIT_S) for it to say it
                                    went there: {state, tab} (POST
                                    /console/tabs/ID/goto), state taken,
                                    replaced, gone or missed; ValueError for
@@ -414,9 +416,15 @@ SERVER = "python3 hack/console/server.py"
 BUILD = "pnpm run console:build"
 TAB_TIMEOUT_S = 5
 # How long goto waits for its tab to take an address by default: a tab in
-# the background takes it at its next report, which a browser's timer
-# throttling can hold to a minute (server.py's GOTO_WAIT_S).
+# view takes it at once, from its stream (server.py's GOTO_WAIT_S); one in
+# the background at its next report, every 30 s, which Chrome's throttling
+# of a tab hidden for 5 minutes holds to a minute, so it waits the most the
+# server takes (GOTO_WAIT_MAX_S).
 GOTO_WAIT_S = 60
+GOTO_HIDDEN_WAIT_S = 120
+# How often an open console tab reports while nothing changes (api.ts's
+# TAB_EVERY_MS).
+TAB_REPORT_S = 30
 
 
 def form(s):
@@ -1522,10 +1530,12 @@ def tab(id=None, server_url=None):
     raise LookupError(f"no tab {id!r}: the tabs are {', '.join(t.get('id', '?') for t in got)}")
 
 
-def goto(url, id=None, wait_s=GOTO_WAIT_S, server_url=None):
+def goto(url, id=None, wait_s=None, server_url=None):
     """Sends tab `id` (else the latest focused) to console address `url`,
-    through the server it reports to, and waits up to `wait_s` seconds for
-    the tab to report it went there: the server's {state, tab}, state
+    through the server it reports to, and waits up to `wait_s` seconds
+    (GOTO_WAIT_S by default, GOTO_HIDDEN_WAIT_S for a tab whose last report
+    said it was in the background) for the tab to report it went there:
+    the server's {state, tab}, state
     "taken" (tab its report then), "replaced" (by a later goto), "gone"
     (the tab forgotten, tab None) or "missed" (the address no longer
     waits for it). The tab goes to the address's route on its own host, a
@@ -1534,6 +1544,8 @@ def goto(url, id=None, wait_s=GOTO_WAIT_S, server_url=None):
     (the server's 404 and 409), NoServer as tabs()."""
     parse(url)
     t = tab(id, server_url)
+    if wait_s is None:
+        wait_s = GOTO_WAIT_S if t.get("visible") else GOTO_HIDDEN_WAIT_S
     at = (t.get("server") or server_url).rstrip("/")
     req = urllib.request.Request(f"{at}/console/tabs/{urllib.parse.quote(t['id'], safe='')}/goto",
                                  data=json.dumps({"url": url, "wait_s": wait_s}).encode("utf-8"),

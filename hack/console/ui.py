@@ -47,14 +47,17 @@ point, bar, area, rect, tick), x=, y=, color= and logy.
 `go` sends a console tab (the latest focused, or `--tab ID`) to an
 address and waits for it to say it went there. The address is VIEW's (no
 params), the URL's, or with neither the tab's own, and then link's flags
-change it: each `--param` set (NAME= leaves it out), `--sel` in place of
-the selection (null drops it), the workbench's `--sql`, `--view` and
-`--chart`. It prints the address the tab then reports, and the one it
-left to stderr. The tab moves within its own page, a history entry its
-Back undoes: a tab in view at once, one in the background at its next
-report (up to a minute) or when it's shown. Past `--wait` seconds
-(default 60) the address is withdrawn and go fails; a tab whose page
-predates go fails at once (reload it on a current build).
+but `--base` change it (the tab stays on its own host): each `--param`
+set (NAME= leaves it out), `--sel` in place of the selection (null drops
+it), the workbench's `--sql`, `--view` and `--chart`. It prints the
+address the tab then reports, and the one it left to stderr. The tab
+moves within its own page, a history entry its Back undoes: a tab in
+view at once, one in the background at its next report (every 30 s, a
+minute where the browser throttles a hidden tab's timers) or when it's
+shown. Past `--wait` seconds (default 60, 120 for a tab in the
+background) the address is withdrawn and go fails, saying what the tab's
+last report gives of why; a tab whose page predates go fails at once
+(reload it on a current build).
 
 `describe VIEW`, `describe URL` and `link` without `--check` need neither
 the server nor the catalog. `rows` and `--check` read the catalog
@@ -409,8 +412,25 @@ def route(url):
     return urllib.parse.urlsplit(url).fragment
 
 
+def missed(t):
+    """Why a tab whose last report is `t` (the server's listing of it)
+    didn't go to an address in go's wait. A page that predates go is
+    refused at once (409), so the likelier causes: the tab is in the
+    background, it left the console's pages (which stops its reports), or
+    its goto stream or reports failed."""
+    if t and not t.get("visible"):
+        return ("it's in the background, where the browser may hold its reports past the wait: bring it up and go "
+                "again")
+    seen = t.get("last_seen") if t else None
+    if isinstance(seen, (int, float)) and seen > views.TAB_REPORT_S + views.TAB_TIMEOUT_S:
+        return (f"it hasn't reported for {seen:g} s: it left the console's pages, which stops its reports, or its "
+                "reports to the server fail")
+    return ("it reports, but took nothing: its goto stream to the server fails (the browser's console says why), or "
+            "it left the console's pages just now")
+
+
 def cmd_go(a):
-    if not 0 < a.wait <= MAX_WAIT_S:
+    if a.wait is not None and not 0 < a.wait <= MAX_WAIT_S:
         sys.exit(f"go: --wait is seconds, more than 0 and at most {MAX_WAIT_S}")
     try:
         t = views.tab(a.tab or None)
@@ -434,11 +454,12 @@ def cmd_go(a):
         sys.exit(f"go: {e}")
     if a.check:
         checked(name, params, sel, "go")
+    wait = a.wait or (views.GOTO_WAIT_S if t.get("visible") else views.GOTO_HIDDEN_WAIT_S)
     if not t.get("visible"):
-        print(f"go: tab {t['id']} is in the background: it goes there at its next report (up to a minute) or when "
-              "it's shown", file=sys.stderr)
+        print(f"go: tab {t['id']} is in the background: it goes there at its next report (every 30 s, a minute where "
+              "the browser throttles a hidden tab's timers) or when it's shown", file=sys.stderr)
     try:
-        r = views.goto(url, t["id"], wait_s=a.wait)
+        r = views.goto(url, t["id"], wait_s=wait)
     except views.NoServer as e:
         sys.exit(f"go: {e}")
     except (LookupError, ValueError) as e:
@@ -455,10 +476,7 @@ def cmd_go(a):
         sys.exit(f"go: a later go to tab {t['id']} replaced this one")
     if state == "gone":
         sys.exit(f"go: tab {t['id']} went away (closed, or unheard from for 2 minutes)")
-    background = r.get("tab") and not r["tab"].get("visible")
-    sys.exit(f"go: tab {t['id']} didn't go there in {a.wait:g} s, so the address is withdrawn: "
-             + ("it's in the background; bring it up and go again" if background else
-                f"reload it on a current build ({views.BUILD})"))
+    sys.exit(f"go: tab {t['id']} didn't go there in {wait:g} s, so the address is withdrawn: " + missed(r.get("tab")))
 
 
 def main(argv=None):
@@ -483,8 +501,9 @@ def main(argv=None):
                                              "own address)")
     g.add_argument("--tab", nargs="?", const="", metavar="ID", help="the tab (default: the most recently focused)")
     address_flags(g)
-    g.add_argument("--wait", type=float, default=views.GOTO_WAIT_S, metavar="S",
-                   help=f"how long it waits for the tab (default {views.GOTO_WAIT_S} s, at most {MAX_WAIT_S})")
+    g.add_argument("--wait", type=float, metavar="S",
+                   help=f"how long it waits for the tab (default {views.GOTO_WAIT_S} s, {views.GOTO_HIDDEN_WAIT_S} for "
+                        f"a tab in the background; at most {MAX_WAIT_S})")
     a = ap.parse_args(argv)
     {"describe": cmd_describe, "rows": cmd_rows, "tabs": cmd_tabs, "link": cmd_link, "go": cmd_go}[a.cmd](a)
 

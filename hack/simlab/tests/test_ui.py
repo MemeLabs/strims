@@ -7,7 +7,8 @@ columns run_timeline reads) and a console server of their own (server.py
 on a free port, its state file in the fixture's checkout):
 
   Offline   describe VIEW, describe URL and link with no server and no
-            catalog; link's refusals
+            catalog; link's refusals; what a go that missed says of why,
+            and go's help
   Catalog   rows of a URL, as a table and as JSON; link --check passing,
             and refusing a bad cell; rows with no catalog
   NoServer  tabs, describe --tab, rows --tab and go say how to start the
@@ -26,6 +27,7 @@ on a free port, its state file in the fixture's checkout):
 """
 
 import http.client
+import importlib.util
 import json
 import shlex
 import signal
@@ -93,6 +95,26 @@ def ui(*args, root=None):
 
 
 class Offline(unittest.TestCase):
+    def test_what_a_go_that_missed_says_of_why(self):
+        spec = importlib.util.spec_from_file_location("console_ui", UI)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        # A page that predates go is refused at once, so none says reload.
+        self.assertEqual(mod.missed({"visible": False, "last_seen": 50.0}),
+                         "it's in the background, where the browser may hold its reports past the wait: bring it up "
+                         "and go again")
+        self.assertEqual(mod.missed({"visible": True, "last_seen": 62.5}),
+                         "it hasn't reported for 62.5 s: it left the console's pages, which stops its reports, or its "
+                         "reports to the server fail")
+        self.assertEqual(mod.missed({"visible": True, "last_seen": 12.0}),
+                         "it reports, but took nothing: its goto stream to the server fails (the browser's console "
+                         "says why), or it left the console's pages just now")
+        # go's help: link's flags but --base, and the waits.
+        code, out, _ = ui("go", "--help", root=EMPTY)
+        self.assertEqual(code, 0)
+        self.assertNotIn("--base", out)
+        self.assertIn("default 60 s, 120 for a tab in the background; at most 120", " ".join(out.split()))
+
     def test_describe_a_view_and_an_address(self):
         code, out, err = ui("describe", "run_timeline", root=EMPTY)
         self.assertEqual((code, err), (0, ""))
@@ -332,16 +354,21 @@ class Go(unittest.TestCase):
         page = Page(self, self.port, "bg", grid, visible=False)
         code, out, err = ui("go", "overhead", "--param", "exp=sf0001", "--tab", "bg")
         self.assertEqual((code, out, err), (0, overhead + "\n", "go: tab bg is in the background: it goes there at "
-                                                                 "its next report (up to a minute) or when it's shown\n"
+                                                                 "its next report (every 30 s, a minute where the "
+                                                                 "browser throttles a hidden tab's timers) or when "
+                                                                 "it's shown\n"
                                                                  f"go: tab bg was at {grid}\n"))
         self.assertEqual(page.url, overhead)
         Page(self, self.port, "old", grid, took=None)
         self.assertEqual(ui("go", "overhead", "--tab", "old"), (1, "", "go: tab old's page predates goto: reload it on "
                                                                        "a current build (pnpm run console:build)\n"))
         Page(self, self.port, "frozen", grid, takes=False)
+        # A page that predates go is refused at once: a tab that reports
+        # but takes nothing has a stream that fails, or left just now.
         self.assertEqual(ui("go", "overhead", "--tab", "frozen", "--wait", "1"),
-                         (1, "", "go: tab frozen didn't go there in 1 s, so the address is withdrawn: reload it on a "
-                                 "current build (pnpm run console:build)\n"))
+                         (1, "", "go: tab frozen didn't go there in 1 s, so the address is withdrawn: it reports, but "
+                                 "took nothing: its goto stream to the server fails (the browser's console says "
+                                 "why), or it left the console's pages just now\n"))
         self.assertEqual(ui("go", "overhead", "--wait", "0")[2],
                          "go: --wait is seconds, more than 0 and at most 120\n")
 

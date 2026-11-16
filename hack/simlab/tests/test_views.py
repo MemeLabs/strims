@@ -539,18 +539,26 @@ class Addresses(unittest.TestCase):
             self.assertEqual(views.tabs("http://127.0.0.1:8087/"),
                              [{"id": "a", "url": "u1", "server": "http://127.0.0.1:8087"}])
         # The tab named, else the latest focused, at the server it was listed at.
-        listed = [{"id": "t1", "url": "u1", "server": "http://127.0.0.1:9000"},
-                  {"id": "t2", "url": "u2", "server": "http://127.0.0.1:8087"}]
+        listed = [{"id": "t1", "url": "u1", "server": "http://127.0.0.1:9000", "visible": True},
+                  {"id": "t2", "url": "u2", "server": "http://127.0.0.1:8087", "visible": True},
+                  {"id": "t3", "url": "u3", "server": "http://127.0.0.1:8087", "visible": False}]
         url = views.link("overhead", {"exp": "e1"}, base="http://blinky.local:8086")
         sent.clear()
         with mock.patch.object(views, "tabs", lambda server_url=None: listed), \
                 mock.patch.object(views.urllib.request, "urlopen", urlopen):
             self.assertEqual(views.goto(url, "t2", wait_s=7), {"state": "taken", "tab": {"id": "t2"}})
             views.goto(url)
+            # A tab in the background takes it at its next report, which a
+            # browser's throttling holds to a minute: the longest wait.
+            views.goto(url, "t3")
         self.assertEqual(sent, [("POST", "http://127.0.0.1:8087/console/tabs/t2/goto", {"url": url, "wait_s": 7},
                                  7 + views.TAB_TIMEOUT_S),
                                 ("POST", "http://127.0.0.1:9000/console/tabs/t1/goto",
-                                 {"url": url, "wait_s": views.GOTO_WAIT_S}, views.GOTO_WAIT_S + views.TAB_TIMEOUT_S)])
+                                 {"url": url, "wait_s": views.GOTO_WAIT_S}, views.GOTO_WAIT_S + views.TAB_TIMEOUT_S),
+                                ("POST", "http://127.0.0.1:8087/console/tabs/t3/goto",
+                                 {"url": url, "wait_s": views.GOTO_HIDDEN_WAIT_S},
+                                 views.GOTO_HIDDEN_WAIT_S + views.TAB_TIMEOUT_S)])
+        self.assertEqual(views.GOTO_HIDDEN_WAIT_S, 120)
 
         # An address of no view goes nowhere; the server's refusals as LookupError and ValueError.
         sent.clear()
