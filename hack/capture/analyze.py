@@ -644,7 +644,7 @@ def tc_queue(d):
     if got and got[-1][1].rate is None:
         tcstats.note(f"{d}: the seed's {spec} link's queue ({got[-1][1].kind} 10:) has no rate to time it by:"
                      " no delay fields")
-    return [(t, 1000 * q.backlog / q.rate) for t, q in got if q.rate]
+    return [(t, 1000 * q.held / q.rate) for t, q in got if q.rate]
 
 
 def testbed_delays(d):

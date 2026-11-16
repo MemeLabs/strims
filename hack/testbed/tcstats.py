@@ -18,6 +18,7 @@ file names.
 """
 
 import json
+import math
 import os
 import re
 import sys
@@ -31,8 +32,10 @@ class Qdisc(NamedTuple):
     """One qdisc's statistics: its kind and handle, its parent (None at the
     root), what it sent (bytes, packets), dropped and holds (bytes,
     packets), its shaping rate in bytes a second where it has one (tbf's
-    rate, cake's bandwidth), and its device where tc named it (a show of
-    every device's, as qdisc-<i>.txt is)."""
+    rate, cake's bandwidth), what its shaper charges for what it holds
+    (`held`, which over `rate` is how long it takes to drain), and its
+    device where tc named it (a show of every device's, as qdisc-<i>.txt
+    is)."""
 
     kind: str
     handle: str
@@ -44,7 +47,29 @@ class Qdisc(NamedTuple):
     backlog: int
     qlen: int
     rate: Optional[float]
+    held: int
     dev: Optional[str] = None
+
+
+# The bytes of a packet's link header ahead of its network header, which
+# cake's overhead takes the place of (its `avg_hdr_offset`: Ethernet's).
+HDR_OFFSET = 14
+
+
+def cake_held(backlog, qlen, overhead, mpu, line):
+    """What cake charges for `backlog` skb bytes in `qlen` packets, at their
+    mean size: it counts its backlog as the skbs are, but shapes on each
+    packet's network bytes and its overhead, at least its mpu, in ATM cells
+    or PTM's 65 bytes for 64 (tc-cake(8); sch_cake's cake_overhead), so a
+    dsl router's queue drains at 0.88 of its bandwidth in skb bytes."""
+    if qlen <= 0:
+        return backlog
+    n = max(backlog / qlen - HDR_OFFSET + overhead, mpu)
+    if line == "atm":
+        n = math.ceil(n / 48) * 53
+    elif line == "ptm":
+        n += math.ceil(n / 64)
+    return round(qlen * n)
 
 
 def size(s):
@@ -69,6 +94,7 @@ HEAD = re.compile(r"qdisc (\S+) ([0-9a-f]+:)(?: dev (\S+))?(?: (root)| parent (\
 SENT = re.compile(r"Sent (\d+) bytes (\d+) pkt \(dropped (\d+), overlimits (\d+)")
 BACKLOG = re.compile(r"backlog ([\d.]+[KMG]?b) (\d+)p")
 SHAPE = re.compile(r" (?:rate|bandwidth) ([\d.]+[KMGT]?bit)")
+CAKE = re.compile(r" (noatm|atm|ptm) overhead (-?\d+)(?: mpu (\d+))?")
 
 
 def parse_text(text):
@@ -85,6 +111,10 @@ def parse_text(text):
             raise ValueError(f"not tc's statistics: {part[:80]!r}")
         # The shaping rate is on the header line, ahead of the stats.
         shape = SHAPE.search(part[:sent.start()])
+        held = size(backlog[1])
+        cake = CAKE.search(part[:sent.start()]) if head[1] == "cake" else None
+        if cake and " raw" not in part[:sent.start()]:
+            held = cake_held(held, int(backlog[2]), int(cake[2]), int(cake[3] or 0), cake[1])
         out.append(Qdisc(
             kind=head[1],
             handle=head[2],
@@ -96,6 +126,7 @@ def parse_text(text):
             backlog=size(backlog[1]),
             qlen=int(backlog[2]),
             rate=rate(shape[1]) if shape else None,
+            held=held,
             dev=head[3],
         ))
     return out
@@ -107,6 +138,9 @@ def parse_json(text):
     for q in json.loads(text):
         opts = q.get("options") or {}
         r = opts.get("rate", opts.get("bandwidth"))
+        held = q.get("backlog", 0)
+        if q["kind"] == "cake" and not opts.get("raw"):
+            held = cake_held(held, q.get("qlen", 0), opts.get("overhead", 0), opts.get("mpu", 0), opts.get("atm"))
         out.append(Qdisc(
             kind=q["kind"],
             handle=q["handle"],
@@ -118,6 +152,7 @@ def parse_json(text):
             backlog=q.get("backlog", 0),
             qlen=q.get("qlen", 0),
             rate=float(r) if isinstance(r, (int, float)) else None,
+            held=held,
             dev=q.get("dev"),
         ))
     return out

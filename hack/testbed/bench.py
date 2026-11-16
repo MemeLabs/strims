@@ -130,7 +130,7 @@ def tc_queue(run, start_ms):
         return []
     if got and got[-1][1].rate is None:
         tcstats.note(f"{run}: the seed's {spec} link's queue ({got[-1][1].kind} 10:) has no rate to time it by: no upq")
-    return [((ms - start_ms) * 1000, q.backlog / q.rate * 1000) for ms, q in got if q.rate]
+    return [((ms - start_ms) * 1000, q.held / q.rate * 1000) for ms, q in got if q.rate]
 
 
 def tc_drops(run):

@@ -13,7 +13,8 @@ import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 import tcstats  # noqa: E402
 
 # A tbf root holding 2 KiB, which tc prints as 2Kb, joined as run.sh's
@@ -61,7 +62,9 @@ qdisc clsact ffff: parent ffff:fff1
  backlog 0b 0p requeues 0
 """
 CAKE_JSON = (
-    '[{"kind":"cake","handle":"10:","root":true,"refcnt":2,"options":{"bandwidth":118750,"diffserv":"diffserv3"},'
+    '[{"kind":"cake","handle":"10:","root":true,"refcnt":2,"options":{"bandwidth":118750,"diffserv":"diffserv3",'
+    '"flowmode":"triple-isolate","nat":false,"wash":false,"ingress":false,"ack-filter":"disabled","split_gso":true,'
+    '"rtt":100000,"raw":false,"atm":"noatm","overhead":18,"mpu":64,"fwmark":"0"},'
     '"bytes":1024,"packets":1,"drops":0,"overlimits":6,"requeues":0,"backlog":5120,"qlen":5,'
     '"tins":[{"backlog_bytes":5120}]}]'
 )
@@ -99,6 +102,19 @@ class Parse(unittest.TestCase):
     def test_cake_has_its_bandwidth_and_root_backlog(self):
         cake = tcstats.parse(CAKE)[0]
         self.assertEqual((cake.kind, cake.backlog, cake.qlen, cake.rate), ("cake", 5120, 5, 118750))
+        # Its 1024-byte skbs cost DOCSIS's 18 bytes past their 1010 of IP.
+        self.assertEqual(cake.held, 5 * 1028)
+
+    def test_cake_holds_what_its_shaper_charges(self):
+        # A dsl router's cake under a flood of 1442-byte skbs (1428 IP
+        # bytes): each costs 1428 + 40 in ATM cells, 31 of 53 bytes, so its
+        # queue drains at 1442 / 1643 of its bandwidth in skb bytes (0.879
+        # measured over 10 s).
+        with open(os.path.join(HERE, "testdata", "tc", "dsl-cake-flood.json")) as f:
+            cake = tcstats.find(tcstats.parse(f.read()), "10:", "cake")
+        self.assertEqual(cake.backlog, cake.qlen * 1442)
+        self.assertEqual(cake.held, cake.qlen * 1643)
+        self.assertEqual(tcstats.find(tcstats.parse(TBF_JSON), "10:").held, 3072)
 
     def test_samples_skip_a_torn_line(self):
         with tempfile.TemporaryDirectory() as d:
