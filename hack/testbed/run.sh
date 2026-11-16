@@ -197,8 +197,8 @@
 # Images: strims-testbed (Dockerfile) for native nodes, the relay and the
 # sink, and strims-testbed-browser (browser.Dockerfile) for browser nodes,
 # built here. Container names (tb-<i>, tb-relay, tb-sink), the network
-# (strims-testbed) and its subnet (10.77.0.0/24) are fixed: one testbed
-# per Docker host at a time.
+# (strims-testbed, internal: no route out) and its subnet (10.77.0.0/24)
+# are fixed: one testbed per Docker host at a time.
 #
 # Needs Docker (the user's docker group) and the kernel modules the links
 # are shaped with, which links.sh's link_modules lists (every run's netem,
@@ -334,8 +334,18 @@ if [ "${CAPTURE:-0}" = 1 ]; then
   mkdir -p "$out/capture"
   chmod 1777 "$out/capture"
 fi
-docker network inspect "$net" >/dev/null 2>&1 \
-  || docker network create --subnet "$subnet.0/24" "$net" >/dev/null
+# The network has no route out (--internal), so the shaped uplinks carry
+# the testbed's traffic alone: a browser's own fetches (component updates,
+# safe browsing, first-run downloads) would cross them otherwise. Nothing
+# in a run needs the internet: the binaries and the page are mounted, the
+# images built beforehand. A network from before is made again.
+if [ "$(docker network inspect -f '{{.Internal}}' "$net" 2>/dev/null)" != true ]; then
+  docker network rm "$net" >/dev/null 2>&1 || true
+  docker network create --internal --subnet "$subnet.0/24" "$net" >/dev/null
+fi
+# Nor does a container speak IPv6, whose link-local chatter (router
+# solicitations, neighbour discovery) would cross them too.
+nov6=(--sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv6.conf.default.disable_ipv6=1)
 
 {
   for i in $(seq 0 $((n - 1))); do
@@ -393,7 +403,7 @@ fi
 if [ "$browsers" = 1 ] && [ "$relay_on" = 1 ]; then
   names+=(tb-relay)
   docker rm -f tb-relay >/dev/null 2>&1 || true
-  docker run -d --name tb-relay --network "$net" --ip "$relay" \
+  docker run -d --name tb-relay --network "$net" --ip "$relay" "${nov6[@]}" \
     -v "$bin:/testbed_node:ro" -v "$out:/out" "$image" \
     bash -c "$(cpu_log relay)
 exec /testbed_node --relay-only --topology /out/topology --start $start --secs $secs 2> /out/node-relay.err" >/dev/null
@@ -480,7 +490,7 @@ $shape"
   names+=("$name")
   docker rm -f "$name" >/dev/null 2>&1 || true
   if [ "$(kind_of "$i")" = native ]; then
-    docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" \
+    docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" "${nov6[@]}" \
       --cap-add NET_ADMIN "${link_mounts[@]}" -v "$bin:/testbed_node:ro" -v "$out:/out" "${media_mount[@]}" "$image" \
       bash -c "set -e
 $shape
@@ -491,13 +501,18 @@ exec /testbed_node --index $i --topology /out/topology --start $start --secs $se
   else
     # The browser runs as the image's unprivileged user, after root has
     # shaped the link. Its profile, in /tmp, stays in memory, so its
-    # writes don't stall the other containers' on the host's disk.
-    docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" \
+    # writes don't stall the other containers' on the host's disk. The
+    # internal network has no default route, and Firefox gathers its ICE
+    # candidates from the address a route lookup gives (none, and its
+    # links fail at once): an on-link one gives it eth0's, and carries
+    # nothing, as no name outside the network resolves.
+    docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" "${nov6[@]}" \
       --cap-add NET_ADMIN "${link_mounts[@]}" --shm-size 1g --tmpfs /tmp:size=1g \
       -v "$browser_bin:/testbed_browser:ro" \
       -v "$web:/web:ro" -v "$out:/out" "$browser_image" \
       bash -c "set -e
 $shape
+ip route add default dev eth0
 tc -s -d qdisc show > /out/qdisc-$i.txt
 $sample
 $(cpu_log "$i")
@@ -526,7 +541,7 @@ if [ -n "$compete" ]; then
   sink=$subnet.250
   names+=(tb-sink)
   docker rm -f tb-sink >/dev/null 2>&1 || true
-  docker run -d --name tb-sink --network "$net" --ip "$sink" --cap-add NET_ADMIN "$image" \
+  docker run -d --name tb-sink --network "$net" --ip "$sink" "${nov6[@]}" --cap-add NET_ADMIN "$image" \
     bash -c "set -e
 tc qdisc replace dev eth0 root netem delay 10ms limit 100000
 exec iperf3 -s" >/dev/null

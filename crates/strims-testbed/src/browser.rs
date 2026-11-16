@@ -220,6 +220,41 @@ pub const FIREFOX_PREFS: &str = concat!(
     "user_pref(\"browser.pagethumbnails.capturing_disabled\", true);\n",
     // Media plays, with sound, without a user's gesture.
     "user_pref(\"media.autoplay.default\", 0);\n",
+    // No fetches of its own, which would cross the node's shaped link (the
+    // testbed's network has no route out, so they only fail): updates of
+    // the browser, its add-ons, media plugins (OpenH264) and remote
+    // settings, safe browsing's lists, telemetry and studies, captive
+    // portal and connectivity checks, the new tab page's feeds, DNS over
+    // HTTPS and prefetches.
+    // With no route out it would take itself to be offline, and offline it
+    // lets no WebRTC connection through.
+    "user_pref(\"network.manage-offline-status\", false);\n",
+    "user_pref(\"app.update.enabled\", false);\n",
+    "user_pref(\"app.update.auto\", false);\n",
+    "user_pref(\"extensions.update.enabled\", false);\n",
+    "user_pref(\"extensions.blocklist.enabled\", false);\n",
+    "user_pref(\"extensions.getAddons.cache.enabled\", false);\n",
+    "user_pref(\"media.gmp-manager.updateEnabled\", false);\n",
+    "user_pref(\"services.settings.server\", \"\");\n",
+    "user_pref(\"browser.safebrowsing.malware.enabled\", false);\n",
+    "user_pref(\"browser.safebrowsing.phishing.enabled\", false);\n",
+    "user_pref(\"browser.safebrowsing.downloads.enabled\", false);\n",
+    "user_pref(\"browser.safebrowsing.blockedURIs.enabled\", false);\n",
+    "user_pref(\"datareporting.healthreport.uploadEnabled\", false);\n",
+    "user_pref(\"toolkit.telemetry.enabled\", false);\n",
+    "user_pref(\"toolkit.telemetry.unified\", false);\n",
+    "user_pref(\"app.normandy.enabled\", false);\n",
+    "user_pref(\"app.shield.optoutstudies.enabled\", false);\n",
+    "user_pref(\"network.captive-portal-service.enabled\", false);\n",
+    "user_pref(\"network.connectivity-service.enabled\", false);\n",
+    "user_pref(\"browser.newtabpage.enabled\", false);\n",
+    "user_pref(\"browser.newtabpage.activity-stream.feeds.topsites\", false);\n",
+    "user_pref(\"browser.newtabpage.activity-stream.feeds.section.topstories\", false);\n",
+    "user_pref(\"browser.topsites.contile.enabled\", false);\n",
+    "user_pref(\"browser.startup.homepage_override.mstone\", \"ignore\");\n",
+    "user_pref(\"network.trr.mode\", 5);\n",
+    "user_pref(\"network.dns.disablePrefetch\", true);\n",
+    "user_pref(\"network.prefetch-next\", false);\n",
 );
 
 /// Chromium's flags for the pages, besides `--user-data-dir`.
@@ -233,6 +268,12 @@ pub const CHROMIUM_FLAGS: &[&str] = &[
     "--disable-dev-shm-usage",
     "--no-first-run",
     "--no-default-browser-check",
+    // No fetches of its own, which would cross the node's shaped link (the
+    // testbed's network has no route out, so they only fail): component
+    // updates, safe browsing, variations and the rest of its background
+    // networking.
+    "--disable-background-networking",
+    "--disable-component-update",
     // The pages' console, on stderr.
     "--enable-logging=stderr",
     // Media plays, with sound, without a user's gesture.
