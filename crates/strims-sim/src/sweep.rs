@@ -40,7 +40,7 @@
 //!   Unset or blank, each scenario keeps its own (IP bytes alone, but a
 //!   testbed link's, `STRIMS_SIM_CAL_SEED_LINK`).
 //! - `STRIMS_SIM_UPLINK_SLOTS=<slots>` hands every WAN host's uplink its
-//!   messages in slots ahead of its shaper (`strims_wan::slots`):
+//!   messages in slots after its shaper (`strims_wan::slots`):
 //!   `<min>-<max>` ms; `profiles`, each host its access kind's
 //!   ([`Access::slots`](strims_wan::Access::slots): cable's grants); `off`,
 //!   none, the scenario's own included. Unset or blank, each scenario's.

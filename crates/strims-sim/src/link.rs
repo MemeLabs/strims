@@ -28,8 +28,10 @@
 //!   bytes; on the testbed alone, `delay=<file>@<step ms>` (a one-way
 //!   delay trace) and `limit=` bytes held at most.
 //!
-//! On any class, `slot=<min>-<max>` (or `<ms>`, or `off`) gives its slots
-//! in milliseconds, and on any but a trace, `router=fq_codel|cake` (the
+//! On any class, `slot=<min>-<max>` (or `<ms>`, or `off`) gives in
+//! milliseconds the slots that send what its shaper passed (cable's grants;
+//! the queue's limit counts what waits for the shaper, not for a slot), and
+//! on any but a trace, `router=fq_codel|cake` (the
 //! testbed's alone) an SQM home router at `pct=` percent of the rate
 //! (default 95). A file's path takes letters, digits and `._/+-` alone.
 //! The twins refuse a router, DOCSIS-PIE, a delay trace and a byte limit,

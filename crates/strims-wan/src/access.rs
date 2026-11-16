@@ -58,7 +58,7 @@ pub struct Profile {
     /// [`Framing::NONE`] in every [`Access::profile`]; [`Access::framing`]
     /// gives a kind's.
     pub framing: Framing,
-    /// The uplink's medium access in slots, ahead of its shaper, if it has
+    /// The uplink's medium access in slots, after its shaper, if it has
     /// any: `None` in every [`Access::profile`]; [`Access::slots`] gives a
     /// kind's typical ones.
     pub slots: Option<Slots>,
@@ -261,7 +261,8 @@ impl Access {
     }
 }
 
-/// A cable modem's upstream slots: an idle modem's request waits 2-8 ms
+/// A cable modem's upstream slots, on what its shaper passed: an idle
+/// modem's request waits 2-8 ms
 /// for its grant (CableLabs, "Low Latency DOCSIS: Technology Overview",
 /// 2019, s3 and Fig 1; RFC 8034 s4.2 gives about 4-8 ms), and a loaded
 /// one's piggybacked requests cycle in about 5 ms (Cisco, "Upstream
@@ -366,8 +367,8 @@ impl Site {
         self
     }
 
-    /// The same site with its uplink's medium access in `slots` (`None`:
-    /// none).
+    /// The same site with its uplink's medium access in `slots`, after its
+    /// shaper (`None`: none).
     pub const fn with_slots(mut self, slots: Option<Slots>) -> Site {
         self.profile.slots = slots;
         self

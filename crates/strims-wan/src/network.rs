@@ -59,13 +59,15 @@
 //!   packets and the rest ([`Framing::message`]): its serialization, its
 //!   bucket's tokens, its queue's bytes and its stats' `up_bytes` count
 //!   those. [`Framing::NONE`] charges the IP bytes alone.
-//! - **Slots.** An uplink whose site has [`Slots`] hands a message to its
-//!   shaper when the next slot opens ([`SlotState::depart`], netem's
-//!   `slot`): a slot opens `min` to `max` (uniformly, from an rng forked at
-//!   the network's construction for each such site) after the first
-//!   message ready past the last, and every message ready before it rides
-//!   it. The testbed's link classes put them ahead of the shaper, as its
-//!   delay's netem holds them.
+//! - **Slots.** An uplink whose site has [`Slots`] sends what its shaper
+//!   passed when the next slot opens ([`SlotState::depart`]): a slot opens
+//!   `min` to `max` (uniformly, from an rng forked at the network's
+//!   construction for each such site) after the first message ready past
+//!   the last, and every message ready before it rides it, as a cable
+//!   modem's grants send what its shaper passed. The testbed's link
+//!   classes hold them there with a netem of slots alone after the shaper.
+//!   The queue's limit counts what waits for the shaper, not for a slot,
+//!   and the shaper takes the next message once it has passed the last.
 //! - **Capacity.** An uplink given a [`Capacity`] ([`Network::set_up_capacity`])
 //!   sends in its delivery opportunities, in place of its rate, bucket and
 //!   steps: a message's last bit leaves at the opportunity where the
@@ -399,20 +401,26 @@ impl End {
     }
 
     /// When a message of `wire` IP bytes in `packets` packets, handed to
-    /// the uplink at `sent`, starts through its shaper, and the bytes it
-    /// charges ([`Framing::message`]): once its slot opens, if the uplink
-    /// has slots, and everything before it has left.
+    /// the uplink at `sent`, starts through its shaper, once everything
+    /// before it has passed the shaper, and the bytes it charges
+    /// ([`Framing::message`]).
     fn admit(&mut self, sent: Time, wire: usize, packets: u32) -> (Time, usize) {
         let charged = self.site.profile.framing.message(wire, packets);
-        let ready = match &mut self.slots {
+        (sent.max(self.up_free), charged)
+    }
+
+    /// When a message the shaper passed at `passed` leaves: when its slot
+    /// opens, if the uplink has slots, the slot stage looking at it as it
+    /// comes or once the message before it has left.
+    fn grant(&mut self, passed: Time) -> Time {
+        match &mut self.slots {
             Some(s) => {
-                let ready = s.depart(sent, sent.max(self.slot_last));
-                self.slot_last = ready;
-                ready
+                let depart = s.depart(passed, passed.max(self.slot_last));
+                self.slot_last = depart;
+                depart
             }
-            None => sent,
-        };
-        (ready.max(self.up_free), charged)
+            None => passed,
+        }
     }
 
     /// When `wire` bytes that start through the uplink at `start`, no
@@ -542,7 +550,8 @@ impl Network {
         &mut self.dirs[a * n + b]
     }
 
-    /// When `h`'s uplink has sent everything handed to it so far.
+    /// When `h`'s uplink's shaper has passed everything handed to it so
+    /// far (its slots, if it has any, may hold some of it later).
     pub fn up_free(&self, h: usize) -> Time {
         self.end(h).up_free
     }
@@ -647,7 +656,7 @@ impl Network {
             .small_packets
             .saturating_add(u64::from(small_packets(wire, packets)));
         end.stats.up_queue_max = end.stats.up_queue_max.max(start - sent);
-        let depart = end.up_free;
+        let depart = end.grant(end.up_free);
         self.transit(depart, a, b, packets, carrier)
     }
 
@@ -660,7 +669,7 @@ impl Network {
         let (start, charged) = end.admit(at, wire, packets);
         end.up_free = end.serve(start, charged);
         end.span(at, start, charged);
-        end.up_free
+        end.grant(end.up_free)
     }
 
     /// How long `h`'s uplink takes from `at` to send what it holds,
@@ -1536,30 +1545,31 @@ mod tests {
     }
 
     #[test]
-    fn slots_hold_what_is_ready_until_the_next_opens() {
+    fn slots_send_what_the_shaper_passed_when_the_next_opens() {
         use crate::slots::Slots;
         let ms = Duration::from_millis;
+        let rate = 1_500_000; // a 1500-byte message a ms
         let site = Site::new(City::Dallas, Access::Fiber)
-            .with_up(125_000_000)
+            .with_up(rate)
             .with_slots(Some(Slots {
                 min: ms(2),
                 max: ms(2),
             }));
         let mut n = net(&[site, Site::new(City::Dallas, Access::Fiber)], QUIET);
-        let at = |t: Time| t + tx_time(1500, 125_000_000);
-        // An idle link waits a slot; what is ready before it rides it.
+        // The shaper passes the first at 1 ms; a slot drawn then opens at
+        // 3 ms, and the second, passed at 2 ms, rides it.
+        assert_eq!(n.send(t(0), 0, 1, 1500, 1, Carrier::Datagram).depart, t(3));
+        assert_eq!(n.send(t(0), 0, 1, 1500, 1, Carrier::Datagram).depart, t(3));
+        // The shaper took the second at 1 ms, not at the first's slot.
+        assert_eq!(n.up_free(0), t(2));
+        // What waits for a slot isn't in the queue: the shaper has passed
+        // both by 2 ms.
+        assert_eq!(n.up_backlog(0, t(2)), Duration::ZERO);
+        assert_eq!(n.up_backlog(0, t(1)), ms(1));
+        // Passed after that slot: the next, drawn as it is passed.
         assert_eq!(
-            n.send(t(0), 0, 1, 1500, 1, Carrier::Datagram).depart,
-            at(t(2))
-        );
-        assert_eq!(
-            n.send(t(1), 0, 1, 1500, 1, Carrier::Datagram).depart,
-            at(at(t(2)))
-        );
-        // Ready past it: the next, drawn when it is ready.
-        assert_eq!(
-            n.send(t(3), 0, 1, 1500, 1, Carrier::Datagram).depart,
-            at(t(5))
+            n.send(t(10), 0, 1, 1500, 1, Carrier::Datagram).depart,
+            t(13)
         );
         assert_eq!(n.up_slots(0).map(|s| s.min), Some(ms(2)));
     }

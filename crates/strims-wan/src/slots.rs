@@ -1,8 +1,8 @@
 // Copyright 2026 Strims contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! An access link's medium access in slots: what was ready leaves when
-//! the next slot opens.
+//! An access link's medium access in slots: what its shaper passed leaves
+//! when the next slot opens.
 //!
 //! A cable modem sends upstream only in the minislots the CMTS grants it,
 //! on request: an idle modem's first packet waits for its request to be
@@ -10,11 +10,13 @@
 //! and a loaded one's grants follow its piggybacked requests, a cycle of
 //! about 5 ms (Cisco, "Upstream Scheduler Mode Configuration for the Cisco
 //! uBR CMTS"). A Wi-Fi station sends what it holds in one aggregate once
-//! it wins the medium. [`Slots`] is the model the Docker testbed shapes
-//! both with, netem's `slot <min> <max>`: a packet that is ready while the
-//! current slot is still to come leaves when it opens; one ready after it
-//! draws the next, uniformly `min` to `max` after the time it is looked at
-//! ([`SlotState::depart`] follows netem's dequeue).
+//! it wins the medium. Both act where a packet leaves the modem, on what
+//! its shaper passed. [`Slots`] is the model the Docker testbed shapes them
+//! with, a netem of `slot <min> <max>` alone after the shaper: a packet that
+//! is ready while the current slot is still to come leaves when it opens;
+//! one ready after it draws the next, uniformly `min` to `max` after the
+//! time it is looked at ([`SlotState::depart`], which with no delay of its
+//! own netem's dequeue is).
 
 use core::fmt;
 
@@ -79,11 +81,13 @@ impl SlotState {
 
     /// When a packet that is ready at `ready` leaves, the link having
     /// looked at it first at `head` (when the packet before it left, or
-    /// when it came to an empty link): as netem dequeues, a slot that
-    /// opened before the packet was ready is replaced by one drawn from
-    /// the time of the look, the link looks again when the packet is ready
-    /// or the slot opens, whichever is later, and the packet leaves once
-    /// both have come.
+    /// when it came to an empty link): a slot that opened before the packet
+    /// was ready is replaced by one drawn from the time of the look, the
+    /// link looks again when the packet is ready or the slot opens,
+    /// whichever is later, and the packet leaves once both have come. A
+    /// netem with no delay of its own dequeues so; one that also delays
+    /// redraws a passed slot on every dequeue while a packet waits out its
+    /// delay, which this doesn't follow.
     pub fn depart(&mut self, ready: Time, head: Time) -> Time {
         let mut now = head;
         loop {
