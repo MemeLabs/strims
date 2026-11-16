@@ -10,23 +10,27 @@ it writes a run's tables with the sim's own table writer, from the
 records the testbed's nodes log and the run's captures, and its
 `job.json` names the run's key, its sim (`testbed`), its test
 (`calibration_star`), its twin's knobs (its env) and its row. A run's
-cell is the tier cell (suite.TIERS) whose env its knobs are, but for the
-knobs a testbed run always sets and a tier's cells don't (TESTBED_FIXED:
+cell is its knobs' (cell_sql, one keying on every path: the index names
+every testbed job's by it, ingest and twins by cells_of): the testbed
+variant of the tier cell (suite.TIERS) whose env its knobs are but for
+what a testbed run always sets and a tier's cells don't (TESTBED_FIXED:
 one clock, its tbf's buckets, honest viewers; links of run.sh's default
-class, DEFAULT_LINK) and the job keys; a run of no tier cell takes a cell
-named for its knobs (`tb-<hash>`).
+class, DEFAULT_LINK), `<cell>@<tree>` with the qdisc tree that shaped it
+(TESTBED_QDISC's last stage), its twin that cell's env with those; a run
+of no tier cell, or with another TESTBED_ setting, takes a cell named for
+its knobs (`tb-<hash>`).
 
   tables(run_dir, binary=None, knobs=None) -> Path
                  the run's tables dir (<run_dir>/tables), written by the
                  testbed_tables binary (BINARY's, by default this
                  checkout's release build), `knobs` added to its twin's
-  cell_of(env) -> str | None
-                 the tier cell whose env `env` is (see above), or None
+  cells_of(envs) -> [str], cell_of(env) -> str
+                 each env's cell (see above; cell_sql's keying)
   ingest(run_dirs, name, binary=None, cell=None, arm="testbed", knobs=None)
         -> (src, [job])
                  the runs' tables folded into the cache as source
-                 testbed/<name>; each run a job of `cell` (else cell_of's,
-                 else its knobs' name) and `arm`, its seed its place among
+                 testbed/<name>; each run a job of `cell` (else
+                 cell_of's) and `arm`, its seed its place among
                  the runs of its cell (1, 2, ...), as a twin's seeds pair
                  with it
   twins(src, binary, name, seeds=8, arm="twin", env=None) -> (src, [job])
@@ -97,45 +101,82 @@ def tables(run_dir, binary=None, knobs=None):
     return out
 
 
-def comparable(env):
-    """`env` less TESTBED_FIXED, the TESTBED_ settings, the job keys and
-    link specs of DEFAULT_LINK alone."""
-    def default_link(k, v):
-        if k in ("STRIMS_SIM_CAL_SEED_LINK", "STRIMS_SIM_CAL_VIEWER_LINK"):
-            return v == DEFAULT_LINK
-        return k == "STRIMS_SIM_CAL_LINKS" and all(p.partition(":")[2] == DEFAULT_LINK for p in v.split())
-
-    return {k: v for k, v in env.items()
-            if k not in TESTBED_FIXED and k not in JOB_KNOBS and not k.startswith("TESTBED_")
-            and not default_link(k, v)}
-
-
 # The tiers whose cells a run's knobs name first: the testbed tier's own
-# (tier_cells), then the rest in suite.TIERS' order. Two tiers can hold one
-# env under two names (peers' star-15 is robust's star-15-10's).
+# (tier_cells), then the rest by name. Two tiers can hold one env under two
+# names (peers' star-15 is robust's star-15-10's).
 CELL_TIERS = ("robust", "browsers")
 
 
-def cell_of(env):
-    """The name of the calibration_star tier cell whose env is `env` (see
-    the module docs: CELL_TIERS' first), or None."""
+def cell_sql(tiers, temp=False):
+    """The keying of a testbed run's cell, as SQL: the macros
+    testbed_comparable(env) (`env` less TESTBED_FIXED, the job keys, the
+    TESTBED_ settings and link specs of DEFAULT_LINK alone) and
+    testbed_cell(env), over `tiers` (a table of tier, cell, test and env,
+    as the catalog's raw.tier_cells): `<cell>@<tree>` where the run's
+    knobs are a calibration_star tier cell's env but for those (CELL_TIERS'
+    first, else the first tier by name) and it holds no TESTBED_ setting
+    but its qdisc tree, `<tree>` that tree's last stage (TESTBED_QDISC:
+    root-class): the cell's testbed variant, whose twin runs the cell's env
+    with what the testbed sets (one clock, its buckets, its link class);
+    else `tb-<hash>` of its knobs but the job keys. The index names every
+    testbed job's cell by it (catalog.JOBS_SQL) and ingest, twins and the
+    tests by cells_of, so a run's cell is one function's on every path."""
+    t = "TEMP " if temp else ""
+    fixed = "[" + ", ".join(store_host.q(k) for k in (*TESTBED_FIXED, *JOB_KNOBS)) + "]"
+    jobs = "[" + ", ".join(store_host.q(k) for k in JOB_KNOBS) + "]"
+    link = store_host.q(DEFAULT_LINK)
+    order = " ".join(f"WHEN {store_host.q(x)} THEN {i}" for i, x in enumerate(CELL_TIERS))
+    return f"""
+CREATE OR REPLACE {t}MACRO testbed_comparable(env) AS map_from_entries(list_filter(map_entries(env), lambda e: NOT (
+    list_contains({fixed}, e.key) OR starts_with(e.key, 'TESTBED_')
+    OR (list_contains(['STRIMS_SIM_CAL_SEED_LINK', 'STRIMS_SIM_CAL_VIEWER_LINK'], e.key) AND e.value = {link})
+    OR (e.key = 'STRIMS_SIM_CAL_LINKS' AND list_bool_and(list_transform(string_split(trim(e.value), ' '),
+                                                                        lambda x: split_part(x, ':', 2) = {link}))))));
+CREATE OR REPLACE {t}MACRO testbed_cell(knobs) AS coalesce(
+    (SELECT arg_min(c.cell, (CASE c.tier {order} ELSE {len(CELL_TIERS)} END, c.tier))
+     FROM {tiers} c
+     WHERE c.test = 'calibration_star'
+       AND list_sort(map_entries(testbed_comparable(c.env))) = list_sort(map_entries(testbed_comparable(knobs)))
+       AND NOT list_bool_or(list_transform(map_keys(knobs), lambda x: starts_with(x, 'TESTBED_') AND x <> 'TESTBED_QDISC')))
+        || '@' || regexp_extract(knobs['TESTBED_QDISC'], '[^>]*$'),
+    'tb-' || sha256(array_to_string(list_sort(list_transform(
+        list_filter(map_entries(knobs), lambda e: NOT list_contains({jobs}, e.key)),
+        lambda e: e.key || '=' || e.value)), chr(10)))[1:8]);
+"""
+
+
+def map_sql(env):
+    """`env` as a SQL MAP(VARCHAR, VARCHAR) literal."""
+    if not env:
+        return "MAP {}::MAP(VARCHAR, VARCHAR)"
+    return "MAP {" + ", ".join(f"{store_host.q(k)}: {store_host.q(v)}" for k, v in sorted(env.items())) + "}"
+
+
+def tier_rows():
+    """suite.TIERS' cells, as the catalog's raw.tier_cells holds them."""
     from . import suite
 
-    if any(k.startswith("TESTBED_") and k != "TESTBED_QDISC" for k in env):
-        return None
-    want = comparable(env)
-    order = [*CELL_TIERS, *(t for t in suite.TIERS if t not in CELL_TIERS)]
-    for cells in (suite.TIERS[t] for t in order if t in suite.TIERS):
-        for c in cells:
-            if c["test"] == "calibration_star" and comparable(c["env"]) == want:
-                return c["name"]
-    return None
+    return [{"tier": t, "cell": c["name"], "test": c.get("test"), "env": {str(a): str(b) for a, b in c["env"].items()}}
+            for t, cells in suite.TIERS.items() for c in cells]
 
 
-def knob_cell(env):
-    """A cell's name for a run of no tier cell: its knobs' hash."""
-    text = "\n".join(f"{k}={v}" for k, v in sorted(env.items()))
-    return "tb-" + hashlib.sha256(text.encode()).hexdigest()[:8]
+def cells_of(envs):
+    """Each of `envs`' cell, by cell_sql's keying over suite.TIERS."""
+    envs = list(envs)
+    if not envs:
+        return []
+    tiers = " UNION ALL ".join(f"SELECT {store_host.q(r['tier'])} AS tier, {store_host.q(r['cell'])} AS cell, "
+                               f"{store_host.q(r['test'] or '')} AS test, {map_sql(r['env'])} AS env"
+                               for r in tier_rows())
+    rows = " UNION ALL ".join(f"SELECT {i} AS i, {map_sql(e)} AS env" for i, e in enumerate(envs))
+    got = store_host.duck(f"CREATE TEMP TABLE tiers AS {tiers};\n{cell_sql('tiers', temp=True)}\n"
+                          f"SELECT i, testbed_cell(env) AS cell FROM ({rows}) ORDER BY i;")
+    return [r["cell"] for r in got]
+
+
+def cell_of(env):
+    """`env`'s cell (cells_of)."""
+    return cells_of([env])[0]
 
 
 def ingest(run_dirs, name, binary=None, cell=None, arm="testbed", knobs=None):
@@ -146,7 +187,7 @@ def ingest(run_dirs, name, binary=None, cell=None, arm="testbed", knobs=None):
     for d in run_dirs:
         out = tables(d, binary, knobs)
         job = json.loads((out / "job.json").read_text())
-        c = cell or cell_of(job["env"]) or knob_cell(job["env"])
+        c = cell or cell_of(job["env"])
         seeds[c] = seeds.get(c, 0) + 1
         jobs.append({**job, "dir": str(out), "cell": c, "arm": arm, "seed": seeds[c],
                      "at": None, "wall_s": None, "rss_mb": None})
@@ -168,11 +209,12 @@ def export(src, jobs):
 
 def cells_in(src):
     """The cells of a testbed source's runs, {cell: env}: their twins'
-    knobs."""
+    knobs, each cell its runs' (cells_of)."""
     runs = store_host.cache_root() / "cache" / src / "runs.parquet"
-    rows = store_host.duck(f"SELECT DISTINCT cell, env FROM read_parquet({store_host.q(runs)}) "
-                           "WHERE sim = 'testbed' ORDER BY cell;")
-    return {r["cell"]: json.loads(r["env"]) for r in rows}
+    rows = store_host.duck(f"SELECT DISTINCT env FROM read_parquet({store_host.q(runs)}) "
+                           "WHERE sim = 'testbed' ORDER BY env;")
+    envs = [json.loads(r["env"]) for r in rows]
+    return dict(sorted(zip(cells_of(envs), envs)))
 
 
 def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8):

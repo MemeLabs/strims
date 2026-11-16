@@ -69,7 +69,9 @@ tarball, into the out dir's tables/ (`TABLES_BIN out out/tables`, a
 `--knob` for each of the job's `knobs`), and fold into the store as a
 test job's out dir does: the fold's key, sim, test, env and row are
 tables/job.json's, the row with the host's fields, its cell the job's
-`cell` (else its matrix), its arm the job's and its seed its `repeat`;
+`cell` (else its matrix; the index names a testbed job's cell by its knobs
+again, simlab.testbed.cell_sql), its arm the job's and its seed its
+`repeat`;
 its result says `key` and `flush` as a stored test job's does. Tables
 that fail (a run that didn't stream, which testbed_tables refuses) fail
 the job: its result has no row, its `error` and `tables_error` saying why,

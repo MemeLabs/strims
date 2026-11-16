@@ -3,9 +3,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """simlab.testbed: testbed runs as their twins' cells, and the tier.
 
-  Cells    a run's knobs name its tier cell but for what a testbed run
-           always sets (TESTBED_FIXED, TESTBED_*); a run of no cell names
-           its knobs'
+  Cells    a run's knobs name its tier cell's testbed variant
+           (`<cell>@<tree>`) but for what a testbed run always sets
+           (TESTBED_FIXED, tbf links); one with another TESTBED_ setting or
+           of no cell names its knobs; each tier cell's run.sh settings,
+           through knobs_of, name that cell
   Joins    an arrivals profile's joins hold its bounds and the twin's
            arrival order (soonest first)
   Tier     the tier's cells are hostable, honest, of the robust and
@@ -15,7 +17,9 @@
   python3 hack/simlab/tests/test_testbed.py
 """
 
+import json
 import random
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -34,7 +38,7 @@ from simlab import suite, testbed  # noqa: E402
 
 
 class Cells(unittest.TestCase):
-    def test_a_runs_knobs_name_its_tier_cell(self):
+    def test_a_runs_knobs_name_its_tier_cells_testbed_variant(self):
         c = next(c for c in suite.TIERS["robust"] if c["name"] == "star-15-10")
         env = {**c["env"], "STRIMS_SIM_HOSTILE": "off", "STRIMS_SIM_CLOCK_SKEW": "off",
                "STRIMS_SIM_CAL_SEED_BURST": "3028", "STRIMS_SIM_CAL_VIEWER_BURST": "3028",
@@ -42,19 +46,46 @@ class Cells(unittest.TestCase):
                "STRIMS_SIM_CAL_VIEWER_LINK": "tbf"}
         for k in testbed.JOB_KNOBS:
             env.pop(k, None)
-        self.assertEqual(testbed.cell_of(env), "star-15-10")
-        self.assertEqual(testbed.cell_of({**env, "STRIMS_SIM_CAL_LINKS": "1:tbf 2:tbf"}), "star-15-10")
-        # Another link class is another cell's (none of the tier's).
-        self.assertIsNone(testbed.cell_of({**env, "STRIMS_SIM_CAL_VIEWER_LINK": "cable,slot=2-4,aqm=fifo"}))
-        # A setting no twin knob takes makes it no cell's.
-        self.assertIsNone(testbed.cell_of({**env, "TESTBED_SEED_LOSS_PCT": "1"}))
-        self.assertIsNone(testbed.cell_of({**env, "STRIMS_SIM_CAL_SECS": "61"}))
+        got = testbed.cells_of([
+            env, {**env, "STRIMS_SIM_CAL_LINKS": "1:tbf 2:tbf"},
+            # The tree that shaped it is in the name: two trees never pair.
+            {**env, "TESTBED_QDISC": "netem>tbf"},
+            # Another link class, a setting no twin knob takes, another cell.
+            {**env, "STRIMS_SIM_CAL_VIEWER_LINK": "cable,slot=2-4,aqm=fifo"},
+            {**env, "TESTBED_SEED_LOSS_PCT": "1"}, {**env, "STRIMS_SIM_CAL_SECS": "61"},
+            {**env, "STRIMS_SIM_SEED": "3"}])
+        self.assertEqual(got[:3], ["star-15-10@root-class", "star-15-10@root-class", "star-15-10@tbf"])
+        self.assertTrue(all(x.startswith("tb-") for x in got[3:6]), got)
+        self.assertEqual(len(set(got[3:6])), 3)
+        # A job key is no knob of its cell's.
+        self.assertEqual(got[6], got[0])
 
-    def test_a_run_of_no_cell_names_its_knobs(self):
-        a = testbed.knob_cell({"STRIMS_SIM_CAL_VIEWERS": "3"})
-        self.assertTrue(a.startswith("tb-"))
-        self.assertEqual(a, testbed.knob_cell({"STRIMS_SIM_CAL_VIEWERS": "3"}))
-        self.assertNotEqual(a, testbed.knob_cell({"STRIMS_SIM_CAL_VIEWERS": "7"}))
+    def test_the_tiers_runs_name_their_cells_through_knobs_of(self):
+        # run.sh's settings for each tier cell (run_env), read by
+        # testbed_tables --knobs (strims-sim's knobs_of) as run.sh's out
+        # dir holds them, name that cell's testbed variant.
+        if not testbed.BINARY.exists():
+            self.skipTest(f"no {testbed.BINARY}: cargo build --release -p strims-sim --example testbed_tables")
+        matrices = HACK / "sim-farm" / "matrices"
+        envs, want = [], []
+        with tempfile.TemporaryDirectory() as d:
+            for kind, cell in testbed.tier_cells():
+                settings, knobs, topology = testbed.run_env(kind, cell)
+                out = Path(d) / f"{kind}-{cell['name']}"
+                out.mkdir()
+                viewers = int(settings["VIEWERS"])
+                (out / "settings").write_text("".join(f"{k}={v}\n" for k, v in settings.items())
+                                              + "QDISC=clsact>ifb-netem>root-class\n")
+                links = ((matrices / "topologies" / topology).read_text() if topology else
+                         "".join(f"link 0 {v}\n" for v in range(1, viewers + 1)))
+                (out / "topology").write_text(links)
+                up = lambda i: settings["SEED_UP_MBIT"] if i == 0 else settings.get("VIEWER_UP_MBIT", "20")
+                (out / "links").write_text("".join(f"node {i} tbf {up(i)} 10 100\n" for i in range(viewers + 1)))
+                p = subprocess.run([str(testbed.BINARY), "--knobs", str(out)], capture_output=True, text=True)
+                self.assertEqual(p.returncode, 0, f"{kind} {cell['name']}: {p.stderr}")
+                envs.append({**json.loads(p.stdout), **knobs})
+                want.append(f"{cell['name']}@root-class")
+        self.assertEqual(testbed.cells_of(envs), want)
 
 
 class Joins(unittest.TestCase):

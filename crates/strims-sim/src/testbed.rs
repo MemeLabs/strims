@@ -67,7 +67,7 @@ pub const TEST: &str = "calibration_star";
 /// The sim name a testbed run's records go under.
 pub const SIM: &str = "testbed";
 /// The settings that only record or capture: no knob of the twin's.
-const RECORDING: [&str; 10] = [
+const RECORDING: [&str; 9] = [
     "CAPTURE",
     "PCAP",
     "PCAP_SNAPLEN",
@@ -77,11 +77,10 @@ const RECORDING: [&str; 10] = [
     "NODE_BIN",
     "BROWSER_BIN",
     "WEB_BUNDLE",
-    "BROWSER_ARGS",
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
-const TWIN_SETTINGS: [&str; 23] = [
+const TWIN_SETTINGS: [&str; 24] = [
     "VIEWERS",
     "SEED_UP_MBIT",
     "VIEWER_UP_MBIT",
@@ -98,6 +97,7 @@ const TWIN_SETTINGS: [&str; 23] = [
     "TOPOLOGY",
     "RATE",
     "NODE_ARGS",
+    "BROWSER_ARGS",
     "KINDS",
     "BROWSER_LINKS",
     "RELAY",
@@ -107,9 +107,34 @@ const TWIN_SETTINGS: [&str; 23] = [
     "LINKS",
 ];
 
-/// The qdisc tree of the runs from before run.sh named its tree (`QDISC`):
-/// a netem root delaying what a tbf child then shaped.
+/// The qdisc trees of the runs from before run.sh named its tree
+/// (`QDISC`): a netem root delaying what a tbf child then shaped; then an
+/// ifb's netem ahead of a root tbf; then (with a `links` file) the access
+/// link classes' root.
 const OLD_QDISC: &str = "netem>tbf";
+const IFB_TBF_QDISC: &str = "clsact>ifb-netem>root-tbf";
+const CLASS_QDISC: &str = "clsact>ifb-netem>root-class";
+
+/// The qdisc tree that shaped a run: settings' `QDISC`, else the tree its
+/// out dir `dir` shows (a `links` file: the access link classes'; the
+/// seed's tc-0.log dump with a clsact: an ifb ahead of a root tbf; one
+/// with a netem alone: the old netem root), else none known.
+fn qdisc_of(settings: &BTreeMap<String, String>, dir: &Path) -> Result<String, String> {
+    if let Some(q) = settings.get("QDISC").filter(|q| !q.is_empty()) {
+        return Ok(q.clone());
+    }
+    if dir.join("links").exists() {
+        return Ok(CLASS_QDISC.to_owned());
+    }
+    match std::fs::read_to_string(dir.join("tc-0.log")) {
+        Ok(t) if t.contains("clsact") => Ok(IFB_TBF_QDISC.to_owned()),
+        Ok(t) if t.contains("netem") => Ok(OLD_QDISC.to_owned()),
+        _ => Err(
+            "no QDISC, links file or tc-0.log dump: the qdisc tree that shaped it is unknown"
+                .to_owned(),
+        ),
+    }
+}
 
 /// A testbed run read from its out dir.
 pub struct Run {
@@ -223,6 +248,14 @@ pub fn knobs_of(
         .unwrap_or("10")
         .parse()
         .map_err(|e| format!("SEED_UP_MBIT: {e}"))?;
+    // The twin's uplinks are whole Mbit/s (Calibration's).
+    for k in ["SEED_UP_MBIT", "VIEWER_UP_MBIT"] {
+        if let Some(v) = get(k)
+            && v.parse::<u64>().is_err()
+        {
+            return Err(format!("{k}={v}: the twin's uplinks are whole Mbit/s"));
+        }
+    }
     put("STRIMS_SIM_CAL_VIEWERS", viewers.to_string());
     put("STRIMS_SIM_CAL_SEED_UP_MBIT", num(seed_up));
     put(
@@ -323,10 +356,18 @@ pub fn knobs_of(
     {
         put("STRIMS_SIM_CAL_MESH", "mesh6".to_owned());
     } else if links != star {
-        put(
-            "STRIMS_SIM_CAL_TOPOLOGY",
-            dir.join("topology").to_string_lossy().into_owned(),
-        );
+        // Another topology keys by its links, not its file's path, and
+        // has no twin: the twin reads a topology from a file of its own
+        // host (the run's report reads the run's, Run::scenario).
+        let mut h = Sha256::new();
+        for (a, b) in &links {
+            h.update(format!("{a} {b}\n"));
+        }
+        let mut digest = String::new();
+        for b in h.finalize().iter().take(8) {
+            let _ = write!(digest, "{b:02x}");
+        }
+        put("TESTBED_TOPOLOGY", digest);
     }
     let node = flags_of(get("NODE_ARGS").unwrap_or(""))?;
     let browser = flags_of(get("BROWSER_ARGS").unwrap_or(""))?;
@@ -344,11 +385,13 @@ pub fn knobs_of(
             return Err(format!("NODE_ARGS and BROWSER_ARGS differ on {f}"));
         }
     }
-    if let Some(extra) = node
-        .keys()
-        .find(|f| !matches!(f.as_str(), "--chunk" | "--munro"))
-    {
-        return Err(format!("NODE_ARGS {extra}: the twin has no knob for it"));
+    for (name, args) in [("NODE_ARGS", &node), ("BROWSER_ARGS", &browser)] {
+        if let Some(extra) = args
+            .keys()
+            .find(|f| !matches!(f.as_str(), "--chunk" | "--munro"))
+        {
+            return Err(format!("{name} {extra}: the twin has no knob for it"));
+        }
     }
     if let (Some(c), Some(m)) = (node.get("--chunk"), node.get("--munro")) {
         put("STRIMS_SIM_CHUNK", c.clone());
@@ -380,10 +423,7 @@ pub fn knobs_of(
             stacks.get(..period).unwrap_or_default().join(","),
         );
     }
-    put(
-        "TESTBED_QDISC",
-        get("QDISC").unwrap_or(OLD_QDISC).to_owned(),
-    );
+    put("TESTBED_QDISC", qdisc_of(settings, dir)?);
     for (k, v) in settings {
         let twin = RECORDING.contains(&k.as_str())
             || TWIN_SETTINGS.contains(&k.as_str())
@@ -416,6 +456,15 @@ impl Run {
         // clock's never do.
         if late_stamps(dir) {
             knobs.insert("TESTBED_STAMPS".to_owned(), "date".to_owned());
+        }
+        // Each viewer's join (JOINS) is a draw of an arrivals profile where
+        // the caller names it (STRIMS_SIM_ARRIVALS, as a tier matrix's
+        // knobs do), which the twin draws its own of; else the joins
+        // themselves, which no knob takes.
+        if let Some(j) = settings.get("JOINS").filter(|j| !j.trim().is_empty())
+            && !knobs.contains_key("STRIMS_SIM_ARRIVALS")
+        {
+            knobs.insert("TESTBED_JOINS".to_owned(), j.clone());
         }
         let viewers: usize = knobs
             .get("STRIMS_SIM_CAL_VIEWERS")
@@ -502,7 +551,17 @@ impl Run {
 
     /// The twin's scenario, with the times the testbed measured.
     fn scenario(&self) -> Scenario {
-        let cal = Calibration::from_knobs(|k| self.knobs.get(k).cloned());
+        // A topology the knobs key by its links alone is the run's file.
+        let topology = self
+            .knobs
+            .contains_key("TESTBED_TOPOLOGY")
+            .then(|| self.dir.join("topology").to_string_lossy().into_owned());
+        let cal = Calibration::from_knobs(|k| {
+            if k == "STRIMS_SIM_CAL_TOPOLOGY" && topology.is_some() {
+                return topology.clone();
+            }
+            self.knobs.get(k).cloned()
+        });
         let mut s = calibration_star(&cal);
         let get = |k: &str| self.knobs.get(k).and_then(|v| v.parse::<usize>().ok());
         if let (Some(c), Some(m), Some(sw)) = (
@@ -1459,7 +1518,7 @@ mod tests {
         let w = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
         w(
             "settings",
-            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-tbf\n",
+            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-class\n",
         );
         w(
             "topology",
@@ -1534,11 +1593,99 @@ mod tests {
         dir
     }
 
-    /// A testbed run's report reads its records as the sim's: each read a
-    /// lag from its frame's due time, each meter sample and seed change,
-    /// the bins, the parents; and its captures in the sim's wire bytes:
-    /// IP lengths, the pure ACK apart, the competing upload's apart, the
-    /// tbf's drops and backlog.
+    /// What changes a run keys it: settings without a twin knob go in as
+    /// TESTBED_*, and what the twin can't take is refused.
+    #[test]
+    fn a_runs_knobs_key_what_changed_it() {
+        let dir = std::env::temp_dir().join(format!("strims-testbed-knobs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let star = "node 0 10.77.0.10:4000\nnode 1 10.77.0.11:4000\nnode 2 10.77.0.12:4000\nlink 0 1\nlink 0 2\n";
+        let of = |text: &str, links: Option<&str>| knobs_of(&settings_of(text), star, links, &dir);
+        let base = "VIEWERS=2\nSECS=30\nQDISC=clsact>ifb-netem>root-class\n";
+        let k = of(base, None).unwrap();
+        assert_eq!(k["TESTBED_QDISC"], "clsact>ifb-netem>root-class");
+        assert!(
+            !k.keys()
+                .any(|k| k.starts_with("TESTBED_") && k != "TESTBED_QDISC")
+        );
+        // The trees of runs from before QDISC: a links file's, a tc dump's.
+        let none = "VIEWERS=2\nSECS=30\n";
+        assert!(of(none, None).unwrap_err().contains("qdisc tree"));
+        std::fs::write(
+            dir.join("tc-0.log"),
+            "1 qdisc clsact ffff: parent ffff:fff1 qdisc tbf 10: root\n",
+        )
+        .unwrap();
+        assert_eq!(
+            of(none, None).unwrap()["TESTBED_QDISC"],
+            "clsact>ifb-netem>root-tbf"
+        );
+        std::fs::write(
+            dir.join("tc-0.log"),
+            "1 qdisc netem 1: root qdisc tbf 10: parent 1:1\n",
+        )
+        .unwrap();
+        assert_eq!(of(none, None).unwrap()["TESTBED_QDISC"], "netem>tbf");
+        std::fs::write(dir.join("links"), "node 0 tbf 10 20 100\n").unwrap();
+        assert_eq!(
+            of(none, None).unwrap()["TESTBED_QDISC"],
+            "clsact>ifb-netem>root-class"
+        );
+        // Uplinks the twin can't take, and node arguments it has no knob for.
+        assert!(
+            of(&format!("{base}SEED_UP_MBIT=2.5\n"), None)
+                .unwrap_err()
+                .contains("whole Mbit/s")
+        );
+        assert!(
+            of(&format!("{base}VIEWER_UP_MBIT=0.5\n"), None)
+                .unwrap_err()
+                .contains("whole Mbit/s")
+        );
+        let browsers = format!("{base}KINDS=native chromium firefox\nBROWSER_LINKS=webrtc\n");
+        assert!(
+            of(&format!("{browsers}BROWSER_ARGS=--rate 3000\n"), None)
+                .unwrap_err()
+                .contains("BROWSER_ARGS --rate")
+        );
+        let k = of(
+            &format!("{browsers}NODE_ARGS=--chunk 4096 --munro 32768\nBROWSER_ARGS=--chunk 4096 --munro 32768\n"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            (k["STRIMS_SIM_CHUNK"].as_str(), k["STRIMS_SIM_RTC"].as_str()),
+            ("4096", "str0m,chromium,firefox")
+        );
+        // Another topology keys by its links, not by its file.
+        let line = "node 0 10.77.0.10:4000\nnode 1 10.77.0.11:4000\nnode 2 10.77.0.12:4000\nlink 0 1\nlink 1 2\n";
+        let k = knobs_of(&settings_of(base), line, None, &dir).unwrap();
+        assert_eq!(k["TESTBED_TOPOLOGY"].len(), 16);
+        assert!(!k.contains_key("STRIMS_SIM_CAL_TOPOLOGY"));
+        let other =
+            std::env::temp_dir().join(format!("strims-testbed-knobs2-{}", std::process::id()));
+        std::fs::create_dir_all(&other).unwrap();
+        assert_eq!(
+            knobs_of(&settings_of(base), line, None, &other).unwrap()["TESTBED_TOPOLOGY"],
+            k["TESTBED_TOPOLOGY"]
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+        std::fs::remove_dir_all(&other).unwrap();
+    }
+
+    #[test]
+    fn a_runs_joins_key_it_unless_they_draw_its_arrivals() {
+        let dir = fixture("joins");
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        std::fs::write(dir.join("settings"), format!("{settings}JOINS=1:4\n")).unwrap();
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs["TESTBED_JOINS"], "1:4");
+        let drawn = BTreeMap::from([("STRIMS_SIM_ARRIVALS".to_owned(), "trickle".to_owned())]);
+        let run = Run::read(&dir, &drawn).unwrap();
+        assert_eq!(run.knobs.get("TESTBED_JOINS"), None);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn a_run_whose_stamps_go_back_keys_apart() {
         let dir = fixture("stamps");
@@ -1593,12 +1740,17 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// A testbed run's report reads its records as the sim's: each read a
+    /// lag from its frame's due time, each meter sample and seed change,
+    /// the bins, the parents; and its captures in the sim's wire bytes:
+    /// IP lengths, the pure ACK apart, the competing upload's apart, the
+    /// tbf's drops and backlog.
     #[test]
     fn a_testbed_runs_records_and_captures_read_as_a_sim_runs() {
         let dir = fixture("records");
         let run = Run::read(&dir, &BTreeMap::new()).unwrap();
         assert_eq!(run.knobs["STRIMS_SIM_CAL_VIEWERS"], "1");
-        assert_eq!(run.knobs["TESTBED_QDISC"], "clsact>ifb-netem>root-tbf");
+        assert_eq!(run.knobs["TESTBED_QDISC"], "clsact>ifb-netem>root-class");
         assert_eq!(run.knobs["STRIMS_SIM_CAL_SEED_LINK"], "tbf");
         assert_eq!(
             run.knobs["STRIMS_SIM_CAL_VIEWER_LINK"],

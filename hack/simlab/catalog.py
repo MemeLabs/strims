@@ -1954,7 +1954,10 @@ SELECT k, nsim AS sim, coalesce(ctest, f.test) AS test,
        coalesce(TRY_CAST(cat AS TIMESTAMPTZ), f.ran_at) AS ran_at,
        coalesce(csrc, f.src) AS src, split_part(coalesce(csrc, f.src), '/', 1) AS origin,
        split_part(coalesce(csrc, f.src), '/', 2) AS run, csrc IS NOT NULL AS cached,
-       coalesce(h.tables, []) AS tables, cell AS stored_cell, coalesce(arm, f.arm) AS stored_arm, bin_ms
+       coalesce(h.tables, []) AS tables,
+       -- A testbed run's cell is its knobs' (simlab.testbed.cell_sql), on every path.
+       CASE WHEN nsim = 'testbed' THEN testbed_cell(env) ELSE cell END AS stored_cell,
+       coalesce(arm, f.arm) AS stored_arm, bin_ms
 FROM s LEFT JOIN held h ON h.src = s.csrc
 WHERE nsim IS NULL OR nsim NOT IN ({skipped});
 """
@@ -1972,9 +1975,11 @@ FROM raw.suite_cells c JOIN raw.suite_runs r USING (exp_id)
 LEFT JOIN fenv f ON f.matrix = c.exp_id || '-' || lpad(c.i::VARCHAR, 2, '0')
 WHERE c.sim IS NULL OR c.sim NOT IN ({skipped})
 UNION ALL BY NAME
-SELECT src AS exp_id, cell, any_value({rsim}) AS sim, any_value(test) AS test,
-       any_value(json_transform(env, '"MAP(VARCHAR, VARCHAR)"')) AS env
-FROM raw.runs r WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND sim NOT IN ({skipped}) AND {streamed}
+SELECT src AS exp_id, cell, any_value({rsim}) AS sim, any_value(test) AS test, any_value(env) AS env
+FROM (SELECT src, sim, test, json_transform(env, '"MAP(VARCHAR, VARCHAR)"') AS env,
+             CASE WHEN sim = 'testbed' THEN testbed_cell(json_transform(env, '"MAP(VARCHAR, VARCHAR)"'))
+                  ELSE cell END AS cell
+      FROM raw.runs r WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND sim NOT IN ({skipped}) AND {streamed})
 GROUP BY src, cell;
 
 CREATE OR REPLACE TABLE main.experiment_jobs AS
@@ -1988,8 +1993,12 @@ SELECT u.* EXCLUDE (line), j.src FROM (
     JOIN raw.farm_index f ON f.matrix = c.exp_id || '-' || lpad(c.i::VARCHAR, 2, '0')
     WHERE f.src IS NOT NULL AND f.k IS NOT NULL AND (c.sim IS NULL OR c.sim NOT IN ({skipped}))
     UNION ALL BY NAME
-    SELECT src AS exp_id, cell, arm AS arm_label, arm AS ref, k, seed, false AS reused, src AS flush, 0 AS line
-    FROM raw.runs WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND sim NOT IN ({skipped})) u
+    SELECT src AS exp_id,
+           CASE WHEN sim = 'testbed' THEN testbed_cell(json_transform(env, '"MAP(VARCHAR, VARCHAR)"'))
+                ELSE cell END AS cell,
+           arm AS arm_label, arm AS ref, k, seed, false AS reused, src AS flush, 0 AS line
+    FROM raw.runs r WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND sim NOT IN ({skipped})
+      AND {streamed}) u
 LEFT JOIN main.jobs j USING (k)
 QUALIFY row_number() OVER (PARTITION BY u.exp_id, u.cell, u.arm_label, u.seed, u.k ORDER BY u.reused, u.line DESC) = 1;
 
@@ -2283,7 +2292,9 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None, hidden
     own = own or {"verdicts": True, "scoring": True}
     hidden = hidden or {}
     skipped = ", ".join(q(s) for s in SKIPPED_SIMS)
-    out = [JOBS_SQL.format(csim=sim_case("csim"), promoted=",\n       ".join(
+    from . import testbed
+
+    out = [testbed.cell_sql("raw.tier_cells"), JOBS_SQL.format(csim=sim_case("csim"), promoted=",\n       ".join(
         f"{knob('env', v)} AS {n}" for n, v in PROMOTED.items()),
         job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped, streamed=STREAMED)]
     out.append(COSTS_SQL.format(**{k: repr(v) for k, v in s3_prices().items()}))

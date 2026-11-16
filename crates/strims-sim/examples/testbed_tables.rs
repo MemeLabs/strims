@@ -7,12 +7,14 @@
 //!
 //! ```text
 //! testbed_tables <out dir> <tables dir> [--knob KEY=VALUE ...]
+//! testbed_tables --knobs <out dir>
 //! ```
 //!
 //! `job.json` holds the run's key (`k`), its sim (`testbed`), its test
 //! (`calibration_star`), its twin's knobs (`env`: [`knobs_of`] and the
 //! `--knob`s, which add to them or replace them) and its row
-//! ([`strims_sim::testbed::row`]).
+//! ([`strims_sim::testbed::row`]). `--knobs` prints the knobs alone, from
+//! the out dir's settings, topology and links (no node lines), as JSON.
 //!
 //! [`knobs_of`]: strims_sim::testbed::knobs_of
 
@@ -22,7 +24,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use strims_sim::testbed::{self, Run};
+use strims_sim::testbed::{self, Run, knobs_of, settings_of};
 
 fn main() {
     if let Err(e) = run() {
@@ -35,8 +37,28 @@ fn run() -> Result<(), String> {
     // The command line names the run.
     #[allow(clippy::disallowed_methods)]
     let mut args = std::env::args().skip(1);
-    let usage = "usage: testbed_tables <out dir> <tables dir> [--knob KEY=VALUE ...]";
-    let dir = PathBuf::from(args.next().ok_or(usage)?);
+    let usage =
+        "usage: testbed_tables <out dir> <tables dir> [--knob KEY=VALUE ...] | --knobs <out dir>";
+    let first = args.next().ok_or(usage)?;
+    if first == "--knobs" {
+        let dir = PathBuf::from(args.next().ok_or(usage)?);
+        let read = |name: &str| {
+            std::fs::read_to_string(dir.join(name)).map_err(|e| format!("{name}: {e}"))
+        };
+        let links = std::fs::read_to_string(dir.join("links")).ok();
+        let knobs = knobs_of(
+            &settings_of(&read("settings")?),
+            &read("topology")?,
+            links.as_deref(),
+            &dir,
+        )?;
+        println!(
+            "{}",
+            serde_json::to_string(&knobs).map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
+    let dir = PathBuf::from(first);
     let out = PathBuf::from(args.next().ok_or(usage)?);
     let mut extra = BTreeMap::new();
     while let Some(flag) = args.next() {
