@@ -399,9 +399,10 @@ impl Spec {
     /// `LINK_SHAPER`, the shaper qdisc (tbf, a peak's bucket two of the
     /// class's largest frames, or the router's); `LINK_CHILD`,
     /// the qdisc that holds its queue, if not tbf's own; `LINK_SLOT`,
-    /// netem's slot argument; `LINK_TRACE`, tracelink's arguments (the
-    /// files at `/links/<name>`); and `LINK_FILES`, the host files to
-    /// mount there. Fails on a bucket the shaper can't take: one under the
+    /// netem's slot argument; `LINK_TRACE`, tracelink's arguments (its
+    /// trace at `/links/trace`, a delay trace at `/links/delay`: two files
+    /// may share a name); and `LINK_FILES`, the host files to mount there,
+    /// as `<host path>:<path>`. Fails on a bucket the shaper can't take: one under the
     /// class's largest frame ([`Spec::check_bucket`]), or a peak at or
     /// under the link's highest rate ([`check_peak`]).
     pub fn shell(&self, run: &Run) -> Result<String, String> {
@@ -509,19 +510,17 @@ impl Spec {
         let slot = self.slots().map_or(String::new(), |s| s.netem());
         let (trace, files) = match &self.trace {
             Some(t) => {
-                let name = |p: &str| p.rsplit('/').next().unwrap_or(p).to_owned();
                 let mut a = format!(
-                    "--trace /links/{} --format {} --scale {} --offset-s {} --limit {}",
-                    name(&t.file),
+                    "--trace /links/trace --format {} --scale {} --offset-s {} --limit {}",
                     if t.us { "us" } else { "mm" },
                     t.scale,
                     t.offset,
                     t.limit.unwrap_or(run.limit)
                 );
-                let mut files = t.file.clone();
+                let mut files = format!("{}:/links/trace", t.file);
                 if let Some((d, step)) = &t.delay {
-                    a += &format!(" --delay /links/{} --delay-step-ms {step}", name(d));
-                    files += &format!(" {d}");
+                    a += &format!(" --delay /links/delay --delay-step-ms {step}");
+                    files += &format!(" {d}:/links/delay");
                 }
                 (a, files)
             }
@@ -802,7 +801,16 @@ mod tests {
         );
         assert!(step.contains("burst 156250"), "{step}");
         let trace = sh("trace,file=/t/x.up,delay=/t/d@10,scale=0.5", &run);
-        assert!(trace.contains("LINK_TRACE='--trace /links/x.up --format mm --scale 0.5 --offset-s 0 --limit 125000 --delay /links/d --delay-step-ms 10'"), "{trace}");
-        assert!(trace.contains("LINK_FILES='/t/x.up /t/d'"), "{trace}");
+        assert!(trace.contains("LINK_TRACE='--trace /links/trace --format mm --scale 0.5 --offset-s 0 --limit 125000 --delay /links/delay --delay-step-ms 10'"), "{trace}");
+        assert!(
+            trace.contains("LINK_FILES='/t/x.up:/links/trace /t/d:/links/delay'"),
+            "{trace}"
+        );
+        // A trace and a delay trace of one name mount apart.
+        let same = sh("trace,file=/a/x,delay=/b/x@10", &run);
+        assert!(
+            same.contains("LINK_FILES='/a/x:/links/trace /b/x:/links/delay'"),
+            "{same}"
+        );
     }
 }
