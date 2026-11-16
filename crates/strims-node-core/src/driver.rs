@@ -1031,10 +1031,105 @@ mod tests {
         );
     }
 
+    /// Moves link bytes both ways, then runs both nodes' timers at `now`
+    /// and moves again, until neither moves.
+    fn settle(a: &mut Side, b: &mut Side, now: Time) {
+        for _ in 0..64 {
+            a.task.state.handle_timeouts(now);
+            b.task.state.handle_timeouts(now);
+            let ab = carry_at(a, b, now);
+            let ba = carry_at(b, a, now);
+            if !ab && !ba {
+                return;
+            }
+        }
+    }
+
+    /// A pass hands a channel a message for each free write buffer (the
+    /// rounds of a pass refill vnic as the channel takes its messages): a
+    /// driver channel takes two, and one standing for an in-process channel
+    /// as many as an MTU holds, as the native node's `write_channel` writes
+    /// a link's pending messages in one go. A seeds a swarm of 4 KiB chunks
+    /// in 64 KiB munros that B takes a push stream of, then writes 256 KiB,
+    /// and one pass's messages are counted before any write buffer comes
+    /// back: each a pushed chunk's frame.
+    #[test]
+    fn a_pass_hands_an_in_process_channel_an_mtu_of_messages() {
+        let m = crate::config::WebRtcConfig::default().max_message;
+        let mtu = LinkConfig::webrtc().mtu;
+        let driver = BufferConfig::default().write_buffers;
+        for in_process in [false, true] {
+            let x = ExchangeId::from(KeyData::from_ffi(1));
+            let mut a = browser(1);
+            let mut b = browser(2);
+            let ca = exchange(&mut a, x, SdpType::Answer);
+            let cb = exchange(&mut b, x, SdpType::Offer);
+            connected_as(&mut a, ca, in_process);
+            connected(&mut b, cb);
+            let mut now = epoch();
+            settle(&mut a, &mut b, now);
+            let pa = peer_added(&mut a).expect("a's peer");
+            let pb = peer_added(&mut b).expect("b's peer");
+            let options = strims_ppspp::SwarmOptions {
+                chunk_size: 4096,
+                chunks_per_signature: 16,
+                live_window: 1024,
+                ..Default::default()
+            };
+            let (reply, _replies) = mpsc::channel(4);
+            let (sa, id, publisher) = a
+                .task
+                .state
+                .create_swarm(
+                    strims_ppspp::WriterOptions {
+                        swarm_options: options.clone(),
+                        key: key_from_seed(&[9; 32]),
+                    },
+                    now,
+                    reply,
+                )
+                .unwrap();
+            let sb = b.task.state.add_swarm(id, options).unwrap();
+            let _reader = open(&mut b.task.state, sb);
+            a.task.state.run_swarm(&pa.host_id, sa, 1, 2, now).unwrap();
+            b.task.state.run_swarm(&pb.host_id, sb, 2, 1, now).unwrap();
+            // Two 64 KiB munros, which B reads and takes a push stream of.
+            let data = vec![0x5a; 128 * 1024];
+            a.task
+                .state
+                .write(publisher, WriteOp::Write(data.len()), data, now);
+            for _ in 0..40 {
+                now += Duration::from_millis(50);
+                settle(&mut a, &mut b, now);
+            }
+            let data = vec![0x5a; 256 * 1024];
+            a.task
+                .state
+                .write(publisher, WriteOp::Write(data.len()), data, now);
+            a.task.state.pump(now);
+            let ch = &mut a.task.io.links[0].1;
+            let mut sizes = Vec::new();
+            while let Ok(buf) = ch.writes.try_recv() {
+                sizes.push(buf.len());
+            }
+            let sent: usize = sizes.iter().sum();
+            let ctx = format!("in_process {in_process}: {sizes:?}");
+            assert!(sizes.iter().all(|&n| n > 4096 && n <= m), "{ctx}");
+            let buffers = if in_process { mtu / m } else { driver };
+            assert_eq!(sizes.len(), buffers, "{ctx}");
+            assert!(sent <= mtu, "{ctx}: {sent} bytes");
+        }
+    }
+
     /// Moves `from`'s link bytes into `to`'s link. Returns whether any
     /// moved.
     fn carry(from: &mut Side, to: &mut Side) -> bool {
-        from.task.state.pump(epoch());
+        carry_at(from, to, epoch())
+    }
+
+    /// [`carry`] with `from`'s pass at `now`.
+    fn carry_at(from: &mut Side, to: &mut Side, now: Time) -> bool {
+        from.task.state.pump(now);
         let mut moved = false;
         loop {
             let (from_link, ch) = from.task.io.links.last_mut().unwrap();
