@@ -336,7 +336,14 @@ impl Spec {
             if f.line == Line::Atm {
                 s += " linklayer atm";
             }
-            s + " mtu 2048 tsize 2048"
+            // A floor or cells need a table of sizes, which charges a byte
+            // at a time only with 2048 entries over an mtu under 2048 (at
+            // 2048 over 2048 it rounds up to 2 bytes, 499 to 500); an
+            // overhead alone needs none.
+            if f.mpu > 0 || f.line == Line::Atm {
+                s += " mtu 2047 tsize 2048";
+            }
+            s
         };
         let line = if self.class == Class::Dsl && self.vdsl {
             64.0 / 65.0
@@ -671,8 +678,14 @@ mod tests {
         );
         let cable = sh("cable", &run);
         assert!(
-            cable.contains("LINK_STAB='stab overhead 4 mpu 64 mtu 2048 tsize 2048'"),
+            cable.contains("LINK_STAB='stab overhead 4 mpu 64 mtu 2047 tsize 2048'"),
             "{cable}"
+        );
+        assert!(sh("fiber", &run).contains("LINK_STAB='stab overhead 4'"));
+        assert!(sh("dsl,line=vdsl", &run).contains("LINK_STAB='stab overhead 16'"));
+        assert!(
+            sh("dsl", &run)
+                .contains("LINK_STAB='stab overhead 26 linklayer atm mtu 2047 tsize 2048'")
         );
         assert!(cable.contains("LINK_SHAPER='tbf rate 10000kbit burst 156250 limit 125000 peakrate 100mbit mtu 3028'"), "{cable}");
         assert!(
