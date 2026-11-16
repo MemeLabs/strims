@@ -25,7 +25,9 @@
 //! - `STRIMS_SIM_UPLINK_BURST=<bucket>` gives every WAN host's uplink a
 //!   shaper's token bucket ([`Bucket`]; the network's model of one is in
 //!   `strims_wan::network`): `<bytes>`, at least a full frame
-//!   ([`MIN_BURST`]), a bucket that size whose bytes leave at once, as
+//!   ([`MIN_BURST`], and at least what the host's framing charges a full
+//!   packet: with `STRIMS_SIM_FRAMING`, a bucket under a DOCSIS or ADSL
+//!   frame fails the run), a bucket that size whose bytes leave at once, as
 //!   `hack/testbed/run.sh`'s tbf has; `profiles`, each host its access
 //!   kind's ([`Access::bucket`](strims_wan::Access::bucket)); `off`, none,
 //!   the scenario's own included. Unset or blank, each scenario keeps its
@@ -170,7 +172,7 @@ use std::thread;
 use std::time::Duration;
 
 use strims_ppspp::PushMode;
-use strims_wan::access::Bucket;
+use strims_wan::access::{Bucket, Site};
 use strims_wan::live::{Encoder, Sign};
 
 use crate::report::Report;
@@ -186,6 +188,36 @@ pub const MEDIA_CHUNK: usize = 4096;
 /// frame, which tbf needs to send one at all (`hack/testbed/run.sh`'s
 /// `SEED_BURST` floor).
 pub const MIN_BURST: u64 = 1514;
+
+/// What is wrong with `site`'s bucket, if it holds less than its link's
+/// largest frame (a full packet's charge, `Framing::packet(1500)`): a
+/// shaper drops a packet its bucket can't cover whole, so the testbed
+/// refuses such a bucket (strims-sim's `link::Spec::check_bucket`), and the
+/// model would pass what the testbed drops.
+fn small_bucket(site: &Site) -> Option<String> {
+    let b = site.profile.bucket?;
+    let frame = site.profile.framing.packet(1500) as u64;
+    (b.bytes < frame).then(|| {
+        format!(
+            "a bucket of {} bytes is less than its link's largest frame, {frame} bytes",
+            b.bytes
+        )
+    })
+}
+
+/// Fails on a WAN host of `spec` whose bucket is smaller than its link's
+/// largest frame ([`small_bucket`]).
+#[allow(clippy::panic)] // a knob's bucket the testbed refuses fails its test
+fn check_buckets(spec: &Scenario) {
+    for h in &spec.hosts {
+        if let Some(e) = h.site.and_then(|s| small_bucket(&s)) {
+            panic!(
+                "{}: {e} (STRIMS_SIM_UPLINK_BURST, STRIMS_SIM_FRAMING)",
+                h.name
+            );
+        }
+    }
+}
 
 /// Seeds per sweep when `STRIMS_SIM_SEEDS` isn't set.
 pub const DEFAULT_SEEDS: u64 = 8;
@@ -762,6 +794,9 @@ fn sweep_seeds(
                 });
             }
         }
+        if uplink_burst.is_some() || framing.is_some() {
+            check_buckets(&spec);
+        }
         if let Some(slots) = uplink_slots {
             for site in spec.hosts.iter_mut().filter_map(|h| h.site.as_mut()) {
                 *site = site.with_slots(match slots {
@@ -1018,6 +1053,21 @@ mod tests {
         for bad in ["0", "1513", "-3028", "3k", "on", "profile"] {
             assert!(parse_uplink_burst(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_bucket_holds_its_links_largest_frame() {
+        use strims_wan::framing::Framing;
+        let site = |bytes: u64, f: Framing| {
+            Site::new(strims_wan::City::Chicago, strims_wan::Access::Dsl)
+                .with_bucket(Some(Bucket::of(bytes)))
+                .with_framing(f)
+        };
+        assert_eq!(small_bucket(&site(MIN_BURST, Framing::ETHERNET)), None);
+        assert!(small_bucket(&site(1517, Framing::DOCSIS)).is_some());
+        assert_eq!(small_bucket(&site(1518, Framing::DOCSIS)), None);
+        assert!(small_bucket(&site(MIN_BURST, Framing::ADSL_PPPOE)).is_some());
+        assert_eq!(small_bucket(&site(1749, Framing::ADSL_PPPOE)), None);
     }
 
     #[test]
