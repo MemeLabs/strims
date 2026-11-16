@@ -1220,8 +1220,8 @@ CREATE OR REPLACE MACRO viewers_link_overhead(env, dflt := '') AS
 -- length: a testbed capture's; a sim's link charge less its access link
 -- class's overhead a packet, link_overhead) and link bytes (what the
 -- access link charged: a sim's; a testbed capture's IP bytes and its
--- class's overhead a packet; a twin's SACKs and pure ACKs are IP bytes in
--- any class, and gain its overhead as a testbed's do). A run without a
+-- class's overhead a packet; a twin's acknowledgements, pure ACKs and
+-- SACKs, are its link's charge too, as its data). A run without a
 -- link spec has run.sh's tbf on the testbed and none in a sim. A class
 -- whose charge isn't a fixed overhead a packet (cable's floor, dsl's
 -- cells) leaves the side that would convert unmeasured. A data channel's
@@ -1334,28 +1334,24 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
         SELECT b.k, b.src, r.rate, b.seed_up_bytes + coalesce(b.seed_up_sack_bytes, 0) AS seed_up_bytes,
                b.seed_up_packets + coalesce(b.seed_up_sack_packets, 0) AS seed_up_packets,
                b.seed_small_packets + coalesce(b.seed_up_sack_packets, 0) AS seed_small_packets,
-               coalesce(b.seed_up_sack_packets, 0) AS seed_sack_packets,
                b.seed_up_ack_packets, b.seed_up_ack_bytes, b.seed_drops,
                b.viewer_up_bytes + coalesce(b.viewer_up_sack_bytes, 0) AS viewer_up_bytes,
-               b.viewer_up_packets + coalesce(b.viewer_up_sack_packets, 0) AS viewer_up_packets,
-               coalesce(b.viewer_up_sack_packets, 0) AS viewer_sack_packets, b.viewer_switched,
+               b.viewer_up_packets + coalesce(b.viewer_up_sack_packets, 0) AS viewer_up_packets, b.viewer_switched,
                b.viewer_shed, j.bin_ms, j.sim, j.seed_ovh, j.viewer_ovh
         FROM bins b JOIN j USING (k, src)
         ASOF LEFT JOIN rate r ON r.k = b.k AND r.src = b.src AND b.t_ms * 1000 >= r.t_us
         WHERE b.t_ms >= lo_s * 1000 AND b.t_ms < hi_s * 1000),
     -- Each side's bytes in IP bytes and link bytes (see the docs): a
-    -- testbed's recorded IP, a sim's data link and its SACKs and pure
-    -- ACKs IP.
+    -- testbed's recorded IP, a sim's link (its acknowledgements' too).
     units AS (
         SELECT *,
-               CASE WHEN sim = 'testbed' THEN seed_up_bytes
-                    ELSE seed_up_bytes - seed_ovh * (seed_up_packets - seed_sack_packets) END AS seed_ip,
+               CASE WHEN sim = 'testbed' THEN seed_up_bytes ELSE seed_up_bytes - seed_ovh * seed_up_packets END
+                   AS seed_ip,
                CASE WHEN sim = 'testbed'
                     THEN seed_up_bytes + seed_up_ack_bytes + seed_ovh * (seed_up_packets + seed_up_ack_packets)
-                    ELSE seed_up_bytes + seed_up_ack_bytes + seed_ovh * (seed_sack_packets + seed_up_ack_packets) END
-                   AS seed_link,
-               CASE WHEN sim = 'testbed' THEN viewer_up_bytes
-                    ELSE viewer_up_bytes - viewer_ovh * (viewer_up_packets - viewer_sack_packets) END AS viewer_ip
+                    ELSE seed_up_bytes + seed_up_ack_bytes END AS seed_link,
+               CASE WHEN sim = 'testbed' THEN viewer_up_bytes ELSE viewer_up_bytes - viewer_ovh * viewer_up_packets END
+                   AS viewer_ip
         FROM bin),
     wire AS (
         SELECT k, src, count(*) * any_value(bin_ms) / 1000.0 AS secs,
@@ -1396,7 +1392,7 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
         SELECT n.k, n.src,
                sum(n.up_bytes + coalesce(n.up_sack_bytes, 0) + n.up_ack_bytes
                    - CASE WHEN j.sim = 'testbed' THEN 0
-                          ELSE j.seed_ovh * n.up_packets END)
+                          ELSE j.seed_ovh * (n.up_packets + coalesce(n.up_sack_packets, 0) + n.up_ack_packets) END)
                    / nullif(sum(n.data_bytes + n.ovh), 0) AS seed_wire_per_written
         FROM node_bins n JOIN j USING (k, src)
         WHERE n.node = 0 AND n.t_ms >= lo_s * 1000 AND n.t_ms < hi_s * 1000 GROUP BY ALL),
