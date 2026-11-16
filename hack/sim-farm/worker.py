@@ -59,9 +59,19 @@ second, since steal and load from elsewhere bend a real-time run. A
 finished run leaves its out dir as D/done/<id>.tar.gz beside its result,
 whose row holds the host's steal and busy shares of CPU time over the
 run, steal's worst 10 s, the load's mean and max, and node-<i>.jsonl's
-line counts; with no node-<i>.jsonl it fails. The containers write some
-of the out dir as root: what the worker can't read or remove goes
-through sudo where it needs no password (EC2), else a container.
+line counts (HOST_FIELDS); with no node-<i>.jsonl it fails. The
+containers write some of the out dir as root: what the worker can't read
+or remove goes through sudo where it needs no password (EC2), else a
+container. With a store and its bundle's TABLES_BIN artifact (strims-sim's
+testbed_tables), a finished run's tables are written too, after the
+tarball, into the out dir's tables/ (`TABLES_BIN out out/tables`, a
+`--knob` for each of the job's `knobs`), and fold into the store as a
+test job's out dir does: the fold's key, sim, test, env and row are
+tables/job.json's, the row with the host's fields, its cell the job's
+`cell` (else its matrix), its arm the job's and its seed its `repeat`;
+its result says `key` and `flush` as a stored test job's does. Tables
+that fail leave the run a success with its tarball, its result's
+`tables_error` saying why.
 
 With --imds it polls the instance metadata (--imds-url, for tests) every
 5 s for a spot interruption notice, which comes 2 minutes before EC2
@@ -138,6 +148,10 @@ STORE_MEMORY = "1GB"
 # What a stored job's result keeps of its row: the controller compares
 # reruns on these; a job's `fields` add what it reads ([[derive]], report).
 THIN = ("trace", "reads_hash", "passed", "failure")
+# What a testbed job's row holds of the host's while it ran (Watch's
+# summary, node_lines'), and its wall time.
+HOST_FIELDS = ("wall_s", "steal_pct", "steal_peak_pct", "busy_pct", "load_mean", "load_max", "node_lines",
+               "node_lines_min")
 # Retries of an upload that fails, a delay before each.
 UPLOAD_RETRIES = (2, 5, 15, 30, 60)
 # --end-at is this long before the host's shutdown (farm.py's start_worker).
@@ -560,6 +574,15 @@ class Store:
 
     def fold_job(self, wid: str, rec: dict) -> dict:
         job, res = rec["job"], rec["result"]
+        if "tables" in job:
+            # A testbed run's tables: their job.json's names, its cell and
+            # repeat (the module docs).
+            t = job["tables"]
+            return {
+                "k": t.get("k") or wid, "dir": self.fold_dir / wid, "sim": t.get("sim"), "test": t.get("test"),
+                "cell": job.get("cell") or job.get("matrix"), "arm": job.get("arm"), "seed": job.get("repeat"),
+                "env": t.get("env") or {}, "row": rec["row"], "wall_s": res.get("wall_s"), "rss_mb": None,
+            }
         env = job.get("env", {})
         seed = env.get("STRIMS_SIM_SEED")
         return {
@@ -790,6 +813,29 @@ def finish_testbed(root: Path, r: Running, work: Path, ok: bool) -> dict:
     return {**res, "row": row}
 
 
+def testbed_tables(root: Path, job: dict, out: Path) -> tuple[Path | None, dict | None, str | None]:
+    """A finished testbed run's tables, written by its bundle's TABLES_BIN
+    into out/tables (the module docs): the dir and its job.json, or why
+    there are none (None, None, without a TABLES_BIN)."""
+    tables = tree_of(root, job["bin"]) / "artifacts" / "TABLES_BIN"
+    if not tables.exists():
+        return None, None, None
+    dest = out / "tables"
+    args = [str(tables), str(out), str(dest)]
+    for k, v in sorted((job.get("knobs") or {}).items()):
+        args += ["--knob", f"{k}={v}"]
+    try:
+        p = subprocess.run(args, capture_output=True, text=True, timeout=600)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, None, f"testbed_tables: {e}"
+    if p.returncode:
+        return None, None, f"testbed_tables: {p.stderr.strip()[-500:] or f'exit {p.returncode}'}"
+    try:
+        return dest, json.loads((dest / "job.json").read_text()), None
+    except (OSError, ValueError) as e:
+        return None, None, f"testbed_tables' job.json: {e}"
+
+
 def kill(r: Running) -> int:
     """Kills a running job's process group; its wait status."""
     try:
@@ -845,6 +891,23 @@ def serve(args: argparse.Namespace) -> None:
     def stored(job: dict) -> bool:
         return store is not None and job.get("kind") != "testbed" and job.get("store", True)
 
+    def store_testbed(jid: str, r: Running, result: dict, row: dict, work: Path) -> bool:
+        """A finished testbed run's tables into the store (the module
+        docs); whether they went, the result saying why not."""
+        if store is None:
+            return False
+        dest, meta, why = testbed_tables(root, r.job, work / "out")
+        if why is not None:
+            result["tables_error"] = why
+        if dest is None:
+            return False
+        full = {**meta.get("row", {}), **row}
+        keep = (*THIN, *HOST_FIELDS, *r.job.get("fields", ()))
+        result["key"] = meta.get("k")
+        job = {**r.job, "tables": {k: meta.get(k) for k in ("k", "sim", "test", "env")}}
+        store.add(jid, job, {**result, "row": {k: full[k] for k in keep if k in full}}, full, dest)
+        return True
+
     def end_job(jid: str, r: Running, status: int, usage, now: float, timed_out: bool = False,
                 killed: str | None = None) -> None:
         r.proc.returncode = os.waitstatus_to_exitcode(status)
@@ -881,7 +944,7 @@ def serve(args: argparse.Namespace) -> None:
         if ok and stored(r.job):
             keep = (*THIN, *r.job.get("fields", ()))
             store.add(jid, r.job, {**result, "row": {k: row[k] for k in keep if k in row}}, row, work / "out")
-        else:
+        elif not (ok and r.watch is not None and store_testbed(jid, r, result, row, work)):
             write_atomic(d["done"] / f"{jid}.json", json.dumps(result))
         remove(work, root)
         del running[jid]

@@ -29,7 +29,13 @@ as the run's first of them, and each gets its own line of that run, all
 but the first's with `from`; a derived job waits on the job that runs its
 source's key, and every job of its key takes what that took; the verify
 copies are of as many keys, and count by job, as a rerun's lines do; a
-job whose binary isn't built shares nothing. Stdlib alone:
+job whose binary isn't built shares nothing. A testbed run's tables, a
+stand-in testbed_tables', fold into a host's store as a test job's out
+dir does, under its tables' key, sim, test and env, its cell, arm and
+repeat, its row with the host's, and the flush lands in its sink; a
+testbed_tables that fails leaves no tables and says why; the controller
+writes a stored testbed run's line once its flush lands, naming its key
+and source, and an unstored one's at once. Stdlib alone:
 
   python3 hack/simlab/tests/test_farm.py
 """
@@ -1010,6 +1016,159 @@ class Contract(unittest.TestCase):
         self.assertEqual(q.estimate["cost"], json.loads(self.estimate("--json").stdout)["cost"])
         self.assertRegex(q.text, r"^\[\d\d:\d\d:\d\d\] r1: budget 256 vCPUs")
         self.assertEqual(regs.get(q.id)["state"], "quoted")
+
+
+# A stand-in testbed_tables: <out> <tables> [--knob K=V ...] writes one
+# table, the viewers', series_meta.json and job.json, its env the knobs.
+FAKE_TABLES = """\
+#!/usr/bin/env python3
+import json, sys
+from pathlib import Path
+out, dest = Path(sys.argv[1]), Path(sys.argv[2])
+knobs = dict(sys.argv[i + 1].split("=", 1) for i in range(3, len(sys.argv), 2))
+if (out / "fail").exists():
+    sys.exit("no node lines")
+dest.mkdir()
+(dest / "viewers.csv").write_text("viewer,host\\n0,1\\n1,2\\n")
+(dest / "viewers.schema.json").write_text('{"columns":[{"name":"viewer","type":"BIGINT"},'
+                                         '{"name":"host","type":"BIGINT"}]}')
+(dest / "series_meta.json").write_text('{"sim":"strims-sim","bin_ms":100}')
+(dest / "job.json").write_text(json.dumps({"k": "tb-0123456789abcdef", "sim": "testbed",
+                                           "test": "calibration_star",
+                                           "env": {"STRIMS_SIM_CAL_VIEWERS": "2", **knobs},
+                                           "row": {"trace": "tb-0123", "lag_p99_ms": 250}}))
+"""
+
+TESTBED_MATRIX = """\
+kind = "testbed"
+repeats = 2
+host_cores = 4
+cell = "star-3-10"
+knobs = {{ STRIMS_SIM_ARRIVALS = "trickle" }}
+[artifacts]
+NODE_BIN = "node"
+TABLES_BIN = "tables"
+[arms]
+main = "{commit}"
+[env]
+SECS = "30"
+"""
+
+
+class TestbedTables(unittest.TestCase):
+    """A testbed run's tables, from the worker's fold to the controller's
+    line (the module docs)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="simlab-farm-testbed-")
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        if str(FARM_PY.parent) not in sys.path:
+            sys.path.insert(0, str(FARM_PY.parent))
+        spec = importlib.util.spec_from_file_location("sim_farm_worker_tb", FARM_PY.parent / "worker.py")
+        self.worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.worker)
+
+    def host_root(self):
+        """A host's farm dir whose bundle `b.tar.gz` holds the stand-in."""
+        root = self.dir / "farm"
+        self.worker.dirs(root)
+        arts = root / "trees" / "b" / "artifacts"
+        arts.mkdir(parents=True)
+        (arts / "TABLES_BIN").write_text(FAKE_TABLES)
+        (arts / "TABLES_BIN").chmod(0o755)
+        return root
+
+    def test_a_runs_tables_fold_as_its_cells_run_and_flush(self):
+        root = self.host_root()
+        out = root / "work" / "j1" / "out"
+        out.mkdir(parents=True)
+        job = {"id": "j1", "kind": "testbed", "bin": "b.tar.gz", "matrix": "tb", "arm": "main", "repeat": 2,
+               "cell": "star-3-10", "knobs": {"STRIMS_SIM_ARRIVALS": "trickle"}, "fields": []}
+        dest, meta, why = self.worker.testbed_tables(root, job, out)
+        self.assertIsNone(why)
+        self.assertEqual(dest, out / "tables")
+        self.assertEqual(meta["env"]["STRIMS_SIM_ARRIVALS"], "trickle")
+        sink = self.dir / "sink"
+        (root / "policy.json").write_text(json.dumps({"dir": str(sink)}))
+        args = mock.Mock(run="r1", instance="i-1", policy=str(root / "policy.json"), rotate_mb=100.0, duckdb=None)
+        with mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(self.dir / "sim-db")}):
+            store = self.worker.Store(root, args)
+            row = {"steal_pct": 0.5, "node_lines_min": 40, "wall_s": 60.0}
+            full = {**meta["row"], **row}
+            tables = {k: meta[k] for k in ("k", "sim", "test", "env")}
+            store.add("j1", {**job, "tables": tables}, {"id": "j1", "row": row, "key": meta["k"]}, full, dest)
+            store.close(60)
+        done = json.loads((root / "done" / "j1.json").read_text())
+        self.assertEqual((done["flush"], done["key"]), (0, "tb-0123456789abcdef"))
+        flushed = sink / "r1" / "i-1" / "0"
+        runs = self.worker.store().duck(
+            f"SELECT k, sim, test, cell, arm, seed, env, row_json FROM read_parquet('{flushed / 'runs.parquet'}');")
+        self.assertEqual([(r["k"], r["sim"], r["test"], r["cell"], r["arm"], r["seed"]) for r in runs],
+                         [("tb-0123456789abcdef", "testbed", "calibration_star", "star-3-10", "main", 2)])
+        self.assertEqual(json.loads(runs[0]["env"])["STRIMS_SIM_ARRIVALS"], "trickle")
+        self.assertEqual(json.loads(runs[0]["row_json"]), {**full})
+        self.assertTrue((flushed / "viewers.parquet").exists())
+
+    def test_tables_that_fail_say_why(self):
+        root = self.host_root()
+        out = root / "work" / "j2" / "out"
+        out.mkdir(parents=True)
+        (out / "fail").touch()
+        dest, meta, why = self.worker.testbed_tables(root, {"bin": "b.tar.gz"}, out)
+        self.assertEqual((dest, meta), (None, None))
+        self.assertIn("no node lines", why)
+        # A bundle without TABLES_BIN writes none, and says nothing.
+        (root / "trees" / "b" / "artifacts" / "TABLES_BIN").unlink()
+        self.assertEqual(self.worker.testbed_tables(root, {"bin": "b.tar.gz"}, out), (None, None, None))
+
+    def test_a_stored_runs_line_waits_for_its_flush(self):
+        d = self.dir
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        env |= {"GIT_DIR": str(d / ".git"), "GIT_WORK_TREE": str(d), "GIT_CONFIG_NOSYSTEM": "1",
+                "HOME": str(d), "SIM_DB_ROOT": str(d / "sim-db")}
+        p = mock.patch.dict(os.environ, env, clear=True)
+        p.start()
+        self.addCleanup(p.stop)
+        subprocess.run(["git", "init", "-q"], cwd=d, check=True)
+        (d / "crates").mkdir()
+        (d / "crates" / "x").write_text("x")
+        for cmd in (["add", "crates"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x"]):
+            subprocess.run(["git", *cmd], cwd=d, check=True)
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, check=True, capture_output=True,
+                                text=True).stdout.strip()
+        fp = farm_of(d)
+        (d / "tb.toml").write_text(TESTBED_MATRIX.format(commit=commit))
+        m = fp.Matrix(str(d / "tb.toml"))
+        m.resolve()
+        self.assertEqual((m.cell, m.knobs), ("star-3-10", {"STRIMS_SIM_ARRIVALS": "trickle"}))
+        args = mock.Mock(local=True, s3_region=None, s3_bucket=None, verify=0)
+        with contextlib.redirect_stdout(io.StringIO()):
+            run = fp.Run([m], args)
+            m.state.mkdir(parents=True, exist_ok=True)
+        self.assertTrue(run.stores)
+        host = fp.Host("local", "local", "-", fp.Spec(1, 1, 0, 1), 0.0, time.time(), state="ready")
+        run.sink_dir = d / "sink"
+        first, second = sorted(run.queue, key=lambda i: i.job.repeat)
+        w = run.wire(first, host)
+        self.assertEqual((w["cell"], w["knobs"], w["repeat"], w["matrix"], w["arm"]),
+                         ("star-3-10", {"STRIMS_SIM_ARRIVALS": "trickle"}, 1, "tb", "main"))
+        rows = m.state / "rows.jsonl"
+        res = {"row": {"steal_pct": 0.5}, "flush": 3, "key": "tb-0123456789abcdef", "wall_s": 60.0, "exit": 0}
+        run.store(host, first, res)
+        run.flush_rows()
+        self.assertFalse(rows.exists())
+        self.assertEqual(host.stored, {first.wid: 3})
+        run.land(host, 3, {"reads": False})
+        run.flush_rows()
+        line, = fp.read_jsonl(rows)
+        self.assertEqual((line["id"], line["key"], line["src"], line["repeat"]),
+                         (first.job.id, "tb-0123456789abcdef", "farm/" + run.name + "/local/3", 1))
+        self.assertEqual(line["row"], {"steal_pct": 0.5})
+        self.assertEqual(host.acks, [first.wid])
+        # One that stored nothing has its line at once.
+        run.store(host, second, {"row": {"steal_pct": 0.1}, "wall_s": 60.0, "exit": 0, "tables_error": "x"})
+        self.assertEqual([r.get("tables_error") for r in fp.read_jsonl(rows)], [None, "x"])
 
 
 if __name__ == "__main__":

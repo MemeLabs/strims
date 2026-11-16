@@ -381,8 +381,11 @@ containers in real time. Its jobs are its arms by its axes by `repeats`:
   sources = ["crates", ...]     # an arm's source (default as for tests;
                                 # hack/testbed is always in it)
   paired = true                 # the default (below)
+  cell = "star-15-10"           # the suite cell its runs stand for (below)
+  knobs = {STRIMS_SIM_ARRIVALS = "trickle"}  # more twin knobs (below)
   [build]     commands = ["cargo build --release ..."]
   [artifacts] NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+              TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
   [files]     TOPOLOGY = "mesh3"
   [arms] [env] [axes] [report]  as above; [report] over the row below
 
@@ -401,7 +404,21 @@ run.sh from the bundle's hack/testbed with each artifact's variable set
 to its path there, and each [files] variable (a file relative to the
 matrix, the same for every arm, whose path may name the job's variables
 as ${VAR}: "topologies/mesh6-v${VIEWERS}") to the host's copy. A job's id
-hashes its source, build, files, environment and repeat.
+hashes its source, build, files, environment and repeat, and its cell and
+knobs where the matrix names them.
+
+With a TABLES_BIN artifact (strims-sim's testbed_tables), a host writes a
+finished run's tables as a sim run writes its own (strims-sim's testbed
+module: `testbed_tables <out dir> <out dir>/tables`, with `--knob` for
+each of `knobs`, the twin knobs a run's settings don't give) and folds
+them into its store as a test job's (worker.py), so they flush to S3 and
+`simdb.py pull --run RUN` brings them into the cache: each run a job of
+sim `testbed` and test calibration_star, its key, env (its twin's knobs)
+and row testbed_tables' (with the host's numbers below), its cell the
+matrix's `cell` (else the matrix's name), its arm the job's, and its seed
+its repeat, so a run pairs with its twin's seed of that number. The run
+needs the S3 bucket then, as a test run does. A run whose tables
+testbed_tables can't write still succeeds, with its out dir.
 
 An arm whose tree has strims-wan's testbed_link example (run.sh's parser
 of its link specs) also builds it and packs it as the artifact LINK_BIN,
@@ -415,7 +432,9 @@ a testbed matrix that gives one fails.
 Testbed runs are real time, so nothing checks that they reproduce: no
 canary, no --verify, a reissued job just runs again (a job's second
 result is dropped), and a job is done only by a row of its id in one of
-the run's matrices (no key, no row index). Instances are the --families types with host_cores
+the run's matrices (no key in the row index, no reuse by key: a stored
+run's row names its tables' key, `key`, and source, `src`, as a test
+job's index line does, written once its flush has landed). Instances are the --families types with host_cores
 cores, one job at a time each, and of one type where it has capacity:
 the type of the run's first launch comes first in every zone of every
 region. Docker is set up at boot, and the link check each arm's bundle
@@ -920,6 +939,10 @@ class Matrix:
         self.host_cores = int(m.get("host_cores", 4))
         self.host_mem_gib = float(m.get("host_mem_gib", 0))
         self.paired = bool(m.get("paired", True))
+        # The suite cell its runs stand for, and the twin knobs their
+        # tables take beside their settings' (testbed_tables' --knob).
+        self.cell = str(m["cell"]) if "cell" in m else None
+        self.knobs = {str(k): str(v) for k, v in m.get("knobs", {}).items()}
         self.source_paths = sorted({*map(str, m.get("sources", SOURCES)), TESTBED})
         self.commands = [str(c) for c in m.get("build", {}).get("commands", [])]
         self.artifacts = {k: str(v) for k, v in m.get("artifacts", {}).items()}
@@ -1023,6 +1046,8 @@ class Matrix:
         env_t = tuple(sorted(env.items()))
         files = tuple(sorted((k, self.file_of(k, env)) for k in self.files))
         key = ["testbed", source, self.commands, sorted(self.artifacts.items()), files, env_t, repeat]
+        if self.cell is not None or self.knobs:
+            key += [self.cell, sorted(self.knobs.items())]
         jid = hashlib.sha256(json.dumps(key).encode()).hexdigest()[:16]
         return Job(
             jid, arm, self.commits[arm], source, self.bin_name(source), "", env_t,
@@ -2592,6 +2617,9 @@ class Run:
             if len(cores) > 1:
                 sys.exit(f"testbed matrices run together want one host_cores, not {sorted(cores)}")
             self.testbed = Testbed(cores.pop(), max(m.host_mem_gib for m in matrices))
+        # Whether its hosts keep stores: a test run's always, a testbed
+        # run's when its matrices write tables (TABLES_BIN).
+        self.stores = self.testbed is None or any("TABLES_BIN" in m.artifacts for m in matrices)
         # A testbed job's place in the queue it went to a host with, and its
         # order there; the type the run's instances take where they can.
         self.seqs: dict[str, int] = {}
@@ -2721,8 +2749,11 @@ class Run:
         j = item.job
         w = {"id": item.wid, "kind": j.kind, "bin": j.bin, "test": j.test, "env": self.env_of(j)}
         if j.kind == "testbed":
+            m = self.owners[j.id][0][0] if j.id in self.owners else self.ms[0]
             w["files"] = dict(j.files)
             w["seq"] = self.seqs.get(item.wid, 0)
+            w.update(matrix=m.name, arm=j.arm, repeat=j.repeat, cell=m.cell, knobs=m.knobs,
+                     fields=self.fields.get(j.id, []))
             return w
         m = self.owners[j.id][0][0] if j.id in self.owners else self.ms[0]
         w.update(key=j.key, matrix=m.name, arm=j.arm, sim=f"{m.package}:{m.target}", out=OUT_KNOBS.get(m.package),
@@ -2746,7 +2777,9 @@ class Run:
         self.queue.extendleft(reversed(ready))
 
     def store_testbed(self, host: Host, item: Item, res: dict) -> None:
-        """A testbed run's row, its run dir fetched already (fetch)."""
+        """A testbed run's row, its run dir fetched already (fetch): written
+        now, or with its tables in a flush (`flush`), once that lands
+        (land), naming their key and source."""
         self.done.add(item.wid)
         jid = item.job.id
         if jid in self.rows:
@@ -2754,6 +2787,7 @@ class Run:
             return
         self.ran += 1
         at = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+        seq = res.get("flush")
         for m, j in self.owners[jid]:
             self.share_run(jid, m)
             rec = {
@@ -2771,10 +2805,20 @@ class Run:
                 **{k: res.get(k) for k in ("cpu_model", "kernel", "docker", "started", "wall_s", "exit")},
                 "at": at,
                 "run_dir": f"runs/{jid}",
-                "row": res["row"],
             }
-            append_jsonl(m.state / "rows.jsonl", [rec])
+            if res.get("tables_error"):
+                rec["tables_error"] = res["tables_error"]
+            if seq is not None:
+                rec["key"] = res.get("key")
+                rec["src"], rec["data"] = self.src_of(host, seq), self.data_of(host, seq)
+            rec["row"] = res["row"]
+            if seq is None:
+                append_jsonl(m.state / "rows.jsonl", [rec])
+            else:
+                host.unlanded.setdefault(seq, []).append((m.state / "rows.jsonl", rec))
             self.rows.setdefault(jid, rec)
+        if seq is not None:
+            host.stored[item.wid] = seq
         if res.get("wall_s"):
             self.seen[self.owners[jid][0][0].name].append(res["wall_s"])
         self.release(jid)
@@ -2911,6 +2955,9 @@ class Run:
             if item is not None:
                 self.done.discard(wid)
                 back.append(item)
+                if item.job.kind == "testbed":
+                    # Real time: its run again is a run of its own.
+                    self.rows.pop(item.job.id, None)
         host.unlanded.clear()
         self.queue.extendleft(reversed(back))
         log(f"{host.id}: {sum(m is not None for m in found.values())} of its {len(seqs)} flushes not seen to "
@@ -3357,7 +3404,7 @@ class Run:
     def store_args(self, host: Host, home: Path, end_at: float | None) -> list[str]:
         """serve's store options for a host of test jobs whose farm dir is
         `home` (its policy file and binaries there)."""
-        if self.testbed is not None:
+        if not self.stores:
             return []
         out = ["--run", self.name, "--instance", host.id, "--policy", str(home / "policy.json"),
                "--rotate-mb", str(self.args.rotate_mb), "--duckdb", str(home / "bin" / self.duckdb)]
@@ -3460,7 +3507,7 @@ class Run:
         host.ssh_at = time.time()
         self.ssh.master(host)
         files = HOST_FILES
-        if self.testbed is None:
+        if self.stores:
             policy = self.state / "policies" / f"{host.id}.json"
             policy.parent.mkdir(parents=True, exist_ok=True)
             policy.write_text(json.dumps(self.policies(host)))
@@ -4106,9 +4153,10 @@ class Run:
         if not key.exists() or not Path(f"{key}.pub").exists():
             sys.exit(f"{key} or its .pub is missing (--ssh-key, $STRIMS_FARM_SSH_KEY, ssh_key in {CONFIG})")
         self.ssh = Ssh(key, self.state)
-        if self.testbed is None:
+        if self.stores:
             if not self.args.s3_bucket:
-                sys.exit(f"a run of test matrices puts its data in S3: --s3-bucket (s3_bucket in {CONFIG})")
+                sys.exit(f"a run of test matrices, or of testbed ones with tables, puts its data in S3: "
+                         f"--s3-bucket (s3_bucket in {CONFIG})")
             self.ship_duckdb()
         if self.args.s3_bucket:
             self.s3_bins = Binaries(self.args.s3_bucket, self.args.s3_region, self.s3_count)
@@ -4264,7 +4312,7 @@ class Run:
             self.bins.append(self.duckdb)
 
     def setup_local(self) -> None:
-        if self.testbed is None:
+        if self.stores:
             self.ship_duckdb()
             # Flushes go straight into the cache, as `pull` would put them.
             self.sink_dir = worker.store().cache_root() / "cache" / "farm"
@@ -4295,7 +4343,7 @@ class Run:
                 shutil.copy2(BIN / b, dst)
         slots = self.local_slots
         h = Host(hid, "local", "-", Spec(slots, slots, 0, slots), 0.0, time.time(), state="ready", dir=self.local_dir)
-        if self.testbed is None:
+        if self.stores:
             (self.local_dir / "policy.json").write_text(json.dumps({"dir": str(self.sink_dir)}))
         self.hosts.append(h)
         self.start_local(h)

@@ -1,0 +1,25 @@
+# The sim farm's smoke test for testbed jobs' tables: one short run of
+# main on the four-node mesh, its packets captured, whose tables
+# (testbed_tables) fold into the host's store and flush as a sim job's.
+
+kind = "testbed"
+repeats = 1
+host_cores = 4
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node --example testbed_tables"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
+
+[files]
+TOPOLOGY = "mesh3"
+
+[arms]
+main = "main"
+
+[env]
+SECS = "30"
+PCAP = "1"
+NODE_ARGS = "--chunk 4096 --munro 32768"
