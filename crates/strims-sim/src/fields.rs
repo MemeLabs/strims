@@ -1980,7 +1980,8 @@ pub(crate) enum RowNum {
     /// reading, `PushStats::upload_capacity`) over what the viewer could upload
     /// (the meter's truth, `Report::upload_cap_at`: see `meter_bucket_seeds`):
     /// their p10, p50 and p90 (`meter_accepting_p10`, ..., `meter_others_p90`);
-    /// left out without a sample.
+    /// left out without a sample, and a sample whose truth is 0 (an outage)
+    /// left out (`meter_samples` keeps it).
     ///
     /// strims-sim: Each viewer's samples with a capacity
     /// (`Report::populations`, `Report::window_readings`), over its
@@ -1993,7 +1994,8 @@ pub(crate) enum RowNum {
     /// startup phase (`STARTUP_SECS`, vocab.toml's `start` horizon, after the
     /// stream's first write) to the stream's last write: their p10, p50 and p90
     /// (`meter_seed_p10`, `meter_seed_p50`, `meter_seed_p90`); left out without
-    /// a sample there (a stream no longer than its startup).
+    /// a sample there (a stream no longer than its startup); a sample whose
+    /// truth is 0 (an outage) is left out (`meter_samples` keeps it).
     ///
     /// strims-sim: Each sample one with a capacity (`Report::seed_meter`).
     MeterSeedPP(u16),
@@ -3988,8 +3990,9 @@ pub(crate) mod cols {
         /// two meter samples over what its link charged its own messages then
         /// (pure acknowledgements and competing uploads apart; at most 1, the
         /// share so far when it wrote nothing between them, and 1 before it
-        /// sent any), within its rate limit; empty with neither a site nor a
-        /// limit.
+        /// sent any), within its rate limit; 0 over a second its link carries
+        /// nothing for the host (an outage), and empty with neither a site nor
+        /// a limit.
         ///
         /// Unit: bytes/s. None is written as an empty field.
         AvailBps,

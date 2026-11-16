@@ -3773,7 +3773,8 @@ fn seed_share(r: &Report, t: Duration) -> f64 {
 /// before, in the data bytes its runner writes (`own_data_share`, its
 /// runner's channel payload bytes over its link's charge of its messages):
 /// an ATM link's rate less its cells and the transports' framing, a
-/// trace's opportunities over the second before.
+/// trace's opportunities over the second before; and 0, kept, over a
+/// second whose trace carries nothing.
 #[test]
 fn the_meters_truth_is_what_the_link_carries_in_data_bytes() {
     let mut c = collapse_case(1, 10, 8);
@@ -3802,6 +3803,7 @@ fn the_meters_truth_is_what_the_link_carries_in_data_bytes() {
     );
     let share = seed_share(&r, Duration::from_secs(6));
     assert_eq!(at(&r, 6_000), (1514.0 * 2000.0 * share) as u64);
+    assert_eq!(at(&r, 7_000), 0);
     let share = seed_share(&r, Duration::from_secs(8));
     assert_eq!(at(&r, 8_000), (1514.0 * share) as u64);
 }

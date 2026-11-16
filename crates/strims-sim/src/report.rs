@@ -1059,8 +1059,9 @@ impl Report {
     /// The meter's truth: what host `h` could upload over the second
     /// before `t` (time since the start), in its meter's units
     /// ([`upload_truth`]), from its meter samples and its competing uploads'
-    /// log; `None` with neither a site nor a rate limit, or while it can
-    /// upload nothing.
+    /// log; `None` with neither a site nor a rate limit, and 0 while its
+    /// link carries nothing for it (an outage), which the tables keep and
+    /// the meter's ratios leave out ([`Report::meter_series`]).
     pub fn upload_cap_at(&self, h: HostIx, t: std::time::Duration) -> Option<u64> {
         let spec = self.scenario.hosts.get(h)?;
         let samples = self.hosts.get(h).map_or(&[][..], |r| &r.runner.meter[..]);
@@ -1072,7 +1073,7 @@ impl Report {
             .as_ref()
             .and_then(|w| w.hosts.iter().find(|w| w.name == spec.name))
             .map_or(&[][..], |w| &w.competing_log[..]);
-        upload_truth(spec, last, prev, log, t).filter(|&c| c > 0)
+        upload_truth(spec, last, prev, log, t)
     }
 
     /// The upload meter's readings at `h` while a swarm was live, as
@@ -1081,7 +1082,8 @@ impl Report {
     /// (capacity ÷ cap, the push rate its subscriptions commit ÷ cap) per
     /// sample, the capacity the relay busy-time reading
     /// ([`MeterSample::capacity`](crate::stats::MeterSample::capacity)), a
-    /// seed's too. Empty without a cap.
+    /// seed's too. A sample whose truth is 0 (an outage) has no ratio and
+    /// is left out, as every sample is without a cap.
     pub fn meter_readings(&self, h: HostIx) -> Vec<(f64, f64)> {
         self.meter_series(h)
             .into_iter()
@@ -1099,7 +1101,7 @@ impl Report {
             .iter()
             .filter(|m| self.live(m.t) && m.capacity > 0)
             .filter_map(|m| {
-                let cap = self.upload_cap_at(h, m.t)? as f64;
+                let cap = self.upload_cap_at(h, m.t).filter(|&c| c > 0)? as f64;
                 let committed: f64 = m
                     .children
                     .iter()
@@ -1142,7 +1144,7 @@ impl Report {
                 .filter(|m| within(m.t))
                 .filter_map(|m| {
                     let c = *m.budget_capacity.get(&swarm).filter(|&&c| c > 0)?;
-                    Some(c as f64 / self.upload_cap_at(spec.seed, m.t)? as f64)
+                    Some(c as f64 / self.upload_cap_at(spec.seed, m.t).filter(|&c| c > 0)? as f64)
                 })
                 .collect()
         });
@@ -1550,8 +1552,8 @@ pub const TRUTH_WINDOW: std::time::Duration = std::time::Duration::from_secs(1);
 /// The meter's truth for host `spec` at `t` (time since the start): what
 /// it could upload over `(t - 1 s, t]` ([`TRUTH_WINDOW`]), in its meter's
 /// units, the data bytes its runner writes (`UploadInfo::rate`'s), within
-/// its rate limit; `None` with neither a site nor a limit. Over the
-/// window:
+/// its rate limit; `None` with neither a site nor a limit, and 0 over a
+/// window its link carries nothing for it (an outage). Over the window:
 ///
 /// - what its uplink carries, in its link's bytes: its rate's mean over
 ///   the window, its steps' from their times ([`HostSpec::up_steps`]), or
