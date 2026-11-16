@@ -16,6 +16,9 @@ links that carry the same schedule:
 
   owd     a record's write start to its last byte read
   lag     its due time to its last byte read
+  first   a burst's first record's owd: what a shaper's bucket lets
+          through at once after idle moves first
+  spread  a burst's arrival spread: its first record read to its last
   block   its write start to its last byte in the socket
   rtt     a probe's write start to its echo read
   rtt@ph  the same by the probe's phase in its burst period (ms)
@@ -202,6 +205,8 @@ def metrics(nodes, sched, cls, t0_us, queue=None, compete=None):
         if e[0] == "burst":
             period[(e[1], e[2])] = e[3]
     rbytes = defaultdict(int)
+    # Each burst's records: (class, link, due) -> [(seq, at, got)].
+    bursts = defaultdict(list)
     tmax = 0
     # The sim's uplink queue, from one link's samples.
     first = {i: min((e["to"] for e in evs if e.get("ev") == "s"), default=None) for i, evs in nodes.items()}
@@ -217,6 +222,7 @@ def metrics(nodes, sched, cls, t0_us, queue=None, compete=None):
                 m[(c, "owd")].append((e["got"] - e["at"]) / 1000)
                 m[(c, "lag")].append((e["got"] - e["due"]) / 1000)
                 rbytes[(c, link)] += e["len"]
+                bursts[(c, link, e["due"])].append((e["seq"], e["at"], e["got"]))
             elif ev == "r" and e["k"] == 2:
                 link = (i, e["from"])
                 c = cls.get(link, "idle")
@@ -264,6 +270,11 @@ def metrics(nodes, sched, cls, t0_us, queue=None, compete=None):
             m[("node 0", "drops")] = [e["queue_drops"] + e.get("competing_drops", 0)]
             if "competing_drops" in e:
                 m[("node 0", "x drops")] = [2 * e["competing_drops"]]
+    for (c, _, _), recs in bursts.items():
+        _, at, got = min(recs)
+        m[(c, "first")].append((got - at) / 1000)
+        if len(recs) > 1:
+            m[(c, "spread")].append((max(r[2] for r in recs) - min(r[2] for r in recs)) / 1000)
     span = max(1.0, (tmax - t0_us) / 1e6)
     per = defaultdict(list)
     for (c, link), b in rbytes.items():

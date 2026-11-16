@@ -24,7 +24,10 @@ DIR/TAG-<seed>.row.json; a seed already there is kept. `--env` sets more
 of strims-sim's settings (STRIMS_SIM_RTC=chromium for browsers). The
 testbed's TRAIN_MS=1500 is strims-sim's STRIMS_SIM_EXP=trains-seed, added
 to the flags `--env` gives; the sim's flag fixes that staleness, so no
-other value runs.
+other value runs. The testbed's tbf buckets, SEED_BURST and VIEWER_BURST,
+are calibration_star's too, at run.sh's 3028 bytes where the knobs don't
+give them, so a run and its twin shape their uplinks alike;
+`--env STRIMS_SIM_UPLINK_BURST=off` runs the sim's uplinks without one.
 
 The others compare twin runs (DIR/TAG-*.json) with a farm testbed matrix's
 runs (MATRIX, its rows.jsonl and runs/) of N viewers, in the phases of the
@@ -132,6 +135,9 @@ def cmd_run(args):
         k, v = flag(args, "--env").split("=", 1)
         extra[k] = v
     tag, knobs = args[0], args[1:]
+    # run.sh's tbf buckets, where the knobs leave them at its default.
+    knobs = knobs + [f"{k}=3028" for k in ("SEED_BURST", "VIEWER_BURST")
+                     if not any(kv.startswith(f"{k}=") for kv in knobs)]
     other = [kv for kv in knobs if kv.startswith("TRAIN_MS=") and kv != "TRAIN_MS=1500"]
     if other:
         sys.exit(f"{other[0]}: the sim's trains-seed runs 1500 alone")

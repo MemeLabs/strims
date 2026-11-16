@@ -11,6 +11,7 @@ them on the testbed and in the sim, and compares the arms.
     hack/testbed/benchsuite.py score ARM ... [--root DIR] [--repeat R]
     hack/testbed/benchsuite.py phases CASE ARM ... [--root DIR] [--repeat R]
                                       [--edges S,S,...] [--links I,I]
+    hack/testbed/benchsuite.py bursts ARM ... [--root DIR] [--repeat R]
 
 `run` runs each case on the testbed (bench.sh) into ROOT/r<k>/<case>, for
 repeats 1..N (the default root is target/bench/runs); a case run already
@@ -25,7 +26,10 @@ p50/p90, the uplink queue's p90 and the drops (each floored at 5), per case
 and over the cases; with --repeat all, each case's fit averaged over the
 repeats it ran in. `phases` prints the data links' one-way delays, probe
 round trips and windows (a data channel's buffered amount) between the given
-times (default: each 8 s).
+times (default: each 8 s). `bursts` prints, unfloored, what a shaper's
+bucket moves first: each data link's bursts' first record's one-way delay
+and their arrival spread (first record read to last), p50/p90, the testbed
+against the arms (with --repeat all, each repeat's).
 Comparisons take repeat R (default r1) and the cases that ran.
 """
 
@@ -195,6 +199,28 @@ def cmd_score(args):
     print(f"{'mean':13}" + "".join(f"{sum(v) / len(v) if v else float('nan'):10.3f}" for v in tot.values()))
 
 
+def cmd_bursts(args):
+    root = flag(args, "--root", os.path.join(ROOT, "target", "bench", "runs"))
+    repeat = flag(args, "--repeat", "r1")
+    arms = args
+    reps = repeats(root) if repeat == "all" else [repeat]
+    print("columns per metric (ms, p50/p90): testbed " + " ".join(arms))
+    print(f"{'case':13} {'rep':4}" + "".join(f" | {c:^{12 * (len(arms) + 1)}}" for c in ("first", "spread")))
+    for r in reps:
+        for c in ran(root, r):
+            run = os.path.join(root, r, c)
+            tb, arm_ms = None, []
+            for a in arms:
+                t, m = stats(run, a)
+                tb = tb or t
+                arm_ms.append(m)
+            line = f"{c:13} {r:4}"
+            for name in ("first", "spread"):
+                cell = [show(pick(tb, data, name))] + [show(pick(m, data, name)) for m in arm_ms]
+                line += " | " + " ".join(f"{x:>11}" for x in cell)
+            print(line)
+
+
 def cmd_phases(args):
     root = flag(args, "--root", os.path.join(ROOT, "target", "bench", "runs"))
     repeat = flag(args, "--repeat", "r1")
@@ -231,10 +257,11 @@ def cmd_phases(args):
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in ("run", "sim", "summary", "score", "phases"):
+    cmds = {"run": cmd_run, "sim": cmd_sim, "summary": cmd_summary, "score": cmd_score,
+            "phases": cmd_phases, "bursts": cmd_bursts}
+    if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         sys.exit(__doc__)
-    {"run": cmd_run, "sim": cmd_sim, "summary": cmd_summary, "score": cmd_score,
-     "phases": cmd_phases}[sys.argv[1]](sys.argv[2:])
+    cmds[sys.argv[1]](sys.argv[2:])
 
 
 if __name__ == "__main__":
