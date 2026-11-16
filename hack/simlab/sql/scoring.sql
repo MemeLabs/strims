@@ -1270,7 +1270,9 @@ CREATE OR REPLACE MACRO viewers_link_overhead(env) AS
 --   seed_children, seed_budget, seed_copies_p50, seed_latest_floor_p50_ms
 --                       its subscriptions served, an adaptive seed's budget,
 --                       copies and the latest floor its budget check read,
---                       medians
+--                       medians: each steps with joins and changes, and
+--                       its median is the level most of the window holds,
+--                       where a mean pools the ramp to it
 --   seed_queue_delay_p50_ms, seed_queue_delay_p90_ms,
 --   seed_busy_p50_permille, seed_busy_p90_permille
 --                       its meter's queueing delay and busy share
@@ -1279,7 +1281,9 @@ CREATE OR REPLACE MACRO viewers_link_overhead(env) AS
 --                       trips stand under 10 ms above their bases
 --   seed_growth_share   the share of samples (with a rate) whose capacity
 --                       reads growth_x (3.5) times its rate or more
---   seed_requests_in_s  STREAM_REQUESTs it answered a second
+--   seed_stream_requests_s
+--                       STREAM_REQUESTs it answered a second (its meter's
+--                       requests_in: subscriptions asked, not chunks)
 -- and from bins and peer_samples:
 --   seed_up_queue_p50_ms, seed_up_queue_p90_ms
 --                       its uplink queue's wait at the bins' edges (a
@@ -1291,6 +1295,8 @@ CREATE OR REPLACE MACRO viewers_link_overhead(env) AS
 --                       viewers' among themselves (samples with a round
 --                       trip)
 --   viewer_requests_s   the viewers' REQUESTs out a second (summed)
+--   seed_requests_in_s  the REQUESTs the seed's peers sent it a second
+--                       (summed over its channels' requests_in)
 -- needs: seconds bins bins.seed_up_queue_ms node_bins meter_samples peer_samples viewer_seconds viewers events
 -- needs: meter_samples.rate_bps meter_samples.busy_permille meter_samples.queue_delay_ms
 -- needs: meter_samples.path_latest_ms meter_samples.children meter_samples.requests_in meter_samples.budget
@@ -1396,7 +1402,7 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
                avg(CASE WHEN m.rate_bps > 0 THEN (m.capacity_bps >= growth_x * m.rate_bps)::INT END)
                    AS seed_growth_share,
                (max(m.requests_in) - min(m.requests_in)) / nullif((max(m.t_ms) - min(m.t_ms)) / 1000.0, 0)
-                   AS seed_requests_in_s
+                   AS seed_stream_requests_s
         FROM meter_samples m SEMI JOIN j USING (k, src)
         WHERE m.role = 'seed' AND m.t_ms >= lo_s * 1000 AND m.t_ms < hi_s * 1000 GROUP BY ALL),
     q AS (
@@ -1413,22 +1419,25 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
         FROM peer_samples p SEMI JOIN j USING (k, src)
         WHERE p.t_ms >= lo_s * 1000 AND p.t_ms < hi_s * 1000 AND p.rtt_ms > 0 GROUP BY ALL),
     pr0 AS (
-        SELECT p.k, p.src, p.node, p.peer, max(p.requests_out) - min(p.requests_out) AS n
+        SELECT p.k, p.src, p.node, p.peer, max(p.requests_out) - min(p.requests_out) AS n,
+               max(p.requests_in) - min(p.requests_in) AS n_in
         FROM peer_samples p SEMI JOIN j USING (k, src)
-        WHERE p.node <> 0 AND p.t_ms >= lo_s * 1000 AND p.t_ms < hi_s * 1000 GROUP BY ALL),
+        WHERE p.t_ms >= lo_s * 1000 AND p.t_ms < hi_s * 1000 GROUP BY ALL),
     pspan AS (
         SELECT p.k, p.src, (max(p.t_ms) - min(p.t_ms)) / 1000.0 AS span
         FROM peer_samples p SEMI JOIN j USING (k, src)
         WHERE p.t_ms >= lo_s * 1000 AND p.t_ms < hi_s * 1000 GROUP BY ALL),
     pr AS (
-        SELECT k, src, sum(n) / nullif(any_value(span), 0) AS viewer_requests_s
+        SELECT k, src, sum(n) FILTER (WHERE node <> 0) / nullif(any_value(span), 0) AS viewer_requests_s,
+               sum(n_in) FILTER (WHERE node = 0) / nullif(any_value(span), 0) AS seed_requests_in_s
         FROM pr0 JOIN pspan USING (k, src) GROUP BY ALL),
     wide AS (
         SELECT j.k, j.src, j.sim, j.cell, j.seed, lags.over_target_s::DOUBLE AS over_target_s,
                p99.lag_p99_ms::DOUBLE AS lag_p99_ms, sec.* EXCLUDE (k, src, n), wire.* EXCLUDE (k, src, secs),
                meter.q[1] AS meter_p10, meter.q[2] AS meter_p50, meter.q[3] AS meter_p90,
                comp.competitor_share, comp.competitor_charged, nb.seed_wire_per_written,
-               ms.* EXCLUDE (k, src), q.* EXCLUDE (k, src), ps.* EXCLUDE (k, src), pr.viewer_requests_s
+               ms.* EXCLUDE (k, src), q.* EXCLUDE (k, src), ps.* EXCLUDE (k, src), pr.viewer_requests_s,
+               pr.seed_requests_in_s
         FROM j LEFT JOIN lags USING (k, src) LEFT JOIN p99 USING (k, src) LEFT JOIN sec USING (k, src)
         LEFT JOIN wire USING (k, src) LEFT JOIN meter USING (k, src) LEFT JOIN comp USING (k, src)
         LEFT JOIN nb USING (k, src) LEFT JOIN ms USING (k, src) LEFT JOIN q USING (k, src)

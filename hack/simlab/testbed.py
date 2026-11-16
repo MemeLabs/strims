@@ -258,12 +258,19 @@ def cells_in(src_like, kind="one", arm="one"):
     return twin_cells([(r["cell"], {k: v for k, v in e.items() if k not in JOB_KNOBS}) for r, e in zip(rows, envs)])
 
 
+# The tables a twin writes beyond a sim job's: each node's bins and
+# channels (node_bins, peer_samples), which a testbed run's tables hold and
+# twin_runs_of reads (seed_wire_per_written, the channels' measures).
+TWIN_TABLES = {"STRIMS_SIM_BIN_NODES": "1"}
+
+
 def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8, kind="one", side_arm="one",
           replace=False):
     """Each cell's twin of the testbed runs side (src, kind, side_arm)
     names (cells_in: `src` a source's LIKE pattern): strims-sim's
     calibration_star (the scenarios test binary `binary`) at seeds 1..N
-    with the cell's knobs (its TESTBED_QDISC left out) and `env`'s, one
+    with the cell's knobs (its TESTBED_QDISC left out), TWIN_TABLES and
+    `env`'s, one
     farm job's way each (STRIMS_SIM_JOB=1), their tables folded into the
     cache as source testbed/<name> (refused over one, unless `replace`),
     each a job of its cell, `arm` and seed. Returns the source and the
@@ -282,7 +289,7 @@ def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8, kind="on
     for cell, knobs in cells.items():
         base = {k: v for k, v in knobs.items() if not k.startswith("TESTBED_")}
         for seed in range(1, seeds + 1):
-            todo.append((cell, {**base, **(env or {}), "STRIMS_SIM_JOB": "1"}, seed))
+            todo.append((cell, {**base, **TWIN_TABLES, **(env or {}), "STRIMS_SIM_JOB": "1"}, seed))
 
     def one(t):
         cell, e, seed = t
