@@ -197,8 +197,9 @@
 # Images: strims-testbed (Dockerfile) for native nodes, the relay and the
 # sink, and strims-testbed-browser (browser.Dockerfile) for browser nodes,
 # built here. Container names (tb-<i>, tb-relay, tb-sink), the network
-# (strims-testbed, internal: no route out) and its subnet (10.77.0.0/24)
-# are fixed: one testbed per Docker host at a time.
+# (strims-testbed-sealed, internal: no route out, removed when the run
+# ends) and its subnet (10.77.0.0/24) are fixed: one testbed per Docker
+# host at a time.
 #
 # Needs Docker (the user's docker group) and the kernel modules the links
 # are shaped with, which links.sh's link_modules lists (every run's netem,
@@ -262,7 +263,8 @@ browser_links=${BROWSER_LINKS:-ws}
 relay_on=${RELAY:-1}
 image=strims-testbed
 browser_image=strims-testbed-browser
-net=strims-testbed
+net=strims-testbed-sealed
+old_net=strims-testbed
 subnet=10.77.0
 relay=$subnet.5
 
@@ -338,11 +340,27 @@ fi
 # the testbed's traffic alone: a browser's own fetches (component updates,
 # safe browsing, first-run downloads) would cross them otherwise. Nothing
 # in a run needs the internet: the binaries and the page are mounted, the
-# images built beforehand. A network from before is made again.
-if [ "$(docker network inspect -f '{{.Internal}}' "$net" 2>/dev/null)" != true ]; then
+# images built beforehand. It has a name of its own, which no older run.sh
+# reuses (they make strims-testbed, routable, whose browsers need its
+# route), and goes when the run ends; the two share the subnet, so the
+# old one goes first, and either with a container on it is another run's,
+# which stops this one. One of the new name is kept only as this run.sh
+# makes it.
+names=()
+cleanup() {
+  docker rm -f "${names[@]}" >/dev/null 2>&1 || true
   docker network rm "$net" >/dev/null 2>&1 || true
-  docker network create --internal --subnet "$subnet.0/24" "$net" >/dev/null
-fi
+}
+trap cleanup EXIT
+for nw in "$old_net" "$net"; do
+  have=$(docker network inspect -f '{{.Internal}} {{range .IPAM.Config}}{{.Subnet}}{{end}}' "$nw" 2>/dev/null) \
+    || continue
+  [ "$nw" = "$net" ] && [ "$have" = "true $subnet.0/24" ] && continue
+  docker network rm "$nw" >/dev/null \
+    || { echo "network $nw ($have) is in use: another testbed run?" >&2; exit 1; }
+done
+docker network inspect "$net" >/dev/null 2>&1 \
+  || docker network create --internal --subnet "$subnet.0/24" "$net" >/dev/null
 # Nor does a container speak IPv6, whose link-local chatter (router
 # solicitations, neighbour discovery) would cross them too.
 nov6=(--sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv6.conf.default.disable_ipv6=1)
@@ -387,9 +405,6 @@ now_ms() {
   echo "${t%???}"
 }
 start=$(( $(now_ms) + lead ))
-names=()
-cleanup() { docker rm -f "${names[@]}" >/dev/null 2>&1 || true; }
-trap cleanup EXIT
 
 # The container's CPU time and memory, once a second, in the background of
 # its script.
