@@ -26,10 +26,14 @@
 # idled, is 3028 bytes (two full frames) unless SEED_BURST (the seed's) or
 # VIEWER_BURST (the viewers') says otherwise.
 #
-# The order is a modem's. netem, holding each packet with a delay of at
-# least 1 ms, releases the socket's memory for it (skb_orphan_partial), as
-# a host's NIC does once it has handed a packet to a modem, so TCP Small
-# Queues doesn't keep the modem's queue empty. tbf, the root, is offered
+# The order is a modem's. The egress filter's redirect hands the ifb a
+# clone of each packet (act_mirred clones at egress), and eth0's clsact
+# hook frees the socket's own (sch_handle_egress consumes the stolen skb),
+# so its memory returns to the socket as at a host's NIC once it has
+# handed a packet to a modem: TCP Small Queues counts nothing the delay
+# or the modem holds and doesn't keep the modem's queue empty, at any
+# delay (at `netem delay 0ms` a CUBIC upload still filled a 2 Mbit/s root
+# tbf to 120 KB). tbf, the root, is offered
 # each packet as netem releases it and dequeues before the next, so a
 # burst its tokens cover leaves as it comes, and its byte limit is met as
 # the packets arrive. (With netem at the root and the tbf its child,
@@ -85,8 +89,8 @@
 #   VIEWER_LINK=<spec>     each viewer's (default tbf)
 #   LINKS="<i>:<spec> ..." node i's link, in place of SEED_LINK or
 #                          VIEWER_LINK
-#   SEED_DELAY_MS=<ms>     the seed's one-way delay (default 20; at least 1)
-#   VIEWER_DELAY_MS=<ms>   each viewer's (default 10; at least 1)
+#   SEED_DELAY_MS=<ms>     the seed's one-way delay (default 20)
+#   VIEWER_DELAY_MS=<ms>   each viewer's (default 10)
 #   SECS=<s>               the stream's length (default 180)
 #   JOIN_AT=<s>            when viewers dial in, after the start (default 0)
 #   JOINS="<i>:<s> ..."    node i dials in <s> seconds after the start, in
