@@ -394,7 +394,59 @@ fn a_holding_link_echoes_its_first_probe_read_a_hold_later() {
     let rtt = Duration::from_millis(340);
     assert_eq!(samples(&mut a), vec![(la, PathSample { at: ms(340), rtt })]);
     assert_eq!(b.host.metrics().echo_hold_ms, 300);
+    assert_eq!(
+        b.host.metrics().echo_ride_count,
+        0,
+        "the probe opened the hold"
+    );
     assert_eq!(b.host.poll_timeout(), Some(ms(10_000)));
+}
+
+/// A probe read while an earlier one's hold runs rides on its release:
+/// the echo answers it, its wait the hold less the time between the two
+/// reads, and it counts as a ride.
+#[test]
+fn a_probe_read_in_a_hold_rides_on_its_release() {
+    let hold = Duration::from_millis(300);
+    let (mut a, la, mut b, lb) = linked_greedy(EchoGreed {
+        hold: Some(hold),
+        forge: false,
+    });
+    b.host.set_probe_interval(None);
+    idle(&mut a, ms(0));
+    let mut first = a.take_transmit(la);
+    b.input(lb, ms(20), &mut first, &mut no_handlers).unwrap();
+    // A second probe, as a link writing data sends one an interval on.
+    let nonce = 77;
+    let mut second = control_frame(None, Some(nonce));
+    b.input(lb, ms(220), &mut second, &mut no_handlers).unwrap();
+    idle(&mut b, ms(320));
+    let back = b.take_transmit(lb);
+    assert_eq!(records(&back), vec![Record::Echo(nonce)]);
+    let m = b.host.metrics();
+    assert_eq!((m.echo_write_count, m.echo_hold_ms), (1, 100));
+    assert_eq!((m.echo_ride_count, m.echo_ride_hold_ms), (1, 100));
+}
+
+/// Two probes read in one input open the hold together: the echo answers
+/// the newer, a whole hold after their read, and doesn't count as a ride.
+#[test]
+fn probes_read_together_open_the_hold_together() {
+    let hold = Duration::from_millis(300);
+    let (_a, _la, mut b, lb) = linked_greedy(EchoGreed {
+        hold: Some(hold),
+        forge: false,
+    });
+    b.host.set_probe_interval(None);
+    let mut both = control_frame(None, Some(76));
+    both.extend(control_frame(None, Some(77)));
+    b.input(lb, ms(20), &mut both, &mut no_handlers).unwrap();
+    idle(&mut b, ms(320));
+    let back = b.take_transmit(lb);
+    assert_eq!(records(&back), vec![Record::Echo(77)]);
+    let m = b.host.metrics();
+    assert_eq!((m.echo_write_count, m.echo_hold_ms), (1, 300));
+    assert_eq!(m.echo_ride_count, 0);
 }
 
 #[test]

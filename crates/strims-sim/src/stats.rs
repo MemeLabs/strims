@@ -573,7 +573,7 @@ pub(crate) struct HostStats {
     messages_done: BTreeMap<(HostId, usize), PeerMessages>,
     /// vnic's echo counters (`HostMetrics`), over every incarnation: a
     /// restart starts them again at zero.
-    echoes: Tracked<3>,
+    echoes: Tracked<5>,
 }
 
 /// [`PeerMessages`]' counters, in its field order.
@@ -665,6 +665,11 @@ pub struct Echoes {
     /// Echoes it wrote, and their summed hold since the probe's read.
     pub written: u64,
     pub hold_ms: u64,
+    /// Of those, the held echoes of a probe read later than the one that
+    /// opened the hold (`strims_vnic::EchoGreed::hold`), and their summed
+    /// hold (`HostMetrics::echo_ride_count`, `echo_ride_hold_ms`).
+    pub rides: u64,
+    pub ride_hold_ms: u64,
     /// Echoes it read of probes it never sent.
     pub unknown: u64,
 }
@@ -703,8 +708,13 @@ impl HostStats {
     ) -> SampleGauges {
         let index = |k: SwarmKey| swarms.iter().position(|s| *s == Some(k));
         let v = &m.host;
-        self.echoes
-            .observe([v.echo_write_count, v.echo_hold_ms, v.echo_unknown_count]);
+        self.echoes.observe([
+            v.echo_write_count,
+            v.echo_hold_ms,
+            v.echo_ride_count,
+            v.echo_ride_hold_ms,
+            v.echo_unknown_count,
+        ]);
         let mut g = SampleGauges::default();
         let p = &mut self.peaks;
         for peer in &m.runner.peers {
@@ -1081,10 +1091,12 @@ impl HostStats {
 
     /// Every incarnation's echo counters.
     pub fn echoes(&self) -> Echoes {
-        let [written, hold_ms, unknown] = self.echoes.total();
+        let [written, hold_ms, rides, ride_hold_ms, unknown] = self.echoes.total();
         Echoes {
             written,
             hold_ms,
+            rides,
+            ride_hold_ms,
             unknown,
         }
     }

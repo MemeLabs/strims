@@ -548,9 +548,12 @@ struct Link<T> {
     /// The echo owed to the peer's newest probe.
     echo: Echo,
     /// [`LinkConfig::echo_greed`], and with a hold, when the echo owed may
-    /// go (its entry in [`Host`]'s `held_echoes`).
+    /// go (its entry in [`Host`]'s `held_echoes`), and whether the probe
+    /// it answers was read after the one that opened the hold (later than
+    /// it, not in the same input).
     echo_greed: EchoGreed,
     echo_release: Option<Time>,
+    echo_rides: bool,
 }
 
 impl<T> Link<T> {
@@ -770,6 +773,7 @@ impl<T: Copy> Host<T> {
             echo: Echo::default(),
             echo_greed: config.echo_greed,
             echo_release: None,
+            echo_rides: false,
         });
         if plain && let Err(e) = self.queue_peer_init(key, now) {
             self.links.remove(key);
@@ -905,7 +909,11 @@ impl<T: Copy> Host<T> {
                     let control_due = &mut self.control_due;
                     let held_echoes = &mut self.held_echoes;
                     let (path, echo) = (&mut link.path, &mut link.echo);
-                    let (greed, release) = (link.echo_greed, &mut link.echo_release);
+                    let (greed, release, rides) = (
+                        link.echo_greed,
+                        &mut link.echo_release,
+                        &mut link.echo_rides,
+                    );
                     link.decoder.decode(rest, &mut |f| {
                         if f.port == ports::KEEPALIVE_PORT {
                             metrics.keepalive_read_count += 1;
@@ -924,7 +932,13 @@ impl<T: Copy> Host<T> {
                                                 *release = Some(now + hold);
                                                 held_echoes.insert((now + hold, key));
                                             }
-                                            Some(_) => {}
+                                            // Read after the probe that
+                                            // opened the hold, not with it.
+                                            Some(hold) => {
+                                                if release.is_some_and(|r| r - hold < now) {
+                                                    *rides = true;
+                                                }
+                                            }
                                             None => {
                                                 control_due.insert(key);
                                             }
@@ -1937,6 +1951,7 @@ fn write_control<T>(
         path,
         echo,
         echo_release,
+        echo_rides,
         ..
     } = link;
     let Some(out) = out.as_mut() else {
@@ -1956,12 +1971,18 @@ fn write_control<T>(
         .then(|| echo.take(now))
         .flatten()
         .map(|(nonce, hold)| {
+            let ms = u64::try_from(hold.as_millis()).unwrap_or(0);
             metrics.echo_write_count += 1;
-            metrics.echo_hold_ms += u64::try_from(hold.as_millis()).unwrap_or(0);
+            metrics.echo_hold_ms += ms;
+            if *echo_rides {
+                metrics.echo_ride_count += 1;
+                metrics.echo_ride_hold_ms += ms;
+            }
             nonce
         });
     if echoed.is_some() {
         *echo_release = None;
+        *echo_rides = false;
     }
     let nonce = probe.then(|| {
         loop {

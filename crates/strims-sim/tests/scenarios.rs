@@ -15,7 +15,6 @@
 
 use std::time::Duration;
 
-use strims_base::path::PROBE_INTERVAL;
 use strims_base::rng::{DetRng, det_rng};
 use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy, SendFate, SendHow};
 use strims_sim::topology::{random_graph, random_hub, random_mesh};
@@ -2543,20 +2542,30 @@ fn echo_greedy_hosts_hold_or_forge_their_echoes() {
         },
         |r| {
             honest_whole_stream(r)?;
-            // A held echo answers the newest probe read when it goes. A
-            // peer sending the holder data probes every probe interval, so
-            // its newest probe in a hold waits at most the hold less an
-            // interval; a peer sending little probes less often than the
-            // hold, so each of its probes waits the whole hold. A holder's
-            // peers mix the two, so its mean hold is over the former, and
-            // an honest host's, which answers at once, is about 0.
-            let busy_hold = HELD_ECHO_MS - PROBE_INTERVAL.as_millis().cast_unsigned();
+            // A held echo answers the newest probe read in its hold. vnic
+            // probes at most every probe interval, on a frame an owner
+            // fills once the link wrote data since its last probe (or as
+            // an idle link's keepalive). So a peer that writes the holder
+            // data within a hold, an interval after its last probe, sends
+            // a probe that rides on the hold (`Echoes::rides`): read after
+            // the one that opened it, it waits less than the hold, unless
+            // a full link defers its echo past the release, so the bound
+            // holds on average. A probe that opens a hold and has none ride
+            // on it (probes read with it in one input open it together)
+            // waits the whole hold, or longer if its echo can't go at the
+            // release. An honest host holds nothing and answers at once.
+            let mut seen = [false, false];
             for (h, host) in r.hosts.iter().enumerate() {
                 let e = host.echoes;
+                let (rides, ride_ms) = (e.rides, e.ride_hold_ms);
+                let (opened, opened_ms) = (e.written - rides, e.hold_ms - ride_ms);
                 let holds = if of_kind(r, h, "free-rider+echo") {
-                    e.written > 0 && e.hold_ms >= busy_hold * e.written
+                    seen[0] |= rides > 0;
+                    seen[1] |= opened > 0;
+                    (rides == 0 || ride_ms < HELD_ECHO_MS * rides)
+                        && opened_ms >= HELD_ECHO_MS * opened
                 } else {
-                    e.hold_ms * 10 < HELD_ECHO_MS * e.written.max(1)
+                    rides == 0 && e.hold_ms * 10 < HELD_ECHO_MS * e.written.max(1)
                 };
                 if !holds {
                     return Err(format!(
@@ -2564,6 +2573,9 @@ fn echo_greedy_hosts_hold_or_forge_their_echoes() {
                         host.name, r.scenario.hosts[h].class
                     ));
                 }
+            }
+            if seen != [true, true] {
+                return Err(format!("holders' riding and opening echoes: {seen:?}"));
             }
             let unknown: u64 = (0..r.hosts.len())
                 .filter(|&h| honest(r, h))

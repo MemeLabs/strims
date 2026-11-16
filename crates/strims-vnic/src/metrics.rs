@@ -38,6 +38,12 @@ pub struct HostMetrics {
     /// Echoes written, and how long their probes waited for them in all.
     pub echo_write_count: u64,
     pub echo_hold_ms: u64,
+    /// Of those, the held echoes ([`crate::EchoGreed::hold`]) of a probe
+    /// read later than the one that opened the hold, which ride on its
+    /// release, and their waits: each less than the hold if its echo goes
+    /// at the release, more if a full link defers it.
+    pub echo_ride_count: u64,
+    pub echo_ride_hold_ms: u64,
     /// Echoes of this host's probes received.
     pub echo_read_count: u64,
     /// Echoes of probes this host never sent or that were already

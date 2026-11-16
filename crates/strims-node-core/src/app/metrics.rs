@@ -150,6 +150,8 @@ fn host(m: HostMetrics) -> v1::HostMetrics {
         probe_read_count: _,
         echo_write_count: _,
         echo_hold_ms: _,
+        echo_ride_count: _,
+        echo_ride_hold_ms: _,
         echo_read_count: _,
         echo_unknown_count: _,
         path_negative_rtt_count: _,
