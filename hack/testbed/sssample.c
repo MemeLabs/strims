@@ -22,11 +22,14 @@
 // minrtt; times in ms, as ss prints them). A dump of every socket walks
 // the kernel's whole established hash, every network namespace's (about
 // 10 ms of a core a family on the dev VM, which ss's dump pays too), so
-// it dumps only when the network namespace has opened a TCP connection
-// since the last sample (/proc/net/snmp's ActiveOpens and PassiveOpens,
-// read through a held fd), and on the sample after (an accepted child may
-// have been in SYN_RECV still), and every `-r` samples where -r is given
-// (0, never, by default). Otherwise it asks for each socket the last dump
+// it dumps only when the network namespace's TCP counters moved since the
+// last sample (/proc/net/snmp's ActiveOpens, PassiveOpens and CurrEstab,
+// read through a held fd: an open, or a connection established, as one
+// whose SYN was lost is seconds after its open), and on the sample after
+// one (an accepted child may have been in SYN_RECV still) or after a
+// known socket went (a close and an establishment in one interval leave
+// CurrEstab as it was), and every `-r` samples where -r is given (0,
+// never, by default). Otherwise it asks for each socket the last dump
 // found by its address and cookie, a hash lookup; one closed, or out of
 // established, goes. Without /proc/net/snmp it dumps every sample. An
 // error (the socket's or the kernel's) costs the sample: none is written,
@@ -238,9 +241,13 @@ static int ask(int fd, uint32_t seq, int family, const struct inet_diag_sockid *
     }
 }
 
-// The network namespace's TCP connections opened (/proc/net/snmp's Tcp
-// ActiveOpens and PassiveOpens, by their header's names), or -1.
-static long long opens(int fd) {
+// The network namespace's TCP counters a dump follows (/proc/net/snmp's
+// Tcp line, by its header's names).
+static const char *const COUNTERS[] = {"ActiveOpens", "PassiveOpens", "CurrEstab"};
+#define NCOUNTERS (sizeof COUNTERS / sizeof *COUNTERS)
+
+// Reads COUNTERS into `out`: 0, or -1 without them all.
+static int counters(int fd, long long out[NCOUNTERS]) {
     static char text[16384];
     ssize_t n = fd < 0 ? -1 : pread(fd, text, sizeof text - 1, 0);
     if (n <= 0)
@@ -253,15 +260,16 @@ static long long opens(int fd) {
     char *hs = NULL, *vs = NULL;
     char *h = strtok_r(head + 4, " \n", &hs);
     char *v = strtok_r(vals + 4, " \n", &vs);
-    long long sum = 0;
-    int found = 0;
+    unsigned found = 0;
     for (; h && v && strcmp(h, "Tcp:"); h = strtok_r(NULL, " \n", &hs), v = strtok_r(NULL, " \n", &vs)) {
-        if (!strcmp(h, "ActiveOpens") || !strcmp(h, "PassiveOpens")) {
-            sum += atoll(v);
-            found++;
+        for (size_t c = 0; c < NCOUNTERS; c++) {
+            if (!strcmp(h, COUNTERS[c])) {
+                out[c] = atoll(v);
+                found |= 1U << c;
+            }
         }
     }
-    return found == 2 ? sum : -1;
+    return found == (1U << NCOUNTERS) - 1 ? 0 : -1;
 }
 
 static int open_diag(void) {
@@ -300,7 +308,8 @@ int main(int argc, char **argv) {
         return 1;
     }
     int snmp = open("/proc/net/snmp", O_RDONLY | O_CLOEXEC);
-    long long seen = -1;
+    long long seen[NCOUNTERS] = {0};
+    int have_seen = 0;
     int dump_next = 1;
     int64_t wall0 = ns_of(CLOCK_REALTIME), mono0 = ns_of(CLOCK_MONOTONIC);
     struct buf b = {malloc(4096), 0, 4096};
@@ -315,13 +324,17 @@ int main(int argc, char **argv) {
         put(&b, "@ %lld\nRecv-Q Send-Q Local Address:Port Peer Address:Port\n",
             (long long)((wall0 + (mono - mono0)) / 1000000));
         int err = fd < 0;
-        // A dump where a connection opened since the last sample, on the
-        // sample after one, every -r samples, or without the counters.
-        long long now_opens = opens(snmp);
-        int opened = now_opens < 0 || now_opens != seen;
-        seen = now_opens;
-        int dump = opened || dump_next || (refresh && sample % refresh == 0);
-        dump_next = opened;
+        // A dump where the counters moved since the last sample, on the
+        // sample after that or after a known socket went, every -r
+        // samples, or without the counters.
+        long long tcp[NCOUNTERS];
+        int ok = counters(snmp, tcp) == 0;
+        int moved = !ok || !have_seen || memcmp(tcp, seen, sizeof tcp) != 0;
+        if (ok)
+            memcpy(seen, tcp, sizeof tcp);
+        have_seen = ok;
+        int dump = moved || dump_next || (refresh && sample % refresh == 0);
+        dump_next = moved;
         if (!err && dump) {
             nknown = 0;
             err = ask(fd, ++seq, AF_INET, NULL, &b) < 0 || ask(fd, ++seq, AF_INET6, NULL, &b) < 0;
@@ -333,6 +346,8 @@ int main(int argc, char **argv) {
                 if (r == 0)
                     known[kept++] = known[i];
             }
+            if (!err && kept < nknown)
+                dump_next = 1;
             nknown = kept;
         }
         if (err) {
