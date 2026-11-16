@@ -3,7 +3,7 @@
 
 import assert from "assert";
 
-import { gotoOf, newResults, routeOf } from "./api";
+import { gotoOf, newResults, releaseTabId, routeOf, tabIdIn } from "./api";
 
 const at = "2026-11-11T21:22:00+00:00";
 
@@ -86,5 +86,46 @@ describe("gotoOf", () => {
       took: 2,
       route: null,
     });
+  });
+});
+
+describe("tabIdIn", () => {
+  /** A tab's sessionStorage: a duplicated tab gets a copy of its original's. */
+  class Store {
+    constructor(readonly items = new Map<string, string>()) {}
+    getItem = (k: string): string | null => this.items.get(k) ?? null;
+    setItem = (k: string, v: string): void => void this.items.set(k, v);
+    removeItem = (k: string): void => void this.items.delete(k);
+    copy = (): Store => new Store(new Map(this.items));
+  }
+  const ids =
+    (...xs: string[]) =>
+    () =>
+      xs.shift() ?? "spent";
+
+  it("keeps a tab's id across a reload", () => {
+    const store = new Store();
+    assert.strictEqual(tabIdIn(store, ids("a1")), "a1");
+    releaseTabId(store);
+    assert.strictEqual(tabIdIn(store, ids("b2")), "a1");
+  });
+
+  it("gives a duplicated tab an id of its own", () => {
+    const store = new Store();
+    assert.strictEqual(tabIdIn(store, ids("a1")), "a1");
+    // Duplicated while its page is open: the copy carries the id, marked taken.
+    const dup = store.copy();
+    assert.strictEqual(tabIdIn(dup, ids("b2")), "b2");
+    // Each keeps its own across a reload.
+    releaseTabId(dup);
+    assert.strictEqual(tabIdIn(dup, ids("c3")), "b2");
+    releaseTabId(store);
+    assert.strictEqual(tabIdIn(store, ids("c3")), "a1");
+  });
+
+  it("takes a fresh id in place of one the server wouldn't take", () => {
+    const store = new Store(new Map([["console-tab", "a.b"]]));
+    assert.strictEqual(tabIdIn(store, ids("a1")), "a1");
+    assert.strictEqual(store.getItem("console-tab"), "a1");
   });
 });

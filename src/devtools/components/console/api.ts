@@ -368,35 +368,68 @@ export const getSpend = (): Promise<Spend> => call<Spend>("/console/spend");
 const TAB_EVERY_MS = 30_000;
 /** Where a tab keeps its id, which a reload keeps. */
 const TAB_KEY = "console-tab";
+/** Where an open page marks its tab's id taken, from its first report until it goes (pagehide). */
+const TAB_OPEN_KEY = "console-tab-open";
 /** A tab's id, as the server takes one. */
 const TAB_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 let tab: string | null = null;
 
+/** The part of sessionStorage a tab's id is kept in. */
+export type TabStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
 /**
- * This tab's id: random, kept in sessionStorage so that a reload keeps it (this page's alone where
- * the storage is out of reach).
+ * The id a page takes from its tab's storage, which it then marks taken: the id kept there, unless
+ * it is marked taken, else `fresh()`, which it keeps. A page unmarks its id as it goes
+ * (releaseTabId), so a reload keeps the id; a duplicated tab starts with a copy of an open page's
+ * storage, its id marked, and so takes one of its own.
+ *
+ * @param store - the tab's storage
+ * @param fresh - a new random id
+ * @returns the id
+ */
+export const tabIdIn = (store: TabStore, fresh: () => string): string => {
+  const kept = store.getItem(TAB_KEY);
+  const id = kept && TAB_ID.test(kept) && store.getItem(TAB_OPEN_KEY) !== kept ? kept : fresh();
+  if (id !== kept) store.setItem(TAB_KEY, id);
+  store.setItem(TAB_OPEN_KEY, id);
+  return id;
+};
+
+/**
+ * Unmarks the id a page took (tabIdIn) as the page goes, for the next page in its tab to keep.
+ *
+ * @param store - the tab's storage
+ */
+export const releaseTabId = (store: TabStore): void => {
+  store.removeItem(TAB_OPEN_KEY);
+};
+
+const randomId = (): string => {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+};
+
+/**
+ * This tab's id: random, kept in sessionStorage so that a reload keeps it and a duplicated tab
+ * doesn't (tabIdIn; this page's alone where the storage is out of reach).
  *
  * @returns the id
  */
 export const tabId = (): string => {
   if (tab !== null) return tab;
   try {
-    const kept = sessionStorage.getItem(TAB_KEY);
-    if (kept && TAB_ID.test(kept)) {
-      tab = kept;
-      return tab;
-    }
+    tab = tabIdIn(sessionStorage, randomId);
+    const id = tab;
+    window.addEventListener("pagehide", () => releaseTabId(sessionStorage));
+    // A page restored from the back-forward cache is open again.
+    window.addEventListener("pageshow", (e) => {
+      if (e.persisted) sessionStorage.setItem(TAB_OPEN_KEY, id);
+    });
   } catch {
     // No storage: the id is this page's.
-  }
-  const bytes = new Uint8Array(12);
-  crypto.getRandomValues(bytes);
-  tab = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  try {
-    sessionStorage.setItem(TAB_KEY, tab);
-  } catch {
-    // As above.
+    tab ??= randomId();
   }
   return tab;
 };
