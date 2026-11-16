@@ -900,13 +900,16 @@ fn a_starved_runs_stalls_are_its_reads_playout() {
     let limit = r.scenario.hosts[seed].uplink.unwrap() as i64;
     let site_up = r.scenario.hosts[seed].site.unwrap().profile.up;
     let meter = &r.hosts[seed].runner.meter;
-    let share = |t: Duration| {
-        let k = meter.partition_point(|m| m.asked < t);
-        strims_sim::report::own_share(
-            &r.scenario.hosts[seed],
-            k.checked_sub(1).and_then(|i| meter.get(i)),
-        )
+    // The table's truth at a sample is the oracle's as the sample was
+    // asked for: from the samples asked before it (`Report::upload_cap_at`),
+    // the rate limit in what vnic hands the transports (its channel share).
+    let last = |t: Duration| {
+        let asked = meter.iter().find(|m| m.t == t).map_or(t, |m| m.asked);
+        let k = meter.partition_point(|m| m.asked < asked);
+        k.checked_sub(1).and_then(|i| meter.get(i))
     };
+    let share = |t: Duration| strims_sim::report::own_share(&r.scenario.hosts[seed], last(t));
+    let limit_at = |t: Duration| (limit as f64 * strims_sim::report::channel_share(last(t))) as i64;
     let secs = Duration::from_secs;
     let mut starved_samples = 0;
     for (t, row) in meter_samples_say_what_they_are(&r, &dir) {
@@ -914,7 +917,7 @@ fn a_starved_runs_stalls_are_its_reads_playout() {
             starved_samples += 1;
             (32.0 * 1024.0 * share(t)) as i64
         } else if t < secs(4) || t >= secs(8) {
-            limit.min((site_up as f64 * share(t)) as i64)
+            limit_at(t).min((site_up as f64 * share(t)) as i64)
         } else {
             // A second that saw the step.
             continue;

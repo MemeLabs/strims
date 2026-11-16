@@ -3846,10 +3846,26 @@ fn a_saturated_links_share_is_a_full_messages() {
 /// link that steps down while a competing upload runs, on a trace whose
 /// rate changes every second (12, 6, 3 and 9 Mbit/s), and on one with an
 /// outage, where it is told 0 (no capacity known: the meter measures).
+/// Outside a competing upload's span nine in ten of its readings are the
+/// truth: there a saturated link is the exception.
 #[test]
 fn the_live_oracle_tells_the_truth() {
     let check = |r: &Report| {
-        let (mut told, mut read, mut zeros) = (0, 0, 0);
+        // The competing upload's span, from its log's first move to its
+        // last (walk-stamped cumulative bytes), and a sample whose truth's
+        // window takes in any of it: beside the upload the seed's link can
+        // run saturated, and the meter read lower.
+        let span = r
+            .wan
+            .as_ref()
+            .and_then(|w| w.hosts.iter().find(|h| h.name == r.scenario.hosts[0].name))
+            .and_then(|h| Some((h.competing_log.first()?.0, h.competing_log.last()?.0)));
+        let beside = |asked: Duration| {
+            let at = strims_base::time::Duration::from(asked);
+            let window = strims_base::time::Duration::from(strims_sim::report::TRUTH_WINDOW);
+            span.is_some_and(|(first, last)| at > first && at - window < last)
+        };
+        let (mut told, mut outside, mut read, mut zeros) = (0, 0, 0, 0);
         let mut truths = Vec::new();
         for m in &r.hosts[0].runner.meter {
             if let Some(x) = m.told {
@@ -3867,12 +3883,18 @@ fn the_live_oracle_tells_the_truth() {
                     m.t
                 );
                 told += 1;
-                read += usize::from(m.capacity == x);
+                if !beside(m.asked) {
+                    outside += 1;
+                    read += usize::from(m.capacity == x);
+                }
                 truths.push(x);
             }
         }
         assert!(told >= 8, "{told} samples told");
-        assert!(read * 10 >= told * 9, "{read} of {told} read the truth");
+        assert!(
+            read * 10 >= outside * 9,
+            "{read} of {outside} samples outside a competing upload read the truth"
+        );
         (truths, zeros)
     };
     let mut c = collapse_case(2, 10, 10);

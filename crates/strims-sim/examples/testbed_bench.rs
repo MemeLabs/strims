@@ -82,6 +82,7 @@ struct Args {
     webrtc: bool,
     str0m: bool,
     bucket: bool,
+    trace_tcp: bool,
     web: Option<PathBuf>,
     browser_bin: Option<PathBuf>,
 }
@@ -110,6 +111,7 @@ fn args() -> Result<Args, String> {
             "--webrtc" => a.webrtc = true,
             "--str0m" => a.str0m = true,
             "--bucket" => a.bucket = true,
+            "--trace-tcp" => a.trace_tcp = true,
             "--web" => a.web = Some(value()?.into()),
             "--browser-bin" => a.browser_bin = Some(value()?.into()),
             "--join-at" | "--rate" | "--hosts" | "--capture" | "--units" | "--player" => {
@@ -155,6 +157,7 @@ fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
     bench.tcp_segment = a.segment;
     bench.str0m = a.str0m;
     bench.buckets = a.bucket;
+    bench.trace_tcp = a.trace_tcp;
     let logs = simulate(&bench)?;
     std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
     for (i, lines) in logs.iter().enumerate() {

@@ -70,6 +70,13 @@
 //! TCP receivers' acknowledgements by why (`ack_now`, `ack_quick`,
 //! `ack_read`, `ack_timer`, `ack_data`: [`crate::ACK_WHYS`]) with the
 //! delayed ones' mean and p90 wait (`delack_mean_ms`, `delack_p90_ms`).
+//! With [`Bench::trace_tcp`] it adds a
+//! `{"ev":"tcp","t":..,"to":..,"k":..,"seq":..,"len":..,"cwnd":..,"ssthresh":..,"flight":..}`
+//! line per event of the window model's TCP the node sends (`k`: `tx`,
+//! `rtx`, `drop`, `ack`, `lost`, `rec`, `end` or `rto` of segment `seq`;
+//! the sender's window, threshold (-1 before the first) and bytes in
+//! flight after it, in bytes), a competing upload's `to` past the nodes,
+//! for the testbed's packet captures (`run.sh`'s `PCAP`) to set beside.
 
 // The bench's nodes share their state between their tasks on one thread.
 #![allow(clippy::disallowed_types)]
@@ -886,6 +893,10 @@ pub struct Bench {
     /// kind's in the topology (the browsers' dcSCTP, or str0m's for a
     /// native node).
     pub stacks: Vec<SctpProfile>,
+    /// The window model's TCP events go in the sending node's log
+    /// (`ev:"tcp"` lines: `t`, `to`, `k`, `seq`, `len`, `cwnd`,
+    /// `ssthresh`, `flight`).
+    pub trace_tcp: bool,
 }
 
 /// The defaults of `hack/testbed/run.sh`.
@@ -1041,6 +1052,7 @@ impl Bench {
             },
             tcp_segment: None,
             buckets: false,
+            trace_tcp: false,
         })
     }
 }
@@ -1203,6 +1215,9 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     };
     let mut sched = Scheduler::new(&sim, &spec, options, 1, Some(buffers))?;
     sched.sample_queues_every(Duration::from(QUEUE_EVERY));
+    if bench.trace_tcp {
+        sched.trace_tcp();
+    }
     for &(a, b) in &bench.links {
         let (Some(sa), Some(sb)) = (bench.sites.get(a), bench.sites.get(b)) else {
             return Err(format!("link {a} {b}: no such node"));
@@ -1222,9 +1237,34 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
         }
     }
     drop(sim);
+    let trace = wan
+        .lock()
+        .as_mut()
+        .map(Scheduler::take_tcp_trace)
+        .unwrap_or_default();
     let report = wan.lock().take().map(|s| s.report(&spec));
     let mut logs = logs.take();
     let start = Duration::from(SIM_START);
+    let t0 = sim_time(SIM_START);
+    for e in trace {
+        if let Some(l) = logs.get_mut(e.from) {
+            let ssthresh = if e.ssthresh.is_finite() {
+                e.ssthresh as i64
+            } else {
+                -1
+            };
+            l.push(format!(
+                r#"{{"ev":"tcp","t":{},"to":{},"k":"{}","seq":{},"len":{},"cwnd":{},"ssthresh":{ssthresh},"flight":{}}}"#,
+                (e.t - t0).as_micros(),
+                e.to,
+                e.what,
+                e.seq,
+                e.len,
+                e.cwnd as i64,
+                e.in_flight
+            ));
+        }
+    }
     for (h, l) in report.iter().flat_map(|r| &r.hosts).zip(logs.iter_mut()) {
         let whys: Vec<String> = crate::ACK_WHYS
             .iter()

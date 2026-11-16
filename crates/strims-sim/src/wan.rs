@@ -66,15 +66,29 @@
 //!   queue holds bytes.
 //! - A segment that loses a packet on its path (the sites' loss) is lost
 //!   to its sender the same way.
-//! - Its sender learns of the loss from a later segment's acknowledgement,
-//!   a quarter of the least round trip later (RACK), or failing that from
+//! - Its sender learns of the loss from the acknowledgement of a segment
+//!   sent after it (RACK, `tcp_rack_mark_lost`, retransmissions' included),
+//!   a quarter of the least round trip later, or at once in a recovery or
+//!   once three packets past the gap are acknowledged; failing that from
 //!   its tail-loss probe's, two smoothed round trips after its last send
 //!   (and 200 ms more with one segment in flight) and a round trip on. A
-//!   lost retransmission waits for the retransmission timeout, which backs
-//!   off, and restarts the window from one segment. The lost segment goes
-//!   to the front of its connection's queue, and the window falls to
-//!   [`BETA`] of itself once a recovery: losses of segments sent before
-//!   it fell don't cut it again.
+//!   retransmission no later segment shows lost waits for the
+//!   retransmission timeout, which backs off and restarts the window from
+//!   what is still in flight and a packet (Linux's loss state,
+//!   `tcp_enter_loss`). The lost segment goes to the front of its
+//!   connection's queue. Left out of the loss state: CUBIC's reset at it
+//!   (`cubictcp_state`'s `bictcp_reset` and `bictcp_hystart_reset`: the
+//!   model keeps the window lost last, HyStart's state and the
+//!   TCP-friendly estimate), a lost retransmission in it moving to a
+//!   recovery and cutting again (`FLAG_LOST_RETRANS`), and F-RTO.
+//! - Recovery is Linux's (`tcp_fastretrans_alert`, [`Recovery`]): a loss
+//!   a sender learns of outside one starts one, which lasts until
+//!   everything it had sent then is acknowledged and cuts the window once,
+//!   its threshold to [`BETA`] of the window; through it the window is
+//!   what is in flight and what proportional rate reduction lets it send
+//!   (RFC 6937, `tcp_cwnd_reduction`), retransmissions first, and at its
+//!   end the threshold. A loss of a segment sent in it starts the next
+//!   once it ends.
 //! - A segment through the receiver's downlink is acknowledged once the
 //!   acknowledgement crosses back, after the receiver's uplink queue. The
 //!   receiver acknowledges as Linux's does ([`ack`]): at once past a
@@ -98,9 +112,9 @@
 //! connections that always have data and reach no host: full segments
 //! enter the host's uplink queue within their window, are lost when it is
 //! full or to the host's site loss, and are acknowledged the upload's round
-//! trip after they leave the uplink. Their windows follow the connections'
-//! CUBIC, HyStart and recoveries too. They need the window model's bounded
-//! queues.
+//! trip after they leave the uplink, their lost segments resent first.
+//! Their windows follow the connections' CUBIC, HyStart and recoveries
+//! too. They need the window model's bounded queues.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
@@ -294,6 +308,24 @@ enum Event {
 
 /// The window model's segment size, for the window's growth.
 pub(crate) const MSS: f64 = 1448.0;
+/// One event of the window model's TCP, traced for the bench
+/// ([`Scheduler::trace_tcp`]): at `t`, on the connection from host `from`
+/// to host `to`, `what` ("tx", "rtx", "drop", "ack", "lost", "rec",
+/// "end", "rto") of segment `seq` of `len` bytes, and the sender's window,
+/// threshold and bytes in flight after it.
+#[derive(Clone, Debug)]
+pub(crate) struct TcpEvent {
+    pub t: Time,
+    pub from: HostIx,
+    pub to: HostIx,
+    pub what: &'static str,
+    pub seq: u64,
+    pub len: usize,
+    pub cwnd: f64,
+    pub ssthresh: f64,
+    pub in_flight: usize,
+}
+
 /// A competing upload's segment, its payload and its bytes on the wire:
 /// two packets, as the window model cuts its connections'
 /// ([`WINDOW_SEGMENT`](crate::spec::WINDOW_SEGMENT)) and as the upload's
@@ -343,8 +375,6 @@ struct Flow {
     /// Data records waiting for the window, in send order. Bound: the
     /// connection's records in flight.
     pending: VecDeque<u64>,
-    /// When the window last fell.
-    cut: Time,
     /// CUBIC's window before its last cut, in segments; when its epoch
     /// began (`NIL` until the first acknowledgement past slow start or a
     /// cut), the window it grows back to and how long that takes, and the
@@ -355,11 +385,8 @@ struct Flow {
     k: f64,
     reno_start: f64,
     /// The sequence number past the furthest data segment sent (turmoil
-    /// numbers a connection's segments), and that number when the window
-    /// last fell: a loss of a segment sent before it belongs to the same
-    /// recovery and doesn't cut the window again.
+    /// numbers a connection's segments).
     sent_end: u64,
-    recover: u64,
     /// The most bytes in flight this round trip and the last, and when
     /// this one began, and whether the window last held back data the
     /// connection had: the window grows only while it limits the flow.
@@ -394,6 +421,47 @@ struct Flow {
     probing: bool,
     /// When the retransmission timeout last fired.
     timed_out: Time,
+    /// Its recovery while one runs.
+    recovery: Option<Recovery>,
+    /// After a retransmission timeout, the sequence number past the
+    /// furthest segment sent then: until the cumulative ack passes it
+    /// (Linux's loss state) a loss is resent and starts no recovery.
+    loss_high: Option<u64>,
+    /// Segments acknowledged past the cumulative ack point (SACKed), by
+    /// sequence number. Bound: the segments in flight.
+    sacked: BTreeSet<u64>,
+}
+
+/// A connection's loss recovery, as Linux's `TCP_CA_Recovery` runs it: from
+/// the first loss its sender learns of (`tcp_enter_recovery`) until the
+/// cumulative ack passes `high`, the sequence number past the furthest
+/// segment sent then. Its threshold is [`BETA`] of the window then,
+/// `prior` (`prior_cwnd`, CUBIC's `cubictcp_recalc_ssthresh`); through it
+/// the window is what is in flight and what proportional rate reduction
+/// (RFC 6937, `tcp_cwnd_reduction`) lets the sender send on each
+/// acknowledgement: while more than the threshold is in flight, the
+/// threshold's share of what was delivered since it began, less what it
+/// sent; under the threshold, as much as was delivered and a packet more
+/// when the cumulative ack advanced without a new loss, up to the
+/// threshold. Losses it learns of in it cut nothing more; at its end the
+/// window is the threshold (`tcp_end_cwnd_reduction`: Linux undoes only
+/// spurious retransmissions, which the model has none of), and if a
+/// segment sent in it is still lost the next recovery begins.
+#[derive(Clone, Copy, Debug)]
+struct Recovery {
+    high: u64,
+    prior: f64,
+    /// Bytes delivered and sent since it began (`prr_delivered`,
+    /// `prr_out`), and the packets the slow start reduction bound added
+    /// (one an acknowledgement that advanced snd_una and marked no loss),
+    /// in bytes. In a recovery the receiver's out-of-order queue isn't
+    /// empty, so it acknowledges each packet at once (`__tcp_ack_snd_check`):
+    /// a segment acknowledged at the cumulative point stands for an ack a
+    /// packet, a bonus each. They add up, since a segment takes more than
+    /// one.
+    delivered: usize,
+    out: usize,
+    bonus: usize,
 }
 
 impl Default for Flow {
@@ -403,14 +471,12 @@ impl Default for Flow {
             ssthresh: f64::INFINITY,
             in_flight: 0,
             pending: VecDeque::new(),
-            cut: Time::NIL,
             w_max: 0.0,
             epoch: Time::NIL,
             origin: 0.0,
             k: 0.0,
             reno_start: 0.0,
             sent_end: 0,
-            recover: 0,
             flight_now: 0,
             flight_last: 0,
             round: Time::NIL,
@@ -429,6 +495,9 @@ impl Default for Flow {
             backoff: 0,
             probing: false,
             timed_out: Time::NIL,
+            recovery: None,
+            loss_high: None,
+            sacked: BTreeSet::new(),
         }
     }
 }
@@ -585,9 +654,10 @@ impl Flow {
         self.cwnd = next.max(cwnd) * MSS;
     }
 
-    /// The window falls to [`BETA`] of itself at `t`, CUBIC's target
-    /// lowered when it falls short of the last one (fast convergence).
-    fn fall(&mut self, t: Time) {
+    /// The threshold falls to [`BETA`] of the window, CUBIC's target
+    /// lowered when the window falls short of the last one (fast
+    /// convergence), as `cubictcp_recalc_ssthresh` sets them.
+    fn reduce(&mut self) {
         let w = self.cwnd / MSS;
         self.w_max = if w < self.w_max {
             w * (1.0 + BETA) / 2.0
@@ -596,9 +666,110 @@ impl Flow {
         };
         self.epoch = Time::NIL;
         self.ssthresh = (self.cwnd * BETA).max(2.0 * MSS);
-        self.cwnd = self.ssthresh;
-        self.cut = t;
-        self.recover = self.sent_end;
+    }
+
+    /// A recovery begins ([`Recovery`]).
+    fn enter_recovery(&mut self) {
+        let prior = self.cwnd;
+        self.reduce();
+        self.recovery = Some(Recovery {
+            high: self.sent_end,
+            prior,
+            delivered: 0,
+            out: 0,
+            bonus: 0,
+        });
+    }
+
+    /// The sequence number of the first segment not acknowledged: the
+    /// cumulative ack point.
+    fn snd_una(&self) -> u64 {
+        [
+            self.sent_at.keys().next(),
+            self.lost.keys().next(),
+            self.retx.iter().next(),
+        ]
+        .into_iter()
+        .flatten()
+        .copied()
+        .min()
+        .unwrap_or(self.sent_end)
+    }
+
+    /// The recovery's window on an acknowledgement of `acked` bytes, which
+    /// `advanced` the cumulative ack point or not and marked segments lost
+    /// or not: [`Recovery`]'s rate reduction, as `tcp_cwnd_reduction`
+    /// computes it, in bytes (the first segment of a recovery goes
+    /// whatever it allows: Linux's forced fast retransmit).
+    fn reduction(&mut self, acked: usize, advanced: bool, newly_lost: bool) {
+        let Some(r) = self.recovery.as_mut() else {
+            return;
+        };
+        if acked == 0 {
+            return;
+        }
+        r.delivered += acked;
+        let ssthresh = self.ssthresh as i64;
+        let pipe = i64::try_from(self.in_flight).unwrap_or(i64::MAX);
+        let delta = ssthresh - pipe;
+        let (delivered, out) = (r.delivered as i64, r.out as i64);
+        let sndcnt = if delta < 0 {
+            let prior = (r.prior as i64).max(1);
+            (ssthresh * delivered + prior - 1) / prior - out
+        } else {
+            if advanced && !newly_lost {
+                r.bonus += acked.div_ceil(MSS as usize) * MSS as usize;
+            }
+            (delivered + r.bonus as i64 - out)
+                .max(acked as i64)
+                .min(delta)
+        };
+        self.cwnd = ((pipe + sndcnt) as f64).max(MSS);
+    }
+
+    /// Whether the window holds back a segment of `len` bytes: past the
+    /// window, unless nothing is in flight or it is a recovery's first.
+    fn holds(&self, len: usize) -> bool {
+        self.in_flight > 0
+            && (self.in_flight + len) as f64 > self.cwnd
+            && self.recovery.is_none_or(|r| r.out > 0)
+    }
+
+    /// A segment of `len` bytes shown lost in a recovery apart from an
+    /// acknowledgement (a competing upload's, a timer's): Linux marks a loss
+    /// on the acknowledgement whose rate reduction then sets the window
+    /// from what remains in flight, so the loss frees no room by itself.
+    fn lost_in_recovery(&mut self, len: usize) {
+        if self.recovery.is_some() {
+            self.cwnd = (self.cwnd - len as f64).max(MSS);
+        }
+    }
+
+    /// `len` bytes went out in a recovery.
+    fn recovery_sent(&mut self, len: usize) {
+        if let Some(r) = self.recovery.as_mut() {
+            r.out += len;
+        }
+    }
+
+    /// The end of a recovery or of the loss state once the cumulative ack
+    /// passes what was sent when it began: the window is the threshold.
+    fn recovered(&mut self) {
+        let una = self.snd_una();
+        if let Some(r) = self.recovery
+            && una >= r.high
+        {
+            self.recovery = None;
+            if self.ssthresh.is_finite() {
+                self.cwnd = self.ssthresh;
+            }
+        }
+        if self.loss_high.is_some_and(|h| una >= h) {
+            self.loss_high = None;
+        }
+        while self.sacked.first().is_some_and(|&s| s < una) {
+            self.sacked.pop_first();
+        }
     }
 }
 
@@ -641,6 +812,9 @@ struct Cross {
     rtt: Duration,
     flow: Flow,
     started: bool,
+    /// Lost segments not yet resent, by sequence number. Bound: the
+    /// segments in flight.
+    resend: BTreeSet<u64>,
 }
 
 /// Whether a segment taking `tx` to send overflows an access queue that
@@ -735,6 +909,9 @@ pub(crate) struct Scheduler {
     up_queue: Vec<Vec<(Duration, Duration)>>,
     up_backlog: Vec<Vec<(Duration, u64)>>,
     queue_every: Duration,
+    /// The window model's TCP events, when traced ([`Scheduler::trace_tcp`]).
+    /// Bound: the run's events; only the bench traces, for one run.
+    tcp_trace: Option<Vec<TcpEvent>>,
     next_queue_sample: Time,
     next_cross_sample: Time,
     /// The competing uploads, in host order.
@@ -841,6 +1018,7 @@ impl Scheduler {
                     rtt: Duration::from(c.rtt),
                     flow: Flow::default(),
                     started: false,
+                    resend: BTreeSet::new(),
                 })
             })
             .collect();
@@ -901,6 +1079,7 @@ impl Scheduler {
             up_queue: vec![Vec::new(); spec.hosts.len()],
             up_backlog: vec![Vec::new(); spec.hosts.len()],
             queue_every: QUEUE_SAMPLE_EVERY,
+            tcp_trace: None,
             next_queue_sample: epoch(),
             next_cross_sample: epoch(),
             cross,
@@ -1238,6 +1417,7 @@ impl Scheduler {
                         What::Data { seq, len } => (seq, len),
                         _ => (0, 0),
                     };
+                    let from = r.from;
                     let f = self.flows.entry(conn).or_default();
                     if matches!(event, Event::Timeout) {
                         // Unless a later segment's acknowledgement told first.
@@ -1248,25 +1428,58 @@ impl Scheduler {
                     }
                     f.in_flight = f.in_flight.saturating_sub(len);
                     f.sent_at.remove(&seq);
-                    if f.cut.is_nil() || seq >= f.recover {
-                        f.fall(t);
-                        if let Some(n) = self.cuts.get_mut(r.from) {
-                            *n += 1;
-                        }
-                    }
-                    if matches!(event, Event::Timeout) && f.timed_out != t {
-                        // Linux's loss state: the window restarts from a
-                        // segment, and the timeout backs off, once for the
-                        // segments it finds lost together.
-                        f.cwnd = MSS;
-                        f.backoff = f.backoff.saturating_add(1);
-                        f.timed_out = t;
-                        if let Some(n) = self.rtos.get_mut(r.from) {
-                            *n += 1;
-                        }
-                    }
                     f.retx.insert(seq);
                     f.pending.push_front(id);
+                    if matches!(event, Event::Timeout) {
+                        if f.timed_out != t {
+                            // Linux's loss state (`tcp_enter_loss`): the
+                            // threshold falls unless a recovery or loss
+                            // state already cut it for what is out, and the
+                            // timeout backs off, once for the segments it
+                            // finds lost together. CUBIC keeps its state
+                            // (Linux's `bictcp_reset` would clear it), and a
+                            // lost retransmission in the loss state stays in
+                            // it (`FLAG_LOST_RETRANS` would start a
+                            // recovery); no F-RTO.
+                            if f.recovery.is_none() && f.loss_high.is_none() {
+                                f.reduce();
+                                if let Some(n) = self.cuts.get_mut(from) {
+                                    *n += 1;
+                                }
+                            }
+                            f.recovery = None;
+                            f.loss_high = Some(f.sent_end);
+                            f.backoff = f.backoff.saturating_add(1);
+                            f.timed_out = t;
+                            if let Some(n) = self.rtos.get_mut(from) {
+                                *n += 1;
+                            }
+                        }
+                        // Its window is what is still in flight and a
+                        // packet (`tcp_enter_loss`, the segments the
+                        // timeout found lost out of the flight).
+                        f.cwnd = f.in_flight as f64 + MSS;
+                    } else if f.recovery.is_none() && f.loss_high.is_none() {
+                        // A loss shown by RACK's timer or a tail-loss probe
+                        // starts a recovery, whose first step counts a
+                        // packet delivered (`tcp_rack_reo_timeout`).
+                        f.enter_recovery();
+                        f.reduction(MSS as usize, false, true);
+                        if let Some(n) = self.cuts.get_mut(from) {
+                            *n += 1;
+                        }
+                        self.traced(t, conn, "rec", seq, 0);
+                    } else {
+                        f.lost_in_recovery(len);
+                    }
+                    if self.tcp_trace.is_some() {
+                        let what = if matches!(event, Event::Timeout) {
+                            "rto"
+                        } else {
+                            "lost"
+                        };
+                        self.traced(t, conn, what, seq, len);
+                    }
                     self.pump(t, &[conn]);
                 }
                 Event::Ack { .. }
@@ -1291,26 +1504,36 @@ impl Scheduler {
             .map(|m| Duration::from(m.uplink_queue))
     }
 
-    /// The `len` bytes at `seq` of `conn` were acknowledged at `t`. The
-    /// window doesn't grow in a recovery (for data sent before it fell).
+    /// The `len` bytes at `seq` of `conn` were acknowledged at `t`, as
+    /// Linux's `tcp_ack` takes an acknowledgement: what it delivered, the
+    /// end of a recovery it completes, the losses RACK marks, a recovery
+    /// they start, then the window: a recovery's rate reduction, or
+    /// outside one its growth.
     fn acked(&mut self, t: Time, conn: (SocketAddr, SocketAddr), seq: u64, len: usize) {
         let base = self.conn_rtt(conn);
         let Some(f) = self.flows.get_mut(&conn) else {
             return;
         };
+        let una = f.snd_una();
+        let was_recovering = f.recovery.is_some();
         let sent = f.sent_at.remove(&seq);
         if let Some(sent) = sent {
             f.sampled(seq, t - sent);
-        }
-        if f.limited() && (f.cut.is_nil() || seq >= f.recover) {
-            f.grow(t, len, base, f.srtt.max(base));
         }
         f.in_flight = f.in_flight.saturating_sub(len);
         if !f.retx.remove(&seq) {
             f.backoff = 0;
         }
+        let advanced = f.snd_una() > una;
+        if seq > una {
+            f.sacked.insert(seq);
+        }
+        f.recovered();
         // RACK: the acknowledgement of a segment sent later shows the
-        // earlier ones lost once a quarter of the least round trip passes.
+        // earlier ones lost, at once in a recovery or once three packets
+        // past the gap are acknowledged (`tcp_rack_reo_wnd`), else a
+        // quarter of the least round trip later.
+        let mut marked = Vec::new();
         if let Some(sent) = sent {
             let earlier: Vec<u64> = f
                 .lost
@@ -1318,12 +1541,61 @@ impl Scheduler {
                 .filter(|(_, v)| v.1 < sent)
                 .map(|(&s, _)| s)
                 .collect();
+            let now = f.recovery.is_some() || f.sacked.len() >= 2;
             let reo = f.min_rtt / 4;
             for s in earlier {
                 if let Some((id, _, _)) = f.lost.remove(&s) {
-                    self.events.insert((t + reo, id), Event::Lost);
+                    if now {
+                        marked.push((s, id));
+                    } else {
+                        self.events.insert((t + reo, id), Event::Lost);
+                    }
                 }
             }
+        }
+        let newly_lost = !marked.is_empty();
+        let traced_lost: Vec<u64> = marked.iter().map(|&(s, _)| s).collect();
+        for (s, id) in marked {
+            let l = match self.records.get(&id).map(|r| r.what) {
+                Some(What::Data { len, .. }) => len,
+                _ => 0,
+            };
+            f.in_flight = f.in_flight.saturating_sub(l);
+            f.sent_at.remove(&s);
+            f.retx.insert(s);
+            f.pending.push_front(id);
+        }
+        // A loss shown, or one a recovery left (a segment it sent lost),
+        // starts the next recovery, outside the loss state.
+        if f.recovery.is_none() && f.loss_high.is_none() && (newly_lost || !f.retx.is_empty()) {
+            f.enter_recovery();
+            if let Some(n) = self
+                .ip_host
+                .get(&conn.0.ip())
+                .and_then(|&h| self.cuts.get_mut(h))
+            {
+                *n += 1;
+            }
+        }
+        let in_recovery = f.recovery.is_some();
+        if in_recovery {
+            f.reduction(len, advanced, newly_lost);
+        } else if (seq <= una || advanced) && f.limited() {
+            // `tcp_may_raise_cwnd`: data the cumulative ack covers, not a
+            // SACK's alone.
+            f.grow(t, len, base, f.srtt.max(base));
+        }
+        if self.tcp_trace.is_some() {
+            if !was_recovering && in_recovery {
+                self.traced(t, conn, "rec", seq, 0);
+            }
+            if was_recovering && !in_recovery {
+                self.traced(t, conn, "end", seq, 0);
+            }
+            for &s in &traced_lost {
+                self.traced(t, conn, "lost", s, 0);
+            }
+            self.traced(t, conn, "ack", seq, len);
         }
         self.pump(t, &[conn]);
     }
@@ -1506,29 +1778,69 @@ impl Scheduler {
     }
 
     /// Competing upload `i`'s segment `seq` was acknowledged at `t`, a
-    /// round trip of `rtt` after it went out: its window grows as the
-    /// window model's connections' do.
+    /// round trip of `rtt` after it went out, as a connection's are
+    /// ([`Scheduler::acked`]): the end of a recovery it completes, a
+    /// recovery a loss left, then the recovery's window or its growth.
     fn cross_acked(&mut self, t: Time, i: usize, seq: u64, rtt: Duration) {
+        let was = self.cross.get(i).is_some_and(|c| c.flow.recovery.is_some());
         if let Some(c) = self.cross.get_mut(i) {
             let f = &mut c.flow;
+            let una = f.snd_una();
+            if f.sent_at.remove(&seq).is_none() {
+                return;
+            }
             f.in_flight = f.in_flight.saturating_sub(CROSS_SEGMENT);
+            f.retx.remove(&seq);
             f.sampled(seq, rtt);
-            if f.cut.is_nil() || seq >= f.recover {
+            let advanced = f.snd_una() > una;
+            f.recovered();
+            if f.recovery.is_none() && f.loss_high.is_none() && !f.retx.is_empty() {
+                f.enter_recovery();
+            }
+            // An upload always has data: its window always limits it.
+            if f.recovery.is_some() {
+                f.reduction(CROSS_SEGMENT, advanced, false);
+            } else {
                 f.grow(t, CROSS_SEGMENT, c.rtt, f.srtt.max(c.rtt));
             }
+        }
+        if self.tcp_trace.is_some() {
+            let now = self.cross.get(i).is_some_and(|c| c.flow.recovery.is_some());
+            if was && !now {
+                self.traced_cross(t, i, "end", seq);
+            }
+            if !was && now {
+                self.traced_cross(t, i, "rec", seq);
+            }
+            self.traced_cross(t, i, "ack", seq);
         }
         self.cross_pump(t, i);
     }
 
     /// Competing upload `i` learned at `t` that its segment `seq` was
-    /// lost: its window falls once a recovery.
+    /// lost: it owes a resend, and outside a recovery one begins.
     fn cross_lost(&mut self, t: Time, i: usize, seq: u64) {
+        let was = self.cross.get(i).is_some_and(|c| c.flow.recovery.is_some());
         if let Some(c) = self.cross.get_mut(i) {
             let f = &mut c.flow;
-            f.in_flight = f.in_flight.saturating_sub(CROSS_SEGMENT);
-            if f.cut.is_nil() || seq >= f.recover {
-                f.fall(t);
+            if f.sent_at.remove(&seq).is_none() {
+                return;
             }
+            f.in_flight = f.in_flight.saturating_sub(CROSS_SEGMENT);
+            f.retx.insert(seq);
+            c.resend.insert(seq);
+            if f.recovery.is_none() && f.loss_high.is_none() {
+                f.enter_recovery();
+                f.reduction(MSS as usize, false, true);
+            } else {
+                f.lost_in_recovery(CROSS_SEGMENT);
+            }
+        }
+        if self.tcp_trace.is_some() {
+            if !was {
+                self.traced_cross(t, i, "rec", seq);
+            }
+            self.traced_cross(t, i, "lost", seq);
         }
         self.cross_pump(t, i);
     }
@@ -1544,16 +1856,22 @@ impl Scheduler {
                 return;
             };
             let f = &mut c.flow;
-            if at < c.start
-                || at >= c.stop
-                || (f.in_flight > 0 && (f.in_flight + CROSS_SEGMENT) as f64 > f.cwnd)
-            {
+            if at < c.start || at >= c.stop || f.holds(CROSS_SEGMENT) {
                 return;
             }
             let (host, rtt) = (c.host, c.rtt);
-            let seq = f.sent_end;
-            f.sent_end += 1;
+            let seq = match c.resend.pop_first() {
+                Some(s) => s,
+                None => {
+                    f.sent_end += 1;
+                    f.sent_end - 1
+                }
+            };
+            let resent = f.retx.contains(&seq);
+            f.recovery_sent(CROSS_SEGMENT);
             f.sent(at, CROSS_SEGMENT, f.srtt.max(rtt));
+            f.sent_at.insert(seq, at);
+            self.traced_cross(at, i, if resent { "rtx" } else { "tx" }, seq);
             let id = self.next;
             self.next += 1;
             let wait = self.net.up_backlog(host, at);
@@ -1562,6 +1880,7 @@ impl Scheduler {
                 if let Some(d) = self.cross_drops.get_mut(host) {
                     *d += 1;
                 }
+                self.traced_cross(at, i, "drop", seq);
                 self.events
                     .insert((at + rtt + wait, id), Event::CrossLost { i, seq });
                 continue;
@@ -1611,18 +1930,13 @@ impl Scheduler {
                         f.pending.pop_front();
                         continue;
                     };
-                    // A retransmission goes at once: the window falls to
-                    // its cut at once, where Linux's proportional rate
-                    // reduction brings it down over the recovery and sends
-                    // the retransmissions first.
-                    if f.in_flight > 0
-                        && (f.in_flight + len) as f64 > f.cwnd
-                        && !f.retx.contains(&seq)
-                    {
+                    // Retransmissions first, all within the window.
+                    if f.holds(len) {
                         f.held = true;
                         return false;
                     }
                     f.pending.pop_front();
+                    f.recovery_sent(len);
                     f.sent(at, len, f.srtt.max(rtt));
                     f.sent_end = f.sent_end.max(seq + 1);
                     f.sent_at.insert(seq, at);
@@ -1656,9 +1970,11 @@ impl Scheduler {
         if self.buffers.is_some() && !resent {
             self.admits.insert((at, id), (conn, len));
         }
+        self.traced(at, conn, if resent { "rtx" } else { "tx" }, seq, len);
         let wait = self.net.up_backlog(from, at);
         let charged = self.net.up_charge(from, wire, packets);
         if overflows(wait, tx_time(charged, self.net.up_rate(from, at)), cap) {
+            self.traced(at, conn, "drop", seq, len);
             if let Some(d) = self.drops.get_mut(from) {
                 *d += 1;
             }
@@ -2168,6 +2484,76 @@ impl Scheduler {
         }
     }
 
+    /// The window model's TCP events are traced from now on.
+    pub(crate) fn trace_tcp(&mut self) {
+        self.tcp_trace = Some(Vec::new());
+    }
+
+    /// The TCP events traced so far.
+    pub(crate) fn take_tcp_trace(&mut self) -> Vec<TcpEvent> {
+        self.tcp_trace.take().unwrap_or_default()
+    }
+
+    /// Traces `what` of segment `seq` (`len` bytes) of `conn` at `t`, with
+    /// its flow's state after it.
+    fn traced(
+        &mut self,
+        t: Time,
+        conn: (SocketAddr, SocketAddr),
+        what: &'static str,
+        seq: u64,
+        len: usize,
+    ) {
+        if self.tcp_trace.is_none() {
+            return;
+        }
+        let (Some(&from), Some(&to)) = (
+            self.ip_host.get(&conn.0.ip()),
+            self.ip_host.get(&conn.1.ip()),
+        ) else {
+            return;
+        };
+        let (cwnd, ssthresh, in_flight) = self
+            .flows
+            .get(&conn)
+            .map_or((0.0, 0.0, 0), |f| (f.cwnd, f.ssthresh, f.in_flight));
+        if let Some(tr) = self.tcp_trace.as_mut() {
+            tr.push(TcpEvent {
+                t,
+                from,
+                to,
+                what,
+                seq,
+                len,
+                cwnd,
+                ssthresh,
+                in_flight,
+            });
+        }
+    }
+
+    /// Traces `what` of competing upload `i`'s segment `seq` at `t`, its
+    /// sink as host `names.len() + i`.
+    fn traced_cross(&mut self, t: Time, i: usize, what: &'static str, seq: u64) {
+        let Some(tr) = self.tcp_trace.as_mut() else {
+            return;
+        };
+        let Some(c) = self.cross.get(i) else {
+            return;
+        };
+        tr.push(TcpEvent {
+            t,
+            from: c.host,
+            to: self.names.len() + i,
+            what,
+            seq,
+            len: CROSS_SEGMENT,
+            cwnd: c.flow.cwnd,
+            ssthresh: c.flow.ssthresh,
+            in_flight: c.flow.in_flight,
+        });
+    }
+
     /// The base latency from `a` to `b` alone becomes `d`.
     pub fn set_latency_from(&mut self, a: HostIx, b: HostIx, d: Duration) {
         if a != b {
@@ -2369,6 +2755,123 @@ mod tests {
             out.set((ms(t1 - t0), ms(t2 - t1)));
             Ok(())
         });
+    }
+
+    /// A flow that filled a window of `segs` segments of `seg` bytes, all
+    /// in flight, and learnt the first was lost: its recovery begins.
+    fn recovering(segs: u64, seg: usize) -> Flow {
+        let mut f = Flow {
+            cwnd: (segs as usize * seg) as f64,
+            sent_end: segs,
+            in_flight: segs as usize * seg,
+            ..Flow::default()
+        };
+        for seq in 0..segs {
+            f.sent_at.insert(seq, Time::EPOCH);
+        }
+        f.enter_recovery();
+        f
+    }
+
+    /// Sends what `f`'s window lets out in segments of `seg` bytes,
+    /// returning how many.
+    fn send_allowed(f: &mut Flow, seg: usize) -> usize {
+        let mut n = 0;
+        while !f.holds(seg) {
+            f.in_flight += seg;
+            f.recovery_sent(seg);
+            n += 1;
+        }
+        n
+    }
+
+    #[test]
+    fn a_recovery_sends_the_thresholds_share_of_what_is_delivered() {
+        // `tcp_cwnd_reduction` while more than ssthresh is in flight:
+        // having delivered d bytes the sender has sent
+        // ceil(ssthresh * d / prior_cwnd), CUBIC's ssthresh 717/1024 of it.
+        let seg = MSS as usize;
+        let mut f = recovering(100, seg);
+        assert!((f.ssthresh - 70.0 * MSS).abs() < 1e-6, "{}", f.ssthresh);
+        // The lost segment leaves the flight and goes again at once,
+        // whatever the window: the forced fast retransmit.
+        f.in_flight -= seg;
+        f.cwnd = 0.0;
+        assert_eq!(send_allowed(&mut f, seg), 1);
+        let mut delivered = 0;
+        let mut out = 1;
+        while f.in_flight - seg > f.ssthresh as usize {
+            f.in_flight -= seg;
+            delivered += seg;
+            f.reduction(seg, false, false);
+            out += send_allowed(&mut f, seg);
+            let share = 0.7 * delivered as f64;
+            assert!(
+                (out * seg) as f64 <= share.max(seg as f64) + 1.0
+                    && (out * seg) as f64 > share - seg as f64,
+                "sent {out} segments of {delivered} bytes delivered"
+            );
+        }
+        assert!(f.recovery.is_some());
+    }
+
+    #[test]
+    fn under_the_threshold_a_recovery_grows_a_packet_an_advancing_ack() {
+        // Under ssthresh, `tcp_cwnd_reduction` sends what was delivered and
+        // a packet more for each acknowledgement that advanced snd_una and
+        // marked no loss, up to ssthresh: the receiver acknowledges each
+        // packet of a two-packet segment, so the flight grows a segment for
+        // each such segment acknowledged.
+        let seg = crate::spec::WINDOW_SEGMENT;
+        let mut f = recovering(100, seg);
+        let ssthresh_segs = (f.ssthresh as usize).div_ceil(seg);
+        f.in_flight = 20 * seg;
+        for k in 1..=60 {
+            f.in_flight -= seg;
+            f.reduction(seg, true, false);
+            send_allowed(&mut f, seg);
+            let segs = f.in_flight / seg;
+            assert!(
+                f.in_flight as f64 <= f.ssthresh,
+                "ack {k}: {segs} segments in flight"
+            );
+            assert!(
+                segs + 1 >= (20 + k).min(ssthresh_segs),
+                "ack {k}: {segs} segments in flight"
+            );
+        }
+        // An acknowledgement that marks a loss sends only what it delivered.
+        let mut f = recovering(100, seg);
+        f.in_flight = 20 * seg;
+        for _ in 0..10 {
+            f.in_flight -= seg;
+            f.reduction(seg, true, true);
+            send_allowed(&mut f, seg);
+        }
+        assert_eq!(f.in_flight, 20 * seg);
+    }
+
+    #[test]
+    fn a_recovery_ends_at_its_threshold() {
+        // Once the cumulative ack passes what was sent when it began the
+        // window is the threshold (`tcp_end_cwnd_reduction`), and a
+        // recovery begun from there cuts it by CUBIC's beta.
+        let seg = MSS as usize;
+        let mut f = recovering(100, seg);
+        let ssthresh = f.ssthresh;
+        f.sent_end = 140;
+        f.sent_at.clear();
+        f.sent_at.insert(99, Time::EPOCH);
+        f.sent_at.insert(120, Time::EPOCH);
+        f.recovered();
+        assert!(f.recovery.is_some(), "the ack point is short of high_seq");
+        f.sent_at.remove(&99);
+        f.recovered();
+        assert!(f.recovery.is_none());
+        assert_eq!(f.cwnd, ssthresh);
+        f.enter_recovery();
+        assert!((f.ssthresh - 0.7 * ssthresh).abs() < 1e-6, "{}", f.ssthresh);
+        assert_eq!(f.recovery.map(|r| r.high), Some(140));
     }
 
     #[test]
