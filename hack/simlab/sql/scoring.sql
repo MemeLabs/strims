@@ -1462,9 +1462,11 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
 -- the run of its number). `kind` keeps 'native' or 'browsers' runs
 -- (STRIMS_SIM_RTC set), and `arm` one arm's (jobs.stored_arm); 'one', each
 -- one's default, takes the runs as they are but fails where they hold two
--- kinds or two arms, which a side mustn't pool; 'any' pools them. Another
--- kind, an arm with no run, and two runs at one cell, arm and seed (which
--- twin_runs_of would pool) fail too.
+-- kinds or two arms, which a side mustn't pool; 'any' pools them: two
+-- arms' runs at one cell and seed are both the side's, two runs of the
+-- cell (each its own k: twin_fit_rows' medians and places take both).
+-- Another kind, an arm with no run, and two runs at one cell, arm and seed
+-- (which twin_runs_of would pool) fail.
 -- needs: jobs.sim jobs.env jobs.stored_arm
 CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
     WITH r AS (

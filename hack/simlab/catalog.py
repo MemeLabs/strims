@@ -183,9 +183,10 @@ skipped_names'):
 
   experiments       one an experiment: a suite farm run (exp_id its name,
                     s7ae7e), a local suite invocation (exp_id its cache
-                    source, suite/<worktree>/<invocation>), or testbed runs
+                    source, suite/<worktree>/<invocation>), testbed runs
                     taken in together (simlab.testbed: exp_id their source,
-                    testbed/<name>)
+                    testbed/<name>), or a farm run's testbed runs (exp_id
+                    farm/<run>, over its flushes farm/<run>/<host>/<seq>)
   experiment_cells  one an experiment's cell (exp_id, cell)
   experiment_jobs   an experiment's jobs: (exp_id, cell, arm_label, seed)
                     names a job `k`; a job the farm reused counts in each
@@ -2485,7 +2486,7 @@ TABLE_DOCS = {
         "A suite farm run (kind 'farm'; exp_id its name, as suite.py farm printed it) or a local suite invocation "
         "(kind 'local'; exp_id its cache source, suite/<worktree>/<invocation>, which holds the jobs it ran itself, "
         "not the ones it kept from earlier invocations), or testbed runs taken in together (kind 'local'; exp_id "
-        "their source, testbed/<name>: simlab.testbed), or a farm run's testbed runs (kind 'local'; exp_id "
+        "their source, testbed/<name>: simlab.testbed), or a farm run's testbed runs (kind 'farm'; exp_id "
         "farm/<run>, over its flushes farm/<run>/<host>/<seq>: testbed matrices, which have no suite index). "
         "started_at and finished_at: its own jobs' first and last "
         "ran_at (a farm run's pending index's time before any ran); tiers (a farm run's): suite.py's TIERS, as they "
