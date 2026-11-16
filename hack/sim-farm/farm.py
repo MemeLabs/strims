@@ -403,6 +403,10 @@ matrix, the same for every arm, whose path may name the job's variables
 as ${VAR}: "topologies/mesh6-v${VIEWERS}") to the host's copy. A job's id
 hashes its source, build, files, environment and repeat.
 
+A trace link class (run.sh's SEED_LINK, VIEWER_LINK or LINKS) runs on a
+local testbed alone: its tracelink and trace files don't reach a host, and
+a testbed matrix that gives one fails.
+
 Testbed runs are real time, so nothing checks that they reproduce: no
 canary, no --verify, a reissued job just runs again (a job's second
 result is dropped), and a job is done only by a row of its id in one of
@@ -998,6 +1002,13 @@ class Matrix:
         return name
 
     def testbed_job(self, arm: str, env: dict[str, str], repeat: int, group: str) -> Job:
+        # A trace link needs tracelink, which run.sh builds with gcc, and
+        # its trace files on the host: neither reaches a farm host.
+        for k in ("SEED_LINK", "VIEWER_LINK", "LINKS"):
+            specs = env.get(k, "").split() if k == "LINKS" else [env.get(k, "")]
+            specs = [s.split(":", 1)[-1] for s in specs]
+            if any(s.split(",")[0] == "trace" for s in specs):
+                sys.exit(f"{self.path}: {k}={env[k]}: a trace link runs on a local testbed alone")
         source = self.sources[arm]
         env_t = tuple(sorted(env.items()))
         files = tuple(sorted((k, self.file_of(k, env)) for k in self.files))

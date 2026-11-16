@@ -52,8 +52,12 @@ builds its own.
   (tbf, cable, dsl, fiber, trace; `hack/testbed/links.sh` documents
   each). A trace link replays a capacity trace with tracelink
   (`hack/testbed/tracelink.c`, an EDT classifier over fq that run.sh
-  builds with gcc), its files mounted from the host; calibration_star's
-  `STRIMS_SIM_CAL_SEED_LINK` and the bench sim take the same specs.
+  builds with gcc), its files mounted from the host, so it runs on a
+  local testbed alone: a farm testbed matrix refuses one. run.sh parses
+  every spec with strims-sim's link module (`testbed_node --link`), and
+  calibration_star's `STRIMS_SIM_CAL_SEED_LINK` and the bench sim take
+  the specs the WAN model can shape, refusing cable's default DOCSIS-PIE
+  (give `aqm=fifo`), `router=`, `delay=` and `limit=`.
 - `CPU_PROFILE` samples the Chromium nodes' V8 profiles.
   `hack/testbed/cpuprofile.py` summarises them (`--crate`, `--match`).
   Wasm frames have names only when the bundle is built with
