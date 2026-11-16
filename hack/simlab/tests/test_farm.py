@@ -21,11 +21,20 @@ exits and lists the instances left with its exact tag; status lists the
 live runs, and down --run terminates one run's instances alone. Stand-in
 runs are processes named farm.py that hold the lock with farm.py's own
 hold_run, or run its main (its builds stubbed, or its own over a binary
-in place) with a stand-in --local worker. Stdlib alone:
+in place) with a stand-in --local worker.
+
+Shared keys, this checkout's Run over a farm of its own: the jobs of one
+key under several ids (arms whose binaries are the same bytes) run once,
+as the run's first of them, and each gets its own line of that run, all
+but the first's with `from`; a derived job waits on the job that runs its
+source's key, and every job of its key takes what that took; the verify
+copies are of as many keys, and count by job, as a rerun's lines do; a
+job whose binary isn't built shares nothing. Stdlib alone:
 
   python3 hack/simlab/tests/test_farm.py
 """
 
+import collections
 import contextlib
 import importlib.util
 import io
@@ -678,6 +687,225 @@ class Live(unittest.TestCase):
             self.assertEqual(self.call(fp.down, "m1", ["r1"], exact=True), (0, "r1: terminating 1 instances\n"))
             self.assertEqual(self.call(fp.down, "m1", ["r1"]), (0, "r1: terminating 2 instances\n"))
         self.assertEqual((asked, gone), (["m1", None], [["i-1"], ["i-1", "i-2"]]))
+
+
+def farm_of(repo):
+    """This checkout's farm.py as a module whose main checkout is the git
+    repository `repo` (GIT_DIR, which its git calls read too: set it while
+    the module runs), so its state, binaries and config are repo's."""
+    with mock.patch.dict(os.environ, {"GIT_DIR": str(repo / ".git")}):
+        spec = importlib.util.spec_from_file_location("sim_farm_farm_keys", FARM_PY)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    return mod
+
+
+# A sweep of three seeds whose X=b jobs wait on their X=a jobs and take
+# STRIMS_SIM_Y from that row's frames.
+KEYED = """\
+package = "strims-sim"
+target = "scenarios"
+test = "sweep"
+[arms]
+{arms}
+[env]
+STRIMS_SIM_JOB = "1"
+[axes]
+STRIMS_SIM_SEED = ["1", "2", "3"]
+STRIMS_SIM_X = ["a", "b"]
+[[derive]]
+when = {{ STRIMS_SIM_X = "b" }}
+from = {{ STRIMS_SIM_X = "a" }}
+set = {{ STRIMS_SIM_Y = "frames" }}
+[report]
+columns = ["{column}"]
+"""
+
+
+class SharedKeys(unittest.TestCase):
+    """Jobs of one key under several ids: arms old and new of k-00 and arm
+    other of k-01 build from commits whose sources differ (crates/x) into
+    binaries of the same bytes, so a job of each arm shares its key with
+    the others' of its environment. The run's first job of a key runs for
+    all of them: each gets its own line, of the flush that one run landed
+    in, all but the first's with `from` naming k-00; what a derived job
+    waits on, takes and keeps, the verify copies, the binaries shipped and
+    the priors follow the job that runs."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="simlab-farm-keys-")
+        self.addCleanup(tmp.cleanup)
+        self.dir = d = Path(tmp.name)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        env |= {"GIT_DIR": str(d / ".git"), "GIT_WORK_TREE": str(d), "GIT_CONFIG_NOSYSTEM": "1",
+                "HOME": str(d), "SIM_DB_ROOT": str(d / "sim-db")}
+        p = mock.patch.dict(os.environ, env, clear=True)
+        p.start()
+        self.addCleanup(p.stop)
+        subprocess.run(["git", "init", "-q"], cwd=d, check=True)
+        (d / "crates").mkdir()
+        self.commits = {}
+        for arm in ("old", "new", "other"):
+            (d / "crates" / "x").write_text(arm)
+            for cmd in (["add", "crates"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", arm]):
+                subprocess.run(["git", *cmd], cwd=d, check=True)
+            self.commits[arm] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, check=True,
+                                               capture_output=True, text=True).stdout.strip()
+        self.fp = farm_of(d)
+        self.assertEqual(self.fp.FARM, d / "target" / "sim-farm")
+        self.path = {}
+        for name, arms, column in (("k-00", ("old", "new"), "delivery:mean"),
+                                   ("k-01", ("other",), "lag_p50_ms:median"),
+                                   ("k-02", ("old", "new"), "delivery:mean")):
+            self.path[name] = d / f"{name}.toml"
+            self.path[name].write_text(KEYED.format(
+                arms="\n".join(f'{a} = "{self.commits[a]}"' for a in arms), column=column))
+        self.fp.BIN.mkdir(parents=True)
+        self.ms = [self.matrix("k-00"), self.matrix("k-01")]
+        self.bins = sorted({m.bin_name(s) for m in self.ms for s in m.sources.values()})
+        self.assertEqual(len(self.bins), 3)
+        for b in self.bins:
+            (self.fp.BIN / b).write_text("#!/bin/sh\n")
+        self.host = self.fp.Host("local", "local", "-", self.fp.Spec(2, 2, 0, 2), 0.0, time.time(), state="ready")
+
+    def matrix(self, name):
+        m = self.fp.Matrix(str(self.path[name]))
+        m.resolve()
+        return m
+
+    def run_of(self, ms, verify=2):
+        """The run of `ms` as Run.run starts it: its matrices' state dirs
+        made, the rows of earlier runs copied in, and what waits on a row
+        it has queued."""
+        args = mock.Mock(local=True, s3_region=None, s3_bucket=None, verify=verify)
+        with contextlib.redirect_stdout(io.StringIO()):
+            run = self.fp.Run(ms, args)
+            for m in ms:
+                m.state.mkdir(parents=True, exist_ok=True)
+            run.share_rows()
+            for jid in [j for j in run.waiting if j in run.rows]:
+                run.release(jid)
+        return run
+
+    @staticmethod
+    def todo(run, copy=""):
+        return [i for i in run.queue if i.copy == copy and i.wid not in run.done]
+
+    def lines(self, name):
+        return self.fp.read_jsonl(self.fp.FARM / name / self.fp.INDEX)
+
+    def finish(self, run, items, seq):
+        """Stores a row for each of `items` in flush `seq` of the host, its
+        frames from its seed (a derived job's from its own), and lands it."""
+        for item in items:
+            env = run.env_of(item.job)
+            frames = int(env["STRIMS_SIM_SEED"]) * 10 + (env["STRIMS_SIM_X"] == "b")
+            run.store(self.host, item, {"row": {"trace": f"t{frames}", "frames": frames}, "wall_s": 2.0 + frames,
+                                        "cpu_s": 1.0 + frames, "max_rss_mb": 100 + frames, "flush": seq})
+        run.land(self.host, seq, {"reads": True})
+        run.flush_rows()
+
+    def test_one_run_of_a_key_gives_every_job_of_it_its_own_line(self):
+        jobs = {m.name: m.jobs() for m in self.ms}
+        every = [j for js in jobs.values() for j in js]
+        self.assertEqual((len(every), len({j.id for j in every}), len({j.key for j in every})), (18, 18, 6))
+        run = self.run_of(self.ms)
+        old = {j.id: j for j in jobs["k-00"] if j.arm == "old"}
+        # The first matrix's first arm's jobs run, each for its key's jobs.
+        self.assertEqual({i.job.id for i in run.items.values() if not i.copy}, set(old))
+        self.assertEqual(set(run.owners), set(old))
+        fields = list(dict.fromkeys(self.ms[0].row_fields() + self.ms[1].row_fields()))
+        for jid, own in run.owners.items():
+            self.assertEqual([(m.name, j.arm) for m, j in own], [("k-00", "old"), ("k-00", "new"), ("k-01", "other")])
+            self.assertEqual({j.key for _, j in own}, {old[jid].key})
+            self.assertEqual({run.lead[j.id] for _, j in own}, {jid})
+            # Its line keeps both matrices' fields.
+            self.assertEqual(run.fields[jid], fields)
+        self.assertEqual(run.bins, [self.ms[0].bin_name(self.ms[0].sources["old"])])
+        # A derived job waits on the job that runs its source's key.
+        plain = {j.id for j in old.values() if not j.after}
+        derived = [j for j in old.values() if j.after]
+        self.assertEqual({i.job.id for i in self.todo(run)}, plain)
+        self.assertEqual(set(run.waiting), plain)
+        self.assertEqual({w.job.after for ws in run.waiting.values() for w in ws}, plain)
+        # The verify copies: each matrix's first jobs by id, of two keys.
+        verify = {i.job.id for i in run.items.values() if i.copy == "v"}
+        for m in self.ms:
+            first = list(dict.fromkeys(run.lead[j.id] for j in sorted(jobs[m.name], key=lambda j: j.id)))
+            self.assertLessEqual(set(first[:2]), verify, m.name)
+        self.assertLessEqual(len(verify), 4)
+
+        self.finish(run, self.todo(run), 0)
+        # What a derived job takes is its item's, and so its owners' too.
+        self.assertEqual({i.job.id for i in self.todo(run)}, {j.id for j in derived})
+        for j in derived:
+            seed = int(dict(j.env)["STRIMS_SIM_SEED"])
+            self.assertEqual(run.derived[j.id], {"STRIMS_SIM_Y": str(seed * 10)})
+            for _, o in run.owners[j.id]:
+                self.assertEqual(run.env_of(o)["STRIMS_SIM_Y"], str(seed * 10))
+        self.finish(run, self.todo(run), 1)
+        self.assertEqual((self.todo(run), run.waiting), ([], {}))
+
+        lines = {n: self.lines(n) for n in ("k-00", "k-01")}
+        self.assertEqual([len(v) for v in lines.values()], [12, 6])
+        self.assertEqual({r["id"] for v in lines.values() for r in v}, {j.id for j in every})
+        by_key = collections.defaultdict(list)
+        for n, v in lines.items():
+            for r in v:
+                by_key[r["key"]].append((n, r))
+        self.assertEqual(len(by_key), 6)
+        same = ("binary", "env", "host", "wall_s", "cpu_s", "max_rss_mb", "src", "data", "reads", "row")
+        for key, got in by_key.items():
+            self.assertEqual([(n, r["arm"], r.get("from")) for n, r in got],
+                             [("k-00", "old", None), ("k-00", "new", "k-00"), ("k-01", "other", "k-00")])
+            self.assertEqual(len({json.dumps([r[f] for f in same]) for _, r in got}), 1, key)
+            for _, r in got:
+                self.assertEqual(r["commit"], self.commits[r["arm"]])
+                if r["env"]["STRIMS_SIM_X"] == "b":
+                    self.assertEqual(r["env"]["STRIMS_SIM_Y"], str(int(r["env"]["STRIMS_SIM_SEED"]) * 10))
+        # The run ran each key once, and walls count it once.
+        self.assertEqual(run.ran, 6)
+        self.assertEqual(len(self.fp.index_walls()), 6)
+
+    def test_a_rerun_takes_each_jobs_line_and_verifies_by_job(self):
+        first = self.run_of(self.ms)
+        self.finish(first, self.todo(first), 0)
+        self.finish(first, self.todo(first), 1)
+        # Every job has a line of its own and none of a verify copy, though
+        # a key has three lines: each verify copy runs.
+        run = self.run_of(self.ms)
+        verify = self.todo(run, "v")
+        self.assertTrue(verify)
+        self.assertEqual({i.wid for i in run.items.values() if i.wid not in run.done}, {i.wid for i in verify})
+        self.assertEqual(set(run.prior), set(run.owners))
+        for m in self.ms:
+            self.assertEqual(len(self.lines(m.name)), len(m.jobs()), m.name)
+        self.finish(run, verify, 2)
+        self.assertEqual((run.verified, run.mismatches), (len(verify), 0))
+        for n, owners in (("k-00", 2), ("k-01", 1)):
+            copies = [r for r in self.lines(n) if r["copy"] == "v"]
+            self.assertEqual(len(copies), len(verify) * owners, n)
+        again = self.run_of(self.ms)
+        self.assertEqual(again.done, set(again.items))
+        # A matrix new to the farm takes a line of each of its jobs, of its
+        # own id, arm and commit, from a matrix that ran its key.
+        m2 = self.matrix("k-02")
+        late = self.run_of([m2])
+        self.assertEqual({i.copy for i in late.items.values() if i.wid not in late.done}, {"v"})
+        got = self.lines("k-02")
+        self.assertEqual(sorted((r["id"], r["arm"], r["commit"]) for r in got),
+                         sorted((j.id, j.arm, j.commit) for j in m2.jobs()))
+        self.assertEqual({r.get("from") for r in got}, {"k-00"})
+
+    def test_a_job_whose_binary_isnt_built_runs_as_its_own(self):
+        # An estimate's: its key is unknown.
+        for b in self.bins[1:]:
+            (self.fp.BIN / b).unlink()
+        ms = [self.matrix("k-00"), self.matrix("k-01")]
+        self.assertEqual(len([j for m in ms for j in m.jobs() if j.key]), 6)
+        run = self.run_of(ms, verify=0)
+        self.assertEqual(len(run.items), 18)
+        self.assertTrue(all(len(own) == 1 for own in run.owners.values()))
 
 
 class Contract(unittest.TestCase):

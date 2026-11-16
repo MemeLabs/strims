@@ -105,16 +105,22 @@ added since (index-keys-read.json keeps how far).
 run takes several matrices at once: one queue holds their jobs, and one
 set of instances runs them. A job two matrices share (the same source and
 environment) runs once, and its line goes to each under that matrix's arm,
-all but the first's with `from` naming the first. As the run starts, each
-matrix gets a copy of the line of each of its jobs that it lacks and
-another matrix, in the run or not, has: with the matrix's own id, arm,
-commit and key, and `from` the matrix whose job ran; the copy points at
-the same data, which isn't copied. The run is named
-for its matrices, their names sorted and joined with "+" (past EC2's
-256-character tag value, the first's, "+<n>more-" and a hash of them all),
-and keeps its own files (the list of its matrices, the canary's trace, SSH
-host keys, --local's worker) in target/sim-farm/<run>/, which for one
-matrix is that matrix's state. Each matrix's farm.log gets the whole log.
+all but the first's with `from` naming the first. So do the jobs of one key
+under several ids (arms, of one matrix or several, whose binaries are the
+same bytes): the run's first job of the key runs for all of them, and each
+gets a line of its own, of its id, arm and commit, all but the first's with
+`from` naming the first's matrix (its own, for two arms of one matrix); a
+flush holds the key once, the run every line names. As the run starts,
+each matrix gets a copy of the line of each of its jobs that it lacks
+(none of the job's id and key) and a matrix, in the run or not, has of its
+key: with the matrix's own id, arm, commit and key, and `from` the matrix
+whose job ran; the copy points at the same data, which isn't copied. The
+run is named for its matrices, their names sorted and joined with "+"
+(past EC2's 256-character tag value, the first's, "+<n>more-" and a hash
+of them all), and keeps its own files (the list of its matrices, the
+canary's trace, SSH host keys, --local's worker) in target/sim-farm/<run>/,
+which for one matrix is that matrix's state. Each matrix's farm.log gets
+the whole log.
 
 A test job is expected to take the mean wall of the latest 64 earlier
 rows of its test and environment, seeds aside, here in any matrix
@@ -259,9 +265,9 @@ speed. A run logs the speeds before its best pools.
   where both rows carry it, reads_hash (a digest of the
   viewers' reads, which a change to readers alone moves without the
   trace), and --verify N (2) runs N jobs of each matrix (the first by
-  id) twice on purpose, on different instances: one whose row came from
-  another matrix runs once more, against that row, which checks it on
-  today's instances (the binaries take libm from the image). A job that
+  id, of N keys) twice on purpose, on different instances: one whose row
+  came from another matrix runs once more, against that row, which checks
+  it on today's instances (the binaries take libm from the image). A job that
   fails twice is recorded in failures.jsonl, not the index, and dropped.
 - A job that waits goes to the head of the queue once the job it waits
   on has a row, and fails for good when that job does. Waiting jobs count
@@ -1225,8 +1231,8 @@ def row_index(mine: set[str]) -> tuple[dict[str, tuple[str, int, str, float]], d
     """The index of lines by key, index-keys.jsonl, after it takes in what
     each matrix's index.jsonl has added since it was last read (all of it
     the first time): each key's newest line, as its matrix, offset, job id
-    and time, and for the matrices `mine` how many lines of each key they
-    have."""
+    and time, and for the matrices `mine` how many lines of each job they
+    have, by (key, job id): jobs of other ids can share a key."""
     FARM.mkdir(parents=True, exist_ok=True)
     with (FARM / "index-keys.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -1269,7 +1275,7 @@ def row_index(mine: set[str]) -> tuple[dict[str, tuple[str, int, str, float]], d
                 newest[key] = (name, off, jid, t)
             if name in have and (name, off) not in seen:
                 seen.add((name, off))
-                have[name][key] += 1
+                have[name][(key, jid)] += 1
         return newest, have
 
 
@@ -2386,7 +2392,7 @@ class Run:
         # test job's of its key in any matrix, as its first owner's copy.
         self.rows: dict[str, dict] = {}
         # matrix -> what has rows there (ident)
-        self.have: dict[str, set[str]] = {}
+        self.have: dict[str, set[str | tuple[str, str]]] = {}
         # The test jobs whose rows are from matrices outside the run.
         self.earlier: set[str] = set()
         jobs = {m.name: m.jobs() for m in matrices}
@@ -2421,11 +2427,14 @@ class Run:
             for j in hits.values():
                 if j.after and j.after not in self.rows:
                     self.rows.pop(j.id, None)
-            self.earlier = {
-                jid for jid, j in hits.items()
-                if jid in self.rows and not any(j.key in h for h in self.have.values())
-            }
-        # job id -> the matrices that have it, each with its own arm and commit
+            held = {key for h in self.have.values() for key, _ in h}
+            self.earlier = {jid for jid, j in hits.items() if jid in self.rows and j.key not in held}
+        # job id -> the job whose item runs it: itself, or for a test job
+        # the run's first job of its key (another arm's or matrix's, whose
+        # binary is the same bytes)
+        self.lead: dict[str, str] = {}
+        # the item's job id -> the jobs it runs for, each with its matrix,
+        # its own id, arm and commit
         self.owners: dict[str, list[tuple[Matrix, Job]]] = {}
         self.njobs: dict[str, int] = {}
         self.done: set[str] = set()  # wids with a row, or failed for good
@@ -2494,25 +2503,34 @@ class Run:
                 self.done.add(item.wid)
             elif item.job.after:
                 # Queued by run(), once the logs are open, if it has its row.
-                self.waiting.setdefault(item.job.after, []).append(item)
+                self.waiting.setdefault(self.waits_on(item.job), []).append(item)
             else:
                 self.queue.append(item)
 
-        # One queue, matrix by matrix; a job two matrices share runs once.
+        # One queue, matrix by matrix; a job two matrices share runs once,
+        # as does a test job whose key another job of the run has.
+        by_key: dict[str, str] = {}
         for m in matrices:
             self.njobs[m.name] = len(jobs[m.name])
             for j in jobs[m.name]:
-                own = self.owners.setdefault(j.id, [])
-                if any(o is m for o, _ in own):
+                lead = self.lead.setdefault(j.id, by_key.setdefault(j.key, j.id) if j.key else j.id)
+                own = self.owners.setdefault(lead, [])
+                if any(o is m and oj.id == j.id for o, oj in own):
                     continue
                 own.append((m, j))
                 if len(own) == 1:
                     add(Item(j), j.id in self.rows)
-            # The verify copies: the first jobs by id that haven't two rows yet.
-            for j in sorted(jobs[m.name], key=lambda j: j.id)[: args.verify if m.kind == "test" else 0]:
-                item = Item(self.owners[j.id][0][1], "v")
+            # The verify copies: the first jobs by id, each of another item,
+            # that haven't two rows yet.
+            picked: dict[str, Job] = {}
+            for j in sorted(jobs[m.name], key=lambda j: j.id) if m.kind == "test" else []:
+                if len(picked) == args.verify:
+                    break
+                picked.setdefault(self.lead[j.id], j)
+            for lead, j in picked.items():
+                item = Item(self.owners[lead][0][1], "v")
                 if item.wid not in self.items:
-                    add(item, counts[self.ident(j)] >= 2 and (m.kind == "testbed" or j.id in self.rows))
+                    add(item, counts[self.ident(j)] >= 2 and j.id in self.rows)
         firsts = [own[0][1] for own in self.owners.values()]
         self.bins = sorted({j.bin for j in firsts} | {name for j in firsts for _, name in j.files})
         # A test job's index line keeps the fields of its row its matrices
@@ -2538,9 +2556,15 @@ class Run:
 
     # -- results
 
-    def ident(self, job: Job) -> str:
-        """What a matrix has rows of: a testbed job's id, a test job's key."""
-        return job.id if job.kind == "testbed" else job.key
+    def ident(self, job: Job) -> str | tuple[str, str]:
+        """What a matrix has rows of: a testbed job's id, a test job's key
+        and id (row_index)."""
+        return job.id if job.kind == "testbed" else (job.key, job.id)
+
+    def waits_on(self, job: Job) -> str:
+        """The item whose row a derived job waits for: the job it waits on,
+        or the one whose item runs that (lead)."""
+        return self.lead.get(job.after, job.after)
 
     def lines(self, m: Matrix) -> Path:
         """A matrix's file of its jobs' lines: a test matrix's index, a
@@ -2577,7 +2601,9 @@ class Run:
             shutil.copytree(src, dest)
 
     def env_of(self, job: Job) -> dict[str, str]:
-        return {**dict(job.env), **self.derived.get(job.id, {})}
+        """A job's environment, with what its item took from the row it
+        waited for."""
+        return {**dict(job.env), **self.derived.get(self.lead.get(job.id, job.id), {})}
 
     def wire(self, item: Item, host: Host | None = None) -> dict:
         """A job as its worker takes it: a test job's with its key, its
@@ -3045,11 +3071,11 @@ class Run:
                     self.queue.remove(item)
                 except ValueError:
                     pass
-                waits = self.waiting.get(item.job.after, [])
+                waits = self.waiting.get(self.waits_on(item.job), [])
                 if item in waits:
                     waits.remove(item)
                     if not waits:
-                        del self.waiting[item.job.after]
+                        del self.waiting[self.waits_on(item.job)]
         gone = [host.assigned.pop(w) for w in list(host.assigned) if w not in there]
         back = [i for i in gone if i.copy != "canary" and i.wid not in self.done]
         if back:
@@ -4258,15 +4284,18 @@ class Run:
             log.open(m.state / "farm.log")
         log(time.strftime("%Y-%m-%d %Z"))  # lines carry local times of day: spend dates runs by this
         to_run = sum(1 for i in self.items.values() if i.wid not in self.done)
+        # The jobs whose key an earlier job of the run has, which run as it.
+        keyed = sum(len({j.id for _, j in own}) - 1 for own in self.owners.values())
         if len(self.ms) == 1:
             m = self.ms[0]
-            log(f"{m.name}: {self.njobs[m.name]} jobs over {len(m.arms)} arms, {to_run} to run")
+            log(f"{m.name}: {self.njobs[m.name]} jobs over {len(m.arms)} arms, {to_run} to run"
+                + (f"; {keyed} of them share another's key, and run as it" if keyed else ""))
         else:
             for m in self.ms:
                 log(f"{m.name}: {self.njobs[m.name]} jobs over {len(m.arms)} arms")
-            shared = sum(1 for own in self.owners.values() if len(own) > 1)
-            log(f"{self.name}: {len(self.owners)} jobs, {shared} of them in more than one "
-                f"matrix; {to_run} to run")
+            shared = sum(1 for own in self.owners.values() if len({o.name for o, _ in own}) > 1)
+            log(f"{self.name}: {len(self.owners)} jobs, {shared} of them in more than one matrix"
+                + (f", and {keyed} more that share one's key run as it" if keyed else "") + f"; {to_run} to run")
         self.share_rows()
         for jid in [j for j in self.waiting if j in self.rows]:
             self.release(jid)
