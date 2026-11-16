@@ -92,6 +92,14 @@ one mode (`--theme`, `--device`).
   nothing, on CI runners too, so a changed story has a cause. A story's
   `visual` (reason, mask, skip, fresh) is for content no capture setting
   holds still. Use it sparingly.
+- With `--port`, a run's servers and browsers live in a network namespace
+  of their own (bwrap, loopback only; the snap's Chromium runs unwrapped,
+  unsandboxed). That's because Chromium fails every load in flight with
+  `net::ERR_NETWORK_CHANGED` when a host interface comes or goes, and
+  testbed runs on the VM make and drop Docker networks all the time. Where
+  bwrap can't make the namespace, the run warns and shares the host's
+  network. A load of a build's file that fails is then the checker's
+  failure, and the story is captured again in a fresh browser.
 - Test a change to what a compare skips or captures by the decision:
   `--list` dry runs, scope_test.py's fixture storybook
   (hack/storybook/testdata/scope) and report_test.py, each mechanism

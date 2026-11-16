@@ -585,6 +585,43 @@ def find_chromium(name):
     sys.exit("check: no Chromium found (--chromium PATH)")
 
 
+# A run's servers and browsers live in a network namespace of their own, with
+# only a loopback, so the host's interfaces coming and going (a Docker
+# network's bridge, a container's veth) can't reach them: Chromium fails every
+# request in flight with net::ERR_NETWORK_CHANGED on such a change, loopback's
+# too, and has no switch to stop it. bwrap makes the namespace (its AppArmor
+# profile may create the user namespace that Ubuntu denies unshare); the run
+# goes on inside it as a process of its own, ISOLATED set in its environment,
+# with a fresh pid namespace, which the kernel empties once the run ends, so
+# none of its browsers outlives it. The snap's Chromium can't start in a user
+# namespace (snap-confine refuses), so the snap's binary runs unwrapped, and
+# without Chromium's sandbox, which needs a user namespace or a setuid helper
+# of its own: the run's pages are its builds' stories, with every request off
+# its servers answered by stub.
+ISOLATED = "STORYBOOK_CHECK_ISOLATED"
+BWRAP = ["bwrap", "--dev-bind", "/", "/", "--proc", "/proc", "--unshare-user", "--unshare-net",
+         "--unshare-pid", "--die-with-parent", "--"]
+SNAP_CHROMIUM = "/snap/chromium/current/usr/lib/chromium-browser/chrome"
+
+
+def unwrapped(exe):
+    """The browser to start inside the namespace: the snap's binary for its
+    wrapper (a link to /usr/bin/snap), else `exe`."""
+    return SNAP_CHROMIUM if Path(exe).resolve() == Path("/usr/bin/snap").resolve() else exe
+
+
+def isolation_unavailable(exe):
+    """Why a run can't have a network namespace of its own here, or None."""
+    if not shutil.which("bwrap"):
+        return "no bwrap on PATH"
+    if not Path(unwrapped(exe)).is_file():
+        return f"no {unwrapped(exe)}"
+    res = subprocess.run([*BWRAP, "true"], stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    if res.returncode:
+        return f"bwrap can't make one ({first_line(res.stderr.strip()) or f'exit {res.returncode}'})"
+    return None
+
+
 class Browser:
     """A headless Chromium of its own, with one page `viewport` (w, h) in
     size, and a window more (tab) for each build compare mode captures in,
@@ -2997,6 +3034,28 @@ def main(argv=None):
     if comparing and (why := head_modules()):
         print(f"check: {why}", file=sys.stderr)
         return 2
+    if os.environ.get(ISOLATED):
+        # Inside the namespace (see ISOLATED): the builds were made outside.
+        exe = unwrapped(exe)
+        CHROMIUM_FLAGS.append("--no-sandbox")
+        args.build = args.rebuild_base = False
+    elif args.port:
+        why = isolation_unavailable(exe)
+        if why:
+            print(f"check: warning: the run shares the host's network, {why}: an interface coming or going "
+                  "(a Docker network's, a container's) fails what its browsers are loading "
+                  "(net::ERR_NETWORK_CHANGED), and those stories are captured again", file=sys.stderr)
+        else:
+            # The builds first, out here: the base's install may need the
+            # registry.
+            if args.build:
+                build()
+            if args.compare:
+                build_base(args.compare, args.rebuild_base)
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.execvpe(BWRAP[0], [*BWRAP, sys.executable, str(Path(__file__).resolve()),
+                                  *(sys.argv[1:] if argv is None else argv)], {**os.environ, ISOLATED: "1"})
     if args.build:
         build()
     if args.screenshots:
