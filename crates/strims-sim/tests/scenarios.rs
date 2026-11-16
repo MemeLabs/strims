@@ -3171,7 +3171,9 @@ fn wan_super_peer_adaptive_uncapped() {
 ///   defaults, 3028 each, are `twin.py run`'s).
 ///   `STRIMS_SIM_CAL_SEED_PEAK_MBIT=<m>` and `STRIMS_SIM_CAL_VIEWER_PEAK_MBIT=<m>`
 ///   send that bucket at that rate (`Bucket::peak`), as `run.sh`'s
-///   `SEED_PEAK_MBIT` and `VIEWER_PEAK_MBIT` set its tbf's peakrate.
+///   `SEED_PEAK_MBIT` and `VIEWER_PEAK_MBIT` set its tbf's peakrate; a
+///   peak needs its bucket's knob, and is over every rate its uplink runs
+///   at, the seed's steps' too (`strims_wan::testbed::check_peak`).
 /// - `STRIMS_SIM_CAL_RATE_LIMIT_PCT=<pct>` gives every node a rate limit
 ///   (`NodeConfig::rate_limit`) of `pct` percent of its starting uplink,
 ///   so the node's QoS, not the access link, is where its peers' data
@@ -3256,7 +3258,7 @@ fn calibration_settings() -> Calibration {
             .map(|(at, f)| (at, f * seed_up_mbit as f64))
             .collect()
     };
-    Calibration {
+    let c = Calibration {
         viewers,
         seed_up_mbit,
         viewer_up_mbit: knob("STRIMS_SIM_CAL_VIEWER_UP_MBIT").unwrap_or(20),
@@ -3299,7 +3301,19 @@ fn calibration_settings() -> Calibration {
                 })
                 .collect()
         },
+    };
+    // A peak is the rate a bucket sends at: without the bucket it would
+    // shape nothing.
+    for (who, peak, burst) in [
+        ("SEED", c.seed_peak_mbit, c.seed_burst),
+        ("VIEWER", c.viewer_peak_mbit, c.viewer_burst),
+    ] {
+        assert!(
+            peak.is_none() || burst.is_some(),
+            "STRIMS_SIM_CAL_{who}_PEAK_MBIT needs STRIMS_SIM_CAL_{who}_BURST, the bucket it sends"
+        );
     }
+    c
 }
 
 /// `link` lines between every pair of a seed and `viewers` viewers.
