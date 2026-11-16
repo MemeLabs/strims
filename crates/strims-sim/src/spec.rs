@@ -94,9 +94,10 @@ pub struct HostSpec {
     /// site's rate throughout.
     pub up_steps: Vec<(Duration, u64)>,
     /// WAN mode: the site's uplink sends in this schedule's delivery
-    /// opportunities in place of its rate, bucket and steps
+    /// opportunities in place of its rate and bucket
     /// (`strims_wan::Network::set_up_capacity`), as a cellular or satellite
-    /// uplink grants them.
+    /// uplink grants them; with [`HostSpec::up_steps`] too, the run fails,
+    /// as the testbed refuses a trace link's steps.
     pub up_capacity: Option<std::sync::Arc<strims_wan::capacity::Capacity>>,
     /// WAN mode with [`SendBuffer::window`]: bulk uploads by other
     /// software on the host, which share its uplink with the node's

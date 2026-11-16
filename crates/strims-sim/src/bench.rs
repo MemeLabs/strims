@@ -976,7 +976,7 @@ impl Bench {
                     )
                 };
                 let link = link_of(i)
-                    .map(|spec| crate::link::TestbedLink::parse(&spec, mbit(up as f64)))
+                    .map(|spec| crate::link::TestbedLink::parse(&spec))
                     .transpose()?;
                 Ok(BenchSite {
                     up: mbit(up as f64),

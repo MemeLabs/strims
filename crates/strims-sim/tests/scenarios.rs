@@ -3344,10 +3344,9 @@ fn pairs_knob(name: &str) -> Vec<(f64, f64)> {
 /// `STRIMS_SIM_CAL_RATE_LIMIT_PCT` sets them; send buffers.
 fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
     let mut s = Scenario::new("calibration_star");
-    let link = |i: usize, mbit: u64| {
+    let link = |i: usize| {
         c.links.get(i).cloned().flatten().map(|spec| {
-            strims_sim::link::TestbedLink::parse(&spec, mbit * 125_000)
-                .unwrap_or_else(|e| panic!("{e}"))
+            strims_sim::link::TestbedLink::parse(&spec).unwrap_or_else(|e| panic!("{e}"))
         })
     };
     let site = |i: usize, mbit: u64, burst: Option<u64>, peak: Option<f64>| {
@@ -3358,7 +3357,7 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
         let st = Site::new(City::Chicago, Access::Cable)
             .with_up(mbit * 125_000)
             .with_bucket(bucket);
-        match link(i, mbit) {
+        match link(i) {
             Some(l) => l.site(st, bucket),
             None => st,
         }
@@ -3387,12 +3386,7 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
         .chain(vs.iter().copied())
         .enumerate()
     {
-        let mbit = if i == 0 {
-            c.seed_up_mbit
-        } else {
-            c.viewer_up_mbit
-        };
-        if let Some(l) = link(i, mbit) {
+        if let Some(l) = link(i) {
             s.hosts[h].up_capacity = l
                 .capacity(Duration::from_secs(5))
                 .unwrap_or_else(|e| panic!("{e}"));

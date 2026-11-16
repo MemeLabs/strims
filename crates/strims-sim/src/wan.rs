@@ -810,6 +810,12 @@ impl Scheduler {
                 net.set_up_steps(h, steps.collect());
             }
             if let Some(cap) = &hs.up_capacity {
+                if !hs.up_steps.is_empty() {
+                    return Err(format!(
+                        "wan: host {} has a capacity schedule, which takes no rate steps",
+                        hs.name
+                    ));
+                }
                 net.set_up_capacity(h, cap.clone());
             }
         }
