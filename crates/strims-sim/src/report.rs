@@ -1067,7 +1067,7 @@ impl Report {
         let samples = self.hosts.get(h).map_or(&[][..], |r| &r.runner.meter[..]);
         // The samples before `t`: the oracle tells a sample's truth before
         // the sample is taken.
-        let k = samples.partition_point(|m| m.t < t);
+        let k = samples.partition_point(|m| m.asked < t);
         let last = k.checked_sub(1).and_then(|i| samples.get(i));
         let prev = k.checked_sub(2).and_then(|i| samples.get(i));
         let log = self
@@ -1103,7 +1103,7 @@ impl Report {
             .iter()
             .filter(|m| self.live(m.t) && m.capacity > 0)
             .filter_map(|m| {
-                let cap = self.upload_cap_at(h, m.t).filter(|&c| c > 0)? as f64;
+                let cap = self.upload_cap_at(h, m.asked).filter(|&c| c > 0)? as f64;
                 let committed: f64 = m
                     .children
                     .iter()
@@ -1146,7 +1146,10 @@ impl Report {
                 .filter(|m| within(m.t))
                 .filter_map(|m| {
                     let c = *m.budget_capacity.get(&swarm).filter(|&&c| c > 0)?;
-                    Some(c as f64 / self.upload_cap_at(spec.seed, m.t).filter(|&c| c > 0)? as f64)
+                    Some(
+                        c as f64
+                            / self.upload_cap_at(spec.seed, m.asked).filter(|&c| c > 0)? as f64,
+                    )
                 })
                 .collect()
         });

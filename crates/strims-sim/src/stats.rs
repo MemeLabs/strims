@@ -387,6 +387,10 @@ impl PathOverhead {
 pub struct MeterSample {
     /// Simulated time since the start of the run.
     pub t: Duration,
+    /// When the controller asked for the sample, which the meter's truth
+    /// is read at (`Report::upload_cap_at`): the live oracle tells the
+    /// node that truth then, ahead of the sample.
+    pub asked: Duration,
     pub rate: u64,
     pub busy_permille: u32,
     pub queue_delay_ms: Option<u32>,
@@ -686,6 +690,7 @@ impl HostStats {
         swarms: &[Option<SwarmKey>],
         live: &[bool],
         t: Duration,
+        asked: Duration,
         clock: Time,
         link_bytes: u64,
         app_bytes: u64,
@@ -796,6 +801,7 @@ impl HostStats {
                 // One meter per node: every hybrid swarm reads the same.
                 let ms = meter.get_or_insert_with(|| MeterSample {
                     t,
+                    asked,
                     data_bytes,
                     link_bytes,
                     told,
@@ -915,7 +921,7 @@ impl HostStats {
         (last, it.next())
     }
 
-    /// Marks the meter sample taken at `t`, if one was, as ending a
+    /// Marks the meter sample asked for at `t`, if one was, as ending a
     /// near-saturated window when the host's link charged it at least
     /// [`crate::report::NEAR_SATURATED`] of what `available` says its link
     /// could carry for it between its sample before and `t`, and sums its
@@ -934,7 +940,7 @@ impl HostStats {
             })
             .map(|p| {
                 (
-                    p.t,
+                    p.asked,
                     p.link_bytes,
                     p.app_bytes,
                     p.data_bytes,
@@ -942,7 +948,7 @@ impl HostStats {
                     p.gated,
                 )
             });
-        let Some(k) = self.meter.last_mut().filter(|m| m.t == t) else {
+        let Some(k) = self.meter.last_mut().filter(|m| m.asked == t) else {
             return;
         };
         let Some((at, link, app, data, vnic, mut g)) = prev else {

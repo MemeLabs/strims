@@ -1192,7 +1192,7 @@ impl Report {
                 let d = u64::from(m.rejected - a.rejected);
                 all += d;
                 let rate = (m.bytes_written - a.bytes_written) as f64 / (m.t - a.t).as_secs_f64();
-                let cap = self.upload_cap_at(h, m.t).unwrap_or(0) as f64;
+                let cap = self.upload_cap_at(h, m.asked).unwrap_or(0) as f64;
                 if cap > 0.0 && rate < cap / 2.0 {
                     idle += d;
                 }
@@ -1262,7 +1262,7 @@ impl Report {
                     .iter()
                     .filter(|m| m.t >= at && m.t < until)
                     .map(|m| {
-                        let cap = self.upload_cap_at(h, m.t).unwrap_or(0) as f64;
+                        let cap = self.upload_cap_at(h, m.asked).unwrap_or(0) as f64;
                         cap <= 0.0 || (m.capacity as f64 / cap - 1.0).abs() > TRACK_BAND
                     })
                     .collect();
@@ -3122,6 +3122,7 @@ mod tests {
         host.runner.meter = (0..100)
             .map(|t| MeterSample {
                 t: Duration::from_secs(t),
+                asked: Duration::from_secs(t),
                 capacity: capacity(t),
                 ..MeterSample::default()
             })

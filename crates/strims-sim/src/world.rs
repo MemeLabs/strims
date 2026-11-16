@@ -1408,6 +1408,7 @@ impl World {
                     &swarms,
                     &live,
                     at,
+                    at,
                     self.clock_at(h, at),
                     link_bytes,
                     app_bytes,
@@ -1493,7 +1494,8 @@ impl World {
     /// Folds a stats sample of `h` into its [`HostStats`] and checks the
     /// runner invariants (see [`crate::Invariants`]). Each broken invariant
     /// is logged once per host.
-    /// `asked` is when the controller asked for the sample, its time.
+    /// `asked` is when the controller asked for the sample, which its
+    /// meter sample's truth is read at (`MeterSample::asked`).
     pub fn observe_stats(&self, h: HostIx, m: &NodeMetrics, asked: Duration) {
         self.observe_bins(h, m);
         self.take_parents();
@@ -1525,6 +1527,7 @@ impl World {
                 m,
                 &swarms,
                 &live,
+                now,
                 asked,
                 self.clock_at(h, now),
                 link_bytes,

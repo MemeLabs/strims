@@ -867,7 +867,7 @@ impl Report {
                     Some(m.capacity)
                         .filter(|&c| c > 0)
                         .map_or(String::new(), |c| c.to_string()),
-                    self.upload_cap_at(h, m.t)
+                    self.upload_cap_at(h, m.asked)
                         .map_or(String::new(), |c| c.to_string()),
                 ]);
             }

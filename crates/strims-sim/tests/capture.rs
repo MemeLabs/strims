@@ -653,7 +653,7 @@ fn a_starved_runs_stalls_are_its_reads_playout() {
     let site_up = r.scenario.hosts[seed].site.unwrap().profile.up;
     let meter = &r.hosts[seed].runner.meter;
     let share = |t: Duration| {
-        let k = meter.partition_point(|m| m.t < t);
+        let k = meter.partition_point(|m| m.asked < t);
         strims_sim::report::own_share(
             &r.scenario.hosts[seed],
             k.checked_sub(1).and_then(|i| meter.get(i)),

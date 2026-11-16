@@ -3581,7 +3581,7 @@ fn calibration_series(r: &Report) -> String {
             m.rate,
             m.busy_permille,
             m.capacity,
-            r.upload_cap_at(seed, m.t).unwrap_or(0),
+            r.upload_cap_at(seed, m.asked).unwrap_or(0),
             m.children.get(&0).copied().unwrap_or(0),
             m.queue_delay_ms
                 .map_or("null".to_owned(), |d| d.to_string()),
@@ -3762,7 +3762,7 @@ fn truth_run(name: &str, c: &Calibration, told: bool) -> Report {
 /// before then (`own_share`).
 fn seed_share(r: &Report, t: Duration) -> f64 {
     let m = &r.hosts[0].runner.meter;
-    let k = m.partition_point(|x| x.t < t);
+    let k = m.partition_point(|x| x.asked < t);
     strims_sim::report::own_share(
         &r.scenario.hosts[0],
         k.checked_sub(1).and_then(|i| m.get(i)),
@@ -3860,7 +3860,7 @@ fn the_live_oracle_tells_the_truth() {
         let mut truths = Vec::new();
         for m in &r.hosts[0].runner.meter {
             if let Some(x) = m.told {
-                let truth = r.upload_cap_at(0, m.t);
+                let truth = r.upload_cap_at(0, m.asked);
                 assert_eq!(Some(x), truth, "told at {:?}", m.t);
                 assert!(m.capacity <= x, "read {} over {x} at {:?}", m.capacity, m.t);
                 told += 1;
@@ -4013,7 +4013,7 @@ fn collapse_meter_oscillation() {
             .iter()
             .filter(|m| m.t > start + secs(5))
         {
-            let cap = r.upload_cap_at(seed, m.t).unwrap_or(u64::MAX);
+            let cap = r.upload_cap_at(seed, m.asked).unwrap_or(u64::MAX);
             if m.busy_permille < 50 && m.capacity > 4 * cap {
                 overread = true;
             } else if overread && m.busy_permille > 900 {
