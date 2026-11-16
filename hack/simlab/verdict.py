@@ -861,6 +861,10 @@ VERDICT_VERSION = verdict_version()
 META_ONLY = {"sim", "seconds", "viewers", "bin_ms"}
 # The sims by the names a run's `sim` holds (a farm job's, its binary's).
 SIM_NAMES = {"strims-sim": "strims-sim", "strims-sim:scenarios": "strims-sim"}
+# The vocabulary each run's sim names its kinds and fields by: a sim's
+# own (SIM_NAMES), and a testbed run's strims-sim's, whose testbed module
+# writes its tables (simlab.testbed).
+VOCAB_SIMS = {**SIM_NAMES, "testbed": "strims-sim"}
 # The ids a sim's runs name the rule's kinds by, (sim, id, current id):
 # each current one's own, and each retired one's replacement for that
 # sim, as load_series reads them.
@@ -976,7 +980,7 @@ def load_series(pairs):
         table = f"read_parquet({plist(files(srcs, 'events'))}, union_by_name=true)"
         cols = {r["column_name"] for r in duck(f"DESCRIBE SELECT * FROM {table};")}
         detail = "e.detail" if "detail" in cols else "NULL::VARCHAR"
-        sims = " ".join(f"WHEN {q(a)} THEN {q(b)}" for a, b in SIM_NAMES.items())
+        sims = " ".join(f"WHEN {q(a)} THEN {q(b)}" for a, b in VOCAB_SIMS.items())
         ids = ", ".join(f"({q(s)}, {q(a)}, {q(b)})" for s, a, b in RULE_IDS)
         events = {p: [] for p in meta}
         for r in duck(f"SELECT e.src, e.k, e.t_us / 1e6 AS t, m.kind, nullif(e.node, -1) AS node, "
@@ -1029,9 +1033,9 @@ VERDICT_COLS = {"k": "VARCHAR", "src": "VARCHAR", "onset": "BIGINT", "trees": "B
 def derived_version():
     """A hash of everything that defines the derived tables:
     VERDICT_VERSION, their columns, the events the verdict reads of a run
-    (RULE_IDS, by SIM_NAMES) and the code that writes them (DERIVE_CODE),
+    (RULE_IDS, by VOCAB_SIMS) and the code that writes them (DERIVE_CODE),
     so a derived table made under another is stale."""
-    parts = [VERDICT_VERSION, repr([DERIVED, DERIVED_KINDS, VERDICT_COLS, RULE_IDS, SIM_NAMES]), *DERIVE_SOURCES]
+    parts = [VERDICT_VERSION, repr([DERIVED, DERIVED_KINDS, VERDICT_COLS, RULE_IDS, VOCAB_SIMS]), *DERIVE_SOURCES]
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
 
 

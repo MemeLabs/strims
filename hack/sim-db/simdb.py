@@ -26,6 +26,8 @@
   hack/sim-db/simdb.py export DB DEST
   hack/sim-db/simdb.py pull --run RUN [--reads [--cell C] [--arm A] [--seed N]] [--dry-run]
   hack/sim-db/simdb.py gc [--days N]
+  hack/sim-db/simdb.py testbed RUN_DIR... --name NAME [--cell C] [--arm A] [--knob KEY=VALUE ...] [--bin PATH]
+  hack/sim-db/simdb.py twin SRC --name NAME --bin SCENARIOS [--seeds N] [--arm A] [--env KEY=VALUE ...]
 
 `describe`, `lake`, `view`, `index` and `fetch` are the catalog's
 (hack/sim-db/catalog.py, whose docs say more): every result the cache,
@@ -517,6 +519,26 @@ def cmd_gc(a):
     print(f"removed {store.gc(a.days)} sources older than {a.days} days")
 
 
+def cmd_testbed(a):
+    from simlab import testbed
+
+    knobs = dict(kv.split("=", 1) for kv in a.knob or [])
+    src, jobs = testbed.ingest(a.run_dirs, a.name, binary=a.bin, cell=a.cell, arm=a.arm, knobs=knobs)
+    for j in jobs:
+        print(f"{src} {j['k']} {j['cell']} {j['arm']} seed {j['seed']}  {j['dir']}")
+    print("simdb.py index takes them in")
+
+
+def cmd_twin(a):
+    from simlab import testbed
+
+    env = dict(kv.split("=", 1) for kv in a.env or [])
+    src, jobs = testbed.twins(a.src, a.bin, a.name, seeds=a.seeds, arm=a.arm, env=env)
+    for j in jobs:
+        print(f"{src} {j['k']} {j['cell']} {j['arm']} seed {j['seed']}")
+    print("simdb.py index takes them in")
+
+
 def catalog():
     """hack/sim-db/catalog.py: the catalog's commands (simlab.catalog's)."""
     spec = importlib.util.spec_from_file_location("catalog", Path(__file__).with_name("catalog.py"))
@@ -622,6 +644,23 @@ def main():
     p.add_argument("--dry-run", action="store_true", help="list the reads' files a pull would fetch, asking S3 nothing")
     g = sub.add_parser("gc")
     g.add_argument("--days", type=float, default=7)
+    t = sub.add_parser("testbed", help="testbed runs (hack/testbed/run.sh's out dirs) into the cache as source "
+                       "testbed/NAME, each a run of its twin's cell (simlab.testbed)")
+    t.add_argument("run_dirs", nargs="+")
+    t.add_argument("--name", required=True, help="the source's name: testbed/NAME")
+    t.add_argument("--cell", help="every run's cell (default: the tier cell of its knobs, else its knobs' name)")
+    t.add_argument("--arm", default="testbed")
+    t.add_argument("--knob", action="append", help="a twin knob KEY=VALUE to add to the runs' (a trickle's "
+                   "STRIMS_SIM_ARRIVALS, say)")
+    t.add_argument("--bin", help="the testbed_tables binary (default: this checkout's release build)")
+    w = sub.add_parser("twin", help="the twins of a testbed source's cells (strims-sim's calibration_star at seeds "
+                       "1..N) into the cache as source testbed/NAME (simlab.testbed.twins)")
+    w.add_argument("src", help="the testbed source, testbed/NAME")
+    w.add_argument("--name", required=True)
+    w.add_argument("--bin", required=True, help="a strims-sim scenarios test binary")
+    w.add_argument("--seeds", type=int, default=8)
+    w.add_argument("--arm", default="twin")
+    w.add_argument("--env", action="append", help="a sim setting KEY=VALUE every twin takes too")
     a = ap.parse_args()
     if a.cmd == "duckdb":
         print(duckdb_bin())
@@ -637,6 +676,10 @@ def main():
         cmd_pull(a)
     elif a.cmd == "gc":
         cmd_gc(a)
+    elif a.cmd == "testbed":
+        cmd_testbed(a)
+    elif a.cmd == "twin":
+        cmd_twin(a)
     elif a.cmd in lake:
         lake[a.cmd](a)
     elif a.cmd == "forecast-report":

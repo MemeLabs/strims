@@ -199,7 +199,7 @@ def rows(pairs, series=False):
     out = {}
     for r in records(f"SELECT src, k, sim, row_json, wall_s, rss_mb FROM read_parquet({plist(runs)}, "
                      f"union_by_name=true) SEMI JOIN {wanted(pairs)} USING (src, k);"):
-        row = vocab.canonical_row(json.loads(r["row_json"]), verdict.SIM_NAMES.get(r["sim"], r["sim"]))
+        row = vocab.canonical_row(json.loads(r["row_json"]), verdict.VOCAB_SIMS.get(r["sim"], r["sim"]))
         row["_wall_s"], row["_rss_mb"] = r["wall_s"], r["rss_mb"]
         _, s = got.get((r["src"], r["k"]), ({}, None))
         row["_verdict"], row["_metrics"] = judge(s)
@@ -456,7 +456,7 @@ def views(sel, derived=True, fetch=True, say=None):
                 # written_kind the id the run wrote.
                 sim = "NULL::VARCHAR"
                 if "sim" in columns(files(srcs, "runs")):
-                    sim = ("CASE r_.sim " + " ".join(f"WHEN {q(a)} THEN {q(b)}" for a, b in verdict.SIM_NAMES.items())
+                    sim = ("CASE r_.sim " + " ".join(f"WHEN {q(a)} THEN {q(b)}" for a, b in verdict.VOCAB_SIMS.items())
                            + " ELSE r_.sim END")
                     join = "JOIN (SELECT DISTINCT k, src, sim FROM runs_all) r_ USING (k, src) "
                 cols = (f"x.* REPLACE ({current_kind_sql('x.kind', sim, 'x.value')} AS kind, "

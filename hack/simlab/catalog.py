@@ -182,8 +182,10 @@ the doc tables and that warning leave out the ppspp sim's jobs
 skipped_names'):
 
   experiments       one an experiment: a suite farm run (exp_id its name,
-                    s7ae7e), or a local suite invocation (exp_id its cache
-                    source, suite/<worktree>/<invocation>)
+                    s7ae7e), a local suite invocation (exp_id its cache
+                    source, suite/<worktree>/<invocation>), or testbed runs
+                    taken in together (simlab.testbed: exp_id their source,
+                    testbed/<name>)
   experiment_cells  one an experiment's cell (exp_id, cell)
   experiment_jobs   an experiment's jobs: (exp_id, cell, arm_label, seed)
                     names a job `k`; a job the farm reused counts in each
@@ -1961,7 +1963,7 @@ WHERE c.sim IS NULL OR c.sim NOT IN ({skipped})
 UNION ALL BY NAME
 SELECT src AS exp_id, cell, any_value({rsim}) AS sim, any_value(test) AS test,
        any_value(json_transform(env, '"MAP(VARCHAR, VARCHAR)"')) AS env
-FROM raw.runs WHERE src LIKE 'suite/%' AND sim NOT IN ({skipped}) GROUP BY src, cell;
+FROM raw.runs WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND sim NOT IN ({skipped}) GROUP BY src, cell;
 
 CREATE OR REPLACE TABLE main.experiment_jobs AS
 SELECT u.* EXCLUDE (line), j.src FROM (
@@ -1975,7 +1977,7 @@ SELECT u.* EXCLUDE (line), j.src FROM (
     WHERE f.src IS NOT NULL AND f.k IS NOT NULL AND (c.sim IS NULL OR c.sim NOT IN ({skipped}))
     UNION ALL BY NAME
     SELECT src AS exp_id, cell, arm AS arm_label, arm AS ref, k, seed, false AS reused, src AS flush, 0 AS line
-    FROM raw.runs WHERE src LIKE 'suite/%' AND sim NOT IN ({skipped})) u
+    FROM raw.runs WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND sim NOT IN ({skipped})) u
 LEFT JOIN main.jobs j USING (k)
 QUALIFY row_number() OVER (PARTITION BY u.exp_id, u.cell, u.arm_label, u.seed, u.k ORDER BY u.reused, u.line DESC) = 1;
 
@@ -2027,11 +2029,11 @@ SELECT * FROM (
            max(TRY_CAST("at" AS TIMESTAMPTZ)) AS finished_at, list(DISTINCT seed ORDER BY seed) AS seeds,
            list(DISTINCT arm ORDER BY arm) AS arm_labels, false AS pending, count(DISTINCT cell) AS cells,
            count(*) AS jobs
-    FROM raw.runs WHERE src LIKE 'suite/%' GROUP BY src)
+    FROM raw.runs WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') GROUP BY src)
 LEFT JOIN (
     SELECT src AS exp_id, map_from_entries(list({{'key': arm, 'value': commit}} ORDER BY arm)) AS arms
     FROM (SELECT src, arm, arg_max(commit, "at") AS commit FROM raw.runs
-          WHERE src LIKE 'suite/%' AND arm IS NOT NULL AND commit IS NOT NULL GROUP BY src, arm)
+          WHERE (src LIKE 'suite/%' OR src LIKE 'testbed/%') AND arm IS NOT NULL AND commit IS NOT NULL GROUP BY src, arm)
     GROUP BY src) USING (exp_id);
 """
 
@@ -2426,7 +2428,8 @@ TABLE_DOCS = {
         "table", "an experiment", "exp_id", "experiment_cells, experiment_jobs USING (exp_id)",
         "A suite farm run (kind 'farm'; exp_id its name, as suite.py farm printed it) or a local suite invocation "
         "(kind 'local'; exp_id its cache source, suite/<worktree>/<invocation>, which holds the jobs it ran itself, "
-        "not the ones it kept from earlier invocations). started_at and finished_at: its own jobs' first and last "
+        "not the ones it kept from earlier invocations), or testbed runs taken in together (kind 'local'; exp_id "
+        "their source, testbed/<name>: simlab.testbed). started_at and finished_at: its own jobs' first and last "
         "ran_at (a farm run's pending index's time before any ran); tiers (a farm run's): suite.py's TIERS, as they "
         "are now, its cells came from, each cell's the tier holding the most of its cells among those with a cell of "
         "its name, test and env (none for a cell whose env no tier's has); seeds; knob (the env variable by sim) and "
@@ -2755,7 +2758,10 @@ ORDER BY d.tbl, d.name;""")
     if not recount:
         seen.append("SELECT sim, kind, n, first_seen, last_seen FROM main.event_kinds WHERE n > 0")
     elif "events" in cols:
-        seen.append("SELECT j.sim, e.kind, count(*) AS n, min(j.ran_at) AS first_seen, max(j.ran_at) AS last_seen "
+        # A run's kinds are its vocabulary's (a testbed run's, strims-sim's).
+        vsim = " ".join(f"WHEN {q(a)} THEN {q(b)}" for a, b in verdict.VOCAB_SIMS.items())
+        seen.append(f"SELECT CASE j.sim {vsim} ELSE j.sim END AS sim, e.kind, count(*) AS n, "
+                    "min(j.ran_at) AS first_seen, max(j.ran_at) AS last_seen "
                     "FROM raw.events e JOIN main.jobs j USING (k, src) GROUP BY ALL")
     if recount and "derived_events" in cols:
         seen.append(f"SELECT {q(DERIVED_SIM)} AS sim, e.kind, count(*) AS n, min(j.ran_at), max(j.ran_at) "
