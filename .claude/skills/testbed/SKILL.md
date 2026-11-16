@@ -73,9 +73,14 @@ builds its own.
   `simdb.py index` then takes them in, naming each run's cell by its
   knobs (`<tier>:<cell>@<qdisc tree>`, else `tb-<hash>`), and the
   tables, the verdicts, the scoring macros and the views read a testbed
-  run as they read a sim run. A run that didn't stream (a node without
-  lines or records, a viewer that read nothing) has no tables, and a run
-  stamped by uutils' late `date` keys apart (TESTBED_STAMPS=date).
+  run as they read a sim run. A run with a node that never ran (its
+  harness's error, or no lines or records) has no tables, and the index
+  takes no testbed run without its own seconds rows; a run whose viewers
+  ran and read nothing is a result, kept. A run whose settings don't say
+  STAMPS=clock (run.sh's clock stamped its steps and samples) keys apart
+  (TESTBED_STAMPS=date: uutils' `date` stamps late), and so do a sampler's
+  stamps that go back (back) and a step or competing upload off its
+  schedule (TESTBED_SCHEDULE).
 - **The twin.** `simdb.py twin 'testbed/NAME' --name NAME-twin --bin
   SCENARIOS --seeds 8` runs strims-sim's `calibration_star` with each
   cell's knobs (a scenarios test binary from `cargo test --release -p

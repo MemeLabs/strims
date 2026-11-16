@@ -1530,7 +1530,7 @@ def index(workers=None, progress=None, wait=True):
                 raise
         warn_undocumented()
         warn_branch_ids()
-        warn_unstreamed()
+        warn_not_ran()
         say("write", f"index: compacting ({took():.0f} s in)")
         skipped = compacted(say)
         private = not mine["verdicts"] and made_private(cache, workers, say)
@@ -1905,14 +1905,22 @@ def knob(env, name):
     return f"{env}['STRIMS_SIM_{name}']"
 
 
-# A run of raw.runs (r) that streamed: every sim run; a testbed run whose
-# row's delivery isn't 0 and whose source holds viewer_seconds. One that
-# didn't stream (a node that never ran, a viewer that read nothing) isn't a
-# job, whatever wrote its tables: its lag measures would be empty and its
-# row's lag the best there is. testbed_tables refuses such runs; flushes
-# from before it did are told apart by what they hold.
-STREAMED = ("(r.sim IS DISTINCT FROM 'testbed' OR (coalesce(TRY_CAST(json_extract_string(r.row_json, '$.delivery') "
-            "AS DOUBLE), 1) > 0 AND r.src IN (SELECT src FROM raw.files WHERE tbl = 'viewer_seconds')))")
+# A run of raw.runs (r) whose nodes ran: every sim run; a testbed run
+# with its own `seconds` rows (a seed that ran writes them). A testbed run
+# with a node that never ran isn't a job, whatever wrote its tables (a
+# flush from before testbed_tables refused them holds a seed's events,
+# runs, scalars and viewers alone): told apart by what the run holds. A
+# run whose viewers ran and read nothing (starved) is a result and stays.
+# With no raw.seconds at all (`seconds` not in `cols`), no testbed run ran.
+def ran_sql(cols):
+    """RAN's SQL over raw.runs r, for the raw tables `cols` holds."""
+    if "seconds" not in cols:
+        return "(r.sim IS DISTINCT FROM 'testbed')"
+    return ("(r.sim IS DISTINCT FROM 'testbed' OR (r.k, r.src) IN "
+            "(SELECT DISTINCT k, src FROM raw.seconds WHERE starts_with(k, 'tb-')))")
+
+
+RAN = ran_sql({"seconds"})
 
 # The runs of raw.runs (r) that are their source's experiment's, not a
 # suite farm run's (whose experiments its index names): a suite
@@ -1931,7 +1939,7 @@ WITH cand AS (
            row_number() OVER (PARTITION BY r.k ORDER BY s.n_tables DESC, coalesce(s.manifest_at, '') DESC,
                               s.seq DESC, r.src DESC) AS rn
     FROM raw.runs r JOIN raw.sources s USING (src)
-    WHERE {streamed}),
+    WHERE {ran}),
 canon AS (SELECT * EXCLUDE (rn) FROM cand WHERE rn = 1),
 fi AS (SELECT k, arg_min(f, (f.reused_from IS NOT NULL AND f.reused_from <> f.matrix, f.ran_at, f.line)) AS f
        FROM raw.farm_index f WHERE k IS NOT NULL GROUP BY k),
@@ -1988,7 +1996,7 @@ SELECT exp_id, cell, any_value({rsim}) AS sim, any_value(test) AS test, any_valu
 FROM (SELECT {local_exp} AS exp_id, sim, test, json_transform(env, '"MAP(VARCHAR, VARCHAR)"') AS env,
              CASE WHEN sim = 'testbed' THEN testbed_cell(json_transform(env, '"MAP(VARCHAR, VARCHAR)"'))
                   ELSE cell END AS cell
-      FROM raw.runs r WHERE {local} AND sim NOT IN ({skipped}) AND {streamed})
+      FROM raw.runs r WHERE {local} AND sim NOT IN ({skipped}) AND {ran})
 GROUP BY exp_id, cell;
 
 CREATE OR REPLACE TABLE main.experiment_jobs AS
@@ -2006,7 +2014,7 @@ SELECT u.* EXCLUDE (line), j.src FROM (
            CASE WHEN sim = 'testbed' THEN testbed_cell(json_transform(env, '"MAP(VARCHAR, VARCHAR)"'))
                 ELSE cell END AS cell,
            arm AS arm_label, arm AS ref, k, seed, false AS reused, src AS flush, 0 AS line
-    FROM raw.runs r WHERE {local} AND sim NOT IN ({skipped}) AND {streamed}) u
+    FROM raw.runs r WHERE {local} AND sim NOT IN ({skipped}) AND {ran}) u
 LEFT JOIN main.jobs j USING (k)
 QUALIFY row_number() OVER (PARTITION BY u.exp_id, u.cell, u.arm_label, u.seed, u.k ORDER BY u.reused, u.line DESC) = 1;
 
@@ -2294,12 +2302,12 @@ def sim_tables(cols):
 
 def main_version():
     """The main tables' version: a digest of the SQL that makes the jobs and
-    the experiments (JOBS_SQL, EXPERIMENTS_SQL, STREAMED, the testbed
+    the experiments (JOBS_SQL, EXPERIMENTS_SQL, RAN, the testbed
     keying) and of the tiers' cells it keys testbed runs by, so a change to
     any makes them again at the next index, the data unchanged."""
     from . import testbed
 
-    text = "\n".join([JOBS_SQL, EXPERIMENTS_SQL, STREAMED, LOCAL_RUNS, LOCAL_EXP, testbed.cell_sql("raw.tier_cells"),
+    text = "\n".join([JOBS_SQL, EXPERIMENTS_SQL, RAN, LOCAL_RUNS, LOCAL_EXP, testbed.cell_sql("raw.tier_cells"),
                       json.dumps(tier_cells(), sort_keys=True)])
     return hashlib.sha256(text.encode()).hexdigest()[:12]
 
@@ -2320,11 +2328,11 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None, hidden
 
     out = [testbed.cell_sql("raw.tier_cells"), JOBS_SQL.format(csim=sim_case("csim"), promoted=",\n       ".join(
         f"{knob('env', v)} AS {n}" for n, v in PROMOTED.items()),
-        job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped, streamed=STREAMED)]
+        job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped, ran=ran_sql(cols))]
     out.append(COSTS_SQL.format(**{k: repr(v) for k, v in s3_prices().items()}))
     out.append(EXPERIMENTS_SQL.format(csim=sim_case("c.sim"), rsim=sim_case("sim"),
                                       job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped,
-                                      streamed=STREAMED, local=LOCAL_RUNS, local_exp=LOCAL_EXP))
+                                      ran=ran_sql(cols), local=LOCAL_RUNS, local_exp=LOCAL_EXP))
     out.append(AVAILABILITY_SQL.format(days=store.s3_kept_days()))
     out.append(EXP_RUNS_SQL)
     out += commits_sql(tmp, ins, parsed, commits)
@@ -2959,16 +2967,16 @@ def warn_branch_ids():
               "rebased onto the vocabulary", file=sys.stderr)
 
 
-def warn_unstreamed():
-    """Warns on stderr of the testbed runs the jobs leave out for not
-    streaming (STREAMED)."""
+def warn_not_ran():
+    """Warns on stderr of the testbed runs the jobs leave out for a node
+    that never ran (RAN)."""
     try:
         r = lake(f"SELECT count(*) AS n, list(DISTINCT split_part(src, '/', 1) || '/' || split_part(src, '/', 2))[:3] "
-                 f"AS some FROM raw.runs r WHERE NOT {STREAMED};")[0]
+                 f"AS some FROM raw.runs r WHERE NOT {RAN};")[0]
     except store_host.DuckError:
         return
     if r["n"]:
-        print(f"index: {r['n']} testbed runs that didn't stream aren't jobs (no viewer read a frame: "
+        print(f"index: {r['n']} testbed runs with a node that never ran aren't jobs (no seconds of their own: "
               f"{', '.join(r['some'])})", file=sys.stderr)
 
 

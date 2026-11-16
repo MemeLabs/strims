@@ -1211,8 +1211,8 @@ CREATE OR REPLACE MACRO viewers_link_overhead(env) AS
 -- (a side: structs of a job's `k`, its `cell` and `seed`) over the stream's
 -- seconds [lo_s, hi_s), one row a measure, the same SQL over a testbed
 -- run's tables and a sim run's: k, src, sim, cell, seed, measure, value.
--- A run whose viewers read no frame (viewer_seconds' frames) didn't
--- stream and gives no measure at all, so each measure counts the same runs;
+-- A starved run (no viewer read a frame: a testbed run, a collapsed twin)
+-- is a result too, its lag measures carried across seconds without reads;
 -- a measure a run's tables lack is left out. Bytes are in one of two
 -- units, each side's from what it records: IP bytes (each packet's IP
 -- length: a testbed capture's; a sim's link charge less its access link
@@ -1306,8 +1306,7 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
     WITH j AS (
         SELECT DISTINCT u.cell, u.seed::BIGINT AS seed, b.k, b.src, b.sim, b.bin_ms,
                link_overhead(b.env['STRIMS_SIM_CAL_SEED_LINK']) AS seed_ovh, viewers_link_overhead(b.env) AS viewer_ovh
-        FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k
-        WHERE EXISTS (SELECT 1 FROM viewer_seconds v WHERE v.k = b.k AND v.src = b.src AND v.frames > 0)),
+        FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k),
     lag AS (
         SELECT l.k, l.src, l.sec, max(l.lag_ms) AS lag_ms
         FROM viewer_lag_of(jobs) l WHERE l.sec >= lo_s AND l.sec < hi_s GROUP BY ALL),

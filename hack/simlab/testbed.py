@@ -165,16 +165,21 @@ def tier_rows():
             for t, cells in suite.TIERS.items() for c in cells]
 
 
+def tiers_sql(name, temp=False):
+    """suite.TIERS' cells (tier_rows) as table `name`, for cell_sql."""
+    tiers = " UNION ALL ".join(f"SELECT {store_host.q(r['tier'])} AS tier, {store_host.q(r['cell'])} AS cell, "
+                               f"{store_host.q(r['test'] or '')} AS test, {map_sql(r['env'])} AS env"
+                               for r in tier_rows())
+    return f"CREATE OR REPLACE {'TEMP ' if temp else ''}TABLE {name} AS {tiers};"
+
+
 def cells_of(envs):
     """Each of `envs`' cell, by cell_sql's keying over suite.TIERS."""
     envs = list(envs)
     if not envs:
         return []
-    tiers = " UNION ALL ".join(f"SELECT {store_host.q(r['tier'])} AS tier, {store_host.q(r['cell'])} AS cell, "
-                               f"{store_host.q(r['test'] or '')} AS test, {map_sql(r['env'])} AS env"
-                               for r in tier_rows())
     rows = " UNION ALL ".join(f"SELECT {i} AS i, {map_sql(e)} AS env" for i, e in enumerate(envs))
-    got = store_host.duck(f"CREATE TEMP TABLE tiers AS {tiers};\n{cell_sql('tiers', temp=True)}\n"
+    got = store_host.duck(f"{tiers_sql('tiers', temp=True)}\n{cell_sql('tiers', temp=True)}\n"
                           f"SELECT i, testbed_cell(env) AS cell FROM ({rows}) ORDER BY i;")
     return [r["cell"] for r in got]
 

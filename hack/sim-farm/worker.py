@@ -75,8 +75,8 @@ again, simlab.testbed.cell_sql), its arm the job's, its seed its
 `repeat`, its commit and binary_sha256 the job's (its arm's commit, its
 bundle's sha256);
 its result says `key` and `flush` as a stored test job's does. Tables
-that fail (a run that didn't stream, which testbed_tables refuses) fail
-the job: its result has no row, its `error` and `tables_error` saying why,
+that fail (a run with a node that never ran, which testbed_tables
+refuses) fail the job: its result has no row, its `error` and `tables_error` saying why,
 and the controller counts it failed, logs it and runs it again.
 
 With --imds it polls the instance metadata (--imds-url, for tests) every
@@ -845,7 +845,7 @@ def finish_testbed(root: Path, r: Running, work: Path, ok: bool) -> dict:
         return {**res, "error": "no node-<i>.jsonl in the out dir"}
     silent = [i for i, n in lines.items() if n == 0]
     if silent:
-        # A node that never ran: the run didn't stream.
+        # A node that never ran: no run to take in.
         why = (out / f"node-{silent[0]}.err")
         why = why.read_text(errors="replace").strip().splitlines()[:1] if why.exists() else []
         return {**res, "error": f"node-{', '.join(silent)}.jsonl without lines" + (f": {why[0]}" if why else "")}

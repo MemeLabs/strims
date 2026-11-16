@@ -411,6 +411,20 @@ def views(sel, derived=True, fetch=True, say=None):
             f"ELSE coalesce(json_extract_string(r.env, '$.' || m.knob), r.arm) END AS arm) "
             f"FROM {read_runs} r LEFT JOIN (VALUES {pairs}) m(matrix, cell, knob) ON r.matrix = m.matrix)"
         )
+    # A testbed run's cell is its knobs' (simlab.testbed.cell_sql), as the
+    # index names it, and one with a node that never ran (no seconds of its
+    # own: catalog.RAN) is no run here either.
+    keying = []
+    if "sim" in columns(files(srcs, "runs")) and records(
+            f"SELECT count(*) AS n FROM {stored} WHERE sim = 'testbed';")[0]["n"]:
+        from . import testbed
+
+        keying = [testbed.tiers_sql("testbed_tiers"), testbed.cell_sql("testbed_tiers")]
+        secs = files(srcs, "seconds")
+        ran = (f"(r.sim IS DISTINCT FROM 'testbed' OR (r.k, r.src) IN (SELECT DISTINCT k, src FROM "
+               f"read_parquet({plist(secs)}, union_by_name=true)))" if secs else "(r.sim IS DISTINCT FROM 'testbed')")
+        read_runs = (f"(SELECT r.* REPLACE (CASE WHEN r.sim = 'testbed' THEN testbed_cell(json_transform(r.env, "
+                     f"'\"MAP(VARCHAR, VARCHAR)\"')) ELSE r.cell END AS cell) FROM {read_runs} r WHERE {ran})")
     where = []
     if sel.cell:
         where.append("(" + " OR ".join(f"cell GLOB {q(c)} OR split_part(cell, '@', 1) GLOB {q(c)}"
@@ -421,6 +435,7 @@ def views(sel, derived=True, fetch=True, say=None):
         where.append(f"seed IN ({', '.join(str(int(s)) for s in sel.seed)})")
     rank = "(VALUES " + ", ".join(f"({q(s)}, {n})" for s, n in source_ranks(srcs).items()) + ") h(src, rank)"
     sql = [
+        *keying,
         f"CREATE VIEW runs_all AS SELECT * FROM {read_runs};",
         # A key's tables come from one source, whatever cells it counts in
         # (the copies are one job's): the top of source_ranks. So (k) is a

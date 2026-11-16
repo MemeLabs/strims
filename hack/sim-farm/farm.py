@@ -426,8 +426,8 @@ arm the job's, its commit and binary_sha256 its arm's commit and bundle's
 sha256, and its seed its repeat, so a run pairs with its twin's seed of
 that number; a farm run's testbed runs are an experiment, farm/RUN. The
 run needs the S3 bucket then, as a test run does. A run whose tables
-testbed_tables can't write (one that didn't stream) fails, and is run
-again, as a failed job is.
+testbed_tables can't write (one with a node that never ran) fails, and
+is run again, as a failed job is.
 
 An arm whose tree has strims-wan's testbed_link example (run.sh's parser
 of its link specs) also builds it and packs it as the artifact LINK_BIN,
