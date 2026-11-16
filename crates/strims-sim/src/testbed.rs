@@ -289,19 +289,19 @@ pub fn knobs_of(
         }
     }
     // When the viewers join, in whole seconds as the tiers' cells give it,
-    // else in ms (the twin takes both).
-    if let Some(v) = get("JOIN_AT").filter(|&v| v != "0" && !v.is_empty()) {
+    // else in ms (the twin takes both), to the ms run.sh's --join-at takes.
+    // 0 however it's written (0.0, 00, or under half a ms) is run.sh's
+    // default, as unset is: no knob.
+    if let Some(v) = get("JOIN_AT").filter(|&v| !v.is_empty()) {
         let s: f64 = v.parse().map_err(|e| format!("JOIN_AT={v}: {e}"))?;
         if !s.is_finite() || s < 0.0 {
             return Err(format!("JOIN_AT={v}: seconds, 0 or more"));
         }
-        if s.fract() == 0.0 {
-            put("STRIMS_SIM_CAL_JOIN_AT", num(s));
-        } else {
-            put(
-                "STRIMS_SIM_CAL_JOIN_AT_MS",
-                ((s * 1000.0).round() as u64).to_string(),
-            );
+        let ms = (s * 1000.0).round() as u64;
+        if ms > 0 && ms.is_multiple_of(1000) {
+            put("STRIMS_SIM_CAL_JOIN_AT", (ms / 1000).to_string());
+        } else if ms > 0 {
+            put("STRIMS_SIM_CAL_JOIN_AT_MS", ms.to_string());
         }
     }
     if let Some(steps) = get("SEED_UP_STEPS").filter(|s| !s.trim().is_empty()) {
@@ -1838,6 +1838,19 @@ mod tests {
         let k = of(&format!("{base}JOIN_AT=2.5\n"), None).unwrap();
         assert_eq!(k["STRIMS_SIM_CAL_JOIN_AT_MS"], "2500");
         assert!(!k.contains_key("STRIMS_SIM_CAL_JOIN_AT"));
+        assert_eq!(
+            of(&format!("{base}JOIN_AT=3.0\n"), None).unwrap()["STRIMS_SIM_CAL_JOIN_AT"],
+            "3"
+        );
+        // 0 in any spelling keys as unset does.
+        let unset = of(base, None).unwrap();
+        for zero in ["0", "0.0", "00", "0.0001"] {
+            assert_eq!(
+                of(&format!("{base}JOIN_AT={zero}\n"), None).unwrap(),
+                unset,
+                "JOIN_AT={zero}"
+            );
+        }
         let cal = Calibration::from_knobs(|n| k.get(n).cloned());
         assert_eq!(cal.join_at_ms, Some(2500));
         assert!(
