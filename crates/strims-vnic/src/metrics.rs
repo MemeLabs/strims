@@ -45,11 +45,6 @@ pub struct HostMetrics {
     pub echo_unknown_count: u64,
     /// Echoes whose round trip came out negative (the clock stepped back).
     pub path_negative_rtt_count: u64,
-    /// Path trains started, and the filler written to fill them out
-    /// (frames on the keepalive port, headers included, also in
-    /// `keepalive_write_bytes`).
-    pub train_count: u64,
-    pub filler_write_bytes: u64,
     /// Links closed by the handshake deadline.
     pub handshake_timeout_count: u64,
     /// Links in the handshake closed to make room for newer ones.

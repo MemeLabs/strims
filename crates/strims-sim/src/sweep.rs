@@ -78,7 +78,7 @@
 //!   share of the first swarm's viewers hostile hosts of its kind
 //!   ([`Scenario::hostile`]; the kinds are `hostile.rs`'s: `free-rider`,
 //!   `liar`, `whitewasher`, `hog`, `grabber`, `withholder`, `colluder`,
-//!   `free-rider+echo`, `liar+echo`, `liar+gap`), the kinds interleaved; `mix` takes
+//!   `free-rider+echo`, `liar+echo`), the kinds interleaved; `mix` takes
 //!   the dishonest mix ([`Scenario::mix`]), which the run draws: 10-20 %
 //!   of the viewers, free riders and liars in turn; `off` none.
 //! - `STRIMS_SIM_CHURN=<viewers/min>:<away s>` makes the first swarm's

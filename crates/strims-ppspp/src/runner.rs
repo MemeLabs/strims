@@ -301,8 +301,6 @@ struct UploadMeter {
     /// The largest write rate since it was set, and when: a newer one, or
     /// any once it is [`PEAK_SPAN`] old, replaces it.
     written_peak: Option<(f64, Time)>,
-    /// The uplink the driver measures ([`Runner::set_uplink`]).
-    uplink: Option<u64>,
 }
 
 /// While a queue stands below the runner the uplink delivers all it can:
@@ -408,7 +406,6 @@ impl UploadMeter {
             drained: None,
             standing: false,
             written_peak: None,
-            uplink: None,
         }
     }
 
@@ -497,7 +494,6 @@ impl UploadMeter {
             busy_recent: busy_recent.clamp(0.0, 1.0),
             push_busy_recent: push_busy_recent.clamp(0.0, 1.0),
             hint: self.hint,
-            uplink: self.uplink.map(|u| u as f64),
             others: 0.0,
             queue_delay: self.queue_delay,
             latest_delay: self.latest_delay,
@@ -913,16 +909,6 @@ impl Runner {
     /// configuration, never from a peer.
     pub fn set_upload_capacity(&mut self, bytes_per_sec: Option<u64>) {
         self.upload.hint = bytes_per_sec.filter(|&b| b > 0);
-    }
-
-    /// The node's uplink as the driver measures it, in bytes per second
-    /// (vnic's uplink trains: [`strims_base::path::UplinkTrains`]), or
-    /// `None` without a measure. Push admission, shedding and seed
-    /// allocation take it as they take a known capacity
-    /// ([`Runner::set_upload_capacity`]), which stands over it. The driver
-    /// sets it every pass.
-    pub fn set_uplink(&mut self, bytes_per_sec: Option<u64>) {
-        self.upload.uplink = bytes_per_sec.filter(|&b| b > 0);
     }
 
     // --- the link's path --------------------------------------------------

@@ -1919,8 +1919,7 @@ impl Report {
     /// `up_wire`): the ppspp layers from
     /// the honest hosts' runners; `up_hostile`, what hostile hosts wrote;
     /// `up_ports`, vnic's other ports (vpn, rpc); `up_vnic`, vnic's frame
-    /// headers, control frames and link handshakes, less `up_filler`, its
-    /// uplink trains' filler; and in WAN mode
+    /// headers, control frames and link handshakes; and in WAN mode
     /// `up_transport`, the transports' framing and resends, and `up_acks`,
     /// pure ACKs and SACKs alone. Then the waste in the honest viewers'
     /// inbound data, the wire bytes per byte of the stream they read, each
@@ -1938,7 +1937,6 @@ impl Report {
         let hostile = |h: HostIx| matches!(self.class(h), HostClass::Hostile(_));
         let (mut up, mut down) = (ChannelMetrics::default(), ChannelMetrics::default());
         let (mut ports, mut vnic, mut transport, mut acks, mut hostile_bytes) = (0, 0, 0, 0, 0);
-        let mut filler = 0;
         let (mut wire_down, mut packets, mut small, mut frames, mut frame_bytes) = (0, 0, 0, 0, 0);
         let mut ack_packets = 0;
         let seeds = self.seeds();
@@ -1958,11 +1956,7 @@ impl Report {
                 let sent = h.ppspp.outbound.wire_bytes();
                 up.merge(&h.ppspp.outbound);
                 ports += h.frame_bytes.saturating_sub(sent);
-                vnic += h
-                    .uploaded
-                    .saturating_sub(h.frame_bytes.max(sent))
-                    .saturating_sub(h.filler_bytes);
-                filler += h.filler_bytes;
+                vnic += h.uploaded.saturating_sub(h.frame_bytes.max(sent));
                 frames += h.frames_written;
                 frame_bytes += h.frame_bytes;
                 if !seeds.contains(&i) {
@@ -1998,7 +1992,7 @@ impl Report {
                 v.stats.received.len() * size as u64
             })
             .sum();
-        let up_wire = up.wire_bytes() + ports + vnic + filler + hostile_bytes + transport + acks;
+        let up_wire = up.wire_bytes() + ports + vnic + hostile_bytes + transport + acks;
         let waste = down
             .data_bytes
             .saturating_sub(down.new_bytes + down.stale_bytes + down.invalid_bytes);
@@ -2016,7 +2010,6 @@ impl Report {
             .int(RowInt::UpChanHdr, up.header_bytes)
             .int(RowInt::UpHostile, hostile_bytes)
             .int(RowInt::UpVnic, vnic)
-            .int(RowInt::UpFiller, filler)
             .int(RowInt::UpPorts, ports)
             .int(RowInt::UpTransport, transport)
             .int(RowInt::UpAcks, acks)

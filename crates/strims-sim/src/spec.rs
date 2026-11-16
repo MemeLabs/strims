@@ -607,9 +607,6 @@ pub struct Scenario {
 /// - `index-sample`: peer index searches are answered with a sample of the
 ///   holders, drawn for each search, not the nearest to the requester
 ///   (`strims_vpn::IndexAnswers`).
-/// - `trains-seed`: the hosts that seed a swarm send uplink train legs, their
-///   reading at most 1.5 s stale while the uplink holds
-///   (`NodeConfig::train_interval`).
 pub const EXP_FLAGS: &[&str] = &[
     "cap6",
     "cap8",
@@ -632,7 +629,6 @@ pub const EXP_FLAGS: &[&str] = &[
     "pool-near",
     "pool-find",
     "index-sample",
-    "trains-seed",
 ];
 
 impl Scenario {

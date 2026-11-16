@@ -437,12 +437,8 @@ pub(crate) struct UploadInfo {
     /// pushes were queued.
     pub(crate) busy_recent: f64,
     pub(crate) push_busy_recent: f64,
-    /// The capacity the driver knows, in bytes per second ...
+    /// The capacity the driver knows, in bytes per second.
     pub(crate) hint: Option<u64>,
-    /// ... and the uplink it measures (vnic's uplink trains), which stands
-    /// for the hint while it knows none, no less than what the links
-    /// deliver.
-    pub(crate) uplink: Option<f64>,
     /// The push rate the node's other swarms commit (their subscriptions
     /// at their stream rates), in bytes per second: this swarm's
     /// admission, shedding and seed budget leave it room.
@@ -560,14 +556,6 @@ impl UploadInfo {
         match (measured, self.hint.map(|h| h as f64)) {
             (Some(m), Some(h)) if self.busy >= SATURATED_BUSY => Some(m.min(h)),
             (_, Some(h)) => Some(h),
-            // The uplink carries at least what its links deliver: a leg
-            // behind a window its link's acknowledgements hold back, or
-            // behind a loss, reads low where the uplink runs near full.
-            // Data that waits in the runner doesn't bound it: the wait is
-            // as often for one link that holds its own data back (a slow
-            // or departed receiver) as for a full uplink, whose fall the
-            // trains read within a few legs.
-            (_, None) if let Some(u) = self.uplink => Some(u.max(self.delivered)),
             // Below the runner the data waits unseen by the busy time, which
             // reads many times the uplink while buffers take writes at once,
             // and next to nothing while the transport stalls. Under a
@@ -3229,24 +3217,6 @@ mod tests {
         };
         assert_eq!(idle.capacity(), Some(1000.0 / MIN_BUSY));
         assert_eq!(UploadInfo::default().capacity(), None);
-    }
-
-    #[test]
-    fn the_measured_uplink_is_at_least_what_the_links_deliver() {
-        let u = UploadInfo {
-            rate: 900,
-            uplink: Some(300.0),
-            delivered: 800.0,
-            ..Default::default()
-        };
-        assert_eq!(u.capacity(), Some(800.0));
-        // Data waiting in the runner doesn't bound it.
-        let busy = UploadInfo {
-            busy_recent: 1.0,
-            uplink: Some(2000.0),
-            ..u
-        };
-        assert_eq!(busy.capacity(), Some(2000.0));
     }
 
     #[test]

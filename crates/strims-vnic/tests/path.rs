@@ -65,8 +65,8 @@ fn probes(wire: &[u8]) -> Vec<u32> {
     records(wire)
         .into_iter()
         .filter_map(|r| match r {
-            Record::Probe(n) | Record::TimedProbe(n) => Some(n),
-            Record::Echo(_) | Record::Gap(_) => None,
+            Record::Probe(n) => Some(n),
+            Record::Echo(_) => None,
         })
         .collect()
 }
@@ -373,7 +373,7 @@ fn a_holding_link_echoes_its_first_probe_read_a_hold_later() {
     let hold = Duration::from_millis(300);
     let (mut a, la, mut b, lb) = linked_greedy(EchoGreed {
         hold: Some(hold),
-        ..EchoGreed::default()
+        forge: false,
     });
     b.host.set_probe_interval(None);
     idle(&mut a, ms(0));
@@ -400,8 +400,8 @@ fn a_holding_link_echoes_its_first_probe_read_a_hold_later() {
 #[test]
 fn a_forging_link_echoes_nonces_its_peer_never_sent() {
     let (mut a, la, mut b, lb) = linked_greedy(EchoGreed {
+        hold: None,
         forge: true,
-        ..EchoGreed::default()
     });
     idle(&mut a, ms(0));
     let mut wire = a.take_transmit(la);
@@ -447,40 +447,4 @@ fn probes_count_every_byte_the_link_buffers() {
     // Written after the probe, by the echo's arrival: 104 + 54.
     assert_eq!(r.in_flight, 158);
     assert_eq!(r.written_since, 0);
-}
-
-/// The wire bytes of a control frame holding `records`, in order.
-fn control_records(records: &[Record]) -> Vec<u8> {
-    let mut buf = [0u8; control::MAX_CONTROL_FRAME_LEN];
-    let rs: Vec<Option<Record>> = records.iter().copied().map(Some).collect();
-    let n = control::encode_records(&rs, &mut buf).unwrap();
-    buf[..n].to_vec()
-}
-
-#[test]
-fn a_timed_probe_is_echoed_with_its_gap_which_a_shrinking_link_divides() {
-    for (greed, gap_us) in [
-        (EchoGreed::default(), 12_000),
-        (
-            EchoGreed {
-                shrink_gaps: Some(4),
-                ..EchoGreed::default()
-            },
-            3_000,
-        ),
-    ] {
-        let (_a, _la, mut b, lb) = linked_greedy(greed);
-        b.host.set_probe_interval(None);
-        let mut first = control_records(&[Record::Probe(7)]);
-        b.input(lb, ms(0), &mut first, &mut no_handlers).unwrap();
-        let mut timed = control_records(&[Record::TimedProbe(8)]);
-        b.input(lb, ms(12), &mut timed, &mut no_handlers).unwrap();
-        idle(&mut b, ms(12));
-        let back = b.take_transmit(lb);
-        assert_eq!(
-            records(&back),
-            vec![Record::Echo(8), Record::Gap(gap_us)],
-            "{greed:?}"
-        );
-    }
 }

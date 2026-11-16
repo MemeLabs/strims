@@ -90,32 +90,6 @@ pub const MIN_PATHS: usize = 3;
 /// several probe intervals of a link that writes, so a link that stopped
 /// writing drops out.
 pub const LATEST_MAX_AGE: Duration = Duration::SECOND;
-/// The resolution a driver's clock and event loop time a read to.
-pub const TRAIN_TICK: Duration = Duration::from_millis(1);
-/// How long an uplink train's leg takes to drain at the uplink it measures
-/// ([`UplinkTrains`]): fifteen [`TRAIN_TICK`]s, so a leg reads its rate
-/// within a few percent ...
-pub const TRAIN_DRAIN: Duration = Duration::from_millis(15);
-/// ... in legs of at most this many bytes on a stream link, which its
-/// transport's window takes at once even after idling (TCP's restart
-/// window of ten packets) ...
-pub const TRAIN_LEG: u64 = 12 * 1024;
-/// ... and on a data channel (SCTP's of four).
-pub const TRAIN_LEG_CHANNEL: u64 = 4 * 1024;
-/// The latest legs, on as many links, that [`UplinkTrains::rate`] reads:
-/// the fewest whose ⌊k/3⌋+1-th fastest no single peer raises past an
-/// honest leg's ([`MIN_PATHS`]), so a fall of the uplink shows in as few
-/// legs as that allows.
-pub const TRAIN_LEGS: usize = MIN_PATHS;
-/// How long a leg counts toward [`UplinkTrains::rate`], and how long one
-/// may wait for its echo.
-pub const TRAIN_SPAN: Duration = Duration::from_secs(10);
-/// How far back a link's legs that agree pool into its reading
-/// ([`UplinkTrains`]).
-pub const TRAIN_POOL: Duration = Duration::from_secs(60);
-/// Legs an [`UplinkTrains`] keeps: a [`TRAIN_POOL`] of them a few times
-/// a second.
-const TRAINS: usize = 256;
 
 /// One round trip, from a probe to its echo.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -218,41 +192,6 @@ struct Acked {
     delivered: u64,
 }
 
-/// A train in progress ([`PathMeter::start_train`]).
-#[derive(Clone, Copy, Debug)]
-struct OpenTrain {
-    /// The first probe's nonce, when it went, and the bytes written
-    /// through it.
-    first: u32,
-    sent: Time,
-    written: u64,
-    /// The bytes to write between the two probes.
-    len: u64,
-    /// The closing probe's nonce and the bytes written through it, once
-    /// written.
-    last: Option<(u32, u64)>,
-}
-
-/// One leg of a train: what [`PathMeter::take_train`] gives once its
-/// closing probe's echo came.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct LegSample {
-    /// When the closing probe's echo came.
-    pub at: Time,
-    /// The bytes after the first probe, through the closing one.
-    pub bytes: u64,
-    /// How long after the first probe the receiver read the closing one,
-    /// as its echo says ([`Echo::read_timed`]): the time those bytes took
-    /// to arrive.
-    pub gap: Duration,
-}
-
-/// `bytes` per second over `d`; `None` for a span that isn't positive.
-fn rate_over(bytes: u64, d: Duration) -> Option<u64> {
-    let nanos = u128::try_from(d.as_nanos()).ok().filter(|&n| n > 0)?;
-    u64::try_from(u128::from(bytes) * 1_000_000_000 / nanos).ok()
-}
-
 #[derive(Clone, Copy, Debug)]
 struct Latest {
     at: Time,
@@ -287,9 +226,6 @@ pub struct PathMeter {
     samples: u64,
     unknown: u64,
     negative: u64,
-    train: Option<OpenTrain>,
-    /// The latest train's measure, until taken.
-    leg: Option<LegSample>,
 }
 
 impl Default for PathMeter {
@@ -313,8 +249,6 @@ impl PathMeter {
             samples: 0,
             unknown: 0,
             negative: 0,
-            train: None,
-            leg: None,
         }
     }
 
@@ -333,7 +267,7 @@ impl PathMeter {
     /// any and [`QUIET_PROBE_INTERVAL`] passed (or `interval`, if longer).
     /// Never while [`MAX_PROBES`] are unanswered.
     pub fn probe_due(&self, now: Time, interval: Duration) -> bool {
-        if !self.can_probe() || self.train_open(now) {
+        if !self.can_probe() {
             return false;
         }
         if self.last_probe.is_nil() {
@@ -370,99 +304,18 @@ impl PathMeter {
         self.sent = 0;
     }
 
-    /// Makes the probe just written ([`PathMeter::probe`]) a train's first:
-    /// the owner writes `len` bytes behind it back to back (filler where it
-    /// has no data: [`PathMeter::train_left`]), then a closing probe
-    /// ([`PathMeter::close_train`]). The closing probe's echo shows how
-    /// long they took to drain ([`PathMeter::take_train`]). No other
-    /// probe goes out while a train is open, for [`TRAIN_SPAN`] at most.
-    /// Ignored without such a probe, or while a train is open.
-    pub fn start_train(&mut self, len: u64, now: Time) {
-        if self.train_open(now) || self.last_probe != now {
-            return;
-        }
-        let Some(p) = self.unanswered().last().copied() else {
-            return;
-        };
-        self.train = Some(OpenTrain {
-            first: p.nonce,
-            sent: now,
-            written: p.written,
-            len,
-            last: None,
-        });
-    }
-
-    /// A train is open: started within [`TRAIN_SPAN`], its closing probe's
-    /// echo yet to come.
-    pub fn train_open(&self, now: Time) -> bool {
-        self.train.is_some_and(|t| now - t.sent < TRAIN_SPAN)
-    }
-
-    /// The bytes the open train still needs before its closing probe;
-    /// `None` without one, or once it is closed.
-    pub fn train_left(&self) -> Option<u64> {
-        let t = self.train.filter(|t| t.last.is_none())?;
-        Some(t.len.saturating_sub(self.written.saturating_sub(t.written)))
-    }
-
-    /// The open train's first probe is the last thing written: no byte
-    /// follows it yet.
-    pub fn train_unstarted(&self) -> bool {
-        self.train
-            .is_some_and(|t| t.last.is_none() && self.written == t.written)
-    }
-
-    /// Makes the probe just written the open train's closing one.
-    pub fn close_train(&mut self) {
-        let last = self.unanswered().last().copied();
-        if let (Some(t), Some(p)) = (self.train.as_mut(), last)
-            && t.last.is_none()
-            && p.nonce != t.first
-        {
-            t.last = Some((p.nonce, p.written));
-        }
-    }
-
     /// Takes the echo of `nonce`, arriving at `now`. It answers its probe and
     /// every older one. The sample is `None` when the clock stepped back
-    /// past the probe, and for a train's closing probe, whose echo times
-    /// its train ([`PathMeter::echo_gap`]); the bytes still count as
-    /// delivered.
+    /// past the probe; the bytes still count as delivered.
     pub fn echo(&mut self, nonce: u32, now: Time) -> Result<Option<PathSample>, UnknownEcho> {
-        self.echo_gap(nonce, None, now)
-    }
-
-    /// [`PathMeter::echo`] for an echo that carries the receiver's `gap`
-    /// ([`Echo::gap`]): for a train's closing probe, how long after the
-    /// first it was read, which [`PathMeter::take_train`] then gives.
-    pub fn echo_gap(
-        &mut self,
-        nonce: u32,
-        gap: Option<Duration>,
-        now: Time,
-    ) -> Result<Option<PathSample>, UnknownEcho> {
         let Some(i) = self.unanswered().iter().position(|p| p.nonce == nonce) else {
             self.unknown += 1;
             self.len = 0;
-            self.train = None;
             return Err(UnknownEcho);
         };
         let Some(p) = self.probes.get(i).copied() else {
             return Err(UnknownEcho);
         };
-        // An echo of a later probe answers the train's closing one with no
-        // round trip of its own: the train measures nothing.
-        let closes = self.train.and_then(|t| t.last).map(|(n, _)| n);
-        let skipped = closes.is_some_and(|n| {
-            n != nonce
-                && self
-                    .probes
-                    .get(..i)
-                    .unwrap_or_default()
-                    .iter()
-                    .any(|q| q.nonce == n)
-        });
         self.probes.copy_within(i + 1..self.len, 0);
         self.len -= i + 1;
         let rate = self.acknowledge(Acked {
@@ -470,27 +323,9 @@ impl PathMeter {
             acked: now,
             delivered: p.written,
         });
-        if skipped {
-            self.train = None;
-        }
         let rtt = now - p.sent;
         if rtt.is_negative() {
             self.negative += 1;
-            if closes == Some(nonce) {
-                self.train = None;
-            }
-            return Ok(None);
-        }
-        if let Some(t) = self.train
-            && let Some((n, written)) = t.last
-            && n == nonce
-        {
-            self.leg = gap.map(|gap| LegSample {
-                at: now,
-                bytes: written.saturating_sub(t.written),
-                gap,
-            });
-            self.train = None;
             return Ok(None);
         }
         self.samples += 1;
@@ -526,12 +361,6 @@ impl PathMeter {
             queued: l.queued,
             written_since: self.written.saturating_sub(l.written),
         })
-    }
-
-    /// The latest train's measure, once its closing probe's echo came; it
-    /// is taken.
-    pub fn take_train(&mut self) -> Option<LegSample> {
-        self.leg.take()
     }
 
     /// Bytes put into the stream so far.
@@ -597,11 +426,7 @@ fn bytes_in(rate: u64, d: Duration) -> u64 {
 /// waiting for its echo.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Echo {
-    /// The probe waiting, when it was read, and for a timed probe how long
-    /// after the probe before it.
-    pending: Option<(u32, Time, Option<Duration>)>,
-    /// When the latest probe was read.
-    last_read: Option<Time>,
+    pending: Option<(u32, Time)>,
     last_hold: Duration,
 }
 
@@ -609,17 +434,7 @@ impl Echo {
     /// Notes a probe read at `now`. It replaces any probe still waiting:
     /// echoing the newest answers the older ones too.
     pub fn read(&mut self, nonce: u32, now: Time) {
-        self.pending = Some((nonce, now, None));
-        self.last_read = Some(now);
-    }
-
-    /// Notes a timed probe read at `now`: its echo carries how long after
-    /// the probe before it this one was read ([`Echo::gap`]), the time the
-    /// bytes between them took to arrive (see [`UplinkTrains`]).
-    pub fn read_timed(&mut self, nonce: u32, now: Time) {
-        let gap = self.last_read.map(|t| (now - t).max(Duration::ZERO));
-        self.pending = Some((nonce, now, gap));
-        self.last_read = Some(now);
+        self.pending = Some((nonce, now));
     }
 
     /// A probe waits for its echo.
@@ -627,15 +442,9 @@ impl Echo {
         self.pending.is_some()
     }
 
-    /// The gap the echo waiting carries, for a timed probe read after
-    /// another.
-    pub fn gap(&self) -> Option<Duration> {
-        self.pending.and_then(|p| p.2)
-    }
-
     /// Takes the nonce to echo now, and how long the probe waited for it.
     pub fn take(&mut self, now: Time) -> Option<(u32, Duration)> {
-        let (nonce, read, _) = self.pending.take()?;
+        let (nonce, read) = self.pending.take()?;
         self.last_hold = (now - read).max(Duration::ZERO);
         Some((nonce, self.last_hold))
     }
@@ -747,204 +556,6 @@ pub fn aggregate(scratch: &mut [Duration]) -> Option<Duration> {
     let k = scratch.len() / 3;
     scratch.select_nth_unstable(k);
     scratch.get(k).copied()
-}
-
-/// A node's uplink as its trains show it.
-///
-/// A train's leg goes on one link: a probe written alone (so that its
-/// receiver reads it as it arrives, not with the packet or segment it
-/// would share), filler behind it and a closing probe
-/// ([`PathMeter::start_train`]), no more than its transport's window takes
-/// after idling ([`TRAIN_LEG`], [`TRAIN_LEG_CHANNEL`]), and the bytes the
-/// uplink measured drains in [`TRAIN_DRAIN`]. The closing probe is timed
-/// ([`Echo::read_timed`]): its echo says how long after the first the
-/// receiver read it, the time the leg's bytes took to arrive, which neither
-/// the queue ahead of the leg, the path's base nor the way back (a
-/// receiver's echoes wait behind its own uplink's queue, which drains
-/// between them) enters; traffic that queues during the leg goes behind it.
-/// A leg can't read more than the narrowest of the uplink, its path and its
-/// receiver's downlink; a window that holds it back, a lost packet or
-/// another link's bytes between its probes only lower it. Legs go one at a
-/// time, apart: the data that queues behind one waits a leg's drain, not a
-/// train's.
-///
-/// A leg's gap is its receiver's claim: a peer can shorten it. Of legs on
-/// `k` links (each link's latest), the ⌊k/3⌋+1-th fastest is one no
-/// minority of their peers raises past an honest leg's, and that slow
-/// downlinks, lost packets and other traffic on a minority don't lower.
-/// With fewer than [`MIN_PATHS`] links it is their fastest: one narrow
-/// first receiver (a mobile downlink, a leg in its transport's first round
-/// trips) doesn't hold the reading down until a third link has legs, and
-/// the copies a raising liar among so few makes the budget pay for can't
-/// pass the neighbours the node has. A leg read in one piece (both probes
-/// in one read: a receiver that takes its downlink's bursts whole) drained
-/// within a [`TRAIN_TICK`], at least its bytes over one. The node's uplink
-/// is the lower of that over every link with a leg in the last
-/// [`TRAIN_SPAN`], which a third of its neighbours can't raise however its
-/// legs fell among them, and over the latest [`TRAIN_LEGS`] links, which
-/// follows the uplink.
-///
-/// A read is timed to a [`TRAIN_TICK`], so one leg's gap is off by up to a
-/// tick either way, a large share of a leg that drains in a few (a data
-/// channel's, on a wide uplink), and the fastest third of such legs are
-/// those it rounded down. A link's reading is therefore its legs of the
-/// last [`TRAIN_POOL`] pooled, their bytes over their gaps, newest first
-/// while each agrees with those after it within its own tick (two against
-/// one leg alone): the ticks average out over them, and a leg that
-/// disagrees (the uplink, the path or the receiver changed) starts the
-/// link's pool again. A link's pool is still one reading among the links'.
-///
-/// A leg slower than the uplink by more than two [`TRAIN_TICK`]s of its gap
-/// (its own and its reading's) asks for the next as soon as it is measured
-/// ([`UplinkTrains::falls`]), so a fall of the uplink shows within as many
-/// legs' round trips as outnumber the faster ones, one leg in flight at a
-/// time.
-///
-/// Legs go a staleness over [`TRAIN_LEGS`] apart
-/// ([`UplinkTrains::spacing`]), the staleness the owner allows
-/// ([`UplinkTrains::set_staleness`]), so each of the latest legs is at most
-/// about that old.
-#[derive(Clone, Debug, Default)]
-pub struct UplinkTrains {
-    /// Measured legs, oldest first. Bound: [`TRAINS`].
-    legs: std::collections::VecDeque<Leg>,
-    staleness: Duration,
-    /// When the latest leg started ([`UplinkTrains::started`]).
-    started: Time,
-}
-
-/// A measured leg ([`UplinkTrains::measured`]).
-#[derive(Clone, Copy, Debug)]
-struct Leg {
-    at: Time,
-    link: u64,
-    bytes: u64,
-    gap: Duration,
-}
-
-/// Whether a leg of `bytes` read with `gap` agrees with `rate`: the gap
-/// that rate drains them in is within two [`TRAIN_TICK`]s of it, the leg's
-/// and the one of the legs the rate came from.
-fn agrees(rate: u64, bytes: u64, gap: Duration) -> bool {
-    let slow = rate_over(bytes, gap + TRAIN_TICK * 2).unwrap_or(0);
-    let fast = rate_over(bytes, gap - TRAIN_TICK * 2).unwrap_or(u64::MAX);
-    (slow..=fast).contains(&rate)
-}
-
-impl UplinkTrains {
-    /// The latest leg, measured since the latest started, is slower than
-    /// the uplink by more than two [`TRAIN_TICK`]s of its gap: the next
-    /// should start now, to tell a fall of the uplink from a leg that met
-    /// other traffic.
-    pub fn falls(&self, now: Time) -> bool {
-        match self.legs.back() {
-            Some(l) if now - l.at <= TRAIN_SPAN && l.at > self.started => {
-                self.rate(now).is_some_and(|r| {
-                    !agrees(r, l.bytes, l.gap) && rate_over(l.bytes, l.gap).is_some_and(|x| x < r)
-                })
-            }
-            _ => false,
-        }
-    }
-
-    /// A leg started at `now`.
-    pub fn started(&mut self, now: Time) {
-        self.started = now;
-    }
-
-    /// How stale the owner lets the reading get: legs go a staleness over
-    /// [`TRAIN_LEGS`] apart.
-    pub fn set_staleness(&mut self, staleness: Duration) {
-        self.staleness = staleness;
-    }
-
-    /// The spacing between legs now (see the type's docs).
-    pub fn spacing(&self) -> Duration {
-        Duration::from_nanos(self.staleness.as_nanos() / TRAIN_LEGS as i64).max(TRAIN_DRAIN)
-    }
-
-    /// The reading of each link with a leg measured in the last
-    /// [`TRAIN_SPAN`] ([`UplinkTrains::pooled`]), the links newest first,
-    /// at most `most`.
-    fn latest(&self, now: Time, most: usize) -> Vec<u64> {
-        let mut links: Vec<u64> = Vec::new();
-        let mut rates: Vec<u64> = Vec::new();
-        for l in self.legs.iter().rev() {
-            if now - l.at > TRAIN_SPAN || rates.len() == most {
-                break;
-            }
-            if !links.contains(&l.link) {
-                links.push(l.link);
-                rates.push(self.pooled(l.link, now));
-            }
-        }
-        rates
-    }
-
-    /// `link`'s reading: its legs of the last [`TRAIN_POOL`], newest
-    /// first while each agrees with those after it, their bytes over their
-    /// gaps (see the type's docs). `0` without a leg.
-    fn pooled(&self, link: u64, now: Time) -> u64 {
-        let (mut bytes, mut gap, mut n) = (0u64, Duration::ZERO, 0i64);
-        for l in self.legs.iter().rev().filter(|l| l.link == link) {
-            if now - l.at > TRAIN_POOL {
-                break;
-            }
-            if let Some(rate) = rate_over(bytes, gap) {
-                // The gap the pool's rate drains the leg's bytes in.
-                let want = Duration::from_nanos(
-                    i64::try_from(u128::from(l.bytes) * 1_000_000_000 / u128::from(rate.max(1)))
-                        .unwrap_or(i64::MAX),
-                );
-                let ticks = if n == 1 { 2 } else { 1 };
-                if (l.gap - want).abs() > TRAIN_TICK * ticks {
-                    break;
-                }
-            }
-            bytes += l.bytes;
-            gap += l.gap;
-            n += 1;
-        }
-        rate_over(bytes, gap).unwrap_or(0)
-    }
-
-    /// A leg on `link` (any number the owner tells its links apart by), as
-    /// its [`PathMeter::take_train`] timed it.
-    pub fn measured(&mut self, link: u64, leg: &LegSample, now: Time) {
-        let gap = leg.gap.max(TRAIN_TICK);
-        if rate_over(leg.bytes, gap).is_none() {
-            return;
-        }
-        if self.legs.len() == TRAINS {
-            self.legs.pop_front();
-        }
-        self.legs.push_back(Leg {
-            at: now,
-            link,
-            bytes: leg.bytes,
-            gap,
-        });
-    }
-
-    /// The node's uplink in bytes per second (see the type's docs); `None`
-    /// without a leg measured in the last [`TRAIN_SPAN`].
-    pub fn rate(&self, now: Time) -> Option<u64> {
-        let all = train_value(self.latest(now, usize::MAX));
-        let recent = train_value(self.latest(now, TRAIN_LEGS));
-        match (all, recent) {
-            (Some(a), Some(r)) => Some(a.min(r)),
-            (a, r) => a.or(r),
-        }
-    }
-}
-
-/// The uplink from the latest legs' rates (see [`UplinkTrains`]).
-fn train_value(mut legs: Vec<u64>) -> Option<u64> {
-    if legs.len() < MIN_PATHS {
-        return legs.into_iter().max();
-    }
-    legs.sort_unstable_by(|a, b| b.cmp(a));
-    legs.get(legs.len() / 3).copied()
 }
 
 /// A node's queueing delay as its links' latest echoes show it at `now`:
@@ -1257,149 +868,6 @@ mod tests {
         assert_eq!(e.take(at(15)), Some((2, ms(5))));
         assert_eq!(e.last_hold(), ms(5));
         assert!(!e.is_pending());
-    }
-
-    #[test]
-    fn a_timed_probe_is_echoed_with_its_gap() {
-        let mut e = Echo::default();
-        e.read(1, at(0));
-        assert_eq!(e.gap(), None);
-        e.take(at(1));
-        e.read_timed(2, at(12));
-        assert_eq!(e.gap(), Some(ms(12)));
-        assert_eq!(e.take(at(30)), Some((2, ms(18))));
-        assert_eq!(e.gap(), None);
-    }
-
-    /// A leg of `bytes` on a fresh meter, its closing probe read `gap`
-    /// after its first, echoed at `echo`.
-    fn leg(bytes: u64, gap: Duration, echo: i64) -> LegSample {
-        let mut m = PathMeter::new();
-        m.wrote(9, false);
-        m.probe(1, at(0));
-        m.start_train(bytes, at(0));
-        assert!(m.train_unstarted());
-        m.wrote(bytes, false);
-        assert_eq!(m.train_left(), Some(0));
-        m.wrote(9, false);
-        m.probe(2, at(1));
-        m.close_train();
-        m.echo(1, at(echo - 5)).unwrap();
-        assert!(m.train_open(at(echo - 5)));
-        assert_eq!(m.echo_gap(2, Some(gap), at(echo)), Ok(None));
-        assert!(!m.train_open(at(echo)));
-        m.take_train().unwrap()
-    }
-
-    #[test]
-    fn a_leg_reads_its_bytes_over_the_receivers_gap() {
-        let l = leg(12_000, ms(10), 300);
-        assert_eq!((l.bytes, l.gap, l.at), (12_009, ms(10), at(300)));
-        let mut t = UplinkTrains::default();
-        t.measured(1, &l, at(300));
-        assert_eq!(t.rate(at(300)), Some(1_200_900));
-        assert_eq!(t.rate(at(300) + TRAIN_SPAN + ms(1)), None);
-    }
-
-    #[test]
-    fn one_peer_cant_raise_the_uplink() {
-        let mut t = UplinkTrains::default();
-        let honest = [10, 11, 12];
-        for (i, g) in honest.into_iter().enumerate() {
-            t.measured(i as u64, &leg(10_000, ms(g), 100), at(100 + i as i64));
-        }
-        let clean = t.rate(at(200));
-        // A liar's legs, however many, count once, and only as its latest.
-        for i in 0..5 {
-            t.measured(9, &leg(10_000, ms(1), 100), at(110 + i));
-        }
-        let lied = t.rate(at(200));
-        assert!(lied <= Some(1_000_900), "{lied:?}");
-        assert!(clean <= lied);
-        assert_eq!(t.latest(at(200), TRAIN_LEGS).len(), TRAIN_LEGS);
-    }
-
-    #[test]
-    fn a_minority_of_liars_cant_raise_the_uplink_from_the_latest_legs() {
-        let mut t = UplinkTrains::default();
-        for i in 0..6 {
-            t.measured(i, &leg(10_000, ms(10), 100), at(100 + i as i64));
-        }
-        // Two of eight lie, and theirs are two of the latest four legs.
-        t.measured(6, &leg(10_000, ms(1), 100), at(120));
-        t.measured(7, &leg(10_000, ms(1), 100), at(121));
-        assert_eq!(t.rate(at(200)), Some(1_000_900));
-    }
-
-    #[test]
-    fn a_leg_slower_by_more_than_two_ticks_falls() {
-        let mut t = UplinkTrains::default();
-        t.set_staleness(ms(1500));
-        assert_eq!(t.spacing(), ms(500));
-        for i in 0..3 {
-            t.measured(i, &leg(10_000, ms(10), 100), at(100 + i as i64));
-        }
-        t.measured(3, &leg(10_000, ms(12), 100), at(110));
-        assert!(!t.falls(at(110)));
-        t.measured(4, &leg(10_000, ms(20), 100), at(120));
-        assert!(t.falls(at(120)));
-        t.measured(5, &leg(10_000, ms(5), 100), at(130));
-        assert!(!t.falls(at(130)));
-    }
-
-    #[test]
-    fn a_fall_chains_one_leg_at_a_time() {
-        let mut t = UplinkTrains::default();
-        for i in 0..3 {
-            t.measured(i, &leg(10_000, ms(10), 100), at(100 + i as i64));
-        }
-        t.measured(3, &leg(10_000, ms(20), 100), at(110));
-        assert!(t.falls(at(110)));
-        // The chained leg is in flight: no other starts before it is measured.
-        t.started(at(110));
-        assert!(!t.falls(at(110)));
-        assert!(!t.falls(at(150)));
-        t.measured(4, &leg(10_000, ms(30), 100), at(160));
-        assert!(t.falls(at(160)));
-    }
-
-    /// A leg of 10 kB read in `gap` ms.
-    fn gap_leg(gap: i64) -> LegSample {
-        LegSample {
-            at: at(100),
-            bytes: 10_000,
-            gap: ms(gap),
-        }
-    }
-
-    #[test]
-    fn a_links_agreeing_legs_pool_and_one_that_disagrees_starts_again() {
-        let mut t = UplinkTrains::default();
-        // 10 kB in 6.5 ticks, read as 6 or 7: one leg reads 1.67 or 1.43 MB/s.
-        for (i, g) in [6, 7, 6, 7].into_iter().enumerate() {
-            t.measured(1, &gap_leg(g), at(100 + i as i64));
-        }
-        assert_eq!(t.rate(at(120)), Some(1_538_461));
-        // A leg more than a tick off the pool's rate: the uplink fell.
-        t.measured(1, &gap_leg(13), at(110));
-        assert_eq!(t.rate(at(120)), Some(769_230));
-        // Legs older than TRAIN_POOL leave the pool.
-        let mut old = UplinkTrains::default();
-        old.measured(1, &gap_leg(6), at(100));
-        old.measured(1, &gap_leg(7), at(100) + TRAIN_POOL + ms(1));
-        assert_eq!(old.rate(at(100) + TRAIN_POOL + ms(2)), Some(1_428_571));
-    }
-
-    #[test]
-    fn below_three_links_the_fastest_leg_reads_and_a_whole_leg_drained_in_a_tick() {
-        let mut t = UplinkTrains::default();
-        t.measured(1, &gap_leg(100), at(100));
-        assert_eq!(t.rate(at(120)), Some(100_000));
-        t.measured(2, &gap_leg(0), at(101));
-        assert_eq!(t.rate(at(120)), Some(10_000_000));
-        // From three, a third of the links can't raise it.
-        t.measured(3, &gap_leg(10), at(102));
-        assert_eq!(t.rate(at(120)), Some(1_000_000));
     }
 
     #[test]

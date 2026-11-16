@@ -518,15 +518,6 @@ pub(crate) enum RowInt {
     /// strims-sim: Its hosts of hostile kind liar+echo (`hostile.rs`), set by
     /// STRIMS_SIM_HOSTILE's shares; `liars` doesn't count them.
     EchoLiars,
-    /// The first swarm's dishonest viewers that lie and shorten the gaps they
-    /// echo to uplink train legs: liars whose links echo each timed probe's gap
-    /// divided, so a train sender's legs to them read its uplink wider than it
-    /// is; 0 in a run without any.
-    ///
-    /// strims-sim: Its hosts of hostile kind liar+gap (`hostile.rs`,
-    /// `GAP_SHRINK`), set by STRIMS_SIM_HOSTILE's shares; `liars` doesn't count
-    /// them.
-    GapLiars,
     /// The honest viewers' peer exchanges that ended Answered
     /// (ExchangeOutcome).
     ExchAnswered,
@@ -1133,8 +1124,7 @@ pub(crate) enum RowInt {
     /// `up_wire`): the ppspp layers from the honest hosts' runners;
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
-    /// handshakes, less `up_filler`, the filler of the seeds' uplink train
-    /// legs; and in WAN mode `up_transport`, the transports' framing and
+    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
     /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
@@ -1158,8 +1148,7 @@ pub(crate) enum RowInt {
     /// `up_wire`): the ppspp layers from the honest hosts' runners;
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
-    /// handshakes, less `up_filler`, the filler of the seeds' uplink train
-    /// legs; and in WAN mode `up_transport`, the transports' framing and
+    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
     /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
@@ -1188,8 +1177,7 @@ pub(crate) enum RowInt {
     /// `up_wire`): the ppspp layers from the honest hosts' runners;
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
-    /// handshakes, less `up_filler`, the filler of the seeds' uplink train
-    /// legs; and in WAN mode `up_transport`, the transports' framing and
+    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
     /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
@@ -1198,8 +1186,7 @@ pub(crate) enum RowInt {
     /// `up_wire`): the ppspp layers from the honest hosts' runners;
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
-    /// handshakes, less `up_filler`, the filler of the seeds' uplink train
-    /// legs; and in WAN mode `up_transport`, the transports' framing and
+    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
     /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
@@ -1208,8 +1195,7 @@ pub(crate) enum RowInt {
     /// `up_wire`): the ppspp layers from the honest hosts' runners;
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
-    /// handshakes, less `up_filler`, the filler of the seeds' uplink train
-    /// legs; and in WAN mode `up_transport`, the transports' framing and
+    /// handshakes; and in WAN mode `up_transport`, the transports' framing and
     /// resends, and `up_acks`, pure ACKs and SACKs alone.
     ///
     /// Unit: bytes.
@@ -1234,7 +1220,7 @@ pub(crate) enum RowInt {
     /// open parent of a stream it was at their transfer samples nearest the
     /// seed's (within half a stats period); the honest are `HostClass::Honest`,
     /// the liars the kinds that announce and serve nothing (liar, liar+echo,
-    /// liar+gap, colluder: `hostile.rs`), the other hostile kinds neither
+    /// colluder: `hostile.rs`), the other hostile kinds neither
     /// (`Report::verdicts`). The counts that read real children are left out
     /// without transfer samples (`STRIMS_SIM_SERIES` or `STRIMS_SIM_OUT`).
     VHonest,
@@ -1246,7 +1232,7 @@ pub(crate) enum RowInt {
     /// Liar holder samples.
     ///
     /// strims-sim: `v_honest`'s samples of the kinds that announce and serve
-    /// nothing: liar, liar+echo, liar+gap and colluder (`Report::verdicts`).
+    /// nothing: liar, liar+echo and colluder (`Report::verdicts`).
     VLiars,
     /// Liar holder samples a quorum judged.
     ///
@@ -1320,13 +1306,6 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     WorstRegionP99Ms,
-    /// With vnic's uplink trains (`STRIMS_SIM_EXP=trains-seed`), the bytes of
-    /// the filler frames the seeds wrote on their keepalive port between each
-    /// train leg's probes, headers included: a part of `up_wire` that `up_vnic`
-    /// leaves out; 0 without trains.
-    ///
-    /// Unit: bytes.
-    UpFiller,
 }
 
 impl RowInt {
@@ -1391,7 +1370,6 @@ impl RowInt {
             RowInt::DupBytes => "dup_bytes",
             RowInt::EchoFreeRiders => "echo_free_riders",
             RowInt::EchoLiars => "echo_liars",
-            RowInt::GapLiars => "gap_liars",
             RowInt::ExchAnswered => "exch_answered",
             RowInt::ExchConnected => "exch_connected",
             RowInt::ExchFailed => "exch_failed",
@@ -1517,7 +1495,6 @@ impl RowInt {
             RowInt::Whitewashers => "whitewashers",
             RowInt::Withholders => "withholders",
             RowInt::WorstRegionP99Ms => "worst_region_p99_ms",
-            RowInt::UpFiller => "up_filler",
         }
     }
 

@@ -296,66 +296,24 @@ the most the seed wrote, ungated or gated on a 10 ms queue in the latest
 round trips, kept star-3-10 at one copy (lag p99 ×1.44); today's
 `UploadInfo::seed_capacity` allows four times until the window's first cut.
 
-**Uplink trains, other shapes.** (`meter-iterate`, against 2536e259) Legs
-of filler on vnic's keepalive port, each between two probes:
-- *Timed by the sender* (the closing probe's round trip less the base, or
-  the span between the two probes' round trips, `5080b31c`): an idle link
-  restarts from TCP's ten-packet window, so a 32 KiB leg spanned an extra
-  round trip (star-15-10's seed read 0.56 of its uplink); behind
-  thin-15-10's full 3 Mbit/s child uplinks the echoes drain between a
-  leg's two, so a 12 KiB leg read in about 1 ms (the seed's p90 4-9.8× its
-  uplink; at 32 seeds thin-15-10 collapsed 0 → 11).
-- *Four legs at once*: 48 KiB held every push 40-79 ms (halve-7-10's lag
-  p99 216 → 268 ms with the seed oracle's reading), and a viewer that
-  arrived while the seed streamed took its base from probes queued behind
-  it (1.5×).
-- *Anchored* (`cbbc65de`: one link's probe pair brackets filler on
-  others): the closing probe overtook filler unsent behind another link's
-  window (the meter bench's thin class e50 +2.36 log2; compete 17 copies).
-- *Every node's legs* (relays' at 1.5 s or 4 s, on 0fc9ffec): filler took
-  4-9.5 % of star-15-5's wire (wire/useful 1.16 → 1.20-1.28) and
-  thin-15-10's lag p99 went 1731 → 2005-2153 ms.
-- *Spacing that adapts to the legs' agreement* (`7abfc125`): jitter kept
-  legs disagreeing; at 32 seeds robust collapsed 160 against main's 75
-  (star-31-5 0 → 32).
-- *A leg at the onset of the runner's data wait*, or *only while every link
-  buffer is empty*: legs under a standing queue read their own flow's share
-  (halve-31-10's lag p99 2314 → 2428 and 3556 ms).
-
-**Uplink train falls, other rules.** (`meter-iterate-c22` 9fda68de, `-c26`
-7f854dbc, `-c37` 398c7922 and their park4 twins, against 2726ce8c) Falls
-read on the latest legs cut copies under jitter (TMP-park-4's cable
-star-15-10: 8-24 copy changes a minute, lag p99 482 ms against the seed
-oracle's 217); every gate tried kept those or lost the halvings: falls
-judged per link (robust 79 → 86 collapsed at 32 seeds), only where the
-fall leaves the seed less than its transports took (halve-7-10 ×1.49
-against the live seed oracle, TMP-park-4's halve-15-10 6 → 17), only while
-the runner's data waited (halve-15-10 504 → 871 ms), every latest leg slow
-(halve-7-10 262 → 365), or a held, pooled or spread-gated reading (485-617
-ms under that jitter).
-
-**Uplink train falls read behind a queue the probes met.**
-(`meter-iterate-c52` d66b6283 and f7f39a26, against 2726ce8c) A latest
-leg read below the links' legs only once its first probe's round trip
-(then its receiver-stamped one-way delay, a sixth control record) stood
-25 ms past its path's base, and alone while the links' latest probes
-showed such a queue. It cut the false falls jitter made, but it times
-probes behind the node's own bursts, which PLAN's meter rule excludes. On
-df5641fa without it the seed's legs read the robust tier's halvings at
-p10 0.89-0.98 and its lag matched the seed oracle's (honest, 8 seeds:
-×0.99 over the tier, halve-* ×0.88-1.29, every interval across 1).
-
-**The uplink trains' reading bounded while the runner waits.**
-(`meter-iterate-c52` 2726ce8c, dropped in `meter-c52-rebase` fa76024f, on
-df5641fa) While data waited in the runner (its last 300 ms busy at
-`SATURATED_BUSY`), the seed's reading was at most what its links delivered
-or it wrote, to catch a fall between legs. The wait is as often for one
-link holding its own data back: behind wan-slow-viewer's slow receiver
-the seed read p10 0.41 of its uplink (robust, honest, 8 seeds) and 0.31
-on browsers, and with star-15-10-end-abrupt's departed viewers' links
-holding their data, browsers read p50 0.52; the halvings' falls the legs
-read anyway. Without it those read 0.61, 0.77 and 0.98, and collapses went
-21 → 19 (robust) and 37 → 29 (browsers).
+**Uplink trains.** (`meter-iterate-c52`'s final arm, on main from e0d4d33b
+to f33d7247 behind `STRIMS_SIM_EXP=trains-seed`, kept as
+`meter-c52-rebase`, whose TRIED holds its variants; measured on
+d908ec35's sims and 4eea4259's testbed) A seed sent legs of filler between
+two probes on its idle links (4 KiB on data channels, 12 KiB on stream
+links), each timed by its receiver's reads to a 1 ms tick, and took the
+⌊k/3⌋+1-th fastest link's as its known capacity. A leg shorter than its
+uplink's shaper bucket leaves at the bucket's peak: with cable's
+(`STRIMS_SIM_UPLINK_BURST=profiles`, 125 ms of the rate at a 100 Mbit/s
+peak) TCP legs read a flat 98 Mbit/s (9.81× at 10 Mbit/s, 19.62× at 5,
+so a halving never showed) and browser legs 32.8 Mbit/s, and on the
+testbed's 3 KB tbf with Chromium and Firefox receivers they read 1.3-2.2×
+at 10-20 Mbit/s; to read the sustained rate a leg must outlast the
+bucket, on cable 125 ms at full rate, a quarter of the uplink or more as
+filler, and seconds for PowerBoost's. A leg read in one piece counts one
+tick, which caps a 4 KiB leg at 32.8 Mbit/s: every 50 Mbit/s run read
+0.66. Beside a CUBIC upload the legs read 0.98-1.09 of the whole link,
+3.5-5.8× what the competitor left (testbed, 20 Mbit/s).
 
 **The seed's own pushes as packet trains.** (`meter-greenfield-e-ytf`, kept
 as `meter-ytf-rebase` at efeeae09 on 2f2ffd6a, whose TRIED commits hold its
@@ -364,11 +322,12 @@ burst it read with their one-way delays, and a PONG carried its PING's, so
 the seed read each burst as a train (its bytes over the time between the
 two reads) and its links' trains together as a held reading whose peak it
 kept; that fed its budget alone, its meter staying the busy time. Against
-vnic's uplink trains (`trains-seed`), over the robust and browsers tiers'
-35 cells whose seed isn't told its capacity, at 32 fresh seeds under the
-hostile mix, the budget's error (|log2| of reading over uplink at p10, p50
-and p90, averaged) was 0.33 and 0.31 against 0.165 and 0.198 (main 0.74 and
-0.77), the trains less it -0.17 and -0.11 paired over the cells, each 95 %
+the uplink trains above (`meter-c52-rebase` 517b632e, in sims without an
+uplink bucket), over the robust and browsers tiers' 35 cells whose seed
+isn't told its capacity, at 32 fresh seeds under the hostile mix, the
+budget's error (|log2| of reading over uplink at p10, p50 and p90,
+averaged) was 0.33 and 0.31 against 0.165 and 0.198 (main 0.74 and 0.77),
+the trains less it -0.17 and -0.11 paired over the cells, each 95 %
 interval below 0; lag p99 and wire were alike, collapses mixed (robust 34
 against 46, browsers 65 against 62). The larger of the two budgets in each
 100 ms bin moved the trains' error over the bins by -0.011 to +0.019.

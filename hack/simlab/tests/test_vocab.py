@@ -380,7 +380,7 @@ class Fields(unittest.TestCase):
 
     def test_the_retired_names_are_declared(self):
         decl = vocab.declared()
-        for n in ("startup_p50_ms", "startup_p99_ms", "steady_p50_ms", "steady_p99_ms"):
+        for n in ("startup_p50_ms", "startup_p99_ms", "steady_p50_ms", "steady_p99_ms", "up_filler"):
             self.assertEqual(decl["rows"][n][1]["retired"], ["strims-sim"], n)
         for n, cur in (("capacity", "capacity_bps"), ("delivered", "delivered_bps"), ("rate", "rate_bps")):
             self.assertIn(n, decl["columns"]["seed_decisions"])
@@ -389,7 +389,7 @@ class Fields(unittest.TestCase):
         outputs = vocab.field_outputs()
         self.assertIn('RowInt::LagP99Ms => "lag_p99_ms",', "".join(outputs.values()))
         for path, text in outputs.items():
-            for n in ("startup_p50_ms", "startup_p99_ms", "steady_p50_ms", "steady_p99_ms"):
+            for n in ("startup_p50_ms", "startup_p99_ms", "steady_p50_ms", "steady_p99_ms", "up_filler"):
                 self.assertNotIn(f'=> "{n}",', text, path)
             for n in ("capacity", "delivered", "rate"):
                 self.assertNotIn(f"DecisionCol::{vocab.camel(n)} =>", text, path)

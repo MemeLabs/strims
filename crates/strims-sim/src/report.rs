@@ -140,14 +140,12 @@ pub struct HostReport {
     /// The runner, link and network stats (see [`crate::stats`]).
     pub runner: RunnerReport,
     /// Its ppspp runners' channel counters (`RunnerMetrics::totals`), and
-    /// vnic's frames written, their bodies' bytes (every port's), its
-    /// control frames' bytes, headers included, and of those its uplink
-    /// trains' filler (`HostMetrics`).
+    /// vnic's frames written, their bodies' bytes (every port's) and its
+    /// control frames' bytes, headers included (`HostMetrics`).
     pub ppspp: ChannelTotals,
     pub frames_written: u64,
     pub frame_bytes: u64,
     pub control_bytes: u64,
-    pub filler_bytes: u64,
     /// With [`Scenario::transfer_samples`], the node's transfers at every
     /// stats sample: (time since the start, scenario swarm, transfers),
     /// peers indexed by host.

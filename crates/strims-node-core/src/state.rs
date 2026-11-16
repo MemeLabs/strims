@@ -370,9 +370,6 @@ pub(crate) struct State {
     allow_insecure_ws: bool,
     /// `NodeConfig::upload_capacity`.
     upload_capacity: Option<u64>,
-    /// `NodeConfig::train_interval`: vnic sends legs only while ppspp knows
-    /// no upload capacity ([`State::set_upload_hint`]).
-    train_interval: Option<Duration>,
     /// Bounded by the transports the driver attaches.
     links: SecondaryMap<LinkKey, LinkSlot>,
     /// Established peers (one per link).
@@ -526,9 +523,7 @@ impl State {
         let rpc_class = vnic.add_qos_class(vnic.qos_root(), rpc::PEER_RPC_QOS_WEIGHT)?;
         let broker_class = vnic.add_qos_class(vnic.qos_root(), rpc::BROKER_QOS_WEIGHT)?;
         let mut runner = Runner::new(fork(&mut rng));
-        let hint = upload_hint(config.upload_capacity, config.rate_limit);
-        runner.set_upload_capacity(hint);
-        vnic.set_train_interval(config.train_interval.filter(|_| hint.is_none()));
+        runner.set_upload_capacity(upload_hint(config.upload_capacity, config.rate_limit));
         runner.set_forecasts(config.forecast_log);
         runner.set_request_log(config.request_log);
         runner.set_parent_log(config.parent_log.is_some());
@@ -570,7 +565,6 @@ impl State {
             interfaces,
             allow_insecure_ws: config.allow_insecure_ws,
             upload_capacity: config.upload_capacity,
-            train_interval: config.train_interval,
             links: SecondaryMap::new(),
             peers: SecondaryMap::new(),
             ppspp_peers: SecondaryMap::new(),
@@ -615,7 +609,8 @@ impl State {
     /// capacity unless the config set that.
     pub(crate) fn set_rate_limit(&mut self, bytes_per_sec: u64) {
         self.vnic.set_rate_limit(bytes_per_sec);
-        self.set_upload_hint(upload_hint(self.upload_capacity, Some(bytes_per_sec)));
+        self.runner
+            .set_upload_capacity(upload_hint(self.upload_capacity, Some(bytes_per_sec)));
     }
 
     /// Replaces [`NodeConfig::upload_capacity`]: ppspp's known upload
@@ -623,16 +618,8 @@ impl State {
     pub(crate) fn set_upload_capacity(&mut self, bytes_per_sec: Option<u64>) {
         self.upload_capacity = bytes_per_sec;
         let limit = self.vnic.qos().rate_limit();
-        self.set_upload_hint(upload_hint(self.upload_capacity, Some(limit)));
-    }
-
-    /// ppspp's known upload capacity: what push admission and seed
-    /// allocation take over any measure, so vnic's uplink trains, whose
-    /// reading it stands over, go only without one.
-    fn set_upload_hint(&mut self, hint: Option<u64>) {
-        self.runner.set_upload_capacity(hint);
-        self.vnic
-            .set_train_interval(self.train_interval.filter(|_| hint.is_none()));
+        self.runner
+            .set_upload_capacity(upload_hint(self.upload_capacity, Some(limit)));
     }
 
     fn emit(&mut self, e: NodeEvent) {
@@ -985,7 +972,6 @@ impl State {
             let reading = vnic.link_path(link, now).and_then(|p| p.reading);
             runner.set_peer_path(ps.pp, reading);
         }
-        runner.set_uplink(vnic.uplink_rate(now));
     }
 
     /// Whether the runner is captured.
