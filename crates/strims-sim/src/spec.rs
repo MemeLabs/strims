@@ -385,6 +385,11 @@ pub enum Fault {
     /// In WAN mode it replaces the paths' base latency, and jitter, loss
     /// and bandwidth still apply.
     Latency(Vec<HostIx>, Vec<HostIx>, Duration),
+    /// [`Fault::Latency`] in one direction, from the first group to the
+    /// second, as a sender's egress delay (netem's) holds what it sends.
+    /// WAN mode only: turmoil's links take one latency both ways, so
+    /// without the WAN model it is skipped.
+    LatencyFrom(Vec<HostIx>, Vec<HostIx>, Duration),
     /// The host's swarm readers stop reading, or resume.
     PauseReading(HostIx),
     ResumeReading(HostIx),

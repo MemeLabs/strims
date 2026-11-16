@@ -920,7 +920,7 @@ impl Report {
                 }
                 Fault::Crash(h) => push(at, Kind::Crash, *h as i64, -1, 0, ""),
                 Fault::Restart(h) => push(at, Kind::Restart, *h as i64, -1, 0, ""),
-                Fault::Latency(a, b, d) => push(
+                Fault::Latency(a, b, d) | Fault::LatencyFrom(a, b, d) => push(
                     at,
                     Kind::Latency,
                     first(a),

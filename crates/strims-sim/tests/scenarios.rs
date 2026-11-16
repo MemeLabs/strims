@@ -1789,6 +1789,68 @@ fn latency_step_hybrid() {
     );
 }
 
+/// A seed and 3 viewers in a WAN full mesh, the seed's sends 40 ms on
+/// their way and its viewers' sends to it 10 ms (`Fault::LatencyFrom`,
+/// the seed's direction set first).
+fn one_way_scenario(_seed: u64) -> Scenario {
+    let mut s = Scenario::new("one_way_latency");
+    let site = Site::new(City::Chicago, Access::Cable);
+    let src = s.host_at("seed", site);
+    let vs: Vec<HostIx> = (0..3).map(|i| s.host_at(&format!("v{i}"), site)).collect();
+    let all: Vec<HostIx> = std::iter::once(src).chain(vs.iter().copied()).collect();
+    for (i, &a) in all.iter().enumerate() {
+        for &b in all.iter().skip(i + 1) {
+            s.link(b, a, Transport::Tcp);
+        }
+    }
+    s.wan = Some(strims_wan::Options {
+        jitter: false,
+        loss: false,
+    });
+    s.at(
+        Duration::ZERO,
+        Fault::LatencyFrom(vec![src], vs.clone(), Duration::from_millis(40)),
+    );
+    s.at(
+        Duration::ZERO,
+        Fault::LatencyFrom(vs.clone(), vec![src], Duration::from_millis(10)),
+    );
+    s.swarm(SwarmSpec::live(src, vs, 32 * KIB, secs(2), secs(8)).with_push_mode(PushMode::Hybrid));
+    s.duration = secs(10);
+    s
+}
+
+/// The seed's direction keeps its 40 ms after the viewers' 10 ms is set:
+/// every frame takes the seed's sends to leave it, so none reaches a
+/// viewer sooner than 40 ms after its write.
+#[test]
+fn a_one_way_latency_holds_what_its_sender_sends() {
+    sweep(
+        "a_one_way_latency_holds_what_its_sender_sends",
+        one_way_scenario,
+        |r| {
+            sound(r)?;
+            whole_stream(r)?;
+            if !r
+                .trace
+                .iter()
+                .any(|l| l.ends_with("latency seed > v0,v1,v2 40 ms"))
+            {
+                return Err("no one-way latency in the trace".to_owned());
+            }
+            for v in &r.viewers {
+                if let Some(&(seq, lag)) = v.stats.lags.iter().find(|&&(_, lag)| lag < 40) {
+                    return Err(format!(
+                        "{}: frame {seq} read {lag} ms after its write",
+                        v.host
+                    ));
+                }
+            }
+            Ok(())
+        },
+    );
+}
+
 // --- 8c. the seed is cut off for longer than the window ------------------
 
 const CUT: u64 = 10;
@@ -3319,14 +3381,22 @@ fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
             ),
         );
     }
-    // The model's latencies are the same both ways: the seed's paths take
-    // the mean of the testbed's two one-way delays.
+    // Each direction takes its sender's delay, as run.sh's netem holds
+    // what a node sends.
     s.at(
         Duration::ZERO,
-        Fault::Latency(
+        Fault::LatencyFrom(
             vec![seed_host],
             vs.clone(),
-            Duration::from_millis((c.seed_delay_ms + c.viewer_delay_ms) / 2),
+            Duration::from_millis(c.seed_delay_ms),
+        ),
+    );
+    s.at(
+        Duration::ZERO,
+        Fault::LatencyFrom(
+            vs.clone(),
+            vec![seed_host],
+            Duration::from_millis(c.viewer_delay_ms),
         ),
     );
     if c.serial_links {

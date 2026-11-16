@@ -270,6 +270,21 @@ fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) {
                 d.as_millis()
             )
         }
+        Fault::LatencyFrom(a, b, d) => {
+            let line = format!(
+                "latency {} > {} {} ms",
+                names(w, a),
+                names(w, b),
+                d.as_millis()
+            );
+            match wan {
+                Some(s) => {
+                    for_ix_pairs(a, b, |x, y| s.set_latency_from(x, y, (*d).into()));
+                    line
+                }
+                None => format!("{line} skipped: one way needs the WAN model"),
+            }
+        }
         Fault::Crash(h) if w.skips_crash(*h, sim.elapsed()) => {
             format!("crash {} skipped: not there", w.name(*h))
         }
