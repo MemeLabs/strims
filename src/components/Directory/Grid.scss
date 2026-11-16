@@ -4,7 +4,9 @@
 .directory_grid {
   display: grid;
   grid-gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  // Columns of 250 px or more, or one as wide as the grid where it is
+  // narrower (a 375 px phone's).
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
   padding: 10px;
 
   &__item {
