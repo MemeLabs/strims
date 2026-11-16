@@ -27,15 +27,16 @@ links that carry the same schedule:
   flight  its bytes sent and unacknowledged (KiB)
   buffered a data channel's buffered amount: unsent and unacknowledged
           bytes (KiB)
-  upq     the seed's uplink queue: tc's tbf backlog over its rate at 10 Hz,
-          or the model's every 10 ms (its own samples every 7 ms where links
+  upq     the seed's uplink queue: its link class's queue (tc's eth0 10:)
+          over the rate it drains at, at 10 Hz (none for a trace link, which
+          has no rate), or the model's every 10 ms (its own samples every 7 ms where links
           have no socket samples)
   rate    bytes read per second per link (KB/s), mean
   compete a competing upload's payload rate (KB/s) each second it ran
           (testbed: iperf3's report; sim: the model's wire bytes)
   x cwnd  its window (KiB) each second
   drops   what the seed's uplink queue dropped over the whole run: tc's
-          tbf counts the buffers it drops, frames behind run.sh's ifb (the
+          eth0 10: counts the buffers it drops, frames behind run.sh's ifb (the
           sim its window model's packets, a competing upload's two a
           segment), TCP's GSO buffers of one or two packets in a run of the
           netem-rooted shaper before it (the sim its segments)
@@ -117,39 +118,30 @@ def classes(sched):
     return names
 
 
-def tc_queue(run, start_ms, s):
-    """The seed's tbf queue in ms, [(t_us, ms)], from tc-0.log."""
-    p = os.path.join(run, "tc-0.log")
-    if not os.path.exists(p) or start_ms is None:
+def tc_queue(run, start_ms):
+    """The seed's uplink queue in ms, [(t_us, ms)], from tc-0.log: its link
+    class's queue (tcstats.uplink) over the rate it drains at then."""
+    if start_ms is None:
         return []
-    up = float(s.get("SEED_UP_MBIT", "10"))
-    steps = []
-    for st in s.get("SEED_UP_STEPS", "").split():
-        a, _, m = st.partition(":")
-        steps.append((float(a), float(m)))
-    out = []
-    for ms, qs in tcstats.samples(p):
-        t = (ms - start_ms) * 1000
-        # The seed's tbf, by its handle wherever run.sh put it.
-        tbf = tcstats.find(qs, "10:", "tbf")
-        if not tbf:
-            continue
-        rate = up
-        for a, m in steps:
-            if t >= a * 1e6:
-                rate = m
-        out.append((t, tbf.backlog * 8 / (rate * 1e6) * 1000))
-    return out
+    try:
+        spec, got = tcstats.uplink(run, 0)
+    except LookupError as e:
+        tcstats.note(f"{e}: no upq")
+        return []
+    if got and got[-1][1].rate is None:
+        tcstats.note(f"{run}: the seed's {spec} link's queue ({got[-1][1].kind} 10:) has no rate to time it by: no upq")
+    return [((ms - start_ms) * 1000, q.backlog / q.rate * 1000) for ms, q in got if q.rate]
 
 
 def tc_drops(run):
-    """The seed's tbf drops over the run, from tc-0.log's last sample."""
-    p = os.path.join(run, "tc-0.log")
-    if not os.path.exists(p):
+    """What the seed's uplink queue dropped over the run, from tc-0.log's
+    last sample."""
+    try:
+        spec, got = tcstats.uplink(run, 0)
+    except LookupError as e:
+        tcstats.note(f"{e}: no drops")
         return None
-    got = tcstats.samples(p)
-    tbf = tcstats.find(got[-1][1], "10:", "tbf") if got else None
-    return tbf.drops if tbf else None
+    return got[-1][1].drops if got else None
 
 
 def tc_compete(run, start_ms):
@@ -202,11 +194,15 @@ def sim_compete(evs):
 
 
 def frames(run):
-    """Whether the run's tbf took frames (run.sh's ifb segments TCP's GSO
-    buffers ahead of its root tbf), as against GSO buffers (a netem root
-    with a tbf child, before)."""
+    """Whether the run's uplink queue took frames (run.sh's ifb segments
+    TCP's GSO buffers ahead of eth0's root, the link class's qdisc 10:), as
+    against GSO buffers (a netem root with a tbf child, before)."""
     p = os.path.join(run, "qdisc-0.txt")
-    return os.path.exists(p) and "qdisc tbf 10: root" in open(p).read()
+    if not os.path.exists(p):
+        return False
+    with open(p) as f:
+        q = tcstats.find(tcstats.parse_text(f.read()), "10:")
+    return q is not None and q.parent is None
 
 
 def metrics(nodes, sched, cls, t0_us, queue=None, compete=None, packets=False):
@@ -311,7 +307,6 @@ def compare(run, extra=(), only=None, t0=2.0):
     `extra` log dirs, or the testbed and `only`'s) and each one's metrics:
     ([(name, dir)], [{(class, metric): [values]}])."""
     extra = list(extra)
-    s = settings(run)
     sched = schedule(run)
     cls = classes(sched)
     arms = [("testbed", run)]
@@ -329,7 +324,7 @@ def compare(run, extra=(), only=None, t0=2.0):
             for e in nodes.get(0, []):
                 if e.get("ev") == "start":
                     start = e["ms"]
-        q = tc_queue(run, start, s) if name == "testbed" else None
+        q = tc_queue(run, start) if name == "testbed" else None
         x = tc_compete(run, start) if name == "testbed" else None
         m = metrics(nodes, sched, cls, int(t0 * 1e6), q, x, frames(run))
         if name == "testbed":

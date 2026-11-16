@@ -11,10 +11,16 @@ its lines joined. tc's text rounds what it prints: a size within 16 bytes
 of a KiB multiple is `<n>Kb`, within a KiB of a MiB multiple `<n>Mb`
 (iproute2's sprint_size), and a rate is in SI units (`<n>Kbit`,
 `<n>Mbit`); its JSON has bytes, and rates in bytes a second.
+
+A node's access link queue is eth0's qdisc 10: in every link class's tree
+(uplink), its kind the class's (queue_kind), the class the run's `links`
+file names.
 """
 
 import json
+import os
 import re
+import sys
 from typing import NamedTuple, Optional
 
 SIZE_UNIT = {"": 1, "K": 1024, "M": 1024 ** 2, "G": 1024 ** 3}
@@ -142,3 +148,54 @@ def find(qdiscs, handle, kind=None):
         if q.handle == handle and (kind is None or q.kind == kind):
             return q
     return None
+
+
+def link_spec(run, node=0):
+    """Node `node`'s access link spec (hack/testbed/links.sh), from the
+    run's `links` file (`node <i> <spec> <up_mbit> <delay_ms> <queue_ms>`);
+    tbf for a run from before run.sh wrote it, when every link was one."""
+    p = os.path.join(run, "links")
+    if not os.path.exists(p):
+        return "tbf"
+    with open(p) as f:
+        for line in f:
+            w = line.split()
+            if len(w) >= 3 and w[0] == "node" and w[1] == str(node):
+                return w[2]
+    raise LookupError(f"{p}: no node {node}")
+
+
+def queue_kind(spec):
+    """The kind of eth0's qdisc 10:, the root of every class's tree and the
+    qdisc that holds its queue, for link `spec`: a cake router's cake; a
+    trace's prio, over the fq that tracelink's program holds packets in
+    (its drops count in the prio); else the class's tbf, which counts what
+    the qdisc under it holds and drops (cable's PIE, a router's
+    fq_codel)."""
+    opts = dict(kv.partition("=")[::2] for kv in spec.split(",")[1:])
+    if opts.get("router") == "cake":
+        return "cake"
+    if spec.split(",")[0] == "trace":
+        return "prio"
+    return "tbf"
+
+
+def uplink(run, node=0):
+    """Node `node`'s access link queue over a run: its link spec and
+    tc-<node>.log's samples of the qdisc that holds the queue,
+    [(unix ms, Qdisc)] (queue_kind). Its `rate` drains it, where it has one:
+    a trace's prio has none. Raises LookupError, naming the link, when the
+    log has samples but none of that qdisc."""
+    spec = link_spec(run, node)
+    kind = queue_kind(spec)
+    p = os.path.join(run, f"tc-{node}.log")
+    got = samples(p) if os.path.exists(p) else []
+    out = [(t, q) for t, qs in got if (q := find(qs, "10:", kind))]
+    if got and not out:
+        raise LookupError(f"{p}: node {node}'s {spec} link has no {kind} 10: in its samples")
+    return spec, out
+
+
+def note(msg):
+    """Says on stderr what a tool can't read from a run."""
+    print(f"NOTE: {msg}", file=sys.stderr)

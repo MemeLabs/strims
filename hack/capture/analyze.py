@@ -143,7 +143,8 @@ prefix.
             median over runs of the reading's median error in ms, its false
             positives and false negatives (`Report::queue_delay_accuracy`),
             at seeds and at forwarders. A sim row has them; a testbed run's
-            are its seed's lines against tc's tbf backlog (tc-0.log) over
+            are its seed's lines against its uplink queue (tc-0.log: its
+            link class's queue over its rate; none for a trace link) over
             the stream, at the same threshold and window
 
 The verdicts that `collapse`, `map`, `pair` and the rest judge runs by,
@@ -631,15 +632,19 @@ SATURATED_STANDING_MS = 5
 QUEUE_DELAY_THRESHOLD_MS = 80
 
 
-def tc_queue(path):
-    """(wall ms, ms to drain the tbf backlog at its rate) per sample of a
-    testbed tc log (run.sh's tc-0.log)."""
-    out = []
-    for t, qs in tcstats.samples(path):
-        tbf = tcstats.find(qs, "10:", "tbf")
-        if tbf and tbf.rate:
-            out.append((t, 1000 * tbf.backlog / tbf.rate))
-    return out
+def tc_queue(d):
+    """(wall ms, ms to drain the seed's uplink queue at its rate) per sample
+    of a testbed run's tc-0.log: its link class's queue (tcstats.uplink),
+    none for a class whose queue has no rate (a trace's), which it says."""
+    try:
+        spec, got = tcstats.uplink(d, 0)
+    except LookupError as e:
+        tcstats.note(f"{e}: no delay fields")
+        return []
+    if got and got[-1][1].rate is None:
+        tcstats.note(f"{d}: the seed's {spec} link's queue ({got[-1][1].kind} 10:) has no rate to time it by:"
+                     " no delay fields")
+    return [(t, 1000 * q.backlog / q.rate) for t, q in got if q.rate]
 
 
 def testbed_delays(d):
@@ -648,7 +653,7 @@ def testbed_delays(d):
     stream."""
     env = settings(d / "settings")
     secs = int(env.get("SECS", 180))
-    queue = tc_queue(d / "tc-0.log") if (d / "tc-0.log").exists() else []
+    queue = tc_queue(d)
     lines = [json.loads(x) for x in (d / "node-0.jsonl").read_text().splitlines() if x.startswith("{")]
     out = {}
     for name, field, instant in DELAY_READINGS:

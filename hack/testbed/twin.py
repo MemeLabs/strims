@@ -42,8 +42,9 @@ testbed's uplink cut (before 35-60 s, cut 60-180 s, after 180-238 s):
   the viewers'.
 - `socks`: the testbed seed's TCP sockets (`ss`): round trips, unsent
   bytes and windows of the links that carried data and the rest; data
-  segments in and out, pure acknowledgements and the tbf's drops, against
-  the twin's drops and pure acknowledgements.
+  segments in and out, pure acknowledgements and what the seed's uplink
+  queue dropped (its link class's, hack/testbed/tcstats.py's uplink),
+  against the twin's drops and pure acknowledgements.
 
 `bytes` sets testbed runs with PCAP=1 (RUN_DIR: run.sh's out dirs, the
 same settings each) beside the twin's rows: over 5-60 s, the uplinks' frame
@@ -364,7 +365,7 @@ def cmd_socks(args):
     tdir = flag(args, "--dir", os.path.join(ROOT, "target", "twin"))
     matrix, tags = args[0], args[1:]
     lo, hi = PH["cut"]
-    agg, flows, drops = {}, [], []
+    agg, flows, drops, kinds = {}, [], [], set()
     for d in testbed_runs(matrix, arm, n):
         seed = node_rows(d, 0)
         off = seed[0]["t_ms"] - seed[0]["rel_ms"]
@@ -391,8 +392,13 @@ def cmd_socks(args):
                 tot[1] += (b[1] - a[1]) / (t1 - t0)
                 tot[2] += ((b[2] - a[2]) - (b[1] - a[1])) / (t1 - t0)
         flows.append(tot)
-        cut = [tbf.drops for t, qs in tcstats.samples(os.path.join(d, "tc-0.log"))
-               if lo * 1000 <= t - off < hi * 1000 and (tbf := tcstats.find(qs, "10:", "tbf"))]
+        try:
+            spec, got = tcstats.uplink(d, 0)
+        except LookupError as e:
+            tcstats.note(f"{e}: its drops left out")
+            continue
+        kinds.add(f"{spec}: {got[-1][1].kind} 10:" if got else spec)
+        cut = [q.drops for t, q in got if lo * 1000 <= t - off < hi * 1000]
         drops.append(cut[-1] - cut[0] if cut else 0)
     print(f"{n} viewers, the testbed seed's sockets in the cut ({arm}), p10/p50/p90/p99")
     for (cls, k), xs in sorted(agg.items()):
@@ -400,7 +406,7 @@ def cmd_socks(args):
         print(f"  {cls:6} {k:8} {unit:4} " + "/".join(f"{q(xs, p):.0f}" for p in (.1, .5, .9, .99)))
     print(f"  per run: data segments in/s, data segments out/s, pure acks out/s: "
           + "  ".join(f"{a:.0f}/{b:.0f}/{c:.0f}" for a, b, c in flows))
-    print(f"  tbf drops in the cut per run: {drops}")
+    print(f"  the seed's queue's drops in the cut per run ({'; '.join(sorted(kinds))}): {drops}")
     for t in tags:
         xs = twin_runs(tdir, t)
         if xs:

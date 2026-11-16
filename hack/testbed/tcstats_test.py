@@ -113,5 +113,79 @@ class Parse(unittest.TestCase):
             self.assertEqual([tcstats.find(qs, "10:").backlog for _, qs in got], [2048, 3072])
 
 
+# The trace class's tree: tracelink's program drops in the prio and holds
+# packets in the fq.
+TRACE_JSON = (
+    '[{"kind":"prio","handle":"10:","root":true,"refcnt":2,"options":{"bands":2},"bytes":572980,"packets":566,'
+    '"drops":893,"overlimits":0,"requeues":0,"backlog":22308,"qlen":22},'
+    '{"kind":"fq","handle":"20:","parent":"10:1","options":{"limit":100000},"bytes":572980,"packets":566,'
+    '"drops":0,"overlimits":0,"requeues":0,"backlog":22308,"qlen":22}]'
+)
+# run.sh's tree before the ifb: netem at the root, the tbf its child.
+NETEM_ROOT = """qdisc netem 1: root refcnt 2 limit 100000 delay 20ms
+ Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
+ backlog 0b 0p requeues 0
+qdisc tbf 10: parent 1:1 rate 10Mbit burst 3028b lat 99.9ms
+ Sent 0 bytes 0 pkt (dropped 0, overlimits 0 requeues 0)
+ backlog 0b 0p requeues 0
+"""
+
+
+def run_dir(d, links, lines, qdisc=None):
+    if links is not None:
+        with open(os.path.join(d, "links"), "w") as f:
+            f.write(links)
+    with open(os.path.join(d, "tc-0.log"), "w") as f:
+        for t, text in lines:
+            f.write(f"{t} {text}\n")
+    if qdisc is not None:
+        with open(os.path.join(d, "qdisc-0.txt"), "w") as f:
+            f.write(qdisc)
+    return d
+
+
+class Uplink(unittest.TestCase):
+    def test_the_queue_is_eth0s_root_of_the_class_kind(self):
+        for spec, kind in (("tbf", "tbf"), ("cable", "tbf"), ("cable,aqm=fifo,slot=4-4", "tbf"),
+                           ("cable,router=fq_codel", "tbf"), ("dsl,line=vdsl,router=cake", "cake"),
+                           ("fiber", "tbf"), ("trace,file=up.mm,limit=30000", "prio")):
+            self.assertEqual(tcstats.queue_kind(spec), kind, spec)
+
+    def test_a_class_s_queue_is_read_from_its_links_line(self):
+        with tempfile.TemporaryDirectory() as d:
+            run_dir(d, "node 0 cable,router=cake 10 20 100\nnode 1 tbf 20 10 100\n", [(1000, CAKE_JSON)])
+            spec, got = tcstats.uplink(d, 0)
+            self.assertEqual(spec, "cable,router=cake")
+            self.assertEqual([(t, q.kind, q.backlog, q.rate) for t, q in got], [(1000, "cake", 5120, 118750)])
+            self.assertEqual(tcstats.link_spec(d, 1), "tbf")
+
+    def test_a_trace_s_queue_has_its_drops_and_no_rate(self):
+        with tempfile.TemporaryDirectory() as d:
+            run_dir(d, "node 0 trace,file=up.mm 10 20 100\n", [(1000, TRACE_JSON)])
+            spec, got = tcstats.uplink(d, 0)
+            q = got[0][1]
+            self.assertEqual((q.kind, q.drops, q.backlog, q.rate), ("prio", 893, 22308, None))
+
+    def test_a_log_without_the_class_s_queue_is_an_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            run_dir(d, "node 0 cable,router=cake 10 20 100\n", [(1000, TBF_JSON)])
+            with self.assertRaisesRegex(LookupError, "cable,router=cake link has no cake 10:"):
+                tcstats.uplink(d, 0)
+
+    def test_a_run_before_the_links_file_had_a_tbf(self):
+        with tempfile.TemporaryDirectory() as d:
+            run_dir(d, None, [(1000, TBF_JSON)])
+            spec, got = tcstats.uplink(d, 0)
+            self.assertEqual((spec, got[0][1].backlog), ("tbf", 3072))
+
+    def test_the_bench_takes_frames_where_the_class_s_qdisc_is_the_root(self):
+        import bench
+
+        with tempfile.TemporaryDirectory() as d:
+            self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=CAKE)))
+            self.assertTrue(bench.frames(run_dir(d, None, [], qdisc=CABLE)))
+            self.assertFalse(bench.frames(run_dir(d, None, [], qdisc=NETEM_ROOT)))
+
+
 if __name__ == "__main__":
     unittest.main()
