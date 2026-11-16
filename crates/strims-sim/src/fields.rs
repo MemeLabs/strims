@@ -3361,8 +3361,12 @@ pub(crate) mod cols {
         ///
         /// None is written as -1.
         ViewerOvh,
-        /// Wire bytes through the honest viewers present's uplinks in the bin
-        /// (WAN mode).
+        /// Bytes through the honest viewers present's uplinks in the bin, as
+        /// their links charged them (`EndStats::up_bytes`: each message's IP
+        /// bytes and its packets' framing at a site that charges it,
+        /// `STRIMS_SIM_FRAMING` or a link class), pure acknowledgements
+        /// (`up_ack_bytes`, `up_sack_bytes`) and competing uploads apart (WAN
+        /// mode).
         ///
         /// Unit: bytes. None is written as -1.
         ViewerUpBytes,
@@ -3384,7 +3388,10 @@ pub(crate) mod cols {
         ///
         /// None is written as -1.
         Busy,
-        /// The seed's uplink at the bin's end, in bytes per second.
+        /// The meter's truth for the seed at the bin's end
+        /// (`Report::upload_cap_at`: what it could upload over the second
+        /// before, in its meter's units, the data bytes its runner writes), in
+        /// bytes per second; 0 over an outage.
         ///
         /// None is written as -1.
         Avail,
@@ -3405,7 +3412,11 @@ pub(crate) mod cols {
         ///
         /// None is written as -1.
         SeedOvh,
-        /// Wire bytes through the seed's uplink in the bin (WAN mode).
+        /// Bytes through the seed's uplink in the bin, as its link charged them
+        /// (`EndStats::up_bytes`: each message's IP bytes and its packets'
+        /// framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link
+        /// class), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and
+        /// competing uploads apart (WAN mode).
         ///
         /// Unit: bytes. None is written as -1.
         SeedUpBytes,
@@ -3846,13 +3857,15 @@ pub(crate) mod cols {
         /// Bytes the node wrote to its links that weren't chunk data, in the
         /// bin.
         Ovh,
-        /// Wire bytes through the node's uplink in the bin (WAN mode).
+        /// Bytes through the node's uplink in the bin, as its link charged them
+        /// (`EndStats::up_bytes`: each message's IP bytes and its packets'
+        /// framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link
+        /// class), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and
+        /// competing uploads apart (WAN mode).
         ///
         /// Unit: bytes.
         UpBytes,
         /// Packets through the node's uplink in the bin (WAN mode).
-        ///
-        /// Unit: bytes.
         UpPackets,
         /// Small packets through the node's uplink in the bin (WAN mode).
         SmallPackets,

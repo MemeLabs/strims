@@ -2393,7 +2393,7 @@ sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
 none = "-1"
-description = "Wire bytes through the honest viewers present's uplinks in the bin (WAN mode)."
+description = "Bytes through the honest viewers present's uplinks in the bin, as their links charged them (`EndStats::up_bytes`: each message's IP bytes and its packets' framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link class), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing uploads apart (WAN mode)."
 
 [columns.bins.viewer_up_packets]
 sims = ["strims-sim"]
@@ -2423,7 +2423,7 @@ description = "The seed's meter's busy fraction, in thousandths, at the bin's en
 sims = ["strims-sim"]
 type = "int"
 none = "-1"
-description = "The seed's uplink at the bin's end, in bytes per second."
+description = "The meter's truth for the seed at the bin's end (`Report::upload_cap_at`: what it could upload over the second before, in its meter's units, the data bytes its runner writes), in bytes per second; 0 over an outage."
 
 [columns.bins.copies]
 sims = ["strims-sim"]
@@ -2454,7 +2454,7 @@ sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
 none = "-1"
-description = "Wire bytes through the seed's uplink in the bin (WAN mode)."
+description = "Bytes through the seed's uplink in the bin, as its link charged them (`EndStats::up_bytes`: each message's IP bytes and its packets' framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link class), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing uploads apart (WAN mode)."
 
 [columns.bins.seed_up_packets]
 sims = ["strims-sim"]
@@ -2691,12 +2691,11 @@ description = "Bytes the node wrote to its links that weren't chunk data, in the
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
-description = "Wire bytes through the node's uplink in the bin (WAN mode)."
+description = "Bytes through the node's uplink in the bin, as its link charged them (`EndStats::up_bytes`: each message's IP bytes and its packets' framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link class), pure acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing uploads apart (WAN mode)."
 
 [columns.node_bins.up_packets]
 sims = ["strims-sim"]
 type = "int"
-unit = "bytes"
 description = "Packets through the node's uplink in the bin (WAN mode)."
 
 [columns.node_bins.small_packets]
