@@ -90,6 +90,25 @@
     &.layout--landscape_ccw:not(.layout--show_video) .layout_chat__header {
       padding-left: env(safe-area-inset-left);
     }
+
+    // Swapped in cw the drawer's arrow is on the notch's side: it pads
+    // clear of the notch as the chat does, and so slides onto the closed
+    // drawer's peek with it.
+    &.layout--landscape_cw.layout--swap:not(.layout--show_video) .layout_chat__header {
+      padding-right: env(safe-area-inset-right);
+    }
+  }
+
+  // The room menu reaches the notch on the side it opens from, and locked,
+  // filling the chat, wherever the chat does.
+  &.layout--landscape_ccw.layout--swap .layout_chat__menu,
+  &.layout--landscape_ccw:not(.layout--show_video) .layout_chat__menu--locked {
+    --room-menu-inset-left: env(safe-area-inset-left);
+  }
+
+  &.layout--landscape_cw:not(.layout--swap) .layout_chat__menu,
+  &.layout--landscape_cw:not(.layout--show_video) .layout_chat__menu--locked {
+    --room-menu-inset-right: env(safe-area-inset-right);
   }
 
   &.layout--min_aspect_ratio_4.layout--show_chat.layout--meme_open {

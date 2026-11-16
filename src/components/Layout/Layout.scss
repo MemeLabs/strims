@@ -261,6 +261,32 @@ $chat-width-sm: 260px;
   &.layout--landscape_cw.layout--swap .layout__video {
     padding-right: env(safe-area-inset-right);
   }
+
+  // The drawer is fixed to the screen's edge, so where its peek is on the
+  // notch's side it covers the layout's padding there: the content keeps
+  // the peek's room from the edge, not from the padding.
+  &.layout--landscape_cw:not(.layout--swap) .content_panel {
+    margin-right: calc(60px - env(safe-area-inset-right));
+  }
+
+  &.layout--landscape_ccw.layout--swap .content_panel {
+    margin-left: calc(60px - env(safe-area-inset-left));
+  }
+
+  // Open, the drawer pads the notch's side. Where the notch is across the
+  // screen from the closed drawer, that side is its peek, so its content
+  // slides the padding off the peek until it opens.
+  .foo_2 > * {
+    transition: transform 200ms ease-in-out;
+  }
+
+  &.layout--landscape_ccw:not(.layout--swap):not(.layout--meme_open) .foo_2 > * {
+    transform: translateX(calc(-1 * env(safe-area-inset-left)));
+  }
+
+  &.layout--landscape_cw.layout--swap:not(.layout--meme_open) .foo_2 > * {
+    transform: translateX(env(safe-area-inset-right));
+  }
 }
 
 .layout--tv,

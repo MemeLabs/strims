@@ -123,6 +123,16 @@
     right: max(10px, env(safe-area-inset-right));
   }
 
+  // Swapped, over the chat on the left.
+  @at-root .layout--portable.layout--min_aspect_ratio_2.layout--swap & {
+    right: unset;
+    left: 10px;
+  }
+
+  @at-root .layout--portable.layout--min_aspect_ratio_2.layout--landscape_ccw.layout--swap & {
+    left: max(10px, env(safe-area-inset-left));
+  }
+
   @at-root .layout--portable.layout--min_aspect_ratio_4 & {
     bottom: unset;
     height: calc(var(--layout-height) - 20px);

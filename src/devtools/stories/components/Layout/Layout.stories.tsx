@@ -149,6 +149,10 @@ const stories: Story[] = [
     name: "Home, chat open",
     component: () => <ShellStory open />,
   },
+  {
+    name: "Home, chat open, swapped",
+    component: () => <ShellStory open swap />,
+  },
   // No room yet: the room menu fills the chat, its button in the strip.
   {
     name: "Home, swapped",
@@ -193,6 +197,10 @@ const stories: Story[] = [
   {
     name: "Chat open, emote menu",
     component: () => <ShellStory room open emoteMenu />,
+  },
+  {
+    name: "Chat open, emote menu, swapped",
+    component: () => <ShellStory room open emoteMenu swap />,
   },
   {
     name: "Chat closed",

@@ -7,6 +7,9 @@
   box-shadow: var(--shadow-elevation-2);
 }
 
+// --room-menu-inset-left and -right, where its container sets them, are a
+// notch the menu reaches: its controls and content clear it, and its
+// header's line runs on under it.
 .room_menu {
   height: 100%;
   display: flex;
@@ -16,7 +19,8 @@
     display: flex;
     flex-direction: row;
     border-bottom: 1px solid var(--color-border-chat-tab);
-    padding: 0.4rem 0.2rem 0.1rem;
+    padding: 0.4rem calc(0.2rem + var(--room-menu-inset-right, 0px)) 0.1rem
+      calc(0.2rem + var(--room-menu-inset-left, 0px));
 
     // The close button on the menu's leading edge, whichever side it opens
     // from.
@@ -99,6 +103,8 @@
     flex: 1;
     width: 100%;
     min-height: 1;
+    box-sizing: border-box;
+    padding: 0 var(--room-menu-inset-right, 0px) 0 var(--room-menu-inset-left, 0px);
   }
 
   &__item {
