@@ -10,6 +10,7 @@ import SettingsDrawer from "../../../../components/Chat/SettingsDrawer";
 import Shell from "../../../../components/Chat/Shell";
 import { MockChat, RoomProvider, WhisperProvider } from "../../../contexts/Chat";
 import { messages, replay } from "../../../mocks/chat/MessageEmitter";
+import { assetBundleWhen } from "../../../mocks/chat/assetBundle";
 import { chatMessage } from "../../../mocks/chat/messages";
 import ChatService, { ChatServiceOptions } from "../../../mocks/chat/service";
 import { Story, fixtures } from "../../../storybook";
@@ -85,6 +86,18 @@ const stories: Story[] = [
   {
     name: "No emotes",
     component: () => <ShellStory options={{ assetBundle: null }} />,
+  },
+  // The room's emotes come once its messages show, as on a page whose asset
+  // swarm lags its chat: the messages are laid out as text first.
+  {
+    name: "Emotes after messages",
+    component: () => (
+      <ShellStory
+        options={{
+          assetBundle: assetBundleWhen(() => !!document.querySelector(".chat__message")),
+        }}
+      />
+    ),
   },
   {
     name: "Whisper",

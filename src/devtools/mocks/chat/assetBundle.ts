@@ -2969,9 +2969,21 @@ export const modifierNames = src.modifiers
   .sort((a, b) => a.localeCompare(b));
 export const emoteNames = src.emotes.map(({ name }) => name).sort((a, b) => a.localeCompare(b));
 
+// The room's asset bundle once `ready` holds, checked each frame, and a
+// frame after: a room whose emotes come after what `ready` waits for (its
+// messages shown), as on a page whose asset swarm lags its chat.
+export const assetBundleWhen = (ready: () => boolean) => (): Promise<chatv1.AssetBundle> =>
+  new Promise((resolve) => {
+    const check = () =>
+      requestAnimationFrame(() =>
+        ready() ? requestAnimationFrame(() => resolve(assetBundle())) : check()
+      );
+    check();
+  });
+
 // The room's asset bundle, its emotes' images read from their inlined
 // imports (imageBytes), with no request.
-export default (): Promise<chatv1.AssetBundle> =>
+const assetBundle = (): Promise<chatv1.AssetBundle> =>
   Promise.resolve(
     new chatv1.AssetBundle({
       ...src,
@@ -2996,3 +3008,5 @@ export default (): Promise<chatv1.AssetBundle> =>
       })),
     })
   );
+
+export default assetBundle;
