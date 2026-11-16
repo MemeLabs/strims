@@ -499,6 +499,7 @@ fn report(
         wan,
         wire_bins,
         wire_unmeasured: Vec::new(),
+        sim: "strims-sim",
         sockets: Vec::new(),
         parent_losses,
         parent_changes,

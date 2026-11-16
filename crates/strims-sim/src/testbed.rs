@@ -765,6 +765,7 @@ impl Run {
             wan: Some(net.wan),
             wire_bins: net.bins,
             wire_unmeasured: net.unmeasured,
+            sim: SIM,
             sockets: (0..self.nodes.len())
                 .flat_map(|i| {
                     self.file(&format!("ss-{i}.log"))
@@ -1016,9 +1017,14 @@ fn sockets_of(run: &Run, node: HostIx, text: &str) -> Vec<SocketSample> {
             };
             continue;
         }
-        let (Some(t), Some(peer)) = (at, peer.take()) else {
+        // A socket to no swarm host (the competing upload's two to the
+        // sink, the relay's) has no peer, the table's key: left out.
+        let (Some(t), Some(Some(peer))) = (at, peer.take()) else {
             continue;
         };
+        if peer >= run.nodes.len() {
+            continue;
+        }
         let mut kv: BTreeMap<&str, &str> = BTreeMap::new();
         let words: Vec<&str> = line.split_whitespace().collect();
         for (i, w) in words.iter().enumerate() {
@@ -1042,7 +1048,7 @@ fn sockets_of(run: &Run, node: HostIx, text: &str) -> Vec<SocketSample> {
         out.push(SocketSample {
             t,
             node,
-            peer: peer.filter(|&p| p < run.nodes.len()),
+            peer: Some(peer),
             rtt_us: rtt,
             rttvar_us: rttvar,
             min_rtt_us: kv.get("minrtt").and_then(|v| us(v)),
@@ -1154,7 +1160,7 @@ fn packets(bytes: &[u8]) -> Option<Vec<Packet>> {
 }
 
 /// A `tc-<i>.log` line's tbf: (Unix ms, packets dropped, backlog bytes).
-fn tbf_of(line: &str) -> Option<(u64, u64, u64)> {
+fn tbf_of(line: &str) -> Option<(u64, u64, u64, Option<u64>)> {
     let (ms, rest) = line.split_once(' ')?;
     let tbf = rest.split("qdisc tbf 10:").nth(1)?;
     let tbf = tbf.split(" qdisc ").next()?;
@@ -1171,7 +1177,27 @@ fn tbf_of(line: &str) -> Option<(u64, u64, u64)> {
         "Mb" => 1024 * 1024,
         _ => return None,
     };
-    Some((ms.parse().ok()?, drops, n.parse::<u64>().ok()? * mult))
+    Some((
+        ms.parse().ok()?,
+        drops,
+        n.parse::<u64>().ok()? * mult,
+        after("rate").and_then(|r| tc_rate(&r)),
+    ))
+}
+
+/// A rate as tc prints it (`10Mbit`, `1500Kbit`, `800bit`), in bytes per
+/// second.
+fn tc_rate(v: &str) -> Option<u64> {
+    let unit = v.find(|c: char| !(c.is_ascii_digit() || c == '.'))?;
+    let (n, unit) = v.split_at(unit);
+    let mult = match unit {
+        "bit" => 1.0,
+        "Kbit" => 1e3,
+        "Mbit" => 1e6,
+        "Gbit" => 1e9,
+        _ => return None,
+    };
+    Some((n.parse::<f64>().ok()? * mult / 8.0) as u64)
 }
 
 /// The network side of a testbed run's report.
@@ -1236,10 +1262,19 @@ impl Network {
                         .peekable();
                     let mut cum = [0u64; UP_COUNTERS.len()];
                     let mut cross = 0u64;
+                    // The swarm's traffic is between its nodes (10 + index);
+                    // a browser's own downloads and their ACKs (it reaches the
+                    // internet) and the relay's (.5) are no sim host's.
+                    let node = |o: Option<u8>| {
+                        o.and_then(|o| o.checked_sub(10))
+                            .is_some_and(|i| usize::from(i) < run.nodes.len())
+                    };
                     for (k, edge) in bins.iter_mut().enumerate() {
                         while let Some(p) = mine.next_if(|p| p.us < edge_us(k as u64)) {
                             if p.dst == Some(SINK) {
                                 cross += p.ip_len;
+                            } else if !node(p.dst) {
+                                continue;
                             } else if p.pure_ack {
                                 add(&mut cum, "up_ack_packets", 1);
                                 add(&mut cum, "up_ack_bytes", p.ip_len);
@@ -1277,7 +1312,8 @@ impl Network {
                     let mut at = samples.iter().peekable();
                     let mut last = samples.first().map_or(0, |x| x.1);
                     for (k, edge) in bins.iter_mut().enumerate() {
-                        while let Some(&(_, d, _)) = at.next_if(|x| x.0 * 1000 < edge_us(k as u64))
+                        while let Some(&(_, d, _, _)) =
+                            at.next_if(|x| x.0 * 1000 < edge_us(k as u64))
                         {
                             last = d;
                         }
@@ -1291,15 +1327,21 @@ impl Network {
                         .map_or(0, |(b, a)| b.1.saturating_sub(a.1));
                     // tbf drops frames: GSO is off, a segment is one.
                     w.queue_drop_packets = w.queue_drops;
-                    for &(ms, _, backlog) in &samples {
+                    // The wait is the backlog over the tbf's own rate as the
+                    // sample shows it (its steps as applied; a class's
+                    // line code: VDSL's tbf runs at 64/65 of the line's),
+                    // else the scenario's.
+                    for &(ms, _, backlog, own) in &samples {
                         let Some(t) = run.at(ms) else {
                             continue;
                         };
-                        let rate = spec
-                            .up_steps
-                            .iter()
-                            .rfind(|&&(at, _)| at <= t)
-                            .map_or(site.profile.up, |&(_, r)| r)
+                        let rate = own
+                            .unwrap_or_else(|| {
+                                spec.up_steps
+                                    .iter()
+                                    .rfind(|&&(at, _)| at <= t)
+                                    .map_or(site.profile.up, |&(_, r)| r)
+                            })
                             .max(1);
                         let wait = i64::try_from(backlog * 1_000_000 / rate).unwrap_or(i64::MAX);
                         w.up_queue
@@ -1567,20 +1609,27 @@ mod tests {
             ),
         );
         let us = |ms: u64| (START + ms) * 1000;
+        // A browser's download's ACK to the internet, and the relay's:
+        // no swarm host's.
+        let mut internet = tcp(10, 11, 0, 0x10);
+        internet[16..20].copy_from_slice(&[93, 184, 216, 34]);
         let packets = [
             (us(50), tcp(10, 11, 1448, 0x18)),
+            (us(55), internet),
+            (us(58), tcp(10, 5, 300, 0x18)),
             (us(60), tcp(10, 11, 0, 0x10)),
             (us(70), tcp(10, 250, 1448, 0x10)),
             (us(80), tcp(11, 10, 100, 0x18)),
         ];
         std::fs::write(dir.join("pcap-0.pcap"), pcap(&packets)).unwrap();
         std::fs::write(dir.join("pcap-1.pcap"), pcap(&[])).unwrap();
-        let tc = |drops: u64| {
+        let tc_at = |ms: u64, rate: &str, drops: u64| {
             format!(
-                "{} qdisc tbf 10: root refcnt 2 rate 10Mbit burst 3028b lat 99ms  Sent 3000 bytes 2 pkt (dropped {drops}, overlimits 0 requeues 0)  backlog 1514b 1p requeues 0  qdisc clsact ffff: parent ffff:fff1 Sent 0 bytes 0 pkt (dropped 9, overlimits 0 requeues 0)\n",
-                START + 150
+                "{} qdisc tbf 10: root refcnt 2 rate {rate} burst 3028b lat 99ms  Sent 3000 bytes 2 pkt (dropped {drops}, overlimits 0 requeues 0)  backlog 1514b 1p requeues 0  qdisc clsact ffff: parent ffff:fff1 Sent 0 bytes 0 pkt (dropped 9, overlimits 0 requeues 0)\n",
+                START + ms
             )
         };
+        let tc = |drops: u64| tc_at(150, "10Mbit", drops);
         w(
             "ss-0.log",
             &format!(
@@ -1588,7 +1637,12 @@ mod tests {
                 START + 1000
             ),
         );
-        w("tc-0.log", &tc(4));
+        // The seed's tbf: 4 drops by 150 ms, 3 more by 450 ms, when a
+        // step has halved its rate.
+        w(
+            "tc-0.log",
+            &[tc(4), tc_at(250, "10Mbit", 4), tc_at(450, "5Mbit", 7)].concat(),
+        );
         w("tc-1.log", &tc(0));
         dir
     }
@@ -1687,6 +1741,41 @@ mod tests {
     }
 
     #[test]
+    fn a_run_without_captures_leaves_them_unmeasured() {
+        let dir = fixture("unmeasured");
+        for i in 0..2 {
+            std::fs::remove_file(dir.join(format!("pcap-{i}.pcap"))).unwrap();
+            std::fs::remove_file(dir.join(format!("tc-{i}.log"))).unwrap();
+        }
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        for c in [
+            "up_bytes",
+            "up_packets",
+            "small_packets",
+            "up_ack_bytes",
+            "drops",
+            "retransmits",
+        ] {
+            assert!(r.wire_unmeasured.contains(&up(c)), "{c}");
+        }
+        assert!(r.wan.as_ref().unwrap().hosts[0].up_queue.is_empty());
+        let out = dir.join("tables");
+        r.write_tables(&out, Duration::from_millis(100), true)
+            .unwrap();
+        // The tables leave them empty, not 0.
+        let bins = crate::tables::read_table(&out, "bins").unwrap();
+        let head: Vec<&str> = bins.lines().next().unwrap().split(',').collect();
+        let col = head.iter().position(|c| *c == "seed_up_bytes").unwrap();
+        assert!(bins.lines().count() >= 2);
+        assert!(
+            bins.lines()
+                .skip(1)
+                .all(|l| l.split(',').nth(col) == Some(""))
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn a_run_whose_stamps_go_back_keys_apart() {
         let dir = fixture("stamps");
         let run = Run::read(&dir, &BTreeMap::new()).unwrap();
@@ -1773,13 +1862,26 @@ mod tests {
         assert_eq!(last[0][up("up_packets")], 1);
         assert_eq!(last[0][up("up_ack_packets")], 1);
         assert_eq!(last[0][up("up_ack_bytes")], 52);
-        assert_eq!(last[0][up("drops")], 4);
+        assert_eq!(last[0][up("drops")], 7);
         assert_eq!(last[1][up("up_bytes")], 0);
         assert!(r.wire_unmeasured.contains(&up("retransmits")));
         let w = &r.wan.as_ref().unwrap().hosts[0];
         assert_eq!(w.competing.last().unwrap().1, 1500);
         assert_eq!(w.up_queue[0].1.as_micros(), 1514 * 1_000_000 / 1_250_000);
-        assert_eq!(r.sockets.len(), 2);
+        // The wait at the tbf's own rate as the sample shows it.
+        assert_eq!(w.up_queue[2].1.as_micros(), 1514 * 1_000_000 / 625_000);
+        // The drops per bin: the counter's steps, in the bins they fell in.
+        let drops: Vec<u64> = r
+            .wire_bins
+            .iter()
+            .map(|b| b[0][up("drops")])
+            .collect::<Vec<_>>()
+            .windows(2)
+            .map(|w| w[1] - w[0])
+            .collect();
+        assert_eq!(drops.iter().sum::<u64>(), 3);
+        assert_eq!(drops.iter().position(|&d| d == 3), Some(4));
+        assert_eq!(r.sockets.len(), 1);
         let k = &r.sockets[0];
         assert_eq!((k.node, k.peer), (0, Some(1)));
         assert_eq!(k.rtt_us, Some(99_967));
@@ -1787,7 +1889,7 @@ mod tests {
         assert_eq!((k.cwnd_segments, k.retrans_segments), (Some(33), Some(13)));
         assert_eq!(k.delivery_rate_bps, Some(3_728_280 / 8));
         assert_eq!(k.notsent_bytes, Some(1448));
-        assert_eq!(r.sockets[1].peer, None);
+        // The competing upload's socket to the sink, no swarm host's, is left out.
         assert_eq!(w.up_backlog[0].1, 1514);
         let out = dir.join("tables");
         r.write_tables(&out, Duration::from_millis(100), true)

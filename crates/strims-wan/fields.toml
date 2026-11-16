@@ -2524,14 +2524,14 @@ sims = ["strims-sim"]
 type = "int"
 unit = "ms"
 none = "empty"
-description = "The seed's uplink queue at the bin's end, as the wait a byte joining it would have (`WanHostReport::up_queue`, its latest sample at or before the edge). The sim measures the wait (its uplink's model); a testbed run derives it from its tbf's backlog over the tbf's nominal rate, which charges each packet's IP length and its Ethernet header. Empty outside WAN mode or before a sample."
+description = "The seed's uplink queue at the bin's end, as the wait a byte joining it would have (`WanHostReport::up_queue`, its latest sample at or before the edge). The sim measures the wait (its uplink's model); a testbed run derives it from its tbf's backlog over the tbf's own rate as the sample shows it (its steps as applied). Empty outside WAN mode or before a sample."
 
 [columns.bins.seed_up_queue_bytes]
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
 none = "empty"
-description = "The seed's uplink queue at the bin's end, in bytes (`WanHostReport::up_backlog`, its latest sample at or before the edge). A testbed run measures it (its tbf's backlog: each packet's IP length and Ethernet header); the sim derives it as its measured wait times its uplink's rate then. Empty outside WAN mode or before a sample."
+description = "The seed's uplink queue at the bin's end, in bytes (`WanHostReport::up_backlog`, its latest sample at or before the edge). A testbed run measures it (its tbf's backlog, in the bytes the tbf counts: a frame's length, each packet's IP length and its Ethernet header, or a class's size table's figure where links.sh gives the tbf one: fiber, dsl, cable); the sim derives it as its measured wait times its uplink's rate then. Empty outside WAN mode or before a sample."
 
 [tables.viewers]
 sims = ["strims-sim"]
@@ -2777,14 +2777,14 @@ sims = ["strims-sim"]
 type = "int"
 unit = "ms"
 none = "empty"
-description = "The node's uplink queue at the bin's end, as the wait a byte joining it would have (`WanHostReport::up_queue`, its latest sample at or before the edge): measured by the sim's uplink model, derived on the testbed from the tbf's backlog over its nominal rate (IP length and Ethernet header per packet). Empty outside WAN mode or before a sample."
+description = "The node's uplink queue at the bin's end, as the wait a byte joining it would have (`WanHostReport::up_queue`, its latest sample at or before the edge): measured by the sim's uplink model, derived on the testbed from the tbf's backlog over its own rate as the sample shows it. Empty outside WAN mode or before a sample."
 
 [columns.node_bins.up_queue_bytes]
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
 none = "empty"
-description = "The node's uplink queue at the bin's end, in bytes (`WanHostReport::up_backlog`, its latest sample at or before the edge): measured on the testbed (the tbf's backlog, IP length and Ethernet header per packet), derived in the sim as its measured wait times its uplink's rate then. Empty outside WAN mode or before a sample."
+description = "The node's uplink queue at the bin's end, in bytes (`WanHostReport::up_backlog`, its latest sample at or before the edge): measured on the testbed (the tbf's backlog, in the bytes it counts: IP length and Ethernet header per packet, or its class's size table's figure), derived in the sim as its measured wait times its uplink's rate then. Empty outside WAN mode or before a sample."
 
 [tables.meter_samples]
 sims = ["strims-sim"]
@@ -4152,7 +4152,7 @@ joins = "viewers USING (k, src, node)"
 sample = false
 zstd = true
 description = "A testbed run's TCP sockets as the kernel reports them (`ss -tin`), sample by sample: the round trip, the congestion window, the bytes sent, acknowledged and unsent, segments and retransmissions, and the delivery and pacing rates."
-notes.strims-sim = "Only testbed runs write it (`crate::testbed`: the seed's ss-0.log, run.sh's `SS_EVERY`, each of its sockets to another node); a sim run's sockets are its window model's and write no table (`Report::sockets` is empty). A field ss leaves out is empty."
+notes.strims-sim = "Only testbed runs write it (`crate::testbed`: the seed's ss-0.log, run.sh's `SS_EVERY`, each of its sockets to another node; one to no node, the competing upload's two to its sink or the relay's, is left out, as the key's peer would be empty); a sim run's sockets are its window model's and write no table (`Report::sockets` is empty). A field ss leaves out is empty but notsent_bytes, which ss leaves out at 0."
 
 [columns.sockets.t_ms]
 sims = ["strims-sim"]
@@ -4169,7 +4169,7 @@ description = "The node whose socket it is, as `events` numbers hosts."
 sims = ["strims-sim"]
 type = "int"
 none = "empty"
-description = "The node at the socket's other end, as `events` numbers hosts; empty for an address that isn't a node's (the relay, the competing upload's sink)."
+description = "The node at the socket's other end, as `events` numbers hosts (a socket to no node's address isn't sampled)."
 
 [columns.sockets.rtt_us]
 sims = ["strims-sim"]
@@ -4230,7 +4230,7 @@ sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
 none = "empty"
-description = "Bytes the node has written to the socket that the kernel hasn't sent yet (`ss`'s `notsent:`), at the sample; empty when ss shows none."
+description = "Bytes the node has written to the socket that the kernel hasn't sent yet (`ss`'s `notsent:`), at the sample; 0 where ss shows none, as it leaves out nothing unsent."
 
 [columns.sockets.segs_out]
 sims = ["strims-sim"]

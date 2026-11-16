@@ -3443,18 +3443,20 @@ pub(crate) mod cols {
         /// The seed's uplink queue at the bin's end, as the wait a byte joining
         /// it would have (`WanHostReport::up_queue`, its latest sample at or
         /// before the edge). The sim measures the wait (its uplink's model); a
-        /// testbed run derives it from its tbf's backlog over the tbf's nominal
-        /// rate, which charges each packet's IP length and its Ethernet header.
-        /// Empty outside WAN mode or before a sample.
+        /// testbed run derives it from its tbf's backlog over the tbf's own
+        /// rate as the sample shows it (its steps as applied). Empty outside
+        /// WAN mode or before a sample.
         ///
         /// Unit: ms. None is written as an empty field.
         SeedUpQueueMs,
         /// The seed's uplink queue at the bin's end, in bytes
         /// (`WanHostReport::up_backlog`, its latest sample at or before the
-        /// edge). A testbed run measures it (its tbf's backlog: each packet's
-        /// IP length and Ethernet header); the sim derives it as its measured
-        /// wait times its uplink's rate then. Empty outside WAN mode or before
-        /// a sample.
+        /// edge). A testbed run measures it (its tbf's backlog, in the bytes
+        /// the tbf counts: a frame's length, each packet's IP length and its
+        /// Ethernet header, or a class's size table's figure where links.sh
+        /// gives the tbf one: fiber, dsl, cable); the sim derives it as its
+        /// measured wait times its uplink's rate then. Empty outside WAN mode
+        /// or before a sample.
         ///
         /// Unit: bytes. None is written as an empty field.
         SeedUpQueueBytes,
@@ -3906,18 +3908,17 @@ pub(crate) mod cols {
         /// The node's uplink queue at the bin's end, as the wait a byte joining
         /// it would have (`WanHostReport::up_queue`, its latest sample at or
         /// before the edge): measured by the sim's uplink model, derived on the
-        /// testbed from the tbf's backlog over its nominal rate (IP length and
-        /// Ethernet header per packet). Empty outside WAN mode or before a
-        /// sample.
+        /// testbed from the tbf's backlog over its own rate as the sample shows
+        /// it. Empty outside WAN mode or before a sample.
         ///
         /// Unit: ms. None is written as an empty field.
         UpQueueMs,
         /// The node's uplink queue at the bin's end, in bytes
         /// (`WanHostReport::up_backlog`, its latest sample at or before the
-        /// edge): measured on the testbed (the tbf's backlog, IP length and
-        /// Ethernet header per packet), derived in the sim as its measured wait
-        /// times its uplink's rate then. Empty outside WAN mode or before a
-        /// sample.
+        /// edge): measured on the testbed (the tbf's backlog, in the bytes it
+        /// counts: IP length and Ethernet header per packet, or its class's
+        /// size table's figure), derived in the sim as its measured wait times
+        /// its uplink's rate then. Empty outside WAN mode or before a sample.
         ///
         /// Unit: bytes. None is written as an empty field.
         UpQueueBytes,
@@ -4871,9 +4872,8 @@ pub(crate) mod cols {
         TMs,
         /// The node whose socket it is, as `events` numbers hosts.
         Node,
-        /// The node at the socket's other end, as `events` numbers hosts; empty
-        /// for an address that isn't a node's (the relay, the competing
-        /// upload's sink).
+        /// The node at the socket's other end, as `events` numbers hosts (a
+        /// socket to no node's address isn't sampled).
         ///
         /// None is written as an empty field.
         Peer,
@@ -4917,7 +4917,8 @@ pub(crate) mod cols {
         /// Unit: bytes. None is written as an empty field.
         BytesReceived,
         /// Bytes the node has written to the socket that the kernel hasn't sent
-        /// yet (`ss`'s `notsent:`), at the sample; empty when ss shows none.
+        /// yet (`ss`'s `notsent:`), at the sample; 0 where ss shows none, as it
+        /// leaves out nothing unsent.
         ///
         /// Unit: bytes. None is written as an empty field.
         NotsentBytes,

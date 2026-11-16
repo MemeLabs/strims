@@ -651,7 +651,7 @@ impl Report {
             sends.finish()?;
         }
         let mut meta = JsonRow::default();
-        meta.str(MetaText::Sim, "strims-sim");
+        meta.str(MetaText::Sim, self.sim);
         if let Some(sw) = self.scenario.swarms.first() {
             meta.int(MetaInt::Seed, sw.seed)
                 .int(MetaInt::Streams, sw.options.stream_count.max(1));

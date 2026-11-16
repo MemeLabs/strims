@@ -11,7 +11,8 @@
 //! the host's clock. It ends 5 s after the stream does.
 //!
 //! The stream ([`Stream`]) is the self-checking frames of [`LiveShape::testbed`],
-//! each stamped with the wall clock as it is written, or an FLV file's
+//! each stamped with its due time (the start plus its place times the
+//! write interval: a late write lags as much), or an FLV file's
 //! media in the unit format ([`media`]), each access unit
 //! with its publish time.
 //!

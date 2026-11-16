@@ -587,6 +587,9 @@ pub struct Report {
     /// measure, which the tables leave empty: none of a sim's, those a
     /// testbed run's captures can't tell ([`crate::testbed`]).
     pub wire_unmeasured: Vec<usize>,
+    /// The sim its tables say wrote them (`series_meta.json`'s `sim`):
+    /// strims-sim's runs', a testbed run's [`crate::testbed::SIM`].
+    pub sim: &'static str,
     /// A testbed run's TCP sockets, sample by sample ([`SocketSample`]):
     /// empty in a sim run, whose tables then hold no `sockets`.
     pub sockets: Vec<SocketSample>,
