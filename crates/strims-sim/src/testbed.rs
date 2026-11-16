@@ -1245,9 +1245,97 @@ fn packets(bytes: &[u8]) -> Option<Vec<Packet>> {
     Some(out)
 }
 
-/// A `tc-<i>.log` line's tbf: (Unix ms, packets dropped, backlog bytes).
-fn tbf_of(line: &str) -> Option<(u64, u64, u64, Option<u64>)> {
+/// Node `h`'s access link spec and the device whose root is its modem, from
+/// out dir `dir`'s `links` file (`node <i> <spec> <up_mbit> <delay_ms>
+/// <queue_ms> [<modem_dev>]`, run.sh's): a run from before it wrote the
+/// file had a tbf on eth0 alone, so tbf and no device (hack/testbed/
+/// tcstats.py's link_spec and link_dev).
+fn link_line(dir: &Path, h: usize) -> (String, Option<String>) {
+    let text = std::fs::read_to_string(dir.join("links")).unwrap_or_default();
+    text.lines()
+        .map(|l| l.split_whitespace().collect::<Vec<_>>())
+        .find(|w| w.first() == Some(&"node") && w.get(1) == Some(&h.to_string().as_str()))
+        .and_then(|w| Some(((*w.get(2)?).to_owned(), w.get(6).map(|d| (*d).to_owned()))))
+        .unwrap_or_else(|| ("tbf".to_owned(), None))
+}
+
+/// The kind of a node's modem qdisc 10:, the root of its link class's tree
+/// that holds its queue, for link `spec` (tcstats.py's queue_kind): a cake
+/// router's cake; a trace's prio, over the fq tracelink's program holds
+/// packets in; else the class's tbf, which counts what the qdisc under it
+/// holds and drops.
+fn queue_kind(spec: &str) -> &'static str {
+    let mut parts = spec.split(',');
+    let class = parts.next().unwrap_or("");
+    if parts.any(|kv| kv == "router=cake") {
+        "cake"
+    } else if class == "trace" {
+        "prio"
+    } else {
+        "tbf"
+    }
+}
+
+/// The bytes of a packet's link header ahead of its network header, which
+/// cake's overhead takes the place of (its `avg_hdr_offset`: Ethernet's).
+const HDR_OFFSET: f64 = 14.0;
+
+/// What cake charges for `backlog` skb bytes in `qlen` packets, at their
+/// mean size (tcstats.py's cake_held): each packet's network bytes and
+/// its overhead, at least its mpu, in ATM's cells or PTM's 65 bytes for 64.
+fn cake_held(backlog: u64, qlen: u64, overhead: f64, mpu: f64, line: Option<&str>) -> u64 {
+    if qlen == 0 {
+        return backlog;
+    }
+    let mut n = (backlog as f64 / qlen as f64 - HDR_OFFSET + overhead).max(mpu);
+    match line {
+        Some("atm") => n = (n / 48.0).ceil() * 53.0,
+        Some("ptm") => n += (n / 64.0).ceil(),
+        _ => {}
+    }
+    (qlen as f64 * n).round() as u64
+}
+
+/// A `tc-<i>.log` line's modem queue: (Unix ms, packets dropped, what it
+/// holds as its shaper charges it, its rate in bytes a second where it
+/// has one), its qdisc 10: of `kind` on `dev` (any device where `dev` is
+/// None or the sample names none), from tc's JSON (`tc -s -j qdisc show`,
+/// tcsample's) as tcstats.py reads it, or from an older run's text (a
+/// tbf's).
+fn modem_of(line: &str, kind: &str, dev: Option<&str>) -> Option<(u64, u64, u64, Option<u64>)> {
     let (ms, rest) = line.split_once(' ')?;
+    let ms: u64 = ms.parse().ok()?;
+    let rest = rest.trim();
+    if rest.starts_with('[') {
+        let qs: Vec<Value> = serde_json::from_str(rest).ok()?;
+        let q = qs.iter().find(|q| {
+            q.get("handle").and_then(Value::as_str) == Some("10:")
+                && q.get("kind").and_then(Value::as_str) == Some(kind)
+                && dev.is_none_or(|d| q.get("dev").and_then(Value::as_str).is_none_or(|x| x == d))
+        })?;
+        let num = |v: Option<&Value>| v.and_then(Value::as_f64);
+        let int = |k: &str| q.get(k).and_then(Value::as_u64).unwrap_or(0);
+        let opts = q.get("options");
+        let opt = |k: &str| opts.and_then(|o| o.get(k));
+        let rate = num(opt("rate")).or_else(|| num(opt("bandwidth")));
+        let (backlog, qlen) = (int("backlog"), int("qlen"));
+        let raw = opt("raw").and_then(Value::as_bool).unwrap_or(false);
+        let held = if kind == "cake" && !raw {
+            cake_held(
+                backlog,
+                qlen,
+                num(opt("overhead")).unwrap_or(0.0),
+                num(opt("mpu")).unwrap_or(0.0),
+                opt("atm").and_then(Value::as_str),
+            )
+        } else {
+            backlog
+        };
+        return Some((ms, int("drops"), held, rate.map(|r| r as u64)));
+    }
+    if kind != "tbf" {
+        return None;
+    }
     let tbf = rest.split("qdisc tbf 10:").nth(1)?;
     let tbf = tbf.split(" qdisc ").next()?;
     let after = |key: &str| {
@@ -1264,7 +1352,7 @@ fn tbf_of(line: &str) -> Option<(u64, u64, u64, Option<u64>)> {
         _ => return None,
     };
     Some((
-        ms.parse().ok()?,
+        ms,
         drops,
         n.parse::<u64>().ok()? * mult,
         after("rate").and_then(|r| tc_rate(&r)),
@@ -1415,10 +1503,17 @@ impl Network {
                 }
                 None => have_pcap = false,
             }
-            // A node shaped by no tbf of handle 10: has no counters here.
+            // The node's modem queue: its class's qdisc 10: on the device
+            // its `links` line names; a node with none has no counters here.
+            let (class, modem_dev) = link_line(&run.dir, h);
+            let kind = queue_kind(&class);
             let tbf = run
                 .file(&format!("tc-{h}.log"))
-                .map(|t| t.lines().filter_map(tbf_of).collect::<Vec<_>>())
+                .map(|t| {
+                    t.lines()
+                        .filter_map(|l| modem_of(l, kind, modem_dev.as_deref()))
+                        .collect::<Vec<_>>()
+                })
                 .filter(|s| !s.is_empty());
             match tbf {
                 Some(samples) => {
@@ -1937,6 +2032,91 @@ mod tests {
         }
         assert!(before > 0 && after > 0, "{before} {after}");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_modem_is_read_as_tcstats_reads_it() {
+        // hack/testbed/testdata/tc's every-device JSON of each class's tree
+        // (tc-<i>.log's form), and what tcstats.py's uplink reads there:
+        // (capture, spec, modem's device, drops, held, rate).
+        let cases = [
+            ("tbf", "tbf", "eth0", 22439, 29808, Some(12500)),
+            ("cable", "cable", "ifbm", 29738, 12460, Some(12500)),
+            (
+                "cable_aqm_fifo",
+                "cable,aqm=fifo",
+                "ifbm",
+                30383,
+                29904,
+                Some(12500),
+            ),
+            ("dsl", "dsl", "eth0", 30856, 28620, Some(12500)),
+            (
+                "dsl_line_vdsl",
+                "dsl,line=vdsl",
+                "eth0",
+                32510,
+                28934,
+                Some(12250),
+            ),
+            ("fiber", "fiber", "eth0", 32603, 29904, Some(12500)),
+            (
+                "cable_router_fq_codel",
+                "cable,router=fq_codel",
+                "ifbm",
+                20607,
+                12751564,
+                Some(11875),
+            ),
+            (
+                "dsl_router_cake",
+                "dsl,router=cake",
+                "eth0",
+                26720,
+                2604420,
+                Some(11875),
+            ),
+            (
+                "trace",
+                "trace,file=slow.us,format=us",
+                "eth0",
+                27434,
+                29808,
+                None,
+            ),
+        ];
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../hack/testbed/testdata/tc");
+        for (name, spec, dev, drops, held, rate) in cases {
+            let json = std::fs::read_to_string(dir.join(format!("{name}.every.json"))).unwrap();
+            let line = format!("1000 {}", json.replace('\n', " "));
+            assert_eq!(
+                modem_of(&line, queue_kind(spec), Some(dev)),
+                Some((1000, drops, held, rate)),
+                "{name}"
+            );
+        }
+        // The text of a run from before (a tbf on eth0), and none of
+        // another kind in it.
+        let text = "2000 qdisc tbf 10: root refcnt 2 rate 10Mbit burst 3028b lat 99ms  Sent 3000 bytes 2 pkt (dropped 4, overlimits 0 requeues 0)  backlog 1514b 1p requeues 0";
+        assert_eq!(
+            modem_of(text, "tbf", None),
+            Some((2000, 4, 1514, Some(1_250_000)))
+        );
+        assert_eq!(modem_of(text, "cake", None), None);
+        // The links file names the device; a run without one, tbf on eth0.
+        let d = std::env::temp_dir().join(format!("strims-links-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        assert_eq!(link_line(&d, 0), ("tbf".to_owned(), None));
+        std::fs::write(
+            d.join("links"),
+            "node 0 tbf 10 20 100 eth0\nnode 1 cable 20 10 100 ifbm\n",
+        )
+        .unwrap();
+        assert_eq!(
+            link_line(&d, 1),
+            ("cable".to_owned(), Some("ifbm".to_owned()))
+        );
+        std::fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]
