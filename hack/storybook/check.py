@@ -585,41 +585,104 @@ def find_chromium(name):
     sys.exit("check: no Chromium found (--chromium PATH)")
 
 
-# A run's servers and browsers live in a network namespace of their own, with
-# only a loopback, so the host's interfaces coming and going (a Docker
-# network's bridge, a container's veth) can't reach them: Chromium fails every
-# request in flight with net::ERR_NETWORK_CHANGED on such a change, loopback's
-# too, and has no switch to stop it. bwrap makes the namespace (its AppArmor
-# profile may create the user namespace that Ubuntu denies unshare); the run
-# goes on inside it as a process of its own, ISOLATED set in its environment,
-# with a fresh pid namespace, which the kernel empties once the run ends, so
-# none of its browsers outlives it. The snap's Chromium can't start in a user
-# namespace (snap-confine refuses), so the snap's binary runs unwrapped, and
-# without Chromium's sandbox, which needs a user namespace or a setuid helper
-# of its own: the run's pages are its builds' stories, with every request off
-# its servers answered by stub.
+# A run's servers and browsers live in a box of their own (bwrap): network,
+# user and pid namespaces with only a loopback, so the host's interfaces
+# coming and going (a Docker network's bridge, a container's veth) can't reach
+# them. Chromium fails every request in flight with net::ERR_NETWORK_CHANGED
+# on such a change, loopback's too, and has no switch to stop it. bwrap's
+# AppArmor profile may create the user namespace that Ubuntu denies unshare.
+# The snap's Chromium can't start in a user namespace (snap-confine refuses),
+# so the snap's binary runs unwrapped, and without Chromium's sandbox, which
+# needs a user namespace or a setuid helper of its own there: the run's pages
+# are its builds' stories, with every request off its servers answered by
+# stub. The run goes on in the box as a child, ISOLATED set to its work dir
+# (browser profiles, server logs), which the run outside holds (hold) and
+# removes once the box ends, ending the box at once when told to stop; the
+# kernel ends whatever runs in the box with its pid namespace.
 ISOLATED = "STORYBOOK_CHECK_ISOLATED"
-BWRAP = ["bwrap", "--dev-bind", "/", "/", "--proc", "/proc", "--unshare-user", "--unshare-net",
-         "--unshare-pid", "--die-with-parent", "--"]
 SNAP_CHROMIUM = "/snap/chromium/current/usr/lib/chromium-browser/chrome"
+# Work dirs this old that no run holds were left by a run killed outright.
+STALE_S = 24 * 3600
+
+
+def bwrap():
+    """bwrap's command line for the box."""
+    return ["bwrap", "--dev-bind", "/", "/", "--proc", "/proc", "--unshare-user", "--unshare-net",
+            "--unshare-pid", "--die-with-parent", "--"]
 
 
 def unwrapped(exe):
-    """The browser to start inside the namespace: the snap's binary for its
+    """The browser to start inside the box: the snap's binary for its
     wrapper (a link to /usr/bin/snap), else `exe`."""
     return SNAP_CHROMIUM if Path(exe).resolve() == Path("/usr/bin/snap").resolve() else exe
 
 
 def isolation_unavailable(exe):
-    """Why a run can't have a network namespace of its own here, or None."""
+    """Why a run can't have a box of its own here, or None."""
     if not shutil.which("bwrap"):
         return "no bwrap on PATH"
     if not Path(unwrapped(exe)).is_file():
         return f"no {unwrapped(exe)}"
-    res = subprocess.run([*BWRAP, "true"], stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    res = subprocess.run([*bwrap(), "true"], stdin=subprocess.DEVNULL, capture_output=True, text=True)
     if res.returncode:
         return f"bwrap can't make one ({first_line(res.stderr.strip()) or f'exit {res.returncode}'})"
     return None
+
+
+def run_boxed(argv, work):
+    """This check again (`argv`) in its box, as a child: its exit code. Told
+    to stop (SIGTERM, SIGINT, SIGHUP), the run ends the box, all of it,
+    before it exits, so its cleanup finds nothing running."""
+    proc = subprocess.Popen([*bwrap(), sys.executable, str(Path(__file__).resolve()), *argv],
+                            env={**os.environ, ISOLATED: str(work)})
+    signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+
+    def stop(n, _):
+        # Not proc.wait() here: the wait this interrupts holds its lock.
+        for sig in signals:
+            signal.signal(sig, signal.SIG_IGN)
+        proc.kill()
+        raise SystemExit(128 + n)
+
+    for sig in signals:
+        signal.signal(sig, stop)
+    try:
+        return proc.wait()
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def hold(work):
+    """A lock on work dir `work`, held while the file returned stays open,
+    so remove_stale passes it by."""
+    f = open(work / ".lock", "w")
+    fcntl.flock(f, fcntl.LOCK_EX)
+    return f
+
+
+def remove_work(work):
+    """Removes a work dir, again while what a killed browser wrote last
+    still turns up."""
+    for _ in range(5):
+        shutil.rmtree(work, ignore_errors=True)
+        if not work.exists():
+            return
+        time.sleep(0.2)
+
+
+def remove_stale(root):
+    """Removes the work dirs under `root` (a run's storybook-check-*, a
+    probe's grab-*) last changed STALE_S ago or more that no run holds."""
+    for d in [*root.glob("storybook-check-*"), *root.glob("grab-*")]:
+        try:
+            if not d.is_dir() or time.time() - d.stat().st_mtime < STALE_S:
+                continue
+            with open(d / ".lock", "a") as f:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                remove_work(d)
+        except OSError:
+            continue
 
 
 class Browser:
@@ -3052,31 +3115,15 @@ def main(argv=None):
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda n, _: sys.exit(128 + n))
     exe = find_chromium(args.chromium)
-    if comparing and (why := head_modules()):
+    inside = os.environ.get(ISOLATED)
+    if comparing and not inside and (why := head_modules()):
         print(f"check: {why}", file=sys.stderr)
         return 2
-    if os.environ.get(ISOLATED):
-        # Inside the namespace (see ISOLATED): the builds were made outside.
+    if inside:
+        # In the box (see ISOLATED), where the run outside made the builds.
         exe = unwrapped(exe)
         CHROMIUM_FLAGS.append("--no-sandbox")
         args.build = args.rebuild_base = False
-    elif args.port:
-        why = isolation_unavailable(exe)
-        if why:
-            print(f"check: warning: the run shares the host's network, {why}: an interface coming or going "
-                  "(a Docker network's, a container's) fails what its browsers are loading "
-                  "(net::ERR_NETWORK_CHANGED), and those stories are captured again", file=sys.stderr)
-        else:
-            # The builds first, out here: the base's install may need the
-            # registry.
-            if args.build:
-                build()
-            if args.compare:
-                build_base(args.compare, args.rebuild_base)
-            sys.stdout.flush()
-            sys.stderr.flush()
-            os.execvpe(BWRAP[0], [*BWRAP, sys.executable, str(Path(__file__).resolve()),
-                                  *(sys.argv[1:] if argv is None else argv)], {**os.environ, ISOLATED: "1"})
     if args.build:
         build()
     if args.screenshots:
@@ -3085,7 +3132,25 @@ def main(argv=None):
     # The snap's Chromium sees only its own corner of the home directory.
     profiles_root = (Path.home() / "snap" / "chromium" / "common") if "/snap/" in exe else Path(tempfile.gettempdir())
     profiles_root.mkdir(parents=True, exist_ok=True)
-    work = Path(tempfile.mkdtemp(prefix="storybook-check-", dir=profiles_root))
+    if inside:
+        work = Path(inside)
+    else:
+        remove_stale(profiles_root)
+        work = Path(tempfile.mkdtemp(prefix="storybook-check-", dir=profiles_root))
+        held = hold(work)  # held while the run lasts
+        why = isolation_unavailable(exe) if args.port else None
+        if args.port and not why:
+            try:
+                # The base's install may need the registry: it builds out here.
+                if args.compare:
+                    build_base(args.compare, args.rebuild_base)
+                return run_boxed(sys.argv[1:] if argv is None else argv, work)
+            finally:
+                remove_work(work)
+        if why:
+            print(f"check: warning: the run shares the host's network, {why}: an interface coming or going "
+                  "(a Docker network's, a container's) fails what its browsers are loading "
+                  "(net::ERR_NETWORK_CHANGED), and those stories are captured again", file=sys.stderr)
     if comparing:
         try:
             return compare_main(args, exe, work)
