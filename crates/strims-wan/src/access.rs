@@ -47,6 +47,38 @@ pub struct Profile {
     pub loss: f64,
     /// Loss that comes in bursts, if the link has any.
     pub bursts: Option<Bursts>,
+    /// The uplink's shaper bucket, if it has one ([`Bucket`]). `None` in
+    /// every [`Access::profile`]: the uplink drains at its rate alone.
+    /// [`Access::bucket`] gives a kind's typical one.
+    pub bucket: Option<Bucket>,
+}
+
+/// An uplink shaper's token bucket. Tokens fill at the uplink's rate (its
+/// steps' from their times) up to `bytes`; the bytes of a message that the
+/// tokens cover leave at once, or at `peak` bytes per second, and the rest
+/// at the uplink's rate, so a burst after idle reaches the path faster
+/// than the rate alone lets it (see [`crate::network`]).
+///
+/// Linux's tbf without a peakrate (`tbf rate <r> burst <bytes>`, as
+/// `hack/testbed/run.sh` shapes its containers' egress) is a bucket of
+/// `bytes` with no `peak`: it keeps its tokens as transmission time at the
+/// rate, at most its buffer's, and dequeues a packet once they cover it
+/// whole, so after idle the first `bytes` of a burst go at once, the next
+/// packet when the rate has refilled what it lacks, and so on. A line's own
+/// rate behind the shaper (a cable modem's upstream channels, a fibre
+/// ONT's) is `peak`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Bucket {
+    pub bytes: u64,
+    pub peak: Option<u64>,
+}
+
+impl Bucket {
+    /// A bucket of `bytes` whose bytes leave at once, as tbf's do over a
+    /// veth.
+    pub const fn of(bytes: u64) -> Bucket {
+        Bucket { bytes, peak: None }
+    }
 }
 
 /// Loss in bursts on an access link, both ways: a burst starts every
@@ -104,6 +136,7 @@ impl Access {
                 jitter: Duration::from_micros(jitter_us),
                 loss,
                 bursts: None,
+                bucket: None,
             }
         }
         const fn bursty(mut p: Profile, bursts: Bursts) -> Profile {
@@ -137,6 +170,67 @@ impl Access {
                     loss: 0.3,
                 },
             ),
+        }
+    }
+}
+
+/// How long a cable uplink's bucket lets it send at its peak, at its rate:
+/// a CMTS's Maximum Traffic Burst of at least the sustained rate over 64
+/// (Cisco's uBR guidance, "Upstream Scheduler Mode Configuration for the
+/// Cisco uBR CMTS", which in bytes is 1/8 s of the rate). DOCSIS 3.0 MULPI
+/// (ETSI EN 302 878-4, C.2.2.5.3) defaults it to 3044 bytes when the
+/// operator leaves it out, at least 1522; PowerBoost-era Comcast buckets
+/// were 5-10 MB (Bauer, Clark and Lehr, HomeNets 2011, table 1;
+/// Kanuparthy and Dovrolis, IMC 2011, table 2). This is the middle of that
+/// range, and the guidance a CMTS's own vendor gives.
+pub const CABLE_BURST: Duration = Duration::from_millis(125);
+
+/// The rate a cable uplink's bucket sends at: four bonded DOCSIS 3.0
+/// upstream channels of about 27 Mbit/s each (A-TDMA at 5.12 Msym/s, 64-QAM;
+/// Cisco, "Data Throughput in a DOCSIS World"), where a burst goes out in
+/// the minislots the CMTS grants.
+pub const CABLE_PEAK: u64 = 100 * MBIT;
+
+impl Access {
+    /// The shaper bucket a link of this kind's uplink typically has at a
+    /// rate of `up` bytes per second, `None` where a token bucket doesn't
+    /// model how its uplink sends:
+    ///
+    /// - **Cable**: DOCSIS shapes the upstream service flow with a token
+    ///   bucket, `T·R/8 + B` bytes over any `T` (MULPI C.2.2.5.2), which
+    ///   the modem shapes to and the CMTS enforces by its grants:
+    ///   [`CABLE_BURST`] of the rate, leaving at [`CABLE_PEAK`].
+    /// - **DSL**: the modem serializes its upstream at the line's sync
+    ///   rate, the cap itself, so no burst passes it; a BNG policer behind
+    ///   it, where there is one, only sees what the line has paced
+    ///   (ShaperProbe, IMC 2011: no shaping on the DSL lines it measured).
+    /// - **Fibre**: a GPON ONU's upstream goes in the grants the OLT's
+    ///   dynamic bandwidth assignment sizes, at most its T-CONT's maximum
+    ///   bandwidth in every 125 µs frame (ITU-T G.984.3, 7.4 and table
+    ///   7-1), whose traffic descriptor has no burst size: a frame's
+    ///   share, 7.8 KB at 500 Mbit/s, passes in 125 µs, under the sims'
+    ///   millisecond.
+    /// - **LTE** and **Starlink**: the base station or satellite schedules
+    ///   uplink grants on request (a scheduling request, a buffer status
+    ///   report, grants each TTI: 3GPP TR 36.912, B.1.2; Starlink's
+    ///   on-demand allocation, Mohan et al., WWW 2024), so an idle uplink
+    ///   sends later, not faster. A bucket models none of that.
+    /// - **Datacenter**: at its line rate, 1 Gbit/s, a bucket's bytes
+    ///   drain in microseconds; a cloud's burst credits act over minutes
+    ///   (AWS EC2's network I/O credits).
+    ///
+    /// Home routers' shapers pass no more: cake paces from the first
+    /// packet after idle, and sqm-scripts' HTB takes a millisecond of its
+    /// rate, at least 1749 bytes (sqm-scripts' `SHAPER_BURST_DUR_US`).
+    pub const fn bucket(self, up: u64) -> Option<Bucket> {
+        match self {
+            Access::Cable => Some(Bucket {
+                bytes: up * CABLE_BURST.as_millis() as u64 / 1000,
+                peak: Some(if up > CABLE_PEAK { up } else { CABLE_PEAK }),
+            }),
+            Access::Datacenter | Access::Fiber | Access::Dsl | Access::Lte | Access::Starlink => {
+                None
+            }
         }
     }
 }
@@ -177,6 +271,13 @@ impl Site {
         self
     }
 
+    /// The same site with its uplink shaped by `bucket` (`None`: the rate
+    /// alone).
+    pub const fn with_bucket(mut self, bucket: Option<Bucket>) -> Site {
+        self.profile.bucket = bucket;
+        self
+    }
+
     /// The site with each packet lost with probability `loss` on its
     /// access link, and no bursts.
     pub const fn with_loss(mut self, loss: f64) -> Site {
@@ -187,7 +288,8 @@ impl Site {
 }
 
 impl fmt::Display for Site {
-    /// `<city> <access> <down>/<up>` with rates in kbit/s.
+    /// `<city> <access> <down>/<up>` with rates in kbit/s, and with a
+    /// bucket ` burst <bytes>`, `@<peak>` in kbit/s if it has one.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -196,7 +298,14 @@ impl fmt::Display for Site {
             self.access,
             self.profile.down * 8 / 1000,
             self.profile.up * 8 / 1000
-        )
+        )?;
+        if let Some(b) = self.profile.bucket {
+            write!(f, " burst {}", b.bytes)?;
+            if let Some(peak) = b.peak {
+                write!(f, "@{}", peak * 8 / 1000)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -255,6 +364,37 @@ mod tests {
         };
         assert!((mean(Access::Lte) - 0.002).abs() < 0.000_1);
         assert!((mean(Access::Starlink) - 0.003).abs() < 0.000_2);
+    }
+
+    #[test]
+    fn only_cable_has_a_typical_bucket() {
+        let up = Access::Cable.profile().up;
+        assert_eq!(
+            Access::Cable.bucket(up),
+            Some(Bucket {
+                bytes: 312_500,
+                peak: Some(100 * MBIT)
+            })
+        );
+        assert_eq!(
+            Access::Cable.bucket(5 * MBIT).map(|b| b.bytes),
+            Some(78_125)
+        );
+        assert_eq!(
+            Access::Cable.bucket(200 * MBIT).and_then(|b| b.peak),
+            Some(200 * MBIT)
+        );
+        for a in Access::ALL.into_iter().filter(|&a| a != Access::Cable) {
+            assert_eq!(a.bucket(a.profile().up), None, "{a}");
+        }
+        for a in Access::ALL {
+            assert_eq!(a.profile().bucket, None, "{a}");
+        }
+        let s = Site::new(City::Chicago, Access::Cable).with_bucket(Access::Cable.bucket(up));
+        assert_eq!(
+            s.to_string(),
+            "chicago cable 300000/20000 burst 312500@100000"
+        );
     }
 
     #[test]

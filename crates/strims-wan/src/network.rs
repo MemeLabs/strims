@@ -38,13 +38,28 @@
 //!   message that is still serializing when a step comes pays the new rate
 //!   for the rest of its bytes, so a step applies from its time, whatever
 //!   the queue holds then.
+//! - **Shaper bucket.** An uplink whose site has a [`Bucket`] holds tokens,
+//!   in bytes, that fill at the uplink's rate (its steps' from their
+//!   times) up to the bucket's size and that the bytes it sends take. A
+//!   message that starts through it with `T` tokens there has its last bit
+//!   out `max(0, wire − T)` over the rate later, or `wire` over the
+//!   bucket's peak if that is later, and leaves the bucket what that time
+//!   refilled less what it took. This is the last packet's dequeue in
+//!   Linux's tbf, whose packets of a burst go once the tokens cover each
+//!   whole: packet `k` of a burst at `T` tokens leaves when the rate has
+//!   added `C_k − T` (`C_k` the burst's bytes through it). The queue holds
+//!   the bytes not yet out ([`Network::up_backlog`]), a byte limit as tbf's
+//!   is. Without a bucket an uplink drains at its rate alone, the model of
+//!   a link whose shaper lets no burst through. A rate step leaves the
+//!   tokens as they are (tbf's `change` refills its bucket; a real link's
+//!   rate changes don't).
 
 use std::collections::VecDeque;
 
 use strims_base::rng::{DetRng, det_rng, fork};
 use strims_base::time::{Duration, Time};
 
-use crate::access::{BURST_MAX, Bursts, Site};
+use crate::access::{BURST_MAX, Bucket, Bursts, Site};
 use crate::sample::{exponential, unit};
 use crate::wire::{small_packets, tx_time};
 
@@ -131,9 +146,53 @@ pub fn retransmission(packets: u32, rtt: Duration) -> Duration {
     }
 }
 
+/// Nanoseconds in a second: bytes times this are byte-nanoseconds, the
+/// unit an uplink's serialization and its bucket's tokens are kept in, so
+/// a step's share of a message stays exact.
+const NS: i128 = 1_000_000_000;
+
 /// When `wire` bytes that start through an uplink at `start` are through:
 /// at `rate`, then from each of `steps` (in time order) on at its rate.
 fn through(rate: u64, steps: &[(Time, u64)], start: Time, wire: usize) -> Time {
+    drain(
+        rate,
+        steps,
+        start,
+        i128::try_from(wire).unwrap_or(i128::MAX) * NS,
+    )
+}
+
+/// The rate an uplink of `rate` with `steps` runs at at `at`.
+fn rate_at(rate: u64, steps: &[(Time, u64)], at: Time) -> u64 {
+    let next = steps.partition_point(|&(t, _)| t <= at);
+    next.checked_sub(1)
+        .and_then(|i| steps.get(i))
+        .map_or(rate, |&(_, r)| r)
+}
+
+/// What an uplink of `rate` with `steps` carries from `from` to `to`, in
+/// byte-nanoseconds (none when `to` isn't later).
+fn carried(rate: u64, steps: &[(Time, u64)], from: Time, to: Time) -> i128 {
+    if to <= from {
+        return 0;
+    }
+    let next = steps.partition_point(|&(t, _)| t <= from);
+    let mut rate = rate_at(rate, steps, from).max(1);
+    let (mut at, mut sum) = (from, 0i128);
+    for &(t, r) in steps.iter().skip(next) {
+        if t >= to {
+            break;
+        }
+        sum += i128::from(rate) * i128::from((t - at).as_nanos());
+        at = t;
+        rate = r.max(1);
+    }
+    sum + i128::from(rate) * i128::from((to - at).as_nanos())
+}
+
+/// When `left` byte-nanoseconds that start through an uplink at `start`
+/// are through ([`through`]).
+fn drain(rate: u64, steps: &[(Time, u64)], start: Time, mut left: i128) -> Time {
     let next = steps.partition_point(|&(t, _)| t <= start);
     let mut rate = next
         .checked_sub(1)
@@ -141,8 +200,6 @@ fn through(rate: u64, steps: &[(Time, u64)], start: Time, wire: usize) -> Time {
         .map_or(rate, |&(_, r)| r)
         .max(1);
     let mut at = start;
-    // Byte-nanoseconds, so a step's share of a message stays exact.
-    let mut left = i128::try_from(wire).unwrap_or(i128::MAX) * 1_000_000_000;
     for &(t, r) in steps.iter().skip(next) {
         let fits = i128::from(rate) * i128::from((t - at).as_nanos());
         if left <= fits {
@@ -198,8 +255,13 @@ struct End {
     up_steps: Vec<(Time, u64)>,
     up_free: Time,
     /// The messages handed to the uplink that may not have left it yet:
-    /// when each started through it and when its last bit left.
-    up_spans: VecDeque<(Time, Time)>,
+    /// when each started through it, when its last bit left, and its wire
+    /// bytes.
+    up_spans: VecDeque<(Time, Time, usize)>,
+    /// With a bucket, the tokens it held at `tokens_at`, in
+    /// byte-nanoseconds.
+    tokens: i128,
+    tokens_at: Time,
     down_free: Time,
     up_jitter: Jitter,
     down_jitter: Jitter,
@@ -291,14 +353,39 @@ impl End {
         }
     }
 
-    /// Records a message handed to the uplink at `at` that starts through
-    /// it at `start` and ends at `up_free`, and forgets those that had
-    /// left by `at`.
-    fn span(&mut self, at: Time, start: Time) {
-        while self.up_spans.front().is_some_and(|&(_, done)| done <= at) {
+    /// Records a message of `wire` bytes handed to the uplink at `at` that
+    /// starts through it at `start` and ends at `up_free`, and forgets
+    /// those that had left by `at`.
+    fn span(&mut self, at: Time, start: Time, wire: usize) {
+        while self
+            .up_spans
+            .front()
+            .is_some_and(|&(_, done, _)| done <= at)
+        {
             self.up_spans.pop_front();
         }
-        self.up_spans.push_back((start, self.up_free));
+        self.up_spans.push_back((start, self.up_free, wire));
+    }
+
+    /// When `wire` bytes that start through the uplink at `start`, no
+    /// earlier than everything before them has left, are through: at the
+    /// rate, or with a bucket what its tokens cover at once (or at its
+    /// peak) and the rest at the rate (see the module docs).
+    fn serve(&mut self, start: Time, wire: usize) -> Time {
+        let rate = self.site.profile.up;
+        let Some(Bucket { bytes, peak }) = self.site.profile.bucket else {
+            return through(rate, &self.up_steps, start, wire);
+        };
+        let cap = i128::from(bytes) * NS;
+        let have = (self.tokens + carried(rate, &self.up_steps, self.tokens_at, start)).min(cap);
+        let need = i128::try_from(wire).unwrap_or(i128::MAX) * NS;
+        let mut done = drain(rate, &self.up_steps, start, (need - have).max(0));
+        if let Some(peak) = peak {
+            done = done.max(start + tx_time(wire, peak));
+        }
+        self.tokens = (have - need + carried(rate, &self.up_steps, start, done)).clamp(0, cap);
+        self.tokens_at = done;
+        done
     }
 }
 
@@ -337,6 +424,8 @@ impl Network {
                     up_steps: Vec::new(),
                     up_free: Time::NIL,
                     up_spans: VecDeque::new(),
+                    tokens: i128::from(site.profile.bucket.map_or(0, |b| b.bytes)) * NS,
+                    tokens_at: Time::NIL,
                     down_free: Time::NIL,
                     up_jitter: Jitter::new(up, site.profile.jitter),
                     down_jitter: Jitter::new(down, site.profile.jitter),
@@ -405,10 +494,7 @@ impl Network {
     /// `h`'s uplink rate at `at`, in bytes per second.
     pub fn up_rate(&self, h: usize, at: Time) -> u64 {
         let end = self.end(h);
-        let next = end.up_steps.partition_point(|&(t, _)| t <= at);
-        next.checked_sub(1)
-            .and_then(|i| end.up_steps.get(i))
-            .map_or(end.site.profile.up, |&(_, r)| r)
+        rate_at(end.site.profile.up, &end.up_steps, at)
     }
 
     /// When `h`'s downlink has delivered everything that reached it so far.
@@ -459,8 +545,8 @@ impl Network {
     ) -> Transit {
         let end = self.end_mut(a);
         let start = sent.max(end.up_free);
-        end.up_free = through(end.site.profile.up, &end.up_steps, start, wire);
-        end.span(sent, start);
+        end.up_free = end.serve(start, wire);
+        end.span(sent, start, wire);
         end.stats.up_bytes = end.stats.up_bytes.saturating_add(wire as u64);
         end.stats.up_packets = end.stats.up_packets.saturating_add(u64::from(packets));
         end.stats.small_packets = end
@@ -479,8 +565,8 @@ impl Network {
     pub fn occupy_up(&mut self, at: Time, h: usize, wire: usize) -> Time {
         let end = self.end_mut(h);
         let start = at.max(end.up_free);
-        end.up_free = through(end.site.profile.up, &end.up_steps, start, wire);
-        end.span(at, start);
+        end.up_free = end.serve(start, wire);
+        end.span(at, start, wire);
         end.up_free
     }
 
@@ -488,14 +574,20 @@ impl Network {
     /// counting the message it is sending whole: an access queue frees a
     /// message's bytes once its last bit has left (Linux's tbf frees a
     /// GSO buffer once its tokens are in), so what it has room for grows
-    /// in steps of what it sends.
+    /// in steps of what it sends. With a bucket, the bytes it holds at the
+    /// rate at `at`: the queue's limit is in bytes, which the bucket's
+    /// tokens send sooner than the rate does.
     pub fn up_backlog(&mut self, h: usize, at: Time) -> Duration {
         let end = self.end_mut(h);
-        while end.up_spans.front().is_some_and(|&(_, done)| done <= at) {
+        while end.up_spans.front().is_some_and(|&(_, done, _)| done <= at) {
             end.up_spans.pop_front();
         }
+        if end.site.profile.bucket.is_some() {
+            let held: usize = end.up_spans.iter().map(|&(_, _, wire)| wire).sum();
+            return tx_time(held, rate_at(end.site.profile.up, &end.up_steps, at));
+        }
         match end.up_spans.front() {
-            Some(&(start, _)) if start <= at => end.up_free - start,
+            Some(&(start, _, _)) if start <= at => end.up_free - start,
             _ => (end.up_free - at).max(Duration::ZERO),
         }
     }
@@ -591,6 +683,8 @@ impl Network {
         let end = self.end_mut(h);
         end.up_free = now;
         end.up_spans.clear();
+        // What it forgets takes no tokens past `now`.
+        end.tokens_at = end.tokens_at.min(now);
         end.down_free = now;
         for x in 0..self.ends.len() {
             self.dir_mut(h, x).last_arrival = Time::NIL;
@@ -999,5 +1093,210 @@ mod tests {
         };
         assert_eq!(run(1), run(1));
         assert_ne!(run(1), run(2));
+    }
+
+    /// Linux's tbf without a peakrate, packet by packet, as
+    /// `net/sched/sch_tbf.c`'s `tbf_dequeue` keeps it: tokens are
+    /// nanoseconds of transmission at the rate, at most the buffer's
+    /// (`burst` at the rate); the head packet leaves once
+    /// `min(buffer, tokens + (now − t_c))` covers its own time, taking it.
+    struct Tbf {
+        rate: u64,
+        buffer: i64,
+        tokens: i64,
+        t_c: i64,
+        last: i64,
+    }
+
+    impl Tbf {
+        fn new(rate: u64, burst: u64) -> Tbf {
+            let buffer = Tbf::l2t(rate, burst as usize);
+            Tbf {
+                rate,
+                buffer,
+                tokens: buffer,
+                t_c: 0,
+                last: 0,
+            }
+        }
+
+        fn l2t(rate: u64, len: usize) -> i64 {
+            len as i64 * 1_000_000_000 / rate as i64
+        }
+
+        /// When a packet of `len` bytes enqueued at `at` (ns) behind those
+        /// before it is dequeued.
+        fn packet(&mut self, at: i64, len: usize) -> i64 {
+            let cost = Tbf::l2t(self.rate, len);
+            assert!(cost <= self.buffer, "a packet past the bucket");
+            let toks = |now: i64| (self.tokens + (now - self.t_c)).min(self.buffer);
+            let mut now = at.max(self.last);
+            if toks(now) < cost {
+                // The watchdog fires once the deficit has refilled.
+                now = self.t_c + cost - self.tokens;
+            }
+            self.tokens = toks(now) - cost;
+            self.t_c = now;
+            self.last = now;
+            now
+        }
+    }
+
+    /// Messages of `sizes` bytes, as packets of at most a frame, handed to
+    /// an uplink of `rate` with a `burst`-byte bucket at `gaps` apart (ns):
+    /// each message's departure in the model and its last packet's in
+    /// [`Tbf`].
+    fn against_tbf(rate: u64, burst: u64, msgs: &[(i64, usize)]) -> (Vec<Time>, Vec<Time>) {
+        let site = Site::new(City::Frankfurt, Access::Fiber)
+            .with_up(rate)
+            .with_bucket(Some(Bucket::of(burst)));
+        let mut n = net(&[site, Site::new(City::Frankfurt, Access::Fiber)], QUIET);
+        let mut tbf = Tbf::new(rate, burst);
+        let base = t(0).unix_nanos();
+        let (mut model, mut reference) = (Vec::new(), Vec::new());
+        let mut at = 0;
+        for &(gap, wire) in msgs {
+            at += gap;
+            let sent = Time::from_unix_nanos(base + at);
+            model.push(
+                n.send(
+                    sent,
+                    0,
+                    1,
+                    wire,
+                    wire.div_ceil(1514) as u32,
+                    Carrier::Stream,
+                )
+                .depart,
+            );
+            let mut left = wire;
+            let mut out = 0;
+            while left > 0 {
+                let len = left.min(1514);
+                out = tbf.packet(at, len);
+                left -= len;
+            }
+            reference.push(Time::from_unix_nanos(base + out));
+        }
+        (model, reference)
+    }
+
+    #[test]
+    fn a_bucket_departs_as_tbf_dequeues() {
+        // At 10 and 20 Mbit/s a byte takes 800 and 400 ns: both sides'
+        // arithmetic is exact.
+        for (rate, burst) in [(1_250_000, 3028), (2_500_000, 1600), (2_500_000, 65_536)] {
+            // After idle, a leg's packets: a full bucket's bytes at once,
+            // the rest at the rate.
+            let leg = [(0, 200), (0, 1514), (0, 1514), (0, 1514)];
+            let (model, reference) = against_tbf(rate, burst, &leg);
+            assert_eq!(model, reference, "{rate} {burst}");
+            let wire: usize = leg.iter().map(|&(_, w)| w).sum();
+            let deficit = (wire as u64).saturating_sub(burst);
+            assert_eq!(
+                model.last().map(|&d| d - t(0)),
+                Some(tx_time(deficit as usize, rate)),
+                "{rate} {burst}"
+            );
+            // Messages of every size from back to back to long idle, one
+            // packet and several.
+            let mut rng = det_rng(7);
+            let msgs: Vec<(i64, usize)> = (0..4_000)
+                .map(|_| {
+                    let gap = match unit(&mut rng) {
+                        x if x < 0.5 => 0,
+                        x if x < 0.8 => (unit(&mut rng) * 2e6) as i64,
+                        _ => (unit(&mut rng) * 50e6) as i64,
+                    };
+                    let wire = 40 + (unit(&mut rng) * 3.0 * 1514.0) as usize;
+                    (gap, wire)
+                })
+                .collect();
+            let (model, reference) = against_tbf(rate, burst, &msgs);
+            assert_eq!(model, reference, "{rate} {burst}");
+        }
+    }
+
+    #[test]
+    fn without_a_bucket_an_uplink_is_unchanged() {
+        let up = 1_250_000;
+        let plain = [
+            Site::new(City::Frankfurt, Access::Fiber).with_up(up),
+            Site::new(City::Frankfurt, Access::Fiber),
+        ];
+        let mut a = net(&plain, QUIET);
+        let mut rng = det_rng(3);
+        let mut at = t(0);
+        for _ in 0..2_000 {
+            at += Duration::from_micros((unit(&mut rng) * 3_000.0) as i64);
+            let wire = 40 + (unit(&mut rng) * 5_000.0) as usize;
+            let start = at.max(a.up_free(0));
+            let d = a.send(at, 0, 1, wire, 1, Carrier::Stream).depart;
+            assert_eq!(d, through(up, &[], start, wire));
+        }
+    }
+
+    #[test]
+    fn a_peak_paces_what_the_bucket_covers() {
+        let (rate, peak) = (1_250_000, 12_500_000); // 10 and 100 Mbit/s
+        let site = Site::new(City::Frankfurt, Access::Cable)
+            .with_up(rate)
+            .with_bucket(Some(Bucket {
+                bytes: 100_000,
+                peak: Some(peak),
+            }));
+        let mut n = net(&[site, Site::new(City::Frankfurt, Access::Fiber)], QUIET);
+        // 50 KB of a full bucket leave at the peak: 4 ms, not at once.
+        let d = n.send(t(0), 0, 1, 50_000, 34, Carrier::Stream).depart;
+        assert_eq!(d, t(4));
+        // The bucket held 100 KB, took 50 and refilled 5 meanwhile: 55 KB
+        // at once at 4 ms, so 100 KB more leave at the rate past them, 36
+        // ms later, or at the peak in 8 ms, whichever is later.
+        let d = n.send(t(4), 0, 1, 100_000, 67, Carrier::Stream).depart;
+        assert_eq!(d, t(4 + 36));
+    }
+
+    #[test]
+    fn a_bucket_refills_at_the_stepped_rate() {
+        let up = 1_000_000; // 1 MB/s: a byte a microsecond
+        let site = Site::new(City::Frankfurt, Access::Fiber)
+            .with_up(up)
+            .with_bucket(Some(Bucket::of(10_000)));
+        let mut n = net(&[site, Site::new(City::Frankfurt, Access::Fiber)], QUIET);
+        n.set_up_steps(0, vec![(t(10), up / 2)]);
+        // Empty the bucket at 0 ms: 10 KB at once.
+        assert_eq!(n.send(t(0), 0, 1, 10_000, 7, Carrier::Stream).depart, t(0));
+        // By 12 ms it refilled 10 ms at 1 MB/s and 2 at 0.5: 11 KB, capped
+        // at 10; the 4 KB past them go at the half rate.
+        assert_eq!(
+            n.send(t(12), 0, 1, 14_000, 10, Carrier::Stream).depart,
+            t(20)
+        );
+        // From empty at 20 ms, 4 ms refill 2 KB: a 3 KB message waits 2 ms.
+        assert_eq!(n.send(t(24), 0, 1, 3_000, 2, Carrier::Stream).depart, t(26));
+    }
+
+    #[test]
+    fn a_bucketed_queue_holds_bytes() {
+        let up = 1_000_000;
+        let site = Site::new(City::Dallas, Access::Fiber)
+            .with_up(up)
+            .with_bucket(Some(Bucket::of(3_000)));
+        let mut n = net(&[site, Site::new(City::Dallas, Access::Fiber)], QUIET);
+        let ms = Duration::from_millis;
+        // The first 3000 bytes leave on the bucket at once; the next 3000
+        // wait for the rate, until 3 ms, and count whole till then.
+        assert_eq!(n.send(t(0), 0, 1, 3000, 2, Carrier::Stream).depart, t(0));
+        assert_eq!(n.occupy_up(t(0), 0, 3000), t(3));
+        assert_eq!(n.up_backlog(0, t(0)), ms(3));
+        assert_eq!(n.up_backlog(0, t(2)), ms(3));
+        assert_eq!(n.up_backlog(0, t(3)), Duration::ZERO);
+        // A host that loses power while its queue drains forgets the queue
+        // and keeps the bucket as it was, empty: 1000 bytes then wait the
+        // 1 ms the rate takes to refill them.
+        n.send(t(10), 0, 1, 3000, 2, Carrier::Stream);
+        n.send(t(10), 0, 1, 3000, 2, Carrier::Stream);
+        n.reset(0, t(11));
+        assert_eq!(n.send(t(11), 0, 1, 1000, 1, Carrier::Stream).depart, t(12));
     }
 }

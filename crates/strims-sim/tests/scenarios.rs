@@ -27,7 +27,7 @@ use strims_sim::{
 use strims_vpn::Routing;
 use strims_wan::live::{Encoder, Sign};
 use strims_wan::sample::{pick, unit};
-use strims_wan::{Access, City, GLOBAL_AUDIENCE, RESIDENTIAL, Region, Site};
+use strims_wan::{Access, Bucket, City, GLOBAL_AUDIENCE, RESIDENTIAL, Region, Site};
 
 #[global_allocator]
 static ALLOC: strims_sim::memory::Allocator<std::alloc::System> =
@@ -3103,6 +3103,11 @@ fn wan_super_peer_adaptive_uncapped() {
 /// - `STRIMS_SIM_CAL_JOIN_AT_MS=<ms>` boots the viewers that long after the
 ///   stream starts (before it if negative); `STRIMS_SIM_CAL_JOIN_AT=<s>`,
 ///   the testbed's `JOIN_AT`, in seconds.
+/// - `STRIMS_SIM_CAL_SEED_BURST=<bytes>` and `STRIMS_SIM_CAL_VIEWER_BURST=<bytes>`
+///   give the seed's and each viewer's uplink a shaper bucket that size
+///   (`strims_wan::Bucket`, leaving at once), as `run.sh`'s `SEED_BURST`
+///   and `VIEWER_BURST` set its tbf's; unset, none (the testbed's
+///   defaults, 3028 each, are `twin.py run`'s).
 /// - `STRIMS_SIM_CAL_RATE_LIMIT_PCT=<pct>` gives every node a rate limit
 ///   (`NodeConfig::rate_limit`) of `pct` percent of its starting uplink,
 ///   so the node's QoS, not the access link, is where its peers' data
@@ -3142,6 +3147,9 @@ struct Calibration {
     /// delay and the testbed sink's). They need the window model
     /// (`STRIMS_SIM_TCP=1`).
     compete: Vec<(f64, f64)>,
+    /// The seed's and the viewers' uplink buckets, in bytes; `None`, none.
+    seed_burst: Option<u64>,
+    viewer_burst: Option<u64>,
 }
 
 fn calibration_settings() -> Calibration {
@@ -3193,6 +3201,8 @@ fn calibration_settings() -> Calibration {
         window: false,
         chunks: None,
         compete: pairs_knob("STRIMS_SIM_CAL_COMPETE"),
+        seed_burst: knob("STRIMS_SIM_CAL_SEED_BURST"),
+        viewer_burst: knob("STRIMS_SIM_CAL_VIEWER_BURST"),
     }
 }
 
@@ -3238,11 +3248,15 @@ fn pairs_knob(name: &str) -> Vec<(f64, f64)> {
 /// `STRIMS_SIM_CAL_RATE_LIMIT_PCT` sets them; send buffers.
 fn calibration_star_scenario(_seed: u64, c: &Calibration) -> Scenario {
     let mut s = Scenario::new("calibration_star");
-    let site = |mbit: u64| Site::new(City::Chicago, Access::Cable).with_up(mbit * 125_000);
-    let seed_host = s.host_at("seed", site(c.seed_up_mbit));
+    let site = |mbit: u64, burst: Option<u64>| {
+        Site::new(City::Chicago, Access::Cable)
+            .with_up(mbit * 125_000)
+            .with_bucket(burst.map(Bucket::of))
+    };
+    let seed_host = s.host_at("seed", site(c.seed_up_mbit, c.seed_burst));
     let vs: Vec<HostIx> = (0..c.viewers)
         .map(|i| {
-            let mut st = site(c.viewer_up_mbit);
+            let mut st = site(c.viewer_up_mbit, c.viewer_burst);
             if i == 0
                 && let Some(k) = c.slow_down_kbit
             {
@@ -3499,6 +3513,8 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
         window: true,
         chunks: Some((4096, 32 * 1024)),
         compete: Vec::new(),
+        seed_burst: None,
+        viewer_burst: None,
     }
 }
 

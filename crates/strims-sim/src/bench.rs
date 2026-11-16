@@ -84,7 +84,7 @@ use std::time::Duration as StdDuration;
 use futures_util::future::join_all;
 use strims_base::time::{Duration, Time};
 use strims_node::{CaptureSample, LinkProbe, Net, TcpOptions, TcpSocketConfig};
-use strims_wan::{Access, City, Options, Site};
+use strims_wan::{Access, Bucket, City, Options, Site};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Notify;
 
@@ -838,6 +838,10 @@ pub struct BenchSite {
     /// The probability it loses a packet it sends or receives, as the
     /// sim's site loss and `run.sh`'s `SEED_LOSS_PCT` do.
     pub loss: f64,
+    /// Its uplink's tbf bucket on the testbed, in bytes (`run.sh`'s
+    /// `SEED_BURST` and `VIEWER_BURST`), which the sim's uplink takes with
+    /// [`Bench::buckets`].
+    pub burst: u64,
 }
 
 /// A bench for [`simulate`].
@@ -857,6 +861,10 @@ pub struct Bench {
     pub compete_rtt_ms: u64,
     pub send_buffer: SendBuffer,
     pub tcp_segment: Option<usize>,
+    /// Each uplink has its testbed bucket ([`BenchSite::burst`]) in the sim
+    /// (`strims_wan::Bucket`, leaving at once, as a veth's tbf); without,
+    /// the sim's uplinks drain at their rates alone.
+    pub buckets: bool,
     /// The links carry their records over WebRTC data channels (the
     /// nodes ran with `--webrtc`, in `run.sh`'s `NODE_ARGS`): the window
     /// model's data channels, or with `str0m` str0m's stack on the sim's
@@ -870,11 +878,13 @@ pub struct Bench {
 }
 
 /// The defaults of `hack/testbed/run.sh`.
-const RUN_SH: [(&str, &str); 7] = [
+const RUN_SH: [(&str, &str); 9] = [
     ("VIEWERS", "3"),
     ("SEED_UP_MBIT", "10"),
     ("VIEWER_UP_MBIT", "20"),
     ("QUEUE_MS", "100"),
+    ("SEED_BURST", "3028"),
+    ("VIEWER_BURST", "3028"),
     ("SEED_DELAY_MS", "20"),
     ("VIEWER_DELAY_MS", "10"),
     ("SECS", "180"),
@@ -920,16 +930,25 @@ impl Bench {
             .map_or(0.0, |p| p / 100.0);
         let sites = (0..=viewers)
             .map(|i| {
-                let (up, delay) = if i == 0 {
-                    (num("SEED_UP_MBIT")?, num("SEED_DELAY_MS")?)
+                let (up, delay, burst) = if i == 0 {
+                    (
+                        num("SEED_UP_MBIT")?,
+                        num("SEED_DELAY_MS")?,
+                        num("SEED_BURST")?,
+                    )
                 } else {
-                    (num("VIEWER_UP_MBIT")?, num("VIEWER_DELAY_MS")?)
+                    (
+                        num("VIEWER_UP_MBIT")?,
+                        num("VIEWER_DELAY_MS")?,
+                        num("VIEWER_BURST")?,
+                    )
                 };
                 Ok(BenchSite {
                     up: mbit(up as f64),
                     down: slow.filter(|_| i == 1).map(|k| k * 125),
                     delay_ms: delay,
                     loss: if i == 0 { seed_loss } else { 0.0 },
+                    burst,
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
@@ -984,6 +1003,7 @@ impl Bench {
                 window,
             },
             tcp_segment: None,
+            buckets: false,
         })
     }
 }
@@ -1022,7 +1042,8 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
     for (i, s) in bench.sites.iter().enumerate() {
         let mut site = Site::new(City::Chicago, Access::Cable)
             .with_up(s.up)
-            .with_loss(s.loss);
+            .with_loss(s.loss)
+            .with_bucket(bench.buckets.then(|| Bucket::of(s.burst)));
         if let Some(d) = s.down {
             site = site.with_down(d);
         }

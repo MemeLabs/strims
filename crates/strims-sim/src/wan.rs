@@ -58,7 +58,12 @@
 //!   write fits where a full segment doesn't. An uplink queue frees a
 //!   segment's room once its last bit has left
 //!   ([`Network::up_backlog`](strims_wan::Network::up_backlog)). A
-//!   datagram that doesn't fit is lost the same way, and forgotten.
+//!   datagram that doesn't fit is lost the same way, and forgotten. An
+//!   uplink with a shaper bucket (a site's
+//!   [`Bucket`](strims_wan::Bucket), `STRIMS_SIM_UPLINK_BURST`) sends what
+//!   its tokens cover at once and the rest at its rate, segments,
+//!   datagrams, acknowledgements and competing uploads alike, and its
+//!   queue holds bytes.
 //! - A segment that loses a packet on its path (the sites' loss) is lost
 //!   to its sender the same way.
 //! - Its sender learns of the loss from a later segment's acknowledgement,

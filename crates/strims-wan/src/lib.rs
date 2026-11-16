@@ -8,7 +8,8 @@
 //! from one site to another
 //!
 //! 1. waits for the sender's uplink and serializes at its rate (FIFO over
-//!    every message the host sends);
+//!    every message the host sends), or with a shaper bucket
+//!    ([`Bucket`]) passes what its tokens cover at once;
 //! 2. crosses the path: both last miles plus half the city pair's RTT
 //!    ([`City::rtt`]), plus each end's jitter;
 //! 3. may lose packets: a lost datagram is gone, a stream message arrives a
@@ -29,8 +30,8 @@
 //! |---|---|
 //! | [`city`] | cities and their RTT table |
 //! | [`live`] | a live encoder's access units and early signing |
-//! | [`access`] | access link profiles, sites and weighted mixes |
-//! | [`network`] | uplink and downlink FIFOs, paths, jitter, loss |
+//! | [`access`] | access link profiles, shaper buckets, sites and weighted mixes |
+//! | [`network`] | uplink and downlink FIFOs, uplink buckets, paths, jitter, loss |
 //! | [`playout`] | a live player's stalls at a fixed delay |
 //! | [`sample`] | seeded draws |
 //! | [`wire`] | packet framing and serialization times |
@@ -46,6 +47,6 @@ pub mod sample;
 pub mod vocab;
 pub mod wire;
 
-pub use access::{Access, GLOBAL_AUDIENCE, Profile, RESIDENTIAL, Site};
+pub use access::{Access, Bucket, GLOBAL_AUDIENCE, Profile, RESIDENTIAL, Site};
 pub use city::{City, Region};
 pub use network::{Carrier, EndStats, Network, Options, Transit};

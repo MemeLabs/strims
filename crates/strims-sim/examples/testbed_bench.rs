@@ -10,7 +10,7 @@
 //!               [--secs <s>] [--start <unix ms>] [--webrtc]
 //!               [--web <dir>] [--browser-bin <path>]
 //! testbed_bench --sim <testbed run dir> --out <dir> [--window]
-//!               [--segment <bytes>] [--str0m]
+//!               [--segment <bytes>] [--str0m] [--bucket]
 //! ```
 //!
 //! On the testbed a node listens on its topology address, dials the nodes
@@ -37,6 +37,9 @@
 //! window model if `--window`, and writes each node's log to
 //! `<out>/node-<i>.jsonl`. A WebRTC bench's links are the window model's
 //! data channels, or with `--str0m` str0m's stack on the sim's sockets.
+//! With `--bucket` each uplink has the tbf bucket the run's settings gave
+//! it (`SEED_BURST`, `VIEWER_BURST`; `run.sh`'s 3028 without), which the
+//! sim's uplinks otherwise lack.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -78,6 +81,7 @@ struct Args {
     segment: Option<usize>,
     webrtc: bool,
     str0m: bool,
+    bucket: bool,
     web: Option<PathBuf>,
     browser_bin: Option<PathBuf>,
 }
@@ -105,6 +109,7 @@ fn args() -> Result<Args, String> {
             "--segment" => a.segment = Some(num(value()?)? as usize),
             "--webrtc" => a.webrtc = true,
             "--str0m" => a.str0m = true,
+            "--bucket" => a.bucket = true,
             "--web" => a.web = Some(value()?.into()),
             "--browser-bin" => a.browser_bin = Some(value()?.into()),
             "--join-at" | "--rate" | "--hosts" | "--capture" | "--units" | "--player" => {
@@ -148,6 +153,7 @@ fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
     )?;
     bench.tcp_segment = a.segment;
     bench.str0m = a.str0m;
+    bench.buckets = a.bucket;
     let logs = simulate(&bench)?;
     std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
     for (i, lines) in logs.iter().enumerate() {

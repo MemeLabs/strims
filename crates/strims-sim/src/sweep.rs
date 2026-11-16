@@ -22,6 +22,15 @@
 //!   most that many bytes ([`Scenario::tcp_segment`]) in place of the
 //!   window model's two packets
 //!   ([`WINDOW_SEGMENT`](crate::spec::WINDOW_SEGMENT)).
+//! - `STRIMS_SIM_UPLINK_BURST=<bucket>` gives every WAN host's uplink a
+//!   shaper's token bucket ([`Bucket`]; the network's model of one is in
+//!   `strims_wan::network`): `<bytes>`, at least a full frame
+//!   ([`MIN_BURST`]), a bucket that size whose bytes leave at once, as
+//!   `hack/testbed/run.sh`'s tbf has; `profiles`, each host its access
+//!   kind's ([`Access::bucket`](strims_wan::Access::bucket)); `off`, none,
+//!   the scenario's own included. Unset or blank, each scenario keeps its
+//!   own: none, but `calibration_star`'s given `STRIMS_SIM_CAL_SEED_BURST`
+//!   or `STRIMS_SIM_CAL_VIEWER_BURST`.
 //! - `STRIMS_SIM_KNOWN_UPLINK=1` tells every WAN host its site's uplink
 //!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)) as it
 //!   is at each time, its steps included
@@ -145,6 +154,7 @@ use std::thread;
 use std::time::Duration;
 
 use strims_ppspp::PushMode;
+use strims_wan::access::Bucket;
 use strims_wan::live::{Encoder, Sign};
 
 use crate::report::Report;
@@ -155,6 +165,11 @@ use crate::wan::SctpProfile;
 
 /// A media swarm's chunk size without `STRIMS_SIM_CHUNK`: a video swarm's.
 pub const MEDIA_CHUNK: usize = 4096;
+
+/// The least bucket `STRIMS_SIM_UPLINK_BURST` takes: a full Ethernet
+/// frame, which tbf needs to send one at all (`hack/testbed/run.sh`'s
+/// `SEED_BURST` floor).
+pub const MIN_BURST: u64 = 1514;
 
 /// Seeds per sweep when `STRIMS_SIM_SEEDS` isn't set.
 pub const DEFAULT_SEEDS: u64 = 8;
@@ -438,6 +453,40 @@ fn seed_links_knob() -> bool {
     }
 }
 
+/// What `STRIMS_SIM_UPLINK_BURST` gives every WAN host's uplink.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum UplinkBurst {
+    /// No bucket, the scenario's own included.
+    Off,
+    /// A bucket of that many bytes, leaving at once.
+    Bytes(u64),
+    /// Each host its access kind's bucket ([`strims_wan::Access::bucket`]).
+    Profiles,
+}
+
+/// `STRIMS_SIM_UPLINK_BURST`'s forms: `off`, `profiles` or a byte count
+/// of at least [`MIN_BURST`]; blank, none.
+fn parse_uplink_burst(v: &str) -> Result<Option<UplinkBurst>, String> {
+    match v.trim() {
+        "" => Ok(None),
+        "off" => Ok(Some(UplinkBurst::Off)),
+        "profiles" => Ok(Some(UplinkBurst::Profiles)),
+        bytes => match bytes.parse::<u64>() {
+            Ok(b) if b >= MIN_BURST => Ok(Some(UplinkBurst::Bytes(b))),
+            _ => Err(format!(
+                "{bytes} is no bucket: off, profiles or at least {MIN_BURST} bytes"
+            )),
+        },
+    }
+}
+
+/// `STRIMS_SIM_UPLINK_BURST` ([`parse_uplink_burst`]), if set.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn uplink_burst_knob() -> Option<UplinkBurst> {
+    let v = env("STRIMS_SIM_UPLINK_BURST")?;
+    parse_uplink_burst(&v).unwrap_or_else(|e| panic!("STRIMS_SIM_UPLINK_BURST={v}: {e}"))
+}
+
 /// `STRIMS_SIM_RTC`'s stacks; `off` is none.
 #[allow(clippy::panic)] // a mistyped setting fails its test
 fn rtc_knob() -> Option<Vec<Option<SctpProfile>>> {
@@ -523,6 +572,7 @@ fn sweep_seeds(
     let capture = env("STRIMS_SIM_CAPTURE");
     let send_buffer = env("STRIMS_SIM_SEND_BUFFER").and_then(|s| s.trim().parse::<u64>().ok());
     let known_uplink = env("STRIMS_SIM_KNOWN_UPLINK").map(|s| s.trim().to_owned());
+    let uplink_burst = uplink_burst_knob();
     let rows = env("STRIMS_SIM_ROWS").is_some_and(|s| s.trim() == "1");
     let job = env("STRIMS_SIM_JOB").is_some_and(|s| s.trim() == "1");
     assert!(
@@ -612,6 +662,16 @@ fn sweep_seeds(
             }
             if let Some(n) = streams {
                 s.options.stream_count = n;
+            }
+        }
+        if let Some(burst) = uplink_burst {
+            for site in spec.hosts.iter_mut().filter_map(|h| h.site.as_mut()) {
+                let bucket = match burst {
+                    UplinkBurst::Off => None,
+                    UplinkBurst::Bytes(b) => Some(Bucket::of(b)),
+                    UplinkBurst::Profiles => site.access.bucket(site.profile.up),
+                };
+                *site = site.with_bucket(bucket);
             }
         }
         if let Some(which) = known_uplink.as_deref() {
@@ -827,6 +887,27 @@ mod tests {
             "mix,liar:0.1",
         ] {
             assert!(parse_hostile(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn uplink_burst_knob_takes_off_profiles_and_a_frame_or_more() {
+        assert_eq!(parse_uplink_burst(" "), Ok(None));
+        assert_eq!(parse_uplink_burst("off"), Ok(Some(UplinkBurst::Off)));
+        assert_eq!(
+            parse_uplink_burst("profiles"),
+            Ok(Some(UplinkBurst::Profiles))
+        );
+        assert_eq!(
+            parse_uplink_burst(" 3028 "),
+            Ok(Some(UplinkBurst::Bytes(3028)))
+        );
+        assert_eq!(
+            parse_uplink_burst("1514"),
+            Ok(Some(UplinkBurst::Bytes(MIN_BURST)))
+        );
+        for bad in ["0", "1513", "-3028", "3k", "on", "profile"] {
+            assert!(parse_uplink_burst(bad).is_err(), "{bad}");
         }
     }
 }
