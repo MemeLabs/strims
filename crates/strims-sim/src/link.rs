@@ -379,7 +379,10 @@ impl Spec {
         let (shaper, child) = match self.router {
             None if self.class == Class::Trace => (String::new(), String::new()),
             Some(router) => {
-                let rate = format!("{:.0}", run.up_mbit * 1000.0 * line * self.pct / 100.0);
+                // cake's pppoe-ptm takes PTM's byte in 65 itself, a tbf's
+                // size table doesn't.
+                let code = if router == Router::Cake { 1.0 } else { line };
+                let rate = format!("{:.0}", run.up_mbit * 1000.0 * code * self.pct / 100.0);
                 match router {
                     Router::Cake => (
                         format!("cake bandwidth {rate}kbit {}", cake_overhead(self)),
@@ -762,6 +765,11 @@ mod tests {
             "{cable}"
         );
         assert!(cable.contains("LINK_SLOT='slot 2000us 8000us'"), "{cable}");
+        assert!(
+            sh("dsl,line=vdsl,router=cake", &run)
+                .contains("LINK_SHAPER='cake bandwidth 9500kbit pppoe-ptm'")
+        );
+        assert!(sh("dsl,line=vdsl,router=fq_codel", &run).contains("tbf rate 9354kbit"));
         // A step keeps the bucket of the rate it started at.
         let step = sh(
             "cable",
