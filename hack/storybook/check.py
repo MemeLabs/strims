@@ -112,22 +112,25 @@ seeded Math.random and crypto random, empty local and session storage,
 no text caret and no smooth scrolling (CAPTURE_SCRIPT); the time zone is
 UTC, the locale en-US and the page always focused; requests off the
 build's server (https://, a third-party embed's iframe among them) get
-stubs, a grey page for a document. The clock moves only while the
-network (workers' requests and blob: loads included) has been quiet for
-NET_QUIET_S, the document has nothing pending (a script or stylesheet it
-inserted with no load or error event yet, a fetch unsettled or its
-response's body still being read, an XHR not ended: the page can ask for
-more between the checker's look at the network and the step, and a
-chunk's loader times out on the clock), and no worker is new
-or has just exchanged a message, after the page has laid out what
-changed: to the next timer until the root leaves
-"loading", then on to `--settle` ms of clock time after it (and while
-the root is empty, on in 100 ms steps up to `--timeout` s). Past
-"loading", a step fires on through the timers its timers set (a chain of
-0 ms timeouts, 4 ms apart past the fifth, and the animation frames)
-while nothing would hold the clock, laying out what they change once a
-frame of clock time, as a browser does, rather than a step and its look
-at the network for each; a longer timeout waits for the next step. A story frame
+stubs, a grey page for a document. The clock moves in steps. A step
+moves it only while the network (workers' requests and blob: loads
+included) has been quiet for NET_QUIET_S, the document has nothing
+pending (a script or stylesheet it inserted with no load or error event
+yet, a fetch unsettled or its response's body still being read, an XHR
+not ended, a FileReader's read not ended, an image off the document not
+loaded or failed: the page can ask for more between the checker's look
+at the network and the step, a chunk's loader times out on the clock,
+and the network never hears of a read), and no worker is new or has just
+exchanged a message, after the page has laid out what changed: to the
+next timer until the root leaves "loading", then on to `--settle` ms of
+clock time after it (and while the root is empty, on in 100 ms steps up
+to `--timeout` s). Past "loading", a step fires on through the timers its
+timers set (a chain of 0 ms timeouts, 4 ms apart past the fifth, and the
+animation frames), laying out what they change once a frame of clock
+time, as a browser does, rather than a step for each; inside the chain
+only the page's own holds are checked (nothing pending, no <img> in the
+document loading, no worker busy), not the network, whose look comes with
+the next step, and a longer timeout waits for it too. A story frame
 on the clock renders once i18next has its strings. Then finite
 animations and transitions jump to their end, infinite ones (spinners,
 animated emotes) and SVG animations hold at their start, videos pause
@@ -1182,6 +1185,46 @@ CAPTURE_SCRIPT = r"""(() => {
       throw e;
     }
   };
+  // And what the page loads that the network never hears of: a
+  // FileReader's read (a dropped file's bytes) until its loadend, and an
+  // image off the document (a new Image() whose size the page wants, of a
+  // file's or a data: URL) from its src until its load or error.
+  if (window.FileReader) {
+    for (const name of ["readAsArrayBuffer", "readAsBinaryString", "readAsDataURL", "readAsText"]) {
+      const read = FileReader.prototype[name];
+      if (typeof read !== "function") continue;
+      FileReader.prototype[name] = function (...args) {
+        const done = ask("about:blank#a-file-read");
+        this.addEventListener("loadend", done, { once: true });
+        try {
+          return read.apply(this, args);
+        } catch (e) {
+          done();
+          throw e;
+        }
+      };
+    }
+  }
+  const imageSrc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
+  const offDocument = new WeakSet();
+  Object.defineProperty(HTMLImageElement.prototype, "src", {
+    ...imageSrc,
+    set(v) {
+      imageSrc.set.call(this, v);
+      if (this.isConnected || offDocument.has(this) || !this.getAttribute("src")) return;
+      offDocument.add(this);
+      const url = String(v);
+      const done = ask(/^(https?|blob):/.test(url) ? url : "about:blank#an-image-off-the-document");
+      const end = () => {
+        this.removeEventListener("load", end);
+        this.removeEventListener("error", end);
+        offDocument.delete(this);
+        done();
+      };
+      this.addEventListener("load", end);
+      this.addEventListener("error", end);
+    },
+  });
   new MutationObserver((records) => {
     mutations++;
     let removed = false;
@@ -1399,9 +1442,10 @@ CAPTURE_SCRIPT = r"""(() => {
   // changed): each in turn up to `limit` while the next due is a chain
   // timer (a timeout asked for in under 4 ms, or the animation frames';
   // any other, a poll's or a debounce's, waits for the next step, which
-  // gives the page's untracked work, a FileReader's or an off-document
-  // image's, real time as before) and nothing pending, no <img> loading
-  // and no worker busy would hold the clock, laying out what they changed
+  // gives work no hold sees, an img.decode(), crypto.subtle, IndexedDB, a
+  // font or a CSS url() load, real time as before) and nothing pending (a
+  // FileReader's read and an image off the document among it), no <img>
+  // loading and no worker busy would hold the clock, laying out what they changed
   // as a browser does, once a frame: a real frame before the first timer
   // of a later frame on the clock. An animation the clock finishes ends
   // it, its events coming with the next step's frames. At most
