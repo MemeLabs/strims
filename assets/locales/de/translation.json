@@ -120,6 +120,9 @@
   },
 
   "settings": {
+    "appearance.title": "Darstellungseinstellungen - Strims",
+    "appearance.chatOnLeft": "Chat links",
+    "appearance.chatOnLeftDescription": "Auf Smartphones öffnet sich die Chat-Leiste vom linken Rand aus, für die einhändige Bedienung mit der linken Hand.",
     "network.title": "Netzwerkeinstellungen - Strims",
     "bootstrap.title": "Netzwerk-Bootstrap-Einstellungen - Strims",
     "chat.title": "Chat-Einstellungen - Strims",
