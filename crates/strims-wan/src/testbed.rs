@@ -35,7 +35,8 @@
 //! the queue's limit counts what waits for the shaper, not for a slot), and
 //! on any but a trace, `router=fq_codel|cake` (the
 //! testbed's alone) an SQM home router at `pct=` percent of the rate
-//! (default 95). A file's path takes letters, digits and `._/+-` alone.
+//! (default 95). A file's path takes letters, digits and `._/+-_` alone,
+//! which go inside single quotes in `links.sh`'s shell as they are.
 //! A peak given (`SEED_PEAK_MBIT` under tbf or fiber, cable's `peak=`) is
 //! over the link's rate at its start and at every step, as tbf takes a
 //! peakrate over its rate alone: both sides refuse one at or under it.
@@ -111,12 +112,12 @@ pub struct Spec {
 fn path(spec: &str, key: &str, v: &str) -> Result<String, String> {
     let ok = !v.is_empty()
         && v.chars()
-            .all(|c| c.is_ascii_alphanumeric() || "._/+-".contains(c));
+            .all(|c| c.is_ascii_alphanumeric() || "._/+-_".contains(c));
     if ok {
         Ok(v.to_owned())
     } else {
         Err(format!(
-            "link {spec}: {key}={v}: a path of letters, digits and ._/+-"
+            "link {spec}: {key}={v}: a path of letters, digits and ._/+-_"
         ))
     }
 }
@@ -665,6 +666,9 @@ mod tests {
             "dsl,line=sdsl",
             "trace",
             "trace,file=a b",
+            "trace,file=a:b",
+            "trace,file=a'b",
+            "trace,file=$x",
             "trace,file=x,offset=-5",
             "trace,file=x,scale=0",
             "trace,file=x,router=cake",
@@ -806,6 +810,7 @@ mod tests {
             trace.contains("LINK_FILES='/t/x.up:/links/trace /t/d:/links/delay'"),
             "{trace}"
         );
+        assert!(sh("trace,file=/t/a_b.up", &run).contains("LINK_FILES='/t/a_b.up:/links/trace'"));
         // A trace and a delay trace of one name mount apart.
         let same = sh("trace,file=/a/x,delay=/b/x@10", &run);
         assert!(
