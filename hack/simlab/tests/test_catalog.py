@@ -61,7 +61,10 @@ simlab.verdict's derive pool:
                a line of the job and of its verify copy and a flush holds
                one copy: jobs reads its src's copy, as job_metrics scores
                it, and exp_runs its flush's, as the experiment's pairs
-               score it; raw.farm_index keeps each kept line's own
+               score it; raw.farm_index keeps each kept line's own;
+               job_metrics_of scores each distinct run it's given once,
+               a key's two runs each by its own copy, whatever field the
+               runs' structs hold first (a side's cell)
   Tables       a sim's tables the catalog has no code for (spec_requests,
                parks), folded by the store, as they are; arrivals' and
                haves' -1 for no node NULL; asks' and haves' truth, NULL
@@ -1160,6 +1163,12 @@ class HostNumbers(Fixture):
 
     def setUp(self):
         super().setUp()
+        # The class's root is its tests', which build it once.
+        if not (self.root / "host-jobs").exists():
+            self.build()
+        self.assertEqual(self.index()[0].failed, {})
+
+    def build(self):
         runs = self.root / "target" / "sim-suite" / "farm-runs"
         (runs / "sx0101.json").write_text(json.dumps({"cells": [
             {"name": "star-5", "sim": "strims-sim", "test": "calibration_star", "why": "w",
@@ -1192,7 +1201,6 @@ class HostNumbers(Fixture):
             "env": {**golden_cli.STAR_ENV, "STRIMS_SIM_SEED": str(seed)}, "copy": copy, "host": host,
             "src": f"{self.RUN}/{host}/0", "at": golden_cli.AT, "wall_s": wall, "max_rss_mb": rss,
             "row": {"trace": f"tr-{k}"}}) + "\n" for i, k, seed, copy, host, wall, rss in lines))
-        self.assertEqual(self.index()[0].failed, {})
 
     def by_k(self, sql):
         return {r.pop("k"): r for r in catalog.lake(sql)}
@@ -1219,6 +1227,23 @@ class HostNumbers(Fixture):
                                    "max(a_value) FILTER (WHERE metric = 'rss_mb') AS rss_mb "
                                    "FROM pairs('sx0101', 'main', 'sx0101', 'main') GROUP BY a_k;"),
                          {"k1": {"wall_s": 8.996, "rss_mb": 113.0}, "k2": {"wall_s": 9.9, "rss_mb": 121.5}})
+
+    def test_job_metrics_of_scores_each_run_it_is_given(self):
+        # k2's two runs, a run named twice, and runs that list other fields
+        # first (a side's, cell first): each distinct run once, its own copy.
+        i1, i2 = f"{self.RUN}/i-1/0", f"{self.RUN}/i-2/0"
+        sql = ("SELECT k, src, max(value) FILTER (WHERE metric = 'wall_s') AS wall_s, max(value) FILTER (WHERE "
+               "metric = 'rss_mb') AS rss_mb FROM job_metrics_of({}) GROUP BY k, src ORDER BY k, src;")
+        runs = f"[{{'k': 'k2', 'src': '{i1}'}}, {{'k': 'k2', 'src': '{i2}'}}, {{'k': 'k1', 'src': '{i1}'}}, " \
+               f"{{'k': 'k2', 'src': '{i2}'}}]"
+        want = [{"k": "k1", "src": i1, "wall_s": 8.996, "rss_mb": 113.0},
+                {"k": "k2", "src": i1, "wall_s": 9.5, "rss_mb": 120.0},
+                {"k": "k2", "src": i2, "wall_s": 9.9, "rss_mb": 121.5}]
+        self.assertEqual(catalog.lake(sql.format(runs)), want)
+        side = f"[{{'cell': 'star-5', 'seed': 2005, 'k': 'k1', 'src': '{i1}'}}, " \
+               f"{{'cell': 'star-5', 'seed': 2006, 'k': 'k2', 'src': '{i2}'}}]"
+        self.assertEqual(catalog.lake(sql.format(side)), [want[0], want[2]])
+        self.assertEqual(catalog.lake(sql.format("arm_side('sx0101', 'main')")), [want[0], want[2]])
 
 
 class Tables(Fixture):

@@ -3123,12 +3123,14 @@ QUALIFY row_number() OVER (PARTITION BY k, src ORDER BY cell) = 1;
 -- The metric values (metric_defs') of the runs in `runs`, a list of
 -- {{'k', 'src'}}, one a metric a run has a value of: k, src (the run's
 -- source, the job's own, jobs.src, where NULL), metric, value. A run reads
--- the job's row and verdict (r, v) and its own copy's numbers (j).
+-- the job's row and verdict (r, v) and its own copy's numbers (j). DISTINCT
+-- goes over the unnested columns, not in unnest's own SELECT: there DuckDB
+-- (1.5.6) keeps a row per value of the first field alone.
 CREATE OR REPLACE MACRO job_metrics_of(runs) AS TABLE
 SELECT k, src, metric, value FROM (UNPIVOT (
     SELECT u.k, coalesce(u.src, r.src) AS src,
        {getters}
-    FROM (SELECT DISTINCT unnest(runs, recursive := true)) u JOIN rows r ON r.k = u.k
+    FROM (SELECT DISTINCT k, src FROM (SELECT unnest(runs, recursive := true))) u JOIN rows r ON r.k = u.k
     LEFT JOIN verdicts v ON v.k = r.k AND v.src = r.src
     LEFT JOIN job_runs j ON j.k = u.k AND j.src = coalesce(u.src, r.src)
 ) ON COLUMNS(* EXCLUDE (k, src)) INTO NAME metric VALUE value);
