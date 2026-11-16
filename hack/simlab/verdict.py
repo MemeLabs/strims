@@ -1033,9 +1033,14 @@ VERDICT_COLS = {"k": "VARCHAR", "src": "VARCHAR", "onset": "BIGINT", "trees": "B
 def derived_version():
     """A hash of everything that defines the derived tables:
     VERDICT_VERSION, their columns, the events the verdict reads of a run
-    (RULE_IDS, by VOCAB_SIMS) and the code that writes them (DERIVE_CODE),
-    so a derived table made under another is stale."""
-    parts = [VERDICT_VERSION, repr([DERIVED, DERIVED_KINDS, VERDICT_COLS, RULE_IDS, VOCAB_SIMS]), *DERIVE_SOURCES]
+    (RULE_IDS, by SIM_NAMES) and the code that writes them (DERIVE_CODE),
+    so a derived table made under another is stale. VOCAB_SIMS' entries
+    past SIM_NAMES (a testbed run's) are left out, the code naming them
+    hashed as it names SIM_NAMES: no run before them named its sim so, and
+    adding one derives no source again; a change to one wants
+    VERDICT_VERSION moved."""
+    sources = [x.replace("VOCAB_SIMS", "SIM_NAMES") for x in DERIVE_SOURCES]
+    parts = [VERDICT_VERSION, repr([DERIVED, DERIVED_KINDS, VERDICT_COLS, RULE_IDS, SIM_NAMES]), *sources]
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:12]
 
 
