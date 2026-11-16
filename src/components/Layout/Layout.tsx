@@ -15,6 +15,7 @@ import NotificationToast from "../Notification/Toast";
 import { withTheme } from "../Theme";
 import Footer from "./Footer";
 import Header from "./Header";
+import { BackSwipeGuard } from "./backSwipeGuard";
 import { layoutShapeClassNames, layoutStateClassNames, screenOrientation } from "./shape";
 
 export type Breakpoint = "sm" | "md" | "lg" | "xl";
@@ -58,17 +59,16 @@ const getViewportShape = (prev?: ViewportShape): ViewportShape => {
   return { height, width, orientation, safariViewportBug, useFixedSize };
 };
 
-interface ExtendedTouchEvent extends TouchEvent {
+// iOS's touch events also carry a pinch's scale.
+interface ScaledTouchEvent extends TouchEvent {
   scale?: number;
-  pageX: number;
-  pageY: number;
-  ctrlKey: boolean;
-  altKey: boolean;
-  shiftKey: boolean;
-  metaKey: boolean;
-  button: number;
-  relatedTarget: EventTarget;
 }
+
+// Whether `target` is in a field a tap focuses: an input, a textarea, a
+// select or editable text.
+const inField = (target: EventTarget): boolean =>
+  target instanceof Element &&
+  !!target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])");
 
 interface LayoutProps {
   className: string;
@@ -84,47 +84,49 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
       return;
     }
 
-    let emulateClick = false;
+    // Swipe history navigation is off near the page's left edge, so a swipe
+    // of a panel there (the nav, the swapped drawer's strip) doesn't go
+    // back; swipes beginning past the edge of the screen are unaffected.
+    // The guard cancels those touches' starts, and gives a tap the click the
+    // browser then doesn't.
+    const guard = new BackSwipeGuard();
 
-    // disable swipe history navigation near the edge of the page to prevent
-    // accidentally triggering when interacting with panels. swipes beginning
-    // past the edge of the screen are unaffected.
-    const handleTouchStart = (event: ExtendedTouchEvent) => {
-      if (event.pageX < 34) {
+    const handleTouchStart = (event: TouchEvent) => {
+      const field = inField(event.target);
+      if (guard.start(event.changedTouches[0], event.touches.length, field)) {
         event.preventDefault();
-        emulateClick = true;
       }
     };
 
-    // when touch start events are cancelled we have to reproduce the browser's
-    // native click emulation on touch end.
-    const handleTouchEnd = (event: ExtendedTouchEvent) => {
-      if (!emulateClick) {
+    const handleTouchEnd = (event: TouchEvent) => {
+      const tap = guard.end(event.changedTouches);
+      if (!tap) {
         return;
       }
 
-      emulateClick = false;
       const click = new MouseEvent("click", {
         bubbles: true,
         cancelable: true,
         view: window,
         detail: 1,
-        screenX: event.pageX,
-        screenY: event.pageY,
-        clientX: event.pageX,
-        clientY: event.pageY,
+        screenX: tap.screenX,
+        screenY: tap.screenY,
+        clientX: tap.clientX,
+        clientY: tap.clientY,
         ctrlKey: event.ctrlKey,
         altKey: event.altKey,
         shiftKey: event.shiftKey,
         metaKey: event.metaKey,
-        button: event.button,
-        relatedTarget: event.relatedTarget,
       });
       event.target.dispatchEvent(click);
     };
 
-    // disable pinch zoom
-    const handleTouchMove = (event: ExtendedTouchEvent) => {
+    const handleTouchCancel = () => guard.cancel();
+
+    const handleTouchMove = (event: ScaledTouchEvent) => {
+      guard.move(event.changedTouches);
+
+      // disable pinch zoom
       if ("scale" in event && event.scale !== 1) {
         event.preventDefault();
         event.stopPropagation();
@@ -133,10 +135,12 @@ const Layout: React.FC<LayoutProps> = ({ className, rootRef, children }) => {
 
     document.addEventListener("touchstart", handleTouchStart, { capture: true, passive: false });
     document.addEventListener("touchend", handleTouchEnd);
+    document.addEventListener("touchcancel", handleTouchCancel);
     document.addEventListener("touchmove", handleTouchMove, { passive: false });
     return () => {
-      document.removeEventListener("touchstart", handleTouchStart);
+      document.removeEventListener("touchstart", handleTouchStart, { capture: true });
       document.removeEventListener("touchend", handleTouchEnd);
+      document.removeEventListener("touchcancel", handleTouchCancel);
       document.removeEventListener("touchmove", handleTouchMove);
     };
   }, []);
