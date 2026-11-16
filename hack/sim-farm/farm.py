@@ -322,7 +322,7 @@ whichever is longer, and two syncs, for those instances), times the
 median of what the last 5 runs took over their model's, which covers
 what it leaves out (the syncs' latency, waves of jobs, the end).
 `estimate` prints that for a run's matrices and options without building
-or launching anything: run it with --regions and without to see what
+or launching anything, a testbed run's too (below): run it with --regions and without to see what
 more regions buy. With --json it prints the estimate as one JSON object
 (Run.estimate's: jobs, have_rows, timed, work_slot_h, boot_s, instances,
 slots, slots_by_region, model_wall_s, model_cost, past_runs, wall_s,
@@ -449,6 +449,21 @@ classes' trees on dummy devices; a host that fails is dropped with its
 log, as one that fails to boot. An arm whose bundle has none (a commit
 from before it) is said to go unchecked. A host runs a testbed job once no container named
 tb-* (run.sh's) is running.
+
+A testbed run's estimate prices it as run launches it: a host per group
+(the jobs that go to one instance together, below) where the budgets have
+room, of the type the first launch takes (the cheapest) wherever that
+type's pools have room, a slot each, each from its boot (the last testbed runs', costs.jsonl) to
+its last job's end; the groups go to the hosts longest first, each one's
+jobs one after another. A job is expected to take the mean wall of its
+matrix's earlier runs of its environment (rows.jsonl, each repeat's
+[repeat_env] values aside: walls.jsonl holds test rows alone), else
+run.sh's own timing (testbed_model_s): its containers' lead (8 s, 1.5 s
+a node past four, and with a browser 20 s and 1 s a browser more), the
+stream's SECS and its 15 s tail, TABLES_S for its tables with a
+TABLES_BIN, and on a host's first job its images' build (IMAGES_S). It
+says how many jobs each way timed, and scales by what the last testbed
+runs took over their estimates, as a test run's does.
 
 With `paired`, the jobs of one environment and repeat, one per arm, go to
 one instance together and run there one after another, the arms' order
@@ -615,6 +630,12 @@ SYSTEM_GIB = 4
 # and an instance's boot (launch to its canary passed) before any is
 # measured.
 DEFAULT_JOB_S = 60
+# A testbed job that no earlier run times (testbed_model_s): what its
+# tables take on top of run.sh (testbed_tables, a few seconds a node), and
+# a host's first run's image builds, native and with a browser (cached
+# after: earlier native runs' first jobs took 10 s over run.sh's timing).
+TABLES_S = 15
+IMAGES_S = {"native": 10, "browser": 60}
 DEFAULT_BOOT_S = 75
 # The work, in seconds per slot, an instance's queue holds: enough to last
 # PREFETCH_TICKS of the loop's ticks as it measures them (a tick whose work
@@ -1146,13 +1167,13 @@ def past_boot_s(kind: str) -> float:
     return statistics.fmean(got) if got else DEFAULT_BOOT_S
 
 
-def past_ratios() -> tuple[float, float, int]:
-    """What the last few finished test runs took over their model's wall
-    time and cost (costs.jsonl), the medians, and how many runs: what the
-    model leaves out (the syncs' latency, the waves of jobs, the end)."""
+def past_ratios(kind: str = "test") -> tuple[float, float, int]:
+    """What the last few finished runs of `kind` took over their model's
+    wall time and cost (costs.jsonl), the medians, and how many runs: what
+    the model leaves out (the syncs' latency, the waves of jobs, the end)."""
     past = [
         r for r in read_jsonl(COSTS)
-        if r.get("kind") == "test" and not r.get("interrupted") and r.get("wall_s") and r.get("cost")
+        if r.get("kind") == kind and not r.get("interrupted") and r.get("wall_s") and r.get("cost")
         and (r.get("estimate") or {}).get("model_wall_s", (r.get("estimate") or {}).get("wall_s"))
     ][-5:]
     if not past:
@@ -1166,12 +1187,12 @@ def past_ratios() -> tuple[float, float, int]:
     )
 
 
-def past_stored_per_job() -> float:
-    """The bytes of tables a test job put in S3, the median over the last
-    few runs that tell (costs.jsonl's s3 over their jobs)."""
+def past_stored_per_job(kind: str = "test") -> float:
+    """The bytes of tables a job of a run of `kind` put in S3, the median
+    over the last few runs that tell (costs.jsonl's s3 over their jobs)."""
     per = [
         r["s3"]["stored"] / r["jobs"] for r in read_jsonl(COSTS)
-        if r.get("kind") == "test" and r.get("jobs") and (r.get("s3") or {}).get("stored")
+        if r.get("kind") == kind and r.get("jobs") and (r.get("s3") or {}).get("stored")
     ][-5:]
     return statistics.median(per) if per else 0.0
 
@@ -1976,9 +1997,11 @@ def cheapest(pools: list[Pool], rooms: dict[str, float], caps: dict[str, float],
 
 
 def plan_fleet(pools: list[Pool], budgets: dict[str, int], max_vcpus: int | None,
-               want: float) -> list[Pool]:
+               want: float, testbed: bool = False) -> list[Pool]:
     """The instances a run launches for `want` of capacity, as Run.scale
-    picks them, if every pool had room for them."""
+    picks them, if every pool had room for them; a testbed run's (one
+    group a host, `want` the groups) of the first's type first, where its
+    pools have room."""
     used: collections.Counter = collections.Counter()
     per_pool: collections.Counter = collections.Counter()
     out = []
@@ -1989,14 +2012,26 @@ def plan_fleet(pools: list[Pool], budgets: dict[str, int], max_vcpus: int | None
             for r, b in budgets.items()
         }
         caps = {r: (b if max_vcpus is None else min(b, max_vcpus)) / 2 for r, b in budgets.items()}
-        p = cheapest(pools, rooms, caps, per_pool, want)
-        if p is None or (out and want < p.spec.slots * p.speed / 2):
+        p = cheapest(pools, rooms, caps, per_pool, want, out[0].type if testbed and out else None)
+        if p is None or (not testbed and out and want < p.spec.slots * p.speed / 2):
             break
         out.append(p)
         used[p.region] += p.spec.vcpus
         per_pool[p.key] += p.spec.vcpus
-        want -= p.spec.slots * p.speed
+        want -= 1 if testbed else p.spec.slots * p.speed
     return out
+
+
+def testbed_model_s(env: dict[str, str], tables: bool) -> float:
+    """A testbed job's wall by run.sh's own timing, in seconds: its
+    containers' lead (8 s and 1.5 s a node past four; with a browser,
+    20 s and 1 s a browser more), the stream's SECS (180 by default) and
+    its 15 s tail, and TABLES_S for its tables."""
+    nodes = int(env.get("VIEWERS", "3")) + 1
+    kinds = env.get("KINDS", "").split()
+    browsers = sum(1 for i in range(nodes) if i < len(kinds) and kinds[i] != "native")
+    lead = 8000 + 1500 * max(nodes - 4, 0) + (20000 + 1000 * browsers if browsers else 0)
+    return lead / 1000 + int(env.get("SECS", "180")) + 15 + (TABLES_S if tables else 0)
 
 
 def pools(region: str, slot_mem_gib: float, families: list[str], max_cores: int,
@@ -3803,7 +3838,9 @@ class Run:
         and the model's wall time, a boot then the work over their capacity
         (or the longest job, if longer) and two syncs, and their cost for that
         long; then both times what the last runs took over their model's
-        (past_ratios)."""
+        (past_ratios). A testbed run's is testbed_estimate's."""
+        if self.testbed is not None:
+            return self.testbed_estimate()
         work = self.work_left()
         items = [i for i in self.queue if i.wid not in self.done]
         items += [i for w in self.waiting.values() for i in w]
@@ -3850,7 +3887,94 @@ class Run:
             "s3_cost": round(s3, 3) if s3 is not None else None,
         }
 
+    def testbed_walls(self, items: list[Item]) -> dict[str, tuple[float, str]]:
+        """Each testbed item's expected wall, in seconds, and what timed it:
+        its matrix's earlier runs of its environment ("rows": the mean of
+        their walls, each repeat's [repeat_env] values aside), else run.sh's
+        timing ("run.sh", testbed_model_s)."""
+        seen: dict[tuple[str, str], list[float]] = {}
+        for m in self.ms:
+            for r in read_jsonl(m.state / "rows.jsonl"):
+                wall = r.get("wall_s") or (r.get("row") or {}).get("wall_s")
+                if wall:
+                    env = {k: v for k, v in (r.get("env") or {}).items() if k not in m.repeat_env}
+                    seen.setdefault((m.name, json.dumps(env, sort_keys=True)), []).append(wall)
+        out = {}
+        for i in items:
+            m = self.owners[i.job.id][0][0] if i.job.id in self.owners else self.ms[0]
+            env = {k: v for k, v in self.env_of(i.job).items() if k not in m.repeat_env}
+            walls = seen.get((m.name, json.dumps(env, sort_keys=True)))
+            out[i.wid] = (statistics.fmean(walls), "rows") if walls else (
+                testbed_model_s(self.env_of(i.job), "TABLES_BIN" in m.artifacts), "run.sh")
+        return out
+
+    def testbed_estimate(self) -> dict:
+        """A testbed run's estimate (the module docs): its jobs' walls
+        (testbed_walls), a host per group of the first launch's type where
+        the budgets have room (plan_fleet), the groups longest first onto
+        the least loaded host, a host's first job building its images
+        (IMAGES_S), each host billed from its launch through its boot and
+        its jobs, the wall the last host's and two syncs; then both times
+        what the last testbed runs took over their estimates."""
+        items = [i for i in self.queue if i.wid not in self.done]
+        walls = self.testbed_walls(items)
+        groups: dict[str, list[Item]] = {}
+        for i in items:
+            groups.setdefault(i.job.group, []).append(i)
+        load = {g: sum(walls[i.wid][0] for i in its) for g, its in groups.items()}
+        browser = {g: any(any(k != "native" for k in self.env_of(i.job).get("KINDS", "").split()) for i in its)
+                   for g, its in groups.items()}
+        b = self.boot_s()
+        budgets = {n: r.budget - self.live_vcpus(n) for n, r in self.regions.items()}
+        fleet = plan_fleet(self.pools, budgets, self.args.max_vcpus, len(groups), testbed=True)
+        busy = [0.0] * len(fleet)
+        images = [set() for _ in fleet]
+        for g in sorted(load, key=lambda g: -load[g]):
+            if not fleet:
+                break
+            h = min(range(len(fleet)), key=lambda k: busy[k])
+            kind = "browser" if browser[g] else "native"
+            # An earlier run's wall holds its images' build already.
+            build = kind not in images[h] and walls[groups[g][0].wid][1] == "run.sh"
+            busy[h] += load[g] + (IMAGES_S[kind] if build else 0)
+            images[h].add(kind)
+        wall = b + max(busy) + 2 * TICK if fleet else None
+        cost = sum((p.price + INSTANCE_EXTRA_HOURLY) * max(60.0, b + busy[k] + TICK) / 3600
+                   for k, p in enumerate(fleet)) if fleet else None
+        wall_x, cost_x, runs = past_ratios("testbed")
+        by_region = collections.Counter(p.region for p in fleet)
+        names = list(dict.fromkeys([*self.bins, *([self.duckdb] if self.stores else [])]))
+        built = {n: (BIN / n).stat().st_size for n in names if (BIN / n).exists()}
+        # A bundle not built yet weighs as the testbed bundles built here.
+        sizes = [s for n, s in built.items() if n != self.duckdb] or [
+            p.stat().st_size for p in BIN.glob("testbed-*.tar.gz")]
+        bins = sum(built.get(n, statistics.fmean(sizes) if sizes else 0) for n in names)
+        far = sum(1 for p in fleet if p.region != self.args.s3_region)
+        up = len(items) * past_stored_per_job("testbed") if self.stores else 0.0
+        far_share = far / len(fleet) if fleet else 0.0
+        s3 = ((far * bins + up * far_share) / GB * S3_INTER_REGION_GB
+              + up / GB * S3_STORAGE_GB_MONTH * S3_KEPT_DAYS / 30) if fleet else None
+        self.timed_by = collections.Counter(how for _, how in walls.values())
+        return {
+            "jobs": len(items),
+            "have_rows": sum(1 for i in self.items.values() if not i.copy and i.wid in self.done),
+            "timed": self.timed_by["rows"],
+            "work_slot_h": round(sum(load.values()) / 3600, 2),
+            "boot_s": round(b),
+            "instances": len(fleet),
+            "slots": len(fleet),
+            "slots_by_region": dict(by_region),
+            "model_wall_s": round(wall) if wall else None,
+            "model_cost": round(cost, 3) if wall else None,
+            "past_runs": runs,
+            "wall_s": round(wall * wall_x) if wall else None,
+            "cost": round(cost * cost_x, 2) if wall else None,
+            "s3_cost": round(s3, 3) if s3 is not None else None,
+        }
+
     def say_estimate(self, est: dict) -> str:
+        if self.testbed is not None:
+            return self.say_testbed_estimate(est)
         timed = f"{est['timed'] / est['jobs']:.0%}" if est["jobs"] else "-"
         head = (
             f"{est['jobs']} jobs to run ({est['have_rows']} more have rows), "
@@ -3869,6 +3993,30 @@ class Run:
             out += (
                 f" (the model's {est['model_wall_s'] / 60:.1f} min and ${est['model_cost']:.2f}, scaled as "
                 f"the last {est['past_runs']} runs took over theirs)"
+            )
+        return head + out
+
+    def say_testbed_estimate(self, est: dict) -> str:
+        by = getattr(self, "timed_by", collections.Counter())
+        groups = len({i.job.group for i in self.queue if i.wid not in self.done})
+        head = (
+            f"{est['jobs']} testbed jobs to run in {groups} groups ({est['have_rows']} more have rows), "
+            f"{est['work_slot_h']:.1f} host-h of runs ({by['rows']} timed by their matrices' earlier runs, "
+            f"{by['run.sh']} by run.sh's timing: lead, SECS + 15 s, tables, images), a boot of "
+            f"{est['boot_s']} s: "
+        )
+        if not est["slots"]:
+            return head + "no pool fits the budget"
+        where = ", ".join(f"{n} {r}" for r, n in sorted(est["slots_by_region"].items()))
+        out = (
+            f"{est['instances']} instances of {self.testbed.cores} cores ({where}), about "
+            f"{est['wall_s'] / 60:.1f} min and ${est['cost']:.2f}"
+            + (f" of EC2 and ${est['s3_cost']:.2f} of S3" if est.get("s3_cost") is not None else "")
+        )
+        if est["past_runs"]:
+            out += (
+                f" (the model's {est['model_wall_s'] / 60:.1f} min and ${est['model_cost']:.2f}, scaled as "
+                f"the last {est['past_runs']} testbed runs took over theirs)"
             )
         return head + out
 
@@ -4237,9 +4385,8 @@ class Run:
             f"${p.per_work * 1000:.1f}m/slot-h" + (f" of {self.speed_ref}" if self.speeds else "")
             for p in self.pools[:5]
         ))
-        if self.testbed is None:
-            self.estimated = self.estimate()
-            log("estimate: " + self.say_estimate(self.estimated))
+        self.estimated = self.estimate()
+        log("estimate: " + self.say_estimate(self.estimated))
 
     def link_check(self) -> str:
         """The run's testbed arms' link check (link_check), from their
@@ -4261,9 +4408,6 @@ class Run:
     def estimate_only(self) -> dict:
         """`estimate`: the run's estimate, printed and returned, with nothing
         changed in AWS (no key pair, security group or launch)."""
-        if self.testbed is not None:
-            sys.exit("estimate takes test matrices")
-
         def setup(name: str) -> Region:
             _, zones = network(name)
             return Region(name, "", zones, "", ("", ""))
@@ -4275,7 +4419,8 @@ class Run:
             sys.exit("no instance type fits (families, sizes, slot_mem_gib, regions)")
         self.read_budgets(time.time())
         unbuilt = [
-            f"{m.name} {arm}" for m in self.ms for arm, s in m.sources.items() if bin_hash(m.bin_name(s)) is None
+            f"{m.name} {arm}" for m in self.ms for arm, s in m.sources.items()
+            if m.kind == "test" and bin_hash(m.bin_name(s)) is None
         ]
         if unbuilt:
             print(f"not built yet, so their jobs count as having no rows: {', '.join(unbuilt)}")

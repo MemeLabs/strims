@@ -35,7 +35,10 @@ dir does, under its tables' key, sim, test and env, its cell, arm and
 repeat, its row with the host's, and the flush lands in its sink; a
 testbed_tables that fails leaves no tables and says why; the controller
 writes a stored testbed run's line once its flush lands, naming its key
-and source, and an unstored one's at once. Stdlib alone:
+and source, and an unstored one's at once. A testbed run's estimate
+prices a host per group of the cheapest type, its jobs timed by their
+matrix's earlier runs or by run.sh's timing, and a set of two host_cores
+is refused. Stdlib alone:
 
   python3 hack/simlab/tests/test_farm.py
 """
@@ -1183,6 +1186,75 @@ class TestbedTables(unittest.TestCase):
         # One that stored nothing has its line at once.
         run.store(host, second, {"row": {"steal_pct": 0.1}, "wall_s": 60.0, "exit": 0, "tables_error": "x"})
         self.assertEqual([r.get("tables_error") for r in fp.read_jsonl(rows)], [None, "x"])
+
+    def test_a_testbed_runs_estimate_prices_a_host_per_group(self):
+        d = self.dir
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        env |= {"GIT_DIR": str(d / ".git"), "GIT_WORK_TREE": str(d), "GIT_CONFIG_NOSYSTEM": "1",
+                "HOME": str(d), "SIM_DB_ROOT": str(d / "sim-db")}
+        p = mock.patch.dict(os.environ, env, clear=True)
+        p.start()
+        self.addCleanup(p.stop)
+        subprocess.run(["git", "init", "-q"], cwd=d, check=True)
+        (d / "hack" / "testbed").mkdir(parents=True)
+        commits = []
+        for arm in ("main", "other"):
+            (d / "hack" / "testbed" / "run.sh").write_text(arm)
+            for cmd in (["add", "hack"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", arm]):
+                subprocess.run(["git", *cmd], cwd=d, check=True)
+            commits.append(subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, check=True, capture_output=True,
+                                          text=True).stdout.strip())
+        commit, other = commits
+        fp = farm_of(d)
+        # Two arms paired, 3 repeats, two sizes: 6 groups of 2 jobs.
+        (d / "e.toml").write_text(TESTBED_MATRIX.format(commit=commit).replace("repeats = 2", "repeats = 3")
+                                  .replace('[arms]\nmain = "', '[arms]\nother = "' + other + '"\nmain = "')
+                                  + '[axes]\nVIEWERS = ["3", "15"]\n')
+        m = fp.Matrix(str(d / "e.toml"))
+        m.resolve()
+        m.state.mkdir(parents=True)
+        # The 3-viewer jobs of arm main have an earlier run of 100 s.
+        fp.append_jsonl(m.state / "rows.jsonl", [{"id": "old", "kind": "testbed", "arm": "main", "wall_s": 100.0,
+                                                  "env": {"SECS": "30", "VIEWERS": "3", "JOINS": "x"}}])
+        args = mock.Mock(local=False, s3_region="r1", s3_bucket="b", verify=0, max_vcpus=None, work_per_boot=2)
+        with contextlib.redirect_stdout(io.StringIO()):
+            run = fp.Run([m], args)
+        cheap = fp.Pool("c6a.xlarge", "r1a", "s", fp.Spec(4, 4, 8, 1), 0.04, "r1")
+        dear = fp.Pool("c7a.xlarge", "r1b", "s", fp.Spec(4, 4, 8, 1), 0.05, "r1")
+        run.pools = [cheap, dear]
+        run.regions = {"r1": fp.Region("r1", "", {}, "", ("", ""), budget=16)}
+        est = run.estimate()
+        self.assertEqual((est["jobs"], est["timed"]), (12, 6))
+        # The budget's 16 vCPUs hold 4 hosts: the cheap type's pool takes
+        # its half of the budget, the next pool the rest.
+        self.assertEqual((est["instances"], est["slots"], est["slots_by_region"]), (4, 4, {"r1": 4}))
+        model = {v: fp.testbed_model_s({"VIEWERS": v, "SECS": "30"}, True) for v in ("3", "15")}
+        self.assertEqual(model["3"], 8 + 30 + 15 + fp.TABLES_S)
+        self.assertEqual(model["15"], 8 + 1.5 * 12 + 30 + 15 + fp.TABLES_S)
+        # Each 3-viewer group: both arms timed by the earlier 100 s (arms
+        # aside), each 15-viewer group by the model.
+        loads = sorted([200.0] * 3 + [2 * model["15"]] * 3, reverse=True)
+        busy = [0.0] * 4
+        for g in loads:
+            h = busy.index(min(busy))
+            busy[h] += g
+        b = est["boot_s"]
+        images = fp.IMAGES_S["native"]
+        self.assertGreaterEqual(est["model_wall_s"], round(b + max(busy) + 2 * fp.TICK))
+        self.assertLessEqual(est["model_wall_s"], round(b + max(busy) + 2 * fp.TICK + 2 * images))
+        text = run.say_estimate(est)
+        self.assertIn("6 timed by their matrices' earlier runs, 6 by run.sh's timing", text)
+        self.assertIn("4 instances of 4 cores", text)
+        self.assertEqual(set(est), {"jobs", "have_rows", "timed", "work_slot_h", "boot_s", "instances", "slots",
+                                    "slots_by_region", "model_wall_s", "model_cost", "past_runs", "wall_s",
+                                    "cost", "s3_cost"})
+        # Two host_cores in one set: refused, as run refuses it.
+        (d / "f.toml").write_text(TESTBED_MATRIX.format(commit=commit).replace("host_cores = 4", "host_cores = 8"))
+        f = fp.Matrix(str(d / "f.toml"))
+        f.resolve()
+        with self.assertRaises(SystemExit) as e, contextlib.redirect_stdout(io.StringIO()):
+            fp.Run([m, f], args)
+        self.assertIn("want one host_cores", str(e.exception))
 
 
 if __name__ == "__main__":
