@@ -383,6 +383,7 @@ containers in real time. Its jobs are its arms by its axes by `repeats`:
   paired = true                 # the default (below)
   cell = "star-15-10"           # the suite cell its runs stand for (below)
   knobs = {STRIMS_SIM_ARRIVALS = "trickle"}  # more twin knobs (below)
+  [repeat_env] JOINS = ["1:3 2:9 3:14", "1:5 2:6 3:18"]  # repeat r's, the r-th
   [build]     commands = ["cargo build --release ..."]
   [artifacts] NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
               TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
@@ -405,7 +406,11 @@ to its path there, and each [files] variable (a file relative to the
 matrix, the same for every arm, whose path may name the job's variables
 as ${VAR}: "topologies/mesh6-v${VIEWERS}") to the host's copy. A job's id
 hashes its source, build, files, environment and repeat, and its cell and
-knobs where the matrix names them.
+knobs where the matrix names them. [repeat_env] gives each repeat its own
+value of a variable: repeat r (from 1) takes the r-th of each list, which
+its id hashes as the rest of its environment (a tier's trickle arrivals,
+JOINS, drawn apart for each repeat as its twin's seeds draw theirs); a
+list shorter than `repeats` is an error.
 
 With a TABLES_BIN artifact (strims-sim's testbed_tables), a host writes a
 finished run's tables as a sim run writes its own (strims-sim's testbed
@@ -943,6 +948,11 @@ class Matrix:
         # tables take beside their settings' (testbed_tables' --knob).
         self.cell = str(m["cell"]) if "cell" in m else None
         self.knobs = {str(k): str(v) for k, v in m.get("knobs", {}).items()}
+        # variable -> each repeat's value, the r-th repeat's r-th
+        self.repeat_env = {str(k): [str(x) for x in v] for k, v in m.get("repeat_env", {}).items()}
+        short = sorted(k for k, v in self.repeat_env.items() if len(v) < self.repeats)
+        if short:
+            bad(f"[repeat_env] {', '.join(short)}: fewer values than the {self.repeats} repeats")
         self.source_paths = sorted({*map(str, m.get("sources", SOURCES)), TESTBED})
         self.commands = [str(c) for c in m.get("build", {}).get("commands", [])]
         self.artifacts = {k: str(v) for k, v in m.get("artifacts", {}).items()}
@@ -950,10 +960,10 @@ class Matrix:
         self.files = {k: str(v) for k, v in m.get("files", {}).items()}
         # name in bin/ -> the file here, for the jobs made so far
         self.shipped: dict[str, Path] = {}
-        given = [set(self.env) | set(self.axes), set(self.artifacts), set(self.files)]
+        given = [set(self.env) | set(self.axes), set(self.artifacts), set(self.files), set(self.repeat_env)]
         twice = set().union(*(a & b for a, b in itertools.combinations(given, 2)))
         if twice:
-            bad(f"{sorted(twice)} set twice ([env] or [axes], [artifacts], [files])")
+            bad(f"{sorted(twice)} set twice ([env] or [axes], [artifacts], [files], [repeat_env])")
 
     def parse_derive(self, i: int, d: dict) -> Derive:
         def bad(msg: str):
@@ -1064,6 +1074,7 @@ class Matrix:
         for repeat in range(1, self.repeats + 1):
             for i, combo in enumerate(itertools.product(*(self.axes[k] for k in keys))):
                 env = {**self.env, **dict(zip(keys, combo))}
+                env.update({k: v[repeat - 1] for k, v in self.repeat_env.items()})
                 group = ""
                 if self.paired:
                     key = json.dumps([self.name, sorted(env.items()), repeat])

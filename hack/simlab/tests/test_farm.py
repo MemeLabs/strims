@@ -1045,6 +1045,8 @@ repeats = 2
 host_cores = 4
 cell = "star-3-10"
 knobs = {{ STRIMS_SIM_ARRIVALS = "trickle" }}
+[repeat_env]
+JOINS = ["1:3 2:9 3:14", "1:5 2:6 3:18", "1:1 2:2 3:3"]
 [artifacts]
 NODE_BIN = "node"
 TABLES_BIN = "tables"
@@ -1142,6 +1144,15 @@ class TestbedTables(unittest.TestCase):
         m = fp.Matrix(str(d / "tb.toml"))
         m.resolve()
         self.assertEqual((m.cell, m.knobs), ("star-3-10", {"STRIMS_SIM_ARRIVALS": "trickle"}))
+        # Each repeat takes its own JOINS, which its id hashes.
+        jobs = sorted(m.jobs(), key=lambda j: j.repeat)
+        self.assertEqual([dict(j.env)["JOINS"] for j in jobs], ["1:3 2:9 3:14", "1:5 2:6 3:18"])
+        self.assertEqual(len({j.id for j in jobs}), 2)
+        short = d / "short.toml"
+        short.write_text(TESTBED_MATRIX.format(commit=commit).replace("repeats = 2", "repeats = 4"))
+        with self.assertRaises(SystemExit) as e:
+            fp.Matrix(str(short))
+        self.assertIn("fewer values than the 4 repeats", str(e.exception))
         args = mock.Mock(local=True, s3_region=None, s3_bucket=None, verify=0)
         with contextlib.redirect_stdout(io.StringIO()):
             run = fp.Run([m], args)
