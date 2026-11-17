@@ -66,8 +66,11 @@
 //!   its tokens cover at once and the rest at its rate, segments,
 //!   datagrams, acknowledgements and competing uploads alike, and its
 //!   queue holds bytes.
-//! - A segment that loses a packet on its path (the sites' loss) is lost
-//!   to its sender the same way.
+//! - A segment that loses a packet on its path (the sites' loss, drawn
+//!   for each packet) is lost to its sender the same way from that packet
+//!   on: the packets ahead of it arrive and the rest goes again alone, as
+//!   Linux resends the packets a SACK leaves out; one that loses its first
+//!   goes again whole.
 //! - Its sender learns of the loss from the acknowledgement of a segment
 //!   sent after it (RACK, `tcp_rack_mark_lost`, retransmissions' included),
 //!   a quarter of the least round trip later, or at once in a recovery or
@@ -2685,10 +2688,9 @@ impl Scheduler {
                 },
             );
         }
-        let whole = took == packets;
         let t = self
             .net
-            .send(at, from, to, head_wire, took, Carrier::Stream);
+            .send(at, from, to, head_wire, took, Carrier::Lossless);
         // What went out of the segment: a tail the queue dropped goes again
         // as a resend.
         let went = (took as usize * MSS as usize).min(len);
@@ -2697,15 +2699,49 @@ impl Scheduler {
             let charge = self.net.up_charge(from, head_wire, took);
             self.resent(from, charge);
         }
-        if t.retransmit > Duration::ZERO {
-            // A packet of it was lost on the path: its sender learns so as
-            // of a full queue's drop, and resends it whole.
-            if let Some(f) = self.flows.get_mut(&conn) {
-                f.tails.remove(&seq);
+        match self.net.first_lost(t.depart, from, to, took) {
+            Some(0) => {
+                // Its first packet was lost on the path: its sender learns
+                // so as of a full queue's drop, and resends it whole, or a
+                // tail it resent the tail again.
+                if let Some(f) = self.flows.get_mut(&conn) {
+                    if start == 0 {
+                        f.tails.remove(&seq);
+                    } else {
+                        f.tails.insert(
+                            seq,
+                            Tail {
+                                head: 0,
+                                tail: len,
+                                resent: false,
+                            },
+                        );
+                    }
+                }
+                self.dropped(at, conn, seq);
+                return;
             }
-            self.dropped(at, conn, seq);
-            return;
+            Some(k) => {
+                // A later one: the leading packets arrive, and what follows
+                // goes again alone, as a queue's dropped tail does.
+                head_wire = strims_wan::framing::frames(head_wire, took)
+                    .take(k as usize)
+                    .sum();
+                took = k;
+                let head = (took as usize * MSS as usize).min(len);
+                let f = self.flows.entry(conn).or_default();
+                f.tails.insert(
+                    seq,
+                    Tail {
+                        head,
+                        tail: len - head,
+                        resent: false,
+                    },
+                );
+            }
+            None => {}
         }
+        let whole = took == packets;
         if !whole {
             self.dropped(at, conn, seq);
         }
@@ -4109,6 +4145,28 @@ mod tests {
     /// `loss`, writes `bytes` to `b` from 1 s on. Returns when `b` had them
     /// (ms from 1 s) and `a`'s access link report.
     fn beside_an_upload(bytes: usize, competing: (u64, u64), loss: f64) -> (i64, WanHostReport) {
+        beside_an_upload_drawn(bytes, competing, loss, 1)
+    }
+
+    /// [`beside_an_upload`] with the WAN's draws from `seed`.
+    fn beside_an_upload_drawn(
+        bytes: usize,
+        competing: (u64, u64),
+        loss: f64,
+        seed: u64,
+    ) -> (i64, WanHostReport) {
+        let (got, a, _) = beside_an_upload_traced(bytes, competing, loss, seed);
+        (got, a)
+    }
+
+    /// [`beside_an_upload_drawn`] and the window model's TCP trace, the
+    /// upload's sink host 2.
+    fn beside_an_upload_traced(
+        bytes: usize,
+        competing: (u64, u64),
+        loss: f64,
+        seed: u64,
+    ) -> (i64, WanHostReport, Vec<TcpEvent>) {
         let mut sim = build();
         let sites = [
             (
@@ -4162,10 +4220,12 @@ mod tests {
             jitter: false,
             loss: loss > 0.0,
         };
-        let mut wan = Scheduler::new(&sim, &spec, options, 1, Some(buffers)).unwrap();
+        let mut wan = Scheduler::new(&sim, &spec, options, seed, Some(buffers)).unwrap();
         wan.set_latency(0, 1, Duration::from_millis(15));
+        wan.trace_tcp();
         drive(&mut sim, &mut wan);
-        (got.get(), wan.report(&spec).hosts.swap_remove(0))
+        let trace = wan.take_tcp_trace();
+        (got.get(), wan.report(&spec).hosts.swap_remove(0), trace)
     }
 
     /// Bytes `a`'s competing uploads had sent `s` seconds in.
@@ -4215,14 +4275,48 @@ mod tests {
     }
 
     #[test]
+    fn a_segment_that_loses_a_later_packet_on_its_path_resends_the_rest_alone() {
+        // Over 5 % site loss and a queue that never fills, a segment whose
+        // path loses a packet past its first goes again from that packet,
+        // as Linux resends what a SACK leaves out; one whose first it
+        // loses goes again whole.
+        let mut rest = 0;
+        let mut whole = 0;
+        for seed in 1..=4 {
+            let (_, _, trace) = beside_an_upload_traced(289_600, (30, 30), 0.05, seed);
+            let link: Vec<_> = trace.iter().filter(|e| e.from == 0 && e.to == 1).collect();
+            assert!(link.iter().all(|e| e.what != "drop"), "a queue drop");
+            let mut sent = BTreeMap::new();
+            for e in &link {
+                match e.what {
+                    "tx" => {
+                        sent.insert(e.seq, e.len);
+                    }
+                    "rtx" if e.len < sent[&e.seq] => rest += 1,
+                    "rtx" => whole += 1,
+                    _ => {}
+                }
+            }
+        }
+        assert!(
+            rest > 0 && whole > 0,
+            "{rest} segments resent from a later packet, {whole} whole"
+        );
+    }
+
+    #[test]
     fn site_loss_holds_windows_down() {
         // Over a 30 ms round trip, a connection that loses 1 % of its
         // packets keeps a window of a few segments, as Linux's does
         // (hack/testbed/bench/lossy-over.sched): 1.45 MB take about 1.3 s
-        // on the bare uplink and about 1.65 times that through the loss.
+        // on the bare uplink and over eight draws of the loss about 1.5
+        // times that on average, 1.0-2.6 times as the losses fall.
         let (clean, _) = beside_an_upload(1_448_000, (30, 30), 0.0);
-        let (lossy, _) = beside_an_upload(1_448_000, (30, 30), 0.01);
-        assert!(lossy * 10 > clean * 16, "{lossy} ms against {clean} ms");
+        let lossy: Vec<i64> = (1..=8)
+            .map(|seed| beside_an_upload_drawn(1_448_000, (30, 30), 0.01, seed).0)
+            .collect();
+        let mean = lossy.iter().sum::<i64>() / 8;
+        assert!(mean * 10 > clean * 14, "{lossy:?} ms against {clean} ms");
         // An upload from the site loses its packets too, and sends about
         // half as much.
         let (_, a) = beside_an_upload(0, (0, 30), 0.0);

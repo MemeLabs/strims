@@ -125,7 +125,9 @@ pub enum Carrier {
     Datagram,
     /// A datagram the path never loses: one whose contents a simulation
     /// can't reproduce run to run, so that its loss would make the run
-    /// irreproducible (a DTLS handshake record).
+    /// irreproducible (a DTLS handshake record). Also a stream message
+    /// whose caller draws its loss packet by packet
+    /// ([`Network::first_lost`]).
     Lossless,
 }
 
@@ -844,17 +846,40 @@ impl Network {
     /// message the caller times itself (the window model's pure
     /// acknowledgements).
     pub fn lost(&mut self, depart: Time, a: usize, b: usize, packets: u32) -> bool {
-        if !self.options.loss {
-            return false;
-        }
-        let reach = depart + self.one_way(a, b);
-        let p =
-            1.0 - (1.0 - self.end_mut(a).loss_at(depart)) * (1.0 - self.end_mut(b).loss_at(reach));
+        let p = self.path_loss(depart, a, b);
         if p <= 0.0 {
             return false;
         }
         let dir = self.dir_mut(a, b);
         unit(&mut dir.rng) < 1.0 - (1.0 - p).powi(i32::try_from(packets).unwrap_or(i32::MAX))
+    }
+
+    /// The first of a stream message's `packets` packets from `a` to `b`
+    /// the path loses, each packet its own draw from both ends' loss, its
+    /// last bit having left `a`'s uplink at `depart`: for a message sent
+    /// [`Carrier::Lossless`] whose caller resends what the path lost
+    /// packet by packet (the window model's segments, as Linux resends
+    /// the packets a SACK leaves out). A loss counts a retransmission.
+    pub fn first_lost(&mut self, depart: Time, a: usize, b: usize, packets: u32) -> Option<u32> {
+        let p = self.path_loss(depart, a, b);
+        if p <= 0.0 {
+            return None;
+        }
+        let dir = self.dir_mut(a, b);
+        let k = (0..packets).find(|_| unit(&mut dir.rng) < p)?;
+        self.end_mut(a).stats.retransmits += 1;
+        Some(k)
+    }
+
+    /// The probability that the path from `a` to `b` loses a packet whose
+    /// last bit left `a`'s uplink at `depart`: both ends' loss, none
+    /// without the options' loss.
+    fn path_loss(&mut self, depart: Time, a: usize, b: usize) -> f64 {
+        if !self.options.loss {
+            return 0.0;
+        }
+        let reach = depart + self.one_way(a, b);
+        1.0 - (1.0 - self.end_mut(a).loss_at(depart)) * (1.0 - self.end_mut(b).loss_at(reach))
     }
 
     /// Whether a message of `packets` packets from `h` to a lossless peer
