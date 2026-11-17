@@ -1874,6 +1874,29 @@ fn dropped(
         .collect()
 }
 
+/// The truth's log of a competing upload from the node at `me` (its
+/// packets to the sink in its capture `ps`, in capture order): after each
+/// packet, its IP bytes so far, stamped with the packet's capture time
+/// since the run's start (`LEAD` before the stream's, `start_ms`), as
+/// `report::competing_before` reads a log: what a window counts is what
+/// the link carried in it.
+fn competing_log(
+    ps: &[Packet],
+    me: Option<u8>,
+    start_ms: u64,
+) -> Vec<(strims_base::time::Duration, u64)> {
+    let run0_us = start_ms.saturating_sub(LEAD.as_millis() as u64) * 1000;
+    let mut sent = 0u64;
+    ps.iter()
+        .filter(|p| p.src.is_some() && p.src == me && p.dst == Some(SINK))
+        .map(|p| {
+            sent += p.ip_len;
+            let us = i64::try_from(p.us.saturating_sub(run0_us)).unwrap_or(i64::MAX);
+            (strims_base::time::Duration::from_micros(us), sent)
+        })
+        .collect()
+}
+
 /// The meter's truth's share at each of a testbed node's meter samples,
 /// as strims-sim's HostStats::gate takes it from the sim's counters, from
 /// the node's capture (`sent`) and its records: its own charge, its first
@@ -2143,8 +2166,11 @@ impl Network {
                     w.acks = cum.get(up("up_ack_packets")).copied().unwrap_or(0);
                     w.ack_bytes = cum.get(up("up_ack_bytes")).copied().unwrap_or(0);
                     // The truth's log of the competitor's bytes: its IP bytes
-                    // so far at each edge (report::available charges them).
-                    w.competing_log = w.competing.clone();
+                    // so far as each of its packets leaves, stamped with the
+                    // packet's capture time (report::available charges them).
+                    if h == seed {
+                        w.competing_log = competing_log(&ps, me, run.start_ms);
+                    }
                 }
                 None => no_pcap.push(h),
             }
@@ -3529,6 +3555,50 @@ mod tests {
         let twin = Calibration::from_knobs(|k| r.knobs.get(k).cloned());
         assert!(twin.compete.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The truth's log of a competing upload holds each of its packets at
+    /// its capture time: a window counts what the link carried in it,
+    /// however it falls on the bins' edges, and the node's other packets
+    /// and the sink's are none of it.
+    #[test]
+    fn the_truths_competitor_log_holds_each_packet_at_its_capture_time() {
+        let packet = |us: u64, src: u8, dst: u8| Packet {
+            us: START * 1000 + us,
+            src: Some(src),
+            dst: Some(dst),
+            ip_len: 1500,
+            pure_ack: false,
+            payload: 1448,
+            tcp: Some((4000, 5201, 0)),
+            ip_id: 0,
+            udp: None,
+        };
+        // From 20.005 s, a packet to the sink every 10 ms, one to a viewer
+        // and one from the sink between each.
+        let mut ps = Vec::new();
+        for i in 0..500u64 {
+            let us = 20_005_000 + i * 10_000;
+            ps.extend([
+                packet(us, 10, SINK),
+                packet(us + 1, 10, 11),
+                packet(us + 2, SINK, 10),
+            ]);
+        }
+        let log = competing_log(&ps, Some(10), START);
+        assert_eq!(log.len(), 500);
+        let at = |ms: u64| strims_base::time::Duration::from(LEAD + Duration::from_millis(ms));
+        assert_eq!(log.first(), Some(&(at(20_005), 1500)));
+        assert_eq!(log.last().map(|x| x.1), Some(500 * 1500));
+        let between = |a: u64, b: u64| {
+            crate::report::competing_before(&log, at(b))
+                - crate::report::competing_before(&log, at(a))
+        };
+        assert_eq!(between(20_000, 21_000), 100 * 1500);
+        // A window ending on an edge takes the packets up to it.
+        assert_eq!(between(19_100, 20_100), 10 * 1500);
+        assert_eq!(between(20_100, 21_100), 100 * 1500);
+        assert_eq!(between(24_900, 25_900), 10 * 1500);
     }
 
     #[test]

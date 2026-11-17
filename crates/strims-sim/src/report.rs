@@ -490,7 +490,9 @@ pub struct WanHostReport {
     /// bytes).
     pub competing: Vec<(strims_base::time::Duration, u64)>,
     /// The same after each walk of the run that moved it, stamped with the
-    /// walk's time: the truth's competing uploads (`competing_before`).
+    /// walk's time (a testbed run's after each of their packets, stamped
+    /// with its capture time): the truth's competing uploads
+    /// (`competing_before`).
     pub competing_log: Vec<(strims_base::time::Duration, u64)>,
     /// With the window model, the segments its connections lost to a full
     /// access queue, up or down, and the pure acknowledgements (SACKs alone
