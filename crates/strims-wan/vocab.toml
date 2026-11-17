@@ -129,7 +129,7 @@ until = "restart"
 horizon_s = 20
 
 [kinds.crash.notes]
-strims-sim = "A crash of a host before it arrives, after it departed, or while it is down from an earlier crash is skipped and has no row; the trace names it (`Report::skipped_faults`). Runs written before skipped faults were left out have a row for each fault, skipped or not."
+strims-sim = "A crash of a host that hasn't arrived yet, has departed, or is still down from an earlier crash is skipped and has no row; the trace names it (`Report::skipped_faults`). Runs written before skipped faults were left out have a row for each fault, skipped or not."
 
 [kinds.restart]
 class = "scenario"
@@ -138,7 +138,7 @@ description = "The host's software starts again (`Fault::Restart`): a new node w
 node = "the host"
 
 [kinds.restart.notes]
-strims-sim = "A restart of a host that isn't down (one that hasn't arrived or departed, never crashed, or is up again from an earlier restart) is skipped and has no row; the trace names it (`Report::skipped_faults`). Runs written before skipped faults were left out have a row for each fault, skipped or not."
+strims-sim = "A restart of a host that isn't down is skipped and has no row: a host not there (not yet arrived, or departed), one that never crashed, or one up again after an earlier restart. The trace names it (`Report::skipped_faults`). Runs written before skipped faults were left out have a row for each fault, skipped or not."
 
 [kinds.latency]
 class = "scenario"
@@ -148,7 +148,7 @@ node = "the host, or the first group's first host"
 peer = "the second group's first host; -1 for every link of the node"
 value = "the one-way latency"
 unit = "ms"
-detail = "`both` when it sets both directions, `one-way` when it sets the one from `node`'s group to `peer`'s alone; empty in runs written before the two were told apart, either"
+detail = "`both` when it sets both directions, `one-way` when it sets only the one from `node`'s group to `peer`'s; empty in runs written before the two were told apart, where it may be either"
 details = ["both", "one-way"]
 phase = "after_disruption"
 # latency-step's 150 ms more: the lag takes it at once, and a bump to
@@ -156,7 +156,7 @@ phase = "after_disruption"
 horizon_s = 15
 
 [kinds.latency.notes]
-strims-sim = "Between two groups of hosts, both ways (`Fault::Latency`, detail `both`), or from the first group to the second alone (`Fault::LatencyFrom`, detail `one-way`); `node` and `peer` the groups' first hosts. Without the WAN model, whose turmoil links take one latency both ways, a `Fault::LatencyFrom` is skipped and has no row; the trace names it (`Report::skipped_faults`). In WAN mode it replaces the paths' base latency, and jitter, loss and bandwidth still apply. Runs written before skipped faults were left out have a row for each fault, skipped or not."
+strims-sim = "Between two groups of hosts, both ways (`Fault::Latency`, detail `both`), or only from the first group to the second (`Fault::LatencyFrom`, detail `one-way`); `node` and `peer` are the groups' first hosts. Without the WAN model, turmoil's links take one latency for both ways, so a `Fault::LatencyFrom` is skipped and has no row; the trace names it (`Report::skipped_faults`). In WAN mode the fault's latency replaces the paths' base latency, and jitter, loss and bandwidth still apply. Runs written before skipped faults were left out have a row for each fault, skipped or not."
 
 [kinds.pause_reading]
 class = "scenario"

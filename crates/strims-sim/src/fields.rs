@@ -947,11 +947,12 @@ pub(crate) enum RowInt {
     ///
     /// Unit: ms.
     SeedRiseP99Ms,
-    /// The seed's requests that ended without data, over every incarnation:
-    /// those that timed out unanswered (SwarmCounters::timeouts)
-    /// (Report::timeouts). On the HAVE-removal lines (decl, p4tf), which send
-    /// speculative requests, it also counts those that expired or that their
-    /// holder answered NOT_YET, so it differs there from main's.
+    /// The seed's requests that ended without data, over every incarnation
+    /// (Report::timeouts): those that timed out unanswered
+    /// (SwarmCounters::timeouts). On the HAVE-removal lines (decl, p4tf), which
+    /// send speculative requests, it also counts the speculative ones that
+    /// expired or that their holder answered NOT_YET, so there it differs from
+    /// main's.
     SeedTimeouts,
     /// The scenario's send buffer's uplink queue, in ms
     /// (STRIMS_SIM_SEND_BUFFER, WAN mode); 0 without one.
@@ -1078,19 +1079,20 @@ pub(crate) enum RowInt {
     /// decision (`Report::loops`).
     SwitchesDown,
     /// The honest viewers' requests that ended without data, over every
-    /// incarnation: those that timed out unanswered (SwarmCounters::timeouts):
-    /// every host but the seed and the dishonest ones. On the HAVE-removal
-    /// lines (decl, p4tf), which send speculative requests, it also counts
-    /// those that expired or that their holder answered NOT_YET, so it differs
-    /// there from main's: its parts there are `request_timeouts` (main's
-    /// count), `timeouts_spec_expired` and `timeouts_spec_not_yet`.
+    /// incarnation: those that timed out unanswered (SwarmCounters::timeouts).
+    /// The honest viewers are every host but the seed and the dishonest ones.
+    /// On the HAVE-removal lines (decl, p4tf), which send speculative requests,
+    /// it also counts the speculative ones that expired or that their holder
+    /// answered NOT_YET, so there it differs from main's. Its parts there are
+    /// `request_timeouts` (main's count), `timeouts_spec_expired` and
+    /// `timeouts_spec_not_yet`.
     TimeoutsHonest,
     /// With dishonest peers, their requests that ended without data, over every
-    /// incarnation: those that timed out unanswered (SwarmCounters::timeouts)
-    /// (the hostile hosts'); left out without any. On the HAVE-removal lines
-    /// (decl, p4tf), which send speculative requests, it also counts those that
-    /// expired or that their holder answered NOT_YET, so it differs there from
-    /// main's.
+    /// incarnation: those that timed out unanswered (SwarmCounters::timeouts),
+    /// the hostile hosts'. Left out without dishonest peers. On the
+    /// HAVE-removal lines (decl, p4tf), which send speculative requests, it
+    /// also counts the speculative ones that expired or that their holder
+    /// answered NOT_YET, so there it differs from main's.
     TimeoutsDishonest,
     /// A media swarm's chunks per unit; left out without media.
     Unit,
@@ -1130,11 +1132,11 @@ pub(crate) enum RowInt {
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
     /// handshakes; and in WAN mode `up_transport`, the transports' framing and
-    /// resends and the link framing of each packet a host's site charges
-    /// (`strims_wan::framing`: none at a site that charges IP bytes alone,
-    /// where a data channel's datagrams still carry Ethernet's 14 bytes of
-    /// their own), and `up_acks`, pure ACKs and SACKs alone, in the bytes their
-    /// links charge them.
+    /// resends plus the link framing of each packet that a host's site charges
+    /// (`strims_wan::framing`; none at a site that charges IP bytes alone,
+    /// though a data channel's datagrams still carry their own 14 bytes of
+    /// Ethernet header), and `up_acks`, pure ACKs and SACKs alone, in the bytes
+    /// their links charge for them.
     ///
     /// Unit: bytes.
     UpHostile,
@@ -1158,11 +1160,11 @@ pub(crate) enum RowInt {
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
     /// handshakes; and in WAN mode `up_transport`, the transports' framing and
-    /// resends and the link framing of each packet a host's site charges
-    /// (`strims_wan::framing`: none at a site that charges IP bytes alone,
-    /// where a data channel's datagrams still carry Ethernet's 14 bytes of
-    /// their own), and `up_acks`, pure ACKs and SACKs alone, in the bytes their
-    /// links charge them.
+    /// resends plus the link framing of each packet that a host's site charges
+    /// (`strims_wan::framing`; none at a site that charges IP bytes alone,
+    /// though a data channel's datagrams still carry their own 14 bytes of
+    /// Ethernet header), and `up_acks`, pure ACKs and SACKs alone, in the bytes
+    /// their links charge for them.
     ///
     /// Unit: bytes.
     UpPorts,
@@ -1191,11 +1193,11 @@ pub(crate) enum RowInt {
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
     /// handshakes; and in WAN mode `up_transport`, the transports' framing and
-    /// resends and the link framing of each packet a host's site charges
-    /// (`strims_wan::framing`: none at a site that charges IP bytes alone,
-    /// where a data channel's datagrams still carry Ethernet's 14 bytes of
-    /// their own), and `up_acks`, pure ACKs and SACKs alone, in the bytes their
-    /// links charge them.
+    /// resends plus the link framing of each packet that a host's site charges
+    /// (`strims_wan::framing`; none at a site that charges IP bytes alone,
+    /// though a data channel's datagrams still carry their own 14 bytes of
+    /// Ethernet header), and `up_acks`, pure ACKs and SACKs alone, in the bytes
+    /// their links charge for them.
     ///
     /// Unit: bytes.
     UpTransport,
@@ -1204,11 +1206,11 @@ pub(crate) enum RowInt {
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
     /// handshakes; and in WAN mode `up_transport`, the transports' framing and
-    /// resends and the link framing of each packet a host's site charges
-    /// (`strims_wan::framing`: none at a site that charges IP bytes alone,
-    /// where a data channel's datagrams still carry Ethernet's 14 bytes of
-    /// their own), and `up_acks`, pure ACKs and SACKs alone, in the bytes their
-    /// links charge them.
+    /// resends plus the link framing of each packet that a host's site charges
+    /// (`strims_wan::framing`; none at a site that charges IP bytes alone,
+    /// though a data channel's datagrams still carry their own 14 bytes of
+    /// Ethernet header), and `up_acks`, pure ACKs and SACKs alone, in the bytes
+    /// their links charge for them.
     ///
     /// Unit: bytes.
     UpVnic,
@@ -1217,11 +1219,11 @@ pub(crate) enum RowInt {
     /// `up_hostile`, what hostile hosts wrote; `up_ports`, vnic's other ports
     /// (vpn, rpc); `up_vnic`, vnic's frame headers, control frames and link
     /// handshakes; and in WAN mode `up_transport`, the transports' framing and
-    /// resends and the link framing of each packet a host's site charges
-    /// (`strims_wan::framing`: none at a site that charges IP bytes alone,
-    /// where a data channel's datagrams still carry Ethernet's 14 bytes of
-    /// their own), and `up_acks`, pure ACKs and SACKs alone, in the bytes their
-    /// links charge them.
+    /// resends plus the link framing of each packet that a host's site charges
+    /// (`strims_wan::framing`; none at a site that charges IP bytes alone,
+    /// though a data channel's datagrams still carry their own 14 bytes of
+    /// Ethernet header), and `up_acks`, pure ACKs and SACKs alone, in the bytes
+    /// their links charge for them.
     ///
     /// Unit: bytes.
     UpWire,
@@ -1971,33 +1973,34 @@ pub(crate) enum RowNum {
     /// A media swarm's media rate: media bytes over the stream's seconds, in
     /// kbit/s; left out without media.
     MediaKbit,
-    /// The upload meter of the first swarm's honest viewers (the seed aside) of
-    /// each population, each classed over the run: `accepting`, those that
-    /// accepted a subscription as a parent at least once
-    /// (`PushStats::accepted`), `delivering`, those that pushed a chunk to a
-    /// subscriber at least once (`pushed_chunks`), and `others`, those that
-    /// never accepted one, a viewer's every sample counting; at each sample
-    /// from the end of the startup phase to the stream's last write
-    /// (`meter_seed_p*`'s window), the meter's capacity (the relay busy-time
+    /// The upload meter of the first swarm's honest viewers (the seed aside),
+    /// by population: the p10, p50 and p90 (`meter_accepting_p10`, ...,
+    /// `meter_others_p90`) of the meter's capacity (the relay busy-time
     /// reading, `PushStats::upload_capacity`) over what the viewer could upload
-    /// (the meter's truth, `Report::upload_cap_at`: see `meter_bucket_seeds`):
-    /// their p10, p50 and p90 (`meter_accepting_p10`, ..., `meter_others_p90`);
-    /// left out without a sample, and a sample whose truth is 0 (an outage)
-    /// left out (`meter_samples` keeps it).
+    /// (the meter's truth, `Report::upload_cap_at`: see `meter_bucket_seeds`),
+    /// at each sample from the end of the startup phase to the stream's last
+    /// write (`meter_seed_p*`'s window). Each viewer is classed over the whole
+    /// run, and all its samples count: `accepting`, those that accepted a
+    /// subscription as a parent at least once (`PushStats::accepted`);
+    /// `delivering`, those that pushed a chunk to a subscriber at least once
+    /// (`pushed_chunks`); and `others`, those that never accepted one. Left out
+    /// without a sample. A sample whose truth is 0 (an outage) is left out
+    /// (`meter_samples` keeps it).
     ///
     /// strims-sim: Each viewer's samples with a capacity
     /// (`Report::populations`, `Report::window_readings`), over its
     /// incarnations.
     MeterPopPP(u16),
-    /// The first swarm's seed's upload meter: its capacity (the relay busy-time
-    /// reading admission and shedding take, `PushStats::upload_capacity`) over
-    /// what the seed could upload (the meter's truth, `Report::upload_cap_at`:
-    /// see `meter_bucket_seeds`), at each of its samples from the end of the
-    /// startup phase (`STARTUP_SECS`, vocab.toml's `start` horizon, after the
-    /// stream's first write) to the stream's last write: their p10, p50 and p90
-    /// (`meter_seed_p10`, `meter_seed_p50`, `meter_seed_p90`); left out without
-    /// a sample there (a stream no longer than its startup); a sample whose
-    /// truth is 0 (an outage) is left out (`meter_samples` keeps it).
+    /// The first swarm's seed's upload meter: the p10, p50 and p90
+    /// (`meter_seed_p10`, `meter_seed_p50`, `meter_seed_p90`) of its capacity
+    /// (the relay busy-time reading that admission and shedding take,
+    /// `PushStats::upload_capacity`) over what the seed could upload (the
+    /// meter's truth, `Report::upload_cap_at`: see `meter_bucket_seeds`), at
+    /// each of its samples from the end of the startup phase (`STARTUP_SECS`
+    /// after the stream's first write, vocab.toml's `start` horizon) to the
+    /// stream's last write. Left out without a sample there (a stream no longer
+    /// than its startup). A sample whose truth is 0 (an outage) is left out
+    /// (`meter_samples` keeps it).
     ///
     /// strims-sim: Each sample one with a capacity (`Report::seed_meter`).
     MeterSeedPP(u16),
@@ -2732,29 +2735,30 @@ pub(crate) enum RowNums {
     /// the seeds'.
     MeterBucketPop(u16),
     /// **meter readings**: the upload meter's capacity, the relay busy-time
-    /// reading admission and shedding take (`PushStats::upload_capacity`,
-    /// `MeterSample::capacity`), ÷ the meter's truth (`Report::upload_cap_at`):
-    /// what the host could upload over the second before the sample, in the
-    /// meter's units, the data bytes its runner writes (`UploadInfo::rate`'s,
-    /// its channel payloads): what its uplink carries over that second (its
-    /// rate's mean, its steps' from their times; with a capacity schedule, its
-    /// opportunities in it) less what its link charged its competing uploads in
-    /// it, times its share of its link in channel bytes (`Report::own_share`, a
-    /// property of its link, its transports and vnic): the bytes its transports
-    /// took of its messages over what its link charged their first
-    /// transmissions as they went to it (its resends, pure acknowledgements and
-    /// competing uploads apart), over its near-saturated sample windows so far
-    /// (its own charge at least `NEAR_SATURATED`, 0.8, of what its link could
-    /// carry for it), else a full message's (a TCP segment of two full packets,
-    /// or a data channel's full datagram, at its framing); times its runner's
-    /// channel bytes over what it handed vnic over its near-saturated windows
-    /// (1 before any); within its rate limit: the seed's quantiles
-    /// `meter_seed_p*`, the populations' `meter_accepting_p*`,
-    /// `meter_delivering_p*` and `meter_others_p*`, its median per bucket over
-    /// the seeds' samples (`meter_bucket_seeds`) and the populations'
-    /// (`meter_bucket_accepting`, `meter_bucket_delivering`,
-    /// `meter_bucket_others`), and how it tracked changes
-    /// (`off_{change}_{role}`).
+    /// reading that admission and shedding take (`PushStats::upload_capacity`,
+    /// `MeterSample::capacity`), ÷ the meter's truth (`Report::upload_cap_at`).
+    /// They are the seed's quantiles `meter_seed_p*`, the populations'
+    /// `meter_accepting_p*`, `meter_delivering_p*` and `meter_others_p*`, their
+    /// median per bucket over the seeds' samples (`meter_bucket_seeds`) and the
+    /// populations' (`meter_bucket_accepting`, `meter_bucket_delivering`,
+    /// `meter_bucket_others`), and how the meter tracked changes
+    /// (`off_{change}_{role}`). The meter's truth is what the host could upload
+    /// over the second before the sample, in the meter's units: the data bytes
+    /// its runner writes (`UploadInfo::rate`'s, its channel payloads). It is
+    /// what the host's uplink carries over that second (its rate's mean, its
+    /// steps' from their times; with a capacity schedule, its opportunities in
+    /// that second), less what its link charged its competing uploads in it,
+    /// times the host's share of its link in channel bytes
+    /// (`Report::own_share`, a property of its link, its transports and vnic),
+    /// and at most its rate limit. That share is the product of two ratios,
+    /// each over the host's near-saturated sample windows so far (those whose
+    /// own charge is at least `NEAR_SATURATED`, 0.8, of what its link could
+    /// carry for it): the bytes its transports took of its messages over what
+    /// its link charged their first transmissions as they went to it (resends,
+    /// pure acknowledgements and competing uploads apart), or a full message's
+    /// before any such window (a TCP segment of two full packets, or a data
+    /// channel's full datagram, at its framing); and its runner's channel bytes
+    /// over what it handed vnic (1 before any such window).
     MeterBucketSeeds,
     /// How the upload meter tracked each change of the host's available upload
     /// (a step of its uplink's rate, a competing upload's start or stop) while
@@ -3314,11 +3318,11 @@ pub(crate) mod cols {
         /// waits, of the node's WaitHistogram, quarter-octave buckets read at
         /// their lower bound (never above the wait, at most a sixth under it
         /// below 46 s; empty without any). The window model's acknowledgements
-        /// alone through a host's uplink, as `UP_COUNTERS` names them: TCP's
-        /// pure ACKs and the data channels' SACKs, packets and the bytes their
-        /// links charge of each (their IP bytes, and their framing at a site
-        /// that charges it). The row's `packets_ack` and `up_acks` count both
-        /// kinds, over the whole run and every host.
+        /// alone through a host's uplink, as `UP_COUNTERS` names them (TCP's
+        /// pure ACKs and the data channels' SACKs): of each, the packets and
+        /// the bytes their links charge for them (their IP bytes, plus their
+        /// framing at a site that charges it). The row's `packets_ack` and
+        /// `up_acks` count both kinds, over the whole run and every host.
         ///
         /// None is written as -1.
         WhoCounter(u16),
@@ -3408,10 +3412,10 @@ pub(crate) mod cols {
         ///
         /// None is written as -1.
         Busy,
-        /// The meter's truth for the seed at the bin's end
-        /// (`Report::upload_cap_at`: what it could upload over the second
-        /// before, in its meter's units, the data bytes its runner writes), in
-        /// bytes per second; 0 over an outage.
+        /// The meter's truth for the seed at the bin's end, in bytes per second
+        /// (`Report::upload_cap_at`): what it could upload over the second
+        /// before, in its meter's units, the data bytes its runner writes; 0
+        /// over an outage.
         ///
         /// None is written as -1.
         Avail,
@@ -3885,11 +3889,11 @@ pub(crate) mod cols {
         /// waits, of the node's WaitHistogram, quarter-octave buckets read at
         /// their lower bound (never above the wait, at most a sixth under it
         /// below 46 s; empty without any). The window model's acknowledgements
-        /// alone through a host's uplink, as `UP_COUNTERS` names them: TCP's
-        /// pure ACKs and the data channels' SACKs, packets and the bytes their
-        /// links charge of each (their IP bytes, and their framing at a site
-        /// that charges it). The row's `packets_ack` and `up_acks` count both
-        /// kinds, over the whole run and every host.
+        /// alone through a host's uplink, as `UP_COUNTERS` names them (TCP's
+        /// pure ACKs and the data channels' SACKs): of each, the packets and
+        /// the bytes their links charge for them (their IP bytes, plus their
+        /// framing at a site that charges it). The row's `packets_ack` and
+        /// `up_acks` count both kinds, over the whole run and every host.
         ///
         /// None is written as an empty field.
         Counter(u16),
@@ -4089,23 +4093,25 @@ pub(crate) mod cols {
         CapacityBps,
         /// What the host could upload at the sample, the meter's truth
         /// (`Report::upload_cap_at`): what the host could upload over the
-        /// second before the sample, in the meter's units, the data bytes its
-        /// runner writes (`UploadInfo::rate`'s, its channel payloads): what its
-        /// uplink carries over that second (its rate's mean, its steps' from
-        /// their times; with a capacity schedule, its opportunities in it) less
-        /// what its link charged its competing uploads in it, times its share
-        /// of its link in channel bytes (`Report::own_share`, a property of its
-        /// link, its transports and vnic): the bytes its transports took of its
-        /// messages over what its link charged their first transmissions as
-        /// they went to it (its resends, pure acknowledgements and competing
-        /// uploads apart), over its near-saturated sample windows so far (its
-        /// own charge at least `NEAR_SATURATED`, 0.8, of what its link could
-        /// carry for it), else a full message's (a TCP segment of two full
-        /// packets, or a data channel's full datagram, at its framing); times
-        /// its runner's channel bytes over what it handed vnic over its
-        /// near-saturated windows (1 before any); within its rate limit; 0 over
-        /// a second its link carries nothing for the host (an outage), and
-        /// empty with neither a site nor a limit.
+        /// second before the sample, in the meter's units: the data bytes its
+        /// runner writes (`UploadInfo::rate`'s, its channel payloads). It is
+        /// what the host's uplink carries over that second (its rate's mean,
+        /// its steps' from their times; with a capacity schedule, its
+        /// opportunities in that second), less what its link charged its
+        /// competing uploads in it, times the host's share of its link in
+        /// channel bytes (`Report::own_share`, a property of its link, its
+        /// transports and vnic), and at most its rate limit. That share is the
+        /// product of two ratios, each over the host's near-saturated sample
+        /// windows so far (those whose own charge is at least `NEAR_SATURATED`,
+        /// 0.8, of what its link could carry for it): the bytes its transports
+        /// took of its messages over what its link charged their first
+        /// transmissions as they went to it (resends, pure acknowledgements and
+        /// competing uploads apart), or a full message's before any such window
+        /// (a TCP segment of two full packets, or a data channel's full
+        /// datagram, at its framing); and its runner's channel bytes over what
+        /// it handed vnic (1 before any such window). It is 0 over a second its
+        /// link carries nothing for the host (an outage), and empty with
+        /// neither a site nor a limit.
         ///
         /// Unit: bytes/s. None is written as an empty field.
         AvailBps,
