@@ -265,6 +265,12 @@
 #                          second: ms since the epoch, the cgroup's
 #                          usage_usec, and its memory.current in bytes,
 #                          read with bash's builtins
+#   netstat-<i>.log        each native node's TCP counters, its namespace's
+#                          (/proc/net/netstat's TcpExt line), every 100 ms,
+#                          read with bash's builtins: `# TcpExt: <names>`
+#                          once, then `<ms since the epoch> TcpExt: <values>`.
+#                          strims-sim's testbed module takes the network
+#                          columns rtos and window_cuts from it
 #   tc-<i>.log             each node's qdiscs on every device at 10 Hz
 #                          (tcsample's): ms since the epoch, then `tc -s -j
 #                          qdisc show`'s JSON, each qdisc with its dev.
@@ -696,6 +702,13 @@ sampled() {
 cpu_log() {
   echo "( exec 3<> <(:); while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; { read -r _ u _; } < /sys/fs/cgroup/cpu.stat; read -r m < /sys/fs/cgroup/memory.current; echo \"\$t \$u \$m\"; read -t 1 -u 3 || true; done > /out/cpu-$1.log ) &"
 }
+# The container's TCP counters (its network namespace's /proc/net/netstat
+# TcpExt line: its names once, `# TcpExt: <names>`, then `<unix ms>
+# TcpExt: <values>`) every 100 ms, with bash's builtins, in the background
+# of its script.
+netstat_log() {
+  echo "( exec 3<> <(:); { read -r h; } < /proc/net/netstat; { echo \"# \$h\"; while :; do t=\${EPOCHREALTIME/[.,]/}; t=\${t%???}; { read -r _; read -r v; } < /proc/net/netstat; echo \"\$t \$v\"; read -t 0.1 -u 3 || true; done; } > /out/netstat-$1.log ) &"
+}
 hosts=""
 if [ "$browsers" = 1 ]; then
   hosts="--hosts /out/hosts"
@@ -798,6 +811,7 @@ tc -s -d qdisc show > /out/qdisc-$i.txt
 : > /ctl/ready-$i
 $sample
 $(cpu_log "$i")
+$(netstat_log "$i")
 $wait_start
 $(link_attached "$i")
 exec /testbed_node --index $i --topology /out/topology --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $media_arg $record_arg $hosts $capture $log_args $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null

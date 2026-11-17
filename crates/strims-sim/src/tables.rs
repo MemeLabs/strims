@@ -454,7 +454,7 @@ impl Report {
     /// Host `h`'s network counter `f` added in bin `k`; `None` outside WAN
     /// mode, and for a counter its network didn't measure
     /// ([`Report::wire_unmeasured`]).
-    fn wire_delta(&self, h: HostIx, k: usize, f: usize) -> Option<i64> {
+    pub(crate) fn wire_delta(&self, h: HostIx, k: usize, f: usize) -> Option<i64> {
         if self.wire_unmeasured.contains(&f)
             || self.wire_ends.get(&(h, f)).is_some_and(|&end| k + 1 > end)
         {

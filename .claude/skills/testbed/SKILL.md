@@ -167,7 +167,9 @@ a sizing decision rests on them.
   process, rtnetlink, `tc -s -j qdisc show`'s JSON lines) for 0.004 core,
   where a shell loop of tc and tr cost 0.08, more than a native node. The
   cpu loop reads with bash's builtins and `read -t`, nothing measurable,
-  where date, sed and cat once a second cost 0.012. hack/testbed/sssample.c
+  where date, sed and cat once a second cost 0.012; the netstat loop
+  (netstat-<i>.log, each native node's TCP counters every 100 ms) reads
+  the same way for 0.0035 core. hack/testbed/sssample.c
   samples the seed's sockets every SS_EVERY for 0.004 at 1 Hz, where ss's
   loop cost 0.028: a dump walks the kernel's whole established hash
   (every network namespace's), which ss and sock_diag pay alike, so it

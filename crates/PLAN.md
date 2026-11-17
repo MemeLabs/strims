@@ -528,18 +528,6 @@ and dropped are in `TRIED.md`.
     budget and cuts its copies less often than the testbed's. Find the
     cause and model it; the seed's budget is one of the meter search's
     measures (Swarm, item 1).
-  - Testbed runs leave empty what the sim fills. Fill each from its own
-    source on the testbed, so a testbed run fills every table and column
-    a sim run does:
-    - the network columns retransmits, rtos and window_cuts, the window
-      model's own counts in the sim: on TCP links, from the kernel's
-      sockets, which the seed's ss log samples (`ss-0.log`, the `sockets`
-      table). A data channel's SACKs (up_sack_*) are inside DTLS and stay
-      unmeasured;
-    - an arrival run's join and caught-up row fields: the testbed's report
-      computes them, but `Report::row` writes them only for a scenario
-      with an arrivals profile (`Scenario::profiled`), which the testbed's
-      scenario doesn't set.
   - The WAN model lacks what the testbed's classes build beyond a FIFO:
     DOCSIS-PIE (cable's `aqm=pie`), a home router's fq_codel or cake
     (`router=`), and a trace's varying delay (`delay=`).

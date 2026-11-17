@@ -33,14 +33,34 @@
 //!   its queue drops and backlog from its tbf (`tc-<i>.log`), whose rate,
 //!   as each sample shows it, is the uplink's; the queries convert between
 //!   the two by the link class (scoring.sql's link_overhead). What a
-//!   capture can't tell (retransmits, the window's cuts and timeouts, a
-//!   data channel's SACKs inside DTLS, which it counts with the data) is
-//!   left empty, and a sampler that stopped before the run's end leaves its
-//!   columns empty past it (`Report::wire_ends`,
+//!   capture can't tell (a data channel's SACKs inside DTLS, which it
+//!   counts with the data) is left empty, and a sampler that stopped before
+//!   the run's end leaves its columns empty past it (`Report::wire_ends`,
 //!   `WanHostReport::up_queue_until`): a tc sampler past its last sample, a
 //!   capture past the stamp run.sh writes when its tcpdump exits while its
 //!   node runs (`pcap-<i>.end`). The competing upload's bytes are its
 //!   packets' to the sink, from the seed's capture.
+//! - **TCP's own counts.** A native node's retransmits are its capture's
+//!   segments to the swarm that resent bytes its link had carried
+//!   (`carried_again`): a loss past its queue, as the window model counts
+//!   its path's, a spurious resend too. One its own queue dropped counts in
+//!   its drops, and so does one a receiver's downlink queue dropped
+//!   (SLOW_DOWN_KBIT's viewer 1, the testbed's one loss past a queue but
+//!   SEED_LOSS_PCT's): its resend of carried bytes to that receiver, as
+//!   the window model counts a full downlink queue's loss as the sender's
+//!   drop. Its window cuts and timeouts are its network namespace's TCP
+//!   counters' (`netstat-<i>.log`, `tcp_counts`: the recoveries Linux
+//!   entered and the losses a tail-loss probe repaired, and its RTOs, a
+//!   spurious one's too), as of each bin's edge, over every TCP flow of
+//!   the namespace; in a run with browsers the twin's swarm links are all
+//!   data channels, so a native node's TCP links to native nodes have none
+//!   there. A browser's links are data channels, whose resends DTLS hides:
+//!   its are empty, as are the retransmits of a native node with a data
+//!   channel to one, the drops of one sending a slow receiver over a data
+//!   channel, the seed's drops and retransmits where SEED_LOSS_PCT's loss
+//!   and a slow receiver's both lose its packets, and the seed's cuts and
+//!   timeouts in a run with competing uploads, whose flows its namespace's
+//!   counters count too.
 //!
 //! A run's lines name the seed's stream start (`t_ms - rel_ms`), which every
 //! container's clock shares.
@@ -1670,6 +1690,55 @@ fn resends<'a>(ps: impl Iterator<Item = &'a Packet>) -> Vec<bool> {
     .collect()
 }
 
+/// Whether each of a node's TCP segments `ps` (its link's, in capture
+/// order) resent bytes its flow's link had carried before: any of its
+/// bytes among what an earlier segment of its flow carried. A segment that
+/// fills a hole (its first sending lost before the link, at the node's own
+/// queue) isn't one, though its sequence number is under the flow's
+/// highest; a tail-loss probe's or a timeout's resend of a segment the
+/// link had carried is. Offsets are from each flow's first segment
+/// (sequence numbers wrap); a datagram is none.
+fn carried_again<'a>(ps: impl Iterator<Item = &'a Packet>) -> Vec<bool> {
+    // Each flow's first sequence number and its carried byte ranges,
+    // merged: start -> end.
+    let mut flows: BTreeMap<Flow, (u32, BTreeMap<u64, u64>)> = BTreeMap::new();
+    ps.map(|p| {
+        let Some((sp, dp, seq)) = p.tcp else {
+            return false;
+        };
+        let (first, carried) = flows
+            .entry((p.dst, sp, dp))
+            .or_insert((seq, BTreeMap::new()));
+        let start = u64::from(seq.wrapping_sub(*first));
+        let end = start + p.payload;
+        if end == start {
+            return false;
+        }
+        // The last range starting before the segment's end reaches into it.
+        let again = carried
+            .range(..end)
+            .next_back()
+            .is_some_and(|(_, &e)| e > start);
+        // Merge it with every range it touches.
+        let (mut lo, mut hi) = (start, end);
+        let touching: Vec<u64> = carried
+            .range(..=end)
+            .rev()
+            .take_while(|&(_, &e)| e >= start)
+            .map(|(&s, _)| s)
+            .collect();
+        for s in touching {
+            if let Some(e) = carried.remove(&s) {
+                lo = lo.min(s);
+                hi = hi.max(e);
+            }
+        }
+        carried.insert(lo, hi);
+        again
+    })
+    .collect()
+}
+
 /// Node `h`'s access link spec and the device whose root is its modem, from
 /// out dir `dir`'s `links` file (`node <i> <spec> <up_mbit> <delay_ms>
 /// <queue_ms> [<modem_dev>]`, run.sh's): a run from before it wrote the
@@ -1763,7 +1832,7 @@ pub struct ModemSample {
     /// The packets the queue dropped so far.
     pub drops: u64,
     /// What it holds, as its shaper charges it: tc's backlog, or under
-    /// cake each packet's network bytes and overhead ([`cake_held`]).
+    /// cake each packet's network bytes and overhead (`cake_held`).
     pub held: u64,
     /// The rate it drains at, bytes a second, where its qdisc has one (a
     /// trace's prio has none).
@@ -1775,7 +1844,7 @@ pub struct ModemSample {
 pub struct Uplink {
     /// Its link spec, as the run's `links` file names it.
     pub spec: String,
-    /// The kind of the qdisc 10: that holds its queue ([`queue_kind`]).
+    /// The kind of the qdisc 10: that holds its queue (`queue_kind`).
     pub kind: &'static str,
     /// The device whose root that qdisc is, as `links` names it: none for a
     /// run from before the file named it.
@@ -1787,7 +1856,7 @@ pub struct Uplink {
 
 /// Node `node`'s access link queue in out dir `dir`: its link spec (the
 /// `links` file's line, tbf on eth0 for a run from before it), the qdisc
-/// that holds its queue (its class's 10:, [`queue_kind`], on the device
+/// that holds its queue (its class's 10:, `queue_kind`, on the device
 /// the line names: eth0, or ifbm for a class with slots) and each sample
 /// of it in `tc-<node>.log`. tcsample writes every device's qdiscs as tc's
 /// JSON (`tc -s -j qdisc show`), each with its dev; an older run's log
@@ -1957,13 +2026,73 @@ fn tc_rate(v: &str) -> Option<u64> {
 }
 
 /// The wire counters a node's capture gives.
-const PCAP_COUNTERS: [&str; 5] = [
+const PCAP_COUNTERS: [&str; 6] = [
     "up_bytes",
     "up_packets",
     "small_packets",
+    "retransmits",
     "up_ack_packets",
     "up_ack_bytes",
 ];
+
+/// The network counters a native node's TCP counters give
+/// (`netstat-<i>.log`, [`tcp_counts`]).
+const NETSTAT_COUNTERS: [&str; 2] = ["window_cuts", "rtos"];
+
+/// The TcpExt counters (`/proc/net/netstat`) that count a window cut:
+/// recoveries entered (SACK's, and Reno's without SACK: each sets the
+/// threshold and starts the window's fall, `tcp_enter_recovery`), and
+/// losses a tail-loss probe repaired (`tcp_process_tlp_ack`: a cwnd
+/// reduction outside a recovery).
+const CUT_COUNTERS: [&str; 3] = ["TCPSackRecovery", "TCPRenoRecovery", "TCPLossProbeRecovery"];
+
+/// The TcpExt counter of retransmission timeouts: every RTO timer that
+/// fired and resent (`tcp_retransmit_timer`), a backed-off one's again.
+const RTO_COUNTER: &str = "TCPTimeouts";
+
+/// A native node's TCP counters over a run, from its `netstat-<i>.log`
+/// (run.sh's: its network namespace's TcpExt line every 100 ms, the
+/// names first): each sample's Unix ms, its window cuts so far
+/// ([`CUT_COUNTERS`]) and its timeouts so far ([`RTO_COUNTER`]), from the
+/// first sample's; none without a log, or one that names none of them.
+fn tcp_counts(text: &str) -> Vec<(u64, u64, u64)> {
+    let mut names: Vec<&str> = Vec::new();
+    let mut first: Option<(u64, u64)> = None;
+    let mut out = Vec::new();
+    for line in text.lines() {
+        if let Some(h) = line.strip_prefix("# TcpExt:") {
+            names = h.split_whitespace().collect();
+            continue;
+        }
+        let Some((ms, rest)) = line.split_once(' ') else {
+            continue;
+        };
+        let (Ok(ms), Some(values)) = (ms.parse::<u64>(), rest.strip_prefix("TcpExt:")) else {
+            continue;
+        };
+        let values: Vec<u64> = values
+            .split_whitespace()
+            .filter_map(|v| v.parse().ok())
+            .collect();
+        // A line cut short (the run's end) is no sample.
+        if values.len() != names.len() || names.is_empty() {
+            continue;
+        }
+        let get = |n: &str| {
+            names
+                .iter()
+                .position(|&x| x == n)
+                .and_then(|i| values.get(i))
+        };
+        let cuts: u64 = CUT_COUNTERS.iter().filter_map(|n| get(n)).sum();
+        let Some(&rtos) = get(RTO_COUNTER) else {
+            continue;
+        };
+        let (c0, r0) = *first.get_or_insert((cuts, rtos));
+        out.push((ms, cuts.saturating_sub(c0), rtos.saturating_sub(r0)));
+    }
+    out
+}
 
 /// The network side of a testbed run's report.
 struct Network {
@@ -2172,18 +2301,69 @@ impl Network {
         let edges = s.duration.saturating_sub(LEAD).as_millis() as u64 / bin + 1;
         let edge_us = |k: u64| (run.start_ms + k * bin) * 1000;
         let mut bins = vec![vec![[0u64; UP_COUNTERS.len()]; s.hosts.len()]; edges as usize];
-        let mut unmeasured: Vec<usize> = [
-            "retransmits",
-            "window_cuts",
-            "rtos",
-            "up_sack_packets",
-            "up_sack_bytes",
-        ]
-        .map(up)
-        .to_vec();
-        // The nodes without a capture or a tc log: their columns are
-        // unmeasured alone, where another node's are measured.
-        let (mut no_pcap, mut no_tc) = (Vec::new(), Vec::new());
+        let mut unmeasured: Vec<usize> = ["up_sack_packets", "up_sack_bytes"].map(up).to_vec();
+        // The nodes without a capture, a tc log or TCP counters: their
+        // columns are unmeasured alone, where another node's are measured.
+        let (mut no_pcap, mut no_tc, mut no_tcp) = (Vec::new(), Vec::new(), Vec::new());
+        let kinds: Vec<&str> = run
+            .settings
+            .get("KINDS")
+            .map_or_else(Vec::new, |k| k.split_whitespace().collect());
+        let competes = run
+            .settings
+            .get("COMPETE")
+            .is_some_and(|c| !c.trim().is_empty());
+        // The nodes with a data channel: a link to a browser, which is
+        // WebRTC but for a native node's under BROWSER_LINKS=ws.
+        let browser = |i: usize| kinds.get(i).is_some_and(|&k| k != "native");
+        let webrtc = run.settings.get("BROWSER_LINKS").map(String::as_str) == Some("webrtc");
+        let topology = run
+            .file("topology")
+            .map(|t| links_of(&t))
+            .unwrap_or_default();
+        let is_rtc = |(a, b): (usize, usize)| {
+            (browser(a) && browser(b)) || (webrtc && (browser(a) || browser(b)))
+        };
+        let rtc: Vec<HostIx> = topology
+            .iter()
+            .copied()
+            .filter(|&l| is_rtc(l))
+            .flat_map(|(a, b)| [a, b])
+            .collect();
+        // The receivers whose downlink has a queue of its own
+        // (SLOW_DOWN_KBIT's viewer 1, its ifb's tbf): what it drops of a
+        // sender's is the sender's drop, as the window model counts a full
+        // downlink queue's, and the sender's resend of it no retransmit.
+        // Each sender's capture tells them, a resend of carried bytes to
+        // that receiver: the testbed loses nothing else past a queue but
+        // SEED_LOSS_PCT's filters.
+        let slow: Vec<HostIx> = if run
+            .settings
+            .get("SLOW_DOWN_KBIT")
+            .is_some_and(|v| !v.trim().is_empty())
+        {
+            vec![1]
+        } else {
+            Vec::new()
+        };
+        let seed_loss = run
+            .settings
+            .get("SEED_LOSS_PCT")
+            .is_some_and(|v| !v.trim().is_empty());
+        // The slow receivers a node sends to, and whether over a data
+        // channel, whose resends DTLS hides.
+        let feeds = |h: HostIx, rtc_only: bool| {
+            topology.iter().any(|&(a, b)| {
+                let peer = if a == h {
+                    b
+                } else if b == h {
+                    a
+                } else {
+                    return false;
+                };
+                slow.contains(&peer) && (!rtc_only || is_rtc((a, b)))
+            })
+        };
         let mut wan = WanReport::default();
         let mut ends = BTreeMap::new();
         let mut sends: Vec<Sent> = (0..s.hosts.len()).map(|_| Sent::default()).collect();
@@ -2234,6 +2414,9 @@ impl Network {
                     ends.insert((h, up(c)), end);
                 }
             }
+            // What slow receivers' downlinks dropped of its, when.
+            let mut down: Vec<u64> = Vec::new();
+            let has_pcap = pcap.is_some();
             match pcap {
                 Some(ps) => {
                     let mut mine = ps
@@ -2276,6 +2459,30 @@ impl Network {
                     let offered = offered_own.as_deref().map(Offers::of);
                     let carried: Vec<&Packet> = ps.iter().filter(own_data).collect();
                     let again = resends(carried.iter().copied());
+                    // Its retransmits: the TCP segments that resent bytes
+                    // its link had carried (past its queue) before, as the
+                    // window model counts a segment the path lost; a resend
+                    // of what its own queue dropped is a drop there (the tc
+                    // log's), not one of these, and one to a slow receiver
+                    // a drop at that receiver's downlink queue (`down`).
+                    let to_slow = |p: &Packet| {
+                        p.dst
+                            .and_then(|o| o.checked_sub(10))
+                            .is_some_and(|i| slow.contains(&usize::from(i)))
+                    };
+                    let (mut resent, mut down_at) = (Vec::new(), Vec::new());
+                    for (p, a) in carried.iter().zip(carried_again(carried.iter().copied())) {
+                        if a {
+                            if to_slow(p) {
+                                &mut down_at
+                            } else {
+                                &mut resent
+                            }
+                            .push(p.us);
+                        }
+                    }
+                    let mut resent = resent.into_iter().peekable();
+                    down = down_at;
                     let stack = spec.rtc_stack;
                     let own: Vec<Send> = carried
                         .iter()
@@ -2309,6 +2516,9 @@ impl Network {
                         };
                     }
                     for (k, edge) in bins.iter_mut().enumerate() {
+                        while resent.next_if(|&us| us < edge_us(k as u64)).is_some() {
+                            add(&mut cum, "retransmits", 1);
+                        }
                         while let Some(p) = mine.next_if(|p| p.us < edge_us(k as u64)) {
                             if p.dst == Some(SINK) {
                                 cross += p.ip_len;
@@ -2357,12 +2567,18 @@ impl Network {
                 Some(samples) => {
                     let mut at = samples.iter().peekable();
                     let mut last = samples.first().map_or(0, |x| x.drops);
+                    // With what slow receivers' downlinks dropped of its.
+                    let mut downs = down.iter().peekable();
+                    let mut lost = 0;
                     for (k, edge) in bins.iter_mut().enumerate() {
                         while let Some(s) = at.next_if(|x| x.ms * 1000 < edge_us(k as u64)) {
                             last = s.drops;
                         }
+                        while downs.next_if(|&&us| us < edge_us(k as u64)).is_some() {
+                            lost += 1;
+                        }
                         if let Some(x) = edge.get_mut(h).and_then(|c| c.get_mut(up("drops"))) {
-                            *x = last;
+                            *x = last + lost;
                         }
                     }
                     // A sampler that stopped before the run's end leaves its
@@ -2387,7 +2603,8 @@ impl Network {
                     w.queue_drops = samples
                         .last()
                         .zip(samples.first())
-                        .map_or(0, |(b, a)| b.drops.saturating_sub(a.drops));
+                        .map_or(0, |(b, a)| b.drops.saturating_sub(a.drops))
+                        + down.len() as u64;
                     // tbf drops frames: GSO is off, a segment is one.
                     w.queue_drop_packets = w.queue_drops;
                     // The wait is the backlog over the tbf's own rate as the
@@ -2415,6 +2632,71 @@ impl Network {
                 }
                 None => no_tc.push(h),
             }
+            // A browser's links are data channels, whose resends DTLS
+            // hides and whose windows no TCP counter counts; so is a
+            // native node's link to one over WebRTC: its retransmits miss
+            // that link's.
+            let native = kinds.get(h).is_none_or(|&k| k == "native");
+            if !native || rtc.contains(&h) {
+                ends.insert((h, up("retransmits")), 0);
+            }
+            // A sender to a slow receiver: its drops there are its
+            // capture's to tell, none without one or past its end, nor a
+            // data channel's; with SEED_LOSS_PCT the seed's resends to it
+            // are its site loss's too, its drops and retransmits not to be
+            // told apart.
+            if feeds(h, false) {
+                let lossy = h == seed && seed_loss;
+                let end = if !has_pcap || feeds(h, true) || lossy {
+                    Some(0)
+                } else {
+                    pcap_end
+                };
+                if let Some(end) = end {
+                    let e = ends.entry((h, up("drops"))).or_insert(end);
+                    *e = (*e).min(end);
+                }
+                if lossy {
+                    ends.insert((h, up("retransmits")), 0);
+                }
+            }
+            // Its window cuts and timeouts, from its namespace's TCP
+            // counters (tcp_counts), as of each bin's edge; not the seed's
+            // where it ran competing uploads, whose flows they count too.
+            let tcp = run
+                .file(&format!("netstat-{h}.log"))
+                .map(|t| tcp_counts(&t))
+                .filter(|x| !x.is_empty());
+            match tcp {
+                Some(samples) if native && !(h == seed && competes) => {
+                    let mut at = samples.iter().peekable();
+                    let (mut cuts, mut rtos) = (0, 0);
+                    for (k, edge) in bins.iter_mut().enumerate() {
+                        while let Some(&(_, c, r)) = at.next_if(|x| x.0 * 1000 < edge_us(k as u64))
+                        {
+                            (cuts, rtos) = (c, r);
+                        }
+                        if let Some(x) = edge.get_mut(h) {
+                            for (name, v) in [("window_cuts", cuts), ("rtos", rtos)] {
+                                if let Some(y) = x.get_mut(up(name)) {
+                                    *y = v;
+                                }
+                            }
+                        }
+                    }
+                    // A log that stopped before the run's end leaves the
+                    // columns unmeasured past the first edge after it.
+                    if let Some(&(t_last, ..)) = samples.last()
+                        && let Some(end) =
+                            (0..bins.len()).find(|&k| edge_us(k as u64) > t_last * 1000)
+                    {
+                        for c in NETSTAT_COUNTERS {
+                            ends.insert((h, up(c)), end);
+                        }
+                    }
+                }
+                _ => no_tcp.push(h),
+            }
             wan.hosts.push(w);
         }
         // Unmeasured where no node measured it; else past nothing (end 0)
@@ -2435,6 +2717,19 @@ impl Network {
             for &h in &no_tc {
                 ends.insert((h, up("drops")), 0);
             }
+        }
+        if no_tcp.len() == nodes {
+            unmeasured.extend(NETSTAT_COUNTERS.map(up));
+        } else {
+            for &h in &no_tcp {
+                for c in NETSTAT_COUNTERS {
+                    ends.insert((h, up(c)), 0);
+                }
+            }
+        }
+        // No node measured its retransmits: every node a browser.
+        if (0..nodes).all(|h| ends.get(&(h, up("retransmits"))) == Some(&0)) {
+            unmeasured.push(up("retransmits"));
         }
         unmeasured.sort_unstable();
         unmeasured.dedup();
@@ -4288,6 +4583,145 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// A native node's window cuts and timeouts are its TCP counters'
+    /// (netstat-<i>.log: recoveries entered and losses a tail-loss probe
+    /// repaired, and RTOs), its retransmits its capture's segments that
+    /// resent bytes its link had carried; each counted at the bin edge its
+    /// sample or packet came before, unmeasured past a log's last sample.
+    /// A browser's are unmeasured (data channels), and so are the seed's
+    /// cuts and timeouts in a run with competing uploads, whose flows its
+    /// counters count too.
+    #[test]
+    fn a_runs_tcp_counters_and_captures_give_its_network_columns() {
+        let dir = fixture("netcols");
+        let names =
+            "# TcpExt: TCPSackRecovery TCPRenoRecovery TCPLossProbeRecovery TCPTimeouts Other\n";
+        let line = |ms: u64, v: [u64; 5]| {
+            let v: Vec<String> = v.iter().map(u64::to_string).collect();
+            format!("{} TcpExt: {}\n", START + ms, v.join(" "))
+        };
+        std::fs::write(
+            dir.join("netstat-0.log"),
+            [
+                names.to_owned(),
+                line(50, [10, 0, 1, 5, 7]),
+                line(150, [12, 0, 1, 6, 7]),
+                line(350, [12, 0, 3, 9, 7]),
+                format!("{} TcpExt: 12 0", START + 450),
+            ]
+            .concat(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("netstat-1.log"),
+            [
+                names.to_owned(),
+                line(50, [0; 5]),
+                line(250, [1, 0, 0, 0, 0]),
+                line(950, [1, 0, 0, 0, 0]),
+            ]
+            .concat(),
+        )
+        .unwrap();
+        let us = |ms: u64| (START + ms) * 1000;
+        // Two segments with a hole between them (the one its queue
+        // dropped), the hole's resend, then the first again: a resend of
+        // carried bytes. The hole's isn't one, though under the highest.
+        std::fs::write(
+            dir.join("pcap-0.pcap"),
+            pcap(&[
+                (us(50), tcp_seq(10, 11, 1448, 1000)),
+                (us(60), tcp_seq(10, 11, 1448, 3896)),
+                (us(150), tcp_seq(10, 11, 1448, 2448)),
+                (us(250), tcp_seq(10, 11, 1448, 1000)),
+            ]),
+        )
+        .unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        let at = |k: usize, h: usize, c: &str| r.wire_bins[k][h][up(c)];
+        let delta = |h, k, c| r.wire_delta(h, k, up(c));
+        for c in ["retransmits", "window_cuts", "rtos"] {
+            assert!(!r.wire_unmeasured.contains(&up(c)), "{c}");
+        }
+        assert_eq!(
+            (1..5).map(|k| at(k, 0, "window_cuts")).collect::<Vec<_>>(),
+            [0, 2, 2, 4]
+        );
+        assert_eq!(
+            (1..5).map(|k| at(k, 0, "rtos")).collect::<Vec<_>>(),
+            [0, 1, 1, 4]
+        );
+        assert_eq!(delta(0, 3, "rtos"), Some(3));
+        // The seed's log stops at 350 ms (the torn line is none): past the
+        // edge after it, nothing.
+        assert_eq!(delta(0, 4, "rtos"), None);
+        assert_eq!(delta(1, 2, "window_cuts"), Some(1));
+        assert_eq!(delta(1, 4, "window_cuts"), Some(0));
+        assert_eq!(delta(0, 2, "retransmits"), Some(1));
+        assert_eq!(delta(0, 1, "retransmits"), Some(0));
+        // The tables write them.
+        let out = dir.join("tables");
+        r.write_tables(&out, Duration::from_millis(100), true)
+            .unwrap();
+        let seed: Vec<String> = table_rows(&out, "bins")
+            .iter()
+            .take(5)
+            .map(|b| b["seed_rtos"].clone())
+            .collect();
+        assert_eq!(seed, ["0", "1", "0", "3", ""]);
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        // Competing uploads: the seed's counters count their flows.
+        std::fs::write(dir.join("settings"), format!("{settings}COMPETE=5:2\n")).unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        assert_eq!(r.wire_delta(0, 2, up("rtos")), None);
+        assert_eq!(r.wire_delta(0, 2, up("retransmits")), Some(1));
+        assert_eq!(r.wire_delta(1, 2, up("window_cuts")), Some(1));
+        // A browser seed: its links are data channels.
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}KINDS=chromium native\nBROWSER_LINKS=webrtc\n"),
+        )
+        .unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        for c in ["retransmits", "window_cuts", "rtos"] {
+            assert_eq!(r.wire_delta(0, 2, up(c)), None, "{c}");
+        }
+        // Its native viewer's TCP counters stay; its retransmits miss its
+        // data channel to the seed's.
+        assert_eq!(r.wire_delta(1, 2, up("window_cuts")), Some(1));
+        assert_eq!(r.wire_delta(1, 2, up("retransmits")), None);
+        // A slow receiver (SLOW_DOWN_KBIT's viewer 1): the seed's resend of
+        // carried bytes to it is its drop at that downlink, as the twin
+        // counts a full downlink queue's, and no retransmit.
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}SLOW_DOWN_KBIT=2000\n"),
+        )
+        .unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        assert_eq!(r.wire_delta(0, 2, up("retransmits")), Some(0));
+        assert_eq!(r.wire_delta(0, 2, up("drops")), Some(1));
+        assert_eq!(r.wire_delta(0, 3, up("drops")), Some(0));
+        // With the seed's site loss too, its resends to it are that loss's
+        // as well: neither column can be told.
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}SLOW_DOWN_KBIT=2000\nSEED_LOSS_PCT=1\n"),
+        )
+        .unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        assert_eq!(r.wire_delta(0, 2, up("retransmits")), None);
+        assert_eq!(r.wire_delta(0, 2, up("drops")), None);
+        // Without a node's TCP counters, they are unmeasured.
+        for i in 0..2 {
+            std::fs::remove_file(dir.join(format!("netstat-{i}.log"))).unwrap();
+        }
+        std::fs::write(dir.join("settings"), &settings).unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        assert!(r.wire_unmeasured.contains(&up("rtos")));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     /// A testbed run's report reads its records as the sim's: each read a
     /// lag from its frame's due time, each meter sample and seed change,
     /// the bins, the parents; and its captures in the sim's wire bytes:
@@ -4323,7 +4757,11 @@ mod tests {
         assert_eq!(last[0][up("up_ack_bytes")], 52);
         assert_eq!(last[0][up("drops")], 7);
         assert_eq!(last[1][up("up_bytes")], 0);
-        assert!(r.wire_unmeasured.contains(&up("retransmits")));
+        // Its capture's segments resent none; its nodes logged no TCP
+        // counters.
+        assert_eq!(last[0][up("retransmits")], 0);
+        assert!(!r.wire_unmeasured.contains(&up("retransmits")));
+        assert!(r.wire_unmeasured.contains(&up("rtos")));
         let w = &r.wan.as_ref().unwrap().hosts[0];
         assert_eq!(w.competing.last().unwrap().1, 1500);
         assert_eq!(w.up_queue[0].1.as_micros(), 1514 * 1_000_000 / 1_250_000);
