@@ -4535,11 +4535,7 @@ pub(crate) mod cols {
         /// parent's push answered our request; `other`. A request to the source
         /// is answered by the chunk while it is still out, or for 200 ms
         /// (`REQUEST_BACKOFF`) after it timed out: a fixed window from the
-        /// timeout, both ends in, whomever we asked since. Runs from before
-        /// strims-ppspp's commit "the held log names an answer that lands just
-        /// after its request timed out an answer" label such a late answer
-        /// `push` from the open parent and `other` from anyone else, so
-        /// comparing `how` across that commit mixes two labellings.
+        /// timeout, both ends in, whomever we asked since.
         How,
         /// the source's host, -1 for none
         ///

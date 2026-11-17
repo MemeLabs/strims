@@ -3438,7 +3438,7 @@ description = "the chunk"
 [columns.arrivals.how]
 sims = ["strims-sim"]
 type = "text"
-description = "`own`: published, or no data message named it, so an unattributed store too; `push`: pushed by the stream's open parent; `answer`: an answer to a request of ours, which wins over `push` when the parent's push answered our request; `other`. A request to the source is answered by the chunk while it is still out, or for 200 ms (`REQUEST_BACKOFF`) after it timed out: a fixed window from the timeout, both ends in, whomever we asked since. Runs from before strims-ppspp's commit \"the held log names an answer that lands just after its request timed out an answer\" label such a late answer `push` from the open parent and `other` from anyone else, so comparing `how` across that commit mixes two labellings."
+description = "`own`: published, or no data message named it, so an unattributed store too; `push`: pushed by the stream's open parent; `answer`: an answer to a request of ours, which wins over `push` when the parent's push answered our request; `other`. A request to the source is answered by the chunk while it is still out, or for 200 ms (`REQUEST_BACKOFF`) after it timed out: a fixed window from the timeout, both ends in, whomever we asked since."
 
 [columns.arrivals.peer]
 sims = ["strims-sim"]
