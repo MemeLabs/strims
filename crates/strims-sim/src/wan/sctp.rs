@@ -251,6 +251,15 @@ impl SctpProfile {
         self.stack == Stack::SctpProto
     }
 
+    /// The DATA chunk payload a datagram of `ip_len` IP bytes carries, as
+    /// strims-sim's testbed module reads a capture's datagrams: its length
+    /// less IP's, UDP's and its DTLS record's bytes, SCTP's common header
+    /// and one DATA chunk's header; none for a SACK alone.
+    pub(crate) fn datagram_payload(&self, ip_len: u64) -> u64 {
+        let headers = self.packet_overhead.saturating_sub(FRAMING) + COMMON_HEADER + CHUNK_HEADER;
+        ip_len.saturating_sub(headers as u64)
+    }
+
     /// A packet of one chunk of `len` bytes, on the wire.
     pub(crate) fn data_wire(&self, len: usize) -> usize {
         self.packet_overhead + COMMON_HEADER + chunk_size(len)

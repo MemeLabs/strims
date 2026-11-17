@@ -4180,8 +4180,16 @@ pub(crate) mod cols {
         /// datagram, at its framing); and its runner's channel bytes over what
         /// it handed vnic (1 before any such window, and on a testbed run whose
         /// node lines don't record their channel bytes: `channel_bytes` empty).
-        /// It is 0 over a second its link carries nothing for the host (an
-        /// outage), and empty with neither a site nor a limit.
+        /// On a testbed run, a host whose capture holds datagrams (a data
+        /// channel's, whose payload DTLS hides) takes a datagram's transports'
+        /// bytes from its length less its stack's fixed headers, leaves a SACK
+        /// alone out of both sides, and takes its dropped datagrams (offered
+        /// against carried) as resent once, their payloads and charges off; it
+        /// keeps what DTLS hides: a chunk resent that had arrived counts on
+        /// both sides, and a packet of two chunks, a chunk's padding and a
+        /// bundled SACK read as payload. It is 0 over a second its link carries
+        /// nothing for the host (an outage), and empty with neither a site nor
+        /// a limit.
         ///
         /// Unit: bytes/s. None is written as an empty field.
         AvailBps,

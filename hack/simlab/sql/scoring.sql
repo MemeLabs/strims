@@ -1425,7 +1425,10 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 10, hi_s := -1, full_packet :
     -- competitor's link charge, L its QoS limit, S_t its transports' share
     -- of its link over its near-saturated windows, S_c its runner's
     -- channel bytes over vnic's. A testbed run's A and S_t come from its
-    -- tc rates, steps and capture, and its S_c from its nodes' lines
+    -- tc rates, steps and capture (a data channel's S_t from its
+    -- datagrams' lengths under its stack's fixed headers over their charge,
+    -- SACKs alone and dropped datagrams apart), and its S_c from its nodes'
+    -- lines
     -- (channel_bytes, bytes_written: strims-sim's testbed::gate). A run whose
     -- node lines don't record its channel bytes (channel_bytes empty)
     -- takes S_c as 1, so its truth reads high, by 1 / S_c, and its

@@ -68,6 +68,10 @@ const LEAD: Duration = Duration::from_secs(5);
 /// sink at `.250`.
 const SUBNET: [u8; 3] = [10, 77, 0];
 const SINK: u8 = 250;
+/// How long after a datagram's offer its link may carry it: past that, the
+/// queue dropped it (`dropped`). The delay and the queue hold a packet some
+/// 20 ms and 100 ms at most.
+const DROP_WAIT_US: u64 = 1_000_000;
 /// The test whose scenario is a testbed run's twin.
 pub const TEST: &str = "calibration_star";
 /// The sim name a testbed run's records go under.
@@ -1379,8 +1383,8 @@ fn sockets_of(run: &Run, node: HostIx, text: &str) -> Vec<SocketSample> {
 /// One packet a node's capture holds: when (Unix µs), its source and
 /// destination's last octets in the testbed's subnet, its IP length,
 /// whether it is a pure TCP acknowledgement (no payload, no SYN, FIN or
-/// RST), its transport's payload bytes (TCP's or UDP's), and a TCP
-/// segment's ports and sequence number.
+/// RST), its transport's payload bytes (TCP's or UDP's), a TCP segment's
+/// ports and sequence number, its IP id, and a UDP datagram's ports.
 struct Packet {
     us: u64,
     src: Option<u8>,
@@ -1389,6 +1393,8 @@ struct Packet {
     pure_ack: bool,
     payload: u64,
     tcp: Option<(u16, u16, u32)>,
+    ip_id: u16,
+    udp: Option<(u16, u16)>,
 }
 
 /// A libpcap file's IPv4 packets over Ethernet; `None` for another
@@ -1476,6 +1482,10 @@ fn packets(bytes: &[u8]) -> Option<Vec<Packet>> {
             pure_ack,
             payload,
             tcp,
+            ip_id: be16(4).unwrap_or(0),
+            udp: (proto == 17)
+                .then(|| be16(ihl).zip(be16(ihl + 2)))
+                .flatten(),
         });
     }
     Some(out)
@@ -1788,26 +1798,85 @@ struct Network {
     bins: Vec<Vec<[u64; UP_COUNTERS.len()]>>,
     unmeasured: Vec<usize>,
     ends: BTreeMap<(HostIx, usize), usize>,
-    /// Each host's own sends to the swarm, from its capture (none without
-    /// one): what its meter's truth takes its share from (`gate`).
-    sends: Vec<Vec<Send>>,
+    /// Each host's own sends, from its capture (none without one): what
+    /// its meter's truth takes its share from (`gate`).
+    sends: Vec<Sent>,
+}
+
+/// What a node's capture says it sent: its segments and datagrams to the
+/// swarm, in time order, a SACK alone apart where its stack tells one
+/// (`sack_alone`); and its own datagrams with a payload that its link's
+/// queue dropped (`dropped`, from its offered capture: none without one).
+#[derive(Default)]
+struct Sent {
+    sends: Vec<Send>,
+    dropped: Vec<Dropped>,
 }
 
 /// One segment a node sent the swarm, as its capture saw it: when (Unix
 /// µs), what its link charged it (its class's framing over its IP length,
 /// `Framing::packet`), its transport's payload (TCP's: the vnic bytes its
-/// transport took; 0 for a data channel's datagram, whose payload DTLS
-/// hides), and whether it resent bytes its flow had sent.
+/// transport took; `None` for a datagram, a data channel's, whose payload
+/// DTLS hides), a datagram's payload as its length gives it
+/// (`SctpProfile::datagram_payload` of its host's stack; 0 for a segment
+/// and without a stack), and whether it resent bytes its flow had sent.
 struct Send {
     us: u64,
     charge: u64,
-    app: u64,
+    app: Option<u64>,
+    est: u64,
     resent: bool,
+}
+
+/// One of a node's datagrams its link's queue dropped: when it was offered
+/// (Unix µs), the charge its link would have taken, and its payload as its
+/// length gives it (`Send::est`).
+struct Dropped {
+    us: u64,
+    charge: u64,
+    est: u64,
+}
+
+/// The node's own datagrams that it offered its link (`offered`, ahead of
+/// its queue) and its link didn't carry within DROP_WAIT_US (`carried`),
+/// told apart by destination, IP id, IP length and ports, each charged at
+/// `framing` and its payload read as `stack` reads a datagram's length.
+fn dropped(
+    offered: &[&Packet],
+    carried: &[&Packet],
+    framing: strims_wan::framing::Framing,
+    stack: Option<SctpProfile>,
+) -> Vec<Dropped> {
+    type Key = (Option<u8>, u16, u64, (u16, u16));
+    let key = |p: &Packet| p.udp.map(|ports| (p.dst, p.ip_id, p.ip_len, ports));
+    let mut at: BTreeMap<Key, Vec<u64>> = BTreeMap::new();
+    for p in carried {
+        if let Some(k) = key(p) {
+            at.entry(k).or_default().push(p.us);
+        }
+    }
+    for v in at.values_mut() {
+        v.sort_unstable();
+    }
+    offered
+        .iter()
+        .filter_map(|p| {
+            let k = key(p)?;
+            let ts = at.get(&k).map_or(&[][..], |v| &v[..]);
+            let i = ts.partition_point(|&t| t < p.us.saturating_sub(1000));
+            let carried = ts.get(i).is_some_and(|&t| t <= p.us + DROP_WAIT_US);
+            (!carried).then(|| Dropped {
+                us: p.us,
+                charge: framing.packet(p.ip_len as usize) as u64,
+                est: stack.map_or(0, |x| x.datagram_payload(p.ip_len)),
+            })
+        })
+        .collect()
 }
 
 /// The meter's truth's share at each of a testbed node's meter samples,
 /// as strims-sim's HostStats::gate takes it from the sim's counters, from
-/// the node's capture (`sends`) and its records: its own charge, its first
+/// the node's capture (`sent`) and its records: its own charge, its first
 /// transmissions' and its transports' bytes so far (link_bytes, app_bytes,
 /// resent_bytes), and over its near-saturated windows (`Gated`: a window
 /// between two samples whose own charge was at least NEAR_SATURATED of
@@ -1818,16 +1887,42 @@ struct Send {
 /// whose samples lack channel_bytes adds none of them: a node whose lines
 /// lack the field keeps S_c = 1 (`report::channel_share` of no data).
 /// `us_of` takes a sample's ask to Unix µs.
+///
+/// A TCP segment's transports' bytes are its payload, and its flow's
+/// resends are out of the charge. A data channel's datagram hides its
+/// payload inside DTLS, so where its spec names its stack a node takes a
+/// datagram's from its length (`Send::est`: one DATA chunk under its
+/// stack's fixed headers), leaves a SACK alone out of both sides, as the
+/// sim leaves pure acknowledgements out, and takes its datagrams its queue
+/// dropped (`Sent::dropped`, offered against carried) as resent once: each
+/// one's payload off its transports' bytes and its charge off its link's,
+/// in the window it was offered, as the sim leaves a dropped chunk out of
+/// both. What stays in, which DTLS hides:
+///
+/// - a packet of two chunks (a message's tail and the next's head, which
+///   dcSCTP bundles), a chunk's padding and a SACK on a DATA packet read
+///   as payload, so the share reads high;
+/// - a chunk SCTP resends that had arrived counts on both sides, about as
+///   a first transmission does;
+/// - a dropped SACK alone, a chunk resent twice or given up on, and a loss
+///   past the node's queue are each taken wrong, and without an offered
+///   capture no drop is taken out: the share reads low by its resends'
+///   charge;
+/// - a SACK with gap blocks reads as a few bytes of payload.
+///
+/// A node without a stack adds no datagram's bytes, and keeps its link's
+/// fallback (`report::full_share`) unless its segments carry some.
 fn gate(
     meter: &mut [MeterSample],
-    sends: &[Send],
+    sent: &Sent,
     spec: &crate::spec::HostSpec,
     competing: &[(strims_base::time::Duration, u64)],
     us_of: impl Fn(Duration) -> u64,
 ) {
     let mut g = Gated::default();
     let (mut link, mut app, mut resent) = (0u64, 0u64, 0u64);
-    let mut next = sends.iter().peekable();
+    let mut next = sent.sends.iter().peekable();
+    let mut drops = sent.dropped.iter().peekable();
     let mut prev: Option<(Duration, Option<u64>, u64)> = None;
     for m in meter.iter_mut() {
         let to = us_of(m.asked);
@@ -1837,8 +1932,12 @@ fn gate(
             if x.resent {
                 again += x.charge;
             } else {
-                took += x.app;
+                took += x.app.unwrap_or(x.est);
             }
+        }
+        while let Some(d) = drops.next_if(|d| d.us <= to) {
+            again += d.charge;
+            took = took.saturating_sub(d.est);
         }
         link += charged;
         app += took;
@@ -1864,6 +1963,13 @@ fn gate(
     }
 }
 
+/// Whether `p` is a datagram that carries a SACK alone as `stack` reads
+/// its length: no DATA chunk's payload under its fixed headers. None is
+/// without a stack.
+fn sack_alone(p: &Packet, stack: Option<SctpProfile>) -> bool {
+    p.udp.is_some() && stack.is_some_and(|x| x.datagram_payload(p.ip_len) == 0)
+}
+
 impl Network {
     fn read(run: &Run, s: &Scenario, seed: HostIx) -> Network {
         let bin = BIN_MS.unsigned_abs().max(1);
@@ -1884,7 +1990,7 @@ impl Network {
         let (mut no_pcap, mut no_tc) = (Vec::new(), Vec::new());
         let mut wan = WanReport::default();
         let mut ends = BTreeMap::new();
-        let mut sends: Vec<Vec<Send>> = (0..s.hosts.len()).map(|_| Vec::new()).collect();
+        let mut sends: Vec<Sent> = (0..s.hosts.len()).map(|_| Sent::default()).collect();
         for (h, spec) in s.hosts.iter().enumerate() {
             let Some(site) = spec.site else {
                 continue;
@@ -1964,28 +2070,47 @@ impl Network {
                             && !p.pure_ack
                             && p.payload > 0
                     };
-                    let offered: Option<Offers> =
+                    let offered_ps: Option<Vec<Packet>> =
                         std::fs::read(run.dir.join(format!("pcap-{h}-offered.pcap")))
                             .ok()
-                            .and_then(|b| packets(&b))
-                            .map(|o| Offers::of(&o.iter().filter(own_data).collect::<Vec<_>>()));
+                            .and_then(|b| packets(&b));
+                    let offered_own: Option<Vec<&Packet>> = offered_ps
+                        .as_ref()
+                        .map(|o| o.iter().filter(own_data).collect());
+                    let offered = offered_own.as_deref().map(Offers::of);
                     let carried: Vec<&Packet> = ps.iter().filter(own_data).collect();
                     let again = resends(carried.iter().copied());
+                    let stack = spec.rtc_stack;
                     let own: Vec<Send> = carried
                         .iter()
                         .zip(again)
+                        .filter(|(p, _)| !sack_alone(p, stack))
                         .map(|(p, carried_again)| {
                             let offer = offered.as_ref().and_then(|o| o.resent(p));
                             Send {
                                 us: p.us,
                                 charge: framing.packet(p.ip_len as usize) as u64,
-                                app: if p.tcp.is_some() { p.payload } else { 0 },
+                                app: p.tcp.is_some().then_some(p.payload),
+                                est: match (p.udp, stack) {
+                                    (Some(_), Some(x)) => x.datagram_payload(p.ip_len),
+                                    _ => 0,
+                                },
                                 resent: offer.unwrap_or(carried_again),
                             }
                         })
                         .collect();
+                    // A SACK alone dropped isn't resent: it is no drop of
+                    // the share's.
+                    let drops = offered_own.as_deref().map_or_else(Vec::new, |o| {
+                        let mut d = dropped(o, &carried, framing, stack);
+                        d.retain(|x| x.est > 0);
+                        d
+                    });
                     if let Some(x) = sends.get_mut(h) {
-                        *x = own;
+                        *x = Sent {
+                            sends: own,
+                            dropped: drops,
+                        };
                     }
                     for (k, edge) in bins.iter_mut().enumerate() {
                         while let Some(p) = mine.next_if(|p| p.us < edge_us(k as u64)) {
@@ -2684,16 +2809,22 @@ mod tests {
             .map(|i| Send {
                 us: 1_000_000 + 1 + i * 999,
                 charge: full,
-                app: full - 60,
+                app: Some(full - 60),
+                est: 0,
                 resent: i % 100 == 0,
             })
             .collect();
         sends.extend((0..100u64).map(|i| Send {
             us: 2_000_000 + 1 + i * 9_999,
             charge: full,
-            app: full - 60,
+            app: Some(full - 60),
+            est: 0,
             resent: false,
         }));
+        let sends = Sent {
+            sends,
+            ..Sent::default()
+        };
         // Lines without the runner's channel bytes (channel_bytes).
         let mut meter = vec![sample(1), sample(2), sample(3)];
         gate(&mut meter, &sends, spec, &[], |d| d.as_micros() as u64);
@@ -2743,6 +2874,202 @@ mod tests {
         meter[0].channel_bytes = None;
         gate(&mut meter, &sends, spec, &[], |d| d.as_micros() as u64);
         assert_eq!((meter[2].gated.data, meter[2].gated.vnic), (0, 0));
+    }
+
+    /// A node whose capture holds datagrams takes its transports' bytes as
+    /// its datagrams' payloads from their lengths, its TCP segments' as
+    /// their payloads: over its near-saturated windows, its dropped
+    /// datagrams' payloads off its bytes and their charges off its link's,
+    /// as its TCP resends' are, in the window each was offered; and the
+    /// truth takes the share they give. Without a stack its datagrams have
+    /// no payload, and the share is its link's fallback.
+    #[test]
+    fn a_data_channels_share_is_its_datagrams_lengths_over_their_charge() {
+        let s = calibration_star(&Calibration::from_knobs(|_| None));
+        let spec = &s.hosts[0];
+        let link = crate::report::available(spec, &[], Duration::ZERO, Duration::from_secs(1));
+        // Seconds 1 and 2 of datagrams at 0.9 of its link, the first a TCP
+        // segment resent, then one at a tenth of it.
+        let full = link * 9 / 10 / 1000;
+        let est = full - 100;
+        let second = |at: u64, n: u64, est: u64| {
+            (0..n).map(move |i| Send {
+                us: at * 1_000_000 + 1 + i * (999_000 / n),
+                charge: full,
+                app: None,
+                est,
+                resent: false,
+            })
+        };
+        let gated = |est: u64| {
+            let mut sends: Vec<Send> = [(1, 1000), (2, 1000), (3, 100)]
+                .into_iter()
+                .flat_map(|(at, n)| second(at, n, est))
+                .collect();
+            if let Some(x) = sends.first_mut() {
+                (x.app, x.est, x.resent) = (Some(full - 60), 0, true);
+            }
+            let sent = Sent {
+                sends,
+                dropped: vec![Dropped {
+                    us: 2_500_000,
+                    charge: full,
+                    est,
+                }],
+            };
+            let mut meter: Vec<MeterSample> = (1..=4u64)
+                .map(|secs| MeterSample {
+                    t: Duration::from_secs(secs),
+                    asked: Duration::from_secs(secs),
+                    ..MeterSample::default()
+                })
+                .collect();
+            gate(&mut meter, &sent, spec, &[], |d| d.as_micros() as u64);
+            meter
+        };
+        let meter = gated(est);
+        assert!(meter[1].gated.window && meter[2].gated.window && !meter[3].gated.window);
+        let g = meter[3].gated;
+        assert_eq!((g.app, g.link), (1998 * est, 1998 * full));
+        assert_eq!(meter[2].resent_bytes, 2 * full);
+        assert_eq!(meter[2].app_bytes, 1998 * est);
+        let truth = |m: &MeterSample| {
+            crate::report::upload_truth(spec, Some(m), &[], Duration::from_secs(5))
+        };
+        let share = (1998 * est) as f64 / (1998 * full) as f64;
+        assert_eq!(truth(&meter[3]), Some((link as f64 * share) as u64));
+        // Without a stack, no payload: the fallback.
+        let meter = gated(0);
+        assert_eq!(meter[3].gated.app, 0);
+        let fallback = crate::report::full_share(spec);
+        assert_eq!(truth(&meter[3]), Some((link as f64 * fallback) as u64));
+    }
+
+    /// A data channel's lengths over its charge read at least what its node
+    /// handed vnic over that charge, and as much without duplicates: a
+    /// chunk SCTP resends that had arrived is a datagram the lengths count
+    /// on both sides and vnic's bytes count once.
+    #[test]
+    fn a_data_channels_lengths_read_at_least_its_vnic_bytes() {
+        let s = calibration_star(&Calibration::from_knobs(|_| None));
+        let spec = &s.hosts[0];
+        let link = crate::report::available(spec, &[], Duration::ZERO, Duration::from_secs(1));
+        let full = link * 9 / 10 / 1000;
+        let est = full - 100;
+        for duplicates in [0, 100] {
+            let sends = (0..1000u64)
+                .map(|i| Send {
+                    us: 1_000_001 + i * 999,
+                    charge: full,
+                    app: None,
+                    est,
+                    resent: false,
+                })
+                .collect();
+            let sent = Sent {
+                sends,
+                dropped: Vec::new(),
+            };
+            let mut meter: Vec<MeterSample> = (1..=2u64)
+                .map(|secs| MeterSample {
+                    t: Duration::from_secs(secs),
+                    asked: Duration::from_secs(secs),
+                    ..MeterSample::default()
+                })
+                .collect();
+            gate(&mut meter, &sent, spec, &[], |d| d.as_micros() as u64);
+            let g = meter[1].gated;
+            let lengths = g.app as f64 / g.link as f64;
+            // What it handed vnic: its first transmissions' payloads.
+            let vnic = ((1000 - duplicates) * est) as f64 / g.link as f64;
+            assert!(vnic <= lengths, "{duplicates}: {vnic} > {lengths}");
+            assert_eq!(vnic == lengths, duplicates == 0);
+        }
+    }
+
+    /// A datagram whose length holds no DATA chunk's payload under its
+    /// stack's headers is a SACK alone, out of the share; one of a node
+    /// without a stack, and a TCP segment, aren't.
+    #[test]
+    fn a_sack_alone_is_out_of_the_share() {
+        let datagram = |ip_len: u64| Packet {
+            us: 0,
+            src: Some(10),
+            dst: Some(11),
+            ip_len,
+            pure_ack: false,
+            payload: ip_len - 28,
+            tcp: None,
+            ip_id: 0,
+            udp: Some((5000, 6000)),
+        };
+        let chromium = Some(SctpProfile::CHROMIUM);
+        assert!(sack_alone(&datagram(78), chromium));
+        assert!(!sack_alone(&datagram(1238), chromium));
+        assert!(!sack_alone(&datagram(78), None));
+        let segment = Packet {
+            udp: None,
+            tcp: Some((4000, 5000, 0)),
+            ..datagram(52)
+        };
+        assert!(!sack_alone(&segment, chromium));
+    }
+
+    /// A datagram the node offered and its link didn't carry within
+    /// DROP_WAIT_US is dropped, told apart by destination, IP id, length
+    /// and ports; one carried later, or a TCP segment, isn't.
+    #[test]
+    fn a_dropped_datagram_is_one_offered_and_never_carried() {
+        let datagram = |us: u64, ip_id: u16| Packet {
+            us,
+            src: Some(10),
+            dst: Some(11),
+            ip_len: 1238,
+            pure_ack: false,
+            payload: 1210,
+            tcp: None,
+            ip_id,
+            udp: Some((5000, 6000)),
+        };
+        let offered = [
+            datagram(1_000_000, 1),
+            datagram(1_000_100, 2),
+            datagram(1_000_200, 3),
+            Packet {
+                udp: None,
+                tcp: Some((4000, 5000, 7)),
+                ..datagram(1_000_300, 4)
+            },
+        ];
+        // 1 carried 30 ms on, 3 past DROP_WAIT_US, 2 never.
+        let carried = [
+            datagram(1_030_000, 1),
+            datagram(1_000_200 + DROP_WAIT_US + 1, 3),
+        ];
+        fn refs(ps: &[Packet]) -> Vec<&Packet> {
+            ps.iter().collect()
+        }
+        let framing = strims_wan::framing::Framing::NONE;
+        let d = dropped(
+            &refs(&offered),
+            &refs(&carried),
+            framing,
+            Some(SctpProfile::CHROMIUM),
+        );
+        let got: Vec<(u64, u64, u64)> = d.iter().map(|x| (x.us, x.charge, x.est)).collect();
+        let charge = framing.packet(1238) as u64;
+        assert_eq!(got, [(1_000_100, charge, 1160), (1_000_200, charge, 1160)]);
+        assert!(dropped(&refs(&offered), &refs(&offered), framing, None).is_empty());
+    }
+
+    /// A Chromium datagram's payload as its length gives it: a full one's
+    /// is the most a chunk carries, a SACK alone's none.
+    #[test]
+    fn a_datagrams_length_gives_its_chunks_payload() {
+        let x = SctpProfile::CHROMIUM;
+        assert_eq!(x.datagram_payload(1238), x.max_payload as u64);
+        assert_eq!(x.datagram_payload(78), 0);
+        assert_eq!(x.datagram_payload(40), 0);
     }
 
     #[test]
