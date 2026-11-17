@@ -13,7 +13,7 @@
 //!   sample while a swarm streams ([`Report::meter_readings`]): its median
 //!   per bucket over the seeds' samples and the populations'
 //!   (`meter_bucket_seeds`, `meter_bucket_accepting`, ...), and how it
-//!   tracked changes (`off_drop_seeds`, ..., below).
+//!   tracked changes (`meter_off_drop_seeds`, ..., below).
 //! - **populations** ([`Report::populations`]): the first swarm's honest
 //!   viewers that accepted a subscription (`accepting`), that pushed a
 //!   chunk to a subscriber (`delivering`) and that never accepted one
@@ -30,7 +30,11 @@
 //!   ([`MeterSample::budget_capacity`]) ÷ the uplink over the same samples
 //!   once measured (`meter_budget_seed_p10`, ...). The first wave's
 //!   `seed_first_wave_capacity` is the budget's busy time's unbounded
-//!   reading, neither of them.
+//!   reading, neither of them. A sample whose truth is 0 (an outage) has
+//!   no ratio: the share of the window's samples that are such
+//!   (`meter_seed_outage_share`) and the meter's capacity in bytes per
+//!   second at them (`meter_seed_outage_over_bps_p50`, `_p90`) are its own
+//!   ([`Report::seed_outages`]).
 //! - **standing queue** ([`Report::standing_queue`]): the share of a set of
 //!   hosts' uplink queue samples, while a swarm streams, that wait longer
 //!   than [`STANDING_QUEUE`] (WAN mode).
@@ -39,12 +43,13 @@
 //!   in which the viewer wrote under half of what it could upload then.
 //! - **tracking** ([`Report::tracking`]): after each change of a host's
 //!   available upload while a swarm streams (a step of its uplink's rate,
-//!   or a competing upload's start or stop), the share of
-//!   the meter's samples until the host's next change, or the stream's
-//!   end, that read more than [`TRACK_BAND`] off what was available. A
-//!   meter that swings between true and far off reads off for as long as
-//!   it swings, where the time until it first reads true would turn on
-//!   chance.
+//!   a competing upload's start or stop, or an outage's start or end), the
+//!   share of the meter's samples until the host's next change, or the
+//!   stream's end, that read more than [`TRACK_BAND`] off what was
+//!   available, every sample where nothing was and every sample without a
+//!   reading counting off. A meter that swings between true and far off
+//!   reads off for as long as it swings, where the time until it first
+//!   reads true would turn on chance.
 //! - **lag after changes** ([`Report::lag_after_changes`]): the lag of the
 //!   frames a swarm's seed wrote in the [`AFTER_CHANGE`] after each drop, or
 //!   each rise, of its available upload.
@@ -225,7 +230,9 @@ pub struct Tracking {
     /// Whether the rate fell.
     pub drop: bool,
     /// The share of the meter's samples until the next change that read
-    /// more than [`TRACK_BAND`] off.
+    /// more than [`TRACK_BAND`] off, every one where the link carried
+    /// nothing for the host (its truth 0) and every one without a reading
+    /// counting off.
     pub off: f64,
 }
 
@@ -1201,7 +1208,12 @@ impl Report {
     /// The changes of host `h`'s available upload while a swarm streams:
     /// when each came and whether the rate fell. A step of its uplink's
     /// rate is one; a competing upload falls at its start and rises at its
-    /// stop.
+    /// stop, and an outage of its capacity schedule (`report::outages`: a
+    /// gap that takes its truth to 0) at the last opportunity before it
+    /// and at the first after. Steps and competing uploads that change at
+    /// one time count once; an outage's two changes count apart from
+    /// anything at their times, so one that ends at the opportunity the
+    /// next starts at keeps both.
     pub fn upload_changes(&self, h: HostIx) -> Vec<(Duration, bool)> {
         let Some(spec) = self.scenario.hosts.get(h) else {
             return Vec::new();
@@ -1232,6 +1244,13 @@ impl Report {
             .collect();
         changes.sort_by_key(|&(at, _)| at);
         changes.dedup_by_key(|&mut (at, _)| at);
+        changes.extend(
+            crate::report::outages(spec, Duration::ZERO, self.scenario.duration)
+                .into_iter()
+                .flat_map(|(a, b)| [(a, true), (b, false)])
+                .filter(|&(at, _)| self.live(at)),
+        );
+        changes.sort_by_key(|&(at, _)| at);
         changes
     }
 
@@ -1259,6 +1278,9 @@ impl Report {
                     .iter()
                     .filter(|m| m.t >= at && m.t < until)
                     .map(|m| {
+                        // Over a link that carries nothing a reading is off
+                        // by all of it, and a meter without one hasn't
+                        // followed the change, whichever way it went.
                         let cap = self.upload_cap_at(h, m.asked).unwrap_or(0) as f64;
                         cap <= 0.0 || (m.capacity as f64 / cap - 1.0).abs() > TRACK_BAND
                     })
@@ -1545,6 +1567,15 @@ impl Report {
                 j.num(RowNum::meter_budget_seed_p_p(p), x);
             }
         }
+        if let Some((share, mut over)) = self.seed_outages(swarm) {
+            j.num(RowNum::MeterSeedOutageShare, share);
+            over.sort_unstable();
+            for p in RowInt::P_OF_METER_SEED_OUTAGE_OVER_BPS_P_P {
+                if let Some(x) = sketch::percentile(&over, u32::from(p)) {
+                    j.int(RowInt::meter_seed_outage_over_bps_p_p(p), x);
+                }
+            }
+        }
         j.nums(RowNums::MeterBucketSeeds, self.meter_buckets(swarm, &seeds));
         let (qd, had) = self.queue_delay_deciles(&seeds);
         j.nums(RowNums::QueueDelaySeedsMs, qd)
@@ -1604,16 +1635,16 @@ impl Report {
                 let n = v.len() as u64;
                 let max = v.iter().copied().fold(0.0, f64::max);
                 j.nums(
-                    RowNums::off_change_role(name, role),
+                    RowNums::meter_off_change_role(name, role),
                     [deciles(&mut v)[1], max],
                 )
-                .int(RowInt::off_change_n_role(name, role), n);
+                .int(RowInt::meter_off_change_n_role(name, role), n);
             }
         }
         if tracked {
             let (drop, rise) = self.lag_after_changes(swarm);
-            j.int(RowInt::SeedDropP99Ms, u64::from(drop.p99))
-                .int(RowInt::SeedRiseP99Ms, u64::from(rise.p99));
+            j.int(RowInt::SeedDropLagP99Ms, u64::from(drop.p99))
+                .int(RowInt::SeedRiseLagP99Ms, u64::from(rise.p99));
         }
         let (budget, copies) = self.seed_changes(swarm);
         j.num(RowNum::SeedBudgetChangesPerMin, budget)
@@ -3319,6 +3350,112 @@ mod tests {
         // 61-64 and 66 of 60-99 read off the full rate.
         assert!(!t[1].drop);
         assert!((t[1].off - 0.125).abs() < 1e-9, "{}", t[1].off);
+    }
+
+    /// The seed of [`seed_reading`] on a trace of 10 bytes every 10 ms
+    /// (1000 B/s) for its 100 s period in place of its rate, but none
+    /// strictly within each of `gaps` (in ms).
+    fn seed_on_gaps(gaps: &[(i64, i64)], capacity: impl Fn(u64) -> u64) -> Report {
+        let mut r = seed_reading(capacity);
+        r.scenario.duration = Duration::from_secs(110);
+        let ops = (0..10_000i64)
+            .map(|k| k * 10)
+            .filter(|&ms| !gaps.iter().any(|&(a, b)| ms > a && ms < b))
+            .map(|ms| (strims_base::time::Duration::from_millis(ms), 10.0));
+        let cap = strims_wan::capacity::Capacity::new(
+            ops,
+            Some(strims_base::time::Duration::from_secs(100)),
+            1.0,
+        )
+        .unwrap()
+        .starting(crate::wan::sim_time(Duration::ZERO));
+        let seed = &mut r.scenario.hosts[0];
+        seed.up_steps.clear();
+        seed.up_capacity = Some(std::sync::Arc::new(cap));
+        r
+    }
+
+    /// Over an outage (none from 40 s to 44 s) the truth is 0: a sample
+    /// there has no ratio, so the seed meter's ratios leave it out, and its
+    /// outage share counts it and its outage readings keep what it read; a
+    /// sample without a reading is left out of both, as of the ratios. The
+    /// outage is a drop at its last opportunity and a rise at its next, and
+    /// over it every sample is off, one without a reading too. A half
+    /// second's gap
+    /// (from 70 s) is neither. The row writes the share and the readings'
+    /// quantiles.
+    #[test]
+    fn an_outage_is_scored_apart_from_the_meters_ratios() {
+        let r = seed_on_gaps(&[(40_000, 44_000), (70_000, 70_500)], |t| match t {
+            41 => 0,
+            42 => 700,
+            43 => 900,
+            71 => 500,
+            _ => 1000,
+        });
+        let at = |s: u64| r.upload_cap_at(0, Duration::from_secs(s));
+        assert!(at(40).unwrap() > 0);
+        assert_eq!([at(41), at(42), at(43)], [Some(0); 3]);
+        // (43, 44 s] holds the opportunity at 44 s alone.
+        assert!(at(44).unwrap() > 0 && at(44) < at(45));
+        assert!(at(71).unwrap() > 0);
+        assert_eq!(
+            r.upload_changes(0),
+            [
+                (Duration::from_secs(40), true),
+                (Duration::from_secs(44), false)
+            ]
+        );
+        // The window is 25-99 s: 75 samples, 74 with a reading, 2 of those
+        // over the outage.
+        let (capacity, _) = r.seed_meter(0);
+        assert_eq!(capacity.len(), 72);
+        let (share, over) = r.seed_outages(0).unwrap();
+        assert!((share - 2.0 / 74.0).abs() < 1e-9, "{share}");
+        assert_eq!(over, [700, 900]);
+        // 41-43 of 40-43 are off, 41 without a reading; of 44-99, 44 reads
+        // 1000 of 10 and 71 half the rate over the half second's gap, on.
+        let t = r.tracking(&r.seeds());
+        assert_eq!(t.len(), 2);
+        assert!(t[0].drop && !t[1].drop);
+        assert!((t[0].off - 0.75).abs() < 1e-9, "{}", t[0].off);
+        assert!((t[1].off - 1.0 / 56.0).abs() < 1e-9, "{}", t[1].off);
+        let row: serde_json::Value = serde_json::from_str(&r.row("t", None)).unwrap();
+        assert_eq!(row["meter_seed_outage_share"].as_f64(), Some(share));
+        assert_eq!(
+            row["meter_seed_outage_over_bps_p50"].as_u64(),
+            Some(sketch::floor_u64(700))
+        );
+        assert_eq!(
+            row["meter_seed_outage_over_bps_p90"].as_u64(),
+            Some(sketch::floor_u64(900))
+        );
+        assert_eq!(row["meter_off_drop_n_seeds"].as_u64(), Some(1));
+        assert_eq!(row["meter_off_rise_n_seeds"].as_u64(), Some(1));
+        // Without a truth of 0 the share is 0 and there are no readings.
+        let r = seed_reading(|_| 1000);
+        assert_eq!(r.seed_outages(0), Some((0.0, Vec::new())));
+        let row: serde_json::Value = serde_json::from_str(&r.row("t", None)).unwrap();
+        assert_eq!(row["meter_seed_outage_share"].as_f64(), Some(0.0));
+        assert!(row.get("meter_seed_outage_over_bps_p50").is_none());
+    }
+
+    /// Two outages that share the opportunity between them (at 44 s) are a
+    /// drop, a rise and a drop at 44 s and a rise: the first's rise holds no
+    /// sample before the second's drop, which takes 44-46 s.
+    #[test]
+    fn outages_that_share_an_opportunity_keep_each_change() {
+        let r = seed_on_gaps(&[(40_000, 44_000), (44_000, 47_000)], |_| 1000);
+        let s = Duration::from_secs;
+        assert_eq!(
+            r.upload_changes(0),
+            [(s(40), true), (s(44), false), (s(44), true), (s(47), false)]
+        );
+        let t = r.tracking(&r.seeds());
+        let at: Vec<(Duration, bool)> = t.iter().map(|x| (x.at, x.drop)).collect();
+        assert_eq!(at, [(s(40), true), (s(44), true), (s(47), false)]);
+        // 44 reads 1000 of its 10 bytes' second, 45 and 46 1000 of nothing.
+        assert!((t[1].off - 1.0).abs() < 1e-9, "{}", t[1].off);
     }
 
     /// A seed (0), three honest viewers (1-3) and a hostile one (4) on a

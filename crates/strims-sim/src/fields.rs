@@ -706,14 +706,31 @@ pub(crate) enum RowInt {
     /// the seeds that never answered a STREAM_REQUEST, hostile ones and every
     /// swarm's in.
     NPop(u16),
+    /// The p50 and p90 (`meter_seed_outage_over_bps_p50`,
+    /// `meter_seed_outage_over_bps_p90`) of the first swarm's seed's upload
+    /// meter at its samples whose truth is 0 (`meter_seed_outage_share`'s, each
+    /// with a reading): its capacity (the relay busy-time reading,
+    /// `PushStats::upload_capacity`) in bytes per second, all of it an
+    /// over-read of a link that carried nothing for the seed. A sample without
+    /// a reading (a capacity of 0, which admission and shedding take as none)
+    /// isn't among them, as `meter_seed_p*` leaves it out. Left out without
+    /// such a sample.
+    ///
+    /// strims-sim: `Report::seed_outages`. A told seed
+    /// (`STRIMS_SIM_KNOWN_UPLINK`) is told 0 there, which the node takes as no
+    /// capacity known, so its meter measures.
+    ///
+    /// Unit: bytes/s.
+    MeterSeedOutageOverBpsPP(u16),
     /// The swarms' seeds (`n_seeds`, `Report::seeds`); the populations' viewers
     /// are `n_{pop}`.
     NRole(u16),
-    /// The changes of the available upload that `off_{change}_{role}` measured
-    /// at the hosts of role `role`, drops (`off_drop_n_seeds`, ...) and rises
-    /// (`off_rise_n_seeds`, ...) (Report::tracking); left out where they had
-    /// none.
-    OffChangeNRole(u16),
+    /// The changes of the available upload that `meter_off_{change}_{role}`
+    /// measured at the hosts of role `role`, those with a sample it judged
+    /// before the next: drops (`meter_off_drop_n_seeds`, ...) and rises
+    /// (`meter_off_rise_n_seeds`, ...) (Report::tracking). Left out where they
+    /// had none.
+    MeterOffChangeNRole(u16),
     /// The row's `packets_ack` and `up_acks` count both kinds, over the whole
     /// run and every host.
     PacketsAck,
@@ -913,11 +930,12 @@ pub(crate) enum RowInt {
     /// strims-sim: The adaptive seed's copies, distinct from `seed_slots`.
     SeedCopies,
     /// The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after
-    /// each drop of its available upload (Report::lag_after_changes); with
+    /// each drop of its available upload, an outage's start among them
+    /// (`meter_off_{change}_{role}`'s changes; Report::lag_after_changes); with
     /// tracking only.
     ///
     /// Unit: ms.
-    SeedDropP99Ms,
+    SeedDropLagP99Ms,
     /// An adaptive seed's first wave: the most copies its window opened before
     /// its budget was measured (PushStats::seed_first_wave); 0 for another
     /// seed.
@@ -942,11 +960,12 @@ pub(crate) enum RowInt {
     /// first EARLY_OFFERS.
     SeedOffers30s,
     /// The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after
-    /// each rise of its available upload (Report::lag_after_changes); with
+    /// each rise of its available upload, an outage's end among them
+    /// (`meter_off_{change}_{role}`'s changes; Report::lag_after_changes); with
     /// tracking only.
     ///
     /// Unit: ms.
-    SeedRiseP99Ms,
+    SeedRiseLagP99Ms,
     /// The seed's requests that ended without data, over every incarnation
     /// (Report::timeouts): those that timed out unanswered
     /// (SwarmCounters::timeouts). On the HAVE-removal lines (decl, p4tf), which
@@ -1348,6 +1367,10 @@ impl RowInt {
     /// loops over.
     pub(crate) const P_OF_LOOP_LIFE_P_P_MS: [u8; 2] = [50, 90];
 
+    /// `meter_seed_outage_over_bps_p{p}`'s `p` values for strims-sim, which its code
+    /// loops over.
+    pub(crate) const P_OF_METER_SEED_OUTAGE_OVER_BPS_P_P: [u8; 2] = [50, 90];
+
     /// `parent_lost_noticed_p{p}_ms`'s `p` values for strims-sim, which its code
     /// loops over.
     pub(crate) const P_OF_PARENT_LOST_NOTICED_P_P_MS: [u8; 2] = [50, 90];
@@ -1427,8 +1450,9 @@ impl RowInt {
             RowInt::LoopsByHow(i) => at(&ROWINT_LOOPS_BY_HOW, i),
             RowInt::LoopsTapLost => "loops_tap_lost",
             RowInt::NPop(i) => at(&ROWINT_N_POP, i),
+            RowInt::MeterSeedOutageOverBpsPP(i) => at(&ROWINT_METER_SEED_OUTAGE_OVER_BPS_P_P, i),
             RowInt::NRole(i) => at(&ROWINT_N_ROLE, i),
-            RowInt::OffChangeNRole(i) => at(&ROWINT_OFF_CHANGE_N_ROLE, i),
+            RowInt::MeterOffChangeNRole(i) => at(&ROWINT_METER_OFF_CHANGE_N_ROLE, i),
             RowInt::PacketsAck => "packets_ack",
             RowInt::PacketsUp => "packets_up",
             RowInt::ParentLost => "parent_lost",
@@ -1462,12 +1486,12 @@ impl RowInt {
             RowInt::SeedAsksHeldByNoneParentless => "seed_asks_held_by_none_parentless",
             RowInt::SeedBudget => "seed_budget",
             RowInt::SeedCopies => "seed_copies",
-            RowInt::SeedDropP99Ms => "seed_drop_p99_ms",
+            RowInt::SeedDropLagP99Ms => "seed_drop_lag_p99_ms",
             RowInt::SeedFirstWave => "seed_first_wave",
             RowInt::SeedFirstWaveCapacity => "seed_first_wave_capacity",
             RowInt::SeedObjectiveMs => "seed_objective_ms",
             RowInt::SeedOffers30s => "seed_offers_30s",
-            RowInt::SeedRiseP99Ms => "seed_rise_p99_ms",
+            RowInt::SeedRiseLagP99Ms => "seed_rise_lag_p99_ms",
             RowInt::SeedTimeouts => "seed_timeouts",
             RowInt::SendBufferMs => "send_buffer_ms",
             RowInt::Shed => "shed",
@@ -1591,18 +1615,27 @@ impl RowInt {
         RowInt::NPop(of(&ROWINT_N_POP, format_args!("n_{pop}")))
     }
 
+    /// `meter_seed_outage_over_bps_p{p}`'s name of `p`: a panic for values
+    /// `fields.toml` doesn't give strims-sim.
+    pub(crate) fn meter_seed_outage_over_bps_p_p(p: impl Display) -> RowInt {
+        RowInt::MeterSeedOutageOverBpsPP(of(
+            &ROWINT_METER_SEED_OUTAGE_OVER_BPS_P_P,
+            format_args!("meter_seed_outage_over_bps_p{p}"),
+        ))
+    }
+
     /// `n_{role}`'s name of `role`: a panic for values
     /// `fields.toml` doesn't give strims-sim.
     pub(crate) fn n_role(role: impl Display) -> RowInt {
         RowInt::NRole(of(&ROWINT_N_ROLE, format_args!("n_{role}")))
     }
 
-    /// `off_{change}_n_{role}`'s name of `change`, `role`: a panic for values
+    /// `meter_off_{change}_n_{role}`'s name of `change`, `role`: a panic for values
     /// `fields.toml` doesn't give strims-sim.
-    pub(crate) fn off_change_n_role(change: impl Display, role: impl Display) -> RowInt {
-        RowInt::OffChangeNRole(of(
-            &ROWINT_OFF_CHANGE_N_ROLE,
-            format_args!("off_{change}_n_{role}"),
+    pub(crate) fn meter_off_change_n_role(change: impl Display, role: impl Display) -> RowInt {
+        RowInt::MeterOffChangeNRole(of(
+            &ROWINT_METER_OFF_CHANGE_N_ROLE,
+            format_args!("meter_off_{change}_n_{role}"),
         ))
     }
 
@@ -1716,17 +1749,23 @@ const ROWINT_LOOPS_BY_HOW: [&str; 7] = [
 /// `n_{pop}`'s names for strims-sim.
 const ROWINT_N_POP: [&str; 3] = ["n_accepting", "n_delivering", "n_others"];
 
+/// `meter_seed_outage_over_bps_p{p}`'s names for strims-sim.
+const ROWINT_METER_SEED_OUTAGE_OVER_BPS_P_P: [&str; 2] = [
+    "meter_seed_outage_over_bps_p50",
+    "meter_seed_outage_over_bps_p90",
+];
+
 /// `n_{role}`'s names for strims-sim.
 const ROWINT_N_ROLE: [&str; 1] = ["n_seeds"];
 
-/// `off_{change}_n_{role}`'s names for strims-sim.
-const ROWINT_OFF_CHANGE_N_ROLE: [&str; 6] = [
-    "off_drop_n_seeds",
-    "off_drop_n_accepting",
-    "off_drop_n_delivering",
-    "off_rise_n_seeds",
-    "off_rise_n_accepting",
-    "off_rise_n_delivering",
+/// `meter_off_{change}_n_{role}`'s names for strims-sim.
+const ROWINT_METER_OFF_CHANGE_N_ROLE: [&str; 6] = [
+    "meter_off_drop_n_seeds",
+    "meter_off_drop_n_accepting",
+    "meter_off_drop_n_delivering",
+    "meter_off_rise_n_seeds",
+    "meter_off_rise_n_accepting",
+    "meter_off_rise_n_delivering",
 ];
 
 /// `parent_lost_noticed_p{p}_ms`'s names for strims-sim.
@@ -1999,11 +2038,25 @@ pub(crate) enum RowNum {
     /// each of its samples from the end of the startup phase (`STARTUP_SECS`
     /// after the stream's first write, vocab.toml's `start` horizon) to the
     /// stream's last write. Left out without a sample there (a stream no longer
-    /// than its startup). A sample whose truth is 0 (an outage) is left out
-    /// (`meter_samples` keeps it).
+    /// than its startup). A sample whose truth is 0 (an outage) has no ratio
+    /// and is left out (`meter_samples` keeps it); `meter_seed_outage_share`
+    /// and `meter_seed_outage_over_bps_p{p}` score it.
     ///
     /// strims-sim: Each sample one with a capacity (`Report::seed_meter`).
     MeterSeedPP(u16),
+    /// Of the first swarm's seed's meter samples in `meter_seed_p*`'s window
+    /// (from the end of the startup phase to the stream's last write) that have
+    /// a reading (a capacity above 0, the samples `meter_seed_p*` takes) and a
+    /// truth (`Report::upload_cap_at`), the share whose truth is 0: an outage,
+    /// a second over which its link carried nothing for it (a capacity
+    /// schedule's gap of more than a second, or a competing upload that took
+    /// the whole link), where `meter_seed_p*` has no ratio and leaves the
+    /// sample out. 0 without one. Left out without such a sample.
+    ///
+    /// strims-sim: `Report::seed_outages`.
+    ///
+    /// Unit: fraction.
+    MeterSeedOutageShare,
     /// The first swarm's seed's budget reading: the capacity its latest
     /// allocation check measured its budget from
     /// (`PushStats::seed_budget_capacity`) over what the seed could upload (the
@@ -2298,6 +2351,7 @@ impl RowNum {
             RowNum::MediaKbit => "media_kbit",
             RowNum::MeterPopPP(i) => at(&ROWNUM_METER_POP_P_P, i),
             RowNum::MeterSeedPP(i) => at(&ROWNUM_METER_SEED_P_P, i),
+            RowNum::MeterSeedOutageShare => "meter_seed_outage_share",
             RowNum::MeterBudgetSeedPP(i) => at(&ROWNUM_METER_BUDGET_SEED_P_P, i),
             RowNum::MsgsPerPayload => "msgs_per_payload",
             RowNum::OvhPopPP(i) => at(&ROWNUM_OVH_POP_P_P, i),
@@ -2742,10 +2796,10 @@ pub(crate) enum RowNums {
     /// median per bucket over the seeds' samples (`meter_bucket_seeds`) and the
     /// populations' (`meter_bucket_accepting`, `meter_bucket_delivering`,
     /// `meter_bucket_others`), and how the meter tracked changes
-    /// (`off_{change}_{role}`). The meter's truth is what the host could upload
-    /// over the second before the sample, in the meter's units: the data bytes
-    /// its runner writes (`UploadInfo::rate`'s, its channel payloads). It is
-    /// what the host's uplink carries over that second (its rate's mean, its
+    /// (`meter_off_{change}_{role}`). The meter's truth is what the host could
+    /// upload over the second before the sample, in the meter's units: the data
+    /// bytes its runner writes (`UploadInfo::rate`'s, its channel payloads). It
+    /// is what the host's uplink carries over that second (its rate's mean, its
     /// steps' from their times; with a capacity schedule, its opportunities in
     /// that second), less what its link charged its competing uploads in it,
     /// times the host's share of its link in channel bytes
@@ -2761,15 +2815,22 @@ pub(crate) enum RowNums {
     /// over what it handed vnic (1 before any such window).
     MeterBucketSeeds,
     /// How the upload meter tracked each change of the host's available upload
-    /// (a step of its uplink's rate, a competing upload's start or stop) while
-    /// a swarm streamed, over the hosts of role `role` (`seeds`, the swarms'
-    /// seeds; `accepting` and `delivering`, the first swarm's honest viewers of
-    /// each population, `meter_{pop}_p{p}`'s): the share of the meter's samples
-    /// from the change to the next that read more than TRACK_BAND off the
-    /// uplink, its median and its largest over the drops (`off_drop_seeds`,
-    /// ...) and over the rises (`off_rise_seeds`, ...) (Report::tracking); left
-    /// out where the role's hosts had no change.
-    OffChangeRole(u16),
+    /// while a swarm streamed: a step of its uplink's rate, a competing
+    /// upload's start or stop, and an outage's start and end (a gap of its
+    /// capacity schedule longer than a second, over which its truth falls to 0:
+    /// a drop at the last delivery opportunity before the gap, a rise at the
+    /// first after). Over the hosts of role `role` (`seeds`, the swarms' seeds;
+    /// `accepting` and `delivering`, the first swarm's honest viewers of each
+    /// population, `meter_{pop}_p{p}`'s), of the meter's samples from the
+    /// change to the next, the share that read more than TRACK_BAND off the
+    /// truth (`Report::upload_cap_at`), every sample whose truth was 0 counting
+    /// off, as every sample without a reading (a capacity of 0) does, whatever
+    /// the truth: a meter without a reading hasn't followed the change,
+    /// whichever way it went. Its median and its largest over the drops
+    /// (`meter_off_drop_seeds`, ...) and over the rises
+    /// (`meter_off_rise_seeds`, ...) (Report::tracking). Left out where the
+    /// role's hosts had no change.
+    MeterOffChangeRole(u16),
     /// The p10, p50 and p90 in ms of the seeds' meters' queueing delay while a
     /// swarm streams, over the samples that had one
     /// (Report::queue_delay_deciles).
@@ -2784,7 +2845,7 @@ impl RowNums {
         match self {
             RowNums::MeterBucketPop(i) => at(&ROWNUMS_METER_BUCKET_POP, i),
             RowNums::MeterBucketSeeds => "meter_bucket_seeds",
-            RowNums::OffChangeRole(i) => at(&ROWNUMS_OFF_CHANGE_ROLE, i),
+            RowNums::MeterOffChangeRole(i) => at(&ROWNUMS_METER_OFF_CHANGE_ROLE, i),
             RowNums::QueueDelaySeedsMs => "queue_delay_seeds_ms",
         }
     }
@@ -2798,12 +2859,12 @@ impl RowNums {
         ))
     }
 
-    /// `off_{change}_{role}`'s name of `change`, `role`: a panic for values
+    /// `meter_off_{change}_{role}`'s name of `change`, `role`: a panic for values
     /// `fields.toml` doesn't give strims-sim.
-    pub(crate) fn off_change_role(change: impl Display, role: impl Display) -> RowNums {
-        RowNums::OffChangeRole(of(
-            &ROWNUMS_OFF_CHANGE_ROLE,
-            format_args!("off_{change}_{role}"),
+    pub(crate) fn meter_off_change_role(change: impl Display, role: impl Display) -> RowNums {
+        RowNums::MeterOffChangeRole(of(
+            &ROWNUMS_METER_OFF_CHANGE_ROLE,
+            format_args!("meter_off_{change}_{role}"),
         ))
     }
 }
@@ -2823,14 +2884,14 @@ const ROWNUMS_METER_BUCKET_POP: [&str; 3] = [
     "meter_bucket_others",
 ];
 
-/// `off_{change}_{role}`'s names for strims-sim.
-const ROWNUMS_OFF_CHANGE_ROLE: [&str; 6] = [
-    "off_drop_seeds",
-    "off_drop_accepting",
-    "off_drop_delivering",
-    "off_rise_seeds",
-    "off_rise_accepting",
-    "off_rise_delivering",
+/// `meter_off_{change}_{role}`'s names for strims-sim.
+const ROWNUMS_METER_OFF_CHANGE_ROLE: [&str; 6] = [
+    "meter_off_drop_seeds",
+    "meter_off_drop_accepting",
+    "meter_off_drop_delivering",
+    "meter_off_rise_seeds",
+    "meter_off_rise_accepting",
+    "meter_off_rise_delivering",
 ];
 
 /// The keys of `series_meta.json` that hold an integer.

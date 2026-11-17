@@ -255,6 +255,52 @@ impl Capacity {
         let bytes = i128::from(self.bytes_between(from, to));
         u64::try_from(bytes * 1_000_000_000 / i128::from(span)).unwrap_or(0)
     }
+
+    /// The gaps longer than `min` between consecutive opportunities that
+    /// overlap `(from, to)`, in time order: each the times of the
+    /// opportunity before it and of the one after, between which the
+    /// schedule carries nothing. Over a window shorter than a gap and
+    /// inside it, [`Capacity::bytes_between`] is 0.
+    pub fn gaps(&self, from: Time, to: Time, min: Duration) -> Vec<(Time, Time)> {
+        let min = min.as_nanos();
+        let mut within: Vec<(i64, i64)> = self
+            .at
+            .windows(2)
+            .filter_map(|w| match *w {
+                [a, b] if b - a > min => Some((a, b)),
+                _ => None,
+            })
+            .collect();
+        // The gap from the period's last opportunity to the next period's
+        // first.
+        if let (Some(&first), Some(&last)) = (self.at.first(), self.at.last())
+            && self.period - last + first > min
+        {
+            within.push((last, self.period + first));
+        }
+        if within.is_empty() || to <= from {
+            return Vec::new();
+        }
+        let origin = i128::from(self.origin.unix_nanos());
+        let p = i128::from(self.period);
+        let (f, t) = (
+            i128::from(from.unix_nanos()) - origin,
+            i128::from(to.unix_nanos()) - origin,
+        );
+        let at = |ns: i128| Time::from_unix_nanos(i64::try_from(origin + ns).unwrap_or(i64::MAX));
+        let mut out = Vec::new();
+        // A period's last gap ends in the next, so the one before `from`'s
+        // can reach into it.
+        for m in f.div_euclid(p) - 1..=t.div_euclid(p) {
+            for &(a, b) in &within {
+                let (a, b) = (m * p + i128::from(a), m * p + i128::from(b));
+                if b > f && a < t {
+                    out.push((at(a), at(b)));
+                }
+            }
+        }
+        out
+    }
 }
 
 /// An uplink's place in its [`Capacity`]: the bytes its messages have
@@ -381,5 +427,41 @@ mod tests {
         // From the origin: the period's at 0, then the three at 1 ms.
         assert_eq!(c.through(t(1)), 4 * 1500);
         assert_eq!(c.rate_between(t(5), t(5)), 0);
+    }
+
+    #[test]
+    fn gaps_are_the_spans_without_an_opportunity_in_every_period() {
+        // Opportunities at 0 (the period's end), 1, 400 and 1000 ms of a
+        // 3 s period: gaps of 599 ms and of 2 s, the last into the next
+        // period.
+        let c = Capacity::mahimahi("1\n400\n1000\n3000\n", 1500, 1.0)
+            .unwrap()
+            .starting(origin());
+        let ms = Duration::from_millis;
+        assert_eq!(
+            c.gaps(t(0), t(7000), ms(1000)),
+            [(t(1000), t(3000)), (t(4000), t(6000))]
+        );
+        // One that only overlaps the span is in it; one that ends where the
+        // span starts isn't.
+        assert_eq!(
+            c.gaps(t(2500), t(4001), ms(1000)),
+            [(t(1000), t(3000)), (t(4000), t(6000))]
+        );
+        assert!(c.gaps(t(3000), t(4000), ms(1000)).is_empty());
+        assert_eq!(c.gaps(t(-2500), t(-1000), ms(1000)), [(t(-2000), t(0))]);
+        assert_eq!(
+            c.gaps(t(0), t(1500), ms(500)),
+            [(t(400), t(1000)), (t(1000), t(3000))]
+        );
+        // Longer than the longest gap, or over nothing: none.
+        assert!(c.gaps(t(0), t(9000), ms(2000)).is_empty());
+        assert!(c.gaps(t(5), t(5), ms(100)).is_empty());
+        // A second inside a gap carries nothing; one that reaches either
+        // opportunity carries it.
+        assert_eq!(c.bytes_between(t(1000), t(2000)), 0);
+        assert_eq!(c.bytes_between(t(1999), t(2999)), 0);
+        assert_eq!(c.bytes_between(t(2000), t(3000)), 1500);
+        assert_eq!(c.bytes_between(t(999), t(1999)), 1500);
     }
 }

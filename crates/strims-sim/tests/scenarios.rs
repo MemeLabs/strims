@@ -3623,6 +3623,69 @@ fn the_meters_truth_is_what_the_link_carries_in_data_bytes() {
     assert_eq!(at(&r, 8_000), (1514.0 * share) as u64);
 }
 
+/// A trace of an opportunity a millisecond but none for 3.5 s from 30 s
+/// of it (35 s of the run, its time 0 at the stream's start): the gap's
+/// ends are a drop and a rise of the seed's available upload, and the
+/// seed's truth is 0 at exactly the samples asked from 1 s into it to its
+/// end. Those of them in the seed meter's window with a reading are the
+/// outage share's and its readings', apart from the meter's ratios, which
+/// take the window's others with a reading; the row writes the share and
+/// the readings' quantiles, and the tracking of both changes.
+#[test]
+fn an_outage_on_a_trace_is_scored_apart_from_the_meters_ratios() {
+    let ms = Duration::from_millis;
+    let trace = TraceFile::new(
+        "outage",
+        (1..=40_000).filter(|ms| !(30_001..33_500).contains(ms)),
+    );
+    let mut c = collapse_case(2, 10, 40);
+    c.links = vec![Some(trace.spec()), None, None];
+    let r = truth_run(
+        "an_outage_on_a_trace_is_scored_apart_from_the_meters_ratios",
+        &c,
+        false,
+    );
+    assert_eq!(
+        r.upload_changes(0),
+        [(ms(35_000), true), (ms(38_500), false)]
+    );
+    let (from, to) = r.seed_meter_window(0).unwrap();
+    let (mut read, mut zero, mut over) = (0, 0, Vec::new());
+    for m in &r.hosts[0].runner.meter {
+        let truth = r.upload_cap_at(0, m.asked).unwrap();
+        let outage = m.asked >= ms(36_000) && m.asked < ms(38_500);
+        assert_eq!(truth == 0, outage, "truth {truth} asked at {:?}", m.asked);
+        zero += usize::from(outage);
+        if m.t >= from && m.t <= to && m.capacity > 0 {
+            read += 1;
+            if outage {
+                over.push(m.capacity);
+            }
+        }
+    }
+    assert!(zero >= 2, "{zero} samples asked over the outage");
+    let (share, readings) = r.seed_outages(0).unwrap();
+    assert_eq!(readings, over);
+    assert_eq!(share, over.len() as f64 / read as f64);
+    assert_eq!(r.seed_meter(0).0.len() + over.len(), read);
+    let row: serde_json::Value =
+        serde_json::from_str(&r.row("an_outage_on_a_trace", None)).unwrap();
+    assert_eq!(row["meter_seed_outage_share"].as_f64(), Some(share));
+    over.sort_unstable();
+    for p in [50, 90] {
+        let field = format!("meter_seed_outage_over_bps_p{p}");
+        assert_eq!(
+            row.get(&field).and_then(|v| v.as_u64()),
+            strims_base::stats::sketch::percentile(&over, p),
+            "{field}"
+        );
+    }
+    let tracked: Vec<(Duration, bool)> = r.tracking(&[0]).iter().map(|t| (t.at, t.drop)).collect();
+    assert_eq!(tracked, [(ms(35_000), true), (ms(38_500), false)]);
+    assert_eq!(row["meter_off_drop_n_seeds"].as_u64(), Some(1));
+    assert_eq!(row["meter_off_rise_n_seeds"].as_u64(), Some(1));
+}
+
 /// A saturated seed's share of its link, measured where its link carried
 /// its messages' first transmissions over its near-saturated windows, is
 /// at most a full message's as the framing and TCP's headers give it

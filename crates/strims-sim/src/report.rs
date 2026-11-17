@@ -1100,8 +1100,9 @@ impl Report {
     /// before `t` (time since the start), in its meter's units
     /// (`upload_truth`), from its meter samples and its competing uploads'
     /// log; `None` with neither a site nor a rate limit, and 0 while its
-    /// link carries nothing for it (an outage), which the tables keep and
-    /// the meter's ratios leave out ([`Report::meter_series`]).
+    /// link carries nothing for it (an outage), which the tables keep, the
+    /// meter's ratios leave out ([`Report::meter_series`]) and the seed's
+    /// outage readings take ([`Report::seed_outages`]).
     pub fn upload_cap_at(&self, h: HostIx, t: std::time::Duration) -> Option<u64> {
         let spec = self.scenario.hosts.get(h)?;
         let samples = self.hosts.get(h).map_or(&[][..], |r| &r.runner.meter[..]);
@@ -1124,7 +1125,8 @@ impl Report {
     /// sample, the capacity the relay busy-time reading
     /// ([`MeterSample::capacity`](crate::stats::MeterSample::capacity)), a
     /// seed's too. A sample whose truth is 0 (an outage) has no ratio and
-    /// is left out, as every sample is without a cap.
+    /// is left out, as every sample is without a cap: the seed's are
+    /// [`seed_outages`](Report::seed_outages)'.
     pub fn meter_readings(&self, h: HostIx) -> Vec<(f64, f64)> {
         self.meter_series(h)
             .into_iter()
@@ -1193,6 +1195,38 @@ impl Report {
                 .collect()
         });
         (capacity, budget)
+    }
+
+    /// Swarm `swarm`'s seed meter over its outages, the row's
+    /// `meter_seed_outage_share` and `meter_seed_outage_over_bps_p*`: of
+    /// the seed's samples in its window
+    /// ([`seed_meter_window`](Report::seed_meter_window)) that have a
+    /// reading (a capacity above 0, those
+    /// [`seed_meter`](Report::seed_meter)'s ratios take) and a truth
+    /// ([`upload_cap_at`](Report::upload_cap_at)), the share whose truth is
+    /// 0, a link that carries nothing for it, where the ratios have none;
+    /// and the meter's capacity at each of those, in bytes per second, all
+    /// of it an over-read. `None` without a window or such a sample there.
+    pub fn seed_outages(&self, swarm: usize) -> Option<(f64, Vec<u64>)> {
+        let spec = self.scenario.swarms.get(swarm)?;
+        let (from, to) = self.seed_meter_window(swarm)?;
+        let (mut with, mut over) = (0usize, Vec::new());
+        for m in self
+            .hosts
+            .get(spec.seed)?
+            .runner
+            .meter
+            .iter()
+            .filter(|m| m.t >= from && m.t <= to && m.capacity > 0)
+        {
+            match self.upload_cap_at(spec.seed, m.asked) {
+                Some(0) => over.push(m.capacity),
+                Some(_) => {}
+                None => continue,
+            }
+            with += 1;
+        }
+        (with > 0).then(|| (over.len() as f64 / with as f64, over))
     }
 
     /// The meter's capacity ÷ what the host could upload at each of
@@ -1668,6 +1702,34 @@ pub(crate) fn available(
     let cross = competing_before(competing, t) - competing_before(competing, f);
     let cross = cross * framing.message(crate::wan::CROSS_WIRE, 2) as u64 / w;
     carried.saturating_sub(cross)
+}
+
+/// Host `spec`'s outages that overlap `(from, to)` (times since the
+/// start), in time order: the gaps of its capacity schedule
+/// ([`HostSpec::up_capacity`], `Capacity::gaps`) longer than
+/// [`TRUTH_WINDOW`], over which its truth falls to 0, each from the
+/// opportunity before it to the one after (from the start, for one before
+/// it). None without a schedule.
+///
+/// [`HostSpec::up_capacity`]: crate::spec::HostSpec::up_capacity
+pub(crate) fn outages(
+    spec: &crate::spec::HostSpec,
+    from: std::time::Duration,
+    to: std::time::Duration,
+) -> Vec<(std::time::Duration, std::time::Duration)> {
+    let Some(c) = &spec.up_capacity else {
+        return Vec::new();
+    };
+    let since =
+        |t: strims_base::time::Time| (t - crate::world::epoch()).to_std().unwrap_or_default();
+    c.gaps(
+        crate::wan::sim_time(from),
+        crate::wan::sim_time(to),
+        TRUTH_WINDOW.into(),
+    )
+    .into_iter()
+    .map(|(a, b)| (since(a), since(b)))
+    .collect()
 }
 
 /// What an uplink of `rate` bytes per second with `steps` carries over

@@ -860,8 +860,24 @@ sims = ["strims-sim"]
 type = "num"
 params = { p = ["10", "50", "90"] }
 consts.strims-sim = ["p"]
-description = "The first swarm's seed's upload meter: the p10, p50 and p90 (`meter_seed_p10`, `meter_seed_p50`, `meter_seed_p90`) of its capacity (the relay busy-time reading that admission and shedding take, `PushStats::upload_capacity`) over what the seed could upload (the meter's truth, `Report::upload_cap_at`: see `meter_bucket_seeds`), at each of its samples from the end of the startup phase (`STARTUP_SECS` after the stream's first write, vocab.toml's `start` horizon) to the stream's last write. Left out without a sample there (a stream no longer than its startup). A sample whose truth is 0 (an outage) is left out (`meter_samples` keeps it)."
+description = "The first swarm's seed's upload meter: the p10, p50 and p90 (`meter_seed_p10`, `meter_seed_p50`, `meter_seed_p90`) of its capacity (the relay busy-time reading that admission and shedding take, `PushStats::upload_capacity`) over what the seed could upload (the meter's truth, `Report::upload_cap_at`: see `meter_bucket_seeds`), at each of its samples from the end of the startup phase (`STARTUP_SECS` after the stream's first write, vocab.toml's `start` horizon) to the stream's last write. Left out without a sample there (a stream no longer than its startup). A sample whose truth is 0 (an outage) has no ratio and is left out (`meter_samples` keeps it); `meter_seed_outage_share` and `meter_seed_outage_over_bps_p{p}` score it."
 notes.strims-sim = "Each sample one with a capacity (`Report::seed_meter`)."
+
+[rows.meter_seed_outage_share]
+sims = ["strims-sim"]
+type = "num"
+unit = "fraction"
+description = "Of the first swarm's seed's meter samples in `meter_seed_p*`'s window (from the end of the startup phase to the stream's last write) that have a reading (a capacity above 0, the samples `meter_seed_p*` takes) and a truth (`Report::upload_cap_at`), the share whose truth is 0: an outage, a second over which its link carried nothing for it (a capacity schedule's gap of more than a second, or a competing upload that took the whole link), where `meter_seed_p*` has no ratio and leaves the sample out. 0 without one. Left out without such a sample."
+notes.strims-sim = "`Report::seed_outages`."
+
+[rows."meter_seed_outage_over_bps_p{p}"]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes/s"
+params = { p = ["50", "90"] }
+consts.strims-sim = ["p"]
+description = "The p50 and p90 (`meter_seed_outage_over_bps_p50`, `meter_seed_outage_over_bps_p90`) of the first swarm's seed's upload meter at its samples whose truth is 0 (`meter_seed_outage_share`'s, each with a reading): its capacity (the relay busy-time reading, `PushStats::upload_capacity`) in bytes per second, all of it an over-read of a link that carried nothing for the seed. A sample without a reading (a capacity of 0, which admission and shedding take as none) isn't among them, as `meter_seed_p*` leaves it out. Left out without such a sample."
+notes.strims-sim = "`Report::seed_outages`. A told seed (`STRIMS_SIM_KNOWN_UPLINK`) is told 0 there, which the node takes as no capacity known, so its meter measures."
 
 [rows."meter_budget_seed_p{p}"]
 sims = ["strims-sim"]
@@ -873,7 +889,7 @@ description = "The first swarm's seed's budget reading: the capacity its latest 
 [rows.meter_bucket_seeds]
 sims = ["strims-sim"]
 type = "nums"
-description = "**meter readings**: the upload meter's capacity, the relay busy-time reading that admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), ÷ the meter's truth (`Report::upload_cap_at`). They are the seed's quantiles `meter_seed_p*`, the populations' `meter_accepting_p*`, `meter_delivering_p*` and `meter_others_p*`, their median per bucket over the seeds' samples (`meter_bucket_seeds`) and the populations' (`meter_bucket_accepting`, `meter_bucket_delivering`, `meter_bucket_others`), and how the meter tracked changes (`off_{change}_{role}`). The meter's truth is what the host could upload over the second before the sample, in the meter's units: the data bytes its runner writes (`UploadInfo::rate`'s, its channel payloads). It is what the host's uplink carries over that second (its rate's mean, its steps' from their times; with a capacity schedule, its opportunities in that second), less what its link charged its competing uploads in it, times the host's share of its link in channel bytes (`Report::own_share`, a property of its link, its transports and vnic), and at most its rate limit. That share is the product of two ratios, each over the host's near-saturated sample windows so far (those whose own charge is at least `NEAR_SATURATED`, 0.8, of what its link could carry for it): the bytes its transports took of its messages over what its link charged their first transmissions as they went to it (resends, pure acknowledgements and competing uploads apart), or a full message's before any such window (a TCP segment of two full packets, or a data channel's full datagram, at its framing); and its runner's channel bytes over what it handed vnic (1 before any such window)."
+description = "**meter readings**: the upload meter's capacity, the relay busy-time reading that admission and shedding take (`PushStats::upload_capacity`, `MeterSample::capacity`), ÷ the meter's truth (`Report::upload_cap_at`). They are the seed's quantiles `meter_seed_p*`, the populations' `meter_accepting_p*`, `meter_delivering_p*` and `meter_others_p*`, their median per bucket over the seeds' samples (`meter_bucket_seeds`) and the populations' (`meter_bucket_accepting`, `meter_bucket_delivering`, `meter_bucket_others`), and how the meter tracked changes (`meter_off_{change}_{role}`). The meter's truth is what the host could upload over the second before the sample, in the meter's units: the data bytes its runner writes (`UploadInfo::rate`'s, its channel payloads). It is what the host's uplink carries over that second (its rate's mean, its steps' from their times; with a capacity schedule, its opportunities in that second), less what its link charged its competing uploads in it, times the host's share of its link in channel bytes (`Report::own_share`, a property of its link, its transports and vnic), and at most its rate limit. That share is the product of two ratios, each over the host's near-saturated sample windows so far (those whose own charge is at least `NEAR_SATURATED`, 0.8, of what its link could carry for it): the bytes its transports took of its messages over what its link charged their first transmissions as they went to it (resends, pure acknowledgements and competing uploads apart), or a full message's before any such window (a TCP segment of two full packets, or a data channel's full datagram, at its framing); and its runner's channel bytes over what it handed vnic (1 before any such window)."
 
 [rows.msgs_per_payload]
 sims = ["strims-sim"]
@@ -886,17 +902,17 @@ type = "int"
 params = { role = ["seeds"] }
 description = "The swarms' seeds (`n_seeds`, `Report::seeds`); the populations' viewers are `n_{pop}`."
 
-[rows."off_{change}_{role}"]
+[rows."meter_off_{change}_{role}"]
 sims = ["strims-sim"]
 type = "nums"
 params = { change = ["drop", "rise"], role = ["seeds", "accepting", "delivering"] }
-description = "How the upload meter tracked each change of the host's available upload (a step of its uplink's rate, a competing upload's start or stop) while a swarm streamed, over the hosts of role `role` (`seeds`, the swarms' seeds; `accepting` and `delivering`, the first swarm's honest viewers of each population, `meter_{pop}_p{p}`'s): the share of the meter's samples from the change to the next that read more than TRACK_BAND off the uplink, its median and its largest over the drops (`off_drop_seeds`, ...) and over the rises (`off_rise_seeds`, ...) (Report::tracking); left out where the role's hosts had no change."
+description = "How the upload meter tracked each change of the host's available upload while a swarm streamed: a step of its uplink's rate, a competing upload's start or stop, and an outage's start and end (a gap of its capacity schedule longer than a second, over which its truth falls to 0: a drop at the last delivery opportunity before the gap, a rise at the first after). Over the hosts of role `role` (`seeds`, the swarms' seeds; `accepting` and `delivering`, the first swarm's honest viewers of each population, `meter_{pop}_p{p}`'s), of the meter's samples from the change to the next, the share that read more than TRACK_BAND off the truth (`Report::upload_cap_at`), every sample whose truth was 0 counting off, as every sample without a reading (a capacity of 0) does, whatever the truth: a meter without a reading hasn't followed the change, whichever way it went. Its median and its largest over the drops (`meter_off_drop_seeds`, ...) and over the rises (`meter_off_rise_seeds`, ...) (Report::tracking). Left out where the role's hosts had no change."
 
-[rows."off_{change}_n_{role}"]
+[rows."meter_off_{change}_n_{role}"]
 sims = ["strims-sim"]
 type = "int"
 params = { change = ["drop", "rise"], role = ["seeds", "accepting", "delivering"] }
-description = "The changes of the available upload that `off_{change}_{role}` measured at the hosts of role `role`, drops (`off_drop_n_seeds`, ...) and rises (`off_rise_n_seeds`, ...) (Report::tracking); left out where they had none."
+description = "The changes of the available upload that `meter_off_{change}_{role}` measured at the hosts of role `role`, those with a sample it judged before the next: drops (`meter_off_drop_n_seeds`, ...) and rises (`meter_off_rise_n_seeds`, ...) (Report::tracking). Left out where they had none."
 
 [rows."ovh_{pop}_p{p}"]
 sims = ["strims-sim"]
@@ -1230,11 +1246,11 @@ type = "num"
 unit = "per minute"
 description = "An adaptive seed's copies changes per minute of stream: consecutive seed samples of the first swarm, from its start to its stop, whose copies differ."
 
-[rows.seed_drop_p99_ms]
+[rows.seed_drop_lag_p99_ms]
 sims = ["strims-sim"]
 type = "int"
 unit = "ms"
-description = "The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after each drop of its available upload (Report::lag_after_changes); with tracking only."
+description = "The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after each drop of its available upload, an outage's start among them (`meter_off_{change}_{role}`'s changes; Report::lag_after_changes); with tracking only."
 
 [rows.seed_first_wave]
 sims = ["strims-sim"]
@@ -1281,11 +1297,11 @@ unit = "fraction"
 description = "Of the chunks the first swarm's seed sent, the share that answered requests: chunks sent less pushed, over chunks sent (its scheduler's counters)."
 notes.strims-sim = "Over every incarnation of the seed (`Report::seed_pull_share`); left out when it sent none."
 
-[rows.seed_rise_p99_ms]
+[rows.seed_rise_lag_p99_ms]
 sims = ["strims-sim"]
 type = "int"
 unit = "ms"
-description = "The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after each rise of its available upload (Report::lag_after_changes); with tracking only."
+description = "The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after each rise of its available upload, an outage's end among them (`meter_off_{change}_{role}`'s changes; Report::lag_after_changes); with tracking only."
 
 [rows.seed_upload_share]
 sims = ["strims-sim"]
@@ -1942,6 +1958,36 @@ retired = ["strims-sim"]
 type = "int"
 params = { change = ["drop", "rise"] }
 description = "The changes of the swarms' seeds' and the forwarders' available upload that `off_{change}` measured, drops (`off_drop_n`) and rises (`off_rise_n`)."
+
+[rows."off_{change}_{role}"]
+sims = []
+retired = ["strims-sim"]
+type = "nums"
+params = { change = ["drop", "rise"], role = ["seeds", "accepting", "delivering"] }
+description = "How the upload meter tracked each change of the host's available upload (a step of its uplink's rate, a competing upload's start or stop) while a swarm streamed, over the hosts of role `role` (`seeds`, the swarms' seeds; `accepting` and `delivering`, the first swarm's honest viewers of each population): the share of the meter's samples from the change to the next that read more than TRACK_BAND off the uplink, every sample whose truth was 0 counting off, its median and its largest over the drops (`off_drop_seeds`, ...) and over the rises (`off_rise_seeds`, ...) (Report::tracking); left out where the role's hosts had no change. `meter_off_{change}_{role}` took its place, with a capacity schedule's outages among the changes."
+
+[rows."off_{change}_n_{role}"]
+sims = []
+retired = ["strims-sim"]
+type = "int"
+params = { change = ["drop", "rise"], role = ["seeds", "accepting", "delivering"] }
+description = "The changes of the available upload that `off_{change}_{role}` measured at the hosts of role `role`, drops (`off_drop_n_seeds`, ...) and rises (`off_rise_n_seeds`, ...) (Report::tracking); left out where they had none. `meter_off_{change}_n_{role}` took its place."
+
+[rows.seed_drop_p99_ms]
+sims = []
+retired = ["strims-sim"]
+replaced_by = "seed_drop_lag_p99_ms"
+type = "int"
+unit = "ms"
+description = "The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after each drop of its available upload (Report::lag_after_changes), a capacity schedule's outages no change; with tracking only."
+
+[rows.seed_rise_p99_ms]
+sims = []
+retired = ["strims-sim"]
+replaced_by = "seed_rise_lag_p99_ms"
+type = "int"
+unit = "ms"
+description = "The lag p99 in ms of the frames the seed wrote in the AFTER_CHANGE after each rise of its available upload (Report::lag_after_changes), a capacity schedule's outages no change; with tracking only."
 
 [rows.ovh_leaf_p50]
 sims = []
