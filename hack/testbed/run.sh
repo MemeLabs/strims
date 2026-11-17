@@ -259,10 +259,7 @@
 #                          qdisc show`'s JSON, each qdisc with its dev.
 #                          hack/testbed/tcstats.py and strims-sim's testbed
 #                          module read it, finding the modem's 10: on eth0
-#                          or, with slots, on ifbm. A checkout from before
-#                          tcstats.py, whose bench.py, twin.py and
-#                          hack/capture/analyze.py read tc's text, finds no
-#                          queue in it and says nothing
+#                          or, with slots, on ifbm
 #   ss-0.log               the seed's sockets every SS_EVERY (sssample's:
 #                          `ss -tin state established`'s text)
 #   tcsample-<i>.err, sssample-0.err

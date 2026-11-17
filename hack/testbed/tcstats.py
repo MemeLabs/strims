@@ -2,7 +2,8 @@
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
 """tc's qdisc statistics as run.sh records them, for the tools that read a
-testbed run (hack/testbed/bench.py and twin.py, hack/capture/analyze.py).
+testbed run (hack/testbed/bench.py; strims-sim's testbed module reads them
+by the same rules).
 
 run.sh's tc-<i>.log holds a sample a line, `<unix ms> <qdiscs>`: every
 device's qdiscs as `tc -s -j qdisc show` prints them, each with its dev.
