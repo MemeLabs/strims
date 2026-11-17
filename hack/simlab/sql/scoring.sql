@@ -1294,6 +1294,15 @@ CREATE OR REPLACE MACRO twin_window_of(jobs, lo_s := 10, hi_s := -1) AS TABLE
 --                       bytes; one whose node lines don't record them
 --                       (meter_samples' channel_bytes empty) takes S_c =
 --                       1, and `basis` says so
+--   truth_bps           that truth itself, in channel bytes a second: the
+--                       mean over the seed's meter samples in the window
+--                       that have one (avail_bps), an outage's 0 among
+--                       them: as many as the seed took there, so a seed
+--                       whose first viewer arrives past the window's start
+--                       (a twin's trickle) averages fewer than its
+--                       seconds; a testbed run's whose node lines don't
+--                       record its channel bytes reads high by 1 / S_c,
+--                       and `basis` says so
 --   seed_drops_s        packets the seed's uplink queue dropped a second
 --   seed_pps            packets the seed's uplink carried a second, pure
 --                       ACKs in
@@ -1428,6 +1437,7 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 10, hi_s := -1, full_packet :
     meter AS (
         SELECT k, src, sketch_quantiles(capacity_bps / truth_bps, [10, 50, 90]) AS q
         FROM truth WHERE capacity_bps > 0 AND truth_bps > 0 GROUP BY ALL),
+    tr AS (SELECT k, src, avg(truth_bps) AS truth_bps FROM truth GROUP BY ALL),
     -- The runs whose seed's every sample records its channel bytes.
     counted AS (SELECT k, src, true AS all_counted FROM channel_counted_of(jobs) WHERE counted = samples),
     competing AS (
@@ -1496,17 +1506,18 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 10, hi_s := -1, full_packet :
     wide AS (
         SELECT j.k, j.src, j.sim, j.cell, j.seed, lags.over_target_s::DOUBLE AS over_target_s,
                p99.lag_p99_ms::DOUBLE AS lag_p99_ms, sec.* EXCLUDE (k, src, n), wire.* EXCLUDE (k, src, secs),
-               meter.q[1] AS meter_p10, meter.q[2] AS meter_p50, meter.q[3] AS meter_p90,
+               meter.q[1] AS meter_p10, meter.q[2] AS meter_p50, meter.q[3] AS meter_p90, tr.truth_bps,
                comp.competitor_share, comp.competitor_charged, nb.seed_wire_per_written,
                ms.* EXCLUDE (k, src), q.* EXCLUDE (k, src), ps.* EXCLUDE (k, src), pr.viewer_requests_s,
                pr.seed_requests_in_s, counted.all_counted IS NULL AS sc_one
         FROM j LEFT JOIN lags USING (k, src) LEFT JOIN p99 USING (k, src) LEFT JOIN sec USING (k, src)
-        LEFT JOIN wire USING (k, src) LEFT JOIN meter USING (k, src) LEFT JOIN comp USING (k, src)
+        LEFT JOIN wire USING (k, src) LEFT JOIN meter USING (k, src) LEFT JOIN tr USING (k, src)
+        LEFT JOIN comp USING (k, src)
         LEFT JOIN nb USING (k, src) LEFT JOIN ms USING (k, src) LEFT JOIN q USING (k, src)
         LEFT JOIN ps USING (k, src) LEFT JOIN pr USING (k, src) LEFT JOIN counted USING (k, src))
     SELECT k, src, sim, cell, seed, measure, value::DOUBLE AS value,
-           CASE WHEN sim = 'testbed' AND measure LIKE 'meter_p%' AND sc_one THEN 'truth with S_c = 1 (no channel_bytes)' END
-               AS basis
+           CASE WHEN sim = 'testbed' AND (measure LIKE 'meter_p%' OR measure = 'truth_bps') AND sc_one
+                THEN 'truth with S_c = 1 (no channel_bytes)' END AS basis
     FROM (UNPIVOT wide ON COLUMNS(* EXCLUDE (k, src, sim, cell, seed, sc_one)) INTO NAME measure VALUE value)
     WHERE value IS NOT NULL;
 
@@ -1564,8 +1575,9 @@ CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
 -- b_quantile (the cells' mean). How well the twin follows the testbed
 -- across cells is the fidelity a model change is judged by. `caveat`
 -- flags a fit whose testbed runs took something as given (their rows'
--- `basis`, twin_runs_of's: a meter reading's, meter_p*, over a truth that
--- takes its channel share as 1), saying how many of them did.
+-- `basis`, twin_runs_of's: a truth that takes its channel share as 1, the
+-- truth's own, truth_bps, and a meter reading's over it, meter_p*), saying
+-- how many of them did.
 CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
     WITH a AS (SELECT unnest(a_rows, recursive := true)),
     b AS (SELECT unnest(b_rows, recursive := true)),

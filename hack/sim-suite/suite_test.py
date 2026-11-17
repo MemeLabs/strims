@@ -240,14 +240,16 @@ class Arithmetic(unittest.TestCase):
 
     @staticmethod
     def twin_lake(path):
-        """A lake of three runs of one cell (SECS 40, recording 10 s past
+        """A lake of four runs of one cell (SECS 40, recording 10 s past
         it, as a twin does): two testbed runs, `tb1` whose seed's meter
         samples record its channel bytes and `tb0` whose don't, and their
-        twin `tw`. Each seed's meter reads its truth at 15, 25 and 35 s,
-        and 0.003 of it at 45 s, past the stream; each viewer lags 100 ms
-        each second to 40 s, its lag carried after."""
+        twins `tw`, which records them, and `tw0`, which doesn't (a twin
+        takes S_c as it measures it, whatever it records). Each seed's
+        meter reads its truth at 15, 25 and 35 s, and 0.003 of it at 45 s,
+        past the stream; each viewer lags 100 ms each second to 40 s, its
+        lag carried after."""
         runs = [("tb1", "testbed/x", "testbed", True), ("tb0", "testbed/y", "testbed", False),
-                ("tw", "testbed/x-twin", "strims-sim", True)]
+                ("tw", "testbed/x-twin", "strims-sim", True), ("tw0", "testbed/y-twin", "strims-sim", False)]
         jobs = ", ".join(f"('{k}', '{src}', '{sim}', 100, MAP {{'STRIMS_SIM_CAL_SECS': '40'}})"
                          for k, src, sim, _ in runs)
         meter = ", ".join(f"('{k}', '{src}', 'seed', {t}, {3 if t > 40000 else 1000}, 1000, "
@@ -289,15 +291,15 @@ class Arithmetic(unittest.TestCase):
     def test_a_testbed_runs_meter_readings_say_s_c_1_only_without_its_channel_bytes(self):
         """twin_runs_of labels a testbed run's meter_p* rows `basis` only
         where its seed's samples lack channel_bytes (channel_counted_of):
-        not a run that records them, nor a twin."""
+        not a run that records them, nor a twin, one without them too."""
         with tempfile.TemporaryDirectory() as tmp:
             side = self.twin_lake(Path(tmp) / "twin.duckdb")
             got = {(r["k"], r["measure"]): r["basis"]
                    for r in scored(f"FROM twin_runs_of({side}) WHERE measure LIKE 'meter_p%';")}
         scoring.SCORE_DB = self.db
-        self.assertEqual(sorted({k for k, _ in got}), ["tb0", "tb1", "tw"])
+        self.assertEqual(sorted({k for k, _ in got}), ["tb0", "tb1", "tw", "tw0"])
         self.assertEqual({k: b for (k, _), b in got.items()},
-                         {"tb0": "truth with S_c = 1 (no channel_bytes)", "tb1": None, "tw": None})
+                         {"tb0": "truth with S_c = 1 (no channel_bytes)", "tb1": None, "tw": None, "tw0": None})
 
     def test_twin_fit_rows(self):
         """twin_fit_rows: a side's median is the mean of its middle two at an
@@ -371,6 +373,31 @@ class Arithmetic(unittest.TestCase):
             self.assertAlmostEqual(to_end[(k, "meter_p10")], 0.003, delta=0.001)
             # Carried 1000 ms a second from 40 s: past the target from 41 s.
             self.assertEqual((stream[(k, "over_target_s")], to_end[(k, "over_target_s")]), (0.0, 9.0))
+
+    def test_a_runs_truth_is_the_mean_of_its_seeds_truths_over_its_stream(self):
+        """twin_runs_of's truth_bps: the mean of the seed's meter samples'
+        truth (avail_bps) over the run's window, an outage's 0 among them,
+        a sample without a truth left out, and the sample past the stream
+        out; a testbed run whose seed's samples lack channel_bytes says S_c
+        = 1 in its basis, as its meter readings do. twin_fit_of scores it
+        testbed over twin, with that run's caveat."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "twin.duckdb"
+            side = self.twin_lake(path)
+            database(path, "UPDATE meter_samples SET avail_bps = CASE t_ms WHEN 15000 THEN 900 WHEN 25000 THEN 0 "
+                           "WHEN 35000 THEN NULL ELSE 5000 END WHERE k = 'tw';")
+            got = {r["k"]: (r["value"], r["basis"])
+                   for r in scored(f"FROM twin_runs_of({side}) WHERE measure = 'truth_bps';")}
+            twin = "[{'cell': 'c', 'seed': 1, 'k': 'tw'}]"
+            bed = "[{'cell': 'c', 'seed': 1, 'k': 'tb1'}, {'cell': 'c', 'seed': 2, 'k': 'tb0'}]"
+            fit = {r["cell"]: r for r in scored(f"FROM twin_fit_of({twin}, {bed}) WHERE measure = 'truth_bps';")}
+        scoring.SCORE_DB = self.db
+        self.assertEqual(got, {"tb1": (1000.0, None), "tb0": (1000.0, "truth with S_c = 1 (no channel_bytes)"),
+                               "tw": (450.0, None), "tw0": (1000.0, None)})
+        self.assertEqual((fit["c"]["a_runs"], fit["c"]["b_runs"], fit["c"]["a_median"], fit["c"]["b_median"]),
+                         (1, 2, 450.0, 1000.0))
+        self.assertAlmostEqual(fit["c"]["ratio"], 1000.0 / 450.0)
+        self.assertEqual(fit["c"]["caveat"], "the testbed's truth with S_c = 1 (no channel_bytes) in 1 of its 2 runs")
 
     def test_sums(self):
         """compensated_sum adds a list in its order as Python's sum() adds
