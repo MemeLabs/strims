@@ -336,10 +336,10 @@ slots, slots_by_region, model_wall_s, model_cost, past_runs, wall_s,
 cost, s3_cost), and its text and log on stderr. Once it's done a run
 logs what it took (launch to finish), what it cost, per 1,000 jobs and
 as instances booting, running jobs (their walls) and idle, and each
-region's mean boot, and adds that, its estimate, and each instance AWS
-interrupted (its id, type, zone, launch, notice and how it ended, which
-the run asks once more as it ends) as a line of
-target/sim-farm/costs.jsonl.
+region's mean boot, and adds that, when its controller began (`began`),
+its estimate, and each instance AWS interrupted (its id, type, zone,
+launch, notice and how it ended, which the run asks once more as it ends)
+as a line of target/sim-farm/costs.jsonl.
 
 A run's S3 use goes to target/sim-farm/s3.jsonl (S3_LEDGER) as it goes,
 priced by the bucket region's list prices (S3_TIER1 and the rest):
@@ -357,8 +357,10 @@ priced by the bucket region's list prices (S3_TIER1 and the rest):
   CLI_PART), and its bytes, out to the internet; a pull after the run
   adds its line to the same run.
 
-A run's end logs its S3 so far, and its costs.jsonl line holds it (`s3`);
-`status MATRIX` shows the S3 of each run of the matrix.
+A run's end logs its S3 since its controller started, and its costs.jsonl
+line holds it (`s3`): the matrices run again later share the run's name,
+and each run's line holds its own. `status MATRIX` shows the S3 of each
+run name of the matrix, every run of it.
 
 spend reads what the farm has spent from the matrices' farm.log files:
 each run once (each of its matrices' logs holds all of it), and its
@@ -1224,10 +1226,12 @@ def past_ratios(kind: str = "test") -> tuple[float, float, int]:
 
 def past_stored_per_job(kind: str = "test") -> float:
     """The bytes of tables a job of a run of `kind` put in S3, the median
-    over the last few runs that tell (costs.jsonl's s3 over their jobs)."""
+    over the last few finished runs that tell (costs.jsonl's s3 over their
+    jobs)."""
     per = [
         r["s3"]["stored"] / r["jobs"] for r in read_jsonl(COSTS)
-        if r.get("kind") == kind and r.get("jobs") and (r.get("s3") or {}).get("stored")
+        if r.get("kind") == kind and not r.get("interrupted") and r.get("jobs")
+        and (r.get("s3") or {}).get("stored")
     ][-5:]
     return statistics.median(per) if per else 0.0
 
@@ -2339,6 +2343,12 @@ class S3Use:
             a.update(b)
         self.stored += o.stored
 
+    def less(self, o: "S3Use") -> "S3Use":
+        """This use less `o`'s (a running total less an earlier one of it),
+        none of it below 0."""
+        return S3Use(self.region or o.region, self.tier1 - o.tier1, self.tier2 - o.tier2, self.up - o.up,
+                     self.down - o.down, max(0, self.stored - o.stored))
+
     def __bool__(self) -> bool:
         return any((self.tier1, self.tier2, self.up, self.down, self.stored))
 
@@ -2368,30 +2378,37 @@ def s3_record(run: str, source: str, use: S3Use, host: str | None = None) -> Non
     append_jsonl(S3_LEDGER, [{**rec, **use.rec()}])
 
 
-def s3_uses() -> dict[str, list[tuple[datetime.datetime, S3Use]]]:
+def s3_uses(since: datetime.datetime | None = None) -> dict[str, list[tuple[datetime.datetime, S3Use]]]:
     """Each run's S3 use from the ledger, (when, use) a line: the
     controller's and the pulls' lines as they are, and an instance's last
-    (largest) running total."""
+    (largest) running total. With `since`, only what the lines from then
+    on add: an instance's total less its largest before then (one a
+    controller adopted)."""
     by: dict[str, list] = collections.defaultdict(list)
     hosts: dict[tuple[str, str], tuple] = {}
+    before: dict[tuple[str, str], tuple] = {}
     for r in read_jsonl(S3_LEDGER):
         at = datetime.datetime.fromisoformat(r["at"]).astimezone()
         use = S3Use.of(r)
+        early = since is not None and at < since
         if r.get("source") == "host":
             key = (r["run"], r.get("host", ""))
             size = sum(use.tier1.values()) + sum(use.up.values())
-            if key not in hosts or size >= hosts[key][0]:
-                hosts[key] = (size, at, use)
-        else:
+            into = before if early else hosts
+            if key not in into or size >= into[key][0]:
+                into[key] = (size, at, use)
+        elif not early:
             by[r["run"]].append((at, use))
-    for (run, _), (_, at, use) in hosts.items():
-        by[run].append((at, use))
+    for key, (_, at, use) in hosts.items():
+        by[key[0]].append((at, use.less(before[key][2]) if key in before else use))
     return by
 
 
-def s3_total(run: str) -> S3Use:
+def s3_total(run: str, since: datetime.datetime | None = None) -> S3Use:
+    """Run `run`'s S3 use (s3_uses'): every run of its name's, or with
+    `since` what it used from then on."""
     total = S3Use()
-    for _, use in s3_uses().get(run, []):
+    for _, use in s3_uses(since).get(run, []):
         total.add(use)
     return total
 
@@ -2612,6 +2629,10 @@ class Run:
         self.name = run_name(matrices)
         self.args = args
         self.local = args.local
+        # When this controller started: its S3 is the ledger's from then
+        # (account), as a later run of the same matrices shares its name.
+        # The ledger stamps whole seconds, so a line of this second is its.
+        self.began = datetime.datetime.now(datetime.UTC).replace(microsecond=0)
         # The run's own files; each matrix's rows and log are in its state.
         self.state = FARM / self.name
         self.slot_mem_gib = max(m.slot_mem_gib for m in matrices)
@@ -4126,6 +4147,7 @@ class Run:
         rec = {
             "run": self.name,
             "kind": "testbed" if self.testbed is not None else "test",
+            "began": self.began.isoformat(timespec="seconds"),
             "at": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
             "regions": sorted(self.regions),
             "interrupted": interrupted,
@@ -4155,9 +4177,11 @@ class Run:
             "work_per_boot": self.args.work_per_boot,
             "estimate": self.estimated,
         }
-        # S3, from the ledger: this controller's and any earlier one's of
-        # the run, and its pulls so far (spend adds later ones).
-        s3 = s3_total(self.name)
+        # S3, from the ledger since this controller started: its own, its
+        # instances' (an adopted one's from then) and pulls meanwhile. An
+        # earlier run of its name (its matrices run before, or this run
+        # stopped and run again) has its own line; spend adds later pulls.
+        s3 = s3_total(self.name, since=self.began)
         if s3:
             rec["s3"] = {**s3.rec(), "cost": round(s3.cost(), 4)}
         append_jsonl(COSTS, [rec])

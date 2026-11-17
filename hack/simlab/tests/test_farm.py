@@ -7,7 +7,11 @@ unknown id or a failed quote is refused; the run's exit finishes it. A
 stand-in farm.py records what it's asked. The contract: this checkout's
 farm.py estimate --json, over a stand-in aws CLI and a farm of its own,
 prints one JSON object with Run.estimate's keys on stdout and on stderr
-the text it prints without --json, and quote reads them.
+the text it prints without --json, and quote reads them. The S3 ledger
+read by run: a run name's every use, or a run's since its controller
+started (a line of that second its), an adopted instance's running total
+less the largest it held before; a run's costs line holds its own, and a
+quote's stored bytes a job skip interrupted runs' lines.
 
 Live runs, this checkout's farm.py over a farm of its own (FARM): a run
 is live while a process holds its lock, which makes no state dir (a run
@@ -46,6 +50,7 @@ is refused. Stdlib alone:
 
 import collections
 import contextlib
+import datetime
 import importlib.util
 import io
 import json
@@ -815,6 +820,10 @@ class SharedKeys(unittest.TestCase):
         run.land(self.host, seq, {"reads": True})
         run.flush_rows()
 
+    def test_a_run_begins_on_a_whole_second_as_the_ledger_stamps_them(self):
+        run = self.run_of(self.ms)
+        self.assertEqual((run.began.microsecond, run.began.utcoffset()), (0, datetime.timedelta(0)))
+
     def test_one_run_of_a_key_gives_every_job_of_it_its_own_line(self):
         jobs = {m.name: m.jobs() for m in self.ms}
         every = [j for js in jobs.values() for j in js]
@@ -938,6 +947,98 @@ class SharedKeys(unittest.TestCase):
         run = self.run_of(ms, verify=0)
         self.assertEqual(len(run.items), 18)
         self.assertTrue(all(len(own) == 1 for own in run.owners.values()))
+
+
+class S3Ledger(unittest.TestCase):
+    """farm.py's S3 ledger read by run: a run name's every use, or what a
+    run used since its controller started (its costs.jsonl line's)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="simlab-farm-s3-")
+        self.addCleanup(tmp.cleanup)
+        self.ledger = Path(tmp.name) / "s3.jsonl"
+        patch = mock.patch.object(fp, "S3_LEDGER", self.ledger)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    @staticmethod
+    def when(at):
+        """2026-11-17 at `at` (HH:MM, or HH:MM:SS), UTC."""
+        return datetime.datetime.fromisoformat(f"2026-11-17T{at}{':00' if len(at) == 5 else ''}+00:00")
+
+    def line(self, at, source, posts, host=None, run="m1"):
+        rec = {"run": run, "at": self.when(at).isoformat(timespec="seconds"), "source": source,
+               "region": "us-west-1", "tier1": {"post": posts}, "tier2": {}, "up": {}, "down": {},
+               "stored": posts * 100}
+        if host is not None:
+            rec["host"] = host
+        fp.append_jsonl(self.ledger, [rec])
+
+    def posts(self, since=None, run="m1"):
+        use = fp.s3_total(run, since=None if since is None else self.when(since))
+        return use.tier1["post"], use.stored
+
+    def test_a_run_of_the_same_name_later_counts_only_its_own(self):
+        # A first run: its controller's line, one host's running totals and
+        # a pull after it; then the matrices run again, under the same name.
+        self.line("02:00", "controller", 1)
+        self.line("02:01", "host", 5, host="i-1")
+        self.line("02:02", "host", 9, host="i-1")
+        self.line("02:30", "pull", 2)
+        self.line("21:00", "controller", 1)
+        self.line("21:02", "host", 7, host="i-2")
+        self.line("21:03", "host", 4, run="m2", host="i-3")
+        self.assertEqual(self.posts(), (20, 2000))
+        self.assertEqual(self.posts(since="20:59"), (8, 800))
+        self.assertEqual(self.posts(since="20:59", run="m2"), (4, 400))
+
+    def test_a_line_of_the_since_second_counts(self):
+        # The ledger stamps whole seconds: a line of the second a run began
+        # is its, one of the second before isn't.
+        self.line("20:59:59", "controller", 1)
+        self.line("21:00:00", "controller", 2)
+        self.assertEqual(self.posts(since="21:00:00"), (2, 200))
+
+    def test_an_adopted_host_counts_what_it_added_since(self):
+        # A host the second controller adopted: its running total holds the
+        # first's flushes, which the first's window counts: its largest
+        # total before then (9, not its first or its last) is the first's.
+        self.line("02:01", "host", 5, host="i-1")
+        self.line("02:05", "host", 9, host="i-1")
+        self.line("02:06", "host", 8, host="i-1")
+        self.line("21:01", "host", 12, host="i-1")
+        self.assertEqual(self.posts(), (12, 1200))
+        self.assertEqual(self.posts(since="21:00"), (3, 300))
+        self.assertEqual(self.posts(since="01:00"), (12, 1200))
+
+    def test_a_runs_costs_line_holds_the_s3_since_it_began(self):
+        # An earlier run of the name, then this controller's, which began at
+        # 21:00:00 (a line of that second is its) with one host.
+        self.line("02:00", "controller", 1)
+        self.line("02:01", "host", 9, host="i-1")
+        self.line("21:00:00", "controller", 2)
+        self.line("21:02", "host", 7, host="i-2")
+        costs = self.ledger.with_name("costs.jsonl")
+        began = self.when("21:00:00")
+        launched = began.timestamp() + 30
+        host = fp.Host("i-2", "c7a.xlarge", "z1", fp.Spec(4, 4, 0, 4), 0.1, launched, state="ready", region="r1",
+                       ready_at=launched + 40, busy_s=60.0)
+        run = object.__new__(fp.Run)
+        run.__dict__.update(local=False, hosts=[host], testbed=object(), name="m1", began=began, regions={"r1": None},
+                            ran=1, peak_slots=1, args=mock.Mock(work_per_boot=2), estimated=None)
+        with mock.patch.object(fp, "COSTS", costs), mock.patch.object(fp, "log", lambda msg: None):
+            run.account(launched + 300, False)
+        rec = json.loads(costs.read_text())
+        self.assertEqual((rec["run"], rec["began"], rec["s3"]["tier1"], rec["s3"]["stored"]),
+                         ("m1", "2026-11-17T21:00:00+00:00", {"post": 9}, 900))
+
+    def test_past_stored_per_job_skips_interrupted_runs(self):
+        costs = self.ledger.with_name("costs.jsonl")
+        fp.append_jsonl(costs, [{"run": "m1", "kind": "testbed", "jobs": 10, "s3": {"stored": 1000}},
+                                {"run": "m2", "kind": "testbed", "jobs": 1, "interrupted": True,
+                                 "s3": {"stored": 1000}}])
+        with mock.patch.object(fp, "COSTS", costs):
+            self.assertEqual(fp.past_stored_per_job("testbed"), 100)
 
 
 class Contract(unittest.TestCase):
