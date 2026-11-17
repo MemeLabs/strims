@@ -34,12 +34,7 @@
 //! |---|---|
 //! | `t_ms`, `rel_ms` | the wall clock, and ms since the start |
 //! | `index`, `seed` | the node, and whether it seeds |
-//! | `bytes_written` | bytes the driver wrote to its links |
-//! | `upload_rate`, `busy_permille`, `capacity`, `queue_delay_ms` | the upload meter |
-//! | `path_delay_ms`, `path_queued_ms`, `path_latest_ms` | the queueing delay from vnic's path measure ([`strims_base::path::node_delays`]): the links' excess round trips, and their queued bytes over their delivery rates; and their latest round trips' excess ([`strims_base::path::latest_excess`]) |
-//! | `children`, `seed_budget`, `seed_window`, `seed_copies`, `seed_first_wave` | the push scheduler |
-//! | `frames`, `lag_p50_ms`, `lag_p99_ms`, `lag_max_ms` | at a viewer, the frames read in that second and their lag; of a media stream, the unit records read whole and their lag from their publish times |
-//! | `rtt_mean_ms` | the swarm's channels' round trips |
+//! | `frames`, `lag_p50_ms`, `lag_p99_ms`, `lag_max_ms` | at a viewer, the frames read in that second and their lag; of a media stream, the unit records read whole and their lag from their publish times, which no record holds |
 //! | `cpu_ms` | the driver's CPU time so far, `null` when it can't tell |
 //! | `transfers` | [`TransferSample`], peers by index |
 //! | `links` | every link: `peer` (its index, `null` for the relay), `kind`, `dialed`, and its path measure as of the latest echo (`null` before one): `rtt_ms`, `base_ms`, `recent_ms`, `in_flight`, `rate`, `queued`, `written_since`, `age_ms` |
@@ -55,7 +50,6 @@
 use std::cell::{Cell, RefCell};
 use std::future::Future;
 
-use strims_base::path;
 use strims_base::time::{Duration, Time};
 use strims_node_core::{
     HostId, LinkKind, Node, NodeMetrics, ParentLogEntry, PeerInfo, ReadError, SwarmId, SwarmKey,
@@ -526,24 +520,6 @@ impl Line<'_> {
     fn json(&self) -> String {
         let m = self.m;
         let index = |id: &HostId| self.ids.iter().find(|(x, _)| x == id).map(|&(_, i)| i);
-        let p = m
-            .runner
-            .swarms
-            .iter()
-            .find(|s| s.swarm == self.swarm)
-            .and_then(|s| s.push.clone())
-            .unwrap_or_default();
-        let rtts: Vec<String> = m
-            .runner
-            .peers
-            .iter()
-            .flat_map(|p| &p.channels)
-            .filter(|c| c.swarm == self.swarm)
-            .filter_map(|c| {
-                c.stats
-                    .map(|s| s.scheduler.rtt_mean.as_millis().to_string())
-            })
-            .collect();
         let transfers =
             TransferSample::of(m, self.swarm, index).map_or("null".to_owned(), |x| x.json());
         let ms = |d: Duration| d.as_millis();
@@ -569,38 +545,17 @@ impl Line<'_> {
                 ))
             })
             .collect();
-        let (path_delay, path_queued) =
-            path::node_delays(m.links.iter().filter_map(|l| l.path?.reading));
-        let path_latest = path::latest_excess(
-            m.links.iter().filter_map(|l| l.path?.reading),
-            self.now,
-            &mut Vec::new(),
-        );
         let lag = self.lag;
         format!(
-            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"bytes_written\":{},\"upload_rate\":{},\"busy_permille\":{},\"capacity\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"children\":{},\"seed_budget\":{},\"seed_window\":{},\"seed_copies\":{},\"seed_first_wave\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"rtt_mean_ms\":[{}],\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{},\"media\":{},\"rec\":{}}}",
+            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{},\"media\":{},\"rec\":{}}}",
             self.t_ms,
             self.t_ms as i64 - self.s.start_ms as i64,
             self.s.index,
             self.seed,
-            m.driver.bytes_written,
-            p.upload_rate,
-            p.upload_busy_permille,
-            p.upload_capacity,
-            opt(p.upload_queue_delay.map(|d| d.as_millis())),
-            opt(path_delay.map(ms)),
-            opt(path_queued.map(ms)),
-            opt(path_latest.map(ms)),
-            p.children,
-            p.seed_budget,
-            p.seed_window,
-            p.seed_copies,
-            p.seed_first_wave,
             lag.len(),
             pct(lag, 0.5),
             pct(lag, 0.99),
             lag.last().copied().unwrap_or(0),
-            rtts.join(","),
             opt(self.cpu_ms),
             links.join(","),
             self.tick_late,
