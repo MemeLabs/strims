@@ -43,8 +43,9 @@ cache's farm/ dir).
 A job whose own data won't fold fails alone (the store's FoldError). A
 fold that raises otherwise FOLD_TRIES times in a row has its batch's jobs
 folded one by one, those that raise again failing (counted, so a job that
-breaks every fold can't take host after host); where none folds, or a
-thread of the store dies, the store is broken (status.json's `broken`).
+breaks every fold can't take host after host); where BREAK_JOBS different
+jobs have failed alone with no fold going through between, or a thread of
+the store dies, the store is broken (status.json's `broken`).
 Its jobs waiting to fold go back (a `requeue` result: no attempt spent),
 as do the running ones (killed) and the queued ones; it tells the
 controller (sync's `ending`) and its note says why; and once the
@@ -160,8 +161,11 @@ IMDS_URL = "http://169.254.169.254"
 NOTICE_FINISH_S = 20
 NOTICE_ABORT_S = 5
 # How many times in a row a fold may fail before its jobs are folded one
-# by one, and the store breaks if none folds.
+# by one, those that fail again failing alone.
 FOLD_TRIES = 3
+# How many different jobs may fail alone with no fold between before the
+# store breaks: one is a job's fault, two the store's.
+BREAK_JOBS = 2
 # How long a worker whose store broke waits for the controller to take its
 # jobs back and for its flushes, before it shuts its host down.
 BROKEN_GRACE_S = 300
@@ -547,6 +551,8 @@ class Store:
 
     def folder(self) -> None:
         failures = 0
+        # The jobs that failed alone since a fold last went through.
+        failed_alone: set[str] = set()
         while not self.broken:
             with self.cv:
                 while not self.folds() and not self.want_rotate and not self.stopping:
@@ -558,6 +564,7 @@ class Store:
                 try:
                     self.fold(batch)
                     failures = 0
+                    failed_alone.clear()
                 except Exception as e:
                     # (A job's own data that won't fold raises FoldError,
                     # which fold fails that job for: this is the rest.)
@@ -567,13 +574,18 @@ class Store:
                         # A job that breaks every fold it's in fails alone,
                         # counted, so it can't take host after host: each
                         # of the batch's jobs is folded on its own, those
-                        # that raise again failing. Where none folds, or
-                        # the batch was one job (failed so), the store is
-                        # broken: it would hold its jobs, and the host's
-                        # next testbed run (which waits for the store),
-                        # while the host bills.
+                        # that raise again failing (one alone fails so).
+                        # Where BREAK_JOBS different jobs have failed alone
+                        # with nothing folding between, the store is the
+                        # fault, not they: broken, as it would hold its
+                        # jobs, and the host's next testbed run (which
+                        # waits for the store), while the host bills.
                         failures = 0
-                        if not self.fold_alone(batch):
+                        folded, failed = self.fold_alone(batch)
+                        if folded:
+                            failed_alone.clear()
+                        failed_alone.update(failed)
+                        if len(failed_alone) >= BREAK_JOBS:
                             self.break_down(batch)
                             return
                     with self.cv:
@@ -591,12 +603,12 @@ class Store:
                         self.cv.notify_all()
                 self.save()
 
-    def fold_alone(self, wids: list[str]) -> bool:
+    def fold_alone(self, wids: list[str]) -> tuple[bool, list[str]]:
         """Folds each of `wids` on its own, failing those that raise (a
         done result with no row and the error, as a failed job's: the
-        controller counts it); whether any folded. One job alone isn't
-        tried again: it fails."""
-        folded = False
+        controller counts it): whether any folded, and those that failed.
+        One job alone isn't tried again: it fails."""
+        folded, failed = False, []
         for w in wids:
             if len(wids) > 1:
                 try:
@@ -606,7 +618,8 @@ class Store:
                 except Exception as e:
                     self.error = f"fold: {e}"[-1000:]
             self.give_back([w], self.error, requeue=False)
-        return folded
+            failed.append(w)
+        return folded, failed
 
     def break_down(self, failed: list[str]) -> None:
         """The store broken: no more folds, every job waiting to fold given

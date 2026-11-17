@@ -1189,13 +1189,16 @@ class TestbedTables(unittest.TestCase):
             calls.append(list(wids))
             raise RuntimeError("disk full")
 
-        # One job a batch: j9 fails (counted), j8 behind it goes back.
-        root, store, done = self.broken_store(fold, ["j9", "j8"], batch=1)
-        self.assertEqual(calls, [["j8"]] * self.worker.FOLD_TRIES)
+        # One job a batch: j7 and j8 fail alone (counted), and with two
+        # different jobs failed and nothing folded the store breaks; j9
+        # behind them goes back.
+        root, store, done = self.broken_store(fold, ["j9", "j8", "j7"], batch=1)
+        self.assertEqual(calls, [["j7"]] * self.worker.FOLD_TRIES + [["j8"]] * self.worker.FOLD_TRIES)
         self.assertFalse(store.workers[0].is_alive())
         self.assertIn("disk full", store.broken)
-        self.assertEqual((done["j8"]["row"], done["j8"].get("requeue")), (None, None))
-        self.assertIn("disk full", done["j8"]["error"])
+        for j in ("j7", "j8"):
+            self.assertEqual((done[j]["row"], done[j].get("requeue")), (None, None))
+            self.assertIn("disk full", done[j]["error"])
         self.assertEqual((done["j9"]["row"], done["j9"].get("requeue")), (None, True))
         self.assertFalse(any((root / "fold").iterdir()))
         status = json.loads((root / "store" / "status.json").read_text())
@@ -1226,18 +1229,25 @@ class TestbedTables(unittest.TestCase):
             fp.Run.absorb(run, host, {**reply, "store": {**status, "broken": None}})
         run.lose.assert_not_called()
 
-    def test_a_job_that_breaks_every_fold_fails_alone(self):
+    def poison(self, batch):
         def fold(store, wids):
             if "jA" in wids:
                 raise RuntimeError("poison")
             for w in wids:
                 store.give_back([w], None, requeue=False)
 
-        _, store, done = self.broken_store(fold, ["jA", "jB"])
+        _, store, done = self.broken_store(fold, ["jA", "jB"], batch=batch)
         self.assertIsNone(store.broken)
         self.assertIn("poison", done["jA"]["error"])
         self.assertIsNone(done["jA"].get("requeue"))
         self.assertIsNotNone(done["jB"])
+
+    def test_a_job_that_breaks_every_fold_fails_alone(self):
+        self.poison(None)
+
+    def test_a_job_that_breaks_its_fold_alone_fails_alone(self):
+        # As a testbed host folds: one job a batch.
+        self.poison(1)
 
     def test_a_stored_runs_tables_are_the_folders_and_their_failure_fails_it(self):
         root = self.host_root()
