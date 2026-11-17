@@ -922,9 +922,30 @@ def test_run(binary: Path, test: str, env: dict[str, str], home: str) -> tuple[l
     }
 
 
+# What run.sh builds for itself where it isn't given (`${VAR:-...}`): with
+# cargo or gcc, which a host has neither of.
+HOST_BUILT = ("LINK_BIN", "TCSAMPLE_BIN", "SSSAMPLE_BIN")
+
+
+def bundle_lacks(tree: Path) -> list[str]:
+    """The HOST_BUILT artifacts bundle `tree`'s run.sh reads that the
+    bundle doesn't hold."""
+    try:
+        run = (tree / "hack" / "testbed" / "run.sh").read_text()
+    except OSError:
+        return []
+    return [v for v in HOST_BUILT if f"${{{v}:-" in run and not (tree / "artifacts" / v).exists()]
+
+
 def testbed_run(root: Path, job: dict, work: Path) -> tuple[list[str], dict[str, str]]:
-    """run.sh from the job's bundle, and its environment."""
+    """run.sh from the job's bundle, and its environment; refused (OSError:
+    the job fails before it runs) for a bundle without an artifact its
+    run.sh would build with a compiler the host hasn't."""
     tree = tree_of(root, job["bin"])
+    lacks = bundle_lacks(tree)
+    if lacks:
+        raise OSError(f"its bundle {job['bin']} lacks {', '.join(lacks)}, which its run.sh would build with a "
+                      "compiler a host hasn't: a farm.py that ships them must pack it")
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": os.environ.get("HOME", str(root)),

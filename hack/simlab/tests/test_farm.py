@@ -1084,6 +1084,29 @@ class TestbedTables(unittest.TestCase):
         (arts / "TABLES_BIN").chmod(0o755)
         return root
 
+    def test_a_bundle_is_named_by_what_farm_adds_and_refused_without_it(self):
+        # A farm.py that adds another set of artifacts names its bundles
+        # apart: it never takes one packed without them.
+        fp = load_farm_py()
+        m = mock.Mock(kind="testbed", commands=["cargo build"], artifacts={"NODE_BIN": "x"})
+        name = fp.Matrix.bin_name(m, "src")
+        with mock.patch.object(fp, "ADDED_ARTIFACTS", fp.ADDED_ARTIFACTS[:1]):
+            self.assertNotEqual(fp.Matrix.bin_name(m, "src"), name)
+        # A bundle whose run.sh would build a sampler, without it, fails its
+        # job before it runs.
+        tree = self.dir / "tree"
+        (tree / "hack" / "testbed").mkdir(parents=True)
+        (tree / "hack" / "testbed" / "run.sh").write_text(
+            'tcsample=${TCSAMPLE_BIN:-$root/target/testbed/tcsample}\nlink_bin=${LINK_BIN:-}\n')
+        (tree / "artifacts").mkdir()
+        (tree / "artifacts" / "LINK_BIN").write_text("")
+        self.assertEqual(self.worker.bundle_lacks(tree), ["TCSAMPLE_BIN"])
+        with mock.patch.object(self.worker, "tree_of", return_value=tree):
+            with self.assertRaisesRegex(OSError, "lacks TCSAMPLE_BIN"):
+                self.worker.testbed_run(self.dir, {"bin": "b.tar.gz", "env": {}}, self.dir / "work")
+        (tree / "artifacts" / "TCSAMPLE_BIN").write_text("")
+        self.assertEqual(self.worker.bundle_lacks(tree), [])
+
     def test_a_runs_tables_fold_as_its_cells_run_and_flush(self):
         root = self.host_root()
         out = root / "work" / "j1" / "out"

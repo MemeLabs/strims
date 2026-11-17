@@ -778,6 +778,12 @@ LINK_ARTIFACT = "$CARGO_TARGET_DIR/release/examples/testbed_link"
 # where they're not given and a host has none: built here, static, from
 # the arm's tree when it has their sources, as artifacts.
 SAMPLERS = {"TCSAMPLE_BIN": "tcsample", "SSSAMPLE_BIN": "sssample"}
+# The artifacts build_testbed adds to a bundle when the arm's tree has their
+# sources, by name and source: part of a bundle's name (Matrix.bin_name), so
+# a farm.py that adds another set names its bundles apart and never takes
+# one another packed without them.
+ADDED_ARTIFACTS = [["LINK_BIN", LINK_EXAMPLE],
+                   *([var, f"{TESTBED}/{name}.c"] for var, name in sorted(SAMPLERS.items()))]
 TESTBED_COLUMNS = ["wall_s:mean,max", "steal_pct:mean,max", "load_max:max", "node_lines_min:min"]
 # The keys only test matrices take.
 TEST_KEYS = {"package", "target", "test", "slot_mem_gib", "canary", "derive"}
@@ -1048,7 +1054,7 @@ class Matrix:
 
     def bin_name(self, source: str) -> str:
         if self.kind == "testbed":
-            key = json.dumps([source, self.commands, sorted(self.artifacts.items())])
+            key = json.dumps([source, self.commands, sorted(self.artifacts.items()), ADDED_ARTIFACTS])
             return f"testbed-{hashlib.sha256(key.encode()).hexdigest()[:12]}.tar.gz"
         return f"{self.package}-{self.target}-{source}"
 
