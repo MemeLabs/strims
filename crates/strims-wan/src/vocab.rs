@@ -143,7 +143,7 @@ until = "restart"
 horizon_s = 20
 
 [kinds.crash.notes]
-strims-sim = "A crash of a host that hasn't arrived yet, has departed, or is still down from an earlier crash is skipped and has no row; the trace names it (`Report::skipped_faults`). Runs written before skipped faults were left out have a row for each fault, skipped or not."
+strims-sim = "A crash of a host that hasn't arrived yet, has departed, or is still down from an earlier crash is skipped and has no row; the trace names it (`Report::skipped_faults`)."
 
 [kinds.restart]
 class = "scenario"
@@ -152,7 +152,7 @@ description = "The host's software starts again (`Fault::Restart`): a new node w
 node = "the host"
 
 [kinds.restart.notes]
-strims-sim = "A restart of a host that isn't down is skipped and has no row: a host not there (not yet arrived, or departed), one that never crashed, or one up again after an earlier restart. The trace names it (`Report::skipped_faults`). Runs written before skipped faults were left out have a row for each fault, skipped or not."
+strims-sim = "A restart of a host that isn't down is skipped and has no row: a host not there (not yet arrived, or departed), one that never crashed, or one up again after an earlier restart. The trace names it (`Report::skipped_faults`)."
 
 [kinds.latency]
 class = "scenario"
@@ -162,7 +162,7 @@ node = "the host, or the first group's first host"
 peer = "the second group's first host; -1 for every link of the node"
 value = "the one-way latency"
 unit = "ms"
-detail = "`both` when it sets both directions, `one-way` when it sets only the one from `node`'s group to `peer`'s; empty in runs written before the two were told apart, where it may be either"
+detail = "`both` when it sets both directions, `one-way` when it sets only the one from `node`'s group to `peer`'s"
 details = ["both", "one-way"]
 phase = "after_disruption"
 # latency-step's 150 ms more: the lag takes it at once, and a bump to
@@ -170,7 +170,7 @@ phase = "after_disruption"
 horizon_s = 15
 
 [kinds.latency.notes]
-strims-sim = "Between two groups of hosts, both ways (`Fault::Latency`, detail `both`), or only from the first group to the second (`Fault::LatencyFrom`, detail `one-way`); `node` and `peer` are the groups' first hosts. Without the WAN model, turmoil's links take one latency for both ways, so a `Fault::LatencyFrom` is skipped and has no row; the trace names it (`Report::skipped_faults`). In WAN mode the fault's latency replaces the paths' base latency, and jitter, loss and bandwidth still apply. Runs written before skipped faults were left out have a row for each fault, skipped or not."
+strims-sim = "Between two groups of hosts, both ways (`Fault::Latency`, detail `both`), or only from the first group to the second (`Fault::LatencyFrom`, detail `one-way`); `node` and `peer` are the groups' first hosts. Without the WAN model, turmoil's links take one latency for both ways, so a `Fault::LatencyFrom` is skipped and has no row; the trace names it (`Report::skipped_faults`). In WAN mode the fault's latency replaces the paths' base latency, and jitter, loss and bandwidth still apply."
 
 [kinds.pause_reading]
 class = "scenario"
@@ -240,7 +240,7 @@ phase = "after_departure"
 horizon_s = 45
 
 [kinds.depart.notes]
-strims-sim = "`Fault::Depart`. An abrupt departure is a crash that leaves the host cut off and stopped, and counts no restart. A host's second departure is skipped and has no row; the trace names it (`Report::skipped_faults`). Runs written before skipped faults were left out have a row for each fault, skipped or not."
+strims-sim = "`Fault::Depart`. An abrupt departure is a crash that leaves the host cut off and stopped, and counts no restart. A host's second departure is skipped and has no row; the trace names it (`Report::skipped_faults`)."
 
 [kinds.uplink_rate]
 class = "scenario"
@@ -717,8 +717,7 @@ pub enum Kind {
     /// - `node`: the host
     /// - strims-sim: A crash of a host that hasn't arrived yet, has departed,
     ///   or is still down from an earlier crash is skipped and has no row; the
-    ///   trace names it (`Report::skipped_faults`). Runs written before skipped
-    ///   faults were left out have a row for each fault, skipped or not.
+    ///   trace names it (`Report::skipped_faults`).
     Crash,
     /// The host's software starts again (`Fault::Restart`): a new node with the
     /// same profile key and a new host key, every partition between the host
@@ -728,8 +727,7 @@ pub enum Kind {
     /// - strims-sim: A restart of a host that isn't down is skipped and has no
     ///   row: a host not there (not yet arrived, or departed), one that never
     ///   crashed, or one up again after an earlier restart. The trace names it
-    ///   (`Report::skipped_faults`). Runs written before skipped faults were
-    ///   left out have a row for each fault, skipped or not.
+    ///   (`Report::skipped_faults`).
     Restart,
     /// A fixed one-way latency from then on.
     ///
@@ -737,9 +735,7 @@ pub enum Kind {
     /// - `peer`: the second group's first host; -1 for every link of the node
     /// - `value`: the one-way latency, ms
     /// - `detail`: `both` when it sets both directions, `one-way` when it sets
-    ///   only the one from `node`'s group to `peer`'s; empty in runs written
-    ///   before the two were told apart, where it may be either: `both`,
-    ///   `one-way`
+    ///   only the one from `node`'s group to `peer`'s: `both`, `one-way`
     /// - strims-sim: Between two groups of hosts, both ways (`Fault::Latency`,
     ///   detail `both`), or only from the first group to the second
     ///   (`Fault::LatencyFrom`, detail `one-way`); `node` and `peer` are the
@@ -747,8 +743,7 @@ pub enum Kind {
     ///   latency for both ways, so a `Fault::LatencyFrom` is skipped and has no
     ///   row; the trace names it (`Report::skipped_faults`). In WAN mode the
     ///   fault's latency replaces the paths' base latency, and jitter, loss and
-    ///   bandwidth still apply. Runs written before skipped faults were left
-    ///   out have a row for each fault, skipped or not.
+    ///   bandwidth still apply.
     Latency,
     /// The host's swarm readers stop reading (`Fault::PauseReading`).
     ///
@@ -788,8 +783,7 @@ pub enum Kind {
     /// - strims-sim: `Fault::Depart`. An abrupt departure is a crash that
     ///   leaves the host cut off and stopped, and counts no restart. A host's
     ///   second departure is skipped and has no row; the trace names it
-    ///   (`Report::skipped_faults`). Runs written before skipped faults were
-    ///   left out have a row for each fault, skipped or not.
+    ///   (`Report::skipped_faults`).
     Depart,
     /// The rate of a host's uplink from then on, a level: its starting rate at
     /// the run's start (`t_us` 0 or less, at or before the stream's start),
