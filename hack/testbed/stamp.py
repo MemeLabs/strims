@@ -2,9 +2,9 @@
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
 """The testbed's build stamps: which sources a testbed_node binary and a
-browser bundle (dist/wasm-testbed) were built from, so run.sh can refuse a
-bundle that may not speak the node's protocol (built from other sources,
-its links come up and no stream flows).
+browser bundle (dist/wasm-testbed) were built from. With them run.sh can
+refuse a bundle that may not speak the node's protocol: one built from
+other sources, whose links come up but no stream flows.
 
     stamp.py sources              the checkout's sources hash
     stamp.py write ARTIFACT ...   writes ARTIFACT.stamp beside each
@@ -12,29 +12,34 @@ its links come up and no stream flows).
                                   unless both carry one sources hash
 
 The sources hash covers what reaches the wire between the node and the
-page: every crate of this checkout in testbed_node's dependency closure
-(strims-sim's, its dev-dependencies with it) or the page's (strims-wasm
-with `e2e`, for wasm32), as `cargo metadata` resolves them, both transport
-ends (strims-node, strims-wasm) with them, but the simulator's own crates
-(SIMULATOR: strims-sim, strims-wan, turmoil), which testbed_node carries
-and no message crosses; each crate's directory whole but its tests/ and
-benches/ (its manifest, sources and build script, and what the build
-script reads there: strims-proto's proto/); testbed_node's own source
-(strims-sim's examples/testbed_node.rs); the page's TypeScript, the e2e
-entry (src/web/e2e.ts) and what it imports of this checkout, src/web/
-wasm.ts among them, which opens the page's data channel as
-strims-webrtc's DATA_CHANNEL_INIT does on the node; and schema/, which
-strims-proto's build script reads, the root Cargo.toml and Cargo.lock
-(which pins every other crate). Each file goes in in path order as its
-path from the checkout, a NUL, its length (8 bytes, little-endian) and
-its bytes, under SHA-256.
+page:
 
-ARTIFACT.stamp is one JSON object: `sources`, that hash when it was
-written, and `sha256`, the artifact's own (a file's bytes; a directory's
-files as above). `check` takes an artifact whose stamp is missing, or whose
-`sha256` isn't the artifact's (rebuilt since), as unstamped. It needs no
-cargo, only the stamps and the artifacts, so it runs where the artifacts
-were shipped (a farm host's bundle).
+- every crate of this checkout in the dependency closure of testbed_node
+  (strims-sim's, its dev-dependencies with it) or of the page (strims-wasm
+  with `e2e`, for wasm32), as `cargo metadata` resolves them. Both
+  transport ends (strims-node, strims-wasm) are among them; the
+  simulator's own crates (SIMULATOR: strims-sim, strims-wan, turmoil),
+  which testbed_node carries and no message crosses, are not. Each
+  crate's directory goes in whole but its tests/ and benches/: its
+  manifest, sources and build script, and what the build script reads
+  there (strims-proto's proto/);
+- testbed_node's own source (strims-sim's examples/testbed_node.rs);
+- the page's TypeScript: the e2e entry (src/web/e2e.ts) and what it
+  imports of this checkout, src/web/wasm.ts among them, which opens the
+  page's data channel as strims-webrtc's DATA_CHANNEL_INIT does on the
+  node;
+- schema/, which strims-proto's build script reads;
+- the root Cargo.toml, and Cargo.lock, which pins every other crate.
+
+Each file goes in, in path order, as its path from the checkout, a NUL,
+its length (8 bytes, little-endian) and its bytes, under SHA-256.
+
+ARTIFACT.stamp is one JSON object: `sources`, the sources hash when it
+was written, and `sha256`, the artifact's own hash (of a file's bytes, or
+of a directory's files as above). `check` treats an artifact as unstamped
+when its stamp is missing or its `sha256` isn't the artifact's (it was
+rebuilt since). It needs no cargo, only the stamps and the artifacts, so
+it runs where the artifacts were shipped (a farm host's bundle).
 """
 import hashlib
 import json

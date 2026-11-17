@@ -12,11 +12,12 @@
 #   hack/testbed/run.sh <out dir>
 #
 # Every container is its own network namespace with a veth on the bridge.
-# Each shapes its egress as a host behind an access modem: eth0's clsact
-# hands every packet it sends to an ifb (ifbd) whose netem holds it for
-# the one-way delay, and the ifb hands it back to eth0, whose root is the
-# modem, the node's access link class (hack/testbed/links.sh's node_tree).
-# The default, tbf, is a tbf of the link's rate, its bucket and queue:
+# Each shapes its egress as a host behind an access modem. eth0's clsact
+# hands every packet the node sends to an ifb (ifbd), whose netem holds it
+# for the one-way delay. The ifb hands it back to eth0, whose root qdisc is
+# the modem: the node's access link class (hack/testbed/links.sh's
+# node_tree). The default class, tbf, is a tbf of the link's rate, bucket
+# and queue:
 #
 #   tc qdisc replace dev eth0 root handle 10: tbf rate <up>mbit \
 #       burst <bucket> limit <up x queue x 125 bytes> \
@@ -24,40 +25,55 @@
 #   tc qdisc add dev ifbd root netem delay <d>ms limit 100000
 #   tc filter add dev eth0 egress matchall action mirred egress redirect dev ifbd
 #
-# The other classes put a size table for their framing on that root, a
-# queue under it (cable's DOCSIS-PIE, a DSL modem's FIFO), a home router's
-# AQM in its place, or tracelink's classifier; a class with slots (cable's
-# grants, slot=) moves the modem, handle 10:, to a second ifb (ifbm), to
-# which eth0's root hands what the delay returns, and holds what comes
-# back from it in a netem of slots alone: delay, shaper, slots.
+# The other classes change that root:
 #
-# The bucket, what leaves at once (or at the peak rate) once the link has
-# idled, is 3028 bytes (two full frames) unless SEED_BURST (the seed's) or
-# VIEWER_BURST (the viewers') says otherwise.
+#   - cable's, dsl's and fiber's framing puts a size table on it (cake
+#     takes the framing as its own overhead instead);
+#   - cable's DOCSIS-PIE (aqm=pie) is a pie under it; a FIFO, such as a DSL
+#     modem's, is the tbf's own byte limit;
+#   - a home router (router=) takes its place: cake at the router's rate,
+#     or a tbf at that rate over fq_codel;
+#   - a trace's root is a prio whose band 1 is an fq, which holds each
+#     packet to the departure tracelink's classifier sets.
 #
-# The order is a modem's. The egress filter's redirect hands the ifb a
-# clone of each packet (act_mirred clones at egress), and eth0's clsact
-# hook frees the socket's own (sch_handle_egress consumes the stolen skb),
-# so its memory returns to the socket as at a host's NIC once it has
-# handed a packet to a modem: TCP Small Queues counts nothing the delay
-# or the modem holds and doesn't keep the modem's queue empty, at any
-# delay (at `netem delay 0ms` a CUBIC upload still filled a 2 Mbit/s root
-# tbf to 120 KB). tbf, the root, is offered
-# each packet as netem releases it and dequeues before the next, so a
-# burst its tokens cover leaves as it comes, and its byte limit is met as
-# the packets arrive. (With netem at the root and the tbf its child,
-# netem_dequeue moves every packet due into the tbf before the tbf sends
-# any, so a burst the tokens covered still met the limit at once and lost
-# its tail.) A fixed delay ahead of a FIFO shaper delays its departures as
-# one after it would, so a rate step applies the delay after its time.
-# Offloads are off on eth0 and on the ifb, which so cuts TCP's GSO
-# buffers (TCP always builds them) into the frames a modem would take:
-# tbf shapes real packets. A peak's bucket holds two of the class's
-# largest frames (3028 bytes under tbf, 3036 under cable's and fiber's
-# 18-byte framing): tbf wakes for each frame its peak paces some 25 us
-# late on this host, which a one-frame bucket would lose (100 Mbit/s read
-# 86), and two frames back to back at most is what a line at the peak
-# sends in 0.24 ms at 100 Mbit/s.
+# A class with slots (cable's grants, slot=) moves the modem, handle 10:,
+# to a second ifb (ifbm). eth0's root then hands ifbm what the delay
+# returns, and holds what comes back from ifbm in a netem of slots alone.
+# The order is delay, shaper, slots.
+#
+# The bucket is what leaves at once (or at the peak rate) after the link
+# has been idle. It is 3028 bytes (two full frames) unless SEED_BURST (the
+# seed's) or VIEWER_BURST (the viewers') says otherwise.
+#
+# This order, the delay ahead of the shaper, acts as a modem's:
+#
+#   - The socket gets its memory back at the redirect, as a host's socket
+#     does at its NIC once it has handed a packet to a modem. The egress
+#     filter's redirect hands the ifb a clone of each packet (act_mirred
+#     clones at egress), and eth0's clsact hook frees the socket's own
+#     (sch_handle_egress consumes the stolen skb). So TCP Small Queues
+#     counts nothing the delay or the modem holds, and doesn't keep the
+#     modem's queue empty, at any delay (at `netem delay 0ms` a CUBIC
+#     upload still filled a 2 Mbit/s root tbf to 120 KB).
+#   - A fixed delay ahead of a FIFO shaper delays its departures as one
+#     after it would, so a rate step applies the delay after its time.
+#
+# tbf, the root, is offered each packet as netem releases it, and dequeues
+# it before the next, so a burst its tokens cover leaves as it comes, and
+# its byte limit is met as the packets arrive. With netem at the root and
+# the tbf its child, netem_dequeue would move every packet due into the
+# tbf before the tbf sent any, so a burst the tokens covered would still
+# meet the limit at once and lose its tail.
+#
+# Offloads are off on eth0 and on the ifb, so the ifb cuts TCP's GSO
+# buffers (TCP always builds them) into the frames a modem would take, and
+# tbf shapes real packets. A peak's bucket (tbf's mtu) holds two of the
+# class's largest frames: 3028 bytes under tbf, 3036 under cable's and
+# fiber's 18-byte framing. On this host tbf wakes some 25 us late for each
+# frame its peak paces, which a one-frame bucket would lose (100 Mbit/s
+# read 86). Two frames back to back, the most the bucket lets out at once,
+# is what a line at the peak sends in 0.24 ms at 100 Mbit/s.
+#
 # One viewer can get a slow downlink (an ifb device with a tbf, on eth0's
 # ingress).
 #
@@ -80,30 +96,31 @@
 #   VIEWER_UP_MBIT=<m>     each viewer's uplink (default 20)
 #   QUEUE_MS=<ms>          every uplink's queue (default 100)
 #   SEED_BURST=<bytes>     the seed's tbf bucket (default 3028; at least its
-#                          link's largest frame: 1514 under tbf, 1518 under
-#                          fiber's framing, which a shaper charges a full
-#                          packet)
+#                          link's largest frame, what a shaper charges a
+#                          full packet: 1514 under tbf, 1518 under fiber's
+#                          framing)
 #   VIEWER_BURST=<bytes>   each viewer's tbf bucket (default 3028; at least
 #                          its link's largest frame)
 #   SEED_PEAK_MBIT=<m>     the rate the seed's bucket sends at, its line's
-#                          own (tbf's peakrate, which must be over its
+#                          own (tbf's peakrate). It must be over the
 #                          uplink's rate and every step's: run.sh refuses
-#                          one that isn't); unset, at once
+#                          one that isn't. Unset, the bucket sends at once
 #   VIEWER_PEAK_MBIT=<m>   each viewer's
-#   SEED_LINK=<spec>       the seed's access link class (default tbf: the
-#                          tbf above): `<class>[,<key>=<value>...]`, tbf,
-#                          cable, dsl, fiber or trace (hack/testbed/links.sh,
-#                          which documents each class, its keys and
-#                          defaults); a class's rate is SEED_UP_MBIT, its
-#                          queue QUEUE_MS (a FIFO's bytes, cable's
-#                          DOCSIS-PIE's full frames; a router's fq_codel and
-#                          cake keep their own limits), a tbf's or fiber's
-#                          bucket SEED_BURST and peak SEED_PEAK_MBIT. A
-#                          trace's time 0 is the stream's start (its
-#                          packets reach the shaper SEED_DELAY_MS later),
-#                          and its files are mounted from the host: a trace
-#                          link runs on a local testbed alone (a farm
-#                          testbed matrix refuses one)
+#   SEED_LINK=<spec>       the seed's access link class,
+#                          `<class>[,<key>=<value>...]`: tbf (the default,
+#                          the tbf above), cable, dsl, fiber or trace.
+#                          hack/testbed/links.sh documents each class, its
+#                          keys and defaults. A class's rate is
+#                          SEED_UP_MBIT and its queue QUEUE_MS (a FIFO's
+#                          bytes, or cable's DOCSIS-PIE's full frames; a
+#                          router's fq_codel and cake keep their own
+#                          limits). A tbf's or fiber's bucket is SEED_BURST
+#                          and its peak SEED_PEAK_MBIT. A trace's time 0 is
+#                          the stream's start (its packets reach the
+#                          shaper SEED_DELAY_MS later). Its files are
+#                          mounted from the host, so a trace link runs only
+#                          on a local testbed (a farm testbed matrix
+#                          refuses one)
 #   VIEWER_LINK=<spec>     each viewer's (default tbf)
 #   LINKS="<i>:<spec> ..." node i's link, in place of SEED_LINK or
 #                          VIEWER_LINK
@@ -115,15 +132,16 @@
 #                          place of JOIN_AT
 #   SLOW_DOWN_KBIT=<k>     viewer 1's downlink, if set
 #   SEED_UP_STEPS="<s>:<m> ..."  the seed's uplink becomes <m> Mbit/s <s>
-#                          seconds after the stream starts (tc qdisc change,
-#                          SEED_DELAY_MS later; the queue keeps QUEUE_MS at
-#                          the new rate). tbf's change fills its bucket
-#                          (tbf_change sets its tokens to the buffer), which
-#                          a link whose rate changes doesn't do; no qdisc
-#                          here steps a byte bucket's rate keeping its
-#                          tokens (HTB keeps them as time at the rate, and
-#                          passes a packet on any), so a step hands the seed
-#                          a full bucket, SEED_BURST bytes at once
+#                          seconds after the stream starts, by a tc qdisc
+#                          change SEED_DELAY_MS later; the queue keeps
+#                          QUEUE_MS at the new rate. A step hands the seed a
+#                          full bucket, SEED_BURST bytes at once: tbf's
+#                          change fills its bucket (tbf_change sets its
+#                          tokens to the buffer), which a link whose rate
+#                          changes doesn't do, and no qdisc here steps a
+#                          byte bucket's rate keeping its tokens (HTB keeps
+#                          them as time at the rate, and passes a packet on
+#                          any)
 #   COMPETE="<s>:<d> ..."  a bulk TCP upload (iperf3, CUBIC) from the seed's
 #                          namespace, through its shaped uplink, to a sink
 #                          container (10 ms egress delay), from <s> seconds
@@ -153,11 +171,12 @@
 #                          tracelink (a farm host has no gcc: the farm
 #                          ships them as artifacts)
 #   LINK_BIN=<path>        the link specs' parser (strims-wan's testbed_link
-#                          example); unset, run.sh builds it from its own
+#                          example). Unset, run.sh builds it from its own
 #                          tree with cargo, into CARGO_TARGET_DIR (default
-#                          target/), so NODE_BIN may be another commit's;
-#                          the build waits for any other cargo build on that
-#                          dir (cargo says so), which LINK_BIN avoids
+#                          target/), so NODE_BIN may be another commit's.
+#                          That build waits for any other cargo build on
+#                          the same dir (cargo says so); LINK_BIN avoids
+#                          the wait
 #   RATE=<bytes/s>         the stream's rate, at every node (default
 #                          strims-testbed's RATE, 256 KiB/s)
 #   MEDIA=<flv file>       the seed streams the file's H.264 and AAC in the
@@ -205,86 +224,109 @@
 #                          built by `pnpm exec webpack --mode production
 #                          --env TARGET=wasm-testbed &&
 #                          hack/testbed/stamp.py write dist/wasm-testbed`
-#                          (node_modules, the pinned wasm-bindgen-cli and
-#                          the wasm32 target); the harness checks it holds
-#                          its page. A run with browsers needs it and
-#                          NODE_BIN stamped from one checkout's sources
-#                          (stamp.py): a page from other sources may not
-#                          speak the node's protocol (links come up, no
-#                          stream flows), and run.sh refuses it, or an
-#                          artifact without a stamp or rebuilt since,
-#                          saying how to rebuild
+#                          (which needs node_modules, the pinned
+#                          wasm-bindgen-cli and the wasm32 target); the
+#                          harness checks it holds its page. A run with
+#                          browsers needs it and NODE_BIN stamped from one
+#                          checkout's sources (stamp.py). A page from other
+#                          sources may not speak the node's protocol (its
+#                          links come up, but no stream flows), so run.sh
+#                          refuses it, and an artifact without a stamp or
+#                          rebuilt since, saying how to rebuild
 #
-# Writes to <out dir>: topology, node-<i>.jsonl (a JSON line per second
-# from each node, strims-testbed's node module; a browser's adds post_ms
-# and host_t_ms, testbed_browser's), node-<i>.err, cpu-<i>.log (the
-# container's CPU time and memory once a second: ms since the epoch, the
-# cgroup's usage_usec, and its memory.current in bytes, read with bash's
-# builtins), tc-<i>.log (each node's qdiscs on every device at 10 Hz,
-# tcsample's: ms since the epoch, then `tc -s -j qdisc show`'s JSON, each
-# qdisc with its dev, which hack/testbed/tcstats.py and strims-sim's
-# testbed module read, finding the modem's 10: on eth0 or, with slots, on
-# ifbm: a checkout from before it, whose bench.py, twin.py and
-# hack/capture/analyze.py read tc's text, finds no queue in it and says
-# nothing), the seed's ss-0.log (its sockets every SS_EVERY, sssample's: `ss
-# -tin state established`'s text), tcsample-<i>.err and sssample-0.err
-# (their errors, each costing a sample), tcsample-<i>.end and
-# sssample-0.end (when one exited while its node ran, and its exit
-# status, which fails the run) and with PCAP pcap-<i>.end (when its
-# tcpdump exited while its node ran, and its exit status: none when it ran
-# to the end), qdisc-<i>.txt (each
-# node's qdiscs on every device as it shaped them, before the stream: `tc
-# -s -d qdisc show`, its modem with its size table, the delay's ifbd, the
-# slots' ifbm, the slow downlink's ifbs and PCAP's ifbo), steps.log (when
-# each of SEED_UP_STEPS applied, ms since the epoch, and its rate),
-# compete-<s>.json (each upload's iperf3 report) and compete.log (when each
-# started), links (each node's link spec, rate, delay and queue, and the
-# device whose root is its modem, as the parser gives it: `node <i> <spec>
-# <up_mbit> <delay_ms> <queue_ms> <modem_dev>`), a
-# trace link's link-<i>.log (tracelink's queue, packets, bytes and drops
-# every 100 ms) and link-<i>.err, and settings: the settings given,
-# QDISC, the shaping's qdisc tree (SHAPER below), so runs of one tree
-# pool apart from another's, and STAMPS, the clock its own logs' stamps
-# and its waits are read from (`clock`: bash's $EPOCHREALTIME, as now_ms
-# and every sampler read it; a run before run.sh named it, stamped by
-# uutils' `date +%s%3N`, which reads up to 900 ms late in a second's first
-# 100 ms, names none, and strims-sim's testbed module keys it apart); while
-# it runs, .ctl (its control files, which go with it). A node's lines
-# carry the records strims-sim's tables take (`rec`), which strims-sim's
-# testbed_tables example writes as a run's tables. With a browser node also
-# node-relay.err, cpu-relay.log and hosts/ (each node's host id). With
-# MEDIA, each browser viewer's player-<i>.jsonl (its player's line a
-# second, testbed_browser's --player), and RECORD's record-<i>.bin.
+# Writes to <out dir>:
+#   topology
+#   node-<i>.jsonl         a JSON line per second from each node
+#                          (strims-testbed's node module); a browser's adds
+#                          post_ms and host_t_ms (testbed_browser's)
+#   node-<i>.err
+#   cpu-<i>.log            the container's CPU time and memory once a
+#                          second: ms since the epoch, the cgroup's
+#                          usage_usec, and its memory.current in bytes,
+#                          read with bash's builtins
+#   tc-<i>.log             each node's qdiscs on every device at 10 Hz
+#                          (tcsample's): ms since the epoch, then `tc -s -j
+#                          qdisc show`'s JSON, each qdisc with its dev.
+#                          hack/testbed/tcstats.py and strims-sim's testbed
+#                          module read it, finding the modem's 10: on eth0
+#                          or, with slots, on ifbm. A checkout from before
+#                          tcstats.py, whose bench.py, twin.py and
+#                          hack/capture/analyze.py read tc's text, finds no
+#                          queue in it and says nothing
+#   ss-0.log               the seed's sockets every SS_EVERY (sssample's:
+#                          `ss -tin state established`'s text)
+#   tcsample-<i>.err, sssample-0.err
+#                          the samplers' errors, each costing a sample
+#   tcsample-<i>.end, sssample-0.end
+#                          when a sampler exited while its node ran, and
+#                          its exit status, which fails the run
+#   pcap-<i>.end           with PCAP, when its tcpdump exited while its node
+#                          ran, and its exit status: none when it ran to the
+#                          end
+#   qdisc-<i>.txt          each node's qdiscs on every device as it shaped
+#                          them, before the stream (`tc -s -d qdisc show`):
+#                          its modem with its size table, the delay's ifbd,
+#                          the slots' ifbm, the slow downlink's ifbs and
+#                          PCAP's ifbo
+#   steps.log              when each of SEED_UP_STEPS applied, ms since the
+#                          epoch, and its rate
+#   compete-<s>.json       each upload's iperf3 report
+#   compete.log            when each upload started
+#   links                  each node's link spec, rate, delay and queue, and
+#                          the device whose root is its modem, as the
+#                          parser gives it: `node <i> <spec> <up_mbit>
+#                          <delay_ms> <queue_ms> <modem_dev>`
+#   link-<i>.log           a trace link's tracelink log: its queue,
+#                          packets, bytes and drops every 100 ms
+#   link-<i>.err           a trace link's tracelink stderr
+#   settings               the settings given, QDISC, the shaping's qdisc
+#                          tree (SHAPER below), so runs of one tree pool
+#                          apart from another's, and STAMPS, the clock its
+#                          own logs' stamps and its waits are read from
+#                          (`clock`: bash's $EPOCHREALTIME, as now_ms and
+#                          every sampler read it; a run before run.sh named
+#                          it, stamped by uutils' `date +%s%3N`, which reads
+#                          up to 900 ms late in a second's first 100 ms,
+#                          names none, and strims-sim's testbed module keys
+#                          it apart)
+#   .ctl                   while the run lasts, its control files, which go
+#                          with it
+# A node's lines carry the records strims-sim's tables take (`rec`), which
+# strims-sim's testbed_tables example writes as a run's tables. With a
+# browser node also node-relay.err, cpu-relay.log and hosts/ (each node's
+# host id). With MEDIA, each browser viewer's player-<i>.jsonl (its
+# player's line a second, testbed_browser's --player), and RECORD's
+# record-<i>.bin.
 #
-# The stream starts once every node's link is up (each container marks it
-# when it has shaped its link, a trace's link once it has loaded its
-# trace). The run fails, removing its containers, if a node's link fails
-# to build (a tc error, a missing module, a tracelink that fails), a node
-# exits with an error, or a step fails to apply. However it ends, it ends
-# its steps and uploads, and those check the run is theirs before they
-# act on a container.
+# The stream starts once every node's link is up: each container marks its
+# link up when it has shaped it, a trace's link once it has loaded its
+# trace. The run fails, removing its containers, if a node's link fails to
+# build (a tc error, a missing module, a tracelink that fails), a node
+# exits with an error, or a step fails to apply. However the run ends, it
+# stops its steps and uploads, and each of those checks that the run is
+# its own before it acts on a container.
 #
 # Images: strims-testbed (Dockerfile) for native nodes, the relay and the
 # sink, and strims-testbed-browser (browser.Dockerfile) for browser nodes,
 # built here. Container names (tb-<i>, tb-relay, tb-sink), the network
 # (strims-testbed-sealed, internal: no route out, removed when the run
-# ends) and its subnet (10.77.0.0/24) are fixed: one testbed per Docker
-# host at a time; run.sh stops if a tb-* container or a testbed network
-# with containers on it is there.
+# ends) and its subnet (10.77.0.0/24) are fixed, so one testbed runs per
+# Docker host at a time: run.sh stops if a tb-* container, or a testbed
+# network with containers on it, is there.
 #
 # The containers send nothing off the testbed, but the host still talks
-# to each run's new bridge: its avahi's mDNS and its IPv6 multicast
-# (mDNS and listener reports from its link-local address), 16-19 mDNS and
-# about 42 IPv6 packets into each container a run, most before the stream.
-# They come in only, so no node's uplink carries them, and the metrics
-# count node-to-node traffic alone.
+# to each run's new bridge: its avahi's mDNS and its IPv6 multicast (mDNS
+# and listener reports from its link-local address). That is 16-19 mDNS
+# and about 42 IPv6 packets into each container per run, most before the
+# stream. They only come in, so no node's uplink carries them, and the
+# metrics count node-to-node traffic alone.
 #
 # Needs Docker (the user's docker group) and the kernel modules the links
-# are shaped with, which links.sh's link_modules lists (every run's netem,
+# are shaped with, which links.sh's link_modules lists: every run's netem,
 # tbf, ifb, clsact and redirect, SEED_LOSS_PCT's filter, and the link
-# classes' qdiscs, classifiers and marks). If tc can't load them, run once
-# (a farm host's boot loads them and builds each class's tree as
-# linkcheck.sh renders it)
+# classes' qdiscs, classifiers and marks. If tc can't load them, run this
+# once (a farm host's boot loads them, and builds each class's tree as
+# linkcheck.sh renders it):
 #
 #   sudo modprobe -a $(. hack/testbed/links.sh; link_modules)
 #

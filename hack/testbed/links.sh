@@ -2,33 +2,37 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
 # run.sh's access link classes. A node's link is a spec,
-# `<class>[,<key>=<value>...]` (run.sh's SEED_LINK, VIEWER_LINK and LINKS),
-# that builds the modem behind run.sh's ifb whose netem holds the node's
-# delay: eth0's root, or with slots the root of a second ifb (ifbm), which
-# eth0's root hands every packet the delay's ifb returns, and whose
-# packets eth0's root then holds for their slot (a netem with slots alone)
-# before they leave: delay, shaper, then the medium's slots, where a cable
-# modem's grants and a station's aggregates act on what its shaper
-# passed. strims-wan's testbed module is the one parser of a spec, the
-# sims' twins' as well (its docs give the classes, their keys and
-# defaults, and what the twins refuse): `link_eval` runs its testbed_link
-# example, which run.sh names in `link_bin` (built from run.sh's own tree,
-# or LINK_BIN), which fails on a spec it wouldn't build, and sets the
-# LINK_* variables it prints; the other functions print shell for the
-# node's container from them.
+# `<class>[,<key>=<value>...]` (run.sh's SEED_LINK, VIEWER_LINK and LINKS).
+# It builds the modem behind run.sh's delay, the ifb whose netem holds the
+# node's one-way delay. The modem is eth0's root, or with slots the root of
+# a second ifb (ifbm): eth0's root hands ifbm every packet the delay's ifb
+# returns, then holds ifbm's packets for their slot (a netem with slots
+# alone) before they leave. So a packet meets the delay, then the shaper,
+# then the medium's slots, where a cable modem's grants and a station's
+# aggregates act on what its shaper passed.
+#
+# strims-wan's testbed module is the one parser of a spec, for the sims'
+# twins as well; its docs give the classes, their keys and defaults, and
+# what the twins refuse. `link_eval` runs its testbed_link example, which
+# run.sh names in `link_bin` (built from run.sh's own tree, or LINK_BIN).
+# link_eval fails on a spec testbed_link wouldn't build, and otherwise sets
+# the LINK_* variables testbed_link prints. The other functions print shell
+# for the node's container from them.
 #
 #   link_eval SPEC UP_MBIT BURST LIMIT [PEAK_MBIT] [BASE_UP_MBIT] [TOP_MBIT]
-#       parses SPEC for a node at UP_MBIT, its rate having started at
-#       BASE_UP_MBIT (UP_MBIT without) and reaching TOP_MBIT at its
-#       highest, its start's or a step's (the higher of the two without),
-#       which a peak is over, with the run's bucket, queue limit and peak
-#       (tbf's and fiber's): LINK_CLASS, LINK_STAB, LINK_SHAPER,
-#       LINK_CHILD, LINK_SLOT, LINK_DEV, LINK_TRACE and LINK_FILES
+#       parses SPEC for a node at UP_MBIT, with the run's bucket, queue
+#       limit and peak (tbf's and fiber's), into LINK_CLASS, LINK_STAB,
+#       LINK_SHAPER, LINK_CHILD, LINK_SLOT, LINK_DEV, LINK_TRACE and
+#       LINK_FILES. BASE_UP_MBIT is the rate the link started at (default
+#       UP_MBIT). TOP_MBIT is its highest rate, its start's or a step's,
+#       which a peak must be over (default the higher of UP_MBIT and
+#       BASE_UP_MBIT)
 #   link_root DELAY_MS NODE
 #       the access link: the modem (handle 10: on eth0, or on ifbm with
-#       slots) and the slots; a trace's link loads its trace and waits for
+#       slots) and the slots. A trace's link loads its trace and waits for
 #       the stream's start (the time in /ctl/start, which run.sh writes
-#       once every link has loaded), its time 0 DELAY_MS after it
+#       once every link has loaded); the trace's time 0 is DELAY_MS after
+#       it
 #   link_attached NODE
 #       once /ctl/start is there, the wait for a trace's classifier to be
 #       in (nothing for another class)
@@ -50,16 +54,16 @@
 #       the kernel modules run.sh and the classes shape with, for a host to
 #       load (a farm host's boot loads them)
 #
-# The classes, each charging a packet what its link does past its IP bytes
-# with tc's size table (strims-wan's Framing over the 14 bytes of Ethernet
+# Each class charges a packet what its link charges past its IP bytes, with
+# tc's size table (strims-wan's Framing, over the 14 bytes of Ethernet
 # header a qdisc counts):
 #
 #   tbf     a tbf of BURST bytes (PEAK_MBIT its peakrate, if set): run.sh's
 #           link
 #   cable   DOCSIS: a token bucket sent at a peak (a line's 100 Mbit/s
-#           unless peak= says, and none if the link's rate reaches it),
+#           unless peak= says, and no peak if the link's rate reaches it),
 #           over DOCSIS-PIE (aqm=pie, the default) or a FIFO of LIMIT
-#           bytes, and the upstream's requests and grants as slots after it
+#           bytes, then the upstream's requests and grants as slots
 #   dsl     the line's sync rate, a burst of two frames, LIMIT bytes of
 #           modem FIFO, in ADSL's ATM cells or VDSL2's PTM
 #   fiber   a tbf of BURST bytes (PEAK_MBIT its peakrate, if set) at the
@@ -67,10 +71,11 @@
 #   trace   tracelink's delivery opportunities (hack/testbed/tracelink.c),
 #           its files mounted at /links
 #
-# and on any class slot= (what the shaper passed leaves when the next slot
-# opens) and, but a trace, router=fq_codel|cake (an SQM home router in
-# place of the modem's shaper and queue). A queue's limit holds what waits
-# for the shaper, not for a slot.
+# Any class also takes slot= (what the shaper passed leaves when the next
+# slot opens), and any class but a trace takes router=fq_codel|cake (a home
+# router's smart queue management, SQM, in place of the modem's shaper and
+# queue). A queue's limit holds what waits for the shaper, not what waits
+# for a slot.
 
 link_eval() {
   local out
@@ -144,11 +149,15 @@ link_change() {
 #   node_tree DELAY NODE PCAP LOSS_MATCH LOSS_EVERY SLOW QUEUE
 #
 # eth0's offloads off, the class's modem (link_root, NODE's), and the
-# delay's netem (DELAY ms) on an ifb behind eth0's clsact redirect; with
-# PCAP 1, a mirror of what the node offers to an ifb (ifbo) ahead of it;
-# with LOSS_EVERY, loss_filter's of LOSS_MATCH; with SLOW (kbit/s), the
-# downlink's tbf on an ifb behind an ingress redirect, QUEUE ms of it.
-# linkcheck.sh builds each class's on a farm host.
+# delay's netem (DELAY ms) on an ifb behind eth0's clsact redirect; and:
+#
+#   - with PCAP 1, a mirror of what the node offers to an ifb (ifbo),
+#     ahead of the delay;
+#   - with LOSS_EVERY, loss_filter's of LOSS_MATCH;
+#   - with SLOW (kbit/s), the downlink's tbf, QUEUE ms of it, on an ifb
+#     behind an ingress redirect.
+#
+# linkcheck.sh builds each class's tree on a farm host.
 node_tree() {
   local delay=$1 node=$2 pcap=$3 loss_match=$4 loss_every=$5 slow=$6 queue=$7 offered=""
   if [ "$pcap" = 1 ]; then
@@ -178,11 +187,11 @@ loss_filter() {
   echo "tc filter add dev eth0 ingress prio 1 $1 action gact continue random netrand drop $2"
 }
 
-# Every run's: the delay's netem on an ifb behind eth0's clsact and its
-# matchall redirect, tbf, and SEED_LOSS_PCT's u32 match and gact. The
-# classes': cable's PIE, the routers' fq_codel and cake, the trace's prio,
-# fq and tracelink's cls_bpf classifier, and the slots' prio, whose fw
-# filter takes what skbedit marked coming back from ifbm.
+# Every run's modules: the delay's netem on an ifb behind eth0's clsact and
+# its matchall redirect, tbf, and SEED_LOSS_PCT's u32 match and gact. The
+# classes' modules: cable's PIE, the routers' fq_codel and cake, the
+# trace's prio, fq and tracelink's cls_bpf classifier, and the slots' prio,
+# whose fw filter takes what skbedit marked coming back from ifbm.
 link_modules() {
   echo "sch_netem sch_tbf ifb sch_ingress cls_matchall act_mirred cls_u32 act_gact" \
     "sch_pie sch_fq_codel sch_cake sch_prio sch_fq cls_bpf cls_fw act_skbedit"

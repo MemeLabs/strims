@@ -9,23 +9,24 @@
 //             [--start-file FILE] [--offset-s S]
 //             [--delay FILE --delay-step-ms MS] [--log FILE] [--samples FILE]
 //
-// A trace is a list of delivery opportunities: times within a period and
-// the bytes each may carry. `mm` is Mahimahi's format (Winstein et al.,
-// NSDI 2013): a millisecond a line, each line one opportunity of
-// --opp-bytes (default 1514, a 1500-byte IP packet's Ethernet frame), the
-// period the last line's time, whose opportunities come at each period's
-// time 0. `us` is `<t_us> <bytes>` a line, the
-// period the last line's time unless a `# period_us <p>` line gives it.
-// The trace repeats from its start every period. --scale multiplies every
-// opportunity's bytes.
+// A trace is a list of delivery opportunities: times within a period, and
+// the bytes each may carry. It repeats from its start every period, and
+// --scale multiplies every opportunity's bytes. Its --format is one of:
+//
+//   - `mm`, Mahimahi's (Winstein et al., NSDI 2013): a millisecond a line,
+//     each line one opportunity of --opp-bytes (default 1514, a 1500-byte
+//     IP packet's Ethernet frame). The period is the last line's time, and
+//     that line's opportunities come at each period's time 0.
+//   - `us`: `<t_us> <bytes>` a line. The period is the last line's time
+//     unless a `# period_us <p>` line gives it.
 //
 // It loads a cls_bpf classifier, assembled here, into the classful qdisc
 // --parent (a prio whose band 1 is an fq with `nopacing`) and stays in the
 // foreground, writing a line every 100 ms to --log (default stdout): ms
 // since the epoch, the bytes queued, packets and bytes passed, packets
-// dropped, and the most bytes it held. With --samples it writes a line a
-// packet there: when it reached the classifier, its departure (0 if
-// dropped) and its bytes, in ns since the epoch.
+// dropped, and the most bytes it held. With --samples it writes there a
+// line a packet: when it reached the classifier and its departure (0 if
+// dropped), in ns since the epoch, and its bytes.
 //
 // The program keeps a byte cursor, the capacity its packets have taken. A
 // packet of `len` bytes (the qdisc's length: a GSO buffer counts each
@@ -50,20 +51,22 @@
 // `gso_max_segs 1`. Departures are fq's, to its timer's slack (10 us).
 //
 // run.sh's links.sh makes the prio the root of the modem's device (eth0,
-// or with slots the ifb behind it) and has eth0's egress filter redirect
-// every packet to the ifb that holds its delay first: the redirect hands
-// on a clone of each packet and frees the socket's own (act_mirred clones
-// at egress, and sch_handle_egress consumes the stolen skb), so TCP Small
-// Queues counts nothing the link holds and lets a sender queue as much as
-// it holds, as at a modem. The prio's enqueue runs under its root lock,
-// so the program's state needs no atomics.
-// --start-ms puts the trace's time 0 (or --offset-s into it) at that time
-// since the epoch, repeating it back to before the program loads. With
-// --start-file, once its maps are filled (it logs `# loaded`), it waits for
-// FILE to hold a time, ms since the epoch, and puts the trace's time 0
-// --start-ms after it: run.sh starts the stream once every link has
-// loaded, however long its trace took. It attaches the classifier then,
-// and logs `# base` (the base, the period and the trace's totals).
+// or with slots the ifb behind it). eth0's egress filter first redirects
+// every packet to the ifb that holds its delay. The redirect hands on a
+// clone of each packet and frees the socket's own (act_mirred clones at
+// egress, and sch_handle_egress consumes the stolen skb), so TCP Small
+// Queues counts nothing the link holds, and lets a sender queue as much as
+// the link holds, as at a modem. The prio's enqueue runs under its root
+// lock, so the program's state needs no atomics.
+//
+// --start-ms puts the trace's time 0 (or the point --offset-s into it) at
+// that time, in ms since the epoch, and the trace repeats back to before
+// the program loads. With --start-file, the program first fills its maps
+// and logs `# loaded`. It then waits for FILE to hold a time, in ms since
+// the epoch, and puts the trace's time 0 --start-ms after that time, so
+// run.sh can start the stream once every link has loaded, however long its
+// trace took. It attaches the classifier then, and logs `# base` (the
+// base, the period and the trace's totals).
 //
 // Build: gcc -O2 -static -o target/testbed/tracelink hack/testbed/tracelink.c.
 // Needs CAP_BPF, CAP_PERFMON and CAP_NET_ADMIN.

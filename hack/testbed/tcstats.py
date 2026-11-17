@@ -5,20 +5,21 @@
 testbed run (hack/testbed/bench.py and twin.py, hack/capture/analyze.py).
 
 run.sh's tc-<i>.log holds a sample a line, `<unix ms> <qdiscs>`: every
-device's qdiscs as `tc -s -j qdisc show` prints them, each with its dev;
-in runs before, the node's eth0's as `tc -s -j qdisc show dev eth0` prints
-them (with no dev), or, before it recorded JSON, as `tc -s qdisc show dev
-eth0` does, its lines joined. tc's text rounds what it prints: a size within 16 bytes
-of a KiB multiple is `<n>Kb`, within a KiB of a MiB multiple `<n>Mb`
-(iproute2's sprint_size), and a rate is in SI units (`<n>Kbit`,
-`<n>Mbit`); its JSON has bytes, and rates in bytes a second.
+device's qdiscs as `tc -s -j qdisc show` prints them, each with its dev.
+Older runs hold the node's eth0's qdiscs alone: as `tc -s -j qdisc show
+dev eth0` prints them (with no dev), or, in runs older still, which
+recorded no JSON, as `tc -s qdisc show dev eth0` prints them, its lines
+joined. tc's text rounds what it prints: a size within 16 bytes of a KiB
+multiple is `<n>Kb`, and one within a KiB of a MiB multiple `<n>Mb`
+(iproute2's sprint_size); a rate is in SI units (`<n>Kbit`, `<n>Mbit`).
+Its JSON has bytes, and rates in bytes a second.
 
-A node's access link queue is the modem's qdisc 10: in every link class's
-tree (uplink): eth0's, or for a class with slots ifbm's, the ifb
-hack/testbed/links.sh moves the modem to ahead of the slots, as the run's
-`links` file names the device (link_dev: what strims-wan's testbed parser
-gave run.sh); its kind the class's (queue_kind), the class that file
-names.
+A node's access link queue (uplink) is the modem's qdisc, 10:, in every
+link class's tree. It is on eth0, or for a class with slots on ifbm, the
+ifb that hack/testbed/links.sh moves the modem to, ahead of the slots.
+The run's `links` file names the device (link_dev: what strims-wan's
+testbed parser gave run.sh) and the link's class, which sets the queue's
+kind (queue_kind).
 """
 
 import json

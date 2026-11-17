@@ -2,11 +2,11 @@
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
 #
-# A farm testbed host's boot check, as this checkout's run.sh shapes a
-# node's link. farm.py runs it on the controller from each testbed arm's
-# bundle (as a host runs run.sh: from the bundle's hack/testbed, each
-# artifact's variable set to its path there), and the host
-# (hack/sim-farm/user-data.sh) runs what it prints, so the host checks
+# A farm testbed host's boot check of a node's link, shaped as this
+# checkout's run.sh shapes it. farm.py runs this script on the controller
+# from each testbed arm's bundle, as a host runs run.sh: from the bundle's
+# hack/testbed, with each artifact's variable set to its path there. The
+# host (hack/sim-farm/user-data.sh) runs what it prints, so the host checks
 # what each arm builds and parses no link spec itself. It prints
 #
 #   modules <module>...    what the host loads first; one that doesn't
@@ -15,14 +15,16 @@
 #   <command>              tree, which the host runs with bash -e in a
 #   ...                    network namespace of their own
 #
-# and fails (and the launch with it) on what it can't render. A tree
-# stands for a node's link on a dummy eth0: links.sh's node_tree, as
-# run.sh builds it from the class's spec as testbed_link parses it (the
-# bundle's LINK_BIN, which the controller runs; built from this tree as
-# run.sh builds it when unset), with the loss filter and the slow downlink
-# (its tc and ip lines: a trace's tracelink and the offloads left out),
-# then link_change's step. cable's tree is the slotted one: eth0's prio,
-# its fw filter and skbedit mark, and the modem on ifbm.
+# and fails, and the launch with it, on what it can't render.
+#
+# A tree stands for a node's link on a dummy eth0: links.sh's node_tree, as
+# run.sh builds it from the class's spec, with the loss filter and the slow
+# downlink, then link_change's step. Only its tc and ip lines go in: a
+# trace's tracelink and the offloads are left out. testbed_link parses each
+# spec: the bundle's LINK_BIN, which the controller runs, or when that is
+# unset one built from this tree as run.sh builds it. cable's tree is the
+# slotted one: eth0's prio, its fw filter and skbedit mark, and the modem
+# on ifbm.
 #
 #   hack/testbed/linkcheck.sh
 
