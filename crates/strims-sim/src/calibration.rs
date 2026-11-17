@@ -522,7 +522,13 @@ mod tests {
                 .collect();
             want.sort();
             assert_eq!(joins(&s), want, "JOIN_AT_MS={join_ms}");
+            // Its viewers there from the start: the row's measures are the
+            // whole run's.
+            assert!(!s.profiled(), "JOIN_AT_MS={join_ms}");
         }
+        // Arriving viewers: the row's measures follow their presence, and
+        // it writes their joins.
+        assert!(star(2500).profiled());
         let s = star(2500);
         assert_eq!(joins(&s), []);
         let arrivals: Vec<Option<Duration>> = s.hosts.iter().map(|h| h.arrive_at).collect();

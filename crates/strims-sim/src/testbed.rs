@@ -684,6 +684,15 @@ impl Run {
                 })
                 .collect();
         }
+        // The arrivals profile JOINS drew (a tier matrix's knob), as the
+        // twin's row names it; the times are the run's.
+        if let Some(a) = self
+            .knobs
+            .get("STRIMS_SIM_ARRIVALS")
+            .and_then(|a| a.parse().ok())
+        {
+            s.arrivals = a;
+        }
         if let Some(joins) = self.settings.get("JOINS") {
             for j in joins.split_whitespace() {
                 if let Some((i, at)) = j.split_once(':')
@@ -2316,7 +2325,10 @@ fn add(c: &mut [u64; UP_COUNTERS.len()], name: &str, n: u64) {
 /// run's names, and those made of what a testbed run records alone (its
 /// viewers' reads and joins, its nodes' meter samples, its seed's changes,
 /// its nodes' parents), not of the network model's counters or truths,
-/// which a testbed run's report lacks.
+/// which a testbed run's report lacks. The joins are a run's whose viewers
+/// arrive into the running stream (`JOINS`, a `JOIN_AT` after the start:
+/// `Scenario::profiled`); a testbed viewer starts once, so a run has no
+/// rejoins.
 pub const ROW: &[&str] = &[
     "test",
     "scenario",
@@ -2326,6 +2338,7 @@ pub const ROW: &[&str] = &[
     "failure",
     "delivery",
     "delivery_honest",
+    "arrivals",
     "lag_p50_ms",
     "lag_p99_ms",
     "lag_p50_ms_honest",
@@ -2338,13 +2351,13 @@ pub const ROW: &[&str] = &[
     "stalled_share_1250_honest",
     "stalls_per_min_4250_honest",
     "stalled_share_4250_honest",
+    "arrived_honest",
     "join_p50_ms",
     "join_p90_ms",
     "caught_up_p50_ms",
     "caught_up_p90_ms",
+    "join_unread",
     "caught_up_never",
-    "rejoin_first_p90_ms",
-    "rejoin_caught_up_p90_ms",
     "meter_seed_p10",
     "meter_seed_p50",
     "meter_seed_p90",
@@ -2740,6 +2753,62 @@ mod tests {
         let drawn = BTreeMap::from([("STRIMS_SIM_ARRIVALS".to_owned(), "trickle".to_owned())]);
         let run = Run::read(&dir, &drawn).unwrap();
         assert_eq!(run.knobs.get("TESTBED_JOINS"), None);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run whose viewers arrive into the running stream (`JOINS`, or a
+    /// `JOIN_AT` after the start) writes their joins, as its twin does,
+    /// and one whose viewers are there from the start writes none; a
+    /// testbed viewer starts once, so no run writes rejoins.
+    #[test]
+    fn a_run_with_arrivals_writes_its_joins_and_no_rejoins() {
+        let dir = fixture("arrivals");
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        let row_of = |knobs: &BTreeMap<String, String>| -> serde_json::Map<String, Value> {
+            let run = Run::read(&dir, knobs).unwrap();
+            serde_json::from_str(&row(&run.report())).unwrap()
+        };
+        let none = BTreeMap::new();
+        let r = row_of(&none);
+        assert!(
+            !r.keys()
+                .any(|k| k.starts_with("join_") || k.starts_with("caught_up_")),
+            "{r:?}"
+        );
+        std::fs::write(dir.join("settings"), format!("{settings}JOINS=1:0\n")).unwrap();
+        let drawn = BTreeMap::from([("STRIMS_SIM_ARRIVALS".to_owned(), "trickle".to_owned())]);
+        for knobs in [&none, &drawn] {
+            let r = row_of(knobs);
+            // The viewer arrived at the stream's start and read its first
+            // frame 40 ms later, 40 ms behind its stamp.
+            for k in [
+                "join_p50_ms",
+                "join_p90_ms",
+                "caught_up_p50_ms",
+                "caught_up_p90_ms",
+            ] {
+                assert_eq!(r[k], 40, "{k}: {r:?}");
+            }
+            assert_eq!(
+                (
+                    &r["arrived_honest"],
+                    &r["join_unread"],
+                    &r["caught_up_never"]
+                ),
+                (&Value::from(1), &Value::from(0), &Value::from(0))
+            );
+            assert!(!r.keys().any(|k| k.starts_with("rejoin_")), "{r:?}");
+            assert_eq!(
+                r.get("arrivals").and_then(Value::as_str),
+                knobs.get("STRIMS_SIM_ARRIVALS").map(String::as_str)
+            );
+        }
+        // A JOIN_AT after the start has its viewers arrive, as the twin's.
+        std::fs::write(dir.join("settings"), format!("{settings}JOIN_AT=1\n")).unwrap();
+        let run = Run::read(&dir, &none).unwrap();
+        assert!(run.scenario().profiled());
+        std::fs::write(dir.join("settings"), format!("{settings}JOIN_AT=0\n")).unwrap();
+        assert!(!Run::read(&dir, &none).unwrap().scenario().profiled());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

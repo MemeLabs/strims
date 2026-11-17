@@ -866,10 +866,14 @@ impl Scenario {
     }
 
     /// Whether viewers arrive after the run's start or leave it
-    /// ([`Scenario::arrivals`], [`Scenario::departures`]): the row's
+    /// ([`Scenario::arrivals`], [`Scenario::departures`], or a host's own
+    /// [`HostSpec::arrive_at`], as `calibration_star`'s join after the
+    /// stream's start and a testbed run's `JOINS` set it): the row's
     /// measures then follow each viewer's own presence.
     pub fn profiled(&self) -> bool {
-        !self.arrivals.is_t0() || self.departures.is_some()
+        !self.arrivals.is_t0()
+            || self.departures.is_some()
+            || self.hosts.iter().any(|h| h.arrive_at.is_some())
     }
 
     /// Whether a run of the scenario reaches time `at`: a fault at its
