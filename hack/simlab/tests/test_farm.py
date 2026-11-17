@@ -35,7 +35,8 @@ dir does, under its tables' key, sim, test and env, its cell, arm and
 repeat, its row with the host's, and the flush lands in its sink; a
 testbed_tables that fails leaves no tables and says why; the controller
 writes a stored testbed run's line once its flush lands, naming its key
-and source, and an unstored one's at once. A testbed run's estimate
+and source, and an unstored one's at once; report names the farm run
+that holds a testbed matrix's stored runs and counts the unstored ones. A testbed run's estimate
 prices a host per group of the cheapest type, its jobs timed by their
 matrix's earlier runs or by run.sh's timing, and a set of two host_cores
 is refused. Stdlib alone:
@@ -1569,6 +1570,24 @@ class TestbedTables(unittest.TestCase):
         # One that stored nothing (no TABLES_BIN) has its line at once.
         run.store(host, second, {"row": {"steal_pct": 0.1}, "wall_s": 60.0, "exit": 0})
         self.assertEqual([r.get("key") for r in fp.read_jsonl(rows)], ["tb-0123456789abcdef", None])
+        # report names the farm run holding the stored run's tables, the
+        # lake's to read, and counts the one without tables; it groups
+        # nothing, and a testbed matrix takes no [report].
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fp.report(m, [], None)
+        self.assertEqual(out.getvalue().splitlines(), [
+            f"farm/{run.name}: 1 runs, in the lake once `python3 hack/sim-db/simdb.py pull --run {run.name}` and "
+            "`simdb.py index` take them in",
+            f"1 runs without tables (no TABLES_BIN), their out dirs alone: {m.state / 'runs'}", "",
+            "2/2 jobs have rows"])
+        with self.assertRaises(SystemExit) as e:
+            fp.report(m, [], ["VIEWERS"])
+        self.assertIn("takes no --where or --group", str(e.exception))
+        (d / "rep.toml").write_text(TESTBED_MATRIX.format(commit=commit) + '[report]\ngroup = ["arm"]\n')
+        with self.assertRaises(SystemExit) as e:
+            fp.Matrix(str(d / "rep.toml"))
+        self.assertIn("takes no [report]", str(e.exception))
 
     def test_a_testbed_runs_estimate_prices_a_host_per_group(self):
         d = self.dir

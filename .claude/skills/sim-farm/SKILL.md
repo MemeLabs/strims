@@ -31,8 +31,11 @@ private `sim-farm-aws` memory. Never write them into the repo.
 
 `estimate` builds and launches nothing, and `--local` runs the jobs
 here without AWS. `status` lists the live runs and the instances in
-every region, plus a matrix's jobs with rows when given one. `spend`
-reports estimates by local day; AWS bills by UTC day.
+every region, plus a matrix's jobs with rows when given one. `report`
+of a test matrix sums its [report] columns from its index; of a testbed
+matrix it names the farm runs that hold its runs' tables, whose results
+are the lake's (sim-lab). `spend` reports estimates by local day; AWS
+bills by UTC day.
 
 ## Before a run
 

@@ -107,17 +107,20 @@ crates differ from those the page was built from builds its own page.
 - **On the farm.** A `kind = "testbed"` matrix runs run.sh as a black box
   on hosts of exactly `host_cores` cores. Its arms are paired on one host
   for each repeat. The sim-farm skill covers running one, and farm.py's
-  docstring the matrix keys. The rows land in
-  target/sim-farm/MATRIX/rows.jsonl and the out dirs in runs/;
-  `farm.py report MATRIX.toml` groups them. A matrix whose artifacts hold
-  `TABLES_BIN` (strims-sim's testbed_tables) has each run's tables folded
-  on its host and flushed to S3 as a sim job's are (the farm's S3 bucket
-  and permissions, as sim matrices' flushes take), so `simdb.py pull
-  --run MATRIX` brings a farm run into the cache, an experiment
-  `farm/RUN`. `simdb.py testbed-tier DIR` writes the testbed tier's
-  matrices (hack/sim-farm/matrices/testbed-tier: the tiers' cells the
-  testbed hosts, one a matrix, each repeat its own joins). Were run.sh to
-  write STAMPS=date, each matrix's header would say its runs key apart.
+  docstring the matrix keys. A matrix whose artifacts hold `TABLES_BIN`
+  (strims-sim's testbed_tables) has each run's tables folded on its host
+  and flushed to S3 as a sim job's are (the farm's S3 bucket and
+  permissions, as sim matrices' flushes take), so `simdb.py pull --run
+  MATRIX` brings a farm run into the cache, an experiment `farm/RUN`,
+  its rows with the host's steal, load and node line counts
+  (`_steal_share`, `_load_max`, ...). Its results are the lake's alone:
+  target/sim-farm/MATRIX/rows.jsonl is the farm's bookkeeping and runs/
+  the out dirs, and `farm.py report MATRIX.toml` names the farm runs
+  that hold its runs' tables. `simdb.py testbed-tier DIR` writes the
+  testbed tier's matrices (hack/sim-farm/matrices/testbed-tier: the
+  tiers' cells the testbed hosts, one a matrix, each repeat its own
+  joins). Were run.sh to write STAMPS=date, each matrix's header would
+  say its runs key apart.
 
 ## Browser node costs
 

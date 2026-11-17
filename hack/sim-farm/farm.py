@@ -395,7 +395,7 @@ containers in real time. Its jobs are its arms by its axes by `repeats`:
   [artifacts] NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
               TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
   [files]     TOPOLOGY = "mesh3"
-  [arms] [env] [axes] [report]  as above; [report] over the row below
+  [arms] [env] [axes]           as above; no [report] (below)
 
 build runs the commands with bash in the arm's worktree, under
 target/sim-farm/build.lock and with a test arm's CARGO_TARGET_DIR and
@@ -493,13 +493,18 @@ A finished run's out dir comes back to target/sim-farm/<matrix>/runs/<id>/
 records its arm, commit, environment, repeat, group (the jobs that went
 to one host together) and order there, the instance (id, type, zone, CPU
 model, kernel, Docker version), when it started, its wall time and exit,
-and in `row` what reports aggregate: wall_s, the host's steal and busy
-shares of CPU time over the run (steal_pct, busy_pct), steal's worst 10 s
+and in `row` the host's numbers: wall_s, the host's steal and busy shares
+of CPU time over the run (steal_pct, busy_pct), steal's worst 10 s
 (steal_peak_pct), the 1-minute load's mean and max (load_mean, load_max),
 and node-<i>.jsonl's line counts (node_lines, node_lines_min). A run that
-leaves no node-<i>.jsonl fails. report adds each instance's runs in order,
-and each group's run dirs as <group>=<dir>,..., the testbed scoring
-scripts' form.
+leaves no node-<i>.jsonl fails. rows.jsonl is the farm's bookkeeping
+(which jobs are done, the walls an estimate takes): a testbed run's
+results are the lake's. report of a testbed matrix names the farm runs
+that hold its runs' tables, each the lake's experiment farm/RUN once
+`simdb.py pull --run RUN` and `simdb.py index` take it in, its rows with
+the host's numbers (worker.lake_row: `_steal_share`, `_load_max`, ...),
+and counts the runs without tables (a matrix without TABLES_BIN), which
+are their out dirs alone; it takes no --where or --group.
 
 run.sh's images pull their bases from Docker Hub, whose anonymous limit
 counts pulls per address. Each instance has an address of its own, so
@@ -795,7 +800,6 @@ SAMPLERS = {"TCSAMPLE_BIN": "tcsample", "SSSAMPLE_BIN": "sssample"}
 # one another packed without them.
 ADDED_ARTIFACTS = [["LINK_BIN", LINK_EXAMPLE],
                    *([var, f"{TESTBED}/{name}.c"] for var, name in sorted(SAMPLERS.items()))]
-TESTBED_COLUMNS = ["wall_s:mean,max", "steal_pct:mean,max", "load_max:max", "node_lines_min:min"]
 # The keys only test matrices take.
 TEST_KEYS = {"package", "target", "test", "slot_mem_gib", "canary", "derive"}
 CAPACITY_ERRORS = {
@@ -955,7 +959,7 @@ class Matrix:
         self.sim: str | None = None
         if self.kind == "testbed":
             self.parse_testbed(m)
-            columns = TESTBED_COLUMNS
+            columns = []
         elif self.kind == "test":
             self.package = m["package"]
             self.sim = SIM_OF_PACKAGE.get(self.package, self.package)
@@ -986,6 +990,9 @@ class Matrix:
 
         if TEST_KEYS & set(m):
             bad(f"a testbed matrix takes no {', '.join(sorted(TEST_KEYS & set(m)))}")
+        if "report" in m:
+            bad("a testbed matrix takes no [report]: its runs' results are the lake's (farm.py report names "
+                "the farm runs that hold them)")
         self.tests, self.slot_mem_gib, self.canary, self.derives = [""], 0.0, {}, []
         self.repeats = int(m.get("repeats", 1))
         if self.repeats < 1:
@@ -4853,10 +4860,16 @@ def short(key: str) -> str:
 
 def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
     matrix.resolve()
+    if matrix.kind == "testbed":
+        if where or group:
+            sys.exit(f"{matrix.path}: a testbed matrix's report takes no --where or --group: its runs' results "
+                     "are the lake's")
+        testbed_report(matrix)
+        return
     jobs = matrix.jobs()
     ids = {j.id for j in jobs}
     keys = {j.id: j.key for j in jobs if j.key}
-    recs = read_jsonl(matrix.state / ("rows.jsonl" if matrix.kind == "testbed" else INDEX))
+    recs = read_jsonl(matrix.state / INDEX)
     # A job's first row of its key, else its first.
     first: dict[str, dict] = {}
     for r in recs:
@@ -4875,7 +4888,7 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
         for k in (key, f"SIM_{key.upper()}", f"STRIMS_SIM_{key.upper()}"):
             if k in env:
                 return env[k]
-        # The row's own fields: host, type, zone, repeat, ...
+        # The line's own fields: host, zone, ...
         v = rec.get(key)
         return "" if v is None or isinstance(v, dict) else str(v)
 
@@ -4889,7 +4902,7 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
     heads, cols = [], []
     # A column's fields by their current names (vocab.resolve), as its
     # rows hold them (current_row).
-    name = (lambda f: f) if matrix.sim is None else (lambda f: vocab.resolve(f, matrix.sim))
+    name = lambda f: vocab.resolve(f, matrix.sim)
     for spec in matrix.columns:
         field, _, aggs = spec.partition(":")
         if aggs == "ratio":
@@ -4914,8 +4927,13 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
                 vs = [r[a] for r in rows if r.get(a) is not None]
                 cells.append(fmt(AGGS[b](vs)) if vs else "–")
         print("| " + " | ".join(cells) + " |")
-    if matrix.kind == "testbed":
-        testbed_report(matrix, groups)
+    report_notes(matrix, ids, first, stale)
+
+
+def report_notes(matrix: Matrix, ids: set[str], first: dict[str, dict], stale: int) -> None:
+    """A report's closing line: how many of the matrix's jobs have rows
+    (`first`: a job's row), the rows of jobs it no longer has (`stale`),
+    the trace mismatches, the jobs that failed and those missing."""
     missing = len(ids) - len(first)
     notes = [f"{len(first)}/{len(ids)} jobs have rows"]
     if stale:
@@ -4931,29 +4949,29 @@ def report(matrix: Matrix, where: list[str], group: list[str] | None) -> None:
     print("\n" + "; ".join(notes))
 
 
-def testbed_report(matrix: Matrix, groups: dict[tuple, list[dict]]) -> None:
-    """Each instance's runs in the order they ran, and each group's run
-    dirs in the form the testbed scoring scripts take."""
-    recs = sorted((r for rs in groups.values() for r in rs), key=lambda r: r.get("started") or "")
-    hosts: dict[str, list[dict]] = {}
+def testbed_report(matrix: Matrix) -> None:
+    """Where a testbed matrix's runs are (the module docs): each farm run
+    holding its runs' tables, the lake's experiment farm/RUN once pulled
+    and indexed, with how many of the matrix's jobs it ran; and how many
+    runs have no tables (a matrix without TABLES_BIN), their out dirs
+    alone."""
+    ids = {j.id for j in matrix.jobs()}
+    recs = read_jsonl(matrix.state / "rows.jsonl")
+    # A job's first row: a testbed job is done by a row of its id.
+    first: dict[str, dict] = {}
     for r in recs:
-        hosts.setdefault(r["host"], []).append(r)
-    print("\n| host | type | zone | cpu | steal % max | load max | runs |")
-    print("|" + "---|" * 7)
-    for h, rs in hosts.items():
-        steal = max(r["row"].get("steal_pct") or 0 for r in rs)
-        load = max(r["row"].get("load_max") or 0 for r in rs)
-        runs = ", ".join(
-            " ".join([r["arm"], *(r["env"].get(k, "") for k in matrix.axes), f"r{r['repeat']}"])
-            for r in rs
-        )
-        print(f"| {h} | {rs[0]['type']} | {rs[0].get('zone') or '-'} | "
-              f"{rs[0].get('cpu_model') or '-'} | {fmt(steal)} | {fmt(load)} | {runs} |")
-    print()
-    for key, rs in groups.items():
-        label = "-".join(key).replace(" ", "_") or "all"
-        dirs = [str(matrix.state / r["run_dir"]) for r in sorted(rs, key=lambda r: r["repeat"])]
-        print(f"{label}={','.join(dirs)}")
+        if r["id"] in ids:
+            first.setdefault(r["id"], r)
+    stale = len({r["id"] for r in recs} - ids)
+    # A stored run's source, farm/<run>/<host>/<seq>, names its farm run.
+    runs = collections.Counter(r["src"].split("/")[1] for r in first.values() if r.get("src"))
+    for run, n in sorted(runs.items()):
+        print(f"farm/{run}: {n} runs, in the lake once `python3 hack/sim-db/simdb.py pull --run {run}` and "
+              "`simdb.py index` take them in")
+    bare = sum(1 for r in first.values() if not r.get("src"))
+    if bare:
+        print(f"{bare} runs without tables (no TABLES_BIN), their out dirs alone: {matrix.state / 'runs'}")
+    report_notes(matrix, ids, first, stale)
 
 
 # --- spend --------------------------------------------------------------

@@ -26,6 +26,3 @@ JOIN_AT = "30"
 
 [axes]
 VIEWERS = ["3", "7", "15", "31", "63"]
-
-[report]
-group = ["VIEWERS"]
