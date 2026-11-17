@@ -169,6 +169,16 @@ on it is in `CONVENTIONS.md`.
   before committing. A dependency bumped since then that is still under a
   week old waits, or goes in `minimumReleaseAgeExclude` until it ages out.
 
+### Visual-regression compare
+- A boxed compare (`hack/storybook/check.py --port`) resolves its
+  `--compare` ref again inside the box (`build_base(args.compare)`), so a
+  ref that moves mid-run sends it to build a base in the box's read-only
+  tree. Land the fix, faef0bd0 on branch `check-box-base-ref`, when the
+  UI work resumes.
+- The light mode's captures of `Chat/Emote`'s All and `Directory/Grid`'s
+  Many differ between a story switched in place and one in a fresh
+  document (`--leaks`). Find the cause.
+
 ### Capture
 - Captures from the app's page node (OPFS, or dumps streamed to the UI).
 - A capture runs for its node's life, from a driver flag. A runtime
@@ -264,13 +274,18 @@ and dropped are in `TRIED.md`.
      `_honest`. Declare each of these names on main with `sims = []`.
    - Give the seed a meter that reads a bucketed uplink's sustained rate,
      scored with realistic buckets on (`STRIMS_SIM_UPLINK_BURST=profiles`).
-     When the meter search resumes, rescreen `meter-ytf-rebase` (the
-     packet trains in `TRIED.md`) with those buckets on.
-     Settle what a seed should read under cross traffic, the whole link or
-     what a competitor leaves it, with a truth row planned first. Choose
-     the relays' meter change after measuring the viewers' gap to a known
-     uplink (`STRIMS_SIM_KNOWN_UPLINK=viewers`). A meter reads the uplink
-     whatever the node sends, never by probes timed behind its own bursts.
+     The meter search resumes once the testbed and its twin agree on the
+     meter's truth (`truth_bps`, meter_samples' `avail_bps`, which
+     `twin_fit_of` reads only inside `meter_p*`: give it a measure of its
+     own), `seed_upload` and `seed_budget` over the testbed tier's cells,
+     for each of native and browsers: for each measure, `twin_fit_of`'s
+     ratio over the cells (their geometric mean) within 0.90-1.10 over the
+     stream window (`twin_window_of`'s), and at least 80 % of the cells'
+     ratios within 0.80-1.25. Then rescreen `meter-ytf-rebase` (the packet
+     trains in `TRIED.md`) with those buckets on. Choose the relays' meter
+     change after measuring the viewers' gap to a known uplink
+     (`STRIMS_SIM_KNOWN_UPLINK=viewers`). A meter reads the uplink whatever
+     the node sends, never by probes timed behind its own bursts.
    - Rescreen on strims-sim's measuring tiers the relay meter changes
      dropped on the ppspp sim's results, which have no queue below the
      runner: a relay reading bounded by a smaller multiple of its peak
@@ -495,18 +510,53 @@ and dropped are in `TRIED.md`.
     lock-in deeper than its twin, and its round trips there ran 1.4 times
     the sim's. Recheck with today's frames; if the gap holds, find the
     per-byte overhead on the seed's link.
-  - LTE's and Starlink's loss comes in bursts at assumed figures (fades
-    of 50 ms every 4 s, the satellites' reassignment every 15 s; the
-    profiles' docs), and jitter changes every 20 ms per end. Measure both
-    where the app runs on those links.
+  - The access-link profiles' rates, delays and loss are typical figures,
+    not measured (`strims_wan::access`); LTE's and Starlink's loss comes
+    in bursts at assumed figures (LTE's fades of 50 ms every 4 s, the
+    30 % Starlink loses for 120 ms at each reassignment;
+    `Access::profile`'s docs), and jitter changes every 20 ms per end.
+    Measure them where the app runs on links of each kind.
   - Score the twin against the testbed per access link class (`run.sh`'s
     `SEED_LINK` classes, strims-wan's `testbed` specs): the testbed's runs
     fold into the sim's tables (`simdb.py testbed`), and `twin_fit_of`
-    compares their twins with them. Turn framing, slots and capacity
-    traces on where they improve the correlation.
+    compares their twins with them. Each switched model goes on by
+    default once it improves the sim–real correlation (testbed, bench,
+    twin): the access kinds' buckets (`STRIMS_SIM_UPLINK_BURST=profiles`),
+    framing (`STRIMS_SIM_FRAMING`), slots (`STRIMS_SIM_UPLINK_SLOTS`),
+    capacity traces, and the timer-lateness model
+    (`STRIMS_SIM_TIMER_LATENESS`, on branch `twin-calibration`).
+  - At 20 Mbit/s the twin's seed serves more children, keeps a larger
+    budget and cuts its copies less often than the testbed's. Find the
+    cause and model it; the seed's budget is one of the meter search's
+    measures (Swarm, item 1).
+  - Testbed runs leave empty what the sim fills. Fill each from its own
+    source on the testbed, so a testbed run fills every table and column
+    a sim run does:
+    - the forecast, arrivals, asks, haves, seed_decisions and seed_sends
+      tables (the sim's under its `FORECAST` and `SPEC` knobs): record
+      the scheduler's logs on the testbed node (strims-testbed's
+      `record`), as the sim takes them;
+    - the network columns retransmits, rtos and window_cuts, the window
+      model's own counts in the sim: on TCP links, from the kernel's
+      sockets, which the seed's ss log samples (`ss-0.log`, the `sockets`
+      table). A data channel's SACKs (up_sack_*) are inside DTLS and stay
+      unmeasured;
+    - an arrival run's join and caught-up row fields: the testbed's report
+      computes them, but `Report::row` writes them only for a scenario
+      with an arrivals profile (`Scenario::profiled`), which the testbed's
+      scenario doesn't set;
+    - the older testbed matrices' runs, which don't fold into the lake:
+      retire `testbed-smoke`, whose tables version is
+      `testbed-tables-smoke`, and give copy-floor, floor, headroom and
+      swarm-size the tables.
   - The WAN model lacks what the testbed's classes build beyond a FIFO:
     DOCSIS-PIE (cable's `aqm=pie`), a home router's fq_codel or cake
     (`router=`), and a trace's varying delay (`delay=`).
+  - Neither side gives a downlink its access kind's shaper: the testbed's
+    link classes build the uplink's modem alone (`SLOW_DOWN_KBIT`'s tbf
+    caps viewer 1's downlink with a 3028-byte bucket), and the WAN
+    model's downlinks drain at their rate with no bucket. Add downlink
+    shapers to both.
   - Browser peers collapse more often than TCP peers (the `browsers` tier,
     `STRIMS_SIM_RTC`), most in thin relays and the WAN cells, where SCTP's
     Reno holds a long, lossy path's window low. Mixed audiences (a native
@@ -524,6 +574,9 @@ and dropped are in `TRIED.md`.
     at a holder's share of the uplink; and both browsers' resends to
     str0m's receiver. The testbed's runs of a case vary: score against
     repeats.
+  - Browser timing tables (`timers`, `channel_writes`,
+    `channel_buffered`, `channel_reads`, `packets`): build them only if
+    the testbed–twin fit shows browser timing matters.
   - Every pair a sim links can reach each other. A model of peers that
     accept no inbound links (an untraversable NAT) would show what they
     cost the mesh and the seed's allocation, and whether either should
