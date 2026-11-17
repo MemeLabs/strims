@@ -228,7 +228,9 @@
 # hack/capture/analyze.py read tc's text, finds no queue in it and says
 # nothing), the seed's ss-0.log (its sockets every SS_EVERY, sssample's: `ss
 # -tin state established`'s text), tcsample-<i>.err and sssample-0.err
-# (their errors, each costing a sample), with PCAP pcap-<i>.end (when its
+# (their errors, each costing a sample), tcsample-<i>.end and
+# sssample-0.end (when one exited while its node ran, and its exit
+# status, which fails the run) and with PCAP pcap-<i>.end (when its
 # tcpdump exited while its node ran, and its exit status: none when it ran
 # to the end), qdisc-<i>.txt (each
 # node's qdiscs on every device as it shaped them, before the stream: `tc
@@ -597,6 +599,14 @@ now_ms() {
 wait_start='until [ -s /ctl/start ]; do sleep 0.05; done
 start=$(cat /ctl/start)'
 
+# Sampler $1 (mounted at /$1) run with arguments $3 in node $2's
+# container, in the background of its script, into $4-$2.log, and what it
+# leaves when it exits early (above): its status taken with `||`, as the
+# container's script runs under set -e, which would end the subshell
+# first.
+sampled() {
+  echo "( e=0; /$1 $3 > /out/$4-$2.log 2> /out/$1-$2.err || e=\$?; t=\${EPOCHREALTIME/[.,]/}; echo \"\${t%???} \$e\" > /out/$1-$2.end; echo \$e > /ctl/sampler-$1-$2 ) &"
+}
 # The container's CPU time and memory, once a second, in the background of
 # its script, with bash's builtins alone: a fork of sed, cat and sleep a
 # second cost 0.012 of a core, this nothing measurable (`read -t` on a pipe
@@ -647,17 +657,21 @@ for i in $(seq 0 $((n - 1))); do
   node_slow=""
   if [ "$i" -eq 1 ]; then node_slow=$slow; fi
   shape=$(node_tree "$delay" "$i" "${PCAP:-0}" "$match" "$loss_every" "$node_slow" "$queue")
-  sample="/tcsample -i 100 > /out/tc-$i.log 2> /out/tcsample-$i.err &"
+  # A sampler that exits while its node runs says when and how
+  # (<sampler>-<i>.end, which strims-sim's reader takes its log's end
+  # from) and tells run.sh (.ctl's sampler-<sampler>-<i>), which fails the
+  # run: its node's container ending kills it, writing nothing.
+  sample="$(sampled tcsample "$i" "-i 100" tc)"
   if [ "$i" -eq 0 ]; then
     sample="$sample
-/sssample -i $ss_ms > /out/ss-$i.log 2> /out/sssample-$i.err &"
+$(sampled sssample "$i" "-i $ss_ms" ss)"
   fi
   if [ "${PCAP:-0}" = 1 ]; then
     # A tcpdump that exits while its node runs says when (its node's
     # container ending kills both, writing nothing), so the capture's
     # columns end there, not at 0.
     sample="$sample
-( tcpdump -i eth0 -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i.pcap 2> /out/tcpdump-$i.err; e=\$?; t=\${EPOCHREALTIME/[.,]/}; echo \"\${t%???} \$e\" > /out/pcap-$i.end ) &
+( e=0; tcpdump -i eth0 -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i.pcap 2> /out/tcpdump-$i.err || e=\$?; t=\${EPOCHREALTIME/[.,]/}; echo \"\${t%???} \$e\" > /out/pcap-$i.end ) &
 ( tcpdump -i ifbo -n -U -s ${PCAP_SNAPLEN:-128} -w /out/pcap-$i-offered.pcap 2> /out/tcpdump-$i-offered.err ) &"
   fi
   capture=""
@@ -828,6 +842,9 @@ failing() {
   for f in "$ctl"/exit-*; do
     if [ -s "$f" ] && [ "$(cat "$f")" != 0 ]; then return 0; fi
   done
+  for f in "$ctl"/sampler-*; do
+    [ -e "$f" ] && return 0
+  done
   return 1
 }
 while [ "$(now_ms)" -lt "$end_ms" ] && ! failing; do
@@ -852,5 +869,13 @@ for name in "${names[@]}"; do
     echo "$name exited with $code (its docker-<i>.log and node-<i>.err)" >&2
     failed=1
   fi
+done
+# A sampler that exited while its node ran (its log would end there)
+# fails it too.
+for f in "$ctl"/sampler-*; do
+  [ -e "$f" ] || continue
+  s=${f##*/sampler-}
+  echo "node ${s##*-}'s ${s%-*} exited with $(cat "$f") while it ran (its $s.err)" >&2
+  failed=1
 done
 [ "$failed" = 0 ] || exit 1

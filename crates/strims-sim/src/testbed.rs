@@ -545,15 +545,23 @@ impl Run {
             .find_map(|l| Some(l.get("t_ms")?.as_i64()? - l.get("rel_ms")?.as_i64()?))
             .and_then(|s| u64::try_from(s).ok())
             .ok_or("no node line names the stream's start")?;
-        if let Some(why) = off_schedule(dir, &settings, start_ms) {
+        check_samplers(dir, &settings, &nodes)?;
+        let starts = competing_starts(dir);
+        if let Some(n) = starts.iter().position(|c| c.failed) {
+            knobs.insert(
+                "TESTBED_SCHEDULE".to_owned(),
+                format!("competing upload {} failed", n + 1),
+            );
+        } else if let Some(why) = off_schedule(dir, &settings, start_ms) {
             knobs.insert("TESTBED_SCHEDULE".to_owned(), why);
         }
         // The competing uploads' starts as recorded, for the twin: each
         // client's (its report's timestamp), ms of stream; the twin adds
         // the setup's round trips. The keying sets them aside (simlab's
-        // testbed MEASURED).
-        let competing: Vec<String> = competing_starts(dir)
+        // testbed MEASURED). A failed one is no upload.
+        let competing: Vec<String> = starts
             .iter()
+            .filter(|c| !c.failed)
             .map(|c| format!("{}:{}", c.client().saturating_sub(start_ms), c.secs))
             .collect();
         if !competing.is_empty() {
@@ -641,6 +649,7 @@ impl Run {
             let rtt = h.competing.first().map(|c| c.rtt).unwrap_or_default();
             h.competing = starts
                 .iter()
+                .filter(|c| !c.failed)
                 .filter_map(|c| {
                     let start = self.at(c.data(rtt))?;
                     Some(Competing {
@@ -1152,6 +1161,9 @@ struct Started {
     report: Option<u64>,
     data: Option<u64>,
     secs: f64,
+    /// It sent nothing: its report is missing, unreadable or says iperf3's
+    /// `error`, or the seed's capture holds no data of it.
+    failed: bool,
 }
 
 impl Started {
@@ -1172,7 +1184,9 @@ impl Started {
 }
 
 /// Each competing upload in out dir `dir` (compete.log's lines, run.sh's
-/// launch of each, `<unix ms> <at> <secs>`), as recorded: iperf3's
+/// launch of each, `<unix ms> <at> <secs>`), as recorded (and whether it
+/// failed: its report missing, unreadable or iperf3's `error`, or with a
+/// capture none of its data in it): iperf3's
 /// report's timestamp (compete-<at>.json's start.timestamp.timemillisecs:
 /// the client's start, 150-215 ms after the launch, before its setup's
 /// round trips) and, with PCAP, its first data, the seed's capture's
@@ -1184,8 +1198,7 @@ fn competing_starts(dir: &Path) -> Vec<Started> {
     };
     let pcap = std::fs::read(dir.join("pcap-0.pcap"))
         .ok()
-        .and_then(|b| packets(&b))
-        .unwrap_or_default();
+        .and_then(|b| packets(&b));
     let seed = u8::try_from(10).ok();
     log.lines()
         .filter_map(|l| {
@@ -1195,6 +1208,7 @@ fn competing_starts(dir: &Path) -> Vec<Started> {
             let secs: f64 = w.next()?.parse().ok()?;
             let data = pcap
                 .iter()
+                .flatten()
                 .find(|p| {
                     p.us >= launch * 1000
                         && p.src == seed
@@ -1202,15 +1216,20 @@ fn competing_starts(dir: &Path) -> Vec<Started> {
                         && p.payload >= COMPETE_DATA_PAYLOAD
                 })
                 .map(|p| p.us / 1000);
-            let report = std::fs::read_to_string(dir.join(format!("compete-{at}.json")))
+            let json = std::fs::read_to_string(dir.join(format!("compete-{at}.json")))
                 .ok()
-                .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+                .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+            let report = json
+                .as_ref()
                 .and_then(|v| v.pointer("/start/timestamp/timemillisecs")?.as_u64());
+            let failed = json.as_ref().is_none_or(|v| v.get("error").is_some())
+                || (pcap.is_some() && data.is_none());
             Some(Started {
                 launch,
                 report,
                 data,
                 secs,
+                failed,
             })
         })
         .collect()
@@ -1447,13 +1466,91 @@ fn packets(bytes: &[u8]) -> Option<Vec<Packet>> {
 /// <queue_ms> [<modem_dev>]`, run.sh's): a run from before it wrote the
 /// file had a tbf on eth0 alone, so tbf and no device (hack/testbed/
 /// tcstats.py's link_spec and link_dev).
-fn link_line(dir: &Path, h: usize) -> (String, Option<String>) {
-    let text = std::fs::read_to_string(dir.join("links")).unwrap_or_default();
+fn link_line(dir: &Path, h: usize) -> Result<(String, Option<String>), String> {
+    let Ok(text) = std::fs::read_to_string(dir.join("links")) else {
+        return Ok(("tbf".to_owned(), None));
+    };
     text.lines()
         .map(|l| l.split_whitespace().collect::<Vec<_>>())
         .find(|w| w.first() == Some(&"node") && w.get(1) == Some(&h.to_string().as_str()))
         .and_then(|w| Some(((*w.get(2)?).to_owned(), w.get(6).map(|d| (*d).to_owned()))))
-        .unwrap_or_else(|| ("tbf".to_owned(), None))
+        .ok_or_else(|| format!("links: no node {h}"))
+}
+
+/// How far a sampler's last line may fall short of its node's last one
+/// (its interval aside): the container ends both, and a node's last line
+/// is a second's.
+const SAMPLER_SLACK_MS: u64 = 2000;
+
+/// The run's samplers' logs, checked as hack/testbed/tcstats.py reads them:
+/// each node's tc-<i>.log and the seed's ss-0.log, where they exist, must
+/// hold samples up to their node's last line (`SAMPLER_SLACK_MS` and an
+/// interval short of it), and a tc log the node's modem (its link class's
+/// qdisc 10: on the device `links` names), unless the sampler's
+/// `<sampler>-<i>.end` (run.sh's: when it exited while its node ran) says
+/// why it stopped. A run whose sampler failed unseen would read as
+/// unmeasured columns.
+fn check_samplers(
+    dir: &Path,
+    settings: &BTreeMap<String, String>,
+    nodes: &[Vec<Value>],
+) -> Result<(), String> {
+    let ss_ms = settings
+        .get("SS_EVERY")
+        .and_then(|v| v.parse::<f64>().ok())
+        .map_or(1000, |s| (s * 1000.0) as u64);
+    for (i, lines) in nodes.iter().enumerate() {
+        let last = lines
+            .iter()
+            .filter_map(|l| l.get("t_ms")?.as_u64())
+            .max()
+            .unwrap_or(0);
+        let logs = [("tc", "tcsample", 100), ("ss", "sssample", ss_ms)];
+        for (log, sampler, every) in logs {
+            let Ok(text) = std::fs::read_to_string(dir.join(format!("{log}-{i}.log"))) else {
+                continue;
+            };
+            if dir.join(format!("{sampler}-{i}.end")).exists() {
+                continue;
+            }
+            let stamps: Vec<u64> = text
+                .lines()
+                .filter_map(|l| {
+                    let l = if log == "ss" {
+                        l.strip_prefix("@ ")?
+                    } else {
+                        l
+                    };
+                    l.split_whitespace().next()?.parse().ok()
+                })
+                .collect();
+            let Some(&end) = stamps.iter().max() else {
+                return Err(format!(
+                    "{log}-{i}.log is empty: its sampler wrote nothing ({sampler}-{i}.err)"
+                ));
+            };
+            if end + every + SAMPLER_SLACK_MS < last {
+                return Err(format!(
+                    "{log}-{i}.log stops {} ms before node {i}'s last line, with no {sampler}-{i}.end",
+                    last - end
+                ));
+            }
+            if log == "tc" {
+                let (class, dev) = link_line(dir, i)?;
+                let kind = queue_kind(&class);
+                if !text
+                    .lines()
+                    .any(|l| modem_of(l, kind, dev.as_deref()).is_some())
+                {
+                    let on = dev.map(|d| format!(" on {d}")).unwrap_or_default();
+                    return Err(format!(
+                        "tc-{i}.log: node {i}'s {class} link has no {kind} 10:{on} in its samples"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The kind of a node's modem qdisc 10:, the root of its link class's tree
@@ -1672,7 +1769,9 @@ impl Network {
         ]
         .map(up)
         .to_vec();
-        let (mut have_pcap, mut have_tc) = (true, true);
+        // The nodes without a capture or a tc log: their columns are
+        // unmeasured alone, where another node's are measured.
+        let (mut no_pcap, mut no_tc) = (Vec::new(), Vec::new());
         let mut wan = WanReport::default();
         let mut ends = BTreeMap::new();
         let mut sends: Vec<Vec<Send>> = (0..s.hosts.len()).map(|_| Vec::new()).collect();
@@ -1801,11 +1900,13 @@ impl Network {
                     // so far at each edge (report::available charges them).
                     w.competing_log = w.competing.clone();
                 }
-                None => have_pcap = false,
+                None => no_pcap.push(h),
             }
             // The node's modem queue: its class's qdisc 10: on the device
             // its `links` line names; a node with none has no counters here.
-            let (class, modem_dev) = link_line(&run.dir, h);
+            // Run::read checked it (check_samplers).
+            let (class, modem_dev) =
+                link_line(&run.dir, h).unwrap_or_else(|_| ("tbf".to_owned(), None));
             let kind = queue_kind(&class);
             let tbf = run
                 .file(&format!("tc-{h}.log"))
@@ -1876,15 +1977,28 @@ impl Network {
                         w.up_backlog.push((t.into(), backlog));
                     }
                 }
-                None => have_tc = false,
+                None => no_tc.push(h),
             }
             wan.hosts.push(w);
         }
-        if !have_pcap {
+        // Unmeasured where no node measured it; else past nothing (end 0)
+        // for the nodes that didn't.
+        let nodes = run.nodes.len();
+        if no_pcap.len() == nodes {
             unmeasured.extend(PCAP_COUNTERS.map(up));
+        } else {
+            for &h in &no_pcap {
+                for c in PCAP_COUNTERS {
+                    ends.insert((h, up(c)), 0);
+                }
+            }
         }
-        if !have_tc {
+        if no_tc.len() == nodes {
             unmeasured.push(up("drops"));
+        } else {
+            for &h in &no_tc {
+                ends.insert((h, up("drops")), 0);
+            }
         }
         unmeasured.sort_unstable();
         unmeasured.dedup();
@@ -2407,7 +2521,7 @@ mod tests {
         // The links file names the device; a run without one, tbf on eth0.
         let d = std::env::temp_dir().join(format!("strims-links-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
-        assert_eq!(link_line(&d, 0), ("tbf".to_owned(), None));
+        assert_eq!(link_line(&d, 0), Ok(("tbf".to_owned(), None)));
         std::fs::write(
             d.join("links"),
             "node 0 tbf 10 20 100 eth0\nnode 1 cable 20 10 100 ifbm\n",
@@ -2415,8 +2529,10 @@ mod tests {
         .unwrap();
         assert_eq!(
             link_line(&d, 1),
-            ("cable".to_owned(), Some("ifbm".to_owned()))
+            Ok(("cable".to_owned(), Some("ifbm".to_owned())))
         );
+        // A links file without the node's line is an error, as tcstats'.
+        assert_eq!(link_line(&d, 2), Err("links: no node 2".to_owned()));
         std::fs::remove_dir_all(&d).unwrap();
     }
 
@@ -2613,6 +2729,62 @@ mod tests {
     }
 
     #[test]
+    fn a_sampler_that_failed_unseen_refuses_the_run() {
+        let dir = fixture("samplers");
+        let read = || Run::read(&dir, &BTreeMap::new()).map(|_| ());
+        let tc1 = std::fs::read_to_string(dir.join("tc-1.log")).unwrap();
+        // Empty: its sampler wrote nothing.
+        std::fs::write(dir.join("tc-1.log"), "").unwrap();
+        assert!(read().unwrap_err().contains("tc-1.log is empty"));
+        // Unless run.sh's marker says it exited (its columns end there).
+        std::fs::write(dir.join("tcsample-1.end"), format!("{} 1\n", START)).unwrap();
+        assert!(read().is_ok());
+        std::fs::remove_file(dir.join("tcsample-1.end")).unwrap();
+        // Stopped seconds before its node's last line.
+        let (_, rest) = tc1.lines().next().unwrap().split_once(' ').unwrap();
+        std::fs::write(dir.join("tc-1.log"), format!("{} {rest}\n", START - 3000)).unwrap();
+        assert!(
+            read()
+                .unwrap_err()
+                .contains("tc-1.log stops 4000 ms before node 1's last line")
+        );
+        std::fs::write(dir.join("tc-1.log"), &tc1).unwrap();
+        // Samples (tc's JSON, each qdisc with its device), but none of the
+        // modem on the device `links` names.
+        let json = |ms: u64| {
+            format!(
+                "{} [{{\"kind\":\"tbf\",\"handle\":\"10:\",\"dev\":\"eth0\",\"root\":true,\"options\":{{\"rate\":1250000}},\"bytes\":3000,\"packets\":2,\"drops\":4,\"overlimits\":0,\"requeues\":0,\"backlog\":1514,\"qlen\":1}}]\n",
+                START + ms
+            )
+        };
+        let tc0 = std::fs::read_to_string(dir.join("tc-0.log")).unwrap();
+        std::fs::write(dir.join("tc-0.log"), json(150) + &json(1500)).unwrap();
+        let links = std::fs::read_to_string(dir.join("links")).unwrap();
+        std::fs::write(
+            dir.join("links"),
+            links.replace("node 0 tbf 10 20 100", "node 0 tbf 10 20 100 eth9"),
+        )
+        .unwrap();
+        assert_eq!(
+            read().unwrap_err(),
+            "tc-0.log: node 0's tbf link has no tbf 10: on eth9 in its samples"
+        );
+        // A links file without a node's line.
+        std::fs::write(dir.join("links"), "node 0 tbf 10 20 100\n").unwrap();
+        assert_eq!(read().unwrap_err(), "links: no node 1");
+        std::fs::write(dir.join("links"), &links).unwrap();
+        std::fs::write(dir.join("tc-0.log"), &tc0).unwrap();
+        // A node without a tc log is unmeasured alone: the other's drops
+        // stay.
+        std::fs::remove_file(dir.join("tc-1.log")).unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        assert_eq!(r.wire_ends.get(&(1, up("drops"))), Some(&0));
+        assert_ne!(r.wire_ends.get(&(0, up("drops"))), Some(&0));
+        assert!(!r.wire_unmeasured.contains(&up("drops")));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn a_competing_upload_starts_at_its_recorded_times() {
         let dir = fixture("compete-start");
         let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
@@ -2665,9 +2837,18 @@ mod tests {
             format!("{settings}SEED_UP_MBIT=10\nSEED_UP_STEPS=2:5\nCOMPETE=3:2\n"),
         )
         .unwrap();
-        // Due at start + 2 s + the seed's 20 ms, and at start + 3 s.
+        // Due at start + 2 s + the seed's 20 ms, and at start + 3 s; the
+        // upload judged by its report's time (no capture: no data to find).
+        std::fs::remove_file(dir.join("pcap-0.pcap")).unwrap();
         let step = |ms: u64| format!("{} 5\n", START + ms);
-        let compete = |ms: u64| format!("{} 3 2\n", START + ms);
+        let compete = |ms: u64| {
+            let report = format!(
+                "{{\"start\":{{\"timestamp\":{{\"timemillisecs\":{}}}}}}}",
+                START + ms
+            );
+            std::fs::write(dir.join("compete-3.json"), report).unwrap();
+            format!("{} 3 2\n", START + ms - 150)
+        };
         let read = |s: &str, c: &str| {
             std::fs::write(dir.join("steps.log"), s).unwrap();
             std::fs::write(dir.join("compete.log"), c).unwrap();
@@ -2687,6 +2868,20 @@ mod tests {
             "competing upload 1 3000 ms late"
         );
         assert_eq!(read("", &compete(3050)).unwrap(), "step 1 not logged");
+        // An upload iperf3 failed (its report's `error`) keys the run apart,
+        // and its twin has none of it.
+        let c = compete(3050);
+        std::fs::write(
+            dir.join("compete-3.json"),
+            r#"{"start":{},"error":"unable to connect"}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.join("steps.log"), step(2100)).unwrap();
+        std::fs::write(dir.join("compete.log"), c).unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(r.knobs["TESTBED_SCHEDULE"], "competing upload 1 failed");
+        assert!(!r.knobs.contains_key("STRIMS_SIM_CAL_COMPETE_MS"));
+        assert!(r.scenario().hosts[0].competing.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
