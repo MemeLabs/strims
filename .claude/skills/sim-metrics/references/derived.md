@@ -21,9 +21,9 @@ verdict's phases from the runs' scenario events).
      lists by hand, apart from `verdict.DERIVE_CODE`: a new helper on
      the verdict's path joins one of the two lists, or a change to it
      derives nothing again (1e008248 fixed such a gap in the hashing).
-   - `hack/capture/analyze.py` imports its names from simlab.verdict by
-     a hand list, and the catalog's docs cite `analyze.` names: add a
-     new one there where analyze.py's callers or the docs use it.
+   - simdb.py, suite.py and the tests import simlab.verdict itself, and
+     the catalog's docs cite its names as `verdict.`: name a new one
+     there where the docs use it.
 2. **The cost.** A change moves `VERDICT_VERSION` or
    `verdict.derived_version`, and every cache source is derived again at
    the next index; collapse counts can move with it. Plan it with the

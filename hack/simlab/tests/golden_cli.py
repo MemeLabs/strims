@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
-"""What hack/sim-db/simdb.py and hack/capture/analyze.py's verdict
-commands print over a fixture cache, invocation by invocation, against
-the text testdata/golden/cli.txt.gz holds:
+"""What hack/sim-db/simdb.py's commands print over a fixture cache,
+invocation by invocation, against the text testdata/golden/cli.txt.gz
+holds:
 
   python3 hack/simlab/tests/golden_cli.py check [--keep DIR]
   python3 hack/simlab/tests/golden_cli.py capture
@@ -47,7 +47,6 @@ import goldens
 
 HACK = Path(__file__).resolve().parents[2]
 SIMDB = HACK / "sim-db" / "simdb.py"
-ANALYZE = HACK / "capture" / "analyze.py"
 GOLDEN = goldens.TESTDATA / "cli.txt.gz"
 SECS = 40
 AT = "2026-11-01T12:00:00Z"
@@ -348,7 +347,6 @@ def build(root):
 # --- the invocations ----------------------------------------------------------------
 
 S = ["--src", "suite/**"]
-FARM_MATRICES = ["<ROOT>/target/sim-farm/sf0001-00", "<ROOT>/target/sim-farm/sf0001-01"]
 # (name, script, args): <ROOT> is the fixture's root, <JOBS> its jobs' dirs.
 INVOCATIONS = [
     ("help", SIMDB, ["--help"]),
@@ -427,16 +425,6 @@ INVOCATIONS = [
     # shows whole: the kinds the runs wrote.
     ("lake-event-kinds", SIMDB, ["lake", "SELECT kind, sim, class, value_meaning, documented, n FROM event_kinds "
                                          "WHERE n > 0 ORDER BY sim, kind"]),
-    ("collapse", ANALYZE, ["collapse", *FARM_MATRICES]),
-    ("series", ANALYZE, ["series", FARM_MATRICES[0], "--every", "5"]),
-    ("series-where", ANALYZE, ["series", *FARM_MATRICES, "--where", "EXP=a", "--every", "10"]),
-    ("map", ANALYZE, ["map", *FARM_MATRICES]),
-    ("map-group", ANALYZE, ["map", *FARM_MATRICES, "--group", "EXP"]),
-    ("pair", ANALYZE, ["pair", FARM_MATRICES[0], "--a", "STRIMS_SIM_EXP=off", "--b", "STRIMS_SIM_EXP=a",
-                       "--ignore", "STRIMS_SIM_SEED"]),
-    ("track", ANALYZE, ["track", *FARM_MATRICES]),
-    ("track-runs", ANALYZE, ["track", FARM_MATRICES[1], "--runs"]),
-    ("delays", ANALYZE, ["delays", *FARM_MATRICES]),
     # A selection whose reads a flush lacks pulls them (the aws stand-in
     # refuses), writing the S3 ledger: after the index, which reads it.
     ("pooled-viewer-json", SIMDB, ["pooled", "--by", "viewer", "--json", "--cell", "star-5"]),

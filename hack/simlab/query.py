@@ -55,7 +55,7 @@ and the selection's parts, which other modules use too:
   reused(srcs, stored) -> (sql | None, [src])
   source_ranks(srcs) -> {src: rank}
   suite_index(run), suite_cells(names), arm_label(knob, sim, arm, env)
-  rows(pairs, series=False) -> {(src, k): row}
+  rows(pairs) -> {(src, k): row}
   pull_sources(srcs) -> [src]
 
 A query that the selection can't answer raises Refused (store's: a
@@ -184,12 +184,12 @@ def records(sql):
 # --- rows ---------------------------------------------------------------------
 
 
-def rows(pairs, series=False):
+def rows(pairs):
     """The rows of `pairs` of (src, k) in the cache, {(src, k): row}: each
     the sim's row (less its series), its renamed fields under their current
     names (vocab.canonical_row, as the catalog's rows view), with
-    `_verdict` and `_metrics` (analyze.py) from its tables' series,
-    `_wall_s` and `_rss_mb`, and with `series` the series as `_series`."""
+    `_verdict` and `_metrics` (simlab.verdict's) from its tables' series,
+    `_wall_s` and `_rss_mb`."""
     pairs = sorted(set(pairs))
     runs = files(sorted({s for s, _ in pairs}), "runs")
     if not pairs or not runs:
@@ -203,8 +203,6 @@ def rows(pairs, series=False):
         row["_wall_s"], row["_rss_mb"] = r["wall_s"], r["rss_mb"]
         _, s = got.get((r["src"], r["k"]), ({}, None))
         row["_verdict"], row["_metrics"] = judge(s)
-        if series:
-            row["_series"] = s
         out[(r["src"], r["k"])] = row
     return out
 
@@ -1005,7 +1003,7 @@ def aligned(sel, event, field="lag_p99", per="run", node=None, peer=None, detail
         got = v.records(f"SELECT {derived} AS derived, {sims}, "
                         "(SELECT list(DISTINCT kind ORDER BY kind) FROM ev) AS kinds;")[0]
         if got["derived"] and got["sims"]:
-            raise Refused(f"{event} is both a derived event and a sim's: analyze.events must name its own apart "
+            raise Refused(f"{event} is both a derived event and a sim's: verdict.events must name its own apart "
                           "(DERIVED_KINDS)")
         if not got["derived"] and not got["sims"]:
             raise Refused(f"the selection has no {event} event" + (f" of node {node}" if node is not None else "")

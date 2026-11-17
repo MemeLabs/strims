@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """The sims' vocabulary: their events, crates/strims-wan/vocab.toml, and
 their recorded names, crates/strims-wan/fields.toml (each header says what
-it holds): loaded, checked and asked, stdlib alone, so analyze.py and the
-scripts under the plain python3 or `python -I` read them too; and the
-files made from them, committed beside their readers:
+it holds): loaded, checked and asked, stdlib alone, so the scripts under
+the plain python3 or `python -I` read them too; and the files made from
+them, committed beside their readers:
 
   crates/strims-wan/src/vocab.rs             the events document, its kinds
                                              as Rust (strims_wan::vocab, the

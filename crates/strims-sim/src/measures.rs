@@ -98,7 +98,7 @@
 //! - **series** (`Report::series_data`): with transfer samples, a swarm's run
 //!   second by second from its stream's start to the run's end, which the
 //!   tables carry ([`Report::write_tables`]) for
-//!   `hack/capture/analyze.py`'s collapse verdicts: each viewer's lag and
+//!   `hack/simlab/verdict.py`'s collapse verdicts: each viewer's lag and
 //!   frames read, the viewers' pushes, prunes and parents, and the seed's
 //!   meter, uplink and copies.
 //! - **clock skew** ([`Report::clock_classes`]): with
@@ -790,7 +790,7 @@ impl Report {
     /// Viewer `v`'s lag in each second of `swarm`'s stream, in ms: the p99
     /// of the frames it read in the second, or a second more than the last
     /// second's in one it read none in (`None` before its first read), as
-    /// `hack/capture/analyze.py` reads the series.
+    /// `hack/simlab/verdict.py` reads the series.
     pub fn lag_by_second(&self, swarm: usize, v: &ViewerReport) -> Vec<Option<u32>> {
         let Some(spec) = self.scenario.swarms.get(swarm) else {
             return Vec::new();

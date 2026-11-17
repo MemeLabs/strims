@@ -1,7 +1,7 @@
 # collapse-map.toml at the testbed's chunks (1 KiB, a 64 KiB munro per
 # write), where its collapses were first seen: the same axes, so the two
-# maps differ only in chunk size. Read it with
-# `hack/capture/analyze.py map target/sim-farm/collapse-map-1k`.
+# maps differ only in chunk size. Read it in the lake as collapse-map.toml
+# says, its jobs' stored_cell 'collapse-map-1k'.
 
 package = "strims-sim"
 target = "scenarios"

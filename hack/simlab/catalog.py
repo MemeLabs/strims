@@ -224,7 +224,7 @@ skipped_names'):
                     no reading NULL
   verdicts, verdict_seconds, episodes, derived_events, viewer_phases,
   phase_windows
-                    analyze.py's verdicts, of the current verdict_version
+                    simlab.verdict's verdicts, of the current verdict_version
                     (catalog_info); <table>_all holds every version kept
   metric_defs, job_metrics, job_runs, t975
                     suite.py's METRICS (each one's SQL over a job's row,
@@ -2587,11 +2587,11 @@ TABLE_DOCS = {
         "numbers and strings left out; a renamed field under its current name, as in rows."),
     "verdicts": (
         "view", "a job", "k", "jobs USING (k, src)",
-        "analyze.py's verdict and run metrics of each job (simdb.py's derived `verdicts`), of the current "
+        "simlab.verdict's verdict and run metrics of each job (simdb.py's derived `verdicts`), of the current "
         "verdict_version: onset (the first unhealthy trigger's second), trees, delivery, latency (each trigger's "
         "onset), recovered, absorbing, feasible ('True', 'False' or 'step'), unhealthy (the share of unhealthy "
         "seconds), lag_p50, lag_max, collapsed (an unhealthy spell of COLLAPSED_SECS lasting past startup_s), "
-        "startup_s, then analyze.run_metrics' columns. verdicts_all holds every version kept."),
+        "startup_s, then verdict.run_metrics' columns. verdicts_all holds every version kept."),
     "verdict_seconds": (
         "view", "a job's second", "k, sec", "jobs USING (k, src); seconds USING (k, src, sec)",
         f"Each second's verdict: phase, the vocabulary's: {verdict_phases_text()}; healthy and what judged it "
@@ -2601,22 +2601,22 @@ TABLE_DOCS = {
         "A run's healthy, unhealthy and collapse spells: [start, stop) seconds, len."),
     "derived_events": (
         "view", "a job's derived event", "k, sec, kind", "jobs USING (k, src)",
-        f"analyze.events, the vocabulary's derived kinds (event_kinds' sim 'derived'): {derived_text()}."),
+        f"verdict.events, the vocabulary's derived kinds (event_kinds' sim 'derived'): {derived_text()}."),
     "viewer_phases": (
         "view", "a viewer's span of one phase", "k, viewer, start",
         "jobs USING (k, src); viewer_seconds, reads (t_ms // 1000) and stalls ON (k, src, viewer) with start <= "
         "sec < stop",
-        "Each viewer's phases (analyze.viewer_phases), which viewer_phases_of(runs) reads a viewer-second's phase "
+        "Each viewer's phases (verdict.viewer_phases), which viewer_phases_of(runs) reads a viewer-second's phase "
         "from (tail past the verdict's seconds): [start, stop) "
         "seconds in phase, the seconds it was there any part of, within the verdict's seconds: each incarnation's "
         "from its join's second (0 for a viewer there from the start) to its departure's, leave's or crash's. A "
         "second's phase is the window that holds it of the run's and the viewer's own joins' (phase_windows; the "
-        "verdict's rule, analyze.timeline): startup while its own join's window holds it (each incarnation's), "
+        "verdict's rule, verdict.timeline): startup while its own join's window holds it (each incarnation's), "
         "else the run's verdict_seconds phase. Every viewer's, the hostile too (viewers.hostile)."),
     "phase_windows": (
         "view", "a job's phase window", "k, anchor_s, kind", "jobs USING (k, src); viewer_phases ON (k, src) with "
         "phase and anchor_s <= viewer_phases.start + 0.5 < stop_s",
-        "The windows the verdict's phases come from (analyze.timeline), unresolved, to explain a phase: one for "
+        "The windows the verdict's phases come from (verdict.timeline), unresolved, to explain a phase: one for "
         "the stream's start (kind start, the run's startup), then one for each event of a kind that anchors a "
         "phase (event_kinds' scenario kinds; the vocabulary's phase, until and horizon_s), at t > 0: kind, node "
         "(NULL for the start's), viewer (a join's viewer, whose own startup it is; NULL for a window of the run's), "
@@ -2629,12 +2629,14 @@ TABLE_DOCS = {
         "joins and departures from their stays, the seed's uplink levels from seed_up."),
     "catalog_info": (
         "view", "a setting", "key", "",
-        "The catalog's versions (catalog_version, verdict_version: the current verdicts', analyze's "
-        "VERDICT_VERSION, the DuckDB and extension builds) and when it was last indexed."),
+        "The catalog's versions (catalog_version, verdict_version: the current verdicts', "
+        "analyze_verdict_version: simlab.verdict's VERDICT_VERSION, the DuckDB and extension builds) and when it "
+        "was last indexed."),
     "metric_catalog": (
         "table", "a column or metric", "tbl, name", "table_catalog ON table_catalog.name = metric_catalog.tbl",
         "Every column of the result tables and every suite.py metric (tbl 'suite'): type, unit (from its name), "
-        "description (the sims' and analyze.py's docs), better ('lower', 'higher' or NULL), kind ('ratio' or 'diff'), "
+        "description (the sims' and simlab.verdict's docs), better ('lower', 'higher' or NULL), kind ('ratio' or "
+        "'diff'), "
         "tie (the band suite.py calls a tie), guard (how suite.py's arm_score uses it), the fields a suite metric "
         "reads and its source, the sims that write it, and when it was first and last seen."),
     "event_kinds": (
@@ -3091,7 +3093,7 @@ def needed(text, have):
 
 
 def scoring_consts(suite=None):
-    """scoring.sql's @{name} constants: suite.py's and analyze.py's (the
+    """scoring.sql's @{name} constants: suite.py's and verdict.py's (the
     vocabulary's phases among them, the verdict's), and t975_at's
     expansion (t975_expansion)."""
     s, a = suite or suite_module(), verdict

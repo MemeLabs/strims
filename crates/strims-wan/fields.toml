@@ -2364,7 +2364,7 @@ description = "from its publishing"
 
 [tables.stalls]
 sims = ["strims-sim"]
-grain = "stall of a viewer's playout at each delay of `DELAYS_MS` (`hack/capture/analyze.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`)"
+grain = "stall of a viewer's playout at each delay of `DELAYS_MS` (`hack/simlab/verdict.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`)"
 keys = "k, viewer, delay_ms, t_ms"
 joins = "viewers USING (k, src, viewer)"
 sample = false

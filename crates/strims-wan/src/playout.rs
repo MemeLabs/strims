@@ -21,7 +21,7 @@
 
 /// The playout delays the sims play their viewers at, in ms: delivery's
 /// share of the 2 s target and of the 5 s maximum glass to glass,
-/// `hack/capture/analyze.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`.
+/// `hack/simlab/verdict.py`'s `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`.
 pub const DELAYS_MS: [i64; 2] = [1250, 4250];
 
 /// A viewer's playout at one delay ([`play`]), in the reads' ms.

@@ -34,7 +34,7 @@ them, so a change here changes that prompt too.
   much a perfect meter could buy. No real node knows its uplink, so an
   oracle arm is never a candidate to ship, and a win that only the
   oracle shows is headroom, not a result.
-- **The verdict.** analyze.py's judgment of each run (`verdicts`) and
+- **The verdict.** simlab.verdict's judgment of each run (`verdicts`) and
   each second (`verdict_seconds`). A second is unhealthy when the push
   trees fail (`trees_bad`), too little is delivered (`deliv_bad`), or the
   honest viewers' q0.9 lag is high or rising (`lag_high`, `lag_rise`). A

@@ -107,12 +107,12 @@ reproduced when it's wanted again, and `gc` deletes what's older than
 `--days` (7).
 
 The queries read the cache's tables and, made from them and kept under
-derived/<table>/v=<derived_version>/ (a hash of analyze.py's
+derived/<table>/v=<derived_version>/ (a hash of hack/simlab/verdict.py's
 VERDICT_VERSION and of the derived tables' columns and code, so a change
 to either makes them again), the verdicts' tables: `verdict_seconds`
 (each second's phase, health and what judged it), `verdicts` (a run's
 verdict, the seconds a collapse must last past, `startup_s`
-(analyze.startup), and analyze.run_metrics), `episodes` (healthy,
+(verdict.startup), and verdict.run_metrics), `episodes` (healthy,
 unhealthy and collapse spells), `viewer_phases` (each viewer's phases,
 its own startup then its seconds' verdict phases, as [start, stop) spans:
 a viewer-second's phase) and `derived_events` (none of them a kind the
@@ -386,19 +386,6 @@ integer nearest rank, read through the log sketch) and sketch_quantiles(x,
     FROM reads JOIN viewers w USING (k, src, viewer) JOIN runs r USING (k, src)
     GROUP BY ALL ORDER BY ALL"
 """
-
-_analyze = None
-
-
-def analyze():
-    """hack/capture/analyze.py: the verdicts, defined once."""
-    global _analyze
-    if _analyze is None:
-        spec = importlib.util.spec_from_file_location("analyze", ROOT / "hack" / "capture" / "analyze.py")
-        _analyze = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(_analyze)
-    return _analyze
-
 
 def __getattr__(name):
     """simlab.query's and simlab.store's names (rows, views, arm_label,

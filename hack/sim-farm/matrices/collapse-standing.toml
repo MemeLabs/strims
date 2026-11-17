@@ -1,8 +1,8 @@
 # strims-sim's adaptive-seed WAN cases at the swarm defaults (4 KiB
 # chunks, 32 KiB munros) in the window model, streaming 120 s, each run's
 # seconds in its row: where the standing cases collapse, beside the
-# testbed twin's map (collapse-map.toml). Read it with
-# `hack/capture/analyze.py map target/sim-farm/collapse-standing`.
+# testbed twin's map (collapse-map.toml). Read it in the lake as
+# collapse-map.toml says, its jobs' stored_cell 'collapse-standing'.
 
 package = "strims-sim"
 target = "scenarios"

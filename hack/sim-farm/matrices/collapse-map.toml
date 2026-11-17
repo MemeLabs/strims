@@ -6,7 +6,29 @@
 # the nodes know their uplinks, a full mesh or the testbed's 6-degree
 # meshes, and a steady seed uplink or one halved from 60 s to 180 s.
 # collapse-map-1k.toml is the same at the testbed's 1 KiB chunks. Read
-# them with `hack/capture/analyze.py map target/sim-farm/collapse-map`.
+# them in the lake (`simdb.py pull --run collapse-map`, then `simdb.py
+# index`): each run's verdict is its `verdicts` row, and a cell's runs
+# share their arm, commit, test and env but the seed (jobs.env_hash), so
+# per cell the shares of runs whose trees failed, delivery or latency
+# collapsed, absorbing or collapsed, the median unhealthy share, the
+# triggers' median onsets (s), the median lag_p50 and feasibility are
+#
+#   simdb.py lake "SELECT j.stored_arm AS arm, left(j.commit, 8) AS commit,
+#     j.test, map_from_entries(list_filter(map_entries(any_value(j.env)),
+#       lambda e: e.key <> 'STRIMS_SIM_SEED')) AS cell, count(*) AS runs,
+#     avg((v.trees IS NOT NULL)::INT) AS trees,
+#     avg((v.delivery IS NOT NULL)::INT) AS delivery,
+#     avg((v.latency IS NOT NULL)::INT) AS latency,
+#     avg(v.absorbing::INT) AS absorbing, avg(v.collapsed::INT) AS collapsed,
+#     sketch_quantile(v.unhealthy, 50) AS unhealthy,
+#     sketch_quantile(v.trees, 50) AS trees_onset,
+#     sketch_quantile(v.delivery, 50) AS delivery_onset,
+#     sketch_quantile(v.latency, 50) AS latency_onset,
+#     sketch_quantile(v.lag_p50, 50) AS lag_p50,
+#     string_agg(DISTINCT v.feasible, '/') AS feasible
+#     FROM jobs j JOIN verdicts v USING (k, src)
+#     WHERE j.stored_cell = 'collapse-map'
+#     GROUP BY j.stored_arm, j.commit, j.test, j.env_hash ORDER BY ALL"
 
 package = "strims-sim"
 target = "scenarios"

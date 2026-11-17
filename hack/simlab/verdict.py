@@ -3,9 +3,8 @@
 """The verdicts on the sims' runs, and the derived tables made from them.
 
 The verdicts judge a run's series, `Report::series_data`'s fields
-(hack/sim-db makes them from a run's tables, hack/capture/analyze.py
-from a testbed run's nodes too), over the stream's seconds (not the
-run's tail):
+(hack/sim-db makes them from a run's tables, a testbed run's as a sim
+run's), over the stream's seconds (not the run's tail):
 
 - Each viewer counts while it is there and past its own startup
   (`presence`): in each of its incarnations, from its join (the stream's
@@ -46,8 +45,7 @@ run's tail):
 - A cell is feasible when the seed's lowest uplink carries one copy of the
   stream with OVERHEAD and the seed's spare plus the viewers' uplinks
   carry every viewer's copy: a collapse no tree could avoid isn't the
-  protocol's. analyze.py's `map` marks cells feasible only at full
-  uplink as "step".
+  protocol's. A cell feasible only at full uplink is "step".
 - A run collapsed (sim-suite's scorecard, `collapsed`) when COLLAPSED_SECS
   seconds in a row are unhealthy and they last past its startup: the
   seconds its startup holds from the stream's start (`startup`: the first
@@ -80,9 +78,8 @@ phase, and for how long, `horizon_s`):
   the start), never the run's response (first reads, catching up). A
   series without events implies them: each viewer's join and departure
   from its stay, and the seed's uplink from `seed_up` (its starting level
-  where the events lack one, and its steps where they hold none), so
-  analyze.py's testbed series and a row's series read as their runs'
-  events do.
+  where the events lack one, and its steps where they hold none), so a
+  row's series reads as its run's events do.
 
 Over time, for hack/sim-db's tables and sim-suite's paired metrics:
 `phases` names each second, `events` lists a run's (its start, the
@@ -96,9 +93,9 @@ the tables made under another are stale. `viewer_phases` gives each
 viewer's seconds their phase, and `phase_windows` lists the windows
 unresolved, to explain a phase.
 
-The verdicts are stdlib alone: hack/capture/analyze.py re-exports their
-names, and its capture tools run under the plain python3. The derived
-tables are made from them, the cache's tables read through
+The verdicts are stdlib alone, so a script under the plain python3
+imports them (hack/capture/analyze.py takes `med`). The derived tables
+are made from them, the cache's tables read through
 store_host.duck (the DuckDB CLI, or the executor installed):
 
   series_of(meta, seconds, viewer_seconds, stays=None, events=None) -> dict | None

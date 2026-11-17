@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
-"""simlab.verdict: hack/capture/analyze.py's verdicts, which analyze.py
-re-exports as they are, under the version the CLI golden's derived tables
-were made under, judged by a Python without the duckdb module; and the
-phase rule (Phases) over made-up series:
+"""simlab.verdict: the runs' verdicts, under the version the CLI golden's
+derived tables were made under, judged by a Python without the duckdb
+module (which imports simlab.verdict as hack/capture/analyze.py does);
+and the phase rule (Phases) over made-up series:
 
   python3 hack/simlab/tests/test_verdict.py
 """
 
-import importlib.util
 import json
 import math
 import subprocess
@@ -19,23 +18,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 HACK = HERE.parents[1]
-ANALYZE = HACK / "capture" / "analyze.py"
 sys.path.insert(0, str(HACK))
 sys.path.insert(0, str(HERE))
 
 import goldens  # noqa: E402
 from simlab import verdict, vocab  # noqa: E402
-
-# The names analyze.py's importers read (simdb.py, catalog.py, suite.py,
-# sim-suite's golden.py, scripts): its verdicts.
-NAMES = (
-    "E2E_TARGET_MS", "E2E_MAX_MS", "PIPELINE_MS", "DELIVERY_TARGET_MS", "DELIVERY_MAX_MS", "TREES_SHARE",
-    "TREES_SMOOTH", "TREES_SECS", "DELIVERY_SHARE", "DELIVERY_SECS", "LAG_PERCENTILE", "LAG_HIGH_MS", "LAG_HIGH_SECS",
-    "LAG_SLOPE", "LAG_SLOPE_SECS", "LAG_SLOPE_FLOOR_MS", "RECOVER_SECS", "ABSORB_SECS", "STARTUP_SECS",
-    "COLLAPSED_SECS", "STEP_SECS", "OSC_ACF", "OSC_MIN_PERIOD", "OVERHEAD", "med", "quantile", "lags", "presence",
-    "startup", "measures", "slope", "runs_of", "verdict", "run_startup", "collapsed", "steps", "timeline", "phases",
-    "events", "episodes", "acf", "run_metrics", "verdict_version", "feasible", "VERDICT_VERSION", "phase_lags",
-)
 
 # A run of two viewers there from the start whose seed's uplink steps
 # down at 20 s and back up at 36 s, no pushes coming and its lag climbing
@@ -51,14 +38,13 @@ SERIES = {
     "frames": [[(64 if k in DOWN else 256) for k in range(SECS)] for _ in range(2)],
 }
 
-# The plain python3's judgement, analyze.py loaded by path (as simdb.py
-# loads it) with every import of duckdb failing.
+# The plain python3's judgement, simlab.verdict imported from hack/ with
+# every import of duckdb failing.
 JUDGE = f"""\
-import importlib.util, json, sys
+import json, sys
 sys.modules["duckdb"] = None
-spec = importlib.util.spec_from_file_location("analyze", {str(ANALYZE)!r})
-a = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(a)
+sys.path.insert(0, {str(HACK)!r})
+from simlab import verdict as a
 s = json.loads(sys.stdin.read())
 v = a.verdict(s)
 print(json.dumps({{"version": a.VERDICT_VERSION, "verdict": v, "collapsed": a.collapsed(v),
@@ -67,19 +53,7 @@ print(json.dumps({{"version": a.VERDICT_VERSION, "verdict": v, "collapsed": a.co
 """
 
 
-def analyze():
-    spec = importlib.util.spec_from_file_location("analyze", ANALYZE)
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-    return m
-
-
 class Verdict(unittest.TestCase):
-    def test_analyze_holds_simlabs_verdicts(self):
-        a = analyze()
-        for name in NAMES:
-            self.assertIs(getattr(a, name), getattr(verdict, name), name)
-
     def test_the_version_is_the_one_the_golden_derived_under(self):
         catalog = goldens.read(goldens.TESTDATA / "cli.txt.gz")["catalog"]
         info = json.loads(catalog.split("=== catalog_info\n", 1)[1].splitlines()[0])

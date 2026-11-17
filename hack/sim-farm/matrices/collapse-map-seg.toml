@@ -1,8 +1,9 @@
 # collapse-map.toml's full-mesh cells around its edges with the window
 # model filling windows segment by segment (STRIMS_SIM_TCP_SEGMENT=1448)
 # instead of whole 16 KiB writes: how far the sim's whole-record windows
-# move each edge. Compare with `hack/capture/analyze.py map` of
-# collapse-map at the same cells.
+# move each edge. Compare its map with collapse-map's at the same cells,
+# each read in the lake as collapse-map.toml says (stored_cell
+# 'collapse-map-seg' and 'collapse-map').
 
 package = "strims-sim"
 target = "scenarios"

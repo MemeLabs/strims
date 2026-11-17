@@ -3,8 +3,7 @@
 """The sims' results, in one library: their store, verdicts, catalog,
 queries, scoring, saved views, farm quotes and plain-language questions,
 behind the scripts that print them (hack/sim-db/simdb.py and catalog.py,
-hack/sim-suite/suite.py, hack/capture/analyze.py) and the console's HTTP
-server (hack/console).
+hack/sim-suite/suite.py) and the console's HTTP server (hack/console).
 
   engine    DuckDB: the pinned release and extensions, the catalog's
             connections (guarded readers, the indexer's writer, a fold's
@@ -15,7 +14,7 @@ server (hack/console).
             module, and pulls from S3
   store_host
             the store as the farm hosts run it: stdlib and the DuckDB CLI
-  verdict   analyze.py's verdicts, and the derived tables made from them
+  verdict   the runs' verdicts, and the derived tables made from them
   vocab     the sims' event vocabulary (crates/strims-wan/vocab.toml),
             and the Rust and TS files made from it
   catalog   the DuckLake catalog: index, fetch, availability, schema

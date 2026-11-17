@@ -3310,7 +3310,7 @@ pub(crate) mod cols {
     }
 
     /// The `stalls` table's columns: a row per stall of a viewer's playout at
-    /// each delay of `DELAYS_MS` (`hack/capture/analyze.py`'s
+    /// each delay of `DELAYS_MS` (`hack/simlab/verdict.py`'s
     /// `DELIVERY_TARGET_MS` and `DELIVERY_MAX_MS`).
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum Stalls {

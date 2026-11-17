@@ -108,7 +108,7 @@ a scheduled event's burst into a warm swarm, an event's end (60 % leaving
 within 10 s, gracefully and abruptly, as separate cells) and the two
 together; strims-sim's run on stars and organic networks, where those
 leaving can't strand the rest. The verdicts count each viewer from its own
-join (analyze.py), so trickle cells need the stream to run past the last
+join (simlab.verdict), so trickle cells need the stream to run past the last
 arrival and its grace.
 
 The scorecard, per cell, shows the seeds whose runs collapsed (8 unhealthy
@@ -133,7 +133,7 @@ that tip between healthy and collapsed by seed.
 
 The sims' results catalog (hack/simlab/catalog.py) computes every score
 here: the runs' tables go to the cache, the catalog indexes them (each
-run's row and analyze.py's verdict), and its scoring macros
+run's row and simlab.verdict's verdict), and its scoring macros
 (hack/simlab/sql/scoring.sql, over METRICS) pair two arms' runs and give the
 effects, collapse tests, traces and guardrails this script prints. A
 session loads the macros as this script defines them, so a branch's
@@ -161,7 +161,7 @@ lag p99 ratio.
 by collapsed runs, then by the geometric mean over cells of their wire
 bytes per byte of the stream read (`wire_per_useful`, the sims' `up_*`
 ledger). Lag up to the delivery target is the room a trade may spend: a
-cell whose median lag p99 the base kept under `--lag-ceiling` (analyze.py's
+cell whose median lag p99 the base kept under `--lag-ceiling` (verdict.py's
 DELIVERY_TARGET_MS, delivery's share of the 2 s glass-to-glass target) is
 out when the arm's isn't, and no ratio guards lag below it unless
 `--lag-budget` sets one.
@@ -530,7 +530,7 @@ def main():
                        help="with --rank overhead: a ratio guarding lag below the ceiling (none by default)")
         p.add_argument("--lag-ceiling", type=float, default=verdict.DELIVERY_TARGET_MS,
                        help="with --rank overhead: the lag p99 (ms) a cell under it must stay under "
-                            "(delivery's share of the latency target, analyze.py)")
+                            "(delivery's share of the latency target, simlab.verdict's)")
     a = ap.parse_args()
 
     if a.cmd == "list":

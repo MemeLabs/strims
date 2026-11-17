@@ -530,7 +530,7 @@ PHASES = {**{("kp1", s): "startup" for s in range(3)}, **{("kp1", s): "steady" f
 # without one is the tail's
 VIEWER_PHASES = {**{(k, v, s): ph for (k, s), ph in PHASES.items() for v, _, _ in READ_RUNS[k]},
                  ("kp1", 1, 3): "startup", ("kp1", 1, 4): "startup"}
-# k: the viewers present each second (analyze.events' present_join and
+# k: the viewers present each second (verdict.events' present_join and
 # present_leave): kp1's second viewer counts from 2 s
 PRESENT = {"kp1": [1, 1, 2, 2, 2], "kp2": [1] * 5, "kd": [1] * 5, "ks1": [2] * 5}
 
@@ -558,7 +558,7 @@ class Queries(unittest.TestCase):
             self.put(src, "reads", ["viewer", "t_ms", "seq", "lag_ms"],
                      [(k, v, t, t // 100, lag) for k in keys for v, t, lag in READS[k]])
             self.derived(src, "derived_events", [
-                [k, src, t, kind, value] for k in keys for t, kind, value in simdb.analyze().events(
+                [k, src, t, kind, value] for k in keys for t, kind, value in verdict.events(
                     {"present": PRESENT[k], "seed_up": [(0, 1000)]},
                     {"healthy": [True] * 5, "onset": None, "recovered": None})])
         self.put(P, "viewers", ["viewer", "node"], [(k, v, n) for k in ("kp1", "kp2", "kd") for v, n in VIEWERS[k]])
@@ -683,11 +683,11 @@ class Queries(unittest.TestCase):
                           self.refused("first_read", field, "run"))
 
     def test_derived_kinds_are_apart_from_the_sims(self):
-        # every kind analyze.events makes: a viewer joins at 5 s and one
+        # every kind verdict.events makes: a viewer joins at 5 s and one
         # leaves at 15, the seed's uplink halves at 20 s and comes back at
         # 30, and 16-25 s are unhealthy, a collapse
         healthy = [True] * 16 + [False] * 10 + [True] * 14
-        got = simdb.analyze().events({"present": [3] * 5 + [5] * 10 + [4] * 25,
+        got = verdict.events({"present": [3] * 5 + [5] * 10 + [4] * 25,
                                       "seed_up": [(0, 1000), (20, 500), (30, 1000)]},
                                      {"healthy": healthy, "onset": 16, "recovered": 26})
         self.assertEqual({kind for _, kind, _ in got}, set(simdb.DERIVED_KINDS))
@@ -1167,11 +1167,11 @@ def audience(secs, stays, sim="ppspp", tree_secs=3, stay_info=True):
 
 
 class PerViewerVerdict(unittest.TestCase):
-    """analyze.py's verdict counts each viewer only while it is there and
-    past its own startup (analyze.presence: its join's window, the phase
+    """The verdict counts each viewer only while it is there and
+    past its own startup (verdict.presence: its join's window, the phase
     rule's)."""
 
-    a = simdb.analyze()
+    a = verdict
 
     def verdict(self, s):
         v = self.a.verdict(s)
@@ -1351,7 +1351,7 @@ class Derived(unittest.TestCase):
     def test_viewer_phases_hold_each_viewers_own_startup(self):
         got, have = self.view("SELECT k, viewer, phase, start, stop FROM viewer_phases ORDER BY ALL")
         self.assertIn("viewer_phases", have)
-        a = simdb.analyze()
+        a = verdict
         by = {}
         for r in got:
             by.setdefault((r["k"], r["viewer"]), []).append((r["phase"], r["start"], r["stop"]))
@@ -1366,7 +1366,7 @@ class Derived(unittest.TestCase):
 
     def test_verdicts_carry_the_startup(self):
         got, _ = self.view("SELECT k, startup_s, collapsed FROM verdicts ORDER BY k")
-        a = simdb.analyze()
+        a = verdict
         self.assertEqual({r["k"]: r["startup_s"] for r in got}, {"kt0": a.STARTUP_SECS, "ktr": a.STARTUP_SECS})
         name = self.SRC.replace("/", "~") + ".parquet"
         for t in [*simdb.DERIVED, "verdicts"]:
@@ -1379,7 +1379,7 @@ class Derived(unittest.TestCase):
         # Verdicts made without startup_s, under VERDICT_VERSION alone: the
         # views make their own rather than read them, and the version moves
         # with the columns.
-        a = simdb.analyze()
+        a = verdict
         name = self.SRC.replace("/", "~") + ".parquet"
         old = {c: t for c, t in simdb.VERDICT_COLS.items() if c != "startup_s"}
         made = [[k, self.SRC] + [None] * (len(old) - 2) for k in self.STAYS]
@@ -1521,7 +1521,7 @@ class Playback(unittest.TestCase):
                   mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
             self.addCleanup(p.stop)
-        a = simdb.analyze()
+        a = verdict
         self.delays = [a.DELIVERY_TARGET_MS, a.DELIVERY_MAX_MS]
 
     def runs(self, src, keys):
@@ -1769,7 +1769,7 @@ class Catalog(unittest.TestCase):
         self.assertEqual(version, simdb.derived_version())
         want = simdb.judge(audience(40, [(None, None)] * 3))
         self.assertEqual((got["k1"]["collapsed"], got["k1"]["unhealthy"]),
-                         (simdb.analyze().collapsed(want[0]), want[0]["unhealthy"]))
+                         (verdict.collapsed(want[0]), want[0]["unhealthy"]))
         self.assertEqual(got["k1"]["flaps_per_min"], want[1]["flaps_per_min"])
 
     def test_availability(self):

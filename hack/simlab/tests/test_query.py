@@ -183,12 +183,13 @@ class Commands(Fixture):
         self.assertEqual([list(r) for r in lines[:1]],
                          [["cell", "arm", "seed", "k", "src", "trace", "_verdict", "_collapsed"]])
         self.assertEqual(len(lines), 6)
-        got = query.rows([(r["src"], r["k"]) for r in lines], series=True)
+        got = query.rows([(r["src"], r["k"]) for r in lines])
         self.assertEqual({(r["src"], r["k"]) for r in lines}, set(got))
         for line in lines:
             row = got[(line["src"], line["k"])]
             self.assertEqual(row["trace"], line["trace"])
-            self.assertIn("lag", row["_series"])
+            self.assertIn("onset", row["_verdict"])
+            self.assertNotIn("_series", row)
 
     def test_a_pulls_dry_run(self):
         run = golden_cli.FARM.split("/")[1]

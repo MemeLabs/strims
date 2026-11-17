@@ -1,10 +1,31 @@
 # vnic's path measure against the WAN model's uplink queue, beside the
 # meter's ping-based queueing delay: strims-sim's uncapped WAN cases, their
 # `_varying` and `_step` versions, under the window model, with whole
-# writes and with 1448-byte segments. Read with `hack/capture/analyze.py
-# delays` (qd: pings, qdv: vnic's excess round trip, qdb: vnic's queued
-# bytes over the delivery rate; qdbi: the same against the wait at the
-# moment). vnic-acks-accuracy-cal.toml has the testbed twin's cells.
+# writes and with 1448-byte segments. Read in the lake each run's
+# `rows` fields <reading>_err_<role>_ms, <reading>_fp_<role> and
+# <reading>_fn_<role> (qd: pings, qdv: vnic's excess round trip, qdb:
+# vnic's queued bytes over the delivery rate; qdbi: the same against the
+# wait at the moment; `simdb.py describe rows`), their medians per cell
+# as collapse-map.toml groups its runs (arm, commit, test and env but the
+# seed), from `rows r JOIN jobs j USING (k, src)` where j.stored_cell is
+# 'vnic-acks-accuracy':
+#
+#   simdb.py lake "SELECT j.stored_arm AS arm, left(j.commit, 8) AS commit,
+#     j.test, map_from_entries(list_filter(map_entries(any_value(j.env)),
+#       lambda e: e.key <> 'STRIMS_SIM_SEED')) AS cell, count(*) AS runs,
+#     sketch_quantile(r.qd_err_seeds_ms, 50) AS qd_err_ms,
+#     sketch_quantile(r.qd_fp_seeds, 50) AS qd_fp,
+#     sketch_quantile(r.qd_fn_seeds, 50) AS qd_fn,
+#     sketch_quantile(r.qdv_err_seeds_ms, 50) AS qdv_err_ms,
+#     sketch_quantile(r.qdb_err_seeds_ms, 50) AS qdb_err_ms,
+#     sketch_quantile(r.qdbi_err_seeds_ms, 50) AS qdbi_err_ms
+#     FROM jobs j JOIN rows r USING (k, src)
+#     WHERE j.stored_cell = 'vnic-acks-accuracy'
+#     GROUP BY j.stored_arm, j.commit, j.test, j.env_hash ORDER BY ALL"
+#
+# (the other roles, accepting and delivering, and the fp and fn of each
+# reading the same way). vnic-acks-accuracy-cal.toml has the testbed
+# twin's cells.
 
 package = "strims-sim"
 target = "scenarios"

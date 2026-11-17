@@ -10,9 +10,8 @@ script prints must stay what it printed before simlab took its work over.
 
 The sets, in order (check runs them all, and exits 1 if any fails):
 
-  cli           simdb.py's commands and analyze.py's verdict commands over
-                a fixture cache, against testdata/golden/cli.txt.gz
-                (golden_cli.py)
+  cli           simdb.py's commands over a fixture cache, against
+                testdata/golden/cli.txt.gz (golden_cli.py)
   matrices      suite.py farm --no-run's matrices and index for every tier,
                 byte for byte, against testdata/golden/matrices.txt.gz
                 (golden_suite.py)
@@ -80,7 +79,7 @@ import goldens
 HERE = Path(__file__).resolve().parent
 HACK = HERE.parents[1]
 REPO = HACK.parent
-SIMDB, ANALYZE = golden_cli.SIMDB, golden_cli.ANALYZE
+SIMDB = golden_cli.SIMDB
 SETS = ("cli", "matrices", "suite_test", "simdb_test", "engine", "catalog", "scorecards1", "scorecards2")
 # A set's other name: the sets it stands for.
 ALIASES = {"scorecards": ("scorecards1", "scorecards2")}
@@ -214,7 +213,7 @@ def choose():
     return [r["exp_id"] for r in farm + local]
 
 
-def real_invocations(exp, kind, matrices, src):
+def real_invocations(exp, kind, src):
     """(name, script, args) over experiment `exp`."""
     # A farm experiment's cells, in the flushes of its farm runs (which may
     # hold other experiments' jobs too).
@@ -244,10 +243,7 @@ def real_invocations(exp, kind, matrices, src):
         ("lake-experiment", SIMDB, ["lake", f"SELECT * EXCLUDE (finished_at) FROM experiments WHERE exp_id = '{q}'",
                                     "--json"]),
     ]
-    if kind == "farm":
-        out += [("collapse", ANALYZE, ["collapse", *matrices]), ("map", ANALYZE, ["map", *matrices]),
-                ("track", ANALYZE, ["track", *matrices])]
-    else:
+    if kind != "farm":
         out += [("pooled", SIMDB, ["pooled", *src]), ("pooled-phase", SIMDB, ["pooled", "--by", "phase", *src]),
                 ("aligned-first-read", SIMDB, ["aligned", "first_read", "--per", "node", "--field", "lag_ms",
                                                "--after", "10", *src]),
@@ -272,7 +268,7 @@ def real_outputs(exps, out):
         matrices = sorted(str(p) for p in (main / "target" / "sim-farm").glob(f"{exp}-[0-9][0-9]"))
         runs = lake(f"SELECT unnest(farm_runs) AS r FROM experiments WHERE exp_id = '{exp}'") if matrices else []
         src = [x for r in runs for x in ("--src", f"farm/{r['r']}")]
-        for name, path, args in real_invocations(exp, kind, matrices, src):
+        for name, path, args in real_invocations(exp, kind, src):
             p = subprocess.run([sys.executable, str(path), *args], cwd=REPO, env=env, capture_output=True, text=True)
             err = p.stderr and "--- stderr\n" + p.stderr
             got[f"{exp}/{name}"] = p.stdout + err + f"--- exit {p.returncode}\n"

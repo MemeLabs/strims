@@ -1,9 +1,27 @@
 # The answer gate's screen (branch answer-gate), main's arm: the collapse
 # cells of collapse-fm.toml (calibration_star, full mesh, uplinks unknown,
-# 4 KiB chunks, the window model). gate-collapse-on.toml and
-# gate-collapse-ablate.toml run the gate's arms on the same cells. Read
-# them with `hack/capture/analyze.py pair` and `map` (--ignore
-# STRIMS_SIM_GATE).
+# 4 KiB chunks, the window model). Read it in the lake as
+# collapse-map.toml says, its jobs' stored_cell 'gate-collapse', and a
+# matrix of the gate's arms on the same cells (GATE below) against it
+# seed by seed with scoring.sql's effects_of: each side a matrix's jobs
+# of its latest commit, in cell and seed order, a cell their test and env
+# but the seed and the gate:
+#
+#   simdb.py lake "WITH side AS (SELECT stored_cell AS m, commit, ran_at,
+#     seed, k, src, test || ' ' || array_to_string(list_sort(list_transform(
+#       list_filter(map_entries(env), lambda e: e.key NOT IN
+#       ('STRIMS_SIM_SEED', 'STRIMS_SIM_GATE')),
+#       lambda e: e.key || '=' || e.value)), ' ') AS cell FROM jobs),
+#     latest AS (SELECT m, arg_max(commit, ran_at) AS commit FROM side
+#       GROUP BY m),
+#     a AS (SELECT list({'cell': cell, 'seed': seed, 'k': k, 'src': src}
+#       ORDER BY cell, seed) AS s FROM side JOIN latest USING (m, commit)
+#       WHERE m = 'gate-collapse'),
+#     b AS (SELECT list({'cell': cell, 'seed': seed, 'k': k, 'src': src}
+#       ORDER BY cell, seed) AS s FROM side JOIN latest USING (m, commit)
+#       WHERE m = 'GATE')
+#     SELECT * FROM effects_of((SELECT list(DISTINCT cell) FROM side
+#       WHERE m = 'gate-collapse'), (FROM a), (FROM b))"
 
 package = "strims-sim"
 target = "scenarios"

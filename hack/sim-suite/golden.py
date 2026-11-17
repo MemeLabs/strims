@@ -58,7 +58,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "hack") not in sys.path:
     sys.path.insert(0, str(ROOT / "hack"))
-from simlab import catalog, scoring, sketch, store_host, suite as lab  # noqa: E402
+from simlab import catalog, scoring, sketch, store_host, suite as lab, verdict  # noqa: E402
 
 # The last suite.py that scored in Python.
 REFERENCE = "4eee6065"
@@ -186,7 +186,7 @@ def printed(fn):
 
 def rank(kind, budget):
     return types.SimpleNamespace(rank=kind, lag_budget=budget,
-                                 lag_ceiling=float(suite().analyze().DELIVERY_TARGET_MS))
+                                 lag_ceiling=float(verdict.DELIVERY_TARGET_MS))
 
 
 def experiments(n, names=None):

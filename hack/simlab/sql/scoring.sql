@@ -6,7 +6,7 @@
 -- catalog.py loads them (scoring_sql) after what it makes itself:
 -- metric_defs, job_runs, job_metrics and job_metrics_of from suite.py's
 -- METRICS, and t975, Student's t. It fills in each @{...}: a constant of
--- suite.py's, analyze.py's or its own, or a row field (r.<field>), the
+-- suite.py's, verdict.py's or its own, or a row field (r.<field>), the
 -- field where the rows have it, else NULL. A macro's `-- needs:` line names
 -- the tables (or table.column) it reads that a catalog indexed by older
 -- code may lack: a session's own objects over such a catalog make it one
@@ -454,7 +454,7 @@ CREATE OR REPLACE MACRO stall_rate_of(runs, delay_ms) AS TABLE
 -- fields left alone, so a side serves): k, src, viewer, sec, lag_ms,
 -- frames and arrive_ms (NULL for a viewer there from the start). lag_ms is
 -- viewer_seconds', carried from the viewer's last second with a read
--- +1000 ms a second without one, as analyze.py's lags() does: NULL before
+-- +1000 ms a second without one, as verdict.py's lags() does: NULL before
 -- its first read.
 CREATE OR REPLACE MACRO viewer_lag_of(jobs) AS TABLE
     WITH j AS (
@@ -496,7 +496,7 @@ CREATE OR REPLACE MACRO viewer_lag_of(jobs) AS TABLE
 --                            played them);
 --   unhealthy_max_s,         the longest unhealthy spell (episodes) of any
 --   unhealthy_p50_s          run, and the median of each run's longest;
--- for D in @{delay_target_ms} and @{delay_max_ms} (analyze.py's
+-- for D in @{delay_target_ms} and @{delay_max_ms} (verdict.py's
 -- DELIVERY_TARGET_MS and DELIVERY_MAX_MS).
 -- needs: viewer_phases verdict_seconds viewers
 CREATE OR REPLACE MACRO dynamics(exp_name) AS TABLE

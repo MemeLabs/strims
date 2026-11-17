@@ -1,8 +1,8 @@
 # Ablations of the collapse modes: each fm-* arm is a local branch that
 # changes one rule (see its commit), never to land, run on the cells of
 # collapse-map.toml where the modes appear (full mesh, uplinks unknown,
-# 4 KiB chunks) against main. Read it with
-# `hack/capture/analyze.py map target/sim-farm/collapse-fm --group arm,...`.
+# 4 KiB chunks) against main. Read it in the lake as collapse-map.toml
+# says, its jobs' stored_cell 'collapse-fm', a line per arm and cell.
 
 package = "strims-sim"
 target = "scenarios"

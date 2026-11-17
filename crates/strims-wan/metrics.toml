@@ -665,7 +665,7 @@ restated = ["coalesce\\(\\s*[a-z_]+\\.phase\\s*,\\s*'steady'\\s*\\)"]
 [lake.viewer_lag]
 macro = "viewer_lag_of"
 unit = "ms"
-description = "The honest viewers' lag each second, carried from a viewer's last second with a read +1000 ms a second without one, as analyze.py's lags() does."
+description = "The honest viewers' lag each second, carried from a viewer's last second with a read +1000 ms a second without one, as verdict.py's lags() does."
 
 [lake.playback]
 macro = "playback_of"

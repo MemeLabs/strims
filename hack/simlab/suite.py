@@ -618,9 +618,9 @@ def cells(tier, only=None, env=()):
 # kind: "ratio" (geometric) or "diff" (absolute), tie band), each as
 # crates/strims-wan/metrics.toml declares it, with what it measures. The SQL
 # reads a job's row (r: the catalog's `rows`, a column a field), its verdict
-# and run metrics (v: `verdicts`, analyze.py's) and its host's numbers (j:
-# `jobs`); a field the catalog's rows lack reads NULL, and NULL is no value
-# (simlab.catalog's job_metrics, scoring.sql's macros).
+# and run metrics (v: `verdicts`, simlab.verdict's) and its host's numbers
+# (j: `jobs`); a field the catalog's rows lack reads NULL, and NULL is no
+# value (simlab.catalog's job_metrics, scoring.sql's macros).
 LOWER, HIGHER = "lower", "higher"
 METRICS = semantic.scored()
 # Its metrics a job's host sets as much as the change: shown, marked h, and
@@ -643,14 +643,9 @@ _simdb = None
 
 
 def simdb():
-    """hack/sim-db/simdb.py (simlab.simdb()): the runs' tables, and
-    analyze.py's verdicts over them."""
+    """hack/sim-db/simdb.py (simlab.simdb()): the runs' tables, and the
+    verdicts' (simlab.verdict) over them."""
     return _simdb or simlab.simdb()
-
-
-def analyze():
-    """hack/capture/analyze.py, for its per-second verdicts."""
-    return simdb().analyze()
 
 
 def git(*args, cwd=ROOT):
