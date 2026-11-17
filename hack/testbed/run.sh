@@ -718,9 +718,11 @@ for i in $(seq 0 $((n - 1))); do
   if [ "$i" -eq 1 ]; then node_slow=$slow; fi
   shape=$(node_tree "$delay" "$i" "${PCAP:-0}" "$match" "$loss_every" "$node_slow" "$queue")
   # A sampler that exits while its node runs says when and how
-  # (<sampler>-<i>.end, which strims-sim's reader takes its log's end
-  # from) and tells run.sh (.ctl's sampler-<sampler>-<i>), which fails the
-  # run: its node's container ending kills it, writing nothing.
+  # (<sampler>-<i>.end: strims-sim's reader then takes its log's early end
+  # as known, the log's columns ending at its last sample, where it
+  # refuses a log that stops short without one) and tells run.sh (.ctl's
+  # sampler-<sampler>-<i>), which fails the run: its node's container
+  # ending kills it, writing nothing.
   sample="$(sampled tcsample "$i" "-i 100" tc)"
   if [ "$i" -eq 0 ]; then
     sample="$sample

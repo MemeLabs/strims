@@ -1505,11 +1505,11 @@ const SAMPLER_SLACK_MS: u64 = 2000;
 /// The run's samplers' logs, checked as hack/testbed/tcstats.py reads them:
 /// each node's tc-<i>.log and the seed's ss-0.log, where they exist, must
 /// hold samples up to their node's last line (`SAMPLER_SLACK_MS` and an
-/// interval short of it), and a tc log the node's modem (its link class's
-/// qdisc 10: on the device `links` names), unless the sampler's
-/// `<sampler>-<i>.end` (run.sh's: when it exited while its node ran) says
-/// why it stopped. A run whose sampler failed unseen would read as
-/// unmeasured columns.
+/// interval short of it), unless the sampler's `<sampler>-<i>.end`
+/// (run.sh's: when it exited while its node ran) says why it stopped
+/// sooner, and a tc log with samples the node's modem (its link class's
+/// qdisc 10: on the device `links` names), whenever its sampler stopped.
+/// A run whose sampler failed unseen would read as unmeasured columns.
 fn check_samplers(
     dir: &Path,
     settings: &BTreeMap<String, String>,
@@ -1530,9 +1530,7 @@ fn check_samplers(
             let Ok(text) = std::fs::read_to_string(dir.join(format!("{log}-{i}.log"))) else {
                 continue;
             };
-            if dir.join(format!("{sampler}-{i}.end")).exists() {
-                continue;
-            }
+            let ended = dir.join(format!("{sampler}-{i}.end")).exists();
             let stamps: Vec<u64> = text
                 .lines()
                 .filter_map(|l| {
@@ -1544,16 +1542,21 @@ fn check_samplers(
                     l.split_whitespace().next()?.parse().ok()
                 })
                 .collect();
-            let Some(&end) = stamps.iter().max() else {
-                return Err(format!(
-                    "{log}-{i}.log is empty: its sampler wrote nothing ({sampler}-{i}.err)"
-                ));
-            };
-            if end + every + SAMPLER_SLACK_MS < last {
-                return Err(format!(
-                    "{log}-{i}.log stops {} ms before node {i}'s last line, with no {sampler}-{i}.end",
-                    last - end
-                ));
+            match stamps.iter().max() {
+                // It exited before its first sample.
+                None if ended => continue,
+                None => {
+                    return Err(format!(
+                        "{log}-{i}.log is empty: its sampler wrote nothing ({sampler}-{i}.err)"
+                    ));
+                }
+                Some(&end) if !ended && end + every + SAMPLER_SLACK_MS < last => {
+                    return Err(format!(
+                        "{log}-{i}.log stops {} ms before node {i}'s last line, with no {sampler}-{i}.end",
+                        last - end
+                    ));
+                }
+                Some(_) => {}
             }
             if log == "tc" {
                 let (class, dev) = link_line(dir, i)?;
@@ -2862,6 +2865,14 @@ mod tests {
             read().unwrap_err(),
             "tc-0.log: node 0's tbf link has no tbf 10: on eth9 in its samples"
         );
+        // Nor does a sampler that stopped early: its samples still show
+        // where the modem is.
+        std::fs::write(dir.join("tcsample-0.end"), format!("{} 1\n", START + 1600)).unwrap();
+        assert_eq!(
+            read().unwrap_err(),
+            "tc-0.log: node 0's tbf link has no tbf 10: on eth9 in its samples"
+        );
+        std::fs::remove_file(dir.join("tcsample-0.end")).unwrap();
         // A links file without a node's line.
         std::fs::write(dir.join("links"), "node 0 tbf 10 20 100\n").unwrap();
         assert_eq!(read().unwrap_err(), "links: no node 1");
