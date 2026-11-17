@@ -9,10 +9,15 @@ publish = false
 
 [dependencies]
 strims-base.workspace = true
+strims-binmap.workspace = true
 strims-crypto.workspace = true
 strims-node-core.workspace = true
 strims-ppspp.workspace = true
 strims-proto.workspace = true
+# The scheduler's logs in a line's records: their runner peer keys, and
+# reading them back (record::logs).
+serde_json.workspace = true
+slotmap.workspace = true
 # The media stream: ingest's source, unit writer and signing, and the
 # egress reader.
 strims-transfer.workspace = true
@@ -29,7 +34,6 @@ tokio-tungstenite.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 futures-util = { workspace = true, features = ["sink", "std"] }
-serde_json.workspace = true
 strims-video = { workspace = true, features = ["test-support"] }
 
 [lints]

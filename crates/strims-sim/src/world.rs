@@ -1251,47 +1251,25 @@ impl World {
                     waits: strims_testbed::record::bin_waits(sw),
                 });
             }
-            for f in &m.forecasts {
-                if Some(f.swarm) != key {
-                    continue;
-                }
-                let at = (f.forecast.at - epoch).to_std().unwrap_or_default();
-                let opened = (f.forecast.channel_open - epoch)
-                    .to_std()
-                    .unwrap_or_default();
-                hs.forecasts.push(ForecastRecord {
-                    at,
-                    opened,
-                    peer: f.peer.and_then(|id| ids.get(&id).copied()),
-                    forecast: f.forecast,
-                });
-            }
-            let t = |t: Time| (t - epoch).to_std().unwrap_or_default();
             let host = |id: Option<HostId>| id.and_then(|id| ids.get(&id).copied());
-            for c in &m.held {
-                if Some(c.swarm) == key {
-                    let at = t(c.at);
-                    hs.held.push((c.bin.base_offset(), at));
-                    hs.arrivals.push(ArrivalHostRecord {
-                        at,
-                        expected: c.held.expected.map(t),
-                        released: c.held.released.map(t),
-                        asked: c.held.asked.map(t),
-                        last_ask: c.held.last_ask.map(|(_, x)| t(x)),
-                        peer: host(c.peer),
-                        parent: host(c.parent),
-                        asked_peer: host(c.asked),
-                        held: c.held,
-                    });
-                }
+            for f in m.forecasts.iter().filter(|f| Some(f.swarm) == key) {
+                hs.forecasts
+                    .push(ForecastRecord::of(f.forecast, host(f.peer), epoch));
+            }
+            for c in m.held.iter().filter(|c| Some(c.swarm) == key) {
+                let a = ArrivalHostRecord::of(
+                    c.held,
+                    host(c.peer),
+                    host(c.parent),
+                    host(c.asked),
+                    epoch,
+                );
+                hs.held.push((c.bin.base_offset(), a.at));
+                hs.arrivals.push(a);
             }
             for x in m.haves.iter().filter(|x| Some(x.swarm) == key) {
-                hs.haves.push(HaveHostRecord {
-                    at: t(x.have.at),
-                    opened: t(x.have.channel_open),
-                    peer: host(x.peer),
-                    have: x.have,
-                });
+                hs.haves
+                    .push(HaveHostRecord::of(x.have, host(x.peer), epoch));
             }
             for x in m.requests.iter().filter(|x| Some(x.swarm) == key) {
                 hs.requests.push(RequestHostRecord {
@@ -1302,21 +1280,12 @@ impl World {
                 });
             }
             for x in m.seed_decisions.iter().filter(|x| Some(x.swarm) == key) {
-                hs.seed_decisions.push(SeedDecisionHostRecord {
-                    at: t(x.record.at),
-                    peer: host(x.peer),
-                    epoch,
-                    record: x.record,
-                });
+                hs.seed_decisions
+                    .push(SeedDecisionHostRecord::of(x.record, host(x.peer), epoch));
             }
             for x in m.seed_sends.iter().filter(|x| Some(x.swarm) == key) {
-                hs.seed_sends.push(SeedSendHostRecord {
-                    queued: t(x.record.queued),
-                    ended: t(x.record.ended),
-                    peer: host(x.peer),
-                    epoch,
-                    record: x.record,
-                });
+                hs.seed_sends
+                    .push(SeedSendHostRecord::of(x.record, host(x.peer), epoch));
             }
             hs.forecasts_lost += m.forecasts_lost;
             hs.held_lost += m.held_lost;

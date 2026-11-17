@@ -17,7 +17,12 @@
 //!   samples and its adaptive seed's changes, its transfers, its stats bins,
 //!   its parent changes, and every frame it read, which each viewer's
 //!   [`ViewerStats`] takes as a simulated viewer's does
-//!   ([`ViewerStats::record`]).
+//!   ([`ViewerStats::record`]); with run.sh's `FORECAST=1` or `SPEC=1`,
+//!   its scheduler's logs too (`rec.logs`, [`strims_testbed::record::logs`]),
+//!   which its report takes as a simulated node's samples hand theirs
+//!   (`add_logs`). Reading a run holds every node's lines at once, so its
+//!   memory grows with them: lines with the logs take about twelve times
+//!   their bytes.
 //! - **The network.** The WAN columns ([`crate::tables::UP_COUNTERS`])
 //!   count each uplink's packets and bytes, its pure acknowledgements and
 //!   a data channel's SACKs apart. The twin counts its bytes as its access
@@ -48,15 +53,18 @@ use std::time::Duration;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use strims_base::stats::WaitHistogram;
+use strims_base::time::Time;
 use strims_ppspp::ParentWhy;
+use strims_testbed::record::logs::Logs;
 use strims_testbed::record::{BIN_MS, Gated, MeterSample, NODE_BIN_COUNTERS, SeedSample};
 use strims_testbed::stream::{FrameInfo, Parsed};
 use strims_testbed::transfer::{PeerTransfer, TransferSample};
 
 use crate::calibration::{self, Calibration, WAN_RATE, calibration_star};
 use crate::report::{
-    ACK_WHYS, AckWaits, HostReport, NodeBinRecord, ParentRecord, Report, SocketSample,
-    ViewerReport, WanHostReport, WanReport,
+    ACK_WHYS, AckWaits, ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport,
+    NodeBinRecord, ParentRecord, Report, RequestHostRecord, SeedDecisionHostRecord,
+    SeedSendHostRecord, SocketSample, ViewerReport, WanHostReport, WanReport,
 };
 use crate::spec::{Competing, Fault, HostIx, Scenario};
 use crate::stream::{SeqSet, ViewerStats};
@@ -91,7 +99,9 @@ const RECORDING: [&str; 10] = [
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
-const TWIN_SETTINGS: [&str; 26] = [
+const TWIN_SETTINGS: [&str; 28] = [
+    "FORECAST",
+    "SPEC",
     "VIEWERS",
     "SEED_UP_MBIT",
     "VIEWER_UP_MBIT",
@@ -221,7 +231,10 @@ fn num(x: f64) -> String {
 ///
 /// The window model (`STRIMS_SIM_TCP=1`), honest viewers
 /// (`STRIMS_SIM_HOSTILE=off`) and one clock (`STRIMS_SIM_CLOCK_SKEW=off`)
-/// always; the viewers, the seed's uplink and the stream's length always;
+/// always; the scheduler's logs the nodes kept (run.sh's `FORECAST=1`,
+/// `SPEC=1`: `STRIMS_SIM_FORECAST=1`, `STRIMS_SIM_SPEC=1`), so the twin
+/// writes the log tables the run does; the viewers, the seed's uplink and
+/// the stream's length always;
 /// the other links' settings where they aren't the twin's defaults; the
 /// seed's steps as factors of its uplink (`STRIMS_SIM_CAL_SEED_UP_SCALE`);
 /// both tbf buckets (run.sh's 3028 bytes where unset) and the peak rates
@@ -267,6 +280,15 @@ pub fn knobs_of(
     put("STRIMS_SIM_TCP", "1".to_owned());
     put("STRIMS_SIM_HOSTILE", "off".to_owned());
     put("STRIMS_SIM_CLOCK_SKEW", "off".to_owned());
+    // The scheduler's logs the nodes kept, which the twin keeps too: its
+    // knobs are the sim's.
+    for k in ["FORECAST", "SPEC"] {
+        match get(k).map(str::trim) {
+            None | Some("" | "0") => {}
+            Some("1") => put(&format!("STRIMS_SIM_{k}"), "1".to_owned()),
+            Some(v) => return Err(format!("{k}={v}: 1 or 0")),
+        }
+    }
     let viewers: usize = get("VIEWERS")
         .unwrap_or("3")
         .parse()
@@ -684,6 +706,10 @@ impl Run {
                 })
                 .collect();
         }
+        // The logs the nodes kept, which the tables write as the twin's.
+        let on = |k: &str| self.knobs.get(k).is_some_and(|v| v == "1");
+        s.forecast_log = on("STRIMS_SIM_FORECAST");
+        s.request_logs = on("STRIMS_SIM_SPEC");
         // The arrivals profile JOINS drew (a tier matrix's knob), as the
         // twin's row names it; the times are the run's.
         if let Some(a) = self
@@ -755,6 +781,11 @@ impl Run {
         let mut parent_changes = Vec::new();
         let swarm = scenario.swarms.first();
         let seed = swarm.map_or(0, |s| s.seed);
+        // The logs' times are from the stream's start (record::logs), and
+        // the report's from the run's, which every node's clock shares.
+        let unix = |ms: u64| Time::from_unix_millis(i64::try_from(ms).unwrap_or(i64::MAX));
+        let origin = unix(self.start_ms);
+        let epoch = unix(self.start_ms.saturating_sub(LEAD.as_millis() as u64));
         for (i, lines) in self.nodes.iter().enumerate() {
             let Some(host) = hosts.get_mut(i) else {
                 continue;
@@ -807,6 +838,9 @@ impl Run {
                     }
                 }
                 host.parents_lost += rec.get("parents_lost").and_then(Value::as_u64).unwrap_or(0);
+                if let Some(logs) = rec.get("logs").and_then(|v| Logs::parse(v, origin)) {
+                    add_logs(host, logs, epoch);
+                }
                 if is_viewer {
                     for r in rec
                         .get("reads")
@@ -979,6 +1013,47 @@ impl Run {
             why: ParentWhy::ALL.into_iter().find(|w| w.name() == why)?,
         })
     }
+}
+
+/// A line's logs ([`Logs`]) into its node's report, as a simulated node's
+/// sample hands its own (the world's `observe_bins`), by the same
+/// records: each chunk it first held (the forecast table's truth and the
+/// arrivals), its forecast samples, HAVEs, requests and seed log, their
+/// times true time from the run's start (the node's clock read `epoch`
+/// then: every container's clock is the host's), and the records the caps
+/// left out.
+fn add_logs(host: &mut HostReport, logs: Logs, epoch: Time) {
+    for (peer, f) in logs.forecasts {
+        host.forecasts.push(ForecastRecord::of(f, peer, epoch));
+    }
+    for (peer, parent, asked, held) in logs.held {
+        let a = ArrivalHostRecord::of(held, peer, parent, asked, epoch);
+        host.held.push((held.bin.base_offset(), a.at));
+        host.arrivals.push(a);
+    }
+    for (peer, have) in logs.haves {
+        host.haves.push(HaveHostRecord::of(have, peer, epoch));
+    }
+    for (peer, rivals, record) in logs.asks {
+        host.requests.push(RequestHostRecord {
+            epoch,
+            peer,
+            rivals,
+            record,
+        });
+    }
+    for (peer, d) in logs.seed_decisions {
+        host.seed_decisions
+            .push(SeedDecisionHostRecord::of(d, peer, epoch));
+    }
+    for (peer, s) in logs.seed_sends {
+        host.seed_sends.push(SeedSendHostRecord::of(s, peer, epoch));
+    }
+    host.forecasts_lost += logs.lost.forecasts;
+    host.held_lost += logs.lost.held;
+    host.haves_lost += logs.lost.haves;
+    host.requests_lost += logs.lost.requests;
+    host.seed_log_lost += logs.lost.seed_log;
 }
 
 /// A seed's state from its record (`SeedSample::json`).
@@ -3931,6 +4006,246 @@ mod tests {
         assert_eq!(between(19_100, 20_100), 10 * 1500);
         assert_eq!(between(20_100, 21_100), 100 * 1500);
         assert_eq!(between(24_900, 25_900), 10 * 1500);
+    }
+
+    /// A table's rows, by its header's column names.
+    fn table_rows(dir: &Path, name: &str) -> Vec<BTreeMap<String, String>> {
+        let csv = crate::tables::read_table(dir, name).unwrap();
+        let mut lines = csv.lines();
+        let head: Vec<String> = lines
+            .next()
+            .unwrap()
+            .split(',')
+            .map(str::to_owned)
+            .collect();
+        lines
+            .map(|l| {
+                head.iter()
+                    .cloned()
+                    .zip(l.split(',').map(str::to_owned))
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// A run whose nodes kept their scheduler's logs (FORECAST=1, SPEC=1)
+    /// keys its twin with the sim's knobs, and its lines' logs fill the log
+    /// tables as a sim run's records fill them: each record's time from
+    /// the stream's start, its hosts by index, the caps' losses in
+    /// series_meta. A run whose knobs are off writes none of the tables,
+    /// and its nodes' lines hold no logs.
+    #[test]
+    fn a_runs_logs_fill_the_log_tables_its_twin_writes() {
+        use strims_binmap::Bin;
+        use strims_ppspp::{
+            AdmitRule, HaveRecord, Held, HeldHow, LagForecast, PeerKey, RequestChannel, RequestEnd,
+            RequestRecord, SeedDecision, SeedDecisionKind, SeedRequest, SeedSend, SendFate,
+            SendHow,
+        };
+        use strims_testbed::record::logs::Lost;
+
+        let dir = fixture("logs");
+        let origin = Time::from_unix_millis(START as i64);
+        let at = |ms: i64| origin + strims_base::time::Duration::from_millis(ms);
+        let peer = PeerKey::default();
+        let channel = |announced| RequestChannel {
+            peer,
+            announced,
+            predicted: None,
+            rtt: strims_base::time::Duration::from_millis(20),
+            channel_open: at(-100),
+        };
+        let viewer = Logs {
+            forecasts: vec![(
+                Some(0),
+                LagForecast {
+                    at: at(310),
+                    peer,
+                    stream: 0,
+                    bin: Bin(2),
+                    sample: strims_base::time::Duration::from_millis(30),
+                    estimate: None,
+                    lazy: false,
+                    first_sight: false,
+                    channel_open: at(-100),
+                    run: 0,
+                },
+            )],
+            held: vec![(
+                Some(0),
+                Some(0),
+                None,
+                Held {
+                    bin: Bin(0),
+                    at: at(300),
+                    peer: Some(peer),
+                    how: HeldHow::Push,
+                    parent: Some(peer),
+                    expected: Some(at(290)),
+                    ..Held::default()
+                },
+            )],
+            haves: vec![(
+                Some(0),
+                HaveRecord {
+                    at: at(305),
+                    peer,
+                    stream: 0,
+                    bin: Bin(0),
+                    channel_open: at(-100),
+                },
+            )],
+            asks: vec![(
+                Some(0),
+                vec![None],
+                RequestRecord {
+                    at: at(200),
+                    stream: 0,
+                    bin: Bin(4),
+                    timeout: strims_base::time::Duration::from_millis(250),
+                    released: Some(at(199)),
+                    asked: channel(Some(at(150))),
+                    rivals: vec![channel(None)],
+                    end: RequestEnd::Answered,
+                    ended: at(240),
+                },
+            )],
+            lost: Lost {
+                forecasts: 2,
+                ..Lost::default()
+            },
+            ..Logs::default()
+        };
+        let seed = Logs {
+            seed_decisions: vec![(
+                Some(1),
+                SeedDecision {
+                    at: at(100),
+                    peer: Some(peer),
+                    kind: SeedDecisionKind::Request(SeedRequest {
+                        stream: 0,
+                        granted: true,
+                        rule: AdmitRule::Unmeasured,
+                        subscribers: 0,
+                        holders: None,
+                        copies: None,
+                        held: None,
+                        per_holder: None,
+                    }),
+                },
+            )],
+            seed_sends: vec![(
+                Some(1),
+                SeedSend {
+                    peer,
+                    stream: 0,
+                    bin: Bin(0),
+                    how: SendHow::Push,
+                    queued: at(150),
+                    ended: at(160),
+                    fate: SendFate::Written,
+                    bytes: 1024,
+                    cancel: None,
+                    declared: false,
+                    subscribed: true,
+                },
+            )],
+            ..Logs::default()
+        };
+        // Each node's first line carries its logs.
+        for (i, logs) in [(0, &seed), (1, &viewer)] {
+            let path = dir.join(format!("node-{i}.jsonl"));
+            let text = std::fs::read_to_string(&path).unwrap();
+            let mut lines: Vec<Value> = text
+                .lines()
+                .map(|l| serde_json::from_str(l).unwrap())
+                .collect();
+            let v: Value = serde_json::from_str(&logs.json(origin)).unwrap();
+            lines[0]["rec"]["logs"] = v;
+            let out: String = lines.iter().map(|l| format!("{l}\n")).collect();
+            std::fs::write(&path, out).unwrap();
+        }
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        let bin = Duration::from_millis(BIN_MS.unsigned_abs());
+        // Off: no log table, though the lines held logs.
+        let off = dir.join("tables-off");
+        Run::read(&dir, &BTreeMap::new())
+            .unwrap()
+            .report()
+            .write_tables(&off, bin, true)
+            .unwrap();
+        for t in [
+            "forecast",
+            "arrivals",
+            "haves",
+            "asks",
+            "seed_decisions",
+            "seed_sends",
+        ] {
+            assert!(crate::tables::read_table(&off, t).is_err(), "{t}");
+        }
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}FORECAST=1\nSPEC=1\n"),
+        )
+        .unwrap();
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(
+            (
+                run.knobs["STRIMS_SIM_FORECAST"].as_str(),
+                run.knobs["STRIMS_SIM_SPEC"].as_str()
+            ),
+            ("1", "1")
+        );
+        assert!(
+            !run.knobs
+                .keys()
+                .any(|k| k == "TESTBED_SPEC" || k == "TESTBED_FORECAST")
+        );
+        let r = run.report();
+        assert_eq!(r.hosts[1].arrivals[0].at, LEAD + Duration::from_millis(300));
+        assert_eq!(r.hosts[1].held, [(0, LEAD + Duration::from_millis(300))]);
+        assert_eq!(r.hosts[1].forecasts[0].peer, Some(0));
+        assert_eq!(r.hosts[1].requests[0].rivals, [None]);
+        assert_eq!(
+            r.hosts[0].seed_sends[0].ended,
+            LEAD + Duration::from_millis(160)
+        );
+        let on = dir.join("tables-on");
+        r.write_tables(&on, bin, true).unwrap();
+        let col = |t: &str, c: &str| -> Vec<String> {
+            table_rows(&on, t).iter().map(|r| r[c].clone()).collect()
+        };
+        assert_eq!(col("arrivals", "t_ms"), ["300"]);
+        assert_eq!(
+            (col("arrivals", "how"), col("arrivals", "expected_ms")),
+            (vec!["push".to_owned()], vec!["290".to_owned()])
+        );
+        assert_eq!(
+            (col("forecast", "t_ms"), col("forecast", "seen_ms")),
+            (vec!["310".to_owned()], vec!["280".to_owned()])
+        );
+        assert_eq!(col("haves", "t_ms"), ["305"]);
+        assert_eq!(col("asks", "picked"), ["true", "false"]);
+        assert_eq!(col("asks", "have_ms"), ["150", ""]);
+        assert_eq!(col("seed_decisions", "kind"), ["request"]);
+        assert_eq!(col("seed_decisions", "peer"), ["1"]);
+        assert_eq!(col("seed_sends", "t_ms"), ["160"]);
+        assert_eq!(col("seed_sends", "queued_ms"), ["150"]);
+        let meta: Value =
+            serde_json::from_str(&std::fs::read_to_string(on.join("series_meta.json")).unwrap())
+                .unwrap();
+        assert_eq!(meta["forecasts_lost"], 2);
+        assert_eq!(meta["held_lost"], 0);
+        // A knob the sim has no value for is refused.
+        std::fs::write(dir.join("settings"), format!("{settings}SPEC=2\n")).unwrap();
+        assert!(
+            Run::read(&dir, &BTreeMap::new())
+                .err()
+                .unwrap()
+                .contains("SPEC=2: 1 or 0")
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

@@ -12,7 +12,7 @@
 //!              [--rate <bytes/s>] [--chunk <bytes> --munro <bytes>]
 //!              [--units <chunks per signature> [--media <flv file>]]
 //!              [--record <file>] [--join-at <s>] [--arrive] [--hosts <dir>]
-//!              [--capture <dir>]
+//!              [--capture <dir>] [--forecast] [--spec]
 //! testbed_node --relay-only --topology <file> [--secs <s>] [--start <unix ms>]
 //! ```
 //!
@@ -41,7 +41,12 @@
 //! process's CPU time as `cpu_ms` and the records strims-sim's tables take
 //! (`rec`), for which it keeps stats bins of
 //! [`BIN_MS`](strims_testbed::record::BIN_MS) from the stream's start and
-//! its parent log, as a simulated node does.
+//! its parent log, as a simulated node does. `--forecast` keeps its
+//! scheduler's forecast log and `--spec` its request and seed logs
+//! (`NodeConfig::forecast_log`, `request_log`), as strims-sim's
+//! `STRIMS_SIM_FORECAST=1` and `STRIMS_SIM_SPEC=1` keep a simulated
+//! node's, and its lines' records carry them
+//! ([`strims_testbed::record::logs`]).
 //!
 //! `--relay-only` runs the relay: it listens where the topology's `relay`
 //! line says, joins the testbed network, runs no swarm, and stops 5 s
@@ -87,6 +92,8 @@ struct Args {
     arrive: bool,
     hosts: Option<PathBuf>,
     capture: Option<String>,
+    forecast: bool,
+    spec: bool,
 }
 
 fn args() -> Result<Args, String> {
@@ -109,6 +116,8 @@ fn args() -> Result<Args, String> {
         arrive: false,
         hosts: None,
         capture: None,
+        forecast: false,
+        spec: false,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -129,6 +138,8 @@ fn args() -> Result<Args, String> {
             "--arrive" => a.arrive = true,
             "--hosts" => a.hosts = Some(value()?.into()),
             "--capture" => a.capture = Some(value()?),
+            "--forecast" => a.forecast = true,
+            "--spec" => a.spec = true,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -254,6 +265,8 @@ async fn run() -> Result<(), String> {
     });
     let parents = ParentLog::default();
     config.parent_log = Some(parents.sink());
+    config.forecast_log = a.forecast;
+    config.request_log = a.spec;
     if topo.relay.is_some() {
         let at = me.browser_addr().to_string();
         match topo.browser_links {

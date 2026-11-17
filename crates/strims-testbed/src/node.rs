@@ -41,7 +41,7 @@
 //! | `tick_late_ms` | how late the timer of this line fired |
 //! | `write_late_ms` | at the seed, the latest of that second's writes past its time; `null` without writes |
 //! | `wakeups` | passes of the node's loop since the last line (`null` on the first): it follows traffic, so it shows load only next to a native node's |
-//! | `rec` | the line's records as strims-sim's tables take them (`Records`): the meter sample, the seed's state, the stats bins and parent changes since the last line, and every frame read since |
+//! | `rec` | the line's records as strims-sim's tables take them (`Records`): the meter sample, the seed's state, the stats bins and parent changes since the last line, and every frame read since; with the node's scheduler logs on (its driver's `NodeConfig::forecast_log` and `request_log`: testbed_node's and testbed_browser's `--forecast` and `--spec`), what they logged since ([`record::logs`]) |
 //! | `media` | of a media stream, `null` otherwise: at the seed, [`SeedStats`]: the unit writer's `records`, `units`, `gops`, `bytes` and `padding`, `early_signs` and `dropped` units; at a viewer, [`ViewerStats`]: `units` and `keyframes` read whole, the `messages` that took records to the player (Data messages, or the batches of a browser player's feed) and their records' `bytes`, `first_message_ms`, the egress reader's `discontinuities`, `corrupt_frames`, `losses`, `records` and `rewinds`/`refused_rewinds`/`overtaken_rewinds`, and the join: `first_read_ms`, the first rewind's `rewind_start_ms`, `rewind_end_ms`, outcome (`granted`, `refused`, `timed_out`, `overtaken`) and bytes back from the reader's position, `rewind_back`. Times are Unix ms. |
 //!
 //! `tick_late_ms` and `write_late_ms` show a throttled timer or an
@@ -60,6 +60,7 @@ use strims_transfer::SwarmRead;
 use tokio::sync::mpsc;
 
 use crate::media::{self, FlvFile, SeedStats, TagKind, ViewerStats};
+use crate::record::logs::Logs;
 use crate::record::{self, ParentLog};
 use crate::shape::LiveShape;
 use crate::stream::{FRAME_LEN, FrameParser, Parsed, encode_frame};
@@ -306,6 +307,7 @@ pub async fn run<R: Runtime + Clone + 'static>(
                 parents: parents.map(ParentLog::take).unwrap_or_default(),
                 reads: std::mem::take(&mut *reads.borrow_mut()),
                 now,
+                origin: Time::from_unix_millis(i64::try_from(s.start_ms).unwrap_or(i64::MAX)),
             }
             .json();
             let line = Line {
@@ -420,7 +422,10 @@ async fn read_frames(
 /// "parents": [[t_ms, stream, peer, why], ...], "parents_lost": n,
 /// "reads": [[seq, stamp_ms, read_ms], ...]}`, times Unix ms, peers by
 /// index (`null`: none, or one without), waits as
-/// [`record::waits_json`].
+/// [`record::waits_json`]. With the node's scheduler logs on
+/// (`NodeConfig::forecast_log`, `request_log`), what they logged since
+/// the last line too, `"logs": Logs` ([`record::logs`], times from
+/// `origin`, the stream's start); a node with them off writes none.
 struct Records<'a> {
     t_ms: u64,
     swarm: SwarmKey,
@@ -429,6 +434,7 @@ struct Records<'a> {
     parents: (Vec<ParentLogEntry>, u64),
     reads: Vec<[u64; 3]>,
     now: Time,
+    origin: Time,
 }
 
 impl Records<'_> {
@@ -484,8 +490,14 @@ impl Records<'_> {
             .iter()
             .map(|[q, s, r]| format!("[{q},{s},{r}]"))
             .collect();
+        let logs = Logs::of(self.m, swarm, index);
+        let logs = if logs.is_empty() {
+            String::new()
+        } else {
+            format!(",\"logs\":{}", logs.json(self.origin))
+        };
         format!(
-            "{{\"meter\":{},\"seed\":{seed},\"bins\":[{}],\"parents\":[{}],\"parents_lost\":{lost},\"reads\":[{}]}}",
+            "{{\"meter\":{},\"seed\":{seed},\"bins\":[{}],\"parents\":[{}],\"parents_lost\":{lost},\"reads\":[{}]{logs}}}",
             meter.map_or("null".to_owned(), |m| m.json()),
             bins.join(","),
             parents.join(","),

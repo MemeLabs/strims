@@ -9,7 +9,10 @@
 //! testbed's nodes run the same functions on their own samples and bins
 //! and log the records ([`crate::node`]'s `rec`), which strims-sim's
 //! `testbed` module reads back into a run's report. A testbed node keeps
-//! its parent log in a [`ParentLog`] between its lines.
+//! its parent log in a [`ParentLog`] between its lines, and with its
+//! scheduler's logs on hands each line their records ([`logs`]).
+
+pub mod logs;
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;

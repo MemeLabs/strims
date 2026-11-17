@@ -199,6 +199,17 @@
 #                          messages they read in record-<i>.bin
 #                          (testbed_node's --record)
 #   NODE_ARGS=<args>       more flags for every native node
+#   FORECAST=1             every node keeps its scheduler's forecast log
+#                          (testbed_node's and testbed_browser's
+#                          --forecast), as strims-sim's STRIMS_SIM_FORECAST=1
+#                          keeps a simulated node's, and its lines' records
+#                          carry it: the run's tables' forecast and arrivals,
+#                          and its twin's (its knob)
+#   SPEC=1                 every node keeps its request and seed logs
+#                          (--spec), as STRIMS_SIM_SPEC=1 does: the tables'
+#                          arrivals, haves, asks, seed_decisions and
+#                          seed_sends. Both off (0) by default; a line's
+#                          records hold no logs then
 #   CAPTURE=1              ppspp captures in <out dir>/capture, one dump
 #                          per node (native and browser), named by host id
 #   PCAP=1                 each node's packets on its eth0, both ways, in
@@ -376,6 +387,16 @@ fi
 node_args=${NODE_ARGS:-}
 browser_args=${BROWSER_ARGS:-}
 rate_arg=${RATE:+--rate $RATE}
+# The scheduler's logs every node keeps (FORECAST, SPEC), as the sim's
+# knobs of those names keep a simulated node's.
+log_args=""
+for k in FORECAST SPEC; do
+  case "${!k:-0}" in
+    0) ;;
+    1) log_args="$log_args --$(echo "$k" | tr '[:upper:]' '[:lower:]')" ;;
+    *) echo "$k=${!k}: 1 or 0" >&2; exit 1 ;;
+  esac
+done
 bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
 browser_bin=${BROWSER_BIN:-$root/target/release/examples/testbed_browser}
 web=${WEB_BUNDLE:-$root/dist/wasm-testbed}
@@ -640,7 +661,7 @@ nov6=(--sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv6.conf.default.d
 # the tree changes it, so runs of two trees don't pool. Its root is the
 # node's access link class's (the `links` file names each node's).
 SHAPER="clsact>ifb-netem>root-class"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD|FORECAST|SPEC)=' \
   > "$out/settings" || true
 echo "QDISC=$SHAPER" >> "$out/settings"
 echo "STAMPS=clock" >> "$out/settings"
@@ -779,7 +800,7 @@ $sample
 $(cpu_log "$i")
 $wait_start
 $(link_attached "$i")
-exec /testbed_node --index $i --topology /out/topology --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $media_arg $record_arg $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec /testbed_node --index $i --topology /out/topology --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $media_arg $record_arg $hosts $capture $log_args $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   else
     # The browser runs as the image's unprivileged user, after root has
     # shaped the link. Its profile, in /tmp, stays in memory, so its
@@ -803,7 +824,7 @@ $sample
 $(cpu_log "$i")
 $wait_start
 $(link_attached "$i")
-exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $log_args $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   fi
 done
 

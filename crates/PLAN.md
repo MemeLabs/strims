@@ -531,10 +531,6 @@ and dropped are in `TRIED.md`.
   - Testbed runs leave empty what the sim fills. Fill each from its own
     source on the testbed, so a testbed run fills every table and column
     a sim run does:
-    - the forecast, arrivals, asks, haves, seed_decisions and seed_sends
-      tables (the sim's under its `FORECAST` and `SPEC` knobs): record
-      the scheduler's logs on the testbed node (strims-testbed's
-      `record`), as the sim takes them;
     - the network columns retransmits, rtos and window_cuts, the window
       model's own counts in the sim: on TCP links, from the kernel's
       sockets, which the seed's ss log samples (`ss-0.log`, the `sockets`

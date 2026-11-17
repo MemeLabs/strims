@@ -128,7 +128,7 @@ fn args() -> Result<Args, String> {
             "--join-at" | "--rate" | "--hosts" | "--capture" | "--units" | "--player" => {
                 value()?;
             }
-            "--arrive" => {}
+            "--arrive" | "--forecast" | "--spec" => {}
             _ => return Err(format!("unknown flag {flag}")),
         }
     }

@@ -54,6 +54,13 @@ crates differ from those the page was built from builds its own page.
   the records strims-sim's tables take, made by the sim's own code
   (strims-testbed's `record`). PCAP=1 gives the tables' wire columns,
   which a comparison wants.
+- `FORECAST=1` and `SPEC=1` keep the nodes' scheduler logs, as the sim's
+  knobs of those names keep a simulated node's, and the run's tables and
+  its twin's fill forecast, arrivals, haves, asks, seed_decisions and
+  seed_sends. The lines grow large (a 3-viewer mesh's 40 s: about 5 MB a
+  node), and folding a run holds every line in memory (testbed_tables:
+  229 MB for that run's 19 MB): measure a run's lines and the fold's RSS
+  before a matrix turns the logs on.
 - `SEED_LINK`, `VIEWER_LINK` and `LINKS` give nodes access link
   classes: tbf, cable, dsl, fiber or trace (`hack/testbed/links.sh`
   documents each).

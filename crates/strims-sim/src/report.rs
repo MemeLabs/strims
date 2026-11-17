@@ -212,10 +212,27 @@ pub struct SeedDecisionHostRecord {
 }
 
 impl SeedDecisionHostRecord {
+    /// Decision `record` of a node whose clock read `epoch` at the run's
+    /// start, about host `peer`.
+    pub fn of(record: SeedDecision, peer: Option<HostIx>, epoch: strims_base::time::Time) -> Self {
+        SeedDecisionHostRecord {
+            at: true_time(epoch, record.at),
+            peer,
+            epoch,
+            record,
+        }
+    }
+
     /// The node's clock reading `t`, as true time from the run's start.
     pub fn true_time(&self, t: strims_base::time::Time) -> Duration {
-        (t - self.epoch).to_std().unwrap_or_default()
+        true_time(self.epoch, t)
     }
+}
+
+/// A node clock's reading `t`, where it read `epoch` at the run's start, as
+/// true time from the run's start (none before it).
+fn true_time(epoch: strims_base::time::Time, t: strims_base::time::Time) -> Duration {
+    (t - epoch).to_std().unwrap_or_default()
 }
 
 /// A chunk a seed pushed or answered ([`HostReport::seed_sends`]): when it
@@ -233,9 +250,21 @@ pub struct SeedSendHostRecord {
 }
 
 impl SeedSendHostRecord {
+    /// Send `record` of a node whose clock read `epoch` at the run's start,
+    /// to host `peer`.
+    pub fn of(record: SeedSend, peer: Option<HostIx>, epoch: strims_base::time::Time) -> Self {
+        SeedSendHostRecord {
+            queued: true_time(epoch, record.queued),
+            ended: true_time(epoch, record.ended),
+            peer,
+            epoch,
+            record,
+        }
+    }
+
     /// The node's clock reading `t`, as true time from the run's start.
     pub fn true_time(&self, t: strims_base::time::Time) -> Duration {
-        (t - self.epoch).to_std().unwrap_or_default()
+        true_time(self.epoch, t)
     }
 }
 
@@ -260,6 +289,32 @@ pub struct ArrivalHostRecord {
     pub held: Held,
 }
 
+impl ArrivalHostRecord {
+    /// Chunk `held` of a node whose clock read `epoch` at the run's start,
+    /// its source's host, the stream's parent's then and the host last
+    /// asked.
+    pub fn of(
+        held: Held,
+        peer: Option<HostIx>,
+        parent: Option<HostIx>,
+        asked_peer: Option<HostIx>,
+        epoch: strims_base::time::Time,
+    ) -> Self {
+        let t = |t| true_time(epoch, t);
+        ArrivalHostRecord {
+            at: t(held.at),
+            expected: held.expected.map(t),
+            released: held.released.map(t),
+            asked: held.asked.map(t),
+            last_ask: held.last_ask.map(|(_, x)| t(x)),
+            peer,
+            parent,
+            asked_peer,
+            held,
+        }
+    }
+}
+
 /// A chunk a HAVE announced to a host ([`HostReport::haves`]): when the
 /// HAVE arrived and when its channel opened (true time from the run's
 /// start), the announcing host, and the record, its times by the host's
@@ -270,6 +325,19 @@ pub struct HaveHostRecord {
     pub opened: Duration,
     pub peer: Option<HostIx>,
     pub have: HaveRecord,
+}
+
+impl HaveHostRecord {
+    /// HAVE `have` to a node whose clock read `epoch` at the run's start,
+    /// from host `peer`.
+    pub fn of(have: HaveRecord, peer: Option<HostIx>, epoch: strims_base::time::Time) -> Self {
+        HaveHostRecord {
+            at: true_time(epoch, have.at),
+            opened: true_time(epoch, have.channel_open),
+            peer,
+            have,
+        }
+    }
 }
 
 /// A request a host made ([`HostReport::requests`]): the record, its times
@@ -311,6 +379,19 @@ pub struct ForecastRecord {
     pub opened: Duration,
     pub peer: Option<HostIx>,
     pub forecast: LagForecast,
+}
+
+impl ForecastRecord {
+    /// Sample `forecast` of a node whose clock read `epoch` at the run's
+    /// start, of host `peer`.
+    pub fn of(forecast: LagForecast, peer: Option<HostIx>, epoch: strims_base::time::Time) -> Self {
+        ForecastRecord {
+            at: true_time(epoch, forecast.at),
+            opened: true_time(epoch, forecast.channel_open),
+            peer,
+            forecast,
+        }
+    }
 }
 
 /// vpn probe results (see [`crate::spec::VpnProbes`]).

@@ -24,7 +24,7 @@
 //!
 //! | `type` | fields | what the node does |
 //! |---|---|---|
-//! | `start` | `profileKey: {type, private, public}`, `rngSeed`, `networkKey`, `bindPort`, `echoPort`, `replyPort`, and optionally `maxBufferedAmount`, `statsBins: {originMs, widthMs}`, `parentLog` and `capture: {maxFileBytes, tap, label}` | Starts a node of [`node::browser_config`] with `ws://` dials allowed and no ICE servers (host candidates only), and `WebRtcConfig::max_buffered_amount` when given. `statsBins` keeps its stats bins (`NodeConfig::stats_bins`) of `widthMs` from `originMs` (Unix ms), and `parentLog` its parent log (`NodeConfig::parent_log`), for the testbed's records. With `capture`, the node captures its ppspp traffic (`NodeConfig::ppspp_capture`, labelled `label`) and sends the dump's bytes (see below). It joins the network `networkKey` with `NetworkOptions::auto_bind_port` `bindPort`, handles vpn messages on `echoPort` and `replyPort`, and reports `started`. Only the first `start` runs. |
+//! | `start` | `profileKey: {type, private, public}`, `rngSeed`, `networkKey`, `bindPort`, `echoPort`, `replyPort`, and optionally `maxBufferedAmount`, `statsBins: {originMs, widthMs}`, `parentLog`, `forecastLog`, `requestLog` and `capture: {maxFileBytes, tap, label}` | Starts a node of [`node::browser_config`] with `ws://` dials allowed and no ICE servers (host candidates only), and `WebRtcConfig::max_buffered_amount` when given. `statsBins` keeps its stats bins (`NodeConfig::stats_bins`) of `widthMs` from `originMs` (Unix ms), `parentLog` its parent log (`NodeConfig::parent_log`), and `forecastLog` and `requestLog` (booleans) its scheduler's forecast log and its request and seed logs (`NodeConfig::forecast_log`, `request_log`), for the testbed's records. With `capture`, the node captures its ppspp traffic (`NodeConfig::ppspp_capture`, labelled `label`) and sends the dump's bytes (see below). It joins the network `networkKey` with `NetworkOptions::auto_bind_port` `bindPort`, handles vpn messages on `echoPort` and `replyPort`, and reports `started`. Only the first `start` runs. |
 //! | `dial` | `uri` | Dials `uri` and reports `dialed`. |
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
@@ -399,6 +399,8 @@ impl Control {
             .as_bool()
             .unwrap_or(false)
             .then(ParentLog::default);
+        let forecast_log = property(cmd, "forecastLog").as_bool().unwrap_or(false);
+        let request_log = property(cmd, "requestLog").as_bool().unwrap_or(false);
         let capture = match property(cmd, "capture") {
             c if c.is_undefined() || c.is_null() => None,
             c => Some((
@@ -437,6 +439,8 @@ impl Control {
         }
         config.stats_bins = stats_bins;
         config.parent_log = parents.as_ref().map(ParentLog::sink);
+        config.forecast_log = forecast_log;
+        config.request_log = request_log;
         let (node, events) = node::spawn(config, signal).map_err(|e| e.to_string())?;
         let options = NetworkOptions {
             auto_bind_port: Some(bind_port),

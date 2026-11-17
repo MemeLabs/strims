@@ -13,6 +13,7 @@
 //!                 [--hosts <dir>] [--capture <dir>] [--player <file>]
 //!                 [--cpu-profile <dir> [--cpu-profile-at <s>]
 //!                  [--cpu-profile-secs <s>] [--cpu-profile-us <us>]]
+//!                 [--forecast] [--spec]
 //! ```
 //!
 //! The node's kind (`firefox` or `chromium`) comes from the topology
@@ -25,7 +26,11 @@
 //! control socket (the protocol of strims-wasm's `e2e` module) it:
 //!
 //! 1. starts the node with node `<i>`'s profile key, in the testbed
-//!    network, and has it run the testbed's swarm (`testbed`), with
+//!    network, keeping the records strims-sim's tables take (its stats
+//!    bins and parent log, and with `--forecast` and `--spec` its
+//!    scheduler's forecast log and its request and seed logs, as
+//!    testbed_node's flags do), and has it run the testbed's swarm
+//!    (`testbed`), with
 //!    `--arrive` as a viewer that arrives into the running stream
 //!    ([`Settings::arrives`](strims_testbed::node::Settings::arrives));
 //! 2. dials the relay over WebSocket, and once the network knows the link
@@ -125,6 +130,8 @@ struct Args {
     cpu_profile_at: u64,
     cpu_profile_secs: u64,
     cpu_profile_us: u64,
+    forecast: bool,
+    spec: bool,
 }
 
 fn args() -> Result<Args, String> {
@@ -151,6 +158,8 @@ fn args() -> Result<Args, String> {
         cpu_profile_at: 30,
         cpu_profile_secs: 30,
         cpu_profile_us: 500,
+        forecast: false,
+        spec: false,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -175,6 +184,8 @@ fn args() -> Result<Args, String> {
             "--cpu-profile-at" => a.cpu_profile_at = num(value()?)?,
             "--cpu-profile-secs" => a.cpu_profile_secs = num(value()?)?,
             "--cpu-profile-us" => a.cpu_profile_us = num(value()?)?,
+            "--forecast" => a.forecast = true,
+            "--spec" => a.spec = true,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -720,6 +731,8 @@ async fn run() -> Result<(), String> {
             // The records strims-sim's tables take (strims_testbed::node's `rec`).
             "statsBins": { "originMs": start_ms, "widthMs": BIN_MS },
             "parentLog": true,
+            "forecastLog": a.forecast,
+            "requestLog": a.spec,
         });
         if a.capture.is_some() {
             start["capture"] = json!({
