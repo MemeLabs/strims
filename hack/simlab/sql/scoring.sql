@@ -1209,10 +1209,26 @@ CREATE OR REPLACE MACRO viewers_link_overhead(env, dflt := '') AS
                                                lambda x: link_overhead(split_part(x, ':', 2))))) = 1
          THEN link_overhead(split_part(string_split(trim(env['STRIMS_SIM_CAL_LINKS']), ' ')[1], ':', 2)) END;
 
+-- twin_runs_of's count of the seed's meter samples of each run of the
+-- runs `jobs` that record its runner's channel bytes (meter_samples'
+-- channel_bytes, a testbed node's lines' field of that name), a row a run
+-- with the seed's samples: k, src, samples, counted. A catalog whose meter
+-- samples hold none (no run indexed records them) has no rows of it,
+-- rather than a macro that fails: its runs count none.
+-- needs: meter_samples.channel_bytes
+-- else none: k VARCHAR, src VARCHAR, samples BIGINT, counted BIGINT
+CREATE OR REPLACE MACRO channel_counted_of(jobs) AS TABLE
+    SELECT m.k, m.src, count(*) AS samples, count(m.channel_bytes) AS counted FROM meter_samples m
+    SEMI JOIN (SELECT DISTINCT b.k, b.src FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k)
+        USING (k, src)
+    WHERE m.role = 'seed'
+    GROUP BY ALL;
+
 -- The testbed and its twin (simlab.testbed): each run of the jobs `jobs`
 -- (a side: structs of a job's `k`, its `cell` and `seed`) over the stream's
 -- seconds [lo_s, hi_s), one row a measure, the same SQL over a testbed
--- run's tables and a sim run's: k, src, sim, cell, seed, measure, value.
+-- run's tables and a sim run's: k, src, sim, cell, seed, measure, value,
+-- basis (what a measure's definition took as given, NULL for nothing).
 -- A starved run (no viewer read a frame: a testbed run, a collapsed twin)
 -- is a result too, its lag measures carried across seconds without reads;
 -- a measure a run's tables lack is left out. Bytes are in one of two
@@ -1253,9 +1269,10 @@ CREATE OR REPLACE MACRO viewers_link_overhead(env, dflt := '') AS
 --                       the row's meter_seed_p* takes them: the truth
 --                       min(L x S_c, A x S_c x S_t) of the sim's
 --                       report::upload_truth on both sides, a testbed
---                       run's from its capture with S_c = 1 (the node
---                       records no data_bytes, its runner's channel
---                       bytes, yet: `basis` says so)
+--                       run's from its capture and its nodes' channel
+--                       bytes; one whose node lines don't record them
+--                       (meter_samples' channel_bytes empty) takes S_c =
+--                       1, and `basis` says so
 --   seed_drops_s        packets the seed's uplink queue dropped a second
 --   seed_pps            packets the seed's uplink carried a second, pure
 --                       ACKs in
@@ -1377,10 +1394,11 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
     -- competitor's link charge, L its QoS limit, S_t its transports' share
     -- of its link over its near-saturated windows, S_c its runner's
     -- channel bytes over vnic's. A testbed run's A and S_t come from its
-    -- tc rates, steps and capture (strims-sim's testbed::gate), and its
-    -- S_c is 1: its node has no data_bytes counter yet, so this truth
-    -- reads high, by 1 / S_c, and its readings over it (capacity over
-    -- truth) read low.
+    -- tc rates, steps and capture, and its S_c from its nodes' lines
+    -- (channel_bytes, bytes_written: strims-sim's testbed::gate). A run whose
+    -- node lines don't record its channel bytes (channel_bytes empty)
+    -- takes S_c as 1, so its truth reads high, by 1 / S_c, and its
+    -- readings over it (capacity over truth) read low: `basis` says so.
     truth AS (
         SELECT m.k, m.src, m.t_ms, m.capacity_bps, m.avail_bps AS truth_bps
         FROM meter_samples m SEMI JOIN j USING (k, src)
@@ -1388,6 +1406,8 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
     meter AS (
         SELECT k, src, sketch_quantiles(capacity_bps / truth_bps, [10, 50, 90]) AS q
         FROM truth WHERE capacity_bps > 0 AND truth_bps > 0 GROUP BY ALL),
+    -- The runs whose seed's every sample records its channel bytes.
+    counted AS (SELECT k, src, true AS all_counted FROM channel_counted_of(jobs) WHERE counted = samples),
     competing AS (
         SELECT e.k, e.src, e.t_us AS start_us,
                lead(e.t_us) OVER (PARTITION BY e.k, e.src ORDER BY e.t_us, e.kind) AS stop_us, e.kind
@@ -1457,15 +1477,15 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
                meter.q[1] AS meter_p10, meter.q[2] AS meter_p50, meter.q[3] AS meter_p90,
                comp.competitor_share, comp.competitor_charged, nb.seed_wire_per_written,
                ms.* EXCLUDE (k, src), q.* EXCLUDE (k, src), ps.* EXCLUDE (k, src), pr.viewer_requests_s,
-               pr.seed_requests_in_s
+               pr.seed_requests_in_s, counted.all_counted IS NULL AS sc_one
         FROM j LEFT JOIN lags USING (k, src) LEFT JOIN p99 USING (k, src) LEFT JOIN sec USING (k, src)
         LEFT JOIN wire USING (k, src) LEFT JOIN meter USING (k, src) LEFT JOIN comp USING (k, src)
         LEFT JOIN nb USING (k, src) LEFT JOIN ms USING (k, src) LEFT JOIN q USING (k, src)
-        LEFT JOIN ps USING (k, src) LEFT JOIN pr USING (k, src))
+        LEFT JOIN ps USING (k, src) LEFT JOIN pr USING (k, src) LEFT JOIN counted USING (k, src))
     SELECT k, src, sim, cell, seed, measure, value::DOUBLE AS value,
-           CASE WHEN sim = 'testbed' AND measure LIKE 'meter_p%' THEN 'truth with S_c = 1 (no data_bytes)' END
+           CASE WHEN sim = 'testbed' AND measure LIKE 'meter_p%' AND sc_one THEN 'truth with S_c = 1 (no channel_bytes)' END
                AS basis
-    FROM (UNPIVOT wide ON COLUMNS(* EXCLUDE (k, src, sim, cell, seed)) INTO NAME measure VALUE value)
+    FROM (UNPIVOT wide ON COLUMNS(* EXCLUDE (k, src, sim, cell, seed, sc_one)) INTO NAME measure VALUE value)
     WHERE value IS NOT NULL;
 
 -- The testbed runs whose source matches the LIKE pattern src_like (a
@@ -1507,8 +1527,8 @@ CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
           FROM r));
 
 -- Twin rows against testbed rows (`a_rows` the twin's, `b_rows` the
--- testbed's: lists of {cell, measure, k, value}, a run's measure each, as
--- twin_runs_of gives them): each cell and measure both sides have,
+-- testbed's: lists of {cell, measure, k, value, basis}, a run's measure
+-- each, as twin_runs_of gives them): each cell and measure both sides have,
 -- a_runs and b_runs, a_median and b_median (each side's median over its
 -- runs, quantile_cont's: the mean of the middle two at an even count, as
 -- a testbed's two repeats are; a sketch's p50 would take the lower),
@@ -1521,13 +1541,15 @@ CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
 -- their mean rank), ratio (the geometric mean of the cells' ratios) and
 -- b_quantile (the cells' mean). How well the twin follows the testbed
 -- across cells is the fidelity a model change is judged by. `caveat`
--- flags a meter reading's fit (meter_p*): the testbed's truth takes its
--- channel share as 1 (twin_runs_of's `basis`).
+-- flags a fit whose testbed runs took something as given (their rows'
+-- `basis`, twin_runs_of's: a meter reading's, meter_p*, over a truth that
+-- takes its channel share as 1), saying how many of them did.
 CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
     WITH a AS (SELECT unnest(a_rows, recursive := true)),
     b AS (SELECT unnest(b_rows, recursive := true)),
     am AS (SELECT cell, measure, count(*) AS runs, quantile_cont(value, 0.5) AS m FROM a GROUP BY ALL),
-    bm AS (SELECT cell, measure, count(*) AS runs, quantile_cont(value, 0.5) AS m FROM b GROUP BY ALL),
+    bm AS (SELECT cell, measure, count(*) AS runs, quantile_cont(value, 0.5) AS m, count(basis) AS given,
+                  string_agg(DISTINCT basis, '; ' ORDER BY basis) AS basis FROM b GROUP BY ALL),
     place AS (
         SELECT b.cell, b.measure, b.k,
                (count(*) FILTER (WHERE a.value < b.value) + 0.5 * count(*) FILTER (WHERE a.value = b.value))
@@ -1536,7 +1558,7 @@ CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
     pq AS (SELECT cell, measure, avg(q) AS q FROM place GROUP BY ALL),
     c AS (
         SELECT cell, measure, am.runs AS a_runs, bm.runs AS b_runs, am.m AS a_median, bm.m AS b_median,
-               CASE WHEN am.m <> 0 THEN bm.m / am.m END AS ratio, pq.q AS b_quantile
+               CASE WHEN am.m <> 0 THEN bm.m / am.m END AS ratio, pq.q AS b_quantile, bm.given, bm.basis
         FROM am JOIN bm USING (cell, measure) JOIN pq USING (cell, measure)),
     ranked AS (
         SELECT *,
@@ -1544,15 +1566,17 @@ CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
                    + (count(*) OVER (PARTITION BY measure, a_median) - 1) / 2.0 AS ra,
                rank() OVER (PARTITION BY measure ORDER BY b_median)
                    + (count(*) OVER (PARTITION BY measure, b_median) - 1) / 2.0 AS rb FROM c)
-    SELECT *, CASE WHEN measure LIKE 'meter_p%' THEN 'the testbed truth takes S_c = 1 (no data_bytes)' END AS caveat
+    SELECT * EXCLUDE (given, basis),
+           CASE WHEN given > 0 THEN 'the testbed''s ' || basis || ' in ' || given || ' of its ' || b_runs || ' runs' END
+               AS caveat
     FROM (
         SELECT cell, measure, a_runs, b_runs, a_median, b_median, ratio, b_quantile, NULL::BIGINT AS cells,
-               NULL::DOUBLE AS corr, NULL::DOUBLE AS rank_corr
+               NULL::DOUBLE AS corr, NULL::DOUBLE AS rank_corr, given, basis
         FROM c
         UNION ALL
         SELECT NULL, measure, sum(a_runs), sum(b_runs), NULL, NULL,
                exp(avg(ln(CASE WHEN ratio > 0 THEN ratio END))), avg(b_quantile), count(*), corr(a_median, b_median),
-               corr(ra, rb)
+               corr(ra, rb), sum(given), string_agg(DISTINCT basis, '; ' ORDER BY basis)
         FROM ranked GROUP BY measure);
 
 -- twin_fit_rows of a testbed side and its twin's (twin_runs_of over both,
@@ -1564,11 +1588,11 @@ CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
 CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 0, hi_s := 1e9, full_packet := 1500,
                                     growth_x := 3.5) AS TABLE
     FROM twin_fit_rows(
-        (SELECT coalesce(list({'cell': cell, 'measure': measure, 'k': k, 'value': value}),
-                         []::STRUCT(cell VARCHAR, measure VARCHAR, k VARCHAR, value DOUBLE)[])
+        (SELECT coalesce(list({'cell': cell, 'measure': measure, 'k': k, 'value': value, 'basis': basis}),
+                         []::STRUCT(cell VARCHAR, measure VARCHAR, k VARCHAR, value DOUBLE, basis VARCHAR)[])
          FROM twin_runs_of(a_jobs, lo_s := lo_s, hi_s := hi_s,
                            full_packet := full_packet, growth_x := growth_x)),
-        (SELECT coalesce(list({'cell': cell, 'measure': measure, 'k': k, 'value': value}),
-                         []::STRUCT(cell VARCHAR, measure VARCHAR, k VARCHAR, value DOUBLE)[])
+        (SELECT coalesce(list({'cell': cell, 'measure': measure, 'k': k, 'value': value, 'basis': basis}),
+                         []::STRUCT(cell VARCHAR, measure VARCHAR, k VARCHAR, value DOUBLE, basis VARCHAR)[])
          FROM twin_runs_of(b_jobs, lo_s := lo_s, hi_s := hi_s,
                            full_packet := full_packet, growth_x := growth_x)));

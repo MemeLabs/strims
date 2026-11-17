@@ -238,16 +238,83 @@ class Arithmetic(unittest.TestCase):
     def setUp(self):
         scoring.SCORE_DB = self.db
 
+    @staticmethod
+    def twin_lake(path):
+        """A lake of three runs of one cell (SECS 40, recording 10 s past
+        it, as a twin does): two testbed runs, `tb1` whose seed's meter
+        samples record its channel bytes and `tb0` whose don't, and their
+        twin `tw`. Each seed's meter reads its truth at 15, 25 and 35 s,
+        and 0.003 of it at 45 s, past the stream; each viewer lags 100 ms
+        each second to 40 s, its lag carried after."""
+        runs = [("tb1", "testbed/x", "testbed", True), ("tb0", "testbed/y", "testbed", False),
+                ("tw", "testbed/x-twin", "strims-sim", True)]
+        jobs = ", ".join(f"('{k}', '{src}', '{sim}', 100, MAP {{'STRIMS_SIM_CAL_SECS': '40'}})"
+                         for k, src, sim, _ in runs)
+        meter = ", ".join(f"('{k}', '{src}', 'seed', {t}, {3 if t > 40000 else 1000}, 1000, "
+                          f"{t // 10 if counted else 'NULL'})"
+                          for k, src, _, counted in runs for t in (15000, 25000, 35000, 45000))
+        lags = ", ".join(f"('{k}', '{src}', 0, {sec}, {100 if sec < 40 else 'NULL'}, {1 if sec < 40 else 0})"
+                         for k, src, _, _ in runs for sec in range(50))
+        viewers = ", ".join(f"('{k}', '{src}', 0, 1, NULL, false)" for k, src, _, _ in runs)
+        database(path, f"""
+            CREATE TABLE jobs (k VARCHAR, src VARCHAR, sim VARCHAR, bin_ms BIGINT, env MAP(VARCHAR, VARCHAR));
+            INSERT INTO jobs VALUES {jobs};
+            CREATE TABLE meter_samples (k VARCHAR, src VARCHAR, role VARCHAR, t_ms BIGINT, capacity_bps BIGINT,
+                avail_bps BIGINT, channel_bytes BIGINT, rate_bps BIGINT, children BIGINT, budget BIGINT,
+                copies BIGINT, queue_delay_ms BIGINT, busy_permille BIGINT, latest_floor_ms BIGINT,
+                path_latest_ms BIGINT, requests_in BIGINT);
+            INSERT INTO meter_samples (k, src, role, t_ms, capacity_bps, avail_bps, channel_bytes) VALUES {meter};
+            CREATE TABLE viewers (k VARCHAR, src VARCHAR, viewer BIGINT, node BIGINT, arrive_ms BIGINT,
+                hostile BOOLEAN);
+            INSERT INTO viewers VALUES {viewers};
+            CREATE TABLE viewer_seconds (k VARCHAR, src VARCHAR, viewer BIGINT, sec BIGINT, lag_ms DOUBLE,
+                frames BIGINT);
+            INSERT INTO viewer_seconds VALUES {lags};
+            CREATE TABLE events (k VARCHAR, src VARCHAR, t_us BIGINT, kind VARCHAR, node BIGINT, value DOUBLE);
+            CREATE TABLE seconds (k VARCHAR, src VARCHAR, sec BIGINT, busy DOUBLE, copies DOUBLE, pushed DOUBLE,
+                sent DOUBLE, hits DOUBLE, misses DOUBLE, pruned DOUBLE, avail DOUBLE);
+            CREATE TABLE bins (k VARCHAR, src VARCHAR, t_ms BIGINT, seed_up_bytes BIGINT, seed_up_sack_bytes BIGINT,
+                seed_up_packets BIGINT, seed_up_sack_packets BIGINT, seed_small_packets BIGINT,
+                seed_up_ack_packets BIGINT, seed_up_ack_bytes BIGINT, seed_drops BIGINT, viewer_up_bytes BIGINT,
+                viewer_up_sack_bytes BIGINT, viewer_up_packets BIGINT, viewer_up_sack_packets BIGINT,
+                viewer_switched BIGINT, viewer_shed BIGINT, seed_up_queue_ms BIGINT);
+            CREATE TABLE node_bins (k VARCHAR, src VARCHAR, node BIGINT, t_ms BIGINT, up_bytes BIGINT,
+                up_sack_bytes BIGINT, up_ack_bytes BIGINT, up_packets BIGINT, up_sack_packets BIGINT,
+                up_ack_packets BIGINT, data_bytes BIGINT, ovh BIGINT);
+            CREATE TABLE peer_samples (k VARCHAR, src VARCHAR, node BIGINT, peer BIGINT, t_ms BIGINT,
+                rtt_ms BIGINT, cto_ms BIGINT, requests_out BIGINT, requests_in BIGINT);
+            """)
+        return "[" + ", ".join(f"{{'cell': 'c', 'seed': 1, 'k': '{k}'}}" for k, _, _, _ in runs) + "]"
+
+    def test_a_testbed_runs_meter_readings_say_s_c_1_only_without_its_channel_bytes(self):
+        """twin_runs_of labels a testbed run's meter_p* rows `basis` only
+        where its seed's samples lack channel_bytes (channel_counted_of):
+        not a run that records them, nor a twin."""
+        with tempfile.TemporaryDirectory() as tmp:
+            side = self.twin_lake(Path(tmp) / "twin.duckdb")
+            got = {(r["k"], r["measure"]): r["basis"]
+                   for r in scored(f"FROM twin_runs_of({side}) WHERE measure LIKE 'meter_p%';")}
+        scoring.SCORE_DB = self.db
+        self.assertEqual(sorted({k for k, _ in got}), ["tb0", "tb1", "tw"])
+        self.assertEqual({k: b for (k, _), b in got.items()},
+                         {"tb0": "truth with S_c = 1 (no channel_bytes)", "tb1": None, "tw": None})
+
     def test_twin_fit_rows(self):
         """twin_fit_rows: a side's median is the mean of its middle two at an
         even count; a testbed run stands at its mid-rank quantile among the
-        twin's seeds; Spearman's rank_corr gives ties their mean rank."""
-        def rows(side):
-            return "[" + ", ".join(f"{{'cell': '{c}', 'measure': 'm', 'k': '{c}{i}', 'value': {v}}}"
+        twin's seeds; Spearman's rank_corr gives ties their mean rank; a
+        fit whose testbed runs took something as given (their basis) says
+        how many did, in its cell and across them."""
+        def rows(side, given=()):
+            basis = lambda c, i: "'S_c = 1'" if (c, i) in given else "NULL"
+            return "[" + ", ".join(f"{{'cell': '{c}', 'measure': 'm', 'k': '{c}{i}', 'value': {v}, "
+                                   f"'basis': {basis(c, i)}}}"
                                    for c, vs in side.items() for i, v in enumerate(vs)) + "]"
         twin = {"x": [1.0, 2.0, 3.0, 4.0], "y": [10.0, 20.0, 30.0, 40.0], "z": [10.0, 20.0, 30.0, 40.0]}
         bed = {"x": [2.0, 5.0], "y": [25.0, 25.0], "z": [0.0, 40.0]}
-        got = {r["cell"]: r for r in scored(f"FROM twin_fit_rows({rows(twin)}, {rows(bed)});")}
+        got = {r["cell"]: r for r in scored(f"FROM twin_fit_rows({rows(twin)}, {rows(bed, given={('x', 1)})});")}
+        self.assertEqual([got[c]["caveat"] for c in ("x", "y", None)],
+                         ["the testbed's S_c = 1 in 1 of its 2 runs", None, "the testbed's S_c = 1 in 1 of its 6 runs"])
         self.assertEqual((got["x"]["a_median"], got["x"]["b_median"]), (2.5, 3.5))
         # x: 2 ties one of four and beats one (0.375), 5 beats all (1).
         self.assertAlmostEqual(got["x"]["b_quantile"], (0.375 + 1.0) / 2)
