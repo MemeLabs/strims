@@ -51,15 +51,14 @@
 //!   ([`HostSpec::upload_capacity_live`](crate::HostSpec::upload_capacity_live):
 //!   [`Report::upload_cap_at`](crate::Report::upload_cap_at) for the second
 //!   before, from the inputs the report takes it from), the oracle the
-//!   upload meter is measured against. A told host's stats fold a runner
-//!   tick (101 ms) past the round's ask, so an oracle arm samples it later
-//!   than an arm without, and its last sample falls past the run's end; a
-//!   stats cadence under [`ORACLE_STATS_MIN`](crate::spec::ORACLE_STATS_MIN)
-//!   fails the run. `=seed` tells only the hosts that
-//!   seed a swarm, `=viewers` only the others. With `-static` (`=1-static`,
-//!   `=seed-static`, `=viewers-static`) each is told once, before it sends,
-//!   what its uplink carries (its rate, or its capacity schedule's mean) in
-//!   channel bytes at a full message's share
+//!   upload meter is measured against: the node takes what it is told at
+//!   once, so where the truth is above 0 its meter reads it at its sample,
+//!   or less where its link was busy for at least half the meter's window,
+//!   and where the truth is 0 it knows no capacity and measures. `=seed`
+//!   tells only the hosts that seed a swarm, `=viewers` only the others. With
+//!   `-static` (`=1-static`, `=seed-static`, `=viewers-static`) each is
+//!   told once, before it sends, what its uplink carries (its rate, or its
+//!   capacity schedule's mean) in channel bytes at a full message's share
 //!   ([`full_share`](crate::report::full_share)), within its rate limit
 //!   ([`HostSpec::upload_capacity`](crate::HostSpec::upload_capacity)).
 //! - `STRIMS_SIM_MINUTES=<m>` sets the stream length of the scenarios that

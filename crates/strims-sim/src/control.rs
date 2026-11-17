@@ -74,31 +74,19 @@ pub(crate) async fn controller(w: Rc<World>) -> turmoil::Result {
 async fn sample(w: &World, full: bool, last: bool) {
     let asked = sim_now();
     // A host the live oracle tells is told the truth for the second before
-    // now, and sampled once its runner has ticked (its schedulers take a
-    // capacity at their tick), so its reading at the sample is the truth
-    // there; it folds after the others, in host order too.
-    let tick = Duration::from_nanos(strims_ppspp::TICK_INTERVAL.as_nanos().unsigned_abs());
+    // now, which its node takes at once, before its sample.
     let ask = |h: HostIx, node: Node, told: Option<u64>| async move {
         if let Some(c) = told {
             let _ = tokio::time::timeout(CALL_TIMEOUT, node.set_upload_capacity(Some(c))).await;
-            let wait = (asked + tick + Duration::from_millis(1)).saturating_sub(sim_now());
-            tokio::time::sleep(wait).await;
         }
         (h, tokio::time::timeout(CALL_TIMEOUT, node.metrics()).await)
     };
     let mut asks = FuturesOrdered::new();
-    let mut told = Vec::new();
     for h in 0..w.spec.hosts.len() {
         let Some(node) = w.node(h).filter(|_| !w.departed(h)) else {
             continue;
         };
-        match w.oracle(h) {
-            Some(c) => told.push((h, node, c)),
-            None => asks.push_back(ask(h, node, None)),
-        }
-    }
-    for (h, node, c) in told {
-        asks.push_back(ask(h, node, Some(c)));
+        asks.push_back(ask(h, node, w.oracle(h)));
     }
     while let Some((h, answer)) = asks.next().await {
         let Ok(Ok(m)) = answer else {

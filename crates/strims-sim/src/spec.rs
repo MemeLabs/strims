@@ -67,14 +67,13 @@ pub struct HostSpec {
     /// The live oracle: the node is told the meter's truth
     /// ([`Report::upload_cap_at`](crate::Report::upload_cap_at)) as it
     /// boots and ahead of each of its stats samples
-    /// (`Node::set_upload_capacity`), from the same inputs the run's report
-    /// takes it from, in place of `upload_capacity`. Its sample is taken
-    /// once its runner has ticked, so the meter reads the truth there: its
-    /// stats fold at least a runner tick (`TICK_INTERVAL`, 101 ms with the
-    /// millisecond after) past the round's ask, so a told host is sampled
-    /// later than the same host untold, and its last sample falls past the
-    /// run's end. A run with a told host takes a stats cadence of at least
-    /// [`ORACLE_STATS_MIN`], and fails under it.
+    /// (`Node::set_upload_capacity`, which it takes at once), from the same
+    /// inputs the run's report takes it from, in place of
+    /// `upload_capacity`. At a sample whose truth is above 0 its meter reads
+    /// the truth, or less where the meter's link was busy for at least half
+    /// its window (it takes the lower of what it knows and what it
+    /// measures); a truth of 0 tells it no capacity, which leaves it none
+    /// known, so its meter measures there.
     pub upload_capacity_live: bool,
     pub max_peers: u32,
     /// vpn routing for this host; `None` uses [`Scenario::routing`].
@@ -764,12 +763,6 @@ pub struct SendBuffer {
     /// Congestion windows and bounded access queues.
     pub window: bool,
 }
-
-/// The shortest stats cadence a run whose hosts the live oracle tells
-/// takes ([`HostSpec::upload_capacity_live`]): a told host is sampled a
-/// runner tick and a millisecond after the round asks (101 ms), and a
-/// cadence under about this would skip its next round.
-pub const ORACLE_STATS_MIN: Duration = Duration::from_millis(110);
 
 impl Scenario {
     /// How often the controller samples every node (`sample_every`, at

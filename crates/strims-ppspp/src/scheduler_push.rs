@@ -1510,6 +1510,14 @@ impl PeerSwarmScheduler {
         }
     }
 
+    /// Takes the capacity the driver knows into the upload measurement
+    /// ([`UploadInfo::hint`]), the rest of it as last recorded.
+    pub(crate) fn set_upload_hint(&mut self, hint: Option<u64>) {
+        if let Some(p) = self.s.push.as_mut() {
+            p.upload.hint = hint;
+        }
+    }
+
     /// Reports the upload measurement to the tap, with this swarm's
     /// committed push rate, if it changed since the last report.
     pub(crate) fn tap_upload(&mut self, committed: f64) {

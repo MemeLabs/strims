@@ -31,16 +31,6 @@ fn wall_clock() -> impl FnOnce() -> f64 {
 /// Runs `spec` with `seed`. `Err` carries turmoil's error (a host task
 /// failed, or the run didn't finish).
 pub fn run(spec: Scenario, seed: u64) -> Result<Report, String> {
-    let stats = spec.cadences().1;
-    if stats < crate::spec::ORACLE_STATS_MIN
-        && let Some(h) = spec.hosts.iter().find(|h| h.upload_capacity_live)
-    {
-        return Err(format!(
-            "{}: the live oracle samples a told host a runner tick after the round, which a stats cadence of {stats:?} (under {:?}) would skip",
-            h.name,
-            crate::spec::ORACLE_STATS_MIN
-        ));
-    }
     let mut group = MemoryGroup::new();
     let counters = group.as_ref().map(MemoryGroup::counters);
     let records = MemoryGroup::new();
@@ -510,22 +500,4 @@ fn report(
     // As the run applied them, so `skipped_faults` indexes them.
     r.scenario.faults.sort_by_key(|f| f.at);
     r
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_told_host_takes_a_stats_cadence_past_a_runner_tick() {
-        let mut s = Scenario::new("oracle-cadence");
-        let h = s.host("a", None);
-        if let Some(host) = s.hosts.get_mut(h) {
-            host.upload_capacity_live = true;
-        }
-        s.stats_every = Some(Duration::from_millis(100));
-        let e = run(s, 1).err().unwrap();
-        assert!(e.contains("a runner tick after the round"), "{e}");
-    }
 }

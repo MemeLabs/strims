@@ -3722,21 +3722,34 @@ fn a_saturated_links_share_is_a_full_messages() {
 }
 
 /// The live oracle tells the seed the truth before each of its meter
-/// samples, so the meter reads it there: at each sample what it was told
-/// is `Report::upload_cap_at` at the sample, and so is its reading but
-/// where the meter reads a saturated link lower (never higher), on an ATM
-/// link that steps down while a competing upload runs, and on a trace
-/// whose rate changes every second (12, 6, 3 and 9 Mbit/s).
+/// samples, which the node takes at once, so the meter reads it there: at
+/// each sample what it was told is `Report::upload_cap_at` at the sample,
+/// and where that is above 0 so is its reading but where the meter reads a
+/// link busy for at least half its window lower (`SATURATED_BUSY`: the
+/// lower of what it knows and what it measures; never higher), on an ATM
+/// link that steps down while a competing upload runs, on a trace whose
+/// rate changes every second (12, 6, 3 and 9 Mbit/s), and on one with an
+/// outage, where it is told 0 (no capacity known: the meter measures).
 #[test]
 fn the_live_oracle_tells_the_truth() {
     let check = |r: &Report| {
-        let (mut told, mut read) = (0, 0);
+        let (mut told, mut read, mut zeros) = (0, 0, 0);
         let mut truths = Vec::new();
         for m in &r.hosts[0].runner.meter {
             if let Some(x) = m.told {
                 let truth = r.upload_cap_at(0, m.asked);
                 assert_eq!(Some(x), truth, "told at {:?}", m.t);
-                assert!(m.capacity <= x, "read {} over {x} at {:?}", m.capacity, m.t);
+                if x == 0 {
+                    zeros += 1;
+                    continue;
+                }
+                assert!(
+                    m.capacity == x || (m.capacity < x && m.busy_permille >= 500),
+                    "read {} of {x}, busy {}/1000, at {:?}",
+                    m.capacity,
+                    m.busy_permille,
+                    m.t
+                );
                 told += 1;
                 read += usize::from(m.capacity == x);
                 truths.push(x);
@@ -3744,7 +3757,7 @@ fn the_live_oracle_tells_the_truth() {
         }
         assert!(told >= 8, "{told} samples told");
         assert!(read * 10 >= told * 9, "{read} of {told} read the truth");
-        truths
+        (truths, zeros)
     };
     let mut c = collapse_case(2, 10, 10);
     c.seed_burst = Some(3028);
@@ -3752,7 +3765,8 @@ fn the_live_oracle_tells_the_truth() {
     c.seed_up_steps = vec![(4.0, 5.0)];
     c.compete = vec![(2.0, 4.0)];
     let r = truth_run("the_live_oracle_tells_the_truth", &c, true);
-    let truths = check(&r);
+    let (truths, zeros) = check(&r);
+    assert_eq!(zeros, 0);
     // The step and the upload move it: from about 1 MB/s to under half.
     let (lo, hi) = (
         truths.iter().copied().min().unwrap(),
@@ -3777,12 +3791,24 @@ fn the_live_oracle_tells_the_truth() {
     c.seed_burst = Some(3028);
     c.links = vec![Some(trace.spec()), None, None];
     let r = truth_run("the_live_oracle_tells_the_truth", &c, true);
-    let truths = check(&r);
+    let (truths, zeros) = check(&r);
+    assert_eq!(zeros, 0);
     let (lo, hi) = (
         truths.iter().copied().min().unwrap(),
         truths.iter().copied().max().unwrap(),
     );
     assert!(hi > 3 * lo, "{lo} {hi}");
+    // An opportunity a millisecond but none for 3.5 s from 4 s: the truth
+    // is 0 for 2.5 s of it, which holds a sample a second.
+    let trace = TraceFile::new(
+        "oracle-outage",
+        (1..=12_000).filter(|ms| !(4_001..7_500).contains(ms)),
+    );
+    let mut c = collapse_case(2, 10, 12);
+    c.links = vec![Some(trace.spec()), None, None];
+    let r = truth_run("the_live_oracle_tells_the_truth", &c, true);
+    let (_, zeros) = check(&r);
+    assert!(zeros >= 2, "{zeros} samples told 0");
 }
 
 /// A trace link takes no rate steps, in the sims as on the testbed.

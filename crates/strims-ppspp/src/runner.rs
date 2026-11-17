@@ -902,13 +902,23 @@ impl Runner {
     }
 
     /// The node's upload capacity in bytes per second, when its driver
-    /// knows it (an upload limit it was configured with); `None` leaves
-    /// the measurement alone. Push admission, shedding and seed allocation
-    /// take it as the capacity, or the measurement where that shows a
-    /// saturated link below it. It comes from the node's own
-    /// configuration, never from a peer.
+    /// knows it (an upload limit it was configured with); `None`, or 0,
+    /// leaves the measurement alone. Push admission, shedding and seed
+    /// allocation take it as the capacity, or the measurement where that
+    /// shows a saturated link below it, from this call on: every swarm's
+    /// reading takes it at once, the rest of the reading as of the last
+    /// tick. It comes from the node's own configuration, never from a
+    /// peer.
     pub fn set_upload_capacity(&mut self, bytes_per_sec: Option<u64>) {
-        self.upload.hint = bytes_per_sec.filter(|&b| b > 0);
+        let hint = bytes_per_sec.filter(|&b| b > 0);
+        self.upload.hint = hint;
+        for sched in self
+            .swarms
+            .values_mut()
+            .filter_map(|rs| rs.scheduler.as_mut())
+        {
+            sched.set_upload_hint(hint);
+        }
     }
 
     // --- the link's path --------------------------------------------------

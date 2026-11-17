@@ -1155,6 +1155,33 @@ fn the_capacity_hint_bounds_the_measured_capacity() {
 }
 
 #[test]
+fn a_known_capacity_takes_effect_at_once() {
+    // Between ticks, a hint the driver sets or clears is the capacity at
+    // once, and so is the measurement it leaves.
+    let mut p = Pair::with(hybrid(), hybrid());
+    for _ in 0..15 {
+        p.write(1);
+        p.tick(100);
+    }
+    let capacity = |p: &Pair| {
+        p.seed
+            .runner
+            .push_stats(p.seed.swarm)
+            .unwrap()
+            .upload_capacity
+    };
+    let measured = capacity(&p);
+    assert!(measured > 1000, "{measured}");
+    p.seed.runner.set_upload_capacity(Some(1000));
+    assert_eq!(capacity(&p), 1000);
+    p.seed.runner.set_upload_capacity(Some(0));
+    assert_eq!(capacity(&p), measured);
+    p.seed.runner.set_upload_capacity(Some(1000));
+    p.seed.runner.set_upload_capacity(None);
+    assert_eq!(capacity(&p), measured);
+}
+
+#[test]
 fn a_seeds_shares_follow_its_subscribers_at_once() {
     // A hybrid seed whose uplink shares follow its pushes weighs a
     // subscriber in the call that admitted or lost it, not at the next
