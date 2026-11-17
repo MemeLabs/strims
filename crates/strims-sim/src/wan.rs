@@ -873,6 +873,24 @@ impl Flow {
         });
     }
 
+    /// What a write would send at once, as Linux's write pushes what the
+    /// window allows before the next (`tcp_push`): the window's room in
+    /// packets, with nothing unsent or to resend waiting, outside a
+    /// recovery and the loss state. Left out: the window's restart after
+    /// an idle spell and TSO deferral, which [`Scheduler::pump`] applies as
+    /// it sends.
+    fn write_room(&self) -> u64 {
+        if !self.unsent.is_empty()
+            || !self.resend.is_empty()
+            || self.recovery.is_some()
+            || self.loss_high.is_some()
+        {
+            return 0;
+        }
+        let room = (self.cwnd - self.in_flight as f64).max(0.0) as u64;
+        room / MSS as u64
+    }
+
     /// The bytes of segment `seq` still out: its tail's, if the queue took
     /// its head.
     fn outstanding(&self, seq: u64) -> usize {
@@ -1164,6 +1182,10 @@ pub(crate) struct Scheduler {
     /// admission time and record: their connection and length. Bound: the
     /// records in flight.
     admits: BTreeMap<(Time, u64), ((SocketAddr, SocketAddr), usize)>,
+    /// The connections whose window a walk moved, whose room for writes
+    /// at once ([`Flow::write_room`]) the send buffers then learn. Bound:
+    /// the connections pumped or acknowledged in one walk.
+    room_moved: Vec<(SocketAddr, SocketAddr)>,
     /// The window model's connections. Bound: one per TCP connection that
     /// sent data.
     flows: FastMap<(SocketAddr, SocketAddr), Flow>,
@@ -1346,6 +1368,7 @@ impl Scheduler {
             tick: Duration::from(spec.tick),
             buffers,
             admits: BTreeMap::new(),
+            room_moved: Vec::new(),
             flows: FastMap::default(),
             arriving: FastMap::default(),
             sending: Vec::new(),
@@ -1458,6 +1481,7 @@ impl Scheduler {
         self.send(now - self.tick, fresh);
         self.purge(sim);
         self.admit(now);
+        self.tell_rooms();
         if now >= self.next_queue_sample {
             self.next_queue_sample = now + self.queue_every;
             for (h, (samples, bytes)) in self
@@ -1531,6 +1555,27 @@ impl Scheduler {
     /// ([`EndStats::up_bytes`](strims_wan::network::EndStats::up_bytes)).
     pub(crate) fn own_up_bytes(&self, h: HostIx) -> u64 {
         self.net.stats(h).up_bytes
+    }
+
+    /// Tells the send buffers what the connections whose window the walk
+    /// moved let out of their next writes at once.
+    fn tell_rooms(&mut self) {
+        let Some(b) = &self.buffers else {
+            return;
+        };
+        if self.room_moved.is_empty() {
+            return;
+        }
+        let mut moved = std::mem::take(&mut self.room_moved);
+        moved.sort_unstable();
+        moved.dedup();
+        let rooms: Vec<_> = moved
+            .iter()
+            .filter_map(|c| Some((*c, self.flows.get(c)?.write_room())))
+            .collect();
+        b.set_rooms(&rooms);
+        moved.clear();
+        self.room_moved = moved;
     }
 
     /// Credits the segments admitted by `now` to their sockets and wakes
@@ -1857,6 +1902,7 @@ impl Scheduler {
     /// they start, then the window: a recovery's rate reduction, or
     /// outside one its growth.
     fn acked(&mut self, t: Time, conn: (SocketAddr, SocketAddr), seq: u64, len: usize) {
+        self.room_moved.push(conn);
         let base = self.conn_rtt(conn);
         let Some(f) = self.flows.get_mut(&conn) else {
             return;
@@ -2443,6 +2489,7 @@ impl Scheduler {
     /// (`tcp_write_xmit`'s `tcp_cwnd_test`, a segment past it cut to it as
     /// `tso_fragment` does), from as many records as hold them.
     fn pump(&mut self, at: Time, conns: &[(SocketAddr, SocketAddr)]) {
+        self.room_moved.extend_from_slice(conns);
         let mut open: Vec<((SocketAddr, SocketAddr), Duration)> =
             conns.iter().map(|&c| (c, self.conn_rtt(c))).collect();
         while !open.is_empty() {

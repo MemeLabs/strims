@@ -1649,6 +1649,23 @@ mod tests {
         assert_ne!(simulate(&bench).unwrap(), first);
     }
 
+    /// A burst's writes leave the window's room out of the mark at once,
+    /// so a 64 KiB burst in 4 KiB writes, past a GSO buffer with its
+    /// headers, goes in whole: on the testbed holders-10's holders blocked
+    /// none of their bursts' last writes in 112, lossy's 16 KiB writes 9.
+    #[test]
+    fn a_burst_takes_the_windows_room_at_once() {
+        let logs = run(
+            "VIEWERS=1\nSEED_UP_MBIT=10\nSECS=10",
+            "burst 0 1 0 250 65536 4096\nprobe 0 1 7 200",
+        );
+        let blocked = events(&logs[0], "w")
+            .filter(|l| field(l, "k") == Some(0) && field(l, "seq").is_some_and(|s| s % 16 == 15))
+            .filter(|l| field(l, "done").unwrap() - field(l, "at").unwrap() > 1000)
+            .count();
+        assert!(blocked <= 2, "{blocked} of 32 bursts' last writes blocked");
+    }
+
     /// On the testbed (`hack/testbed/bench/over.sched`) a socket asked for
     /// more than its 5 Mbit/s uplink takes drains its unsent bytes to
     /// under half the mark before the writer may write again, then takes

@@ -15,9 +15,15 @@
 //! mark plus a segment unsent, not the mark alone. A write it refuses
 //! leaves the socket unwritable until its unsent bytes fall under half the
 //! mark, as a real socket's readiness does, however often its writer is
-//! polled meanwhile. Each write is stamped with its order on the host, so
-//! the WAN scheduler hands a sender's segments to its uplink in the order
-//! its sockets took them. A byte is
+//! polled meanwhile. With [`SendBuffer::window`] the bytes a write's
+//! connection's window lets out at once count as sent from the write, as
+//! Linux's write pushes what the window allows before the next
+//! (`tcp_push`): a burst of writes leaves its first window's bytes out of
+//! the mark and out of the buffer it fills, whose unsent remainder later
+//! writes join, though the scheduler admits them only at its next walk
+//! (sent at the step they were written in). Each write is stamped with
+//! its order on the host, so the WAN scheduler hands a sender's segments
+//! to its uplink in the order its sockets took them. A byte is
 //! unsent from its write until the WAN scheduler admits its segment: to
 //! the sender's uplink queue once that queue holds less than
 //! [`SendBuffer::uplink_queue`] of transmission time, where the segment's
@@ -77,6 +83,14 @@ struct Conn {
     /// ... and of them, those in the last buffer a write started, which
     /// later writes fill to [`GSO_SEGMENT`] whatever the mark.
     tail: u64,
+    /// What the connection's window lets out of its next writes at once,
+    /// in packets, as the WAN scheduler last found it
+    /// ([`SendBuffers::set_rooms`]) ...
+    room: u64,
+    /// ... and of `unsent`, the bytes written into it: sent from their
+    /// write as far as the mark and the tail go, the scheduler admitting
+    /// them at its next walk.
+    early: u64,
     /// The writer a refused write left waiting. Until it is woken the
     /// socket stays unwritable, as a real socket's readiness does once a
     /// write would block: it isn't polled again before the wake.
@@ -101,6 +115,13 @@ struct Conn {
 }
 
 impl Conn {
+    /// The bytes Linux would count unsent (`tcp_notsent_bytes`): those
+    /// written and not yet admitted, less those the window let out at
+    /// once.
+    fn notsent(&self) -> u64 {
+        self.unsent.saturating_sub(self.early)
+    }
+
     /// A data channel's buffered amount.
     fn buffered(&self) -> u64 {
         self.unsent + if self.flight { self.unacked } else { 0 }
@@ -174,7 +195,7 @@ impl SendBuffers {
 
     /// `conn`'s unsent bytes and `TCP_NOTSENT_LOWAT`, while it is open.
     fn conn(&self, conn: ConnKey) -> Option<(u64, Option<u64>)> {
-        self.with(|b| b.conns.get(&conn).map(|c| (c.unsent, c.lowat)))
+        self.with(|b| b.conns.get(&conn).map(|c| (c.notsent(), c.lowat)))
     }
 
     /// The order of `conn`'s next write the scheduler hasn't taken (writes
@@ -182,6 +203,20 @@ impl SendBuffers {
     /// whether it ends a data channel's message.
     pub fn next_write(&self, conn: ConnKey) -> Option<(u64, bool)> {
         self.with(|b| b.conns.get_mut(&conn)?.writes.pop_front())
+    }
+
+    /// Each of `rooms`' connections lets out that many packets of its next
+    /// writes at once (see the module docs); a data channel's takes none.
+    pub fn set_rooms(&self, rooms: &[(ConnKey, u64)]) {
+        self.with(|b| {
+            for &(conn, room) in rooms {
+                if let Some(c) = b.conns.get_mut(&conn)
+                    && c.channel.is_none()
+                {
+                    c.room = room;
+                }
+            }
+        });
     }
 
     /// `len` bytes of `conn` reached the uplink queue at `at`. Returns the
@@ -193,14 +228,16 @@ impl SendBuffers {
     pub fn admit(&self, conn: ConnKey, len: usize, at: Time) -> Option<Waker> {
         self.with(|b| {
             let c = b.conns.get_mut(&conn)?;
+            let early = c.early.min(len as u64);
+            c.early -= early;
             c.unsent = c.unsent.saturating_sub(len as u64);
-            c.tail = c.tail.min(c.unsent);
+            c.tail = c.tail.min(c.notsent());
             if c.channel.is_some() {
                 c.unacked = c.unacked.saturating_add(len as u64);
                 return if c.flight { None } else { release(b, conn, at) };
             }
             let lowat = c.lowat?;
-            if 2 * c.unsent < lowat {
+            if 2 * c.notsent() < lowat {
                 c.waker.take()
             } else {
                 None
@@ -648,7 +685,7 @@ impl AsyncWrite for SimTcpStream {
                     None
                 } else if c.tail > 0 && c.tail < GSO_SEGMENT {
                     Some(GSO_SEGMENT - c.tail)
-                } else if c.unsent >= lowat {
+                } else if c.notsent() >= lowat {
                     c.waker = Some(cx.waker().clone());
                     None
                 } else {
@@ -670,8 +707,19 @@ impl AsyncWrite for SimTcpStream {
                 x.stamp += 1;
                 if let Some(c) = x.conns.get_mut(key) {
                     c.unsent = c.unsent.saturating_add(*n as u64);
+                    // A write takes whole packets of the room, a short
+                    // one a packet (Linux's window counts packets).
+                    let mss = crate::wan::MSS as u64;
+                    let packets = (*n as u64).div_ceil(mss);
+                    let early = if packets <= c.room {
+                        *n as u64
+                    } else {
+                        c.room * mss
+                    };
+                    c.room -= packets.min(c.room);
+                    c.early += early;
                     if c.lowat.is_some() {
-                        c.tail = c.tail.saturating_add(*n as u64);
+                        c.tail = c.tail.saturating_add(*n as u64).min(c.notsent());
                     }
                     // A write is a whole message, if a channel later
                     // takes the connection.
