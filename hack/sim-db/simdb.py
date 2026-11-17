@@ -610,7 +610,7 @@ def main():
     for x in qs.values():
         x.add_argument("--src", action="append", help="cache sources, globs (suite/WT/INV, farm/RUN/...)")
         x.add_argument("--cell", action="append", help="cells, globs; a testbed cell (TIER:NAME@TREE) also by its "
-                       "NAME where one tier holds it")
+                       "NAME, a glob of names too, where one tier holds each name matched")
         x.add_argument("--arm", action="append", help="arms, globs")
         x.add_argument("--seed", action="append", type=int)
         x.add_argument("--bin", type=int, default=1000, help="ms")

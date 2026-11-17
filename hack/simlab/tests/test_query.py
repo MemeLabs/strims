@@ -22,6 +22,9 @@ simdb.py prints of it is golden_cli's):
   Asks         asks (the HAVE removal's decision log, every rival kept)
                is a sample table too: a pull fetches it with the reads,
                and the catalog says whose rows hold an outcome
+  TestbedCells a testbed run's cell by its name alone: a glob of names
+               matches where one tier holds each name it matches, and is
+               refused naming those two tiers hold
 
   python3 hack/simlab/tests/test_query.py
 """
@@ -48,7 +51,7 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
-from simlab import catalog, query, sketch, store, store_host  # noqa: E402
+from simlab import catalog, engine, query, sketch, store, store_host  # noqa: E402
 
 SUITE = query.Selection(src=["suite/**"])
 
@@ -623,6 +626,68 @@ class SeedLog(unittest.TestCase):
         with self.assertRaisesRegex(store.Refused, r"^the selection has no arrivals \(nor does S3: run with "
                                                    r"STRIMS_SIM_FORECAST=1 or STRIMS_SIM_SPEC=1"):
             query.need({"seed_sends", "reads"}, "seed_sends", "reads")
+
+
+# Testbed runs' knobs that key to three tier cells (simlab.testbed.cell_sql):
+# robust's star-31-5, and thin-15-10 in robust and in browsers.
+TESTBED_ENV = {"STRIMS_SIM_CAL_MESH": "full", "STRIMS_SIM_CAL_SECS": "60", "STRIMS_SIM_CAL_SEED_BURST": "3028",
+               "STRIMS_SIM_CAL_SEED_LINK": "tbf", "STRIMS_SIM_CAL_SEED_UP_MBIT": "10", "STRIMS_SIM_CAL_VIEWERS": "15",
+               "STRIMS_SIM_CAL_VIEWER_BURST": "3028", "STRIMS_SIM_CAL_VIEWER_LINK": "tbf",
+               "STRIMS_SIM_CAL_VIEWER_UP_MBIT": "3", "STRIMS_SIM_CHUNK": "4096", "STRIMS_SIM_CLOCK_SKEW": "off",
+               "STRIMS_SIM_HOSTILE": "off", "STRIMS_SIM_MUNRO": "32768", "STRIMS_SIM_TCP": "1",
+               "TESTBED_QDISC": "clsact>ifb-netem>root-class"}
+TESTBED_RUNS = {
+    "star": {**{k: v for k, v in TESTBED_ENV.items() if k != "STRIMS_SIM_CAL_VIEWER_UP_MBIT"},
+             "STRIMS_SIM_CAL_SEED_UP_MBIT": "5", "STRIMS_SIM_CAL_VIEWERS": "31"},
+    "thin": TESTBED_ENV,
+    "thin-b": {**TESTBED_ENV, "STRIMS_SIM_RTC": "chromium,chromium,chromium,firefox"},
+}
+
+
+class TestbedCells(unittest.TestCase):
+    """--cell over testbed runs, each cell <tier>:<name>@<tree>: a glob of
+    names takes the runs of every name it matches where one tier holds
+    each, and is refused where a name it matches is held in two."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="simlab-query-tb-")
+        root = Path(self.tmp.name)
+        engine.need_module()
+        # testbed/both: all three runs; testbed/apart: star (robust's) and
+        # thin-b (browsers'), each name in one tier, the two tiers apart.
+        for src, ks in (("testbed/both", ("star", "thin", "thin-b")), ("testbed/apart", ("star", "thin-b"))):
+            d = root / "cache" / src
+            d.mkdir(parents=True)
+            runs = " UNION ALL ".join(
+                f"SELECT {store_host.q(k)} AS k, {store_host.q(src)} AS src, 'testbed' AS sim, "
+                f"'calibration_star' AS test, NULL::VARCHAR AS cell, 'testbed' AS arm, 1 AS seed, "
+                f"{store_host.q(json.dumps(TESTBED_RUNS[k]))} AS env" for k in ks)
+            engine.duckdb.sql(f"COPY ({runs}) TO {store_host.q(str(d / 'runs.parquet'))} (FORMAT parquet)")
+            secs = " UNION ALL ".join(f"SELECT {store_host.q(k)} AS k, {store_host.q(src)} AS src, 0 AS sec"
+                                      for k in ks)
+            engine.duckdb.sql(f"COPY ({secs}) TO {store_host.q(str(d / 'seconds.parquet'))} (FORMAT parquet)")
+        for p in (mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root)}),
+                  mock.patch.object(query, "stderr", lambda m: None)):
+            p.start()
+            self.addCleanup(p.stop)
+        self.addCleanup(self.tmp.cleanup)
+
+    def cells(self, src, cell):
+        with query.views(query.Selection(src=[src], cell=[cell]), derived=False) as v:
+            return sorted((k, c.split("@")[0]) for k, c in v.connection().execute("SELECT k, cell FROM runs").fetchall())
+
+    def test_a_glob_of_names_each_in_one_tier_takes_them_all(self):
+        self.assertEqual(self.cells("testbed/apart", "*-*-*"),
+                         [("star", "robust:star-31-5"), ("thin-b", "browsers:thin-15-10")])
+        self.assertEqual(self.cells("testbed/both", "star-*"), [("star", "robust:star-31-5")])
+        self.assertEqual(self.cells("testbed/both", "robust:thin-*"), [("thin", "robust:thin-15-10")])
+
+    def test_a_glob_matching_a_name_two_tiers_hold_is_refused(self):
+        for cell in ("thin-15-10", "*-*-*"):
+            with self.assertRaises(query.Refused) as cm:
+                self.cells("testbed/both", cell)
+            self.assertEqual(str(cm.exception), f"--cell {cell} names testbed cells of two tiers "
+                                                "(browsers:thin-15-10, robust:thin-15-10): name the one")
 
 
 if __name__ == "__main__":
