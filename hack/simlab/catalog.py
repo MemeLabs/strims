@@ -783,7 +783,7 @@ COST_COLS = {
     "run": "VARCHAR", "kind": "VARCHAR", "at": "VARCHAR", "regions": "VARCHAR[]", "interrupted": "BOOLEAN",
     "jobs": "BIGINT", "wall_s": "DOUBLE", "instances": "BIGINT", "spot_interrupted": "BIGINT", "cost": "DOUBLE",
     "boot_cost": "DOUBLE", "busy_cost": "DOUBLE", "idle_cost": "DOUBLE", "busy_slot_h": "DOUBLE",
-    "estimate": "JSON", "s3": "JSON"}
+    "estimate": "JSON", "s3": "JSON", "began": "VARCHAR"}
 S3_COLS = {
     "run": "VARCHAR", "at": "VARCHAR", "source": "VARCHAR", "host": "VARCHAR", "region": "VARCHAR",
     "tier1": "MAP(VARCHAR, BIGINT)", "tier2": "MAP(VARCHAR, BIGINT)", "up": "MAP(VARCHAR, BIGINT)",
@@ -2054,10 +2054,48 @@ s3 AS (SELECT farm_run, sum(cost_usd) AS s3 FROM main.s3 GROUP BY ALL),
 share AS (
     SELECT c.exp_id, r.farm_run, sum(r.n) / nullif(any_value(r.total), 0) AS share
     FROM main.experiment_cells c JOIN runs r USING (matrix) GROUP BY ALL),
+-- A suite farm run's every run is its experiment's (its name is its
+-- inputs': a rerun resumes it), its cost and S3 shared out by the name's
+-- jobs.
 spend AS (
     SELECT exp_id, list(DISTINCT farm_run ORDER BY farm_run) AS farm_runs, sum(share * cost.cost) AS cost_usd,
            sum(share * s3.s3) AS s3_usd
     FROM share LEFT JOIN cost USING (farm_run) LEFT JOIN s3 USING (farm_run) GROUP BY exp_id),
+-- A farm run's testbed runs (below) take the runs of its name that ran
+-- them. Each run of a farm run's name (a costs line: one controller's, as
+-- the same matrices run again share their name): from when it began (its
+-- line's began; a line from before farm.py wrote one, its end less its
+-- wall_s, launch to finish) to its end; its S3 from then (the name's
+-- first run's, from the ledger's start) to the next run of its name's.
+inv AS (
+    SELECT *, CASE WHEN n = 1 THEN '-infinity'::TIMESTAMPTZ ELSE began END AS s3_from
+    FROM (SELECT run AS farm_run, cost, began, ended,
+                 row_number() OVER (PARTITION BY run ORDER BY began NULLS FIRST, ended NULLS FIRST, cost) AS n
+          FROM (SELECT run, cost, TRY_CAST("at" AS TIMESTAMPTZ) AS ended,
+                       coalesce(TRY_CAST(began AS TIMESTAMPTZ),
+                                TRY_CAST("at" AS TIMESTAMPTZ) - to_seconds(coalesce(wall_s, 0))) AS began
+                FROM raw.costs))),
+-- A run's S3: the ledger's lines in its window (its pulls after it too),
+-- each line of the latest run of its name begun by then; a host's use its
+-- largest running total in the run less the largest it held in the runs
+-- before (an instance a later controller adopted), as farm.py's s3_total
+-- reads a run since it began.
+led AS (
+    SELECT l.farm_run, l.source, l.host, l.line, i.n, l.size, l.usd
+    FROM (SELECT run AS farm_run, source, coalesce(host, '') AS host, line, TRY_CAST("at" AS TIMESTAMPTZ) AS at_,
+                 coalesce(list_sum(map_values(tier1)), 0) + coalesce(list_sum(map_values(up)), 0) AS size,
+                 {line_usd} AS usd
+          FROM raw.s3_ledger) l
+    ASOF JOIN inv i ON i.farm_run = l.farm_run AND l.at_ >= i.s3_from),
+host_in AS (SELECT farm_run, host, n, arg_max(usd, (size, line)) AS usd FROM led WHERE source = 'host' GROUP BY ALL),
+s3_in AS (
+    SELECT farm_run, n, sum(usd) AS s3 FROM (
+        SELECT farm_run, n, usd FROM led WHERE source IS DISTINCT FROM 'host'
+        UNION ALL
+        SELECT farm_run, n, greatest(0, usd - coalesce(max(usd) OVER (
+            PARTITION BY farm_run, host ORDER BY n ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0))
+        FROM host_in)
+    GROUP BY ALL),
 cell_tiers AS (
     SELECT e.exp_id, e.cell, t.tier, t.size, count(*) OVER (PARTITION BY e.exp_id, t.tier) AS held
     FROM main.experiment_cells e
@@ -2092,10 +2130,33 @@ LEFT JOIN (
     FROM (SELECT {local_exp} AS exp_id, arm, arg_max(commit, "at") AS commit FROM raw.runs r
           WHERE {local} AND arm IS NOT NULL AND commit IS NOT NULL GROUP BY ALL)
     GROUP BY exp_id) USING (exp_id)
+-- A farm run's testbed runs: each run of its name that ran one of them,
+-- whole, its cost and S3 (s3_in's).
 LEFT JOIN (
-    SELECT 'farm/' || run AS exp_id, [run] AS farm_runs, sum(cost) AS cost_usd FROM raw.costs GROUP BY run)
+    SELECT 'farm/' || i.farm_run AS exp_id, [i.farm_run] AS farm_runs,
+           sum(i.cost) FILTER (WHERE r.n IS NOT NULL) AS cost_usd,
+           sum(coalesce(x.s3, 0)) FILTER (WHERE r.n IS NOT NULL) AS s3_usd
+    FROM inv i
+    LEFT JOIN (SELECT DISTINCT i.farm_run, i.n FROM main.experiment_jobs e JOIN main.jobs j USING (k)
+               JOIN inv i ON e.exp_id = 'farm/' || i.farm_run AND j.ran_at >= i.began AND j.ran_at <= i.ended) r
+           USING (farm_run, n)
+    LEFT JOIN s3_in x USING (farm_run, n)
+    GROUP BY i.farm_run)
     USING (exp_id);
 """
+
+# An S3 ledger line's cost, priced as farm.py prices it (S3Use.cost), over
+# raw.s3_ledger's columns: its requests, its bytes between regions and out
+# to the internet, and what it stores, kept its week.
+S3_LINE_USD = """\
+coalesce(list_sum(map_values(tier1)), 0) * {S3_TIER1} + coalesce(list_sum(map_values(tier2)), 0) * {S3_TIER2}
+       + (coalesce(list_sum(list_transform(list_filter(map_entries(up), lambda e: e.key NOT IN ('here', region)),
+                                           lambda e: e.value)), 0)
+          + coalesce(list_sum(list_transform(list_filter(map_entries(down),
+                                                         lambda e: e.key NOT IN ('internet', region)),
+                                             lambda e: e.value)), 0)) / {GB} * {S3_INTER_REGION_GB}
+       + coalesce(down['internet'], 0) / {GB} * {S3_INTERNET_GB}
+       + coalesce(stored, 0) / {GB} * {S3_STORAGE_GB_MONTH} * {S3_KEPT_DAYS} / 30"""
 
 COSTS_SQL = """
 CREATE OR REPLACE VIEW main.costs AS
@@ -2106,15 +2167,7 @@ SELECT run AS farm_run, kind, TRY_CAST("at" AS TIMESTAMPTZ) AS finished_at, regi
 FROM raw.costs;
 CREATE OR REPLACE VIEW main.s3 AS
 SELECT run AS farm_run, TRY_CAST("at" AS TIMESTAMPTZ) AS logged_at, source, host, region, tier1, tier2, up, down,
-       stored,
-       coalesce(list_sum(map_values(tier1)), 0) * {S3_TIER1} + coalesce(list_sum(map_values(tier2)), 0) * {S3_TIER2}
-       + (coalesce(list_sum(list_transform(list_filter(map_entries(up), lambda e: e.key NOT IN ('here', region)),
-                                           lambda e: e.value)), 0)
-          + coalesce(list_sum(list_transform(list_filter(map_entries(down),
-                                                         lambda e: e.key NOT IN ('internet', region)),
-                                             lambda e: e.value)), 0)) / {GB} * {S3_INTER_REGION_GB}
-       + coalesce(down['internet'], 0) / {GB} * {S3_INTERNET_GB}
-       + coalesce(stored, 0) / {GB} * {S3_STORAGE_GB_MONTH} * {S3_KEPT_DAYS} / 30 AS cost_usd
+       stored, {line_usd} AS cost_usd
 FROM raw.s3_ledger
 QUALIFY source IS DISTINCT FROM 'host' OR row_number() OVER (
     PARTITION BY run, source, coalesce(host, '')
@@ -2348,10 +2401,11 @@ def main_sql(cols, version, tmp, ins, parsed, docs, commits=(), own=None, hidden
     out = [testbed.cell_sql("raw.tier_cells"), JOBS_SQL.format(csim=sim_case("csim"), promoted=",\n       ".join(
         f"{knob('env', v)} AS {n}" for n, v in PROMOTED.items()),
         job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped, ran=ran_sql(cols))]
-    out.append(COSTS_SQL.format(**{k: repr(v) for k, v in s3_prices().items()}))
+    line_usd = S3_LINE_USD.format(**{k: repr(v) for k, v in s3_prices().items()})
+    out.append(COSTS_SQL.format(line_usd=line_usd))
     out.append(EXPERIMENTS_SQL.format(csim=sim_case("c.sim"), rsim=sim_case("sim"),
                                       job_keys="[" + ", ".join(q(k) for k in JOB_KEYS) + "]", skipped=skipped,
-                                      ran=ran_sql(cols), local=LOCAL_RUNS, local_exp=LOCAL_EXP))
+                                      ran=ran_sql(cols), local=LOCAL_RUNS, local_exp=LOCAL_EXP, line_usd=line_usd))
     out.append(AVAILABILITY_SQL.format(days=store.s3_kept_days()))
     out.append(EXP_RUNS_SQL)
     out += commits_sql(tmp, ins, parsed, commits)
@@ -2514,9 +2568,17 @@ TABLE_DOCS = {
         "and arm_labels (experiment_jobs' arms); base: the arm the others are scored against, where its index names "
         "it (a --sets run's first set else); question "
         "(suite.py farm --question); pending: its index still waits for the farm to start it; farm_runs: the farm "
-        "runs that ran its matrices; cost_usd and s3_usd: those runs' costs and S3 uses (s3's rows), each shared "
-        "out by the jobs its matrices ran of the run's (a key that arms whose binaries are the same bytes share ran "
-        "once, for the matrix of the job that ran it)."),
+        "runs that ran its matrices (a farm run's testbed runs: its own); cost_usd and s3_usd: a suite farm run's, "
+        "every run of those names (a suite farm run's name is its inputs': a rerun resumes it), their costs and S3 "
+        "uses (s3's rows), each shared out by the jobs its matrices ran of the name's (a key that arms whose "
+        "binaries are the same bytes share ran once, for the matrix of the job that ran it); a farm run's testbed "
+        "runs', the runs of its name that ran one of the testbed runs the catalog holds (the same matrices run "
+        "again share their name), each whole: a costs line (one controller's, from its start, its line's began, or "
+        "for a line from before farm.py wrote one its end less its wall_s, to its end) with the S3 the ledger holds "
+        "from its start to the next run of its name's (its pulls after it too; the name's first run's from the "
+        "ledger's start; a host's use its largest running total there less the largest it held in the runs "
+        "before). A run with no costs line yet (still running) has no cost, and its S3 counts to the run of its "
+        "name before it."),
     "experiment_cells": (
         "table", "an experiment's cell", "exp_id, cell", "experiments USING (exp_id); experiment_jobs USING (exp_id, cell)",
         "A cell as the experiment ran it: sim, test, why, env (its settings), mem_gib (the farm slot's), and the "
@@ -2559,8 +2621,11 @@ TABLE_DOCS = {
         "on_main (main holds it), branches (the local branches whose tip it is). One git doesn't know has NULLs."),
     "costs": (
         "view", "a farm run's cost line", "farm_run", "experiments' farm_runs",
-        "The farm's cost of each run (target/sim-farm/costs.jsonl): cost_usd (boot, busy and idle), its jobs, "
-        "wall time, instances, the S3 cost when it ended and the estimate's cost."),
+        "The farm's cost of each run (target/sim-farm/costs.jsonl), a controller's run a row: cost_usd (boot, "
+        "busy and idle), its jobs, wall time, instances, s3_usd (the S3 its line holds: the ledger's from its "
+        "controller's start to its end; a line farm.py wrote before it recorded its began holds every run of its "
+        "name's until its end, so a rerun of the same matrices reads high there; experiments' s3_usd windows each "
+        "run) and the estimate's cost."),
     "s3": (
         "view", "a farm run's S3 use", "farm_run", "costs USING (farm_run)",
         "The farm's S3 ledger (target/sim-farm/s3.jsonl) as farm.py reads it (s3_uses), a row a use, its "

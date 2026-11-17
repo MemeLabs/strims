@@ -55,6 +55,12 @@ simlab.verdict's derive pool:
                running totals the largest, the later line on a tie, its
                other runs' apart; experiments' s3_usd their sum, and a
                catalog's ledger lacking line numbers read again
+  RunSpend     each run of a farm run's name (a costs line) its own window
+               of the ledger, from its start to the next run's (the
+               first's from the ledger's start; an adopted host's use less
+               what it held before): a suite experiment's cost and S3 every
+               run of its name's, a farm run's testbed runs' those of its
+               name that ran the runs the catalog holds
   Tiers        an experiment's tiers from its cells' names, tests and env,
                its index recording none
   HostNumbers  a farm job's wall_s and rss_mb, where its matrix's index has
@@ -1099,6 +1105,79 @@ class S3(Fixture):
         self.assertEqual([r["line"] for r in lines], list(range(9)))
         got = {(r["source"], r["host"]): r["stored"] for r in self.uses(self.RUN)}
         self.assertEqual(got[("host", "i-a")], 3 * self.GIB)
+
+
+class RunSpend(Fixture):
+    """Two runs of each of two farm run names: the suite's (an earlier one,
+    its costs line from before farm.py wrote its began, then the
+    fixture's) and a testbed one's (farm/tb-run, whose flush the cache
+    holds of its second run alone). A suite experiment takes every run of
+    its name, its cost and S3 by the name's share; a farm run's testbed
+    runs take those that ran the runs the catalog holds, each run's S3 its
+    own window of the ledger, from its start to the next run of its name's
+    (the first's from the ledger's start)."""
+
+    RUN = golden_cli.FARM.split("/")[1]
+
+    def setUp(self):
+        super().setUp()
+        farm = self.root / "target" / "sim-farm"
+
+        def cost(run, at, usd, began=None):
+            return {"run": run, "kind": "test", "at": at, "cost": usd, "jobs": 1, "wall_s": 300,
+                    **({"began": began} if began else {})}
+
+        (farm / "costs.jsonl").write_text("".join(json.dumps(r) + "\n" for r in [
+            cost(self.RUN, "2026-10-31T12:00:00+00:00", 1.0),
+            cost(self.RUN, golden_cli.AT, 0.25, began="2026-11-01T11:58:00+00:00"),
+            cost("tb-run", "2026-10-30T12:00:00+00:00", 2.0),
+            cost("tb-run", "2026-11-02T12:00:00+00:00", 0.5, began="2026-11-02T11:00:00+00:00")]))
+
+        def line(run, at, source, host=None, **use):
+            return {"run": run, "at": at, "source": source, "region": "r", "tier1": {}, "tier2": {}, "up": {},
+                    "down": {}, "stored": 0, **({"host": host} if host else {}), **use}
+
+        (farm / "s3.jsonl").write_text("".join(json.dumps(r) + "\n" for r in [
+            # Before either run of the name: the first's (its window opens
+            # at the ledger's start).
+            line(self.RUN, "2026-10-29T12:00:00+00:00", "pull", tier1={"pull_list": 1}),
+            # The earlier run's host and its pull a day later.
+            line(self.RUN, "2026-10-31T11:57:00+00:00", "host", "i-old", tier1={"post": 5000}),
+            line(self.RUN, "2026-11-01T09:00:00+00:00", "pull", tier1={"pull_list": 7}),
+            # The fixture's run: its binaries, a host, a pull after it.
+            line(self.RUN, "2026-11-01T11:58:00+00:00", "controller", tier1={"bin_put": 100}),
+            line(self.RUN, "2026-11-01T12:00:00+00:00", "host", "i-a", tier1={"post": 1000}),
+            line(self.RUN, "2026-11-01T12:30:00+00:00", "pull", tier2={"pull_get": 10000}),
+            line("tb-run", "2026-10-30T11:58:00+00:00", "host", "i-t1", tier1={"post": 7000}),
+            # The testbed run's second run: a host of its own, and the
+            # first's, adopted, whose running total holds the first's 7000.
+            line("tb-run", "2026-11-02T11:30:00+00:00", "host", "i-t2", tier1={"post": 3000}),
+            line("tb-run", "2026-11-02T11:40:00+00:00", "host", "i-t1", tier1={"post": 7500})]))
+        # The testbed run's second run's flush, its job run at 11:45.
+        src = "farm/tb-run/i-t2/0"
+        d = self.root / "jobs-tables" / "tb-run"
+        meta = golden_cli.job_dir(d, (src, "tb-0123", "testbed", "calibration_star", "tb", "main", 1,
+                                      golden_cli.STAR_ENV, golden_cli.TRICKLE, None))
+        meta["at"] = "2026-11-02T11:45:00Z"
+        db = self.root / "jobs-tables" / "tb-run.duckdb"
+        store_host.fold(db, [meta], src)
+        store_host.export(db, store_host.cache_root() / "cache" / src)
+
+    def test_each_run_counts_its_own_window(self):
+        catalog.index(workers=0)
+        t1, t2 = 0.0055 / 1000, 0.0044 / 10000
+        got = {r["exp_id"]: r for r in catalog.lake(
+            "SELECT exp_id, kind, farm_runs, cost_usd, s3_usd FROM experiments "
+            "WHERE exp_id IN ('sf0001', 'farm/tb-run');")}
+        self.assertEqual({e: (r["kind"], r["farm_runs"]) for e, r in got.items()},
+                         {"sf0001": ("farm", [self.RUN]), "farm/tb-run": ("farm", ["tb-run"])})
+        self.assertAlmostEqual(got["sf0001"]["cost_usd"], 1.25, places=12)
+        self.assertAlmostEqual(got["sf0001"]["s3_usd"], (1 + 5000 + 7 + 100 + 1000) * t1 + 10000 * t2, places=12)
+        self.assertAlmostEqual(got["farm/tb-run"]["cost_usd"], 0.5, places=12)
+        self.assertAlmostEqual(got["farm/tb-run"]["s3_usd"], (3000 + 500) * t1, places=12)
+        # The costs view holds each line as it is.
+        lines = catalog.lake(f"SELECT cost_usd FROM costs WHERE farm_run = {catalog.q(self.RUN)} ORDER BY finished_at;")
+        self.assertEqual([r["cost_usd"] for r in lines], [1.0, 0.25])
 
 
 class Tiers(Fixture):
