@@ -91,12 +91,14 @@ const RECORDING: [&str; 10] = [
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
-const TWIN_SETTINGS: [&str; 24] = [
+const TWIN_SETTINGS: [&str; 26] = [
     "VIEWERS",
     "SEED_UP_MBIT",
     "VIEWER_UP_MBIT",
     "SEED_BURST",
     "VIEWER_BURST",
+    "SEED_PEAK_MBIT",
+    "VIEWER_PEAK_MBIT",
     "SEED_DELAY_MS",
     "VIEWER_DELAY_MS",
     "SECS",
@@ -222,15 +224,18 @@ fn num(x: f64) -> String {
 /// always; the viewers, the seed's uplink and the stream's length always;
 /// the other links' settings where they aren't the twin's defaults; the
 /// seed's steps as factors of its uplink (`STRIMS_SIM_CAL_SEED_UP_SCALE`);
-/// both tbf buckets (run.sh's 3028 bytes where unset); a full mesh or the
-/// farm's 6-link mesh by name, another topology by its file; each node's
+/// both tbf buckets (run.sh's 3028 bytes where unset) and the peak rates
+/// they send at (`SEED_PEAK_MBIT`, `VIEWER_PEAK_MBIT`, where set:
+/// `STRIMS_SIM_CAL_SEED_PEAK_MBIT`, `STRIMS_SIM_CAL_VIEWER_PEAK_MBIT`); a
+/// full mesh or the farm's 6-link mesh by name, another topology by its
+/// file; each node's
 /// access link spec (its `links` file's, `STRIMS_SIM_CAL_SEED_LINK`,
 /// `STRIMS_SIM_CAL_VIEWER_LINK` where the viewers' are one, else
 /// `STRIMS_SIM_CAL_LINKS`), so a run pairs with the twin of its own links; the chunks
 /// and munros the nodes take; and with browsers, each node's stack
 /// (`STRIMS_SIM_RTC`, native nodes str0m), its shortest repeating cycle.
-/// A setting the twin has no knob for (a seed's loss, a bucket's peak
-/// rate, another queue) goes in as `TESTBED_<SETTING>`, so the run pairs
+/// A setting the twin has no knob for (a seed's loss, another queue) goes
+/// in as `TESTBED_<SETTING>`, so the run pairs
 /// with no cell, and so does the qdisc tree that shaped it (`QDISC`,
 /// `TESTBED_QDISC`; runs from before run.sh named it, its netem root over
 /// a tbf). A stream the twin can't stand for (media, another rate),
@@ -383,6 +388,14 @@ pub fn knobs_of(
             &format!("STRIMS_SIM_CAL_{k}"),
             get(k).unwrap_or("3028").to_owned(),
         );
+    }
+    // A bucket's peak rate (tbf's peakrate), which the twin's bucket sends
+    // at as run.sh's does; run.sh refused one under its uplink's rates.
+    for k in ["SEED_PEAK_MBIT", "VIEWER_PEAK_MBIT"] {
+        if let Some(v) = get(k).filter(|v| !v.trim().is_empty()) {
+            let mbit: f64 = v.parse().map_err(|e| format!("{k}={v}: {e}"))?;
+            put(&format!("STRIMS_SIM_CAL_{k}"), num(mbit));
+        }
     }
     let links = links_of(topology);
     let star: Vec<(usize, usize)> = (1..=viewers).map(|v| (0, v)).collect();
@@ -2662,6 +2675,40 @@ mod tests {
         }
         let cal = Calibration::from_knobs(|n| k.get(n).cloned());
         assert_eq!(cal.join_at_ms, Some(2500));
+        // The buckets' peaks are the twin's, its buckets sending at them.
+        let k = of(
+            &format!("{base}SEED_PEAK_MBIT=100\nVIEWER_PEAK_MBIT=40.5\n"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                k["STRIMS_SIM_CAL_SEED_PEAK_MBIT"].as_str(),
+                k["STRIMS_SIM_CAL_VIEWER_PEAK_MBIT"].as_str()
+            ),
+            ("100", "40.5")
+        );
+        assert!(
+            !k.keys()
+                .any(|k| k.starts_with("TESTBED_") && k != "TESTBED_QDISC"),
+            "{k:?}"
+        );
+        let cal = Calibration::from_knobs(|n| k.get(n).cloned());
+        assert_eq!(
+            (cal.seed_peak_mbit, cal.viewer_peak_mbit),
+            (Some(100.0), Some(40.5))
+        );
+        let peaks: Vec<Option<u64>> = calibration_star(&cal)
+            .hosts
+            .iter()
+            .map(|h| h.site.and_then(|s| s.profile.bucket).and_then(|b| b.peak))
+            .collect();
+        assert_eq!(peaks, [Some(12_500_000), Some(5_062_500), Some(5_062_500)]);
+        assert!(
+            of(&format!("{base}SEED_PEAK_MBIT=fast\n"), None)
+                .unwrap_err()
+                .contains("SEED_PEAK_MBIT=fast")
+        );
         assert!(
             of(&format!("{base}JOIN_AT=soon\n"), None)
                 .unwrap_err()
