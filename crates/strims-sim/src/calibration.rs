@@ -87,7 +87,13 @@ fn value<T: std::str::FromStr>(get: &impl Fn(&str) -> Option<String>, name: &str
 ///   all at once from the start of the run.
 /// - `STRIMS_SIM_CAL_JOIN_AT_MS=<ms>` boots the viewers that long after the
 ///   stream starts (before it if negative); `STRIMS_SIM_CAL_JOIN_AT=<s>`,
-///   the testbed's `JOIN_AT`, in seconds.
+///   the testbed's `JOIN_AT`, in seconds. Viewers that join after the
+///   stream starts arrive then
+///   ([`HostSpec::arrive_at`](crate::spec::HostSpec::arrive_at)) and read
+///   from the live edge, as the testbed's late viewers do; at or before
+///   it, each boots by a restart of a host down from the run's start, and
+///   reads as the swarm's options say, as the testbed's viewers at the
+///   start do.
 /// - `STRIMS_SIM_CAL_SEED_BURST=<bytes>` and `STRIMS_SIM_CAL_VIEWER_BURST=<bytes>`
 ///   give the seed's and each viewer's uplink a shaper bucket that size
 ///   (`strims_wan::Bucket`, leaving at once), as `run.sh`'s `SEED_BURST`
@@ -118,7 +124,8 @@ pub struct Calibration {
     pub viewer_delay_ms: u64,
     pub secs: u64,
     /// When the viewers boot, in ms after the stream starts (before it if
-    /// negative); `None` with the seed, at the start of the run.
+    /// negative), arriving if after it; `None` with the seed, at the start
+    /// of the run.
     pub join_at_ms: Option<i64>,
     /// The viewers make their links one at a time from the stream's start,
     /// as the testbed's harness does ([`HostSpec::serial_links`](crate::spec::HostSpec::serial_links)).
@@ -442,8 +449,12 @@ pub fn calibration_star(c: &Calibration) -> Scenario {
     if let Some(ms) = c.join_at_ms {
         let at = Duration::from_millis(u64::try_from(5000 + ms).unwrap_or(0).max(1));
         for &v in &vs {
-            s.at(Duration::ZERO, Fault::Crash(v));
-            s.at(at, Fault::Restart(v));
+            if ms > 0 {
+                s.hosts[v].arrive_at = Some(at);
+            } else {
+                s.at(Duration::ZERO, Fault::Crash(v));
+                s.at(at, Fault::Restart(v));
+            }
         }
     }
     let mut swarm = SwarmSpec::live(seed_host, vs, WAN_RATE, secs(5), secs(5 + c.secs))
@@ -463,4 +474,59 @@ pub fn calibration_star(c: &Calibration) -> Scenario {
     s.duration = secs(5 + c.secs + 10);
     s.transfer_samples = true;
     striped(s, STRIPES, ADAPTIVE)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Viewers that join after the stream starts (5 s into the run) arrive
+    /// then, with no crash or restart; at or before it, each is down from
+    /// the run's start and restarts at its join. The seed is there from
+    /// the start either way.
+    #[test]
+    fn viewers_joining_after_the_start_arrive_and_the_rest_restart() {
+        let star = |ms: i64| {
+            calibration_star(&Calibration::from_knobs(|k| {
+                (k == "STRIMS_SIM_CAL_JOIN_AT_MS").then(|| ms.to_string())
+            }))
+        };
+        let joins = |s: &Scenario| -> Vec<(Duration, String)> {
+            let mut v: Vec<(Duration, String)> = s
+                .faults
+                .iter()
+                .filter(|f| matches!(f.fault, Fault::Crash(_) | Fault::Restart(_)))
+                .map(|f| (f.at, format!("{:?}", f.fault)))
+                .collect();
+            v.sort();
+            v
+        };
+        let ms = Duration::from_millis;
+        for (join_ms, up) in [(-2000, ms(3000)), (0, ms(5000))] {
+            let s = star(join_ms);
+            assert_eq!(s.hosts.len(), 4, "JOIN_AT_MS={join_ms}");
+            assert!(
+                s.hosts.iter().all(|h| h.arrive_at.is_none()),
+                "JOIN_AT_MS={join_ms}"
+            );
+            let mut want: Vec<(Duration, String)> = [1, 2, 3]
+                .into_iter()
+                .flat_map(|v: HostIx| {
+                    [
+                        (Duration::ZERO, format!("{:?}", Fault::Crash(v))),
+                        (up, format!("{:?}", Fault::Restart(v))),
+                    ]
+                })
+                .collect();
+            want.sort();
+            assert_eq!(joins(&s), want, "JOIN_AT_MS={join_ms}");
+        }
+        let s = star(2500);
+        assert_eq!(joins(&s), []);
+        let arrivals: Vec<Option<Duration>> = s.hosts.iter().map(|h| h.arrive_at).collect();
+        assert_eq!(
+            arrivals,
+            [None, Some(ms(7500)), Some(ms(7500)), Some(ms(7500))]
+        );
+    }
 }

@@ -127,9 +127,15 @@
 #   SEED_DELAY_MS=<ms>     the seed's one-way delay (default 20)
 #   VIEWER_DELAY_MS=<ms>   each viewer's (default 10)
 #   SECS=<s>               the stream's length (default 180)
-#   JOIN_AT=<s>            when viewers dial in, after the start (default 0)
+#   JOIN_AT=<s>            when viewers dial in, after the start (default 0).
+#                          A viewer that dials in after the start arrives
+#                          into the running stream: it reads from the live
+#                          edge, as the app's player joins (strims-testbed's
+#                          node module)
 #   JOINS="<i>:<s> ..."    node i dials in <s> seconds after the start, in
-#                          place of JOIN_AT
+#                          place of JOIN_AT. A viewer of JOINS arrives, and
+#                          reads from the live edge, whatever its time (0
+#                          too), as its twin's viewers do
 #   SLOW_DOWN_KBIT=<k>     viewer 1's downlink, if set
 #   SEED_UP_STEPS="<s>:<m> ..."  the seed's uplink becomes <m> Mbit/s <s>
 #                          seconds after the stream starts, by a tc qdisc
@@ -210,7 +216,9 @@
 #   BROWSER_BIN=<path>     the testbed_browser binary (default
 #                          target/release/examples/testbed_browser), built by
 #                          `cargo build --release -p strims-testbed --example
-#                          testbed_browser`
+#                          testbed_browser && hack/testbed/stamp.py write
+#                          target/release/examples/testbed_browser`, stamped
+#                          from NODE_BIN's sources as WEB_BUNDLE is
 #   BROWSER_ARGS=<args>    more flags for every browser node's harness
 #   CPU_PROFILE=<at>:<s>   each Chromium node's page and workers sampled by
 #                          V8's profiler from <at> seconds after the start
@@ -227,12 +235,14 @@
 #                          (which needs node_modules, the pinned
 #                          wasm-bindgen-cli and the wasm32 target); the
 #                          harness checks it holds its page. A run with
-#                          browsers needs it and NODE_BIN stamped from one
-#                          checkout's sources (stamp.py). A page from other
-#                          sources may not speak the node's protocol (its
-#                          links come up, but no stream flows), so run.sh
-#                          refuses it, and an artifact without a stamp or
-#                          rebuilt since, saying how to rebuild
+#                          browsers needs it, NODE_BIN and BROWSER_BIN
+#                          stamped from one checkout's sources (stamp.py).
+#                          A page from other sources may not speak the
+#                          node's protocol (its links come up, but no stream
+#                          flows), nor read the harness's commands as it
+#                          sends them, so run.sh refuses it, and an artifact
+#                          without a stamp or rebuilt since, saying how to
+#                          rebuild
 #
 # Writes to <out dir>:
 #   topology
@@ -414,6 +424,17 @@ join_of() {
   done
   echo "$join_at"
 }
+# --arrive for a viewer that arrives into the running stream, as the twin
+# has its viewers arrive (strims-sim's testbed and calibration modules):
+# one of JOINS, whatever its time, or of a JOIN_AT after the start.
+arrive_of() {
+  local j
+  [ "$1" -eq 0 ] && return
+  for j in "${joins[@]}"; do
+    if [ "${j%%:*}" = "$1" ]; then echo --arrive; return; fi
+  done
+  if awk -v s="$join_at" 'BEGIN { exit !(s > 0) }'; then echo --arrive; fi
+}
 browsers=0
 nbrowsers=0
 if [ -n "$media" ] && [ "$(kind_of 0)" != native ]; then
@@ -508,7 +529,7 @@ if [ "$browsers" = 1 ]; then
   [ -x "$browser_bin" ] || { echo "no testbed_browser at $browser_bin" >&2; exit 1; }
   [ -d "$web" ] || { echo "no web bundle at $web" >&2; exit 1; }
   web=$(cd "$web" && pwd)
-  python3 "$root/hack/testbed/stamp.py" check "$bin" "$web" || exit 1
+  python3 "$root/hack/testbed/stamp.py" check "$bin" "$web" "$browser_bin" || exit 1
   docker build -q -t "$browser_image" -f "$root/hack/testbed/browser.Dockerfile" \
     "$root/hack/testbed" >/dev/null
   # Written by the nodes, whatever user each runs as.
@@ -719,6 +740,7 @@ $(sampled sssample "$i" "-i $ss_ms" ss)"
   capture=""
   if [ "${CAPTURE:-0}" = 1 ]; then capture="--capture /out/capture"; fi
   join=$(join_of "$i")
+  arrive_arg=$(arrive_of "$i")
   media_mount=()
   media_arg=""
   if [ -n "$media" ] && [ "$i" -eq 0 ]; then
@@ -757,7 +779,7 @@ $sample
 $(cpu_log "$i")
 $wait_start
 $(link_attached "$i")
-exec /testbed_node --index $i --topology /out/topology --start \$start --secs $secs --join-at $join $rate_arg $units_arg $media_arg $record_arg $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec /testbed_node --index $i --topology /out/topology --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $media_arg $record_arg $hosts $capture $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   else
     # The browser runs as the image's unprivileged user, after root has
     # shaped the link. Its profile, in /tmp, stays in memory, so its
@@ -781,7 +803,7 @@ $sample
 $(cpu_log "$i")
 $wait_start
 $(link_attached "$i")
-exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start \$start --secs $secs --join-at $join $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   fi
 done
 

@@ -16,6 +16,17 @@
 //! media in the unit format ([`media`]), each access unit
 //! with its publish time.
 //!
+//! A viewer joins at the live edge, as the app's player joins a running
+//! stream: egress adds its swarm in low latency delivery, the default a
+//! URI's options leave, and rewinds to its GOP's start. A media viewer
+//! takes egress's options and rewinds as egress does ([`media::read`]). A
+//! viewer of the frames that arrives into the running stream
+//! ([`Settings::arrives`]) reads in low latency delivery, from the newest
+//! chunk its peers have, as strims-sim's arriving viewers do. One there
+//! from the start keeps the frames' mandatory delivery, which reads from
+//! the stream's first chunk its peers still hold: a late viewer would read
+//! that backlog, up to a window, in its lag.
+//!
 //! Every second from 5 s before the start, the node emits one JSON line
 //! ([`Runtime::emit`]); a second it missed has none:
 //!
@@ -50,6 +61,7 @@ use strims_node_core::{
     HostId, LinkKind, Node, NodeMetrics, ParentLogEntry, PeerInfo, ReadError, SwarmId, SwarmKey,
     SwarmReader, SwarmWriter, WriterOptions,
 };
+use strims_ppspp::{DeliveryMode, SwarmOptions};
 use strims_transfer::SwarmRead;
 use tokio::sync::mpsc;
 
@@ -114,6 +126,12 @@ pub struct Settings {
     /// When the seed starts writing, in Unix milliseconds.
     pub start_ms: u64,
     pub secs: u64,
+    /// Whether a viewer arrives into the running stream, and so reads from
+    /// the live edge (see the [module docs](self)): `--arrive`, which
+    /// run.sh gives each viewer of `JOINS`, whatever its time, and every
+    /// viewer of a `JOIN_AT` after the start, as strims-sim's twin of
+    /// those joins has its viewers arrive.
+    pub arrives: bool,
     /// The stream rate in bytes per second.
     pub rate: u64,
     /// The chunk size and munro in bytes ([`LiveShape::with_chunks`]);
@@ -141,7 +159,7 @@ pub async fn run<R: Runtime + Clone + 'static>(
             if let Some((chunk, munro)) = s.chunks {
                 shape = shape.with_chunks(chunk, munro)?;
             }
-            (shape.options.clone(), None)
+            (frames_options(&shape, seed, s.arrives), None)
         }
         Stream::Units { .. } if s.chunks.is_some() => {
             return Err("a media stream takes ingest's chunks".to_owned());
@@ -324,6 +342,17 @@ pub async fn run<R: Runtime + Clone + 'static>(
         () = async { tokio::join!(accept, write, read); } => {}
     }
     Ok(())
+}
+
+/// The swarm options of the frames of `shape` at a node: the shape's, in
+/// low latency delivery at a viewer that `arrives` (see the
+/// [module docs](self)).
+fn frames_options(shape: &LiveShape, seed: bool, arrives: bool) -> SwarmOptions {
+    let mut options = shape.options.clone();
+    if !seed && arrives {
+        options.delivery_mode = DeliveryMode::LOW_LATENCY;
+    }
+    options
 }
 
 /// Writes the self-checking frames of `shape` from `start_ms` until
@@ -602,5 +631,32 @@ pub fn kind_name(kind: LinkKind) -> &'static str {
         LinkKind::Ws => "ws",
         LinkKind::WebRtc => "webrtc",
         LinkKind::Other => "other",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+    use crate::shape::RATE;
+
+    /// A viewer that arrives reads the frames from the live edge, one
+    /// there from the start and the seed in the shape's mandatory
+    /// delivery. Arriving doesn't depend on the time: run.sh's viewer of
+    /// a `JOINS` entry of 0 s arrives, as its twin's does.
+    #[test]
+    fn an_arriving_viewer_reads_the_frames_from_the_live_edge() {
+        let shape = LiveShape::testbed(RATE)
+            .with_chunks(4096, 32 * 1024)
+            .unwrap();
+        assert_eq!(shape.options.delivery_mode, DeliveryMode::MANDATORY);
+        let mode = |seed, arrives| frames_options(&shape, seed, arrives).delivery_mode;
+        assert_eq!(mode(false, true), DeliveryMode::LOW_LATENCY);
+        assert_eq!(mode(false, false), DeliveryMode::MANDATORY);
+        assert_eq!(mode(true, false), DeliveryMode::MANDATORY);
+        assert_eq!(mode(true, true), DeliveryMode::MANDATORY);
+        let mut live = shape.options.clone();
+        live.delivery_mode = DeliveryMode::LOW_LATENCY;
+        assert_eq!(frames_options(&shape, false, true), live);
     }
 }

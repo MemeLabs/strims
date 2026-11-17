@@ -9,7 +9,7 @@
 //! testbed_browser --index <i> --topology <file> --web <dir>
 //!                 [--browser-bin <path>] [--secs <s>] [--start <unix ms>]
 //!                 [--rate <bytes/s>] [--chunk <bytes> --munro <bytes>]
-//!                 [--units <chunks per signature>] [--join-at <s>]
+//!                 [--units <chunks per signature>] [--join-at <s>] [--arrive]
 //!                 [--hosts <dir>] [--capture <dir>] [--player <file>]
 //!                 [--cpu-profile <dir> [--cpu-profile-at <s>]
 //!                  [--cpu-profile-secs <s>] [--cpu-profile-us <us>]]
@@ -25,7 +25,9 @@
 //! control socket (the protocol of strims-wasm's `e2e` module) it:
 //!
 //! 1. starts the node with node `<i>`'s profile key, in the testbed
-//!    network, and has it run the testbed's swarm (`testbed`);
+//!    network, and has it run the testbed's swarm (`testbed`), with
+//!    `--arrive` as a viewer that arrives into the running stream
+//!    ([`Settings::arrives`](strims_testbed::node::Settings::arrives));
 //! 2. dials the relay over WebSocket, and once the network knows the link
 //!    (1 s), writes the node's host id into `--hosts`;
 //! 3. at `--join-at` seconds after the start, makes the node's links
@@ -112,6 +114,7 @@ struct Args {
     rate: u64,
     /// When a viewer joins, in ms after the start (`--join-at`, seconds).
     join_at_ms: u64,
+    arrive: bool,
     hosts: Option<PathBuf>,
     capture: Option<PathBuf>,
     chunk: Option<u64>,
@@ -137,6 +140,7 @@ fn args() -> Result<Args, String> {
         start_ms: None,
         rate: RATE,
         join_at_ms: 0,
+        arrive: false,
         hosts: None,
         capture: None,
         chunk: None,
@@ -160,6 +164,7 @@ fn args() -> Result<Args, String> {
             "--start" => a.start_ms = Some(num(value()?)?),
             "--rate" => a.rate = num(value()?)?,
             "--join-at" => a.join_at_ms = secs_ms(&value()?)?,
+            "--arrive" => a.arrive = true,
             "--hosts" => a.hosts = Some(value()?.into()),
             "--capture" => a.capture = Some(value()?.into()),
             "--chunk" => a.chunk = Some(num(value()?)?),
@@ -733,6 +738,7 @@ async fn run() -> Result<(), String> {
             "nodes": topo.nodes.len(),
             "startMs": start_ms,
             "secs": a.secs,
+            "arrives": a.arrive,
             "rate": a.rate,
         });
         if let (Some(chunk), Some(munro)) = (a.chunk, a.munro) {

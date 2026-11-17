@@ -29,7 +29,7 @@
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
 //! | `stats` | | Reports `stats`. |
-//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, and optionally `rate`, `chunk` with `munro`, and `units` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. With `units`, the stream is media in the unit format in a swarm of `units` chunks per signature ([`strims_testbed::media`]), which the node reads as a viewer and feeds the page's player (see below). Only the first `testbed` runs. |
+//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, `arrives`, and optionally `rate`, `chunk` with `munro`, and `units` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. A viewer that `arrives` (a boolean) reads from the live edge ([`Settings::arrives`]): the harness makes its links into the running stream. With `units`, the stream is media in the unit format in a swarm of `units` chunks per signature ([`strims_testbed::media`]), which the node reads as a viewer and feeds the page's player (see below). Only the first `testbed` runs. |
 //!
 //! Events, from the node:
 //!
@@ -328,11 +328,15 @@ impl Control {
                         chunks_per_signature: size("units")?,
                     },
                 };
+                let arrives = property(cmd, "arrives")
+                    .as_bool()
+                    .ok_or("arrives: not a boolean")?;
                 let settings = Settings {
                     index: size("index")?,
                     nodes: size("nodes")?,
                     start_ms: int(cmd, "startMs")?,
                     secs: int(cmd, "secs")?,
+                    arrives,
                     rate,
                     chunks,
                     stream,

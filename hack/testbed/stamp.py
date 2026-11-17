@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
-"""The testbed's build stamps: which sources a testbed_node binary and a
-browser bundle (dist/wasm-testbed) were built from. With them run.sh can
-refuse a bundle that may not speak the node's protocol: one built from
-other sources, whose links come up but no stream flows.
+"""The testbed's build stamps: which sources a testbed_node binary, a
+browser bundle (dist/wasm-testbed) and the browsers' harness
+(testbed_browser) were built from. With them run.sh can refuse a bundle
+that may not speak the node's protocol: one built from other sources,
+whose links come up but no stream flows. It refuses a harness from other
+sources too: the harness drives the page by its control commands
+(strims-wasm's e2e module), which a page of other sources may read
+otherwise.
 
-    stamp.py sources              the checkout's sources hash
-    stamp.py write ARTIFACT ...   writes ARTIFACT.stamp beside each
-    stamp.py check NODE WEB       exit 1, saying why and how to rebuild,
-                                  unless both carry one sources hash
+    stamp.py sources                      the checkout's sources hash
+    stamp.py write ARTIFACT ...           writes ARTIFACT.stamp beside each
+    stamp.py check NODE WEB [BROWSER]     exit 1, saying why and how to
+                                          rebuild, unless all carry one
+                                          sources hash
 
 The sources hash covers what reaches the wire between the node and the
 page:
@@ -24,6 +29,8 @@ page:
   manifest, sources and build script, and what the build script reads
   there (strims-proto's proto/);
 - testbed_node's own source (strims-sim's examples/testbed_node.rs);
+  testbed_browser's is strims-testbed's examples/testbed_browser.rs, among
+  its crate's files;
 - the page's TypeScript: the e2e entry (src/web/e2e.ts) and what it
   imports of this checkout, src/web/wasm.ts among them, which opens the
   page's data channel as strims-webrtc's DATA_CHANNEL_INIT does on the
@@ -56,6 +63,8 @@ BUILD = {
             " && hack/testbed/stamp.py write target/release/examples/testbed_node",
     "web": "pnpm exec webpack --mode production --env TARGET=wasm-testbed"
            " && hack/testbed/stamp.py write dist/wasm-testbed",
+    "browser": "cargo build --release -p strims-testbed --example testbed_browser"
+               " && hack/testbed/stamp.py write target/release/examples/testbed_browser",
 }
 
 
@@ -186,8 +195,9 @@ def read(path):
     return st.get("sources"), None
 
 
-def check(node, web):
-    """None when `node` and `web` carry one sources hash, else why not."""
+def check(node, web, browser=None):
+    """None when `node`, `web` and `browser` (if given) carry one sources
+    hash, else why not."""
     ns, nwhy = read(node)
     ws, wwhy = read(web)
     if nwhy:
@@ -198,6 +208,16 @@ def check(node, web):
         return (f"the web bundle at {web} was built from other sources than the testbed_node at {node}"
                 f" (stamps {ws[:12]} and {ns[:12]}), so it may not speak the node's protocol; rebuild"
                 f" both from one checkout: {BUILD['node']}; {BUILD['web']}")
+    if browser is None:
+        return None
+    bs, bwhy = read(browser)
+    if bwhy:
+        return f"the testbed_browser at {browser} {bwhy}; rebuild it: {BUILD['browser']}"
+    if bs != ns:
+        return (f"the testbed_browser at {browser} was built from other sources than the testbed_node at"
+                f" {node} and the web bundle at {web} (stamps {bs[:12]} and {ns[:12]}), so it may not"
+                f" drive the page as the page reads its commands; rebuild it from their checkout:"
+                f" {BUILD['browser']}")
     return None
 
 
@@ -207,8 +227,8 @@ def main():
         print(sources())
     elif args[:1] == ["write"] and len(args) > 1:
         write(args[1:])
-    elif args[:1] == ["check"] and len(args) == 3:
-        why = check(args[1], args[2])
+    elif args[:1] == ["check"] and len(args) in (3, 4):
+        why = check(*args[1:])
         if why:
             print(why, file=sys.stderr)
             return 1

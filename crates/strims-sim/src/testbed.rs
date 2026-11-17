@@ -2690,10 +2690,12 @@ mod tests {
 
     #[test]
     fn a_testbed_run_skips_the_faults_a_run_of_its_scenario_would() {
-        let mut s = calibration_star(&Calibration::from_knobs(|k| {
-            (k == "STRIMS_SIM_CAL_JOIN_AT").then(|| "2".to_owned())
-        }));
+        let mut s = calibration_star(&Calibration::from_knobs(|_| None));
         let (v0, v1, v2) = (1, 2, 3);
+        for v in [v0, v1, v2] {
+            s.at(Duration::ZERO, Fault::Crash(v));
+            s.at(Duration::from_secs(7), Fault::Restart(v));
+        }
         s.hosts[v2].arrive_at = Some(Duration::from_secs(9));
         let end = s.duration;
         s.at(Duration::from_secs(8), Fault::Crash(v2)); // not there yet
@@ -2716,7 +2718,7 @@ mod tests {
         assert_eq!(
             skipped,
             [
-                // The join's crash and restart, before v2 arrives.
+                // v2's crash and restart, before it arrives.
                 format!("Crash({v2})@0"),
                 format!("Restart({v2})@7"),
                 format!("Crash({v2})@8"),

@@ -20,7 +20,8 @@ what lands in the out dir, and the images.
 
     cargo build --release -p strims-sim --example testbed_node \
       && hack/testbed/stamp.py write target/release/examples/testbed_node
-    cargo build --release -p strims-testbed --example testbed_browser
+    cargo build --release -p strims-testbed --example testbed_browser \
+      && hack/testbed/stamp.py write target/release/examples/testbed_browser
     pnpm exec webpack --mode production --env TARGET=wasm-testbed \
       && hack/testbed/stamp.py write dist/wasm-testbed
     VIEWERS=3 SECS=90 hack/testbed/run.sh target/testbed/OUT
@@ -28,13 +29,14 @@ what lands in the out dir, and the images.
 
 The first line builds the native node, and the next two the browser
 nodes' harness and their page (dist/wasm-testbed). `stamp.py write`
-records beside each artifact the hash of the sources the node and the
-page share (hack/testbed/stamp.py's doc). A run with browsers refuses a
-page whose stamp differs from the node's, and an artifact that has no
-stamp or was rebuilt since it was stamped. A page built from other
-sources may not speak the node's protocol: its links come up, but no
-stream flows. A worktree whose shared crates differ from those the page
-was built from builds its own page.
+records beside each artifact the hash of the sources the node, the
+harness and the page share (hack/testbed/stamp.py's doc). A run with
+browsers refuses a page or a harness whose stamp differs from the
+node's, and an artifact that has no stamp or was rebuilt since it was
+stamped. A page built from other sources may not speak the node's
+protocol (its links come up, but no stream flows), nor read the
+harness's commands as the harness sends them. A worktree whose shared
+crates differ from those the page was built from builds its own page.
 
 - **One testbed per Docker host at a time.** The container names
   (tb-*), the network and its subnet are fixed. Check

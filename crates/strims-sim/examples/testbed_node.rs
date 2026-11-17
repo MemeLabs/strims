@@ -11,7 +11,7 @@
 //! testbed_node --index <i> --topology <file> [--secs <s>] [--start <unix ms>]
 //!              [--rate <bytes/s>] [--chunk <bytes> --munro <bytes>]
 //!              [--units <chunks per signature> [--media <flv file>]]
-//!              [--record <file>] [--join-at <s>] [--hosts <dir>]
+//!              [--record <file>] [--join-at <s>] [--arrive] [--hosts <dir>]
 //!              [--capture <dir>]
 //! testbed_node --relay-only --topology <file> [--secs <s>] [--start <unix ms>]
 //! ```
@@ -25,8 +25,9 @@
 //! there ([`strims_testbed::native`]) for the browsers that exchange with
 //! it. The seed starts writing at `--start` (all nodes share the clock)
 //! and writes for `--secs`; a viewer makes its links `--join-at` seconds
-//! after the start. `--chunk` and `--munro` size the swarm's chunks and
-//! signatures
+//! after the start, and with `--arrive` it arrives into the running stream,
+//! reading from the live edge ([`Settings::arrives`]). `--chunk` and
+//! `--munro` size the swarm's chunks and signatures
 //! ([`with_chunks`](strims_testbed::shape::LiveShape::with_chunks)); every
 //! node must take the same. With `--units`, the stream is media in the
 //! unit format in a swarm of that many chunks per signature
@@ -83,6 +84,7 @@ struct Args {
     record: Option<String>,
     /// When a viewer joins, in ms after the start (`--join-at`, seconds).
     join_at_ms: u64,
+    arrive: bool,
     hosts: Option<PathBuf>,
     capture: Option<String>,
 }
@@ -104,6 +106,7 @@ fn args() -> Result<Args, String> {
         media: None,
         record: None,
         join_at_ms: 0,
+        arrive: false,
         hosts: None,
         capture: None,
     };
@@ -123,6 +126,7 @@ fn args() -> Result<Args, String> {
             "--media" => a.media = Some(value()?),
             "--record" => a.record = Some(value()?),
             "--join-at" => a.join_at_ms = secs_ms(&value()?)?,
+            "--arrive" => a.arrive = true,
             "--hosts" => a.hosts = Some(value()?.into()),
             "--capture" => a.capture = Some(value()?),
             _ => return Err(format!("unknown flag {flag}")),
@@ -311,6 +315,7 @@ async fn run() -> Result<(), String> {
         nodes: topo.nodes.len(),
         start_ms,
         secs: a.secs,
+        arrives: a.arrive,
         rate: a.rate,
         chunks: a.chunk.zip(a.munro),
         stream: a.units.map_or(Stream::Frames, |cps| Stream::Units {
