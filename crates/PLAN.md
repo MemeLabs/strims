@@ -12,9 +12,10 @@ on it is in `CONVENTIONS.md`.
 - The UI warns a user whose device clock is set far enough wrong to break
   links and records, judged against the server's or peers' time, and says
   how to fix it.
-- Measure Safari's edge back swipe on the device lab's iPhone (a tab,
-  portrait and landscape, swapped and not) and set the layout's back-swipe
-  guard from it: its band, or no guard.
+- Measure Safari's edge back swipe on the device lab's iPhone: in a
+  Safari tab, in portrait and landscape, with the main panels swapped and
+  not. Then set the layout's back-swipe guard from it: its band
+  (`BACK_SWIPE_EDGE_PX`), or no guard.
 
 ### Video
 - **Services.**
@@ -255,15 +256,16 @@ and dropped are in `TRIED.md`.
      error against true holds (`simdb.py forecast-report`), and fit the
      requests to the one-window answer cap (`max_pending_requests`).
      Tune the collapse cures (first waves, repair stalls) only after.
-     At the lines' next rebase onto main (decl, p4tf), keep
-     `timeouts_honest` (and `seed_timeouts`, `timeouts_dishonest`) at
-     main's meaning, give the lines' inclusive total of timed-out and
-     speculative requests a name of its own, and suffix its parts
-     (`request_timeouts`, `timeouts_spec_*`) `_honest`, each declared on
-     main with `sims = []`.
+     At the next rebase of the HAVE-removal lines (decl, p4tf) onto
+     main, keep `timeouts_honest`, `seed_timeouts` and
+     `timeouts_dishonest` at main's meaning. Give the lines' inclusive
+     total of timed-out and speculative requests a name of its own, and
+     suffix its parts (`request_timeouts`, `timeouts_spec_*`) with
+     `_honest`. Declare each of these names on main with `sims = []`.
    - Give the seed a meter that reads a bucketed uplink's sustained rate,
      scored with realistic buckets on (`STRIMS_SIM_UPLINK_BURST=profiles`).
-     When the search resumes, rescreen `meter-ytf-rebase` with them on.
+     When the meter search resumes, rescreen `meter-ytf-rebase` (the
+     packet trains in `TRIED.md`) with those buckets on.
      Settle what a seed should read under cross traffic, the whole link or
      what a competitor leaves it, with a truth row planned first. Choose
      the relays' meter change after measuring the viewers' gap to a known
@@ -350,9 +352,9 @@ and dropped are in `TRIED.md`.
      grafts onto**: a far holder can relay to nobody, and keeps its copy
      while no reporter votes on it.
    - **A viewer among peers that serve nothing.** An honest viewer whose
-     every peer serves it nothing (free riders, liars) seeks other peers.
-     Test it with `echo_greed_eclipse`: a viewer whose peer slots its
-     links to such peers fill, with discovery beside them.
+     peers all serve it nothing (free riders, liars) seeks other peers.
+     Test it with `echo_greed_eclipse`: a viewer whose peer slots are full
+     of links to such peers, with discovery running as well.
 4. **Pull on lossy, sparse and mobile paths.** The worst scenarios after
    a constrained seed, where pull does the most repair.
    - **The silence after a timeout.** LEDBAT's minimum window, under a
@@ -495,12 +497,13 @@ and dropped are in `TRIED.md`.
     profiles' docs), and jitter changes every 20 ms per end. Measure both
     where the app runs on those links.
   - Score the twin against the testbed per access link class (`run.sh`'s
-    `SEED_LINK` classes, strims-wan's `testbed` specs) once the testbed's runs
-    are on the metrics layer, and turn framing, slots and capacity traces
-    on where they improve the correlation.
+    `SEED_LINK` classes, strims-wan's `testbed` specs): the testbed's runs
+    fold into the sim's tables (`simdb.py testbed`), and `twin_fit_of`
+    compares their twins with them. Turn framing, slots and capacity
+    traces on where they improve the correlation.
   - The WAN model lacks what the testbed's classes build beyond a FIFO:
     DOCSIS-PIE (cable's `aqm=pie`), a home router's fq_codel or cake
-    (`router=`), a trace's varying delay (`delay=`).
+    (`router=`), and a trace's varying delay (`delay=`).
   - Browser peers collapse more often than TCP peers (the `browsers` tier,
     `STRIMS_SIM_RTC`), most in thin relays and the WAN cells, where SCTP's
     Reno holds a long, lossy path's window low. Mixed audiences (a native

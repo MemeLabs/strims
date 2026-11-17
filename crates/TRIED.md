@@ -323,11 +323,13 @@ the seed read each burst as a train (its bytes over the time between the
 two reads) and its links' trains together as a held reading whose peak it
 kept; that fed its budget alone, its meter staying the busy time. The
 comparison ran in sims without uplink buckets, which flattered the uplink
-trains above: against them (`meter-c52-rebase` 517b632e), over the robust
-and browsers tiers' 35 cells whose seed isn't told its capacity, at 32
-seeds under the hostile mix, the budget's error (|log2| of reading over
-uplink at p10, p50 and p90, averaged) was 0.33 and 0.31 against 0.165 and
-0.198 (main 0.74 and 0.77); lag p99 and wire were alike.
+trains above. Against them (`meter-c52-rebase` 517b632e), over the 35
+cells of the robust and browsers tiers whose seed isn't told its
+capacity, at 32 seeds under the hostile mix, the seed budget's error was
+0.33 on the robust tier and 0.31 on the browsers tier, against the uplink
+trains' 0.165 and 0.198 (main: 0.74 and 0.77). The error is |log2| of the
+reading over the uplink at p10, p50 and p90, averaged. Lag p99 and the
+`wire` score were alike.
 
 **Admitting by count until the uplink saturates.** (`idle-count`,
 `idle-count-all`, against 5d81aaf6) An idle relay reads twenty times its
