@@ -720,7 +720,11 @@ impl Flow {
     /// trip and its variation (RFC 6298), and HyStart's delay test, which
     /// ends slow start once a round's least round trip of its first
     /// [`HYSTART_SAMPLES`] passes CUBIC's least (`delay_min`) by an eighth
-    /// of it, clamped to 4-16 ms, as Linux's CUBIC does.
+    /// of it, clamped to 4-16 ms, as Linux's CUBIC does. A round begins
+    /// with the acknowledgement of the first segment sent after the last
+    /// one began, whatever the window, as `hystart_update` starts one
+    /// before it tests the window against [`HYSTART_LOW_WINDOW`]: its
+    /// samples are of the segments it sent alone.
     fn sampled(&mut self, seq: u64, sample: Duration) {
         self.estimate(sample);
         self.delay_min = if self.delay_min == Duration::ZERO {
@@ -728,13 +732,16 @@ impl Flow {
         } else {
             self.delay_min.min(sample)
         };
-        if self.hs_found || self.cwnd >= self.ssthresh || self.cwnd < HYSTART_LOW_WINDOW {
+        if self.hs_found || self.cwnd >= self.ssthresh {
             return;
         }
         if seq >= self.hs_end {
             self.hs_end = self.sent_end;
             self.hs_rtt = Duration::MAX;
             self.hs_samples = 0;
+        }
+        if self.cwnd < HYSTART_LOW_WINDOW {
+            return;
         }
         self.hs_rtt = self.hs_rtt.min(sample);
         if self.hs_samples < HYSTART_SAMPLES {
@@ -3943,6 +3950,41 @@ mod tests {
             f.grow(t, seg, ms(30));
         }
         assert!(f.cwnd >= 41.0 * MSS, "{} packets after 160", f.cwnd / MSS);
+    }
+
+    #[test]
+    fn hystart_rounds_take_the_samples_of_their_own_segments() {
+        // An upload that starts just before another's burst: its first
+        // round comes back at the path's round trip and its second behind
+        // the burst. HyStart's second round begins with the second's first
+        // segment, though the window reached its low window during the
+        // first, so slow start ends at the second's ninth sample, a window
+        // of 36 packets; a round begun at the window's 16 packets would
+        // hold the first round's last samples and run to 48.
+        let ms = |n: i64| Duration::from_millis(n);
+        let seg = 2 * MSS as usize;
+        let mut f = Flow::default();
+        let t = Time::EPOCH + ms(1000);
+        let send = |f: &mut Flow| {
+            while !f.holds(seg) {
+                f.sent(t, seg, ms(30));
+                f.sent_end += 2;
+            }
+        };
+        send(&mut f);
+        let mut seq = 0;
+        while f.ssthresh.is_infinite() && seq < 400 {
+            f.sampled(seq, if seq < 10 { ms(30) } else { ms(80) });
+            f.in_flight -= seg;
+            f.grow(t, seg, ms(30));
+            send(&mut f);
+            seq += 2;
+        }
+        assert_eq!(
+            f.ssthresh / MSS,
+            36.0,
+            "slow start ended at the ack of {seq}"
+        );
     }
 
     #[test]

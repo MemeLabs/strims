@@ -486,8 +486,11 @@ and dropped are in `TRIED.md`.
     runner's totals, which keep closed channels'.
   - Close the window model's gaps against the testbed's bare TCP bench
     (`hack/testbed/benchsuite.py`): the holders' losses beside each
-    other's bursts, the holders' probe round-trip tails, a HyStart
-    ack-train test, and the uplink cut's twin (`testbed-copy-floor`).
+    other's bursts, the holders' probe round-trip tails and the uplink
+    cut's twin (`testbed-copy-floor`); build its remaining departures from
+    Linux's TCP (HyStart's ACK-train exit, per-packet arrival at the
+    receiver, CUBIC's reset at a timeout, lost retransmissions, F-RTO) if
+    the testbed–twin fit shows they matter.
   - Through a halving of the seed's uplink the testbed fell into the
     lock-in deeper than its twin, and its round trips there ran 1.4 times
     the sim's. Recheck with today's frames; if the gap holds, find the
