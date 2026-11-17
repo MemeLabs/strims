@@ -10,7 +10,9 @@ on a free port, its state file in the fixture's checkout):
             catalog; link's refusals; what a go that missed says of why,
             and go's help
   Catalog   rows of a URL, as a table and as JSON; link --check passing,
-            and refusing a bad cell; rows with no catalog
+            and refusing a bad cell; rows with no catalog; rows and
+            describe URL saying where the console serves scoring macros
+            this checkout doesn't make (the catalog's behind its data)
   NoServer  tabs, describe --tab, rows --tab and go say how to start the
             server, with no state file and with a stale one
   Server    tabs; describe --tab and rows --tab of the latest focused tab
@@ -52,7 +54,7 @@ if __name__ == "__main__":
 
 import golden_cli  # noqa: E402
 import test_views  # noqa: E402
-from simlab import views  # noqa: E402
+from simlab import engine, views  # noqa: E402
 
 UI = HACK / "console" / "ui.py"
 SERVER = HACK / "console" / "server.py"
@@ -185,6 +187,32 @@ class Catalog(unittest.TestCase):
         code, out, err = ui("rows", URL, root=EMPTY)
         self.assertEqual((code, out), (1, ""))
         self.assertRegex(err, r"^no catalog at .*: run python3 hack/sim-db/simdb.py index\n$")
+
+    def test_rows_and_describe_say_where_the_console_serves_other_macros(self):
+        lake = ROOT / "target" / "sim-db" / "lake"
+
+        def write(sql):
+            w = engine.writer(lake)
+            try:
+                w.execute(sql)
+            finally:
+                engine.close(w)
+
+        write("INSERT INTO raw.info VALUES ('scoring_behind', '1')")
+        try:
+            for args in (["rows", URL], ["describe", URL]):
+                code, _, err = ui(*args)
+                self.assertEqual(code, 0, err)
+                first = err.splitlines()[0]
+                self.assertRegex(first, r"^catalog: the console serves the catalog's scoring macros \(scoring_version "
+                                        r"[0-9a-f]{12}, this checkout's too; made before data an index of other code "
+                                        r"added\), not those simdb.py lake and view run from this checkout: simdb.py "
+                                        r"index from this checkout makes them again$")
+        finally:
+            write("DELETE FROM raw.info WHERE key = 'scoring_behind'")
+        code, _, err = ui("rows", URL)
+        self.assertEqual(code, 0, err)
+        self.assertTrue(err.startswith("rows: run_timeline "), err)
 
     def test_link_check(self):
         code, out, err = ui("link", "run_timeline", *RUN, "--sel", json.dumps(STALL_SEL), "--check")

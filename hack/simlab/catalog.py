@@ -22,9 +22,14 @@ DuckLake, so that any question is one SQL statement over it.
   pinned()       this thread's readers opened in the block at one
                  snapshot (below)
   pool(name, size=1, guard=engine.Guard()) -> engine.Pool
-                 guarded readers of the catalog (the console's, the Ask
-                 eval's, and the CLI's for a query with params, a saved
-                 view and describe), spilling under the cache's tmp/<name>/
+                 guarded readers of the catalog (the console's, ui.py's,
+                 the Ask eval's, and simdb.py describe's), spilling under
+                 the cache's tmp/<name>/, reading it as it serves every
+                 session (the last index's verdicts and scoring objects)
+  Readers()      a pool's query over lake's readers instead (the CLI's
+                 lake --param and saved views): this process's own
+                 verdicts and scoring objects where they aren't the
+                 catalog's (below)
   schema(pool) -> dict
                  what the console's GET /console/schema answers, from an
                  engine.Pool's readers: {tables (each table's schema,
@@ -60,6 +65,11 @@ DuckLake, so that any question is one SQL statement over it.
   owns(info) -> dict
                  whether this process's verdicts and scoring objects are
                  those the shared catalog serves (below)
+  scoring_served(info) -> bool
+                 whether the catalog's scoring objects are the ones this
+                 process makes, or its readers make their own (below)
+  served_note() -> str | None
+                 the line a pool's reader prints where they aren't
 
 hack/sim-db/simdb.py's index, fetch, lake, view and describe commands
 call these (hack/sim-db/catalog.py's), printing an index's and a fetch's
@@ -297,10 +307,18 @@ database, made again by its index whenever those files changed), which
 that process's readers read (connected's and lake's:
 simlab.scoring's sessions, the reports', golden.py's): each verdict
 table a TEMP view of the copy's, which a name's lookup finds before the
-catalog's, in the catalog's views and macros too (privately); lake's
-make the scoring objects TEMP too, as simlab.scoring's sessions do
-always. The console's readers (pool) read the catalog as it serves every
-session.
+catalog's, in the catalog's views and macros too (privately). lake's
+and Readers' (the CLI's lake --param and view) make the scoring objects
+TEMP too wherever the catalog's aren't the ones this process makes
+(scoring_served: another scoring_version, or behind the data, whoever
+indexed), as simlab.scoring's sessions do always: a query scores by its
+checkout's scoring.sql over any lake, the main checkout's or one
+SIM_DB_ROOT names, with no index since scoring.sql changed. A
+scoring.sql that doesn't load fails the query (store_host.DuckError,
+saying so). The console's readers and ui.py's (pool) read the catalog as
+it serves every session, the rows behind what a console tab shows:
+served_note is the line they print where its scoring objects aren't this
+checkout's.
 
 An experiment's `tiers` are suite.py's TIERS (as they are now) its cells
 came from: each cell is matched by its name, test and env (a farm cell's
@@ -430,8 +448,8 @@ def connected(write=False, threads=None, memory=None, scoring=False):
     inlined), spilling to the cache's tmp/; store_host.DuckError when it
     doesn't attach. A reader of a process whose verdicts aren't the ones
     the catalog serves reads its own (privately), and with `scoring` its
-    own scoring objects too; one inside latest() reads the catalog as it
-    is."""
+    own scoring objects wherever the catalog's aren't the ones it makes
+    (scoring_served); one inside latest() reads the catalog as it is."""
     tmp = spill()
     try:
         if write:
@@ -3496,13 +3514,32 @@ def owns(info):
     (main_key: the main checkout's code, or a lake other than the main
     checkout's). Any other process's (a branch's worktree, one older than
     main's code) aren't: its index leaves the catalog's as they are
-    (main's), and its readers read their own (privately)."""
+    (main's), and its readers read their own (privately). It says whose
+    index makes them, not whether they are made yet: those of a process
+    whose files are main's are the catalog's however old the catalog's
+    are (scoring_served)."""
     sv = lake_scoring_version()
     mine = {"verdicts": info.get("verdict_version") in (None, verdict.derived_version()),
             "scoring": sv is None or info.get("scoring_version") in (None, sv)}
     if all(mine.values()) or main_key()[1]:
         return {"verdicts": True, "scoring": True}
     return mine
+
+
+def scoring_served(info):
+    """Whether the scoring objects the catalog holds, `info` its
+    catalog_info, are the ones this process makes: made at its
+    scoring_version (scoring.sql, suite.py's METRICS and the code making
+    them) over the data the catalog holds (not scoring_behind), or none it
+    could make (suite.py's METRICS don't load). An index of other code
+    made any others, though this process's index would make them again
+    (owns): the main checkout's catalog before an index of main's latest
+    scoring, or a lake outside it (SIM_DB_ROOT's) that an index from
+    another checkout, or from this one before an edit, made. Its readers
+    make their own (privately), so a query scores by this checkout's
+    scoring.sql over any lake, indexed or not since it changed."""
+    sv = lake_scoring_version()
+    return sv is None or info.get("scoring_version") == sv and not info.get("scoring_behind")
 
 
 def kept_lines(mine):
@@ -3641,17 +3678,19 @@ def warn_once(text):
 
 
 def privately(conn, scoring=False):
-    """In the session of reader `conn`, this process's own verdicts, and
-    with `scoring` its own scoring objects, where they aren't those the
-    catalog serves (owns): each of VERDICT_TABLES (and its _all) a TEMP
-    view of the private copy's (made_private), of the jobs' own sources
-    (jobs.src) as the catalog's are, and the scoring objects TEMP
-    (simlab.scoring.load) over them. A TEMP object comes first in a name's
-    lookup, the catalog's views and macros' own included. Without a copy
-    of this process's derived_version (an index from this checkout makes
-    one) the catalog's are read, and a copy lacking sources the catalog
-    holds has no verdicts of theirs: each said on stderr, once a
-    process."""
+    """In the session of reader `conn`, this process's own verdicts where
+    they aren't those the catalog serves (owns), and with `scoring` its
+    own scoring objects where the catalog's aren't the ones it makes
+    (scoring_served): each of VERDICT_TABLES (and its _all) a TEMP view of
+    the private copy's (made_private), of the jobs' own sources (jobs.src)
+    as the catalog's are, and the scoring objects TEMP (simlab.scoring.load)
+    over them. A TEMP object comes first in a name's lookup, the catalog's
+    views and macros' own included. Without a copy of this process's
+    derived_version (an index from this checkout makes one) the catalog's
+    are read, and a copy lacking sources the catalog holds has no verdicts
+    of theirs; verdicts the catalog serves this process (owns) that an
+    index of other code made are read as they are, until this checkout's
+    index makes them again: each said on stderr, once a process."""
     try:
         info = dict(conn.execute("SELECT key, value FROM lake.raw.info").fetchall())
     except engine.duckdb.Error:
@@ -3683,10 +3722,43 @@ def privately(conn, scoring=False):
             if n:
                 warn_once(f"{why}: its own copy, {private_path()}, lacks {n} of the catalog's sources, read without "
                           "verdicts (simdb.py index from this checkout brings it up to date)")
-    if scoring and not mine["scoring"]:
+    elif info.get("verdict_version") not in (None, verdict.derived_version()):
+        warn_once(f"catalog: the catalog's verdicts (verdict_version {info['verdict_version']}) aren't this "
+                  f"checkout's (derived_version {verdict.derived_version()}): reading the catalog's until simdb.py "
+                  "index from this checkout makes them again")
+    if scoring and not scoring_served(info):
         from . import scoring as session
 
-        session.load(conn)
+        try:
+            session.load(conn)
+        except engine.duckdb.Error as e:
+            raise store_host.DuckError(f"this checkout's scoring macros ({relative(SCORING)}) don't load: "
+                                       f"{e}") from None
+
+
+def served_note():
+    """The line a reader of the catalog as it serves every session (the
+    console's, ui.py's) prints where its scoring objects aren't the ones
+    this checkout makes (scoring_served): what the catalog's are, that
+    `simdb.py lake` and `view` run this checkout's, and which index makes
+    the catalog's again (this checkout's where it owns them, else main's);
+    None where they are the same, or where the catalog can't be read."""
+    try:
+        with latest():
+            info = {r["key"]: r["value"] for r in lake("SELECT key, value FROM raw.info;")}
+    except store_host.DuckError:
+        return None
+    if scoring_served(info):
+        return None
+    sv = lake_scoring_version()
+    what = [f"scoring_version {info.get('scoring_version')}, this checkout's {sv}"
+            if info.get("scoring_version") != sv else f"scoring_version {sv}, this checkout's too"]
+    if info.get("scoring_behind"):
+        what.append("made before data an index of other code added")
+    again = ("simdb.py index from this checkout makes them again" if owns(info)["scoring"]
+             else "main's next index makes them again (this checkout's code isn't main's)")
+    return (f"catalog: the console serves the catalog's scoring macros ({'; '.join(what)}), not those simdb.py "
+            f"lake and view run from this checkout: {again}")
 
 
 # --- maintenance ------------------------------------------------------------------
@@ -3846,9 +3918,31 @@ def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, pr
 def pool(name, size=1, guard=engine.Guard()):
     """An engine.Pool of `size` guarded readers of the catalog, `guard`'s
     limits theirs, spilling under the cache's tmp/<name>/; the extensions
-    installed and checked first (extensions)."""
+    installed and checked first (extensions). They read the catalog as it
+    serves every session, its verdicts and scoring objects the last
+    index's, never a session's own (served_note says where those differ
+    from this checkout's)."""
     extensions()
     return engine.Pool(lake_root(), store_host.cache_root() / "tmp" / name, size=size, guard=guard)
+
+
+class Readers:
+    """An engine.Pool's query over lake's readers: a connection of
+    connected's for each query (with this process's own verdicts and
+    scoring objects where they aren't the catalog's: privately), its one
+    statement gated and its `$name`s bound as a pool's are (engine.run).
+    The CLI's lake --param and saved views read through it, so they read
+    what its lake does. The extensions installed and checked first
+    (extensions)."""
+
+    def __init__(self):
+        extensions()
+
+    def query(self, sql, params=None, max_rows=None, timeout_s=None, text=False):
+        """`sql`'s rows as engine.Pool.query gives them; store_host.DuckError
+        where the catalog doesn't attach."""
+        with connected(scoring=True) as conn:
+            return engine.run(conn, sql, params, max_rows=max_rows, timeout_s=timeout_s, guard=True, text=text)
 
 
 # --- the console's schema ------------------------------------------------------------

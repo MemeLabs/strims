@@ -48,7 +48,10 @@ verdict's phases from the runs' scenario events).
    - vocabulary names from the vocabulary (as `@{...}` constants or the
      vocabulary's tables), never literals.
    `catalog.scoring_version` moves, and the catalog makes the scoring
-   again at the next index.
+   again at the next index. Before it, `simdb.py lake` and `view` from
+   the changed checkout already run the change (`catalog.scoring_served`),
+   so its before and after are the same query over one lake from the
+   parent's checkout and from the change's.
 
 ## One definition
 

@@ -340,14 +340,15 @@ def prepare(conn, sel):
 
 @contextlib.contextmanager
 def connected(conn=None, threads=8, memory="16GB"):
-    """`conn`, else a reader of the catalog of its own (simlab.catalog's),
-    closed after the block."""
+    """`conn`, else a reader of the catalog of its own (simlab.catalog's,
+    with this checkout's scoring macros where the catalog's aren't them:
+    the sketch quantiles the sections take), closed after the block."""
     if conn is not None:
         yield conn
         return
     from . import catalog
 
-    with catalog.connected(threads=threads, memory=memory) as c:
+    with catalog.connected(threads=threads, memory=memory, scoring=True) as c:
         # The decisions' every row, rivals and all, is tens of millions in
         # the overload: no section needs them in order.
         c.execute("SET preserve_insertion_order = false")

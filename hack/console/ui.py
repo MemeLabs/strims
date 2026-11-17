@@ -29,7 +29,10 @@ its rows, and its graph. With nothing, the views.
 those its selection's panel filters and values keep), as `simdb.py view`
 prints a view's: DuckDB's table, or with `--json` objects; what the
 address is and any panel filter that doesn't translate to SQL (and so
-isn't applied) go to stderr.
+isn't applied) go to stderr. It reads the catalog as the console serves
+it, so its rows are those the console tab shows: where the catalog's
+scoring macros aren't this checkout's, which `simdb.py view` runs,
+`rows` and `describe` say so on stderr (simlab.catalog's served_note).
 
 `tabs` lists the console tabs open in a browser, as the servers running
 (each its own) last heard from them, the latest focused first.
@@ -60,10 +63,11 @@ last report gives of why; a tab whose page predates go fails at once
 (reload it on a current build).
 
 `describe VIEW`, `describe URL` and `link` without `--check` need neither
-the server nor the catalog. `rows` and `--check` read the catalog
-(simdb.py's, through the reader `simdb.py view` uses); `--tab`, `tabs`
-and `go` ask the console servers running (python3
-hack/console/server.py, after pnpm run console:build).
+the server nor the catalog (`describe URL` reads its served note where
+there is one). `rows` and `--check` read the catalog (simdb.py's, as the
+console serves it: simlab.catalog's pool); `--tab`, `tabs` and `go` ask
+the console servers running (python3 hack/console/server.py, after pnpm
+run console:build).
 """
 
 import argparse
@@ -103,13 +107,23 @@ def param(text):
 
 
 def pool():
-    """The catalog's reader, as simdb.py view opens it; exits when there's
-    no catalog."""
+    """The catalog's guarded readers (simlab.catalog's pool), which read it
+    as it serves every session, as the console's do; exits when there's no
+    catalog."""
     from simlab import catalog
 
     if not catalog.catalog_path().exists():
         sys.exit(f"no catalog at {catalog.catalog_path()}: run {SIMDB} index")
     return catalog.pool(READERS)
+
+
+def served_note():
+    """simlab.catalog's served_note on stderr, where the catalog has one."""
+    from simlab import catalog
+
+    note = catalog.served_note() if catalog.catalog_path().exists() else None
+    if note:
+        print(note, file=sys.stderr)
 
 
 def address(a, cmd):
@@ -258,6 +272,7 @@ def describe_address(url, tab=None):
 def cmd_describe(a):
     if a.tab is not None or (a.target and ("#" in a.target or "://" in a.target)):
         url, tab = address(a, "describe")
+        served_note()
         return describe_address(url, tab)
     if a.target:
         if a.target == views.WORKBENCH:
@@ -291,6 +306,7 @@ def cmd_rows(a):
     except (KeyError, ValueError) as e:
         sys.exit(f"rows: {e.args[0] if isinstance(e, KeyError) else e}")
     p = pool()
+    served_note()
     try:
         r = views.run(p, name, params, max_rows=a.max_rows, timeout_s=None, text=not a.json, sel=sel)
     except (KeyError, ValueError) as e:

@@ -127,9 +127,10 @@ the Rust and Python checks, and what each golden diff means.
   its data but leaves the doc tables, the verdicts and the scoring
   objects as main's (`catalog.docs_of`, `catalog.owns`), keeping its
   own verdicts in its checkout's private copy, which its sessions read
-  (`catalog.privately`; `simlab.scoring` loads this checkout's scoring
-  as TEMP). Its keys and views are still its code's: index a new table
-  from main's checkout.
+  (`catalog.privately`). Its sessions make this checkout's scoring
+  objects TEMP wherever the catalog's aren't its own, whoever indexed
+  (`catalog.scoring_served`; `simlab.scoring` always does). Its keys and
+  views are still its code's: index a new table from main's checkout.
 
 ## Order of work
 

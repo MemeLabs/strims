@@ -24,7 +24,7 @@ view's name its params and SQL.
 
 `lake` runs a query over the whole catalog, read-only, its macros
 loaded: a script of any number of statements, or with `--param` one
-SELECT through the console's guarded readers (engine.Pool) whose
+SELECT, gated as the console's readers gate one (engine.run), whose
 `$name`s the params bind, each value JSON's where it parses as JSON (7,
 true, [1, 2], "007" for a string of digits) and the text else; a query
 with `$name`s goes in single quotes, or the shell takes them for its
@@ -33,10 +33,22 @@ own:
   simdb.py lake 'SELECT * FROM structural($exp)' --param exp=sa0755
 
 `view` lists the console's saved views (simlab.views) or, given a name,
-runs one: each `--param` a string, as the console's pickers give it (a
-seed's or number's its number), a param not given its default; at most
-`--max-rows` rows. Every query prints DuckDB's table, or with `--json`
-its rows as objects, integers and decimals as numbers.
+runs one, reading what `lake` reads: each `--param` a string, as the
+console's pickers give it (a seed's or number's its number), a param not
+given its default; at most `--max-rows` rows. Every query prints
+DuckDB's table, or with `--json` its rows as objects, integers and
+decimals as numbers.
+
+The macros `lake` and `view` run are this checkout's scoring
+(hack/simlab/sql/scoring.sql and suite.py's METRICS) over whichever lake
+they read, the main checkout's or one SIM_DB_ROOT names: where the
+catalog's were made from other code (an index from another checkout, or
+from this one before scoring.sql changed), they make this checkout's in
+their session (simlab.catalog's scoring_served), so a change to
+scoring.sql scores at once, no index needed. `describe` reads the
+catalog's docs as its last index made them, and the console (and
+hack/console/ui.py's rows) the catalog's macros. `lake` and `view` run
+as a script does, with none of the console's memory, thread or spill caps.
 
 `index` brings the catalog up to date with the cache (simdb.py's: the
 suite's and the farm's flushes), the suite's and the farm's indexes, the
@@ -46,8 +58,7 @@ last ran, and makes the verdicts of every source that lacks them,
 catalog with the next index. From a checkout whose code isn't main's (a
 branch's worktree) it adds the data alone, leaving the catalog's doc
 tables, verdicts and scoring objects main's: its own verdicts go to its
-checkout's target/sim-db-private/, which its `lake` reads, with its own
-scoring macros (`--param`, `view` and `describe` read the catalog's).
+checkout's target/sim-db-private/, which its `lake` and `view` read.
 `fetch` copies what S3 still holds of an
 experiment's jobs into the cache (with `--tables` the bulky sample
 tables of the jobs picked by `--cells` and `--arms`, asks, haves and
@@ -74,7 +85,8 @@ from simlab import catalog, describe, engine, store_host, views  # noqa: E402
 
 # A --param's name: a statement's `$name`.
 PARAM = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-# The CLI's readers spill under the cache's tmp/<READERS>/.
+# describe's pool spills under the cache's tmp/<READERS>/ (lake's and
+# view's readers under tmp/, as a lake script's do).
 READERS = "cli"
 
 
@@ -126,14 +138,10 @@ def cmd_fetch(a):
 def cmd_lake(a):
     need_catalog()
     if a.param:
-        pool = catalog.pool(READERS)
         try:
-            r = pool.query(a.query, {k: typed(v) for k, v in a.param}, max_rows=None, timeout_s=None,
-                           text=not a.json)
-        except engine.QueryError as e:
+            r = catalog.Readers().query(a.query, {k: typed(v) for k, v in a.param}, text=not a.json)
+        except (engine.QueryError, store_host.DuckError) as e:
             sys.exit(f"lake: {e}")
-        finally:
-            pool.close()
         printed_result(r, a.json)
         return
     try:
@@ -153,16 +161,16 @@ def cmd_view(a):
                                       [[v.name, v.title, describe.params_text(v.params)] for v in saved]), end="")
         return
     need_catalog()
-    pool = catalog.pool(READERS)
     try:
-        r = views.run(pool, a.name, dict(a.param or []), max_rows=a.max_rows, timeout_s=None, text=not a.json)
+        r = views.run(catalog.Readers(), a.name, dict(a.param or []), max_rows=a.max_rows, timeout_s=None,
+                      text=not a.json)
     except KeyError:
         sys.exit(f"view: no view {a.name!r}: {', '.join(v.name for v in views.saved())}")
     except engine.QueryError as e:
         v = views.get(a.name)
         sys.exit(f"view {a.name}: {e}" + (f" (its params: {describe.params_text(v.params)})" if v.params else ""))
-    finally:
-        pool.close()
+    except store_host.DuckError as e:
+        sys.exit(f"view {a.name}: {e}")
     printed_result(r, a.json)
     if r.truncated:
         print(f"view {a.name}: its first {a.max_rows:,} rows; --max-rows for more", file=sys.stderr)

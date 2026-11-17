@@ -123,6 +123,18 @@ simlab.verdict's derive pool:
                this one). A branch's reader in latest() reads the
                catalog; one whose copy lacks a source main's index added
                reads none of its verdicts, saying so, until its index
+  Served       scoring.sql edited after an index, over a lake outside the
+               main checkout (owned) and over the main checkout's when
+               main's scoring moved: lake, the CLI's Readers (lake
+               --param, a saved view) and simlab.scoring score by the
+               edit, the catalog serving its indexed macros until an index
+               makes them again, and an index of other code's macros, or
+               behind the data, isn't served; verdicts an index of other
+               code made are read as they are, saying so once; the
+               reports' readers (forecast.connected) take the edit's
+               sketch macros; a scoring.sql that doesn't load fails a
+               query, saying so; served_note names the catalog's macros
+               while they aren't this checkout's
   MainDocs     main's doc files from git, for the main checkout's lake
                alone; this checkout's as git names their contents
   DocsVersion  docs_version hashes the code that loaded, and covers every
@@ -2072,6 +2084,146 @@ class Private(DocsFixture):
             self.assertTrue(catalog.state()["current"])
             self.assertEqual(catalog.lake("SELECT count(*) FILTER (WHERE NOT collapsed) AS n FROM verdicts;"),
                              [{"n": 0}])
+
+
+class Served(DocsFixture):
+    """The fixture's lake is one outside the main checkout (SIM_DB_ROOT's),
+    which this process owns (owns); a copy of scoring.sql with fisher_p
+    another (changed) stands for an edit to it."""
+
+    P = "SELECT fisher_p(1, 4, 3, 4) AS p"
+
+    def setUp(self):
+        super().setUp()
+        p = mock.patch.object(catalog, "WARNED", set())
+        p.start()
+        self.addCleanup(p.stop)
+
+    def changed(self, made="CREATE OR REPLACE MACRO fisher_p(k_, n_, m_, n2_) AS 0.125;"):
+        """scoring.sql's copy with the statement `made` in place of the one
+        making its macro (by default fisher_p, 0.125 whatever it's
+        given)."""
+        text = catalog.SCORING.read_text()
+        start = text.index(made[:made.index("(") + 1])
+        end = text.index(";\n", start) + 2
+        d = Path(tempfile.mkdtemp(dir=self.root))
+        (d / "scoring.sql").write_text(text[:start] + made + "\n" + text[end:])
+        return d / "scoring.sql"
+
+    def reads(self):
+        """fisher_p as lake, the CLI's Readers (lake --param, a saved view's
+        SQL) and simlab.scoring read it, and as the catalog serves it
+        (latest: no session's own)."""
+        with catalog.latest():
+            served = catalog.lake(self.P + ";")[0]["p"]
+        return {"lake": catalog.lake(self.P + ";")[0]["p"],
+                "readers": catalog.Readers().query(self.P).records()[0]["p"],
+                "scoring": scoring.query(self.P + ";")[0]["p"], "served": served}
+
+    def card(self):
+        """The scorecard view's Fisher p's of sf0001's arms, as simdb.py view
+        runs it."""
+        got = views.run(catalog.Readers(), "scorecard", {"exp": "sf0001", "arm": "a", "arm2": "off"}, max_rows=None,
+                        timeout_s=None)
+        return {r["fisher_p"] for r in got.records()}
+
+    def test_a_query_scores_by_this_checkouts_scoring_sql_whatever_the_lake_was_indexed_with(self):
+        self.index()
+        self.assertIsNone(catalog.main_docs())
+        before = self.reads()
+        p = before["lake"]
+        self.assertNotEqual(p, 0.125)
+        self.assertEqual(before, {"lake": p, "readers": p, "scoring": p, "served": p})
+        self.assertTrue(catalog.scoring_served(self.info()))
+        self.assertIsNone(catalog.served_note())
+        made = self.info()["scoring_version"]
+        # scoring.sql edited, the lake not indexed since: its macros are
+        # the edit's in every session, the catalog's as they were, and a
+        # pool's reader (ui.py's) says so.
+        changed = self.changed()
+        with mock.patch.object(catalog, "SCORING", changed):
+            self.assertTrue(catalog.owns(self.info())["scoring"])
+            self.assertFalse(catalog.scoring_served(self.info()))
+            self.assertEqual(self.reads(), {"lake": 0.125, "readers": 0.125, "scoring": 0.125, "served": p})
+            self.assertEqual(catalog.served_note(),
+                             f"catalog: the console serves the catalog's scoring macros (scoring_version {made}, this "
+                             f"checkout's {catalog.scoring_version()}), not those simdb.py lake and view run from this "
+                             "checkout: simdb.py index from this checkout makes them again")
+            # A saved view calling the macros (simdb.py view's) scores by
+            # the edit too.
+            self.assertEqual(self.card(), {0.125})
+            # Then indexed with it: the catalog's are the edit's.
+            self.assertTrue(self.index()[0].scoring)
+            self.assertTrue(catalog.scoring_served(self.info()))
+            self.assertIsNone(catalog.served_note())
+            self.assertEqual(self.reads(), {"lake": 0.125, "readers": 0.125, "scoring": 0.125, "served": 0.125})
+        # The edit undone, the lake indexed with it: this checkout's again.
+        self.assertFalse(catalog.scoring_served(self.info()))
+        self.assertEqual(self.reads(), {"lake": p, "readers": p, "scoring": p, "served": 0.125})
+        self.assertNotIn(0.125, self.card())
+
+    def test_the_main_checkouts_lake_before_an_index_of_mains_latest_scoring(self):
+        # This checkout's files are main's; the catalog's scoring objects an
+        # index of main's older scoring.sql made, or behind a branch's data.
+        with mock.patch.object(catalog, "main_docs", catalog.docs_ids):
+            with mock.patch.object(catalog, "SCORING", self.changed()):
+                self.index()
+                self.assertEqual(self.reads()["lake"], 0.125)
+            info = self.info()
+            self.assertTrue(catalog.owns(info)["scoring"])
+            self.assertFalse(catalog.scoring_served(info))
+            got = self.reads()
+            self.assertNotEqual(got["lake"], 0.125)
+            self.assertEqual({k: got[k] for k in ("readers", "scoring", "served")},
+                             {"readers": got["lake"], "scoring": got["lake"], "served": 0.125})
+            self.index()
+            self.assertTrue(catalog.scoring_served(self.info()))
+            self.assertFalse(catalog.scoring_served({**self.info(), "scoring_behind": "1"}))
+        # A branch's (its scoring.sql not main's): main's next index makes
+        # the catalog's again, its own never.
+        ids = catalog.docs_ids()
+        with mock.patch.object(catalog, "main_docs", lambda: dict(ids)), \
+                mock.patch.object(catalog, "SCORING", self.changed()):
+            self.assertFalse(catalog.owns(self.info())["scoring"])
+            self.assertEqual(self.reads()["lake"], 0.125)
+            self.assertTrue(catalog.served_note().endswith(
+                ": main's next index makes them again (this checkout's code isn't main's)"))
+
+    def test_the_reports_readers_take_this_checkouts_sketch_macros(self):
+        # forecast.connected, simlab.regimes' and simlab.coverage's reader
+        # too, whose sections take sketch_quantile.
+        self.index()
+        sql = "SELECT sketch_quantile(x, 50) AS q FROM (VALUES (1.0), (2.0), (3.0)) t(x)"
+        with forecast.connected() as c:
+            self.assertEqual(c.execute(sql).fetchone()[0], 2.0)
+        with mock.patch.object(catalog, "SCORING",
+                               self.changed("CREATE OR REPLACE MACRO sketch_quantile(x, p) AS 0.125 + 0 * count(x);")):
+            with forecast.connected() as c:
+                self.assertEqual(c.execute(sql).fetchone()[0], 0.125)
+
+    def test_a_scoring_sql_that_doesnt_load_fails_a_query_saying_so(self):
+        self.index()
+        broken = self.changed("CREATE OR REPLACE MACRO fisher_p(k_, n_, m_, n2_) AS (;")
+        with mock.patch.object(catalog, "SCORING", broken):
+            for read in (lambda: catalog.lake(self.P + ";"), lambda: catalog.Readers().query(self.P)):
+                with self.assertRaises(store_host.DuckError) as e:
+                    read()
+                self.assertTrue(str(e.exception).startswith(f"this checkout's scoring macros ({broken}) don't load: "
+                                                            "Parser Error: "), str(e.exception))
+
+    def test_verdicts_an_index_of_other_code_made_are_said_to_be(self):
+        self.index()
+        info = self.info()
+        made = info["verdict_version"]
+        with mock.patch.object(verdict, "derived_version", lambda: "c" * 12):
+            self.assertTrue(catalog.owns(info)["verdicts"])
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                catalog.lake("SELECT count(*) AS n FROM verdicts;")
+                catalog.lake("SELECT count(*) AS n FROM verdicts;")
+            self.assertEqual(err.getvalue(), f"catalog: the catalog's verdicts (verdict_version {made}) aren't this "
+                                             f"checkout's (derived_version {'c' * 12}): reading the catalog's until "
+                                             "simdb.py index from this checkout makes them again\n")
 
 
 class MainDocs(unittest.TestCase):

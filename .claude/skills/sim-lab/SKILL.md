@@ -87,12 +87,19 @@ their joins.
 - Narrow the per-second and per-read tables to an experiment's jobs
   first: `JOIN experiment_jobs USING (k, src) WHERE exp_id = ...`.
   `describe tables` gives each table's grain.
+- **Whose macros run.** `lake` (with or without `--param`) and `view`
+  run the scoring.sql and METRICS of the checkout you run them from,
+  over any lake (main's, or a private one under `SIM_DB_ROOT`), indexed
+  since the edit or not (`catalog.scoring_served`). To compare a
+  scoring change, run one query over one lake from the base's checkout
+  and from the change's; no index between. Verdicts are an index's
+  (a verdict.py change needs one). `describe` reads the catalog's docs,
+  and the console and `ui.py rows` its macros (ui.py says when those
+  aren't this checkout's).
 - **From a branch's worktree,** an index leaves the verdicts and scoring
   macros that every session reads as main's. It derives the branch's own
-  into that checkout's `target/sim-db-private`. There, plain `simdb.py
-  lake` reads the branch's verdicts and macros, while `lake --param`,
-  `view` and `describe` read main's. Index a new table from main's
-  checkout.
+  verdicts into that checkout's `target/sim-db-private`, which its `lake`
+  and `view` read. Index a new table from main's checkout.
 - **Tiers and knobs.** hack/sim-suite/suite.py's module docs describe
   the tiers; `suite.py list --tier T` prints a tier's cells, audience and
   settings. peers is the local directional tier (about half an hour of

@@ -35,7 +35,9 @@ maps to a name.
 
 From there, the analysis is sim-lab's: `simdb.py lake` around that run
 and time, under its rules. Analyse rows, never a rendering of the
-chart.
+chart. `rows` reads the catalog as the console serves it, the rows the
+tab shows; where its scoring macros aren't this checkout's, which
+`simdb.py view` and `lake` run, it says so on stderr.
 
 ## Pointing the user at a result
 
