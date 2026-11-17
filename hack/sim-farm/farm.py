@@ -257,7 +257,14 @@ speed. A run logs the speeds before its best pools.
   notice; until the notice's time it syncs on (every 5 s while one
   drains), and at that time what's left goes back to the queue, its
   flushes not landed checked in S3 first. A testbed instance gives its
-  jobs back at the notice. Costs count it as unbilled until it
+  jobs back at the notice. One whose store broke (sync's store `broken`:
+  its folds kept failing, or a thread of it died) drains the same way,
+  testbed or not, while its worker gives back what it holds and ends
+  itself once its results are taken and its flushes are up: it is lost
+  when its worker has ended and it holds nothing, or terminated at its
+  worker's `ending` (BROKEN_WAIT_S at most), what it still holds back to
+  the queue; one with a spot notice too is AWS's at the notice's time.
+  Costs count an interrupted instance as unbilled until it
   ends, and after only if it ended as a spot termination
   (Server.SpotInstanceTermination; an AWS FIS interruption ends as the
   user's). Runs are deterministic, so a reissued job must print the same
@@ -774,6 +781,10 @@ TESTBED = "hack/testbed"
 LINK_EXAMPLE = "crates/strims-wan/examples/testbed_link.rs"
 LINK_BUILD = "cargo build --release --locked -p strims-wan --example testbed_link"
 LINK_ARTIFACT = "$CARGO_TARGET_DIR/release/examples/testbed_link"
+# How long a host whose store broke may drain (its worker ends it once its
+# results are taken and its flushes are up, worker.BROKEN_GRACE_S at most)
+# before it is terminated.
+BROKEN_WAIT_S = worker.BROKEN_GRACE_S + 120
 # run.sh's samplers (TCSAMPLE_BIN, SSSAMPLE_BIN), which it builds with gcc
 # where they're not given and a host has none: built here, static, from
 # the arm's tree when it has their sources, as artifacts.
@@ -2214,9 +2225,12 @@ class Host:
     interrupted: float | None = None
     reclaimed: bool | None = None
     end_code: str | None = None  # how it ended, as AWS tells (StateReason)
-    # Draining (test jobs): when AWS will take it, the queued jobs it gave
-    # back for the next sync to drop, the running ones it gave back (left
-    # to run), and the rows it sent meanwhile.
+    # Draining (test jobs; a testbed host too, once its store broke): when
+    # it ends (AWS takes it, its --hours end, its store's drain is over),
+    # the queued jobs it gave back for the next sync to drop, the jobs it
+    # gave back (the running ones, left to its worker, which kills them,
+    # and the queued ones dropped), whose `requeue` results and listings
+    # are no longer its own, and the rows it sent meanwhile.
     deadline: float | None = None
     drop: list[str] = dataclasses.field(default_factory=list)
     given: set[str] = dataclasses.field(default_factory=set)
@@ -2232,6 +2246,9 @@ class Host:
     flush_acks: list[int] = dataclasses.field(default_factory=list)
     flush_wanted: bool = False
     store_error: str | None = None
+    # Its store broke (sync's store `broken`): why. The host drains until
+    # its worker ends itself (worker.BROKEN_GRACE_S) or its deadline.
+    broken: str | None = None
     # The run stopping short (wind_down): when it's to have flushed by.
     wind_down: float | None = None
     # Its worker's S3 POSTs by flush (sync's `s3`, and a lost one's landed
@@ -2252,6 +2269,12 @@ class Host:
     @property
     def hourly(self) -> float:
         return self.price + INSTANCE_EXTRA_HOURLY
+
+    def ends_itself(self) -> bool:
+        """Draining to an end the run leaves to AWS (a spot notice's) or
+        to the instance (its --hours end's shutdown), which the run doesn't
+        terminate; one whose store broke, without a notice, it terminates."""
+        return self.deadline is not None and (self.broken is None or self.interrupted is not None)
 
     def billed(self) -> bool:
         """Whether AWS bills it: not if it reclaimed it in its first hour."""
@@ -3112,6 +3135,10 @@ class Run:
     def take(self, host: Host) -> list[Item]:
         if host.state != "ready":
             return []
+        # A draining instance (interrupted, at its --hours end, its store
+        # broken) takes nothing: its worker starts nothing more.
+        if host.deadline is not None:
+            return []
         others = sum(1 for h in self.hosts if h is not host and h.state != "lost")
         if self.testbed is not None:
             return self.take_group(host, others)
@@ -3122,9 +3149,6 @@ class Run:
         # behind others starts late, so one at the head stops it once the
         # run has less than twice its length left: it could end the run
         # late.
-        # An interrupted instance takes nothing: its worker uploads.
-        if host.deadline is not None:
-            return []
         ready = sum(h.capacity for h in self.hosts if h.state == "ready")
         prefetch = self.prefetch_s()
         remaining = self.work_left() / max(ready, 1)
@@ -3278,12 +3302,14 @@ class Run:
             if st.get("error"):
                 log(f"{host.id}: its store: {st['error'].strip().splitlines()[-1]}")
             host.store_error = st.get("error")
-        if st.get("broken") and host.state != "lost":
-            # Its store can't fold (its folds kept failing, or a thread of
-            # it died): what it holds would wait while the host bills. Its
-            # jobs go back to the queue, for other hosts.
-            self.lose(host, f"its store is broken: {st['broken'].strip().splitlines()[-1]}")
-            return
+        # Its store can't fold (its folds kept failing, or a thread of it
+        # died). Its worker gives its jobs back, writes `ending` and ends its
+        # host once its results are taken and its flushes are up: the host
+        # drains until then (below), and is lost (terminated) at its
+        # deadline, BROKEN_WAIT_S at most, should it not end itself.
+        broke = bool(st.get("broken")) and host.state != "lost" and host.broken is None
+        if broke:
+            host.broken = st["broken"].strip().splitlines()[-1]
         host.running = set(reply["running"])
         there = (set(reply["queued"]) | set(reply["running"]) | set(reply.get("folding", []))
                  | set(reply.get("held", [])))
@@ -3313,32 +3339,46 @@ class Run:
             self.queue.extendleft(reversed(back))
         deadline = reply.get("interrupting")
         ending = reply.get("ending")
-        if ending and not deadline and host.deadline is None:
-            # Its --hours end: drained as an interrupted one is, until its
-            # shutdown.
-            now = time.time()
-            host.deadline = ending
-            back = self.give_back(host, reply.get("started", {}), now)
-            log(f"{host.id} ({host.type} in {host.zone}): its --hours end; it flushes and shuts down within "
-                f"{host.deadline - now:.0f} s, {back} jobs given back")
-        elif deadline and host.deadline is None:
+        now = time.time()
+        notice = bool(deadline) and host.interrupted is None
+        if notice:
             # A pool AWS takes instances back from is one to stay out of,
             # and the instance is AWS's to reclaim (RECLAIM_GRACE); one of
-            # test jobs drains until then.
-            now = time.time()
+            # test jobs drains until then, or until it ends sooner (its
+            # store broke). Recorded whether or not it drains already.
             if not self.local:
                 self.backoff[(host.type, host.zone)] = now + POOL_BACKOFF
             host.interrupted = now
-            host.deadline = deadline if isinstance(deadline, float) else now + 120
+            at = deadline if isinstance(deadline, float) else now + 120
+            host.deadline = at if host.deadline is None else min(host.deadline, at)
             skip = f"skipping {host.type} in {host.zone} for {POOL_BACKOFF // 60} min"
             if self.testbed is not None:
                 self.lose(host, f"spot interruption notice; left for AWS to reclaim, and {skip}",
                           terminate_it=False)
-            else:
-                back = self.give_back(host, reply.get("started", {}), now)
-                log(f"{host.id} ({host.type} in {host.zone}): spot interruption notice; it flushes "
-                    f"within {host.deadline - now:.0f} s, {back} jobs given back, {len(host.assigned)} kept "
-                    f"to end within {NOTICE_FINISH_S} s, {len(host.stored)} jobs' data still to land; {skip}")
+                return
+        if broke:
+            limit = now + BROKEN_WAIT_S
+            host.deadline = min(x for x in (host.deadline, float(ending) if ending else None, limit) if x is not None)
+            back = self.give_back(host, reply.get("started", {}), now)
+            log(f"{host.id}: its store is broken ({host.broken}): draining until its worker ends it, within "
+                f"{host.deadline - now:.0f} s, {back} jobs given back"
+                + (f"; a spot interruption notice too, {skip}" if notice else ""))
+        elif notice:
+            back = self.give_back(host, reply.get("started", {}), now)
+            log(f"{host.id} ({host.type} in {host.zone}): spot interruption notice; it flushes "
+                f"within {host.deadline - now:.0f} s, {back} jobs given back, {len(host.assigned)} kept "
+                f"to end within {NOTICE_FINISH_S} s, {len(host.stored)} jobs' data still to land; {skip}")
+        elif ending and not deadline and host.deadline is None:
+            # Its --hours end: drained as an interrupted one is, until its
+            # shutdown.
+            host.deadline = ending
+            back = self.give_back(host, reply.get("started", {}), now)
+            log(f"{host.id} ({host.type} in {host.zone}): its --hours end; it flushes and shuts down within "
+                f"{host.deadline - now:.0f} s, {back} jobs given back")
+        elif host.broken is not None and not reply.get("serving") and not host.assigned and not host.stored:
+            # Its worker has ended itself, and it holds nothing.
+            self.lose(host, f"its store is broken ({host.broken}) and its worker has ended",
+                      terminate_it=not host.ends_itself())
         elif host.deadline is not None and host.state == "ready":
             back = self.give_back(host, reply.get("started", {}), time.time())
             if back:
@@ -3351,10 +3391,16 @@ class Run:
                 self.pool.submit(self.start_worker, host)
 
     def give_back(self, host: Host, started: dict[str, float], now: float) -> int:
-        """An interrupted instance's jobs, back to the head of the queue, but
-        the running ones expected to end within NOTICE_FINISH_S: queued ones
-        to be dropped from its queue at the next sync, running ones left to
-        its worker, which kills them (they come back as `requeue`; a row one
+        """A draining instance's jobs (interrupted, at its --hours end, its
+        store broken; a testbed one's on its store's break), back to the
+        head of the queue, but the running ones expected to end within
+        NOTICE_FINISH_S: queued ones to be dropped from its queue at the
+        next sync, running ones left to its worker, which kills them. Each
+        is the host's given (Host.given): its worker may still list it
+        (one that ended into a broken store's fold/, one queued until the
+        drop lands), which the reconciling doesn't take back, and its
+        `requeue` result, which a broken store's worker sends for its
+        queued and folding ones too, doesn't queue it again (a row one
         still sends is a copy's)."""
         back = []
         for wid, item in list(host.assigned.items()):
@@ -3363,9 +3409,9 @@ class Run:
             if wid in started:
                 if self.expected(item) / host.speed - (now - started[wid]) <= NOTICE_FINISH_S:
                     continue
-                host.given.add(wid)
             else:
                 host.drop.append(wid)
+            host.given.add(wid)
             back.append(host.assigned.pop(wid))
         self.queue.extendleft(reversed(back))
         return len(back)
@@ -3431,11 +3477,15 @@ class Run:
                 write_jsonl(path, [r for r in read_jsonl(path) if not str(r.get("src", "")).startswith(mine)])
 
     def drained(self, now: float) -> None:
-        """Interrupted instances whose deadline has passed: left for AWS,
-        their flushes not seen to land checked in S3 (recover), what they
-        hold back to the queue."""
+        """Draining instances whose deadline has passed, what they hold back
+        to the queue and their flushes not seen to land checked in S3
+        (recover): an interrupted one or one at its --hours end left for
+        AWS (Host.ends_itself), one whose store broke terminated."""
         for h in self.hosts:
             if h.state == "ready" and h.deadline is not None and now >= h.deadline:
+                if not h.ends_itself():
+                    self.lose(h, f"its store is broken ({h.broken}) and its drain is over")
+                    continue
                 self.lose(h, "its interruption is due; left for AWS to reclaim" if h.interrupted is not None
                           else "its --hours end is due", terminate_it=False)
 
@@ -4266,9 +4316,11 @@ class Run:
         for h in self.hosts:
             if h.state != "ready" or h.assigned or h.stored:
                 continue
-            if h.deadline is not None:
+            if h.ends_itself():
                 self.lose(h, "nothing left for it while it drained; left for AWS to reclaim",
                           terminate_it=False)
+            elif h.deadline is not None:
+                self.lose(h, f"its store is broken ({h.broken}) and it holds nothing")
             else:
                 idle.append(h)
         self.terminate_now(idle, "nothing left for it")
@@ -4290,7 +4342,7 @@ class Run:
         region, then any its tag finds in a region it may have used (one
         whose launch never answered), but those AWS is reclaiming."""
         for h in self.hosts:
-            if h.state != "lost" and h.deadline is not None:
+            if h.state != "lost" and h.ends_itself():
                 h.state, h.ended = "lost", time.time()
         live = [h for h in self.hosts if h.state != "lost"]
         if live:
@@ -4589,7 +4641,7 @@ class Run:
             except Exception as e:
                 h.failing_since = h.failing_since or now
                 if now - h.failing_since > SSH_GRACE:
-                    self.lose(h, f"no sync for {SSH_GRACE // 60} min: {e}", terminate_it=h.deadline is None)
+                    self.lose(h, f"no sync for {SSH_GRACE // 60} min: {e}", terminate_it=not h.ends_itself())
                 continue
             h.failing_since = None
             _, sent, sent_flushes, _ = batches[h.id]

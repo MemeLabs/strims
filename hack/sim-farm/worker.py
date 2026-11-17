@@ -47,12 +47,13 @@ breaks every fold can't take host after host); where BREAK_JOBS different
 jobs have failed alone with no fold going through between, or a thread of
 the store dies, the store is broken (status.json's `broken`).
 Its jobs waiting to fold go back (a `requeue` result: no attempt spent),
-as do the running ones (killed) and the queued ones; it tells the
+as do the running ones (killed), the queued ones and any that ended into
+it before serve saw it broken (give_back_waiting); it tells the
 controller (sync's `ending`) and its note says why; and once the
 controller has taken its results and its flushes are up, or
 BROKEN_GRACE_S on, it exits (powering the host off with --poweroff),
-whether or not the controller knows `broken` (farm.py then loses the
-host).
+whether or not the controller knows `broken` (farm.py drains the host
+until then, and terminates it at its BROKEN_WAIT_S).
 
 With --end-at T (seconds since the epoch) it starts no job expected
 (`expected_s`) to end after T, and at T kills what still runs (requeued
@@ -430,6 +431,10 @@ class Store:
         # Its S3 requests and bytes by flush (sync's `s3`), kept across
         # serves.
         self.ops_lock = threading.Lock()
+        # Held while jobs waiting to fold are given back: a broken store's
+        # (break_down, on its folder's thread) and serve's of what came
+        # after, each a job once.
+        self.giving = threading.Lock()
         try:
             self.ops = json.loads((self.dir / "ops.json").read_text())
         except (OSError, ValueError):
@@ -641,18 +646,23 @@ class Store:
     def give_back(self, wids: list[str], why: str | None, requeue: bool) -> None:
         """Jobs `wids` that wait to fold, each a done result with no row
         and `why`: failed, or `requeue` (back to the controller's queue,
-        no attempt spent); their fold files go."""
-        for w in wids:
-            try:
-                res = json.loads((self.fold_dir / f"{w}.json").read_text())["result"]
-            except (OSError, ValueError, KeyError):
-                res = {"id": w}
-            res.update(row=None, error=why)
-            if requeue:
-                res["requeue"] = True
-            write_atomic(self.root / "done" / f"{w}.json", json.dumps(res))
-            remove(self.fold_dir / w, self.root)
-            (self.fold_dir / f"{w}.json").unlink(missing_ok=True)
+        no attempt spent); their fold files go. One whose fold file is gone
+        (given back already, or folded) is skipped: a second result would
+        queue it twice."""
+        with self.giving:
+            for w in wids:
+                try:
+                    res = json.loads((self.fold_dir / f"{w}.json").read_text())["result"]
+                except FileNotFoundError:
+                    continue
+                except (OSError, ValueError, KeyError):
+                    res = {"id": w}
+                res.update(row=None, error=why)
+                if requeue:
+                    res["requeue"] = True
+                write_atomic(self.root / "done" / f"{w}.json", json.dumps(res))
+                remove(self.fold_dir / w, self.root)
+                (self.fold_dir / f"{w}.json").unlink(missing_ok=True)
 
     def flushed(self) -> bool:
         """No closed generation waiting for its upload or in it."""
@@ -1178,7 +1188,8 @@ def serve(args: argparse.Namespace) -> None:
         if store is not None and store.broken and broken_at is None:
             # Its store can't fold, so nothing that ends here can land: it
             # gives its jobs back (a requeue result each, no attempt spent:
-            # the running ones killed, the queued ones), stops taking more
+            # the running ones killed, the waiting ones, give_back_waiting),
+            # stops taking more
             # (`ending`, as at --end-at), and shuts its host down once the
             # controller has taken its results and its flushes are up, or
             # BROKEN_GRACE_S on. It doesn't wait for the controller to lose
@@ -1188,7 +1199,7 @@ def serve(args: argparse.Namespace) -> None:
             why = f"its store is broken: {store.broken.strip().splitlines()[-1]}"
             for jid, r in list(running.items()):
                 end_job(jid, r, kill(r), None, now, killed=why)
-            give_back_queue(d, why, host)
+            give_back_waiting(d, store, why, host)
             write_atomic(root / "ending", str(broken_at + BROKEN_GRACE_S))
             write_atomic(root / "note", why)
         if broken_at is not None:
@@ -1317,6 +1328,16 @@ def serve(args: argparse.Namespace) -> None:
         # until it's cut off, a stopped serve's for a minute.
         store.close(max(0.0, deadline - time.time()) if deadline else 60)
     pidfile.unlink(missing_ok=True)
+
+
+def give_back_waiting(d: dict, store, why: str, host: str | None) -> None:
+    """A broken store's worker's waiting jobs back to the controller, a
+    requeue result each (no attempt spent): the queued ones, and those in
+    fold/, which ended into the store after its folder broke (break_down
+    gave back what waited then), before serve saw it: nothing would fold
+    them or give them back, and sync would list them as folding."""
+    give_back_queue(d, why, host)
+    store.give_back(store.folds(), why, requeue=True)
 
 
 def give_back_queue(d: dict, why: str, host: str | None) -> None:

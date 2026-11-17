@@ -1182,7 +1182,7 @@ class TestbedTables(unittest.TestCase):
         done = {j: json.loads(f.read_text()) if (f := root / "done" / f"{j}.json").exists() else None for j in jobs}
         return root, store, done
 
-    def test_a_store_whose_folds_keep_failing_breaks_and_its_host_is_lost(self):
+    def test_a_store_whose_folds_keep_failing_breaks_and_gives_back_what_waits(self):
         calls = []
 
         def fold(store, wids):
@@ -1216,18 +1216,144 @@ class TestbedTables(unittest.TestCase):
         for f in d["done"].glob("*.json"):
             f.unlink()
         self.assertTrue(self.worker.broken_done(d, store, now, now))
-        # The controller loses the host, whose jobs go back to the queue.
+        # A job that ended into the store after its folder broke, before
+        # serve saw it, waits in fold/ with nothing to fold or give it back:
+        # serve gives back what waits (give_back_waiting), each job once.
+        out = root / "work" / "j6" / "out"
+        out.mkdir(parents=True)
+        store.add("j6", {"id": "j6"}, {"id": "j6", "row": {}}, {}, out)
+        (d["queue"] / "j5.json").write_text(json.dumps({"id": "j5"}))
+        self.worker.give_back_waiting(d, store, "its store is broken: x", "i-1")
+        self.assertEqual({j: json.loads((d["done"] / f"{j}.json").read_text())["requeue"] for j in ("j5", "j6")},
+                         {"j5": True, "j6": True})
+        self.assertEqual((store.folds(), list(d["queue"].iterdir())), ([], []))
+        for f in d["done"].glob("*.json"):
+            f.unlink()
+        store.give_back(["j6"], "again", requeue=True)
+        self.assertFalse((d["done"] / "j6.json").exists())
+        self.assertTrue(self.worker.broken_done(d, store, now, now))
+
+    def broken_host(self, fp, hid, **kw):
+        return fp.Host(hid, "local", "-", fp.Spec(1, 1, 0, 1), 0.0, time.time(), state="ready", **kw)
+
+    def broken_run(self, fp, hosts, items=(), testbed=None):
+        """A Run of `hosts` whose give_back, take_group and the
+        reconciling's state are the real ones."""
+        run = mock.Mock(queue=collections.deque(), items={i.wid: i for i in items}, done=set(), hosts=hosts,
+                        testbed=testbed, took=collections.defaultdict(set), waiting={}, local=False, backoff={},
+                        order={}, seqs={})
+        run.give_back.side_effect = lambda *a: fp.Run.give_back(run, *a)
+        run.take_group.side_effect = lambda *a: fp.Run.take_group(run, *a)
+        run.expected.return_value = 600.0
+        return run
+
+    def absorb(self, fp, run, host, **reply):
+        base = {"done": [], "flushes": [], "running": [], "queued": [], "folding": [], "started": {},
+                "store": None, "ending": None, "interrupting": None, "serving": True}
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            fp.Run.absorb(run, host, {**base, **reply})
+
+    def test_a_broken_stores_host_drains_giving_each_job_back_once(self):
         fp = load_farm_py()
-        host = fp.Host("i-1", "local", "-", fp.Spec(1, 1, 0, 1), 0.0, time.time(), state="ready")
-        reply = {"done": [], "flushes": [], "running": [], "queued": [], "store": status}
-        run = mock.Mock()
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            fp.Run.absorb(run, host, reply)
-        run.lose.assert_called_once_with(host, "its store is broken: fold: disk full")
-        run = mock.Mock()
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            fp.Run.absorb(run, host, {**reply, "store": {**status, "broken": None}})
+        broken = {"broken": "Traceback\nfold: disk full", "error": None}
+        q1, y = fp.Item(mock.Mock(id="q1")), fp.Item(mock.Mock(id="y"))
+        a, b = self.broken_host(fp, "i-a"), self.broken_host(fp, "i-b")
+        run = self.broken_run(fp, [a, b], [q1, y], testbed=mock.Mock())
+        a.assigned.update(q1=q1, y=y)
+        ending = time.time() + 300
+        # The sync that says `broken`, before serve gave anything back: q1
+        # still queued there, y ended into fold/. Each goes back once, at
+        # the queue's head, and the host drains until its worker's
+        # `ending`, taking nothing (a testbed run's take_group too).
+        self.absorb(fp, run, a, queued=["q1"], folding=["y"], store=broken, ending=ending)
         run.lose.assert_not_called()
+        run.give_back.assert_called_once()
+        self.assertEqual((a.broken, a.deadline, a.assigned, list(run.queue)),
+                         ("fold: disk full", ending, {}, [q1, y]))
+        self.assertEqual((a.drop, a.given), (["q1", "y"], {"q1", "y"}))
+        self.assertEqual(fp.Run.take(run, a), [])
+        run.testbed = None
+        self.assertEqual(fp.Run.take(run, a), [])
+        # B takes q1. The next sync still lists y as folding and brings
+        # q1's requeue result (serve gave its queue back): A takes neither
+        # back, and neither is queued again.
+        run.queue.remove(q1)
+        b.assigned["q1"] = q1
+        requeued = lambda j: {"id": j, "row": None, "error": "its store is broken", "requeue": True}
+        self.absorb(fp, run, a, done=[requeued("q1")], folding=["y"], store=broken, ending=ending)
+        self.assertEqual((a.assigned, list(run.queue), list(b.assigned)), ({}, [y], ["q1"]))
+        # Serve gives y back too (give_back_waiting); B takes it first.
+        run.queue.remove(y)
+        b.assigned["y"] = y
+        self.absorb(fp, run, a, done=[requeued("y")], store=broken, ending=ending)
+        self.assertEqual((list(run.queue), sorted(b.assigned), a.given), ([], ["q1", "y"], set()))
+        # Lost at its `ending`, terminated: no notice left it to AWS.
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            fp.Run.drained(run, ending - 1)
+            run.lose.assert_not_called()
+            fp.Run.drained(run, ending)
+        run.lose.assert_called_once_with(a, "its store is broken (fold: disk full) and its drain is over")
+        self.assertFalse(a.ends_itself())
+
+    def test_a_broken_stores_host_ends_by_its_worker_its_notice_or_its_bound(self):
+        fp = load_farm_py()
+        broken = {"broken": "fold: disk full", "error": None}
+        # A worker that gives no `ending`: BROKEN_WAIT_S from the sync.
+        a = self.broken_host(fp, "i-a")
+        run = self.broken_run(fp, [a])
+        with mock.patch.object(fp.time, "time", return_value=1000.0):
+            self.absorb(fp, run, a, store=broken)
+        self.assertEqual(a.deadline, 1000.0 + fp.BROKEN_WAIT_S)
+        # Once its worker has ended and it holds nothing, it's lost at once,
+        # terminated (--local's too, which no idle retirement reaches).
+        self.absorb(fp, run, a, store=broken, serving=False)
+        run.lose.assert_called_once_with(a, "its store is broken (fold: disk full) and its worker has ended",
+                                         terminate_it=True)
+        # A spot notice after the break is recorded: the pool backs off and
+        # the host ends at the notice, AWS's, not terminated.
+        a = self.broken_host(fp, "i-b")
+        run = self.broken_run(fp, [a])
+        ending = time.time() + 300
+        self.absorb(fp, run, a, store=broken, ending=ending)
+        notice = time.time() + 100.0
+        self.absorb(fp, run, a, store=broken, ending=ending, interrupting=notice)
+        self.assertEqual((a.deadline, list(run.backoff)), (notice, [("local", "-")]))
+        self.assertIsNotNone(a.interrupted)
+        self.assertTrue(a.ends_itself())
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            fp.Run.drained(run, notice)
+        run.lose.assert_called_once_with(a, "its interruption is due; left for AWS to reclaim", terminate_it=False)
+        # The notice first, then the break: still AWS's at the notice.
+        a = self.broken_host(fp, "i-c")
+        run = self.broken_run(fp, [a])
+        self.absorb(fp, run, a, interrupting=notice)
+        self.absorb(fp, run, a, store=broken, ending=ending, interrupting=notice)
+        self.assertEqual((a.deadline, a.broken, a.ends_itself()), (notice, "fold: disk full", True))
+        # Both in one reply: recorded, given back once.
+        a = self.broken_host(fp, "i-d")
+        run = self.broken_run(fp, [a], [fp.Item(mock.Mock(id="q2"))])
+        a.assigned["q2"] = run.items["q2"]
+        self.absorb(fp, run, a, queued=["q2"], store=broken, ending=ending, interrupting=notice)
+        run.give_back.assert_called_once()
+        self.assertEqual((a.deadline, a.interrupted is not None, [i.wid for i in run.queue]), (notice, True, ["q2"]))
+        # With nothing left to run, retire_idle terminates a drained broken
+        # host (no notice), where it leaves an interrupted one to AWS.
+        a, c = self.broken_host(fp, "i-e"), self.broken_host(fp, "i-f")
+        run = self.broken_run(fp, [a, c])
+        self.absorb(fp, run, a, store=broken, ending=ending)
+        self.absorb(fp, run, c, store=broken, ending=ending, interrupting=notice)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            fp.Run.retire_idle(run, time.time())
+        self.assertEqual(run.lose.call_args_list, [
+            mock.call(a, "its store is broken (fold: disk full) and it holds nothing"),
+            mock.call(c, "nothing left for it while it drained; left for AWS to reclaim", terminate_it=False)])
+        # Without `broken`, nothing.
+        a = self.broken_host(fp, "i-g")
+        run = self.broken_run(fp, [a])
+        self.absorb(fp, run, a, store={"broken": None, "error": None})
+        run.lose.assert_not_called()
+        run.give_back.assert_not_called()
+        self.assertEqual((a.broken, a.deadline, a.ends_itself()), (None, None, False))
 
     def poison(self, batch):
         def fold(store, wids):
