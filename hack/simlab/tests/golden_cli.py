@@ -270,7 +270,10 @@ def job_dir(d, job):
            "useful_bytes": n_reads * 4096, "wire_bytes": n_reads * 4400 + 1000 * seed,
            "meter_seeds": [1.5, 2.0],
            "arrivals": "trickle" if stays is TRICKLE else "t0", "series": {"secs": SECS},
-           **({"meter_off_drop_seeds": [2.5, 3.0], "meter_off_rise_seeds": [4.0]} if shape == "step" else {})}
+           **({"meter_off_drop_seeds": [2.5, 3.0], "meter_off_rise_seeds": [4.0]} if shape == "step" else {}),
+           # A run whose seed's uplink only fell: a drop's reading, no rise's.
+           **({"meter_off_drop_seeds": [1.5, 2.0], "meter_off_drop_n_seeds": 1, "meter_off_rise_n_seeds": 0}
+              if k == "g-off-2002" else {})}
     return {"k": k, "dir": str(d), "sim": sim, "test": test, "cell": cell, "arm": arm, "seed": seed, "env": env,
             "row": row, "wall_s": 1.5 + seed / 1000, "rss_mb": 40.0 + len(k), "at": AT}
 

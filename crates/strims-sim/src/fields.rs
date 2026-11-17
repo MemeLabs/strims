@@ -728,8 +728,8 @@ pub(crate) enum RowInt {
     /// The changes of the available upload that `meter_off_{change}_{role}`
     /// measured at the hosts of role `role`, those with a sample it judged
     /// before the next: drops (`meter_off_drop_n_seeds`, ...) and rises
-    /// (`meter_off_rise_n_seeds`, ...) (Report::tracking). Left out where they
-    /// had none.
+    /// (`meter_off_rise_n_seeds`, ...) (Report::tracking). 0 where they had
+    /// changes of the other direction alone, and left out where they had none.
     MeterOffChangeNRole(u16),
     /// The row's `packets_ack` and `up_acks` count both kinds, over the whole
     /// run and every host.
@@ -2829,7 +2829,8 @@ pub(crate) enum RowNums {
     /// whichever way it went. Its median and its largest over the drops
     /// (`meter_off_drop_seeds`, ...) and over the rises
     /// (`meter_off_rise_seeds`, ...) (Report::tracking). Left out where the
-    /// role's hosts had no change.
+    /// role's hosts had no change of its direction
+    /// (`meter_off_{change}_n_{role}` 0, or none).
     MeterOffChangeRole(u16),
     /// The p10, p50 and p90 in ms of the seeds' meters' queueing delay while a
     /// swarm streams, over the samples that had one

@@ -1633,12 +1633,16 @@ impl Report {
                     .map(|x| x.off)
                     .collect();
                 let n = v.len() as u64;
-                let max = v.iter().copied().fold(0.0, f64::max);
-                j.nums(
-                    RowNums::meter_off_change_role(name, role),
-                    [deciles(&mut v)[1], max],
-                )
-                .int(RowInt::meter_off_change_n_role(name, role), n);
+                // A direction without changes has no reading: the deciles
+                // of none read 0, a meter that tracked every change.
+                if n > 0 {
+                    let max = v.iter().copied().fold(0.0, f64::max);
+                    j.nums(
+                        RowNums::meter_off_change_role(name, role),
+                        [deciles(&mut v)[1], max],
+                    );
+                }
+                j.int(RowInt::meter_off_change_n_role(name, role), n);
             }
         }
         if tracked {
@@ -3438,6 +3442,36 @@ mod tests {
         let row: serde_json::Value = serde_json::from_str(&r.row("t", None)).unwrap();
         assert_eq!(row["meter_seed_outage_share"].as_f64(), Some(0.0));
         assert!(row.get("meter_seed_outage_over_bps_p50").is_none());
+    }
+
+    /// A role whose hosts' available upload only fell has its drops' reading
+    /// and no rises': the row leaves the rises' median and largest out and
+    /// counts none of them; a role without changes has neither.
+    #[test]
+    fn a_direction_without_changes_has_no_tracking_reading() {
+        let mut r = seed_reading(|t| match t {
+            30..=64 => 500,
+            _ => 1000,
+        });
+        r.scenario.hosts[0].up_steps.truncate(1);
+        let t = r.tracking(&r.seeds());
+        assert_eq!(t.len(), 1);
+        assert!(t[0].drop);
+        let row: serde_json::Value = serde_json::from_str(&r.row("t", None)).unwrap();
+        let off = row["meter_off_drop_seeds"].as_array().unwrap();
+        assert_eq!(off.len(), 2);
+        assert!(off.iter().all(|x| x.as_f64().unwrap() > 0.0), "{off:?}");
+        assert_eq!(row["meter_off_drop_n_seeds"].as_u64(), Some(1));
+        assert!(row.get("meter_off_rise_seeds").is_none(), "{row}");
+        assert_eq!(row["meter_off_rise_n_seeds"].as_u64(), Some(0));
+        for name in ["drop", "rise"] {
+            for k in [
+                format!("meter_off_{name}_accepting"),
+                format!("meter_off_{name}_n_accepting"),
+            ] {
+                assert!(row.get(&k).is_none(), "{k}");
+            }
+        }
     }
 
     /// Two outages that share the opportunity between them (at 44 s) are a
