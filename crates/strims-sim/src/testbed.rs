@@ -1481,6 +1481,88 @@ fn packets(bytes: &[u8]) -> Option<Vec<Packet>> {
     Some(out)
 }
 
+/// A TCP flow: its destination and ports.
+type Flow = (Option<u8>, u16, u16);
+
+/// The most a segment the node offered its link carries: a GSO buffer
+/// (64 KiB), which the queue's device splits into the link's segments.
+const OFFER_MAX: u64 = 65536;
+
+/// A node's offers to its link (its offered capture's data segments, in
+/// capture order), by flow and then by the offset of their first byte in
+/// it from the flow's first offer's (sequence numbers wrap): each offer's
+/// length, when it was offered, and whether it resent bytes the flow had
+/// offered before.
+struct Offers {
+    first: BTreeMap<Flow, u32>,
+    by: BTreeMap<Flow, FlowOffers>,
+}
+
+/// A flow's offers by their first byte's offset: (length, µs, resent).
+type FlowOffers = BTreeMap<u32, Vec<(u64, u64, bool)>>;
+
+impl Offers {
+    fn of(ps: &[&Packet]) -> Offers {
+        let mut o = Offers {
+            first: BTreeMap::new(),
+            by: BTreeMap::new(),
+        };
+        for (p, again) in ps.iter().zip(resends(ps.iter().copied())) {
+            let Some((sp, dp, seq)) = p.tcp else {
+                continue;
+            };
+            let flow = (p.dst, sp, dp);
+            let first = *o.first.entry(flow).or_insert(seq);
+            o.by.entry(flow)
+                .or_default()
+                .entry(seq.wrapping_sub(first))
+                .or_default()
+                .push((p.payload, p.us, again));
+        }
+        o
+    }
+
+    /// Whether the latest offer at or before the link carried segment `p`
+    /// whose bytes hold all of `p`'s resent them (one GSO buffer offered
+    /// holds several carried segments); `None` where no offer holds them.
+    fn resent(&self, p: &Packet) -> Option<bool> {
+        let (sp, dp, seq) = p.tcp?;
+        let flow = (p.dst, sp, dp);
+        let at = seq.wrapping_sub(*self.first.get(&flow)?);
+        let by = self.by.get(&flow)?;
+        by.range(..=at)
+            .rev()
+            .take_while(|&(&start, _)| u64::from(at - start) < OFFER_MAX)
+            .flat_map(|(&start, offers)| {
+                offers.iter().filter(move |&&(len, us, _)| {
+                    us <= p.us && u64::from(at - start) + p.payload <= len
+                })
+            })
+            .max_by_key(|&&(_, us, _)| us)
+            .map(|&(_, _, again)| again)
+    }
+}
+
+/// Whether each of a node's data segments `ps` (in capture order) resent
+/// bytes its flow had sent: its sequence number under the highest its flow
+/// had sent, even where no gap showed (a tail-loss probe resends the last
+/// segment).
+fn resends<'a>(ps: impl Iterator<Item = &'a Packet>) -> Vec<bool> {
+    let mut sent: BTreeMap<(Option<u8>, u16, u16), u32> = BTreeMap::new();
+    ps.map(|p| {
+        p.tcp.is_some_and(|(sp, dp, seq)| {
+            let end = seq.wrapping_add(p.payload as u32);
+            let max = sent.entry((p.dst, sp, dp)).or_insert(seq);
+            let again = (seq.wrapping_sub(*max) as i32) < 0;
+            if (end.wrapping_sub(*max) as i32) > 0 {
+                *max = end;
+            }
+            again
+        })
+    })
+    .collect()
+}
+
 /// Node `h`'s access link spec and the device whose root is its modem, from
 /// out dir `dir`'s `links` file (`node <i> <spec> <up_mbit> <delay_ms>
 /// <queue_ms> [<modem_dev>]`, run.sh's): a run from before it wrote the
@@ -1864,30 +1946,40 @@ impl Network {
                         o.and_then(|o| o.checked_sub(10))
                             .is_some_and(|i| usize::from(i) < run.nodes.len())
                     };
-                    // Its own data to the swarm, a TCP flow's resends told
-                    // by their sequence numbers falling under what the flow
-                    // had sent (`gate` takes them).
+                    // Its own data to the swarm (`gate` takes it): each
+                    // segment the link carried, a resend where its flow had
+                    // sent its bytes before. That is told from what the
+                    // node offered its link (pcap-<i>-offered.pcap, ahead of
+                    // the queue and of GSO's split: a segment the queue
+                    // dropped is there, and its resend, a tail-loss probe's
+                    // too, falls under what its flow had offered), by the
+                    // latest offer holding the carried segment's bytes, else
+                    // from what the link carried.
                     let framing = site.profile.framing;
-                    let mut sent: BTreeMap<(Option<u8>, u16, u16), u32> = BTreeMap::new();
-                    let own: Vec<Send> = ps
+                    let own_data = |p: &&Packet| {
+                        p.src.is_some()
+                            && p.src == me
+                            && node(p.dst)
+                            && !p.pure_ack
+                            && p.payload > 0
+                    };
+                    let offered: Option<Offers> =
+                        std::fs::read(run.dir.join(format!("pcap-{h}-offered.pcap")))
+                            .ok()
+                            .and_then(|b| packets(&b))
+                            .map(|o| Offers::of(&o.iter().filter(own_data).collect::<Vec<_>>()));
+                    let carried: Vec<&Packet> = ps.iter().filter(own_data).collect();
+                    let again = resends(carried.iter().copied());
+                    let own: Vec<Send> = carried
                         .iter()
-                        .filter(|p| p.src.is_some() && p.src == me && node(p.dst))
-                        .filter(|p| !p.pure_ack && p.payload > 0)
-                        .map(|p| {
-                            let resent = p.tcp.is_some_and(|(sp, dp, seq)| {
-                                let end = seq.wrapping_add(p.payload as u32);
-                                let max = sent.entry((p.dst, sp, dp)).or_insert(seq);
-                                let again = (seq.wrapping_sub(*max) as i32) < 0;
-                                if (end.wrapping_sub(*max) as i32) > 0 {
-                                    *max = end;
-                                }
-                                again
-                            });
+                        .zip(again)
+                        .map(|(p, carried_again)| {
+                            let offer = offered.as_ref().and_then(|o| o.resent(p));
                             Send {
                                 us: p.us,
                                 charge: framing.packet(p.ip_len as usize) as u64,
                                 app: if p.tcp.is_some() { p.payload } else { 0 },
-                                resent,
+                                resent: offer.unwrap_or(carried_again),
                             }
                         })
                         .collect();
@@ -2208,6 +2300,16 @@ mod tests {
         p[16..20].copy_from_slice(&[10, 77, 0, dst]);
         p[20 + 12] = 8 << 4;
         p[20 + 13] = flags;
+        p
+    }
+
+    /// A TCP segment of `payload` bytes from `src` to `dst` at sequence
+    /// number `seq`, ports 4000 to 5000.
+    fn tcp_seq(src: u8, dst: u8, payload: usize, seq: u32) -> Vec<u8> {
+        let mut p = tcp(src, dst, payload, 0x18);
+        p[20..22].copy_from_slice(&4000u16.to_be_bytes());
+        p[22..24].copy_from_slice(&5000u16.to_be_bytes());
+        p[24..28].copy_from_slice(&seq.to_be_bytes());
         p
     }
 
@@ -2822,6 +2924,80 @@ mod tests {
                 format!("Crash({v1})@{}", end.as_secs()),
             ]
         );
+    }
+
+    #[test]
+    fn a_tail_loss_probes_resend_is_one_though_its_original_never_reached_the_link() {
+        let dir = fixture("tlp");
+        let us = |ms: u64| (START + ms) * 1000;
+        // The seed offers three segments, the queue drops the third, and a
+        // tail-loss probe resends it 200 ms on: the link carries the first
+        // two and the probe, never the third's original.
+        let seg = |seq: u32| tcp_seq(10, 11, 1000, seq);
+        let offered = [
+            (us(1100), seg(0)),
+            (us(1101), seg(1000)),
+            (us(1102), seg(2000)),
+            (us(1302), seg(2000)),
+        ];
+        let carried = [
+            (us(1110), seg(0)),
+            (us(1111), seg(1000)),
+            (us(1312), seg(2000)),
+        ];
+        std::fs::write(dir.join("pcap-0.pcap"), pcap(&carried)).unwrap();
+        let resent = || {
+            let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+            let framing = r.scenario.hosts[0].site.unwrap().profile.framing;
+            let m = &r.hosts[0].runner.meter;
+            (
+                m.last().unwrap().resent_bytes,
+                framing.packet(20 + 32 + 1000) as u64,
+            )
+        };
+        // Without the offered capture the probe reads as a first
+        // transmission: the link never carried the bytes before it.
+        assert_eq!(resent().0, 0);
+        std::fs::write(dir.join("pcap-0-offered.pcap"), pcap(&offered)).unwrap();
+        let (got, one) = resent();
+        assert_eq!(got, one);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_gso_buffers_resend_counts_in_each_segment_the_link_carried() {
+        let dir = fixture("gso");
+        let us = |ms: u64| (START + ms) * 1000;
+        // The seed offers a 2000-byte GSO buffer, which the queue drops
+        // whole, and offers it again 200 ms on; the queue's device splits
+        // the resend into the two 1000-byte segments the link carries. The
+        // link never carried those bytes before, yet both are resends.
+        let carried = [
+            (us(1310), tcp_seq(10, 11, 1000, 0)),
+            (us(1311), tcp_seq(10, 11, 1000, 1000)),
+        ];
+        let offered = [
+            (us(1100), tcp_seq(10, 11, 2000, 0)),
+            (us(1300), tcp_seq(10, 11, 2000, 0)),
+        ];
+        std::fs::write(dir.join("pcap-0.pcap"), pcap(&carried)).unwrap();
+        let resent = || {
+            let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+            let framing = r.scenario.hosts[0].site.unwrap().profile.framing;
+            let m = &r.hosts[0].runner.meter;
+            (
+                m.last().unwrap().resent_bytes,
+                framing.packet(20 + 32 + 1000) as u64,
+            )
+        };
+        assert_eq!(resent().0, 0);
+        std::fs::write(dir.join("pcap-0-offered.pcap"), pcap(&offered)).unwrap();
+        let (got, one) = resent();
+        assert_eq!(got, 2 * one);
+        // Offered once, the same split is two first transmissions.
+        std::fs::write(dir.join("pcap-0-offered.pcap"), pcap(&offered[..1])).unwrap();
+        assert_eq!(resent().0, 0);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
