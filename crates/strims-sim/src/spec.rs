@@ -123,14 +123,15 @@ pub struct HostSpec {
     /// (`DeliveryMode::LOW_LATENCY`), and a media swarm's reader moves back
     /// to its GOP's start within [`ARRIVAL_REWIND`], as egress joins, where
     /// reading from the stream's start would put the backlog of a live
-    /// window into its lag. `None`: with the run, reading as the swarm's
-    /// options say.
+    /// window into its lag. A viewer that restarts ([`Fault::Restart`])
+    /// rejoins the same way. `None`: with the run, reading as the swarm's
+    /// options say until it restarts.
     pub arrive_at: Option<Duration>,
 }
 
-/// How long an arriving media viewer's join waits for its rewind to its
-/// GOP's start ([`HostSpec::arrive_at`]): `strims-video`'s default
-/// `rewind_timeout`.
+/// How long the join of a media viewer that arrives or restarts waits for
+/// its rewind to its GOP's start ([`HostSpec::arrive_at`]):
+/// `strims-video`'s default `rewind_timeout`.
 pub const ARRIVAL_REWIND: Duration = Duration::from_secs(10);
 
 /// A bulk upload that isn't the node's: a TCP connection that always has
@@ -190,7 +191,9 @@ pub struct SwarmSpec {
     /// moves back to the start of the GOP that read falls in, through the
     /// swarm's backlog, within this deadline; one that doesn't land in time
     /// is dropped and reading goes on where it was. `None`: readers read on
-    /// from where they start ([`SwarmSpec::with_join_rewind`]).
+    /// from where they start ([`SwarmSpec::with_join_rewind`]), but for a
+    /// viewer's join at the live edge, which rewinds within
+    /// [`ARRIVAL_REWIND`] ([`HostSpec::arrive_at`]).
     pub join_rewind: Option<Duration>,
 }
 
@@ -373,7 +376,10 @@ pub enum Fault {
     /// Start the host's software again (`Sim::bounce`): a new node with the
     /// same profile key (so the same URIs) and a new host key. Repairs every
     /// partition between the host and the others first, including those of
-    /// a [`Fault::Partition`].
+    /// a [`Fault::Partition`]. A viewer rejoins its swarms at the live edge,
+    /// as one that arrives does ([`HostSpec::arrive_at`]); a host crashed
+    /// before it ever ran starts its first incarnation here, and reads as
+    /// one there from the run.
     ///
     /// Only a host that is down from a crash restarts: a restart of one
     /// that isn't there, never crashed, or is up again from an earlier
@@ -702,7 +708,8 @@ impl Scenario {
 
     /// Viewer churn: from 20 s into the first swarm, every `60 / per_min`
     /// seconds the next of its viewers in turn leaves and rejoins `away`
-    /// later, until the swarm stops. It draws nothing from the run's rng.
+    /// later, at the live edge ([`Fault::Restart`]), until the swarm stops.
+    /// It draws nothing from the run's rng.
     pub fn churn(&mut self, per_min: f64, away: Duration) {
         let Some((viewers, start, stop)) = self
             .swarms

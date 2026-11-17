@@ -21,6 +21,7 @@ use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy, SendFate, SendHow};
 use strims_sim::calibration::{
     self, ADAPTIVE, Calibration, STRIPES, UPLINK_QUEUE, WAN_RATE, WAN_WINDOW, full_mesh, striped,
 };
+use strims_sim::stream::Join;
 use strims_sim::topology::{random_graph, random_hub, random_mesh};
 use strims_sim::{
     Arrivals, Binding, ClockSkew, Competing, Fault, HostClass, HostIx, Invariants, NetworkSpec,
@@ -1003,6 +1004,121 @@ fn overlapping_crashes_restart_a_host_once() {
             }
             let spec = &r.scenario.swarms[0];
             complete(r, &[v], secs(12 + CATCH_UP), spec.stop)
+        },
+    );
+}
+
+/// When [`restarted_viewer`]'s v1 goes down: it is back 2 s later.
+const REJOIN_DOWN: u64 = 12;
+
+/// 4 viewers streaming from 3 s, in 4 KiB chunks of a signed 1500 kbit/s
+/// VBR stream if `media`: v1 is down from [`REJOIN_DOWN`] for 2 s, and v2
+/// is crashed before it ever ran and started at 6 s, as the viewers
+/// `calibration_star` boots at or before the stream's start are.
+fn restarted_viewer(seed: u64, media: bool) -> Scenario {
+    let mut m = streaming(
+        "restarted_viewer",
+        seed,
+        4,
+        (2048 * KIB, 1024 * KIB),
+        PushMode::Hybrid,
+        (3, 24),
+    );
+    if media {
+        let encoder = Encoder::parse("1500v").unwrap();
+        let sign = Sign::parse("u8,t200").unwrap().unwrap();
+        m.s.swarms = std::mem::take(&mut m.s.swarms)
+            .into_iter()
+            .map(|sw| sw.with_chunk_size(4096).with_media(encoder, sign))
+            .collect();
+    }
+    let (v1, v2) = (m.viewers[1], m.viewers[2]);
+    m.s.at(secs(REJOIN_DOWN), Fault::Crash(v1));
+    m.s.at(secs(REJOIN_DOWN + 2), Fault::Restart(v1));
+    m.s.at(Duration::ZERO, Fault::Crash(v2));
+    m.s.at(secs(6), Fault::Restart(v2));
+    m.s
+}
+
+/// v1's rejoin of [`restarted_viewer`] first reads a chunk written after it
+/// went down: at the live edge, where a read from the stream's start would
+/// take the window's 11 s of backlog first. Returns the rejoin.
+fn rejoined_live(r: &Report) -> Result<Join, String> {
+    sound(r)?;
+    let joins = &r
+        .viewer(0, all_viewers(r)[1])
+        .ok_or("v1 read nothing")?
+        .stats
+        .joins;
+    let Some((rejoin, seq)) = joins.get(1).and_then(|j| Some((*j, j.first_seq?))) else {
+        return Err(format!("v1's rejoin read nothing: {joins:?}"));
+    };
+    let written = r.written_at(0, seq);
+    if written < secs(REJOIN_DOWN) {
+        return Err(format!(
+            "v1's rejoin first read seq {seq}, written at {} ms",
+            ms(written)
+        ));
+    }
+    Ok(rejoin)
+}
+
+/// A viewer there from the run reads from the stream's start, and after a
+/// crash and restart rejoins at the live edge, as a player does
+/// ([`rejoined_live`]): every viewer's first join of [`restarted_viewer`]
+/// reads seq 0 first, v2's at its first incarnation.
+#[test]
+fn restarted_viewers_rejoin_at_the_live_edge() {
+    sweep(
+        "restarted_viewers_rejoin_at_the_live_edge",
+        |s| restarted_viewer(s, false),
+        |r| {
+            rejoined_live(r)?;
+            for h in all_viewers(r) {
+                let joins = &r.viewer(0, h).ok_or("a viewer read nothing")?.stats.joins;
+                let first = joins.first().and_then(|j| j.first_seq);
+                if first != Some(0) {
+                    return Err(format!(
+                        "{} first read seq {first:?}: {joins:?}",
+                        r.scenario.name_of(h)
+                    ));
+                }
+            }
+            Ok(())
+        },
+    );
+}
+
+/// [`restarted_viewers_rejoin_at_the_live_edge`] in a media swarm: v1's
+/// rejoin also moves back to its GOP's start, as an arrival's join does
+/// (`ARRIVAL_REWIND`), unless its first read is a GOP's start, from which
+/// a rewind has nowhere to go; no viewer's first join rewinds, v2's
+/// included. A first join's first chunk isn't checked: a reader there from
+/// the stream's start can skip ahead on an underrun before its first read.
+#[test]
+fn restarted_media_viewers_rejoin_at_the_live_edge_and_rewind() {
+    sweep(
+        "restarted_media_viewers_rejoin_at_the_live_edge_and_rewind",
+        |s| restarted_viewer(s, true),
+        |r| {
+            let rejoin = rejoined_live(r)?;
+            for h in all_viewers(r) {
+                let joins = &r.viewer(0, h).unwrap().stats.joins;
+                if let Some(rw) = joins.first().and_then(|j| j.rewind) {
+                    return Err(format!(
+                        "{}'s first join rewound: {rw:?}",
+                        r.scenario.name_of(h)
+                    ));
+                }
+            }
+            let m = r.media[0].as_ref().ok_or("no media log")?;
+            let on_gop = rejoin
+                .first_seq
+                .is_some_and(|s| m.gops.contains(&(s * m.chunk)));
+            if rejoin.rewind.is_none() && !on_gop {
+                return Err(format!("v1's rejoin didn't rewind: {rejoin:?}"));
+            }
+            Ok(())
         },
     );
 }

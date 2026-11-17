@@ -8,9 +8,10 @@
 //! turmoil re-runs [`host_main`] when a host restarts, so everything here
 //! starts from the spec and the shared registry: a restarted host joins the
 //! same networks and swarms with a new host key, its seed continues the
-//! stream from the current time, and its viewers keep accumulating into the
-//! same statistics. A host with [`HostSpec::arrive_at`] starts at its
-//! arrival, and one that departs gracefully leaves through [`depart`].
+//! stream from the current time, and its viewers rejoin at the live edge
+//! ([`joins_live`]) and keep accumulating into the same statistics. A host
+//! with [`HostSpec::arrive_at`] starts at its arrival, and one that departs
+//! gracefully leaves through [`depart`].
 //!
 //! [`HostSpec::arrive_at`]: crate::HostSpec::arrive_at
 //!
@@ -58,11 +59,11 @@ const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
 /// state, or a media swarm's [`MediaCodec`] state, unless the scenario
 /// keeps the bytes
 /// ([`Scenario::stored_chunks`](crate::Scenario::stored_chunks)) or the
-/// chunks aren't whole frames. A viewer that arrives reads from the live
-/// edge ([`arrives`]).
-fn swarm_options(w: &World, s: usize, spec: &SwarmSpec, h: HostIx) -> SwarmOptions {
+/// chunks aren't whole frames. A viewer that joins `live` reads from the
+/// live edge ([`joins_live`]).
+fn swarm_options(w: &World, s: usize, spec: &SwarmSpec, live: bool) -> SwarmOptions {
     let mut o = spec.options.clone();
-    if arrives(w, h, spec) {
+    if live {
         o.delivery_mode = DeliveryMode::LOW_LATENCY;
     }
     let swarm = u32::try_from(s).unwrap_or(u32::MAX);
@@ -77,11 +78,19 @@ fn swarm_options(w: &World, s: usize, spec: &SwarmSpec, h: HostIx) -> SwarmOptio
     o
 }
 
-/// Whether host `h` is a viewer of `spec` that arrives
-/// ([`HostSpec::arrive_at`](crate::HostSpec::arrive_at)), and so joins at
-/// the live edge.
-fn arrives(w: &World, h: HostIx, spec: &SwarmSpec) -> bool {
-    spec.viewers.contains(&h) && w.spec.hosts.get(h).is_some_and(|x| x.arrive_at.is_some())
+/// Whether incarnation `inc` of host `h` (1 for the first) is a viewer of
+/// `spec` that joins at the live edge, as a player that joins or rejoins a
+/// live stream does: one that arrives
+/// ([`HostSpec::arrive_at`](crate::HostSpec::arrive_at)), or any
+/// incarnation after its first (a churn's restart or a fault's,
+/// [`Fault::Restart`]). A viewer there from the run reads as the swarm's
+/// options say until it restarts. A host crashed before it ever ran has
+/// its first incarnation at its restart, and reads as the swarm's options
+/// say: the viewers `calibration_star` boots at or before the stream's
+/// start, as the testbed's viewers at the start read.
+fn joins_live(w: &World, h: HostIx, inc: u32, spec: &SwarmSpec) -> bool {
+    spec.viewers.contains(&h)
+        && (inc > 1 || w.spec.hosts.get(h).is_some_and(|x| x.arrive_at.is_some()))
 }
 
 pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
@@ -185,10 +194,11 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
     let mut held: Vec<(TransferId, SwarmKey)> = Vec::new();
     for (s, spec) in w.spec.swarms.iter().enumerate() {
         let key = w.swarm_keys.get(s).ok_or("swarm key")?;
+        let live = joins_live(&w, h, inc, spec);
         let swarm = if spec.seed == h {
             let (swarm, _, writer) = node
                 .create_swarm(WriterOptions {
-                    swarm_options: swarm_options(&w, s, spec, h),
+                    swarm_options: swarm_options(&w, s, spec, live),
                     key: key.clone(),
                 })
                 .await?;
@@ -208,10 +218,10 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
             swarm
         } else if spec.member(h) {
             let swarm = node
-                .add_swarm(SwarmId::new(&key.public), swarm_options(&w, s, spec, h))
+                .add_swarm(SwarmId::new(&key.public), swarm_options(&w, s, spec, live))
                 .await?;
             if spec.viewers.contains(&h) {
-                spawn_local(reader_task(w.clone(), h, s, node.clone(), swarm));
+                spawn_local(reader_task(w.clone(), h, s, node.clone(), swarm, live));
             }
             swarm
         } else {
@@ -924,7 +934,10 @@ impl MediaWriter {
     }
 }
 
-async fn reader_task(w: Rc<World>, h: HostIx, s: usize, node: Node, swarm: SwarmKey) {
+/// Reads swarm `s` at viewer `h`. Where its first read lands is the
+/// delivery mode's ([`swarm_options`]); `live` ([`joins_live`]) gives a
+/// media swarm's join its rewind to its GOP's start ([`media_reader`]).
+async fn reader_task(w: Rc<World>, h: HostIx, s: usize, node: Node, swarm: SwarmKey, live: bool) {
     let me = w.name(h).to_owned();
     let mut reader = match node.open_reader(swarm).await {
         Ok(r) => r,
@@ -936,7 +949,7 @@ async fn reader_task(w: Rc<World>, h: HostIx, s: usize, node: Node, swarm: Swarm
     w.viewer_start(s, h);
     let mut buf = vec![0u8; 64 * 1024];
     if w.spec.swarms.get(s).is_some_and(|x| x.media.is_some()) {
-        media_reader(&w, h, s, &mut reader, &mut buf).await;
+        media_reader(&w, h, s, &mut reader, &mut buf, live).await;
         return;
     }
     let mut parser = FrameParser::default();
@@ -967,15 +980,23 @@ async fn reader_task(w: Rc<World>, h: HostIx, s: usize, node: Node, swarm: Swarm
 
 /// [`reader_task`]'s loop for a media swarm: reads at offsets, checked
 /// chunk by chunk ([`MediaParser`]), and rewinds to its GOP's start after
-/// its first read ([`SwarmSpec::join_rewind`]).
-async fn media_reader(w: &World, h: HostIx, s: usize, reader: &mut SwarmReader, buf: &mut [u8]) {
+/// its first read ([`SwarmSpec::join_rewind`], or [`ARRIVAL_REWIND`] for
+/// a join at the live edge).
+async fn media_reader(
+    w: &World,
+    h: HostIx,
+    s: usize,
+    reader: &mut SwarmReader,
+    buf: &mut [u8],
+    live: bool,
+) {
     let me = w.name(h).to_owned();
     let mut parser = MediaParser::default();
     let mut rewind = w
         .spec
         .swarms
         .get(s)
-        .and_then(|x| x.join_rewind.or(arrives(w, h, x).then_some(ARRIVAL_REWIND)));
+        .and_then(|x| x.join_rewind.or(live.then_some(ARRIVAL_REWIND)));
     loop {
         while w.reading_paused(h) {
             tokio::time::sleep(Duration::from_millis(20)).await;
