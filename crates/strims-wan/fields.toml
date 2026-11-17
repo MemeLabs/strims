@@ -2870,7 +2870,7 @@ sims = ["strims-sim"]
 type = "int"
 unit = "bytes/s"
 none = "empty"
-description = "What the host could upload at the sample, the meter's truth (`Report::upload_cap_at`): what the host could upload over the second before the sample, in the meter's units: the data bytes its runner writes (`UploadInfo::rate`'s, its channel payloads). It is what the host's uplink carries over that second (its rate's mean, its steps' from their times; with a capacity schedule, its opportunities in that second), less what its link charged its competing uploads in it, times the host's share of its link in channel bytes (`Report::own_share`, a property of its link, its transports and vnic), and at most its rate limit. That share is the product of two ratios, each over the host's near-saturated sample windows so far (those whose own charge is at least `NEAR_SATURATED`, 0.8, of what its link could carry for it): the bytes its transports took of its messages over what its link charged their first transmissions as they went to it (resends, pure acknowledgements and competing uploads apart), or a full message's before any such window (a TCP segment of two full packets, or a data channel's full datagram, at its framing); and its runner's channel bytes over what it handed vnic (1 before any such window). It is 0 over a second its link carries nothing for the host (an outage), and empty with neither a site nor a limit."
+description = "What the host could upload at the sample, the meter's truth (`Report::upload_cap_at`): what the host could upload over the second before the sample, in the meter's units: the data bytes its runner writes (`UploadInfo::rate`'s, its channel payloads). It is what the host's uplink carries over that second (its rate's mean, its steps' from their times; with a capacity schedule, its opportunities in that second), less what its link charged its competing uploads in it, times the host's share of its link in channel bytes (`Report::own_share`, a property of its link, its transports and vnic), and at most its rate limit. That share is the product of two ratios, each over the host's near-saturated sample windows so far (those whose own charge is at least `NEAR_SATURATED`, 0.8, of what its link could carry for it): the bytes its transports took of its messages over what its link charged their first transmissions as they went to it (resends, pure acknowledgements and competing uploads apart), or a full message's before any such window (a TCP segment of two full packets, or a data channel's full datagram, at its framing); and its runner's channel bytes over what it handed vnic (1 before any such window, and on a testbed run whose node lines don't record their channel bytes: `channel_bytes` empty). It is 0 over a second its link carries nothing for the host (an outage), and empty with neither a site nor a limit."
 
 [columns.meter_samples.rate_bps]
 sims = ["strims-sim"]
@@ -2932,6 +2932,13 @@ sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
 description = "The bytes the node's driver had handed its links since its incarnation started (`MeterSample::bytes_written`, `DriverMetrics::bytes_written`): every port's, before the transports' framing."
+
+[columns.meter_samples.channel_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The channel payload bytes the node's runner had written since the run started, every incarnation's (`MeterSample::channel_bytes`: the bytes `UploadInfo::rate` counts, `ChannelMetrics::wire_bytes` of its outbound totals; a testbed node's line records them under the same name). The meter's truth takes its channel share from them: their growth over that of the bytes the node handed vnic, over its near-saturated windows (`avail_bps`). Empty on a testbed run whose node lines don't record them, whose truth takes that share as 1."
 
 [columns.meter_samples.budget_capacity_bps]
 sims = ["strims-sim"]

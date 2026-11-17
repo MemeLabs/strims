@@ -4170,9 +4170,10 @@ pub(crate) mod cols {
         /// competing uploads apart), or a full message's before any such window
         /// (a TCP segment of two full packets, or a data channel's full
         /// datagram, at its framing); and its runner's channel bytes over what
-        /// it handed vnic (1 before any such window). It is 0 over a second its
-        /// link carries nothing for the host (an outage), and empty with
-        /// neither a site nor a limit.
+        /// it handed vnic (1 before any such window, and on a testbed run whose
+        /// node lines don't record their channel bytes: `channel_bytes` empty).
+        /// It is 0 over a second its link carries nothing for the host (an
+        /// outage), and empty with neither a site nor a limit.
         ///
         /// Unit: bytes/s. None is written as an empty field.
         AvailBps,
@@ -4235,6 +4236,17 @@ pub(crate) mod cols {
         ///
         /// Unit: bytes.
         BytesWritten,
+        /// The channel payload bytes the node's runner had written since the
+        /// run started, every incarnation's (`MeterSample::channel_bytes`: the
+        /// bytes `UploadInfo::rate` counts, `ChannelMetrics::wire_bytes` of its
+        /// outbound totals; a testbed node's line records them under the same
+        /// name). The meter's truth takes its channel share from them: their
+        /// growth over that of the bytes the node handed vnic, over its
+        /// near-saturated windows (`avail_bps`). Empty on a testbed run whose
+        /// node lines don't record them, whose truth takes that share as 1.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        ChannelBytes,
         /// The capacity reading an adaptive seed's latest allocation check
         /// measured its first-swarm budget from
         /// (`MeterSample::budget_capacity`, `PushStats::seed_budget_capacity`):
@@ -4309,6 +4321,7 @@ pub(crate) mod cols {
                 MeterSamples::RequestsIn => "requests_in",
                 MeterSamples::Rejected => "rejected",
                 MeterSamples::BytesWritten => "bytes_written",
+                MeterSamples::ChannelBytes => "channel_bytes",
                 MeterSamples::BudgetCapacityBps => "budget_capacity_bps",
                 MeterSamples::LatestFloorMs => "latest_floor_ms",
                 MeterSamples::Budget => "budget",
@@ -4347,6 +4360,7 @@ pub(crate) mod cols {
                 | MeterSamples::RequestsIn
                 | MeterSamples::Rejected
                 | MeterSamples::BytesWritten
+                | MeterSamples::ChannelBytes
                 | MeterSamples::BudgetCapacityBps
                 | MeterSamples::LatestFloorMs
                 | MeterSamples::Budget

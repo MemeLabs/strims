@@ -55,14 +55,18 @@ pub const BIN_MS: i64 = 100;
 /// (`have_lazy_out`, `have_lazy_in`). And the bytes the node handed to
 /// vnic since the incarnation started (`DriverMetrics::bytes_written`).
 /// And what strims-sim's meter truth takes its share from (its
-/// `report::own_share`), which the sim's counters give and a testbed
-/// node's records leave out (0, and `asked` its `t`): the channel payload
-/// bytes its runner has written since the run started, every incarnation
-/// (the bytes `UploadInfo::rate` counts, `ChannelMetrics::wire_bytes` of
-/// its outbound totals), what its uplink has charged its own messages
-/// (`EndStats::up_bytes`; with no WAN, 0), and its transports' and vnic's
-/// bytes beside them. With the live oracle, what it told the node ahead
-/// of the sample (`told`).
+/// `report::own_share`): the channel payload bytes its runner has written
+/// since the run started, every incarnation's (`channel_bytes`: the bytes
+/// `UploadInfo::rate` counts, `ChannelMetrics::wire_bytes` of its outbound
+/// totals; none where a node's line lacks them), and what it handed vnic
+/// (`vnic_bytes`), which
+/// [`meter_sample`] takes from the node's metrics, its incarnation's, and
+/// strims-sim adds its finished incarnations' to; and what its uplink has
+/// charged its own messages (`link_bytes`, `EndStats::up_bytes`; with no
+/// WAN, 0) and its transports' bytes beside them, which the sim's counters
+/// give and a testbed run's captures (strims-sim's `testbed` module), 0
+/// in a node's records, as `asked` is its `t` there. With the live
+/// oracle, what it told the node ahead of the sample (`told`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MeterSample {
     /// When it was taken: simulated time since the start of the run in
@@ -88,7 +92,7 @@ pub struct MeterSample {
     pub lazy_out: u32,
     pub lazy_in: u32,
     pub bytes_written: u64,
-    pub data_bytes: u64,
+    pub channel_bytes: Option<u64>,
     pub link_bytes: u64,
     pub told: Option<u64>,
     /// What the host's transports took of its uplink's messages so far
@@ -153,6 +157,8 @@ pub fn meter_sample(
             t,
             asked: t,
             bytes_written: m.driver.bytes_written,
+            channel_bytes: Some(m.runner.totals.outbound.wire_bytes()),
+            vnic_bytes: m.driver.bytes_written,
             rate: push.upload_rate,
             busy_permille: push.upload_busy_permille,
             capacity: push.upload_capacity,
@@ -361,7 +367,7 @@ impl MeterSample {
     /// One JSON object, fields named as here, `t` as `t_ms` in ms.
     pub fn json(&self) -> String {
         format!(
-            "{{\"t_ms\":{},\"rate\":{},\"busy_permille\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"capacity\":{},\"budget_capacity\":{},\"latest_floor_ms\":{},\"children\":{},\"requests_in\":{},\"rejected\":{},\"pace_channels\":{},\"lazy_out\":{},\"lazy_in\":{},\"bytes_written\":{}}}",
+            "{{\"t_ms\":{},\"rate\":{},\"busy_permille\":{},\"queue_delay_ms\":{},\"path_delay_ms\":{},\"path_queued_ms\":{},\"path_latest_ms\":{},\"capacity\":{},\"budget_capacity\":{},\"latest_floor_ms\":{},\"children\":{},\"requests_in\":{},\"rejected\":{},\"pace_channels\":{},\"lazy_out\":{},\"lazy_in\":{},\"bytes_written\":{},\"channel_bytes\":{}}}",
             self.t.as_millis(),
             self.rate,
             self.busy_permille,
@@ -379,6 +385,7 @@ impl MeterSample {
             self.lazy_out,
             self.lazy_in,
             self.bytes_written,
+            opt(self.channel_bytes),
         )
     }
 }

@@ -899,6 +899,10 @@ impl Run {
             lazy_out: n("lazy_out"),
             lazy_in: n("lazy_in"),
             bytes_written: u("bytes_written").unwrap_or(0),
+            // A node runs one incarnation: its channel and vnic bytes are
+            // the run's.
+            channel_bytes: u("channel_bytes"),
+            vnic_bytes: u("bytes_written").unwrap_or(0),
             ..MeterSample::default()
         })
     }
@@ -1702,16 +1706,17 @@ struct Send {
 
 /// The meter's truth's share at each of a testbed node's meter samples,
 /// as strims-sim's HostStats::gate takes it from the sim's counters, from
-/// the node's capture (`sends`): its own charge, its first transmissions'
-/// and its transports' bytes so far (link_bytes, app_bytes,
+/// the node's capture (`sends`) and its records: its own charge, its first
+/// transmissions' and its transports' bytes so far (link_bytes, app_bytes,
 /// resent_bytes), and over its near-saturated windows (`Gated`: a window
 /// between two samples whose own charge was at least NEAR_SATURATED of
 /// what its link could carry for it, `report::available` over `spec` and
 /// its competitor's log) its transports' bytes over its link's charge of
-/// its first transmissions. Its runner's channel bytes aren't recorded on
-/// the testbed (no data_bytes counter on the node), so its channel share
-/// is 1 (`report::channel_share` of no data). `us_of` takes a sample's
-/// ask to Unix µs.
+/// its first transmissions, and its runner's channel bytes over what it
+/// handed vnic (its records' channel_bytes and bytes_written). A window
+/// whose samples lack channel_bytes adds none of them: a node whose lines
+/// lack the field keeps S_c = 1 (`report::channel_share` of no data).
+/// `us_of` takes a sample's ask to Unix µs.
 fn gate(
     meter: &mut [MeterSample],
     sends: &[Send],
@@ -1722,7 +1727,7 @@ fn gate(
     let mut g = Gated::default();
     let (mut link, mut app, mut resent) = (0u64, 0u64, 0u64);
     let mut next = sends.iter().peekable();
-    let mut prev: Option<Duration> = None;
+    let mut prev: Option<(Duration, Option<u64>, u64)> = None;
     for m in meter.iter_mut() {
         let to = us_of(m.asked);
         let (mut charged, mut took, mut again) = (0u64, 0u64, 0u64);
@@ -1738,7 +1743,7 @@ fn gate(
         app += took;
         resent += again;
         (m.link_bytes, m.app_bytes, m.resent_bytes) = (link, app, resent);
-        g.window = prev.is_some_and(|at| {
+        g.window = prev.is_some_and(|(at, ..)| {
             at < m.asked
                 && charged > 0
                 && charged as f64
@@ -1748,9 +1753,13 @@ fn gate(
         if g.window {
             g.app += took;
             g.link += charged.saturating_sub(again);
+            if let (Some((_, Some(data), vnic)), Some(now)) = (prev, m.channel_bytes) {
+                g.data += now.saturating_sub(data);
+                g.vnic += m.vnic_bytes.saturating_sub(vnic);
+            }
         }
         m.gated = g;
-        prev = Some(m.asked);
+        prev = Some((m.asked, m.channel_bytes, m.vnic_bytes));
     }
 }
 
@@ -2563,6 +2572,7 @@ mod tests {
             app: full - 60,
             resent: false,
         }));
+        // Lines without the runner's channel bytes (channel_bytes).
         let mut meter = vec![sample(1), sample(2), sample(3)];
         gate(&mut meter, &sends, spec, &[], |d| d.as_micros() as u64);
         assert!(!meter[0].gated.window);
@@ -2574,12 +2584,77 @@ mod tests {
         assert_eq!(meter[2].gated.link, g.link);
         assert_eq!(meter[2].link_bytes, 1100 * full);
         assert_eq!(meter[2].resent_bytes, 10 * full);
-        // The truth there is the link's second times that share (no
-        // channel share on the testbed: 1).
-        let truth = crate::report::upload_truth(spec, Some(&meter[2]), &[], Duration::from_secs(4))
-            .unwrap();
+        // The truth there is the link's second times that share, its
+        // channel share 1 without the channel bytes.
+        assert_eq!((g.data, g.vnic), (0, 0));
+        let truth = |m: &MeterSample| {
+            crate::report::upload_truth(spec, Some(m), &[], Duration::from_secs(4)).unwrap()
+        };
         let share = g.app as f64 / g.link as f64;
-        assert_eq!(truth, (link as f64 * share) as u64);
+        assert_eq!(truth(&meter[2]), (link as f64 * share) as u64);
+        // With them, the saturated second's channel bytes over its vnic
+        // bytes: 0.98 of what it handed vnic was its runner's.
+        let counted = |secs: u64, data: u64, vnic: u64| MeterSample {
+            channel_bytes: Some(data),
+            vnic_bytes: vnic,
+            ..sample(secs)
+        };
+        let mut meter = vec![
+            counted(1, 1_000, 2_000),
+            counted(2, 491_000, 502_000),
+            counted(3, 500_000, 600_000),
+        ];
+        gate(&mut meter, &sends, spec, &[], |d| d.as_micros() as u64);
+        assert_eq!(
+            (meter[1].gated.data, meter[1].gated.vnic),
+            (490_000, 500_000)
+        );
+        assert_eq!(
+            meter[2].gated,
+            Gated {
+                window: false,
+                ..meter[1].gated
+            }
+        );
+        assert_eq!(truth(&meter[2]), (link as f64 * 0.98 * share) as u64);
+        // A window whose earlier sample lacks them adds none.
+        meter[0].channel_bytes = None;
+        gate(&mut meter, &sends, spec, &[], |d| d.as_micros() as u64);
+        assert_eq!((meter[2].gated.data, meter[2].gated.vnic), (0, 0));
+    }
+
+    #[test]
+    fn a_lines_meter_record_reads_back_its_channel_and_vnic_bytes() {
+        let dir = fixture("meter-bytes");
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap();
+        // As a node's line writes it (MeterSample::json, native and
+        // browser nodes alike), its clock in Unix ms.
+        let t = Duration::from_millis(START + 1000);
+        let m = MeterSample {
+            t,
+            asked: t,
+            rate: 1000,
+            capacity: 5000,
+            bytes_written: 700,
+            channel_bytes: Some(650),
+            ..MeterSample::default()
+        };
+        let read = |m: &MeterSample| {
+            let v: Value = serde_json::from_str(&m.json()).unwrap();
+            r.meter_of(&v).unwrap()
+        };
+        let got = read(&m);
+        assert_eq!(
+            (got.channel_bytes, got.vnic_bytes, got.bytes_written),
+            (Some(650), 700, 700)
+        );
+        // A line without them.
+        let got = read(&MeterSample {
+            channel_bytes: None,
+            ..m
+        });
+        assert_eq!((got.channel_bytes, got.vnic_bytes), (None, 700));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

@@ -1118,7 +1118,8 @@ fn seed_tables_say_what_the_seed_did(r: &strims_sim::Report, d: &Path) {
 /// ÷ its uplink (`avail_bps`) are the readings the row's `meter_seed_p*`
 /// and `meter_{pop}_p*` take over their window
 /// ([`strims_sim::Report::meter_series`]). Each row holds its sample's
-/// other readings, and the seed's its state as of its last change at or
+/// other readings (its channel bytes cumulative over the host's
+/// incarnations), and the seed's its state as of its last change at or
 /// before the sample (`RunnerReport::seed_changes`), which no viewer's
 /// row has. Returns the seed's rows, each with its sample's time.
 fn meter_samples_say_what_they_are(
@@ -1132,6 +1133,7 @@ fn meter_samples_say_what_they_are(
     let mut seed = Vec::new();
     for h in hosts {
         let mut readings = Vec::new();
+        let mut channel = 0;
         for m in r.hosts[h]
             .runner
             .meter
@@ -1160,6 +1162,7 @@ fn meter_samples_say_what_they_are(
                     int(&row, "requests_in"),
                     int(&row, "rejected"),
                     int(&row, "bytes_written"),
+                    int(&row, "channel_bytes"),
                 ],
                 [
                     Some(m.rate as i64),
@@ -1172,6 +1175,7 @@ fn meter_samples_say_what_they_are(
                     Some(i64::from(m.requests_in)),
                     Some(i64::from(m.rejected)),
                     Some(m.bytes_written as i64),
+                    m.channel_bytes.map(|b| b as i64),
                 ],
                 "{at}"
             );
@@ -1218,6 +1222,11 @@ fn meter_samples_say_what_they_are(
                     "{at}: a viewer has no seed state"
                 );
             }
+            // The channel bytes are cumulative over the host's incarnations,
+            // and a sim records them at every sample.
+            let c = int(&row, "channel_bytes").expect("a sim's channel bytes");
+            assert!(c >= channel, "{at}: {c} < {channel}");
+            channel = c;
             if m.t <= swarm.stop
                 && let (Some(c), Some(a)) = (int(&row, "capacity_bps"), int(&row, "avail_bps"))
                 && a > 0

@@ -892,6 +892,7 @@ impl Report {
                 cols::MeterSamples::RequestsIn,
                 cols::MeterSamples::Rejected,
                 cols::MeterSamples::BytesWritten,
+                cols::MeterSamples::ChannelBytes,
                 cols::MeterSamples::BudgetCapacityBps,
                 cols::MeterSamples::LatestFloorMs,
                 cols::MeterSamples::Budget,
@@ -946,6 +947,7 @@ impl Report {
                     m.requests_in.to_string(),
                     m.rejected.to_string(),
                     m.bytes_written.to_string(),
+                    opt(m.channel_bytes),
                     // Zero until measured: no reading.
                     opt(m.budget_capacity.get(&0).copied().filter(|&c| c > 0)),
                     opt(m.latest_floor_ms.get(&0).map(|&f| u64::from(f))),

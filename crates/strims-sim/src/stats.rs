@@ -454,9 +454,9 @@ pub(crate) struct HostStats {
     /// hundreds).
     meter: Vec<MeterSample>,
     /// The channel payload bytes the runners of finished incarnations
-    /// wrote, and the current one's so far ([`MeterSample::data_bytes`]).
-    data_done: u64,
-    data_now: u64,
+    /// wrote, and the current one's so far ([`MeterSample::channel_bytes`]).
+    channel_done: u64,
+    channel_now: u64,
     /// The same of vnic's bytes ([`MeterSample::vnic_bytes`]).
     vnic_done: u64,
     vnic_now: u64,
@@ -729,16 +729,17 @@ impl HostStats {
             }
         }
         let told = self.told.take();
-        self.data_now = m.runner.totals.outbound.wire_bytes();
-        let data_bytes = self.data_done + self.data_now;
+        self.channel_now = m.runner.totals.outbound.wire_bytes();
+        let channel_bytes = self.channel_done + self.channel_now;
         self.vnic_now = m.driver.bytes_written;
         let vnic_bytes = self.vnic_done + self.vnic_now;
         let (mut meter, seeds) = strims_testbed::record::meter_sample(m, index, t, clock);
-        // What the meter's truth takes its share from, which the sim's own
-        // counters give (a testbed node's records leave them out).
+        // What the meter's truth takes its share from: the channel and vnic
+        // bytes of every incarnation (the node's records hold its own
+        // incarnation's), and what the sim's own counters give.
         if let Some(ms) = meter.as_mut() {
             ms.asked = asked;
-            ms.data_bytes = data_bytes;
+            ms.channel_bytes = Some(channel_bytes);
             ms.link_bytes = link_bytes;
             ms.told = told;
             ms.app_bytes = app_bytes;
@@ -838,7 +839,7 @@ impl HostStats {
                     p.link_bytes,
                     p.resent_bytes,
                     p.app_bytes,
-                    p.data_bytes,
+                    p.channel_bytes,
                     p.vnic_bytes,
                     p.gated,
                 )
@@ -856,7 +857,10 @@ impl HostStats {
         if g.window {
             g.app += k.app_bytes.saturating_sub(app);
             g.link += charged.saturating_sub(k.resent_bytes.saturating_sub(resent));
-            g.data += k.data_bytes.saturating_sub(data);
+            g.data += k
+                .channel_bytes
+                .unwrap_or(0)
+                .saturating_sub(data.unwrap_or(0));
             g.vnic += k.vnic_bytes.saturating_sub(vnic);
         }
         k.gated = g;
@@ -872,7 +876,7 @@ impl HostStats {
     pub fn retire(&mut self) {
         let r = self.current();
         self.totals.add(&r);
-        self.data_done += std::mem::take(&mut self.data_now);
+        self.channel_done += std::mem::take(&mut self.channel_now);
         self.vnic_done += std::mem::take(&mut self.vnic_now);
         for (&k, t) in &self.messages {
             self.messages_done
