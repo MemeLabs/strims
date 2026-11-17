@@ -62,19 +62,21 @@ chart.
 - Move a tab only when the user asks to see something there; otherwise
   give a link. Moving replaces what they're looking at, though their
   Back button undoes it.
-- `go` takes `link`'s flags but `--base` (the tab stays on its own
-  host), and with no VIEW or URL it changes the tab's current address.
-  It goes to the latest focused tab unless `--tab ID` names another
-  (`tabs` lists them). Pass `--check`, as with links.
-- It waits for the tab to report the new address and prints it, and
-  says on stderr which address the tab left. A tab in the background
-  takes the address when it's shown or at its next report: it reports
-  every 30 s, a minute once Chrome throttles a hidden tab's timers, so go
-  waits 120 s for a tab in the background. A page built before `go`
-  fails at once: the user rebuilds
-  (`pnpm run console:build`) and reloads the tab. A go that times out
-  says what the tab's last report gives of why (it left the console's
-  pages, its stream or reports fail).
+- `go` takes all of `link`'s flags except `--base`, since the tab stays
+  on its own host. With no VIEW or URL, it changes the tab's current
+  address. It goes to the latest focused tab unless `--tab ID` names
+  another (`tabs` lists them). Pass `--check`, as with links.
+- `go` waits for the tab to report the new address, prints that address,
+  and says on stderr which address the tab left.
+- A tab in the background takes the address when it's shown or at its
+  next report. It reports every 30 s, or every minute once Chrome
+  throttles a hidden tab's timers, so `go` waits 120 s for a tab in the
+  background.
+- `go` to a tab whose page is older than `go` fails at once: the user
+  rebuilds (`pnpm run console:build`) and reloads the tab.
+- When `go` times out, it says why, as far as the tab's last report
+  shows: the tab left the console's pages, or its goto stream or its
+  reports to the server fail.
 
 ## The server
 

@@ -62,8 +62,8 @@ catalog's covered, skipped and missing files.
 - A story frame's localStorage is an in-memory stub (host/preload.ts),
   empty for each story, so stories never read or write the origin's.
   Components, hooks and contexts reach local storage only through src/lib
-  modules (lib/storage's helpers, lib/devicePreferences), which take a
-  page without storage for one with nothing stored.
+  modules (lib/storage's helpers, lib/devicePreferences). Those modules
+  treat a page without storage as one with nothing stored.
 - A story fails on a crash or an empty root at `--timeout`. It also fails
   on any error no allow list (`allowErrors`) covers: an uncaught error or
   rejection, or a console.error such as a React warning or a translation
@@ -92,18 +92,22 @@ one mode (`--theme`, `--device`).
   nothing, on CI runners too, so a changed story has a cause. A story's
   `visual` (reason, mask, skip, fresh) is for content no capture setting
   holds still. Use it sparingly.
-- With `--port`, a run's servers and browsers live in a bwrap box of their
-  own: loopback only, the filesystem read-only except the run's work dir,
-  target/storybook/compare and its `--report`, `--screenshots` and
-  `--summary` (the bases' builds read-only: the run outside makes them), and
-  /run, /tmp and the other socket dirs empty. The snap's Chromium runs
-  unwrapped and unsandboxed in it. That's because Chromium fails every load
-  in flight with `net::ERR_NETWORK_CHANGED` when a host interface comes or
-  goes, and testbed runs on the VM make and drop Docker networks all the
-  time. A box's files (a harness script) must sit outside /tmp. Where bwrap
-  can't make the box, the run warns and shares the host's network: a failed
-  load of a build's file is then retried in a fresh browser by a compare,
-  and fails the story in the plain check.
+- With `--port`, a run's servers and browsers live in a bwrap box of
+  their own, whose only network is loopback. Chromium fails every load in
+  flight (`ERR_NETWORK_CHANGED`) when a host interface comes or goes, and
+  testbed runs on the VM make and drop Docker networks all the time. In
+  the box:
+  - The filesystem is read-only except the run's work dir,
+    target/storybook/compare, and `--report`, `--screenshots` and
+    `--summary` where they lie outside it. The bases' builds stay
+    read-only: the run outside the box makes them.
+  - /run, /tmp and the other dirs that hold the host's sockets are
+    empty, so a box's files (a harness script) must sit outside /tmp.
+  - The snap's Chromium runs unwrapped and without its sandbox.
+- Where bwrap can't make the box, the run warns and shares the host's
+  network. A failed load of a build's file then fails the story in the
+  plain check, and a compare captures the story again in a fresh
+  browser.
 - Test a change to what a compare skips or captures by the decision:
   `--list` dry runs, scope_test.py's fixture storybook
   (hack/storybook/testdata/scope) and report_test.py, each mechanism

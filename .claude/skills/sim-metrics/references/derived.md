@@ -72,15 +72,19 @@ sims' fields use `strims_base::stats::sketch`. A change to how a
 reference quantity is taken goes in sim-suite's `golden.TAUGHT`, so the
 scorecards set compares like with like.
 
-A sum of floats that a scorecard prints is scoring.sql's
-`compensated_sum`, which adds as Python's sum() does, not a `list_reduce`
-fold: a fold strays by last bits, and a mean on a tie at the printed
-places then prints otherwise than the Python scoring's. Those are
-effects_of's means and sums of squares, arm_score_of's geometric means
-and fisher_p's sum. dynamics' means (DuckDB's avg) and a metric's own
-SQL in metrics.toml (depth_mean's terms) add plainly, and the other
-macros' sums are of integers: no reference scores them bit for bit. A
-new sum of floats that a scorecard prints takes `compensated_sum`.
+A sum of floats that a scorecard prints uses scoring.sql's
+`compensated_sum`, which adds as Python's sum() does. A `list_reduce`
+fold strays in the last bits, so a mean that falls on a tie at the
+printed places would print differently from the Python scoring's.
+
+- These sums use `compensated_sum`: effects_of's means and sums of
+  squares, arm_score_of's geometric means and fisher_p's sum.
+- These sums of floats add plainly, as no golden compares them with a
+  reference to the bit: dynamics' means (DuckDB's avg) and a metric's own
+  SQL in metrics.toml (depth_mean's terms).
+- The other macros' sums are of integers.
+
+A new sum of floats that a scorecard prints takes `compensated_sum`.
 
 ## Checks
 

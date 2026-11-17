@@ -58,13 +58,17 @@ usually enough.
 
 ## Python
 
-The tests each reference names, then `python3
-hack/simlab/tests/golden.py check`'s sets while iterating, and every one
-of them before landing: the whole check takes about 40 minutes, past the
-15 a run may block, so run its groups (`golden.GROUPS`) one at a time,
-each under `timeout 900`: `--only cli,matrices,suite_test,simdb_test`,
-`--only engine`, `--only catalog`, `--only scorecards1` and `--only
-scorecards2`.
+Run the tests each reference names, then the sets of `python3
+hack/simlab/tests/golden.py check`: some while iterating, and every one
+before landing. The whole check takes about 40 minutes, more than the 15
+minutes a run may block, so run it in its groups (`golden.GROUPS`), one
+at a time, each under `timeout 900`:
+
+    python3 hack/simlab/tests/golden.py check --only cli,matrices,suite_test,simdb_test
+    python3 hack/simlab/tests/golden.py check --only engine
+    python3 hack/simlab/tests/golden.py check --only catalog
+    python3 hack/simlab/tests/golden.py check --only scorecards1
+    python3 hack/simlab/tests/golden.py check --only scorecards2
 
 - The scorecards set reads the shared catalog: while another process
   writes it (an index), the set can fail with "database is locked".

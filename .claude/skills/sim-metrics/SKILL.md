@@ -154,14 +154,14 @@ the tests run and the golden sets, with each re-capture's reason.
 
 ## Baseline first, and the land gate
 
-Before changing anything, run the checks of the change's crates and
-`python3 hack/simlab/tests/golden.py check` on the parent (its groups one
-at a time: `references/checks.md`), and note what already fails there,
-so a failure the parent has isn't blamed on the change, nor absorbed
-into it.
+Before changing anything, run on the parent the checks of the change's
+crates, and `python3 hack/simlab/tests/golden.py check` in its groups,
+one at a time (`references/checks.md`). Note what already fails there, so
+that a failure the parent has is neither blamed on the change nor
+absorbed into it.
 
-To land, every golden set passes (scorecards included), and the
-commit message carries the evidence of each check the change called for:
+To land, every golden set passes, scorecards included, and the commit
+message carries the evidence of each check the change called for:
 
 - the neutrality comparison (cells, seeds, what moved, what it compared
   against), saved in the notebook too (`references/checks.md`);

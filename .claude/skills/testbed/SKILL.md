@@ -28,12 +28,13 @@ what lands in the out dir, and the images.
 
 The first line builds the native node, and the next two the browser
 nodes' harness and their page (dist/wasm-testbed). `stamp.py write`
-records beside each the hash of the sources the node and the page share
-(hack/testbed/stamp.py's doc), and a run with browsers refuses a page
-whose stamp isn't the node's, or an unstamped or since rebuilt artifact:
-one from other sources may not speak the node's protocol (links come up,
-no stream flows). A worktree whose shared crates differ from the page's
-builds its own.
+records beside each artifact the hash of the sources the node and the
+page share (hack/testbed/stamp.py's doc). A run with browsers refuses a
+page whose stamp differs from the node's, and an artifact that has no
+stamp or was rebuilt since it was stamped. A page built from other
+sources may not speak the node's protocol: its links come up, but no
+stream flows. A worktree whose shared crates differ from those the page
+was built from builds its own page.
 
 - **One testbed per Docker host at a time.** The container names
   (tb-*), the network and its subnet are fixed. Check
@@ -51,17 +52,20 @@ builds its own.
   the records strims-sim's tables take, made by the sim's own code
   (strims-testbed's `record`). PCAP=1 gives the tables' wire columns,
   which a comparison wants.
-- `SEED_LINK`, `VIEWER_LINK` and `LINKS` give nodes access link classes
-  (tbf, cable, dsl, fiber, trace; `hack/testbed/links.sh` documents
-  each). A trace link replays a capacity trace with tracelink
-  (`hack/testbed/tracelink.c`, an EDT classifier over fq that run.sh
-  builds with gcc), its files mounted from the host, so it runs on a
-  local testbed alone: a farm testbed matrix refuses one. run.sh parses
-  every spec with strims-wan's testbed module (its `testbed_link`
-  example, which run.sh builds from its own tree, or `LINK_BIN`), and
-  calibration_star's `STRIMS_SIM_CAL_SEED_LINK` and the bench sim take
-  the specs the WAN model can shape, refusing cable's default DOCSIS-PIE
-  (give `aqm=fifo`), `router=`, `delay=` and `limit=`.
+- `SEED_LINK`, `VIEWER_LINK` and `LINKS` give nodes access link
+  classes: tbf, cable, dsl, fiber or trace (`hack/testbed/links.sh`
+  documents each).
+  - A trace link replays a capacity trace with tracelink
+    (`hack/testbed/tracelink.c`, which run.sh builds with gcc): a
+    classifier that sets each packet's earliest departure time, over fq.
+    The trace's files are mounted from the host, so a trace link runs
+    only on a local testbed, and a farm testbed matrix refuses one.
+  - run.sh parses every spec with strims-wan's testbed module, through
+    its `testbed_link` example, which run.sh builds from its own tree
+    unless `LINK_BIN` names one.
+  - calibration_star's `STRIMS_SIM_CAL_SEED_LINK` and the bench sim take
+    only the specs the WAN model can shape. They refuse cable's default
+    DOCSIS-PIE (give `aqm=fifo`), `router=`, `delay=` and `limit=`.
 - `CPU_PROFILE` samples the Chromium nodes' V8 profiles.
   `hack/testbed/cpuprofile.py` summarises them (`--crate`, `--match`).
   Wasm frames have names only when the bundle is built with
