@@ -1765,7 +1765,9 @@ impl PeerSwarmScheduler {
 
     /// With the held log on, names `peer` the source of the chunks of `b`
     /// just stored ([`super::log::Held`]): pushed by the stream's open parent, an
-    /// answer to a request of ours, or other data.
+    /// answer to a request of ours ([`super::log::HeldHow::Answer`]: one
+    /// still out to `peer`, or one to `peer` that timed out at most
+    /// [`REQUEST_BACKOFF`] before, a fixed window), or other data.
     pub(super) fn held_from(&mut self, peer: PeerKey, b: Bin) {
         let PeerSwarmScheduler { s, channels } = self;
         let stream_bits = s.stream_bits;
@@ -1786,7 +1788,11 @@ impl PeerSwarmScheduler {
                 .and_then(|p| p.subs.get(stream))
                 .and_then(|sub| sub.open.filter(|o| h.bin >= o.start))
                 .map(|o| o.peer);
-            let asked = c.request_times.get(h.bin).is_some();
+            let late = c
+                .expired
+                .get(&h.bin)
+                .is_some_and(|&t| t <= h.at && h.at <= t + REQUEST_BACKOFF);
+            let asked = c.request_times.get(h.bin).is_some() || late;
             h.peer = Some(peer);
             h.parent = parent;
             h.rtt = crate::controller::RequestController::rtt(&c.controller);

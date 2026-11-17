@@ -908,6 +908,11 @@ pub(crate) struct PeerChannelScheduler {
     /// the peer holds ([`log::RequestChannel::announced`]). Bound: pruned
     /// behind the store's window at GC.
     announced: BTreeMap<Bin, Time>,
+    /// With the held log on, when our latest request to the peer for each
+    /// chunk timed out, for the held log's late answers
+    /// ([`log::HeldHow::Answer`]). Bound: pruned behind the store's
+    /// window at GC.
+    expired: BTreeMap<Bin, Time>,
 
     /// Scratch for `write1`. Bound: one frame of requests plus a request
     /// group per lane (live and backlog), and [`CANDIDATE_CAPACITY`]
@@ -952,6 +957,7 @@ impl PeerChannelScheduler {
             handshake_received: false,
             opened: now,
             announced: BTreeMap::new(),
+            expired: BTreeMap::new(),
             next_ping_time: Time::EPOCH,
             ping_nonce: 0,
             eager_haves_until: now + EAGER_HAVES_AFTER_OPEN,
@@ -997,6 +1003,7 @@ impl PeerChannelScheduler {
         self.peer_have_bins = Map::new();
         self.known_bins = Map::new();
         self.announced.clear();
+        self.expired.clear();
         // The new stream starts at bin 0: requests must not wait for it to
         // pass the old stream's position.
         self.peer_max_have_bin = Bin(0);
@@ -1049,6 +1056,9 @@ impl PeerChannelScheduler {
                         timeout: deadline - requested,
                     }
                 });
+                if s.held_log.is_some() {
+                    self.expired.insert(x, now);
+                }
                 s.request_bins.reset(x);
                 self.request_times.unset(x);
                 self.cancel_bins.set(x);
@@ -1902,6 +1912,11 @@ impl PeerSwarmScheduler {
         if self.s.request_log.is_some() {
             for c in self.channels.values_mut() {
                 c.announced.retain(|&b, _| b >= from);
+            }
+        }
+        if self.s.held_log.is_some() {
+            for c in self.channels.values_mut() {
+                c.expired.retain(|&b, _| b >= from);
             }
         }
         if self
@@ -3455,6 +3470,9 @@ impl PeerSwarmScheduler {
         if on != self.s.held_log.is_some() {
             self.s.held_log = on.then(Vec::new);
             self.s.held_marks.clear();
+            for c in self.channels.values_mut() {
+                c.expired.clear();
+            }
         }
     }
 

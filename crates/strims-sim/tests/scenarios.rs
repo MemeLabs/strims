@@ -2478,7 +2478,8 @@ fn withholders(seed: u64) -> Scenario {
 /// from one is a prune (`Report::parent_changes`), and none taken before
 /// the stream's last 2 s is kept at the end; every chunk an honest viewer
 /// stored from a withholder it had asked of that withholder by then (the
-/// request logs); no STREAM_CLOSE of a withholder's reaches an honest
+/// request logs), and its held log names it an answer (the arrivals'
+/// `how`); no STREAM_CLOSE of a withholder's reaches an honest
 /// viewer and the STREAM_OPENs they read of it are its opens and closes,
 /// none in flight at the end (each withholder's admissions, declines,
 /// sheds and subscribers, which queue them, settled 4 s before it), and
@@ -2556,11 +2557,10 @@ fn withholders_keep_streams_open_and_get_pruned() {
                     r.hosts[k.0].name, r.hosts[*p].name, k.1
                 ));
             }
-            // A withholder sends a child only chunks the child asked of it.
-            // Its answer to a request that expired at the child just
-            // before it landed counts as a push there (`HeldHow::Push`,
-            // the withholder the child's parent), so the arrivals' way in
-            // can't tell; the request logs can.
+            // A withholder sends a child only chunks the child asked of it:
+            // the request logs show the asks, and the held log names each
+            // an answer, one that lands just after its request timed out
+            // too.
             for (h, host) in r.hosts.iter().enumerate() {
                 if !honest(r, h) {
                     continue;
@@ -2580,10 +2580,14 @@ fn withholders_keep_streams_open_and_get_pruned() {
                             && q.record.bin.contains(a.held.bin)
                             && (q.record.at - q.epoch).to_std().is_some_and(|t| t <= a.at)
                     });
-                    if !asked {
+                    if !asked || a.held.how != strims_ppspp::HeldHow::Answer {
                         return Err(format!(
-                            "{} had {:?} from {} unasked ({:?})",
-                            host.name, a.held.bin, r.hosts[w].name, a.held.how
+                            "{} had {:?} from {} as {:?}, {}asked",
+                            host.name,
+                            a.held.bin,
+                            r.hosts[w].name,
+                            a.held.how,
+                            if asked { "" } else { "un" }
                         ));
                     }
                 }

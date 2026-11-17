@@ -771,6 +771,125 @@ fn time_outs_cancel_and_release() {
     assert_eq!(cancels, vec![Bin::new(2, 0)]);
 }
 
+/// Asks `p` (and with `rival` then `o`, the chunk released to it as the
+/// test's scaffold) for chunks 0..=3 at `now()`, and times them out at the
+/// returned time.
+fn time_out_asks(f: &mut Fixture, q: &mut MockQueue, p: PeerKey, o: PeerKey, rival: bool) -> Time {
+    f.sched.set_request_log(true);
+    f.sched.s.first_chunk_set = true;
+    let cfg = f.swarm.reader_config();
+    let asked = |f: &mut Fixture, peer: PeerKey| {
+        f.sched.handle_have(peer, Bin::new(2, 0), now());
+        let (sched, swarm) = (&mut f.sched, &f.swarm);
+        let msgs = written(|cw| sched.write(peer, now(), swarm, cw, true).unwrap(), cfg);
+        assert!(
+            msgs.iter()
+                .any(|m| matches!(m, Message::Request(r) if r.bin == Bin(0)))
+        );
+    };
+    asked(f, p);
+    if rival {
+        f.sched.s.request_bins.reset(Bin::new(2, 0));
+        asked(f, o);
+    }
+    let expired = now() + Duration::from_secs(2);
+    f.sched.run(expired, &mut f.swarm, q);
+    for (peer, timed_out) in [(p, true), (o, rival)] {
+        let c = &f.sched.channels[&peer];
+        assert!(c.request_times.get(Bin(0)).is_none());
+        assert_eq!(c.expired.get(&Bin(0)), timed_out.then_some(&expired));
+    }
+    expired
+}
+
+/// The held log names a chunk a peer sends after our request of it timed
+/// out an answer within [`REQUEST_BACKOFF`] of the timeout, both ends in,
+/// whomever we asked since and whichever other peer's request timed out
+/// with it, and other data past that, or from a peer whose request didn't
+/// time out.
+#[test]
+fn a_late_answer_is_held_as_an_answer_within_the_backoff() {
+    use log::HeldHow::{Answer, Other};
+    let ms = Duration::from_millis;
+    // How late the data comes; whether o was asked too, timing out with
+    // p, or after p's timeout; and whether o sends it.
+    for (late, rival, asked_o, from_o, how) in [
+        (ms(0), false, false, false, Answer),
+        (REQUEST_BACKOFF, false, false, false, Answer),
+        (REQUEST_BACKOFF + ms(1), false, false, false, Other),
+        (ms(0), false, true, false, Answer),
+        (ms(0), false, false, true, Other),
+        (ms(0), true, false, true, Answer),
+        (ms(0), true, false, false, Answer),
+        (REQUEST_BACKOFF + ms(1), true, false, true, Other),
+    ] {
+        let mut f = fixture(pull());
+        let mut q = MockQueue::default();
+        let p = add_ready(&mut f, &mut q, 0);
+        let o = add_ready(&mut f, &mut q, 1);
+        let expired = time_out_asks(&mut f, &mut q, p, o, rival);
+        let cfg = f.swarm.reader_config();
+        if asked_o {
+            f.sched.handle_have(o, Bin::new(2, 0), expired);
+            let msgs = written(
+                |cw| f.sched.write(o, expired, &f.swarm, cw, true).unwrap(),
+                cfg,
+            );
+            assert!(
+                msgs.iter()
+                    .any(|m| matches!(m, Message::Request(r) if r.bin == Bin(0)))
+            );
+        }
+        let at = expired + late;
+        let from = if from_o { o } else { p };
+        f.sched.consume(Bin(0), at, &f.swarm, &mut q);
+        f.sched
+            .handle_data(from, Bin(0), at, None, true, true, at, Bin(0), &mut q);
+        let held = f.sched.take_held();
+        let h = held.iter().find(|h| h.bin == Bin(0)).unwrap();
+        let last = if rival || asked_o { o } else { p };
+        assert_eq!(h.last_ask.map(|(peer, _)| peer), Some(last));
+        assert_eq!(
+            (h.peer, h.how),
+            (Some(from), how),
+            "{late:?} {rival} {asked_o} {from_o}"
+        );
+    }
+}
+
+/// A late answer from the stream's open parent is an answer, not a push.
+#[test]
+fn a_late_answer_from_the_parent_is_held_as_an_answer() {
+    use log::HeldHow::{Answer, Push};
+    for (late, how) in [
+        (Duration::ZERO, Answer),
+        (REQUEST_BACKOFF + Duration::MILLISECOND, Push),
+    ] {
+        let mut f = fixture(hybrid(1));
+        let mut q = MockQueue::default();
+        let p = add_ready(&mut f, &mut q, 0);
+        let o = add_ready(&mut f, &mut q, 1);
+        let expired = time_out_asks(&mut f, &mut q, p, o, false);
+        assert!(f.sched.do_stream_sub(p, 0, Bin(0)));
+        assert_eq!(
+            f.sched.handle_stream_open(p, 0, Bin(0), expired, &mut q),
+            Ok(StreamOpenOutcome::Accepted)
+        );
+        assert_eq!(f.sched.push_stats().parents, vec![Some(p)]);
+        let at = expired + late;
+        f.sched.consume(Bin(0), at, &f.swarm, &mut q);
+        f.sched
+            .handle_data(p, Bin(0), at, None, true, true, at, Bin(0), &mut q);
+        let held = f.sched.take_held();
+        let h = held.iter().find(|h| h.bin == Bin(0)).unwrap();
+        assert_eq!(
+            (h.peer, h.parent, h.how),
+            (Some(p), Some(p), how),
+            "{late:?}"
+        );
+    }
+}
+
 #[test]
 fn gc_keeps_request_times_before_the_read_offset() {
     // Before the read offset is set `store.next()` is NONE; GC must not

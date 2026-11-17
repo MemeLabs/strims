@@ -35,7 +35,11 @@ pub enum HeldHow {
     Own,
     /// Pushed by the stream's open parent.
     Push,
-    /// An answer to a request of ours.
+    /// An answer to a request of ours: one still out to the sender, or
+    /// one to the sender that timed out at most 200 ms
+    /// (`REQUEST_BACKOFF`) before the chunk came, a fixed window from the
+    /// timeout, both ends in, whomever we asked since. It wins over
+    /// [`HeldHow::Push`] when the parent's push answered our request.
     Answer,
     /// Any other peer's data.
     Other,
