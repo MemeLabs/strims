@@ -650,13 +650,14 @@ def interfaces():
 
 def box_writable(args, work):
     """What a run writes, each made if missing, and those it made: its work
-    dir, target/storybook (the bases' locks, the reports), and --report,
-    --screenshots and --summary where they're elsewhere."""
-    stories = ROOT / "target" / "storybook"
-    stories.mkdir(parents=True, exist_ok=True)
-    out, made = [work, stories], []
+    dir, the reports' dir, and --report, --screenshots and --summary where
+    they're elsewhere. Not the bases' builds, which the run outside makes
+    (build_base) and a run in the box reads: one run's browser can't change
+    what a later one serves."""
+    REPORTS.mkdir(parents=True, exist_ok=True)
+    out, made = [work, REPORTS], []
     for d in (args.report, args.screenshots):
-        if d and not Path(d).resolve().is_relative_to(stories):
+        if d and not Path(d).resolve().is_relative_to(REPORTS):
             d = Path(d).resolve()
             if not d.exists():
                 d.mkdir(parents=True)
@@ -2058,7 +2059,11 @@ def build_base(ref, rebuild):
     home = BASES / sha
     record = home / "build.json"
     home.mkdir(parents=True, exist_ok=True)
-    with open(BASES / f"{sha}.lock", "a") as lock:
+    lock_path = BASES / f"{sha}.lock"
+    if not lock_path.exists():
+        lock_path.touch()
+    # Read-only, as a run in the box has it: flock needs no write.
+    with open(lock_path) as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         rec = json.loads(record.read_text()) if record.is_file() else {}
         if rec.get("lock_sha256") and not rebuild:

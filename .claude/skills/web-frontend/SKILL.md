@@ -94,7 +94,8 @@ one mode (`--theme`, `--device`).
   holds still. Use it sparingly.
 - With `--port`, a run's servers and browsers live in a bwrap box of their
   own: loopback only, the filesystem read-only except the run's work dir,
-  target/storybook and its `--report`, `--screenshots` and `--summary`, and
+  target/storybook/compare and its `--report`, `--screenshots` and
+  `--summary` (the bases' builds read-only: the run outside makes them), and
   /run, /tmp and the other socket dirs empty. The snap's Chromium runs
   unwrapped and unsandboxed in it. That's because Chromium fails every load
   in flight with `net::ERR_NETWORK_CHANGED` when a host interface comes or
