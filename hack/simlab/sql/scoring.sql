@@ -1255,11 +1255,14 @@ CREATE OR REPLACE MACRO twin_window_of(jobs, lo_s := 10, hi_s := -1) AS TABLE
 -- class's overhead a packet, link_overhead) and link bytes (what the
 -- access link charged: a sim's; a testbed capture's IP bytes and its
 -- class's overhead a packet; a twin's acknowledgements, pure ACKs and
--- SACKs, are its link's charge too, as its data). A run without a
--- link spec has run.sh's tbf on the testbed and none in a sim. A class
--- whose charge isn't a fixed overhead a packet (cable's floor, dsl's
--- cells) leaves the side that would convert unmeasured. A data channel's
--- SACKs, which a testbed capture can't tell from its data inside DTLS,
+-- SACKs, are its link's charge too, as its data). Score a testbed run
+-- against twins built from the tree that ingested it: these units are
+-- the code's, and the lake can't tell a twin's binary's from its rows. A
+-- run without a link spec has run.sh's tbf on the testbed and none in a
+-- sim. A class whose charge isn't a fixed overhead a packet (cable's
+-- floor, dsl's cells) leaves the side that would convert unmeasured. A
+-- data channel's SACKs, which a testbed capture can't tell from its data
+-- inside DTLS,
 -- count in the uplink's bytes, packets and small packets on both sides.
 -- The measures:
 --   over_target_s       seconds in which an honest viewer lags past
