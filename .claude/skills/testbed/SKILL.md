@@ -97,7 +97,10 @@ crates differ from those the page was built from builds its own page.
   `twin_fit_of` compare the two over the same tables (`simdb.py describe
   twin_fit_of`): a side is `testbed_side(SRC_LIKE, kind := ..., arm :=
   ...)`, and twin_fit_of gives each cell's medians and the testbed runs'
-  place among the twin's seeds (b_quantile). `effects` scores one against
+  place among the twin's seeds (b_quantile). Both score each run's stream
+  by default, from 10 s to its own SECS (`twin_window_of`): a twin records
+  10 s past its stream and a testbed run about 5, where the meter reads
+  nothing and the lag is carried. `effects` scores one against
   the other, a testbed run paired with the twin seed of its number. The bare TCP bench is
   `hack/testbed/bench.sh` with `benchsuite.py run` and `benchsuite.py
   score`, over the cases in hack/testbed/bench/.

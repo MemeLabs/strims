@@ -331,6 +331,47 @@ class Arithmetic(unittest.TestCase):
         sd = lambda v: sum((p - mean(v)) ** 2 for p in v) ** 0.5
         self.assertAlmostEqual(across["rank_corr"], cov / (sd(ra) * sd(rb)))
 
+    def test_a_twins_window_is_its_runs_own_stream(self):
+        """twin_window_of: by default each run's window is its own stream,
+        [10 s, its STRIMS_SIM_CAL_SECS), calibration_star's 180 s where its
+        knobs lack it, so the seconds a run records past its stream stay
+        out; a window given is every run's."""
+        with tempfile.TemporaryDirectory() as tmp:
+            database(Path(tmp) / "jobs.duckdb",
+                     "CREATE TABLE jobs (k VARCHAR, src VARCHAR, env MAP(VARCHAR, VARCHAR)); INSERT INTO jobs VALUES "
+                     "('tb', 'testbed/x', MAP {'STRIMS_SIM_CAL_SECS': '40'}), "
+                     "('tw', 'testbed/x-twin', MAP {'STRIMS_SIM_CAL_SECS': '120'}), "
+                     "('old', 'testbed/y', MAP {'STRIMS_SIM_CAL_VIEWERS': '3'});")
+            side = "[{'cell': 'c', 'seed': 1, 'k': 'tb'}, {'cell': 'c', 'seed': 1, 'k': 'tw'}, " \
+                   "{'cell': 'c', 'seed': 2, 'k': 'old'}, {'cell': 'd', 'seed': 1, 'k': 'tb'}]"
+            got = lambda args="": {r["k"]: (r["lo"], r["hi"]) for r in scored(f"FROM twin_window_of({side}{args});")}
+            self.assertEqual(got(), {"tb": (10.0, 40.0), "tw": (10.0, 120.0), "old": (10.0, 180.0)})
+            # One window a run, though the side lists it under two cells.
+            self.assertEqual(len(scored(f"FROM twin_window_of({side});")), 3)
+            self.assertEqual(got(", lo_s := 20, hi_s := 1e9"),
+                             {"tb": (20.0, 1e9), "tw": (20.0, 1e9), "old": (20.0, 1e9)})
+            self.assertEqual(got(", hi_s := 30")["tw"], (10.0, 30.0))
+        scoring.SCORE_DB = self.db
+
+    def test_a_twins_measures_by_default_are_its_runs_streams(self):
+        """twin_runs_of's default window, each run's own stream: the meter's
+        sample past the stream (0.003 of its truth) and the viewer's carried
+        lag after it stay out, where a window to the run's end takes them
+        in."""
+        with tempfile.TemporaryDirectory() as tmp:
+            side = self.twin_lake(Path(tmp) / "twin.duckdb")
+            measures = lambda args="": {(r["k"], r["measure"]): r["value"]
+                                        for r in scored(f"FROM twin_runs_of({side}{args});")}
+            stream, to_end = measures(), measures(", lo_s := 10, hi_s := 1e9")
+            same = measures(", lo_s := 10, hi_s := 40")
+        scoring.SCORE_DB = self.db
+        self.assertEqual(stream, same)
+        for k in ("tb1", "tb0", "tw"):
+            self.assertAlmostEqual(stream[(k, "meter_p10")], 1.0, delta=0.02)
+            self.assertAlmostEqual(to_end[(k, "meter_p10")], 0.003, delta=0.001)
+            # Carried 1000 ms a second from 40 s: past the target from 41 s.
+            self.assertEqual((stream[(k, "over_target_s")], to_end[(k, "over_target_s")]), (0.0, 9.0))
+
     def test_sums(self):
         """compensated_sum adds a list in its order as Python's sum() adds
         floats, bit for bit (signed zeros, the infinities and NaN too), where

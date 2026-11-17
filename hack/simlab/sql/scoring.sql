@@ -1224,9 +1224,27 @@ CREATE OR REPLACE MACRO channel_counted_of(jobs) AS TABLE
     WHERE m.role = 'seed'
     GROUP BY ALL;
 
+-- twin_runs_of's window over each run of the runs `jobs`, in seconds of
+-- stream: [lo_s, hi_s), its run's own stream's end where hi_s is below 0
+-- (the default): the stream's length its job's knobs give
+-- (STRIMS_SIM_CAL_SECS, calibration_star's 180 s where they lack it).
+-- A run records seconds past its stream (a twin to its SECS + 10, a
+-- testbed run to about SECS + 5), where its meter has nothing to measure
+-- and its viewers' lag is carried 1000 ms a second, so a window to the
+-- run's end scores its tail. k, src, lo, hi.
+-- needs: jobs.env
+CREATE OR REPLACE MACRO twin_window_of(jobs, lo_s := 10, hi_s := -1) AS TABLE
+    SELECT b.k, b.src, lo_s::DOUBLE AS lo,
+           CASE WHEN hi_s >= 0 THEN hi_s
+                ELSE coalesce(TRY_CAST(any_value(b.env['STRIMS_SIM_CAL_SECS']) AS DOUBLE), 180) END::DOUBLE AS hi
+    FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k
+    GROUP BY b.k, b.src;
+
 -- The testbed and its twin (simlab.testbed): each run of the jobs `jobs`
 -- (a side: structs of a job's `k`, its `cell` and `seed`) over the stream's
--- seconds [lo_s, hi_s), one row a measure, the same SQL over a testbed
+-- seconds [lo_s, hi_s) (twin_window_of's: by default from 10 s, past the
+-- startup's first seconds, to the end of each run's own stream, its
+-- SECS), one row a measure, the same SQL over a testbed
 -- run's tables and a sim run's: k, src, sim, cell, seed, measure, value,
 -- basis (what a measure's definition took as given, NULL for nothing).
 -- A starved run (no viewer read a frame: a testbed run, a collapsed twin)
@@ -1328,9 +1346,10 @@ CREATE OR REPLACE MACRO channel_counted_of(jobs) AS TABLE
 -- needs: meter_samples.rate_bps meter_samples.busy_permille meter_samples.queue_delay_ms
 -- needs: meter_samples.path_latest_ms meter_samples.children meter_samples.requests_in meter_samples.budget
 -- needs: meter_samples.copies meter_samples.latest_floor_ms
-CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet := 1500,
+CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 10, hi_s := -1, full_packet := 1500,
                                      growth_x := 3.5) AS TABLE
-    WITH j AS (
+    WITH w AS (FROM twin_window_of(jobs, lo_s := lo_s, hi_s := hi_s)),
+    j AS (
         SELECT DISTINCT u.cell, u.seed::BIGINT AS seed, b.k, b.src, b.sim, b.bin_ms,
                link_overhead(b.env['STRIMS_SIM_CAL_SEED_LINK'], dflt := CASE WHEN b.sim = 'testbed' THEN 'tbf' ELSE '' END)
                    AS seed_ovh,
@@ -1338,17 +1357,17 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
         FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k),
     lag AS (
         SELECT l.k, l.src, l.sec, max(l.lag_ms) AS lag_ms
-        FROM viewer_lag_of(jobs) l WHERE l.sec >= lo_s AND l.sec < hi_s GROUP BY ALL),
+        FROM viewer_lag_of(jobs) l JOIN w USING (k, src) WHERE l.sec >= w.lo AND l.sec < w.hi GROUP BY ALL),
     lags AS (
         SELECT k, src, count(*) FILTER (WHERE lag_ms > @{delay_target_ms}) AS over_target_s FROM lag GROUP BY ALL),
     p99 AS (
         SELECT l.k, l.src, sketch_quantile(l.lag_ms, 99) AS lag_p99_ms
-        FROM viewer_lag_of(jobs) l WHERE l.sec >= lo_s AND l.sec < hi_s GROUP BY ALL),
+        FROM viewer_lag_of(jobs) l JOIN w USING (k, src) WHERE l.sec >= w.lo AND l.sec < w.hi GROUP BY ALL),
     sec AS (
         SELECT s.k, s.src, count(*) AS n, avg(s.busy) AS seed_busy_permille, avg(s.copies) AS seed_copies,
                avg(s.pushed) AS seed_pushes_s, avg(s.sent - s.pushed) AS seed_answers_s,
                avg(s.hits) AS viewer_hits_s, avg(s.misses) AS viewer_misses_s, avg(s.pruned) AS viewer_pruned_s
-        FROM seconds s SEMI JOIN j USING (k, src) WHERE s.sec >= lo_s AND s.sec < hi_s GROUP BY ALL),
+        FROM seconds s JOIN w USING (k, src) WHERE s.sec >= w.lo AND s.sec < w.hi GROUP BY ALL),
     rate AS (
         SELECT e.k, e.src, e.t_us, e.value AS rate
         FROM events e SEMI JOIN j USING (k, src) WHERE e.kind = 'uplink_rate' AND e.node = 0),
@@ -1360,9 +1379,9 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
                b.viewer_up_bytes + coalesce(b.viewer_up_sack_bytes, 0) AS viewer_up_bytes,
                b.viewer_up_packets + coalesce(b.viewer_up_sack_packets, 0) AS viewer_up_packets, b.viewer_switched,
                b.viewer_shed, j.bin_ms, j.sim, j.seed_ovh, j.viewer_ovh
-        FROM bins b JOIN j USING (k, src)
+        FROM bins b JOIN j USING (k, src) JOIN w USING (k, src)
         ASOF LEFT JOIN rate r ON r.k = b.k AND r.src = b.src AND b.t_ms * 1000 >= r.t_us
-        WHERE b.t_ms >= lo_s * 1000 AND b.t_ms < hi_s * 1000),
+        WHERE b.t_ms >= w.lo * 1000 AND b.t_ms < w.hi * 1000),
     -- Each side's bytes in IP bytes and link bytes (see the docs): a
     -- testbed's recorded IP, a sim's link (its acknowledgements' too).
     units AS (
@@ -1401,8 +1420,8 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
     -- readings over it (capacity over truth) read low: `basis` says so.
     truth AS (
         SELECT m.k, m.src, m.t_ms, m.capacity_bps, m.avail_bps AS truth_bps
-        FROM meter_samples m SEMI JOIN j USING (k, src)
-        WHERE m.role = 'seed' AND m.t_ms >= lo_s * 1000 AND m.t_ms < hi_s * 1000),
+        FROM meter_samples m JOIN w USING (k, src)
+        WHERE m.role = 'seed' AND m.t_ms >= w.lo * 1000 AND m.t_ms < w.hi * 1000),
     meter AS (
         SELECT k, src, sketch_quantiles(capacity_bps / truth_bps, [10, 50, 90]) AS q
         FROM truth WHERE capacity_bps > 0 AND truth_bps > 0 GROUP BY ALL),
@@ -1416,11 +1435,11 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
     comp AS (
         SELECT s.k, s.src, avg(1 - s.avail / r.rate) AS competitor_share,
                avg(1 - s.avail / r.rate) * (full_packet + any_value(j.seed_ovh)) / full_packet AS competitor_charged
-        FROM seconds s JOIN j USING (k, src)
+        FROM seconds s JOIN j USING (k, src) JOIN w USING (k, src)
         JOIN competing c ON c.k = s.k AND c.src = s.src AND c.kind = 'competing_start'
          AND (s.sec + 0.5) * 1e6 >= c.start_us AND (s.sec + 0.5) * 1e6 < c.stop_us
         ASOF JOIN rate r ON r.k = s.k AND r.src = s.src AND (s.sec + 0.5) * 1e6 >= r.t_us
-        WHERE s.sec >= lo_s AND s.sec < hi_s AND s.avail >= 0
+        WHERE s.sec >= w.lo AND s.sec < w.hi AND s.avail >= 0
         GROUP BY ALL),
     nb AS (
         SELECT n.k, n.src,
@@ -1428,8 +1447,8 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
                    - CASE WHEN j.sim = 'testbed' THEN 0
                           ELSE j.seed_ovh * (n.up_packets + coalesce(n.up_sack_packets, 0) + n.up_ack_packets) END)
                    / nullif(sum(n.data_bytes + n.ovh), 0) AS seed_wire_per_written
-        FROM node_bins n JOIN j USING (k, src)
-        WHERE n.node = 0 AND n.t_ms >= lo_s * 1000 AND n.t_ms < hi_s * 1000 GROUP BY ALL),
+        FROM node_bins n JOIN j USING (k, src) JOIN w USING (k, src)
+        WHERE n.node = 0 AND n.t_ms >= w.lo * 1000 AND n.t_ms < w.hi * 1000 GROUP BY ALL),
     ms AS (
         SELECT m.k, m.src, avg(m.rate_bps) AS seed_rate_bps, sketch_quantile(m.children, 50) AS seed_children,
                sketch_quantile(m.budget, 50) AS seed_budget, sketch_quantile(m.copies, 50) AS seed_copies_p50,
@@ -1443,12 +1462,12 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
                    AS seed_growth_share,
                (max(m.requests_in) - min(m.requests_in)) / nullif((max(m.t_ms) - min(m.t_ms)) / 1000.0, 0)
                    AS seed_stream_requests_s
-        FROM meter_samples m SEMI JOIN j USING (k, src)
-        WHERE m.role = 'seed' AND m.t_ms >= lo_s * 1000 AND m.t_ms < hi_s * 1000 GROUP BY ALL),
+        FROM meter_samples m JOIN w USING (k, src)
+        WHERE m.role = 'seed' AND m.t_ms >= w.lo * 1000 AND m.t_ms < w.hi * 1000 GROUP BY ALL),
     q AS (
         SELECT b.k, b.src, sketch_quantile(b.seed_up_queue_ms, 50) AS seed_up_queue_p50_ms,
                sketch_quantile(b.seed_up_queue_ms, 90) AS seed_up_queue_p90_ms
-        FROM bins b SEMI JOIN j USING (k, src) WHERE b.t_ms >= lo_s * 1000 AND b.t_ms < hi_s * 1000 GROUP BY ALL),
+        FROM bins b JOIN w USING (k, src) WHERE b.t_ms >= w.lo * 1000 AND b.t_ms < w.hi * 1000 GROUP BY ALL),
     ps AS (
         SELECT p.k, p.src,
                sketch_quantile(CASE WHEN p.node = 0 THEN p.rtt_ms END, 50) AS seed_rtt_p50_ms,
@@ -1456,17 +1475,17 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
                sketch_quantile(CASE WHEN p.node <> 0 AND p.peer = 0 THEN p.rtt_ms END, 50) AS viewer_seed_rtt_p50_ms,
                sketch_quantile(CASE WHEN p.node <> 0 AND p.peer <> 0 THEN p.rtt_ms END, 50) AS viewer_rtt_p50_ms,
                sketch_quantile(CASE WHEN p.node <> 0 AND p.peer <> 0 THEN p.cto_ms END, 50) AS viewer_cto_p50_ms
-        FROM peer_samples p SEMI JOIN j USING (k, src)
-        WHERE p.t_ms >= lo_s * 1000 AND p.t_ms < hi_s * 1000 AND p.rtt_ms > 0 GROUP BY ALL),
+        FROM peer_samples p JOIN w USING (k, src)
+        WHERE p.t_ms >= w.lo * 1000 AND p.t_ms < w.hi * 1000 AND p.rtt_ms > 0 GROUP BY ALL),
     pr0 AS (
         SELECT p.k, p.src, p.node, p.peer, max(p.requests_out) - min(p.requests_out) AS n,
                max(p.requests_in) - min(p.requests_in) AS n_in
-        FROM peer_samples p SEMI JOIN j USING (k, src)
-        WHERE p.t_ms >= lo_s * 1000 AND p.t_ms < hi_s * 1000 GROUP BY ALL),
+        FROM peer_samples p JOIN w USING (k, src)
+        WHERE p.t_ms >= w.lo * 1000 AND p.t_ms < w.hi * 1000 GROUP BY ALL),
     pspan AS (
         SELECT p.k, p.src, (max(p.t_ms) - min(p.t_ms)) / 1000.0 AS span
-        FROM peer_samples p SEMI JOIN j USING (k, src)
-        WHERE p.t_ms >= lo_s * 1000 AND p.t_ms < hi_s * 1000 GROUP BY ALL),
+        FROM peer_samples p JOIN w USING (k, src)
+        WHERE p.t_ms >= w.lo * 1000 AND p.t_ms < w.hi * 1000 GROUP BY ALL),
     pr AS (
         SELECT k, src, sum(n) FILTER (WHERE node <> 0) / nullif(any_value(span), 0) AS viewer_requests_s,
                sum(n_in) FILTER (WHERE node = 0) / nullif(any_value(span), 0) AS seed_requests_in_s
@@ -1580,12 +1599,13 @@ CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
         FROM ranked GROUP BY measure);
 
 -- twin_fit_rows of a testbed side and its twin's (twin_runs_of over both,
--- `a_jobs` the twin's, `b_jobs` the testbed's).
+-- `a_jobs` the twin's, `b_jobs` the testbed's), each run over its own
+-- window (twin_window_of: by default its stream from 10 s).
 -- needs: seconds bins bins.seed_up_queue_ms node_bins meter_samples peer_samples viewer_seconds viewers events
 -- needs: meter_samples.rate_bps meter_samples.busy_permille meter_samples.queue_delay_ms
 -- needs: meter_samples.path_latest_ms meter_samples.children meter_samples.requests_in meter_samples.budget
 -- needs: meter_samples.copies meter_samples.latest_floor_ms
-CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 0, hi_s := 1e9, full_packet := 1500,
+CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 10, hi_s := -1, full_packet := 1500,
                                     growth_x := 3.5) AS TABLE
     FROM twin_fit_rows(
         (SELECT coalesce(list({'cell': cell, 'measure': measure, 'k': k, 'value': value, 'basis': basis}),
