@@ -1674,6 +1674,34 @@ mod tests {
         assert_ne!(simulate(&bench).unwrap(), first);
     }
 
+    /// A competing upload's setup round trips each wait for the uplink's
+    /// queue as they begin: one started 10 ms into a 64 KiB burst at 10
+    /// Mbit/s (55 ms of the uplink with its headers) waits for the rest of
+    /// it in its first trip alone, and sends its first data 45 ms and
+    /// three of the path's 30 ms round trips after its start, where three
+    /// trips that long would take 225 ms.
+    #[test]
+    fn a_competing_uploads_setup_waits_for_the_queue_as_each_trip_begins() {
+        let mut bench = Bench::testbed(
+            "VIEWERS=1\nSECS=2\nCOMPETE=1.01:0.5",
+            "",
+            "burst 0 1 0 250 65536 65536",
+            true,
+        )
+        .unwrap();
+        bench.trace_tcp = true;
+        let logs = simulate(&bench).unwrap();
+        let t = logs
+            .first()
+            .into_iter()
+            .flatten()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .find(|e| e["ev"] == "tcp" && e["to"] == 2 && e["k"] == "tx")
+            .and_then(|e| e["t"].as_i64())
+            .unwrap_or_default();
+        assert!((1_130_000..1_160_000).contains(&t), "first data at {t} us");
+    }
+
     /// A burst's writes leave the window's room out of the mark at once,
     /// so a 64 KiB burst in 4 KiB writes, past a GSO buffer with its
     /// headers, goes in whole: on the testbed holders-10's holders blocked

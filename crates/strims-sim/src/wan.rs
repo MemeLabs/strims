@@ -482,6 +482,9 @@ struct Flow {
     srtt: Duration,
     rttvar: Duration,
     min_rtt: Duration,
+    /// CUBIC's least round trip (`delay_min`), HyStart's: its samples
+    /// since the congestion control's state began, after the handshake's.
+    delay_min: Duration,
     /// HyStart's round (it ends with the acknowledgement of the segment
     /// this numbers), its least round trip and samples so far, and whether
     /// it ended slow start.
@@ -608,6 +611,7 @@ impl Default for Flow {
             srtt: Duration::ZERO,
             rttvar: Duration::ZERO,
             min_rtt: Duration::ZERO,
+            delay_min: Duration::ZERO,
             hs_end: 0,
             hs_rtt: Duration::ZERO,
             hs_samples: 0,
@@ -715,23 +719,15 @@ impl Flow {
     /// A round-trip `sample` of the segment at `seq`: the smoothed round
     /// trip and its variation (RFC 6298), and HyStart's delay test, which
     /// ends slow start once a round's least round trip of its first
-    /// [`HYSTART_SAMPLES`] passes the path's least by an eighth of it,
-    /// clamped to 4-16 ms, as Linux's CUBIC does.
+    /// [`HYSTART_SAMPLES`] passes CUBIC's least (`delay_min`) by an eighth
+    /// of it, clamped to 4-16 ms, as Linux's CUBIC does.
     fn sampled(&mut self, seq: u64, sample: Duration) {
-        if self.srtt == Duration::ZERO {
-            self.srtt = sample;
-            self.rttvar = sample / 2;
-            self.min_rtt = sample;
+        self.estimate(sample);
+        self.delay_min = if self.delay_min == Duration::ZERO {
+            sample
         } else {
-            let dev = if sample > self.srtt {
-                sample - self.srtt
-            } else {
-                self.srtt - sample
-            };
-            self.rttvar = (self.rttvar * 3 + dev) / 4;
-            self.srtt = (self.srtt * 7 + sample) / 8;
-            self.min_rtt = self.min_rtt.min(sample);
-        }
+            self.delay_min.min(sample)
+        };
         if self.hs_found || self.cwnd >= self.ssthresh || self.cwnd < HYSTART_LOW_WINDOW {
             return;
         }
@@ -745,11 +741,32 @@ impl Flow {
             self.hs_samples += 1;
         } else {
             let thresh =
-                (self.min_rtt / 8).clamp(Duration::from_millis(4), Duration::from_millis(16));
-            if self.hs_rtt > self.min_rtt + thresh {
+                (self.delay_min / 8).clamp(Duration::from_millis(4), Duration::from_millis(16));
+            if self.hs_rtt > self.delay_min + thresh {
                 self.hs_found = true;
                 self.ssthresh = self.cwnd;
             }
+        }
+    }
+
+    /// A round-trip `sample` of the smoothed round trip, its variation
+    /// (RFC 6298) and the least round trip (`tcp_rtt_estimator`,
+    /// `rtt_min`) alone: the handshake's, which the congestion control's
+    /// state, begun after it, doesn't take.
+    fn estimate(&mut self, sample: Duration) {
+        if self.srtt == Duration::ZERO {
+            self.srtt = sample;
+            self.rttvar = sample / 2;
+            self.min_rtt = sample;
+        } else {
+            let dev = if sample > self.srtt {
+                sample - self.srtt
+            } else {
+                self.srtt - sample
+            };
+            self.rttvar = (self.rttvar * 3 + dev) / 4;
+            self.srtt = (self.srtt * 7 + sample) / 8;
+            self.min_rtt = self.min_rtt.min(sample);
         }
     }
 
@@ -1094,14 +1111,18 @@ fn ip_key(ip: IpAddr) -> IpKey {
 struct Cross {
     host: HostIx,
     /// When its client starts, and when it sends data from and to: from
-    /// the setup's round trips after the start, each of the uplink's
-    /// queue then and the path's round trip, for as long as it was asked.
+    /// the setup's round trips after the start, each the path's round trip
+    /// and the uplink's queue as the trip begins, for as long as it was
+    /// asked (`NIL` until the setup ends).
     start: Time,
     stop: Time,
     data_at: Time,
     rtt: Duration,
     flow: Flow,
     started: bool,
+    /// The setup's round trips taken, and when the next begins.
+    trips: u32,
+    trip_at: Time,
     /// Lost segments not yet resent, by sequence number, and their frames.
     /// Bound: the segments in flight.
     resend: BTreeMap<u64, u32>,
@@ -1327,6 +1348,8 @@ impl Scheduler {
                     rtt: Duration::from(c.rtt),
                     flow: Flow::default(),
                     started: false,
+                    trips: 0,
+                    trip_at: Time::NIL,
                     resend: BTreeMap::new(),
                     acks_lost: Vec::new(),
                     probe_at: Time::NIL,
@@ -1477,16 +1500,42 @@ impl Scheduler {
             else {
                 continue;
             };
-            if !started && now >= start {
-                let wait = self.net.up_backlog(host, start);
+            if !started
+                && now >= start
+                && let Some(c) = self.cross.get_mut(i)
+            {
+                c.started = true;
+                c.trip_at = start;
+            }
+            // Each of the setup's round trips waits for the uplink's queue
+            // as it begins. The second is the data connection's handshake,
+            // its round trip's first sample (the smoothed round trip and the
+            // least); the last carries iperf3's cookie on it, whose
+            // acknowledgement is the first sample of CUBIC's state, begun
+            // at the handshake's end (`tcp_init_transfer`): HyStart's least
+            // round trip.
+            while let Some(c) = self.cross.get(i)
+                && c.started
+                && c.data_at.is_nil()
+                && now >= c.trip_at
+            {
+                let at = c.trip_at;
+                let trip = rtt + self.net.up_backlog(host, at);
                 if let Some(c) = self.cross.get_mut(i) {
-                    c.started = true;
-                    c.data_at = start + (rtt + wait) * i64::from(crate::spec::COMPETE_SETUP_TRIPS);
-                    c.stop += c.data_at - c.start;
+                    c.trips += 1;
+                    c.trip_at = at + trip;
+                    if c.trips == 2 {
+                        c.flow.estimate(trip);
+                    }
+                    if c.trips >= crate::spec::COMPETE_SETUP_TRIPS {
+                        c.data_at = c.trip_at;
+                        c.stop += c.data_at - c.start;
+                        c.flow.sampled(0, trip);
+                    }
                 }
             }
             if let Some(c) = self.cross.get(i)
-                && c.started
+                && !c.data_at.is_nil()
                 && c.flow.last_send.is_nil()
                 && now >= c.data_at
             {
@@ -4486,6 +4535,56 @@ mod tests {
             rest > 0 && whole > 0,
             "{rest} frames lost after a segment's first, {whole} segments whole"
         );
+    }
+
+    #[test]
+    fn a_competing_uploads_cookie_is_cubics_first_round_trip() {
+        // The data connection's handshake gives the round trip estimate its
+        // first sample and the cookie's acknowledgement CUBIC's least round
+        // trip (`delay_min`, its state begun after the handshake,
+        // `tcp_init_transfer`): on an idle uplink both are the path's 30 ms
+        // when the upload's first data goes, three trips after its start.
+        let mut sim = build();
+        let sites = [
+            (
+                "a",
+                Site::new(City::Frankfurt, Access::Fiber).with_up(1_250_000),
+            ),
+            ("b", Site::new(City::Frankfurt, Access::Fiber)),
+        ];
+        let buffers = SendBuffers::new(SendBuffer {
+            uplink_queue: StdDuration::from_millis(100),
+            window: true,
+        });
+        sim.host("a", || async { Ok(()) });
+        sim.client("b", async {
+            tokio::time::sleep(StdDuration::from_secs(2)).await;
+            Ok(())
+        });
+        let mut spec = spec(&sites);
+        spec.hosts[0].competing = vec![Competing {
+            start: StdDuration::from_secs(1),
+            stop: StdDuration::from_secs(2),
+            rtt: StdDuration::from_millis(30),
+        }];
+        let mut wan = Scheduler::new(&sim, &spec, QUIET, 1, Some(buffers)).unwrap();
+        let mut seen = None;
+        loop {
+            wan.walk(&sim).unwrap();
+            if let Some(c) = wan.cross.first()
+                && seen.is_none()
+                && !c.data_at.is_nil()
+            {
+                seen = Some((c.flow.srtt, c.flow.min_rtt, c.flow.delay_min, c.data_at));
+            }
+            if sim.step().unwrap() {
+                break;
+            }
+        }
+        let ms = Duration::from_millis;
+        let (srtt, min_rtt, delay_min, data_at) = seen.unwrap();
+        assert_eq!((srtt, min_rtt, delay_min), (ms(30), ms(30), ms(30)));
+        assert_eq!(data_at, sim_time(StdDuration::from_millis(1090)));
     }
 
     #[test]

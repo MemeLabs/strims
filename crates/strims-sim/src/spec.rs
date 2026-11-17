@@ -146,10 +146,10 @@ pub struct Competing {
 }
 
 /// The round trips an iperf3 client takes from its start to its first
-/// data: its data stream's handshake, its cookie on it, and the server's
-/// TEST_START and TEST_RUNNING on the control stream. On the testbed the
-/// gap from iperf3's report's timestamp to the upload's first data was
-/// 2.4-3.1 times the holders' smoothed round trip then (93-178 ms).
+/// data: its parameters and the server's CREATE_STREAMS on the control
+/// stream, its data stream's handshake, and its cookie on that stream,
+/// which the server answers with TEST_START and TEST_RUNNING. Each takes
+/// the path's round trip and the uplink's queue as it begins.
 pub const COMPETE_SETUP_TRIPS: u32 = 3;
 
 /// A link the `from` host dials (and redials while it is down).
