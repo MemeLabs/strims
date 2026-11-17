@@ -558,14 +558,21 @@ impl Run {
         // The competing uploads' starts as recorded, for the twin: each
         // client's (its report's timestamp), ms of stream; the twin adds
         // the setup's round trips. The keying sets them aside (simlab's
-        // testbed MEASURED). A failed one is no upload.
+        // testbed MEASURED). A failed one is no upload, and a run whose
+        // every upload failed says so (`none`), so its knobs' schedule
+        // (STRIMS_SIM_CAL_COMPETE) starts none in a twin.
         let competing: Vec<String> = starts
             .iter()
             .filter(|c| !c.failed)
             .map(|c| format!("{}:{}", c.client().saturating_sub(start_ms), c.secs))
             .collect();
-        if !competing.is_empty() {
-            knobs.insert("STRIMS_SIM_CAL_COMPETE_MS".to_owned(), competing.join(" "));
+        if !starts.is_empty() {
+            let ms = if competing.is_empty() {
+                "none".to_owned()
+            } else {
+                competing.join(" ")
+            };
+            knobs.insert("STRIMS_SIM_CAL_COMPETE_MS".to_owned(), ms);
         }
         Ok(Run {
             dir: dir.to_owned(),
@@ -1165,8 +1172,10 @@ struct Started {
     report: Option<u64>,
     data: Option<u64>,
     secs: f64,
-    /// It sent nothing: its report is missing, unreadable or says iperf3's
-    /// `error`, or the seed's capture holds no data of it.
+    /// It failed: its report is missing, unreadable or says iperf3's
+    /// `error` (which iperf3 may report after it sent some data), or the
+    /// seed's capture, running to the upload's end or past it, holds no
+    /// data of it.
     failed: bool,
 }
 
@@ -1189,13 +1198,15 @@ impl Started {
 
 /// Each competing upload in out dir `dir` (compete.log's lines, run.sh's
 /// launch of each, `<unix ms> <at> <secs>`), as recorded (and whether it
-/// failed: its report missing, unreadable or iperf3's `error`, or with a
-/// capture none of its data in it): iperf3's
+/// failed, [`Started::failed`]: its report missing, unreadable or iperf3's
+/// `error`, or none of its data in a capture that ran to its end): iperf3's
 /// report's timestamp (compete-<at>.json's start.timestamp.timemillisecs:
 /// the client's start, 150-215 ms after the launch, before its setup's
 /// round trips) and, with PCAP, its first data, the seed's capture's
 /// first segment to the sink of at least COMPETE_DATA_PAYLOAD bytes after
-/// the launch (pcap-0.pcap).
+/// the launch (pcap-0.pcap). A capture that stopped while the seed ran
+/// (run.sh's pcap-0.end) before an upload's end can't say its data never
+/// came.
 fn competing_starts(dir: &Path) -> Vec<Started> {
     let Ok(log) = std::fs::read_to_string(dir.join("compete.log")) else {
         return Vec::new();
@@ -1203,6 +1214,9 @@ fn competing_starts(dir: &Path) -> Vec<Started> {
     let pcap = std::fs::read(dir.join("pcap-0.pcap"))
         .ok()
         .and_then(|b| packets(&b));
+    let pcap_end: Option<u64> = std::fs::read_to_string(dir.join("pcap-0.end"))
+        .ok()
+        .and_then(|t| t.split_whitespace().next()?.parse().ok());
     let seed = u8::try_from(10).ok();
     log.lines()
         .filter_map(|l| {
@@ -1226,8 +1240,10 @@ fn competing_starts(dir: &Path) -> Vec<Started> {
             let report = json
                 .as_ref()
                 .and_then(|v| v.pointer("/start/timestamp/timemillisecs")?.as_u64());
+            let end = launch + (secs * 1000.0) as u64;
+            let watched = pcap.is_some() && pcap_end.is_none_or(|ms| ms >= end);
             let failed = json.as_ref().is_none_or(|v| v.get("error").is_some())
-                || (pcap.is_some() && data.is_none());
+                || (watched && data.is_none());
             Some(Started {
                 launch,
                 report,
@@ -2906,6 +2922,39 @@ mod tests {
     }
 
     #[test]
+    fn a_capture_that_stopped_before_an_uploads_end_cant_fail_it() {
+        let dir = fixture("compete-cut");
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        std::fs::write(dir.join("settings"), format!("{settings}COMPETE=3:2\n")).unwrap();
+        std::fs::write(dir.join("compete.log"), format!("{} 3 2\n", START + 3000)).unwrap();
+        std::fs::write(
+            dir.join("compete-3.json"),
+            format!(
+                "{{\"start\":{{\"timestamp\":{{\"timemillisecs\":{}}}}}}}",
+                START + 3180
+            ),
+        )
+        .unwrap();
+        // The seed's capture holds none of the upload's data.
+        let us = |ms: u64| (START + ms) * 1000;
+        std::fs::write(
+            dir.join("pcap-0.pcap"),
+            pcap(&[(us(1000), tcp(10, 11, 1448, 0x10))]),
+        )
+        .unwrap();
+        let failed = || competing_starts(&dir)[0].failed;
+        assert!(failed());
+        // Its tcpdump exited 3.1 s in, while the seed ran: before the
+        // upload's data could show.
+        std::fs::write(dir.join("pcap-0.end"), format!("{} 1\n", START + 3100)).unwrap();
+        assert!(!failed());
+        // One that ran to the upload's end saw none of it.
+        std::fs::write(dir.join("pcap-0.end"), format!("{} 1\n", START + 5000)).unwrap();
+        assert!(failed());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn a_step_or_upload_off_its_schedule_keys_the_run_apart() {
         let dir = fixture("schedule");
         let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
@@ -2957,8 +3006,13 @@ mod tests {
         std::fs::write(dir.join("compete.log"), c).unwrap();
         let r = Run::read(&dir, &BTreeMap::new()).unwrap();
         assert_eq!(r.knobs["TESTBED_SCHEDULE"], "competing upload 1 failed");
-        assert!(!r.knobs.contains_key("STRIMS_SIM_CAL_COMPETE_MS"));
+        assert_eq!(r.knobs["STRIMS_SIM_CAL_COMPETE_MS"], "none");
         assert!(r.scenario().hosts[0].competing.is_empty());
+        // A twin of its knobs has none either, though they keep its
+        // schedule.
+        assert_eq!(r.knobs["STRIMS_SIM_CAL_COMPETE"], "3:2");
+        let twin = Calibration::from_knobs(|k| r.knobs.get(k).cloned());
+        assert!(twin.compete.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

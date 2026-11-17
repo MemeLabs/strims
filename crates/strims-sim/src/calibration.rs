@@ -149,8 +149,10 @@ pub struct Calibration {
     /// for given seconds (`<s>:<d> ...`), to a sink 30 ms away (the seed's
     /// delay and the testbed sink's). They need the window model
     /// (`STRIMS_SIM_TCP=1`). `STRIMS_SIM_CAL_COMPETE_MS=<ms>:<d> ...`, a
-    /// testbed run's recorded starts (its iperf3 reports' timestamps, ms
-    /// of stream), takes the place of `STRIMS_SIM_CAL_COMPETE`'s.
+    /// testbed run's recorded starts of the uploads that ran (their iperf3
+    /// reports' timestamps, ms of stream), takes the place of
+    /// `STRIMS_SIM_CAL_COMPETE`'s wherever it is set: `none` where none ran
+    /// (each one the run asked for failed).
     pub compete: Vec<(f64, f64)>,
     /// The seed's and the viewers' uplink buckets, in bytes; `None`, none.
     pub seed_burst: Option<u64>,
@@ -215,13 +217,13 @@ impl Calibration {
             rate_limit_pct: value(&get, "STRIMS_SIM_CAL_RATE_LIMIT_PCT"),
             window: false,
             chunks: None,
-            compete: {
-                let ms = pairs(&get, "STRIMS_SIM_CAL_COMPETE_MS");
-                if ms.is_empty() {
-                    pairs(&get, "STRIMS_SIM_CAL_COMPETE")
-                } else {
-                    ms.into_iter().map(|(at, d)| (at / 1000.0, d)).collect()
-                }
+            compete: match get("STRIMS_SIM_CAL_COMPETE_MS").as_deref().map(str::trim) {
+                Some("none") => Vec::new(),
+                Some(_) => pairs(&get, "STRIMS_SIM_CAL_COMPETE_MS")
+                    .into_iter()
+                    .map(|(at, d)| (at / 1000.0, d))
+                    .collect(),
+                None => pairs(&get, "STRIMS_SIM_CAL_COMPETE"),
             },
             seed_burst: value(&get, "STRIMS_SIM_CAL_SEED_BURST"),
             viewer_burst: value(&get, "STRIMS_SIM_CAL_VIEWER_BURST"),
