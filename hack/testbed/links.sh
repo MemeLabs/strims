@@ -42,6 +42,10 @@
 #       a node's whole link as run.sh builds it on its eth0, a command a
 #       line, from link_eval's LINK_* (linkcheck.sh renders each class's
 #       for a farm host)
+#   loss_filter MATCH EVERY
+#       the ingress filter on eth0's clsact that drops one packet in EVERY
+#       of those MATCH (a tc match) takes: SEED_LOSS_PCT's, node_tree's
+#       and run.sh's sink's
 #   link_modules
 #       the kernel modules run.sh and the classes shape with, for a host to
 #       load (a farm host's boot loads them)
@@ -142,8 +146,7 @@ link_change() {
 # eth0's offloads off, the class's modem (link_root, NODE's), and the
 # delay's netem (DELAY ms) on an ifb behind eth0's clsact redirect; with
 # PCAP 1, a mirror of what the node offers to an ifb (ifbo) ahead of it;
-# with LOSS_EVERY, the ingress filter that drops one packet in LOSS_EVERY
-# of those LOSS_MATCH (a tc match) takes; with SLOW (kbit/s), the
+# with LOSS_EVERY, loss_filter's of LOSS_MATCH; with SLOW (kbit/s), the
 # downlink's tbf on an ifb behind an ingress redirect, QUEUE ms of it.
 # linkcheck.sh builds each class's on a farm host.
 node_tree() {
@@ -160,13 +163,19 @@ node_tree() {
   echo "tc qdisc add dev eth0 clsact"
   echo "tc filter add dev eth0 egress matchall ${offered}action mirred egress redirect dev ifbd"
   if [ -n "$loss_every" ]; then
-    echo "tc filter add dev eth0 ingress prio 1 $loss_match action gact continue random netrand drop $loss_every"
+    loss_filter "$loss_match" "$loss_every"
   fi
   if [ -n "$slow" ]; then
     echo "ip link add ifbs type ifb && ip link set ifbs up"
     echo "tc filter add dev eth0 ingress prio 2 matchall action mirred egress redirect dev ifbs"
     echo "tc qdisc add dev ifbs root tbf rate ${slow}kbit burst 3028 limit $((slow * queue / 8))"
   fi
+}
+
+# gact's netrand drops each packet the match takes with probability
+# 1/EVERY.
+loss_filter() {
+  echo "tc filter add dev eth0 ingress prio 1 $1 action gact continue random netrand drop $2"
 }
 
 # Every run's: the delay's netem on an ifb behind eth0's clsact and its

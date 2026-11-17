@@ -131,9 +131,12 @@
 #   SEED_LOSS_PCT=<p>      the seed's site loses each packet it sends or
 #                          receives with this probability, in percent, as
 #                          the sim's site loss does: one in round(100/<p>)
-#                          (tc's gact) as each packet reaches its receiver.
-#                          netem's loss on the seed's egress would drop the
-#                          whole GSO buffer a packet leaves in
+#                          (tc's gact) as each packet reaches its receiver,
+#                          the node's and COMPETE's upload's alike: a filter
+#                          on the seed's ingress, and on each viewer's and
+#                          the sink's for what the seed sends them. netem's
+#                          loss on the seed's egress would drop the whole
+#                          GSO buffer a packet leaves in
 #   SS_EVERY=<s>           how often the seed's sockets are sampled into
 #                          ss-0.log (default 1)
 #   TOPOLOGY=<file>        links (`link a b` lines); default a star
@@ -324,6 +327,9 @@ relay=$subnet.5
 # An address on the subnet no container or host holds (the nodes are
 # .10 up, the relay .5, the sink .250, the bridge .1).
 unused=$subnet.254
+# The packets the seed sends, which each viewer and the sink lose
+# SEED_LOSS_PCT of (a tc match).
+from_seed="protocol ip u32 match ip src $subnet.10/32"
 
 n=$((viewers + 1))
 kind_of() { echo "${kinds[$1]:-native}"; }
@@ -587,8 +593,9 @@ for i in $(seq 0 $((n - 1))); do
   fi
   # The node's link (links.sh's node_tree, which linkcheck.sh checks on
   # a farm host): the seed loses what it receives, a viewer what the seed
-  # sends it, and the first viewer's downlink is SLOW_DOWN_KBIT's.
-  if [ "$i" -eq 0 ]; then match=matchall; else match="protocol ip u32 match ip src $subnet.10/32"; fi
+  # sends it (as the sink does), and the first viewer's downlink is
+  # SLOW_DOWN_KBIT's.
+  if [ "$i" -eq 0 ]; then match=matchall; else match=$from_seed; fi
   node_slow=""
   if [ "$i" -eq 1 ]; then node_slow=$slow; fi
   shape=$(node_tree "$delay" "$i" "${PCAP:-0}" "$match" "$loss_every" "$node_slow" "$queue")
@@ -724,11 +731,21 @@ fi
 
 if [ -n "$compete" ]; then
   sink=$subnet.250
+  # The sink's 10 ms, and, as a viewer does, its loss of what the seed
+  # sends it (the upload's data; the seed's own filter takes its acks),
+  # each frame alone (no GRO).
+  sink_shape="tc qdisc replace dev eth0 root netem delay 10ms limit 100000"
+  if [ -n "$loss_every" ]; then
+    sink_shape="$sink_shape
+ethtool -K eth0 gro off >/dev/null 2>&1 || true
+tc qdisc add dev eth0 clsact
+$(loss_filter "$from_seed" "$loss_every")"
+  fi
   names+=(tb-sink)
   docker rm -f tb-sink >/dev/null 2>&1 || true
   docker run -d --name tb-sink --network "$net" --ip "$sink" "${nov6[@]}" --cap-add NET_ADMIN "$image" \
     bash -c "set -e
-tc qdisc replace dev eth0 root netem delay 10ms limit 100000
+$sink_shape
 exec iperf3 -s" >/dev/null
   (
     for flow in $compete; do
