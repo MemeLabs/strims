@@ -44,8 +44,9 @@ A job whose own data won't fold fails alone (the store's FoldError). A
 fold that raises otherwise FOLD_TRIES times in a row has its batch's jobs
 folded one by one, those that raise again failing (counted, so a job that
 breaks every fold can't take host after host); where BREAK_JOBS different
-jobs have failed alone with no fold going through between, or a thread of
-the store dies, the store is broken (status.json's `broken`).
+jobs have failed alone with no job folding between (a job retried counts
+once, and a fold whose jobs all fail on their own data is none), or a
+thread of the store dies, the store is broken (status.json's `broken`).
 Its jobs waiting to fold go back (a `requeue` result: no attempt spent),
 as do the running ones (killed), the queued ones and any that ended into
 it before serve saw it broken (give_back_waiting); it tells the
@@ -556,7 +557,7 @@ class Store:
 
     def folder(self) -> None:
         failures = 0
-        # The jobs that failed alone since a fold last went through.
+        # The jobs that failed alone since a job last folded.
         failed_alone: set[str] = set()
         while not self.broken:
             with self.cv:
@@ -567,9 +568,10 @@ class Store:
             batch = self.folds()[:FOLD_BATCH]
             if batch:
                 try:
-                    self.fold(batch)
+                    folded = self.fold(batch)
                     failures = 0
-                    failed_alone.clear()
+                    if folded:
+                        failed_alone.clear()
                 except Exception as e:
                     # (A job's own data that won't fold raises FoldError,
                     # which fold fails that job for: this is the rest.)
@@ -611,14 +613,14 @@ class Store:
     def fold_alone(self, wids: list[str]) -> tuple[bool, list[str]]:
         """Folds each of `wids` on its own, failing those that raise (a
         done result with no row and the error, as a failed job's: the
-        controller counts it): whether any folded, and those that failed.
-        One job alone isn't tried again: it fails."""
+        controller counts it): whether any folded, and those that failed
+        so (one that fold failed on its own data is neither). One job
+        alone isn't tried again: it fails."""
         folded, failed = False, []
         for w in wids:
             if len(wids) > 1:
                 try:
-                    self.fold([w])
-                    folded = True
+                    folded = bool(self.fold([w])) or folded
                     continue
                 except Exception as e:
                     self.error = f"fold: {e}"[-1000:]
@@ -673,9 +675,10 @@ class Store:
         db = self.db(seq)
         return sum(p.stat().st_size for p in (db, db.with_suffix(".duckdb.wal")) if p.exists())
 
-    def fold(self, wids: list[str]) -> None:
+    def fold(self, wids: list[str]) -> int:
         """Folds finished jobs into the open generation, then leaves their
-        results in done/ naming it; one without tables fails."""
+        results in done/ naming it; one without tables fails, as does one
+        whose own data won't fold (FoldError). How many folded."""
         recs = {}
         for w in wids:
             try:
@@ -715,6 +718,7 @@ class Store:
             (self.fold_dir / f"{w}.json").unlink(missing_ok=True)
         with self.cv:
             self.open_jobs += len(recs) - len(failed)
+        return len(recs) - len(failed)
 
     def testbed_tables(self, wid: str, rec: dict) -> str | None:
         """A testbed run's tables, written (testbed_tables, niced; the next

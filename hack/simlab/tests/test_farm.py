@@ -1151,10 +1151,14 @@ class TestbedTables(unittest.TestCase):
         self.assertEqual(json.loads(runs[0]["row_json"]), {**full})
         self.assertTrue((flushed / "viewers.parquet").exists())
 
-    def broken_store(self, fold, jobs, batch=None):
+    def broken_store(self, fold, jobs, batch=None, again=(), later=(), testbed=()):
         """A store whose fold is `fold`, given `jobs` to fold, run until it
-        breaks or every job has a done result; the store, and each job's
-        done result (None for none)."""
+        breaks or every job has a done result, each of `again` taken once it
+        has one and added again (the controller's retry: the same id), and
+        `later` added once every one of `jobs` has one; each of `testbed` a
+        testbed run whose tables fail (FAKE_TABLES refuses its out dir), for
+        the real Store.fold. The store, and each job's done result (None for
+        none)."""
         root = self.host_root()
         (root / "policy.json").write_text(json.dumps({"dir": str(self.dir / "sink")}))
         args = mock.Mock(run="r1", instance="i-1", policy=str(root / "policy.json"), rotate_mb=100.0, duckdb=None)
@@ -1168,15 +1172,36 @@ class TestbedTables(unittest.TestCase):
             for p in patches:
                 stack.enter_context(p)
             store = self.worker.Store(root, args)
+
+            def add(j):
+                out = root / "work" / j / "out"
+                out.mkdir(parents=True, exist_ok=True)
+                job = {"id": j, "kind": "testbed"}
+                if j in testbed:
+                    (out / "fail").touch()
+                    job.update(bin="b.tar.gz", tables_pending=True)
+                store.add(j, job, {"id": j, "row": {"steal_pct": 0}}, {}, out)
+
             with store.cv:
                 # All of them in place before the folder takes a batch.
                 for j in jobs:
-                    out = root / "work" / j / "out"
-                    out.mkdir(parents=True)
-                    store.add(j, {"id": j, "kind": "testbed"}, {"id": j, "row": {"steal_pct": 0}}, {}, out)
+                    add(j)
+            again, later, jobs = list(again), list(later), list(jobs)
             deadline = time.monotonic() + 20
-            while (store.broken is None and not all((root / "done" / f"{j}.json").exists() for j in jobs)
+            while (store.broken is None
+                   and (again or later or not all((root / "done" / f"{j}.json").exists() for j in jobs))
                    and time.monotonic() < deadline):
+                for j in [j for j in again if (root / "done" / f"{j}.json").exists()]:
+                    (root / "done" / f"{j}.json").unlink()
+                    again.remove(j)
+                    with store.cv:
+                        add(j)
+                if later and all((root / "done" / f"{j}.json").exists() for j in jobs):
+                    with store.cv:
+                        for j in later:
+                            add(j)
+                    jobs += later
+                    later = []
                 real_sleep(0.05)
             store.close(0.1)
         done = {j: json.loads(f.read_text()) if (f := root / "done" / f"{j}.json").exists() else None for j in jobs}
@@ -1361,6 +1386,7 @@ class TestbedTables(unittest.TestCase):
                 raise RuntimeError("poison")
             for w in wids:
                 store.give_back([w], None, requeue=False)
+            return len(wids)
 
         _, store, done = self.broken_store(fold, ["jA", "jB"], batch=batch)
         self.assertIsNone(store.broken)
@@ -1374,6 +1400,63 @@ class TestbedTables(unittest.TestCase):
     def test_a_job_that_breaks_its_fold_alone_fails_alone(self):
         # As a testbed host folds: one job a batch.
         self.poison(1)
+
+    def test_a_batch_whose_job_fails_on_its_own_data_by_the_real_fold_folds_none(self):
+        real = self.worker.Store.fold
+
+        def fold(store, wids):
+            # jC folds for real (its tables fail: its own data); every other
+            # fold raises.
+            if wids == ["jC"]:
+                return real(store, wids)
+            raise RuntimeError("disk full")
+
+        # jA fails alone. Then jB and jC, a batch of two, fail their fold:
+        # folded one by one, jB fails alone and jC on its own data, which
+        # folds none. Two jobs failed alone with nothing folded between, so
+        # the store breaks.
+        _, store, done = self.broken_store(fold, ["jA"], batch=2, later=["jB", "jC"], testbed=["jC"])
+        self.assertIsNotNone(store.broken, "the store breaks")
+        self.assertIn("disk full", store.broken)
+        self.assertIn("no node lines", done["jC"]["error"])
+        for j in ("jA", "jB", "jC"):
+            self.assertIsNone(done[j].get("requeue"), j)
+        for j in ("jA", "jB"):
+            self.assertIn("disk full", done[j]["error"])
+
+    def test_a_retried_job_that_breaks_its_folds_counts_once(self):
+        calls = []
+
+        def fold(store, wids):
+            calls.append(list(wids))
+            raise RuntimeError("poison")
+
+        # jA fails alone, the controller retries it (the same id), and it
+        # fails alone again: one job, not the store's fault.
+        _, store, done = self.broken_store(fold, ["jA"], batch=1, again=["jA"])
+        self.assertEqual(calls, [["jA"]] * (2 * self.worker.FOLD_TRIES))
+        self.assertIsNone(store.broken)
+        self.assertIn("poison", done["jA"]["error"])
+        self.assertIsNone(done["jA"].get("requeue"))
+
+    def test_a_fold_whose_jobs_fail_on_their_own_data_folds_none(self):
+        def fold(store, wids):
+            if wids == ["jB"]:
+                # Its own data won't fold (FoldError, a testbed run's
+                # tables): failed, nothing raised, nothing folded.
+                store.give_back(["jB"], "its own data", requeue=False)
+                return 0
+            raise RuntimeError("disk full")
+
+        # jA and jC fail alone with only jB's failure between: the store
+        # breaks.
+        _, store, done = self.broken_store(fold, ["jA", "jB", "jC"], batch=1)
+        self.assertIsNotNone(store.broken, "the store breaks")
+        self.assertIn("disk full", store.broken)
+        self.assertEqual(done["jB"]["error"], "its own data")
+        for j in ("jA", "jC"):
+            self.assertIn("disk full", done[j]["error"])
+            self.assertIsNone(done[j].get("requeue"))
 
     def test_a_stored_runs_tables_are_the_folders_and_their_failure_fails_it(self):
         root = self.host_root()
