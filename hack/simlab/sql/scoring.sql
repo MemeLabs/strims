@@ -1273,7 +1273,10 @@ CREATE OR REPLACE MACRO twin_window_of(jobs, lo_s := 10, hi_s := -1) AS TABLE
 --   seed_upload         the seed's uplink IP bytes (bins' seed_up_bytes
 --                       and its SACKs; TCP's pure ACKs apart) over its
 --                       uplink's rate (its uplink_rate levels) times the
---                       window
+--                       window's bins that measure them (a testbed run's
+--                       capture that stopped early leaves the rest
+--                       unmeasured; each per-second rate below takes the
+--                       bins that measure it alike)
 --   seed_charged        its link bytes, its pure ACKs' too, over the same
 --   seed_busy_permille  the seed meter's busy share (seconds' busy)
 --   seed_copies         an adaptive seed's copies (seconds' copies)
@@ -1321,7 +1324,8 @@ CREATE OR REPLACE MACRO twin_window_of(jobs, lo_s := 10, hi_s := -1) AS TABLE
 --   seed_wire_per_written
 --                       the seed's uplink IP bytes, pure ACKs and SACKs
 --                       in, over the bytes its driver wrote (node_bins:
---                       data_bytes and ovh)
+--                       data_bytes and ovh), over the bins its capture
+--                       measured
 -- and over the seed's meter samples (meter_samples, every one):
 --   seed_rate_bps       its meter's rate, mean
 --   seed_children, seed_budget, seed_copies_p50, seed_latest_floor_p50_ms
@@ -1406,17 +1410,23 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 10, hi_s := -1, full_packet :
                CASE WHEN sim = 'testbed' THEN viewer_up_bytes ELSE viewer_up_bytes - viewer_ovh * viewer_up_packets END
                    AS viewer_ip
         FROM bin),
+    -- Each rate is over the bins that measure what it counts: a testbed
+    -- run's capture or tc sampler that stopped early leaves its bins past
+    -- the stop unmeasured (NULL), which count in neither its bytes nor its
+    -- time. The viewers' switched and shed are their nodes' own counters,
+    -- which every bin measures.
     wire AS (
         SELECT k, src, count(*) * any_value(bin_ms) / 1000.0 AS secs,
-               sum(seed_ip) / sum(rate * bin_ms / 1000.0) AS seed_upload,
-               sum(seed_link) / sum(rate * bin_ms / 1000.0) AS seed_charged,
-               sum(seed_drops) / (count(*) * any_value(bin_ms) / 1000.0) AS seed_drops_s,
-               (sum(seed_up_packets) + sum(seed_up_ack_packets)) / (count(*) * any_value(bin_ms) / 1000.0) AS seed_pps,
+               sum(seed_ip) / sum(rate * bin_ms / 1000.0) FILTER (WHERE seed_ip IS NOT NULL) AS seed_upload,
+               sum(seed_link) / sum(rate * bin_ms / 1000.0) FILTER (WHERE seed_link IS NOT NULL) AS seed_charged,
+               sum(seed_drops) / (count(seed_drops) * any_value(bin_ms) / 1000.0) AS seed_drops_s,
+               sum(seed_up_packets + seed_up_ack_packets)
+                   / (count(seed_up_packets + seed_up_ack_packets) * any_value(bin_ms) / 1000.0) AS seed_pps,
                sum(seed_up_ack_packets) / nullif(sum(seed_up_packets) + sum(seed_up_ack_packets), 0) AS seed_ack_share,
                sum(seed_small_packets) / nullif(sum(seed_up_packets), 0) AS seed_small_share,
-               sum(viewer_ip) / (count(*) * any_value(bin_ms) / 1000.0) AS viewer_up_bps,
-               sum(viewer_switched) / (count(*) * any_value(bin_ms) / 1000.0) AS viewer_switched_s,
-               sum(viewer_shed) / (count(*) * any_value(bin_ms) / 1000.0) AS viewer_shed_s
+               sum(viewer_ip) / (count(viewer_ip) * any_value(bin_ms) / 1000.0) AS viewer_up_bps,
+               sum(viewer_switched) / (count(viewer_switched) * any_value(bin_ms) / 1000.0) AS viewer_switched_s,
+               sum(viewer_shed) / (count(viewer_shed) * any_value(bin_ms) / 1000.0) AS viewer_shed_s
         FROM units GROUP BY ALL),
     -- The meter's truth, what the seed could upload at each sample: its
     -- meter_samples' avail_bps (Report::upload_cap_at's, on both sides),
@@ -1457,14 +1467,19 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 10, hi_s := -1, full_packet :
         ASOF JOIN rate r ON r.k = s.k AND r.src = s.src AND (s.sec + 0.5) * 1e6 >= r.t_us
         WHERE s.sec >= w.lo AND s.sec < w.hi AND s.avail >= 0
         GROUP BY ALL),
+    -- The seed's wire bytes over what its driver wrote, over the bins its
+    -- capture measured (its driver's counters measure every bin).
     nb AS (
-        SELECT n.k, n.src,
-               sum(n.up_bytes + coalesce(n.up_sack_bytes, 0) + n.up_ack_bytes
-                   - CASE WHEN j.sim = 'testbed' THEN 0
-                          ELSE j.seed_ovh * (n.up_packets + coalesce(n.up_sack_packets, 0) + n.up_ack_packets) END)
-                   / nullif(sum(n.data_bytes + n.ovh), 0) AS seed_wire_per_written
-        FROM node_bins n JOIN j USING (k, src) JOIN w USING (k, src)
-        WHERE n.node = 0 AND n.t_ms >= w.lo * 1000 AND n.t_ms < w.hi * 1000 GROUP BY ALL),
+        SELECT k, src, sum(wire) / nullif(sum(written) FILTER (WHERE wire IS NOT NULL), 0) AS seed_wire_per_written
+        FROM (SELECT n.k, n.src,
+                     n.up_bytes + coalesce(n.up_sack_bytes, 0) + n.up_ack_bytes
+                         - CASE WHEN j.sim = 'testbed' THEN 0
+                                ELSE j.seed_ovh * (n.up_packets + coalesce(n.up_sack_packets, 0) + n.up_ack_packets)
+                           END AS wire,
+                     n.data_bytes + n.ovh AS written
+              FROM node_bins n JOIN j USING (k, src) JOIN w USING (k, src)
+              WHERE n.node = 0 AND n.t_ms >= w.lo * 1000 AND n.t_ms < w.hi * 1000)
+        GROUP BY ALL),
     ms AS (
         SELECT m.k, m.src, avg(m.rate_bps) AS seed_rate_bps, sketch_quantile(m.children, 50) AS seed_children,
                sketch_quantile(m.budget, 50) AS seed_budget, sketch_quantile(m.copies, 50) AS seed_copies_p50,

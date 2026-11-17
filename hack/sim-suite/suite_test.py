@@ -399,6 +399,49 @@ class Arithmetic(unittest.TestCase):
         self.assertAlmostEqual(fit["c"]["ratio"], 1000.0 / 450.0)
         self.assertEqual(fit["c"]["caveat"], "the testbed's truth with S_c = 1 (no channel_bytes) in 1 of its 2 runs")
 
+    def test_a_capture_that_ends_early_scores_the_bins_it_measured(self):
+        """twin_runs_of's seed_upload and seed_charged take their bytes over
+        the uplink's rate times the bins that measure them, and the seed's
+        packets, drops and viewers' bytes a second, and the seed's wire
+        bytes over what its driver wrote, over the bins that measure them:
+        a testbed run whose capture and tc sampler stopped at 25 s (bins'
+        and node bins' wire columns NULL from then, the driver's counters
+        measured to the end) reads as the run whose capture ran to the end,
+        where its whole window would read it at half."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "twin.duckdb"
+            side = self.twin_lake(path)
+            ended = lambda t, v: f"{v} " if t < 25000 else "NULL "
+            bins = ", ".join(
+                f"('{k}', '{src}', {t}, "
+                + ", ".join(ended(t, v) if k == "tb0" else f"{v} " for v in (50, 0, 1, 0, 0, 1, 10, 2, 30, 0, 1, 0))
+                + ", 0, 0, 0)"
+                for k, src in (("tb1", "testbed/x"), ("tb0", "testbed/y")) for t in range(0, 50000, 100))
+            # The seed's node bins: 60 wire bytes of 50 written and 10 of
+            # overhead a bin, its wire columns ending with tb0's capture.
+            nodes = ", ".join(
+                f"('{k}', '{src}', 0, {t}, "
+                + ", ".join(ended(t, v) if k == "tb0" else f"{v} " for v in (60, 0, 0, 1, 0, 0))
+                + ", 50, 10)"
+                for k, src in (("tb1", "testbed/x"), ("tb0", "testbed/y")) for t in range(0, 50000, 100))
+            database(path, "INSERT INTO events VALUES ('tb1', 'testbed/x', 0, 'uplink_rate', 0, 1000), "
+                           "('tb0', 'testbed/y', 0, 'uplink_rate', 0, 1000); "
+                           f"INSERT INTO bins VALUES {bins}; INSERT INTO node_bins VALUES {nodes};")
+            got = {(r["k"], r["measure"]): r["value"]
+                   for r in scored(f"FROM twin_runs_of({side}) WHERE measure IN "
+                                   "('seed_upload', 'seed_charged', 'seed_pps', 'seed_drops_s', 'viewer_up_bps', "
+                                   "'seed_wire_per_written');")}
+        scoring.SCORE_DB = self.db
+        for k in ("tb1", "tb0"):
+            # 50 IP bytes a 100 ms bin against 100 of the rate; a data
+            # packet and a pure ACK of 10 bytes, 14 each of tbf's framing.
+            self.assertAlmostEqual(got[(k, "seed_upload")], 0.5)
+            self.assertAlmostEqual(got[(k, "seed_charged")], (50 + 10 + 2 * 14) / 100)
+            self.assertAlmostEqual(got[(k, "seed_pps")], 20.0)
+            self.assertAlmostEqual(got[(k, "seed_drops_s")], 20.0)
+            self.assertAlmostEqual(got[(k, "viewer_up_bps")], 300.0)
+            self.assertAlmostEqual(got[(k, "seed_wire_per_written")], 1.0)
+
     def test_sums(self):
         """compensated_sum adds a list in its order as Python's sum() adds
         floats, bit for bit (signed zeros, the infinities and NaN too), where
