@@ -3383,7 +3383,11 @@ pub(crate) mod cols {
         /// pure ACKs and the data channels' SACKs): of each, the packets and
         /// the bytes their links charge for them (their IP bytes, plus their
         /// framing at a site that charges it). The row's `packets_ack` and
-        /// `up_acks` count both kinds, over the whole run and every host.
+        /// `up_acks` count both kinds, over the whole run and every host. A
+        /// testbed run writes IP bytes there: each pure TCP ACK's IP length
+        /// from its node's capture, and no SACKs (a data channel's, inside
+        /// DTLS, count with its data: the up_sack columns are empty); the
+        /// queries add its class's overhead (scoring.sql's link_overhead).
         ///
         /// None is written as -1.
         WhoCounter(u16),
@@ -3954,7 +3958,11 @@ pub(crate) mod cols {
         /// pure ACKs and the data channels' SACKs): of each, the packets and
         /// the bytes their links charge for them (their IP bytes, plus their
         /// framing at a site that charges it). The row's `packets_ack` and
-        /// `up_acks` count both kinds, over the whole run and every host.
+        /// `up_acks` count both kinds, over the whole run and every host. A
+        /// testbed run writes IP bytes there: each pure TCP ACK's IP length
+        /// from its node's capture, and no SACKs (a data channel's, inside
+        /// DTLS, count with its data: the up_sack columns are empty); the
+        /// queries add its class's overhead (scoring.sql's link_overhead).
         ///
         /// None is written as an empty field.
         Counter(u16),
