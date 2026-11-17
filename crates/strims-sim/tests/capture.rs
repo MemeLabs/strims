@@ -1164,6 +1164,7 @@ fn meter_samples_say_what_they_are(
     for h in hosts {
         let mut readings = Vec::new();
         let mut channel = 0;
+        let mut measured = false;
         for m in r.hosts[h]
             .runner
             .meter
@@ -1237,7 +1238,7 @@ fn meter_samples_say_what_they_are(
                     int(&row, "first_wave_capacity_bps"),
                 ],
                 state.map_or([None; 5], |x| [
-                    Some(x.budget as i64),
+                    (x.budget > 0).then_some(x.budget as i64),
                     Some(x.window as i64),
                     Some(x.copies as i64),
                     Some(x.first_wave as i64),
@@ -1251,6 +1252,15 @@ fn meter_samples_say_what_they_are(
                     None,
                     "{at}: a viewer has no seed state"
                 );
+            }
+            // A budget is empty until measured; once measured it holds a
+            // slot a stream at least, and stays measured while its seed
+            // runs, which here runs one incarnation.
+            if let Some(b) = int(&row, "budget") {
+                assert!(b >= 1, "{at}: budget {b}");
+                measured = true;
+            } else {
+                assert!(!measured, "{at}: a budget unmeasured after it was measured");
             }
             // The channel bytes are cumulative over the host's incarnations,
             // and a sim records them at every sample.

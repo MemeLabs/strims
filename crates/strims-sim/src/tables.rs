@@ -951,7 +951,8 @@ impl Report {
                     // Zero until measured: no reading.
                     opt(m.budget_capacity.get(&0).copied().filter(|&c| c > 0)),
                     opt(m.latest_floor_ms.get(&0).map(|&f| u64::from(f))),
-                    of_seed(|x| x.budget as u64),
+                    // Zero until measured: no reading.
+                    opt(seed.as_ref().map(|x| x.budget as u64).filter(|&b| b > 0)),
                     of_seed(|x| x.window as u64),
                     of_seed(|x| x.copies as u64),
                     of_seed(|x| x.first_wave as u64),

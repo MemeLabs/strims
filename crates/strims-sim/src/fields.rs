@@ -4283,7 +4283,7 @@ pub(crate) mod cols {
         /// The adaptive seed's budget in stream slots at the sample
         /// (`SeedSample::budget`, `PushStats::seed_budget`): its latest state
         /// change in the first swarm at or before the sample
-        /// (`RunnerReport::seed_changes`), zero until measured; empty at other
+        /// (`RunnerReport::seed_changes`); empty until measured, and at other
         /// nodes.
         ///
         /// None is written as an empty field.

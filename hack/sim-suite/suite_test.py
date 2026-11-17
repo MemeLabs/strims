@@ -399,6 +399,23 @@ class Arithmetic(unittest.TestCase):
         self.assertAlmostEqual(fit["c"]["ratio"], 1000.0 / 450.0)
         self.assertEqual(fit["c"]["caveat"], "the testbed's truth with S_c = 1 (no channel_bytes) in 1 of its 2 runs")
 
+    def test_a_seeds_budget_median_leaves_its_unmeasured_samples_out(self):
+        """twin_runs_of's seed_budget is the median of the seed's measured
+        budgets: an unmeasured one, empty or 0 (no measured budget is 0),
+        is left out, where taking it in would set a median of two
+        unmeasured samples and one of 30 to 0."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "twin.duckdb"
+            side = self.twin_lake(path)
+            database(path, "UPDATE meter_samples SET budget = CASE WHEN t_ms = 35000 THEN 30 "
+                           "WHEN k = 'tw' THEN 0 END;")
+            got = {r["k"]: r["value"]
+                   for r in scored(f"FROM twin_runs_of({side}) WHERE measure = 'seed_budget';")}
+        scoring.SCORE_DB = self.db
+        self.assertEqual(sorted(got), ["tb0", "tb1", "tw", "tw0"])
+        for k, v in got.items():
+            self.assertAlmostEqual(v, 30, delta=0.5, msg=k)
+
     def test_a_capture_that_ends_early_scores_the_bins_it_measured(self):
         """twin_runs_of's seed_upload and seed_charged take their bytes over
         the uplink's rate times the bins that measure them, and the seed's

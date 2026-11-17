@@ -1333,7 +1333,19 @@ CREATE OR REPLACE MACRO twin_window_of(jobs, lo_s := 10, hi_s := -1) AS TABLE
 --                       copies and the latest floor its budget check read,
 --                       medians: each steps with joins and changes, and
 --                       its median is the level most of the window holds,
---                       where a mean pools the ramp to it
+--                       where a mean pools the ramp to it. The budget's
+--                       median is over the samples with a measured
+--                       budget: an unmeasured one is empty, or 0, which no
+--                       measured budget is (it is a slot a stream at
+--                       least). A seed takes meter samples from its first
+--                       viewer's arrival on both sides (a twin's from the
+--                       stats tick after it, a testbed node's from its
+--                       line after it) and measures its budget about 3 s
+--                       on, so a seed whose first viewer arrives past
+--                       about 6 s has unmeasured samples in the window
+--                       from 10 s; a twin's viewers arrive as its knobs
+--                       draw them (a trickle by its seed), a testbed
+--                       run's as its JOINS give them
 --   seed_queue_delay_p50_ms, seed_queue_delay_p90_ms,
 --   seed_busy_p50_permille, seed_busy_p90_permille
 --                       its meter's queueing delay and busy share
@@ -1482,7 +1494,7 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 10, hi_s := -1, full_packet :
         GROUP BY ALL),
     ms AS (
         SELECT m.k, m.src, avg(m.rate_bps) AS seed_rate_bps, sketch_quantile(m.children, 50) AS seed_children,
-               sketch_quantile(m.budget, 50) AS seed_budget, sketch_quantile(m.copies, 50) AS seed_copies_p50,
+               sketch_quantile(nullif(m.budget, 0), 50) AS seed_budget, sketch_quantile(m.copies, 50) AS seed_copies_p50,
                sketch_quantile(m.queue_delay_ms, 50) AS seed_queue_delay_p50_ms,
                sketch_quantile(m.queue_delay_ms, 90) AS seed_queue_delay_p90_ms,
                sketch_quantile(m.busy_permille, 50) AS seed_busy_p50_permille,
