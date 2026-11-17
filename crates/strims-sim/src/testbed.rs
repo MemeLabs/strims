@@ -1127,7 +1127,7 @@ fn skipped_faults(s: &Scenario) -> Vec<usize> {
     };
     let mut out = Vec::new();
     for (i, f) in s.faults.iter().enumerate() {
-        let skip = f.at >= s.duration
+        let skip = !s.reaches(f.at)
             || match f.fault {
                 Fault::Crash(h) => {
                     let skip = down.get(h).copied().unwrap_or(false) || absent(h, f.at, &departed);

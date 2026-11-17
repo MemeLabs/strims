@@ -138,8 +138,12 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
         .zip(spec.swarms.first())
         .map(|(width, s)| (width.max(Duration::from_millis(1)), s.start));
     loop {
+        // A fault at the scenario's duration or past it is one the run
+        // never reaches (Scenario::reaches), though its hosts' teardown
+        // runs past it, as a testbed run's report takes it.
         while let Some(f) = faults.get(next)
             && sim.elapsed() >= f.at
+            && spec.reaches(f.at)
         {
             if !apply(&mut sim, w, w.wan.lock().as_mut(), &f.fault) {
                 w.fault_skipped(next);

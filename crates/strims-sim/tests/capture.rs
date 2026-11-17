@@ -613,6 +613,33 @@ fn skipping(wan: bool) -> Scenario {
     s
 }
 
+/// A fault at the scenario's duration is one the run never reaches, as
+/// one past it is, though the hosts' teardown runs the sim on past it, and
+/// one just before it applies: the boundary strims-sim's testbed reports
+/// take too (`Scenario::reaches`), so a twin and its testbed run skip the
+/// same faults.
+#[test]
+fn a_fault_at_the_runs_end_is_unreached() {
+    for wan in [true, false] {
+        let mut spec = skipping(wan);
+        spec.faults.clear();
+        let end = spec.duration;
+        spec.at(end - Duration::from_millis(1), Fault::PauseReading(1));
+        spec.at(end, Fault::PauseReading(2));
+        spec.at(end + Duration::from_millis(1), Fault::PauseReading(1));
+        assert!(spec.reaches(end - Duration::from_millis(1)) && !spec.reaches(end));
+        let r = run(spec, 1).unwrap();
+        // The hosts' teardown runs the sim past its duration.
+        assert!(r.sim_secs > end.as_secs_f64(), "wan {wan}: {}", r.sim_secs);
+        let skipped: Vec<Duration> = r
+            .skipped_faults
+            .iter()
+            .map(|&i| r.scenario.faults[i].at)
+            .collect();
+        assert_eq!(skipped, [end, end + Duration::from_millis(1)], "wan {wan}");
+    }
+}
+
 /// The tables read the faults the run applied and leave out those it
 /// skipped ([`strims_sim::Report::skipped_faults`], by their index in the
 /// time-ordered faults, each named in the trace but the one past the

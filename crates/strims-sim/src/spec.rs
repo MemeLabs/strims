@@ -857,6 +857,13 @@ impl Scenario {
         !self.arrivals.is_t0() || self.departures.is_some()
     }
 
+    /// Whether a run of the scenario reaches time `at`: a fault at its
+    /// duration or past it is one the run never applies
+    /// (Report::skipped_faults), on a testbed run's report as on a sim's.
+    pub fn reaches(&self, at: Duration) -> bool {
+        at < self.duration
+    }
+
     /// When host `h` leaves for good ([`Fault::Depart`]), and how: its
     /// earliest departure, the first given of those at one time, as the
     /// run applies them (a later one is a second departure, which it
