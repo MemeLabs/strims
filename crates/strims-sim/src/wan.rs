@@ -124,8 +124,11 @@
 //! ([`HostSpec::competing`](crate::spec::HostSpec::competing)) are TCP
 //! connections that always have data and reach no host: full segments
 //! enter the host's uplink queue within their window, are lost when it is
-//! full or to the host's site loss, and are acknowledged the upload's round
-//! trip after they leave the uplink, their lost segments resent first.
+//! full or to the host's site loss (from the first frame lost, a frame
+//! past a segment's first leaving the rest to go again alone), and are
+//! acknowledged the upload's round trip after they leave the uplink,
+//! unless the site loses the acknowledgement, which the next then carries;
+//! their lost segments resent first.
 //! Their windows follow the connections' CUBIC, HyStart and recoveries
 //! too. They need the window model's bounded queues.
 
@@ -333,6 +336,10 @@ enum Event {
     /// Competing upload `i` learns its segment `seq` of `frames` frames was
     /// lost.
     CrossLost { i: usize, seq: u64, frames: u32 },
+    /// Competing upload `i`'s tail-loss probe is due: what lost
+    /// acknowledgements acknowledged and no later one carried, its
+    /// acknowledgement carries a round trip on.
+    CrossProbe { i: usize },
     /// A SACK of data channel `conn` reaches its sender: the association's
     /// SACK of the event's key.
     SctpSack { conn: (SocketAddr, SocketAddr) },
@@ -1098,6 +1105,14 @@ struct Cross {
     /// Lost segments not yet resent, by sequence number, and their frames.
     /// Bound: the segments in flight.
     resend: BTreeMap<u64, u32>,
+    /// What acknowledgements the host's access link lost acknowledged (each
+    /// segment's sequence number, frames and send time), which the next to
+    /// arrive acknowledges too, as Linux's cumulative and selective ones
+    /// cover an earlier one's, and when its tail-loss probe is queued
+    /// ([`Event::CrossProbe`], `NIL` without). Bound: the segments in
+    /// flight.
+    acks_lost: Vec<(u64, u32, Time)>,
+    probe_at: Time,
 }
 
 /// Whether a segment taking `tx` to send overflows an access queue that
@@ -1313,6 +1328,8 @@ impl Scheduler {
                     flow: Flow::default(),
                     started: false,
                     resend: BTreeMap::new(),
+                    acks_lost: Vec::new(),
+                    probe_at: Time::NIL,
                 })
             })
             .collect();
@@ -1762,11 +1779,15 @@ impl Scheduler {
                     frames,
                     rtt,
                 } => {
-                    self.cross_acked(t, i, seq, frames, rtt);
+                    self.cross_ack_arrives(t, i, seq, frames, rtt);
                     continue;
                 }
                 Event::CrossLost { i, seq, frames } => {
                     self.cross_lost(t, i, seq, frames);
+                    continue;
+                }
+                Event::CrossProbe { i } => {
+                    self.cross_probe(t, i);
                     continue;
                 }
                 Event::SctpSack { conn } => {
@@ -1879,6 +1900,7 @@ impl Scheduler {
                 | Event::DelAck { .. }
                 | Event::CrossAck { .. }
                 | Event::CrossLost { .. }
+                | Event::CrossProbe { .. }
                 | Event::SctpSack { .. }
                 | Event::SctpTimeout { .. }
                 | Event::SctpDelSack { .. }
@@ -2307,6 +2329,69 @@ impl Scheduler {
         }
     }
 
+    /// Competing upload `i`'s acknowledgement of segment `seq` reaches its
+    /// host at `t`, unless the host's access link loses it (the site's
+    /// loss), when the next to arrive acknowledges it too.
+    fn cross_ack_arrives(&mut self, t: Time, i: usize, seq: u64, frames: u32, rtt: Duration) {
+        let Some(host) = self.cross.get(i).map(|c| c.host) else {
+            return;
+        };
+        if self.net.lost_off_net(t, host, 1) {
+            self.traced_cross(t, i, "acklost", seq, frames as usize * MSS as usize);
+            if let Some(c) = self.cross.get_mut(i) {
+                c.acks_lost.push((seq, frames, t - rtt));
+                if c.probe_at.is_nil() {
+                    // Its tail-loss probe, two smoothed round trips and 2
+                    // ms past its last send, unless an acknowledgement
+                    // comes first.
+                    let srtt = c.flow.srtt.max(c.rtt);
+                    let at = (c.flow.last_send + srtt * 2 + Duration::from_millis(2)).max(t);
+                    c.probe_at = at;
+                    let key = self.next;
+                    self.next += 1;
+                    self.events.insert((at, key), Event::CrossProbe { i });
+                }
+            }
+            return;
+        }
+        let carried = self
+            .cross
+            .get_mut(i)
+            .map(|c| std::mem::take(&mut c.acks_lost))
+            .unwrap_or_default();
+        for (s, n, sent) in carried {
+            self.cross_acked(t, i, s, n, t - sent);
+        }
+        self.cross_acked(t, i, seq, frames, rtt);
+    }
+
+    /// Competing upload `i`'s tail-loss probe is due at `t`: if what lost
+    /// acknowledgements acknowledged is still unheard, the probe's
+    /// acknowledgement, a round trip on, carries it (and may be lost in
+    /// turn, which queues the next probe).
+    fn cross_probe(&mut self, t: Time, i: usize) {
+        let Some(c) = self.cross.get_mut(i) else {
+            return;
+        };
+        c.probe_at = Time::NIL;
+        if c.acks_lost.is_empty() {
+            return;
+        }
+        let (seq, frames, sent) = c.acks_lost.remove(0);
+        let at = t + c.rtt + self.net.up_backlog(c.host, t);
+        let key = self.next;
+        self.next += 1;
+        self.events.insert(
+            (at, key),
+            Event::CrossAck {
+                i,
+                seq,
+                frames,
+                rtt: at - sent,
+            },
+        );
+    }
+
     /// Competing upload `i`'s segment `seq` was acknowledged at `t`, a
     /// round trip of `rtt` after it went out, as a connection's are
     /// ([`Scheduler::acked`]): the end of a recovery it completes, a
@@ -2456,16 +2541,38 @@ impl Scheduler {
             }
             let id = self.next;
             self.next += 1;
-            if self.net.lost_off_net(depart, host, took) {
-                self.events.insert(
-                    (depart + rtt, id),
-                    Event::CrossLost {
-                        i,
-                        seq,
-                        frames: took,
-                    },
-                );
-                continue;
+            match self.net.first_lost_off_net(depart, host, took) {
+                Some(0) => {
+                    self.events.insert(
+                        (depart + rtt, id),
+                        Event::CrossLost {
+                            i,
+                            seq,
+                            frames: took,
+                        },
+                    );
+                    continue;
+                }
+                Some(k) => {
+                    // A frame past the first: the leading ones arrive and
+                    // what follows is a segment of its own, resent alone.
+                    let tail = seq + u64::from(k);
+                    if let Some(c) = self.cross.get_mut(i) {
+                        c.flow.sent_at.insert(tail, at);
+                    }
+                    let id = self.next;
+                    self.next += 1;
+                    self.events.insert(
+                        (depart + rtt, id),
+                        Event::CrossLost {
+                            i,
+                            seq: tail,
+                            frames: took - k,
+                        },
+                    );
+                    took = k;
+                }
+                None => {}
             }
             // Two packets are more than the receiver's rcv_mss, which
             // acknowledges them at once (`ack::Owed`); a lone one goes with
@@ -4352,6 +4459,36 @@ mod tests {
     }
 
     #[test]
+    fn a_competing_segment_that_loses_a_later_frame_on_its_path_resends_it_alone() {
+        // The same for an upload's two-frame segments: one whose second
+        // frame the path loses loses that frame alone.
+        let mut rest = 0;
+        let mut whole = 0;
+        for seed in 1..=4 {
+            let (_, _, trace) = beside_an_upload_traced(0, (0, 10), 0.05, seed);
+            let up: Vec<_> = trace.iter().filter(|e| e.to == 2).collect();
+            assert!(up.iter().all(|e| e.what != "drop"), "a queue drop");
+            let mut sent = BTreeMap::new();
+            for e in &up {
+                match e.what {
+                    "tx" | "rtx" => {
+                        sent.insert(e.seq, e.len);
+                    }
+                    "lost" => match sent.get(&e.seq) {
+                        Some(&len) if len <= e.len => whole += 1,
+                        _ => rest += 1,
+                    },
+                    _ => {}
+                }
+            }
+        }
+        assert!(
+            rest > 0 && whole > 0,
+            "{rest} frames lost after a segment's first, {whole} segments whole"
+        );
+    }
+
+    #[test]
     fn site_loss_holds_windows_down() {
         // Over a 30 ms round trip, a connection that loses 1 % of its
         // packets keeps a window of a few segments, as Linux's does
@@ -4374,6 +4511,35 @@ mod tests {
             "{} bytes in 4 s against {} without the loss",
             rate(&b),
             rate(&a)
+        );
+    }
+
+    #[test]
+    fn a_competing_uploads_acknowledgements_cross_the_site_loss() {
+        // The site loses the upload's acknowledgements as it loses its
+        // data, each with the loss's probability; what a lost one
+        // acknowledged goes with the next, so its segments aren't sent
+        // again.
+        let (_, _, trace) = beside_an_upload_traced(0, (0, 10), 0.05, 1);
+        let upload = |what: &str| {
+            trace
+                .iter()
+                .filter(|e| e.to == 2 && e.what == what)
+                .collect::<Vec<_>>()
+        };
+        let (acked, unheard) = (upload("ack").len(), upload("acklost"));
+        let share = unheard.len() as f64 / (acked + unheard.len()) as f64;
+        assert!((0.02..0.09).contains(&share), "{share} of {acked} lost");
+        let resent: BTreeSet<u64> = upload("rtx").iter().map(|e| e.seq).collect();
+        let lost: BTreeSet<u64> = upload("lost").iter().map(|e| e.seq).collect();
+        let again: Vec<u64> = unheard
+            .iter()
+            .map(|e| e.seq)
+            .filter(|s| resent.contains(s) && !lost.contains(s))
+            .collect();
+        assert!(
+            again.is_empty(),
+            "resent after a lost acknowledgement: {again:?}"
         );
     }
 

@@ -1632,6 +1632,31 @@ mod tests {
         }
     }
 
+    /// The same for a competing upload: it keeps sending to its stop.
+    #[test]
+    fn a_competing_upload_keeps_sending_through_lost_acknowledgements() {
+        for seed in 1..=8 {
+            let mut bench = Bench::testbed(
+                "VIEWERS=1\nSECS=20\nSEED_LOSS_PCT=5\nCOMPETE=2:16",
+                "",
+                "probe 0 1 3 1000",
+                true,
+            )
+            .unwrap();
+            bench.seed = seed;
+            let last = tcp_events(&mut bench)
+                .iter()
+                .filter(|e| e["to"] == 2 && (e["k"] == "tx" || e["k"] == "rtx"))
+                .filter_map(|e| e["t"].as_i64())
+                .max()
+                .unwrap_or_default();
+            assert!(
+                last > 17_000_000,
+                "seed {seed}: the upload's last send at {last} us"
+            );
+        }
+    }
+
     /// A lossy bench's draws are its seed's: the same seed runs the same,
     /// another loses other packets.
     #[test]

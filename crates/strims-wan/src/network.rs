@@ -882,9 +882,26 @@ impl Network {
         1.0 - (1.0 - self.end_mut(a).loss_at(depart)) * (1.0 - self.end_mut(b).loss_at(reach))
     }
 
+    /// The first of a message's `packets` packets from `h` to a lossless
+    /// peer outside the network, leaving `h`'s uplink at `at`, that `h`'s
+    /// access link loses, each packet its own draw: for a caller that
+    /// resends what the link lost packet by packet (the window model's
+    /// competing uploads).
+    pub fn first_lost_off_net(&mut self, at: Time, h: usize, packets: u32) -> Option<u32> {
+        if !self.options.loss {
+            return None;
+        }
+        let p = self.end_mut(h).loss_at(at);
+        if p <= 0.0 {
+            return None;
+        }
+        let dir = self.dir_mut(h, h);
+        (0..packets).find(|_| unit(&mut dir.rng) < p)
+    }
+
     /// Whether a message of `packets` packets from `h` to a lossless peer
     /// outside the network, leaving `h`'s uplink at `at`, loses a packet on
-    /// `h`'s access link.
+    /// `h`'s access link (or one from such a peer reaching `h` at `at`).
     pub fn lost_off_net(&mut self, at: Time, h: usize, packets: u32) -> bool {
         if !self.options.loss {
             return false;
