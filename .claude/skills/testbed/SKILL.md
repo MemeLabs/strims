@@ -103,7 +103,10 @@ crates differ from those the page was built from builds its own page.
   nothing and the lag is carried. `effects` scores one against
   the other, a testbed run paired with the twin seed of its number. The bare TCP bench is
   `hack/testbed/bench.sh` with `benchsuite.py run` and `benchsuite.py
-  score`, over the cases in hack/testbed/bench/.
+  score`, over the cases in hack/testbed/bench/. Its comparison
+  (`hack/testbed/bench.py`) reads a run's uplink queue and qdisc tree
+  through a release testbed_tables (`--uplink`; `TABLES_BIN`, else `cargo
+  build --release -p strims-sim --example testbed_tables`).
 - **On the farm.** A `kind = "testbed"` matrix runs run.sh as a black box
   on hosts of exactly `host_cores` cores. Its arms are paired on one host
   for each repeat. The sim-farm skill covers running one, and farm.py's

@@ -2,7 +2,8 @@
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
 #
-# tcstats_test.py's captures: each link class's tree as run.sh builds a
+# strims-sim's testbed module's tests' captures (its uplink reads
+# tc-<i>.log as tcsample writes it): each link class's tree as run.sh builds a
 # node's (links.sh's node_tree on eth0, a dummy here, from what
 # testbed_link parses the class's spec to), at 100 kbit/s under a UDP flood
 # so a queue stands and drops, then the modem's device's tc text and JSON

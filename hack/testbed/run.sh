@@ -257,9 +257,10 @@
 #   tc-<i>.log             each node's qdiscs on every device at 10 Hz
 #                          (tcsample's): ms since the epoch, then `tc -s -j
 #                          qdisc show`'s JSON, each qdisc with its dev.
-#                          hack/testbed/tcstats.py and strims-sim's testbed
-#                          module read it, finding the modem's 10: on eth0
-#                          or, with slots, on ifbm
+#                          strims-sim's testbed module reads it (its
+#                          uplink; testbed_tables --uplink prints it),
+#                          finding the modem's 10: on eth0 or, with slots,
+#                          on ifbm
 #   ss-0.log               the seed's sockets every SS_EVERY (sssample's:
 #                          `ss -tin state established`'s text)
 #   tcsample-<i>.err, sssample-0.err

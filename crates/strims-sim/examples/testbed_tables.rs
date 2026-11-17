@@ -8,6 +8,7 @@
 //! ```text
 //! testbed_tables <out dir> <tables dir> [--knob KEY=VALUE ...]
 //! testbed_tables --knobs <out dir>
+//! testbed_tables --uplink <out dir> <node>
 //! ```
 //!
 //! `job.json` holds the run's key (`k`), its sim (`testbed`), its test
@@ -15,8 +16,18 @@
 //! `--knob`s, which add to them or replace them) and its row
 //! ([`strims_sim::testbed::row`]). `--knobs` prints the knobs alone, from
 //! the out dir's settings, topology and links (no node lines), as JSON.
+//! `--uplink` prints, as JSON, the qdisc tree that shaped the run
+//! (`qdisc`, [`qdisc_tree`]; `null` where its files don't say) and node
+//! `<node>`'s access link queue as the tables read it ([`uplink`]): its
+//! `spec`, its queue's `kind` and `dev`, and its `samples`, `[unix ms,
+//! drops, held, rate or null]` each; or where the reader refuses its log
+//! (a log without its class's queue), the refusal as `error` in their
+//! place. It reads any out dir run.sh wrote, a bench's (bench.sh's) too,
+//! which has no tables, and refuses a dir without run.sh's `settings`.
 //!
 //! [`knobs_of`]: strims_sim::testbed::knobs_of
+//! [`qdisc_tree`]: strims_sim::testbed::qdisc_tree
+//! [`uplink`]: strims_sim::testbed::uplink
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -37,9 +48,43 @@ fn run() -> Result<(), String> {
     // The command line names the run.
     #[allow(clippy::disallowed_methods)]
     let mut args = std::env::args().skip(1);
-    let usage =
-        "usage: testbed_tables <out dir> <tables dir> [--knob KEY=VALUE ...] | --knobs <out dir>";
+    let usage = "usage: testbed_tables <out dir> <tables dir> [--knob KEY=VALUE ...] | --knobs <out dir> | --uplink <out dir> <node>";
     let first = args.next().ok_or(usage)?;
+    if first == "--uplink" {
+        let dir = PathBuf::from(args.next().ok_or(usage)?);
+        // A run without its files would read as one without samples.
+        if !dir.join("settings").exists() {
+            return Err(format!(
+                "{}: no run.sh out dir (no settings)",
+                dir.display()
+            ));
+        }
+        let node: usize = args
+            .next()
+            .ok_or(usage)?
+            .parse()
+            .map_err(|e| format!("<node>: {e}"))?;
+        let mut out = serde_json::Map::new();
+        out.insert("qdisc".to_owned(), testbed::qdisc_tree(&dir).ok().into());
+        match testbed::uplink(&dir, node) {
+            Ok(u) => {
+                let samples: Vec<serde_json::Value> = u
+                    .samples
+                    .iter()
+                    .map(|s| serde_json::json!([s.ms, s.drops, s.held, s.rate]))
+                    .collect();
+                out.insert("spec".to_owned(), u.spec.into());
+                out.insert("kind".to_owned(), u.kind.into());
+                out.insert("dev".to_owned(), u.dev.into());
+                out.insert("samples".to_owned(), samples.into());
+            }
+            Err(e) => {
+                out.insert("error".to_owned(), e.into());
+            }
+        }
+        println!("{}", serde_json::Value::Object(out));
+        return Ok(());
+    }
     if first == "--knobs" {
         let dir = PathBuf::from(args.next().ok_or(usage)?);
         let read = |name: &str| {

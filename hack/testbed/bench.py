@@ -6,7 +6,10 @@
     hack/testbed/bench.py <run dir> [<sim log dir> ...] [--from <s>]
                           [--only <arm>,...]
 
-<run dir> is bench.sh's output: the testbed's node-<i>.jsonl and tc-0.log,
+<run dir> is bench.sh's output: the testbed's node-<i>.jsonl and tc-0.log
+(its qdisc tree and its seed's queue as strims-sim's testbed module reads
+them: `testbed_tables --uplink`, TABLES_BIN or this checkout's release
+build of strims-sim's testbed_tables example),
 and the sim's logs in sim/ and sim-tcp/ (more sim log dirs, as
 testbed_bench --sim writes them, may follow; --only keeps the testbed and
 the arms named). Each arm gets a column; each
@@ -44,14 +47,40 @@ links that carry the same schedule:
           retransmits; sim: two per lost segment)
 """
 
+import functools
 import json
 import os
 import re
+import subprocess
 import sys
 from collections import defaultdict
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import tcstats  # noqa: E402
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+# strims-sim's testbed_tables, whose --uplink reads a run's qdisc tree and
+# its seed's queue (strims-sim's testbed module: the tables' parser of
+# tc-<i>.log): TABLES_BIN, else this checkout's release build.
+TABLES_BIN = os.environ.get("TABLES_BIN") or os.path.join(
+    ROOT, os.environ.get("CARGO_TARGET_DIR", "target"), "release", "examples", "testbed_tables")
+
+
+def note(msg):
+    """Says on stderr what the comparison can't read from a run."""
+    print(f"NOTE: {msg}", file=sys.stderr)
+
+
+@functools.cache
+def uplink(run):
+    """The run's qdisc tree and its seed's access link queue, as
+    `testbed_tables --uplink` reads them: {"qdisc", "spec", "kind", "dev",
+    "samples": [[unix ms, drops, held, rate or None], ...], "error"}, its
+    error (a log without the class's queue) in place of the samples."""
+    if not os.path.exists(TABLES_BIN):
+        raise FileNotFoundError(f"no testbed_tables at {TABLES_BIN}: cargo build --release -p strims-sim "
+                                f"--example testbed_tables (or TABLES_BIN)")
+    p = subprocess.run([TABLES_BIN, "--uplink", run, "0"], capture_output=True, text=True)
+    if p.returncode:
+        raise RuntimeError(f"testbed_tables --uplink {run}: {p.stderr.strip()}")
+    return json.loads(p.stdout)
 
 
 def quantiles(xs, qs=(0.1, 0.5, 0.9, 0.99)):
@@ -120,28 +149,27 @@ def classes(sched):
 
 def tc_queue(run, start_ms):
     """The seed's uplink queue in ms, [(t_us, ms)], from tc-0.log: its link
-    class's queue (tcstats.uplink) over the rate it drains at then."""
+    class's queue (uplink) over the rate it drains at then."""
     if start_ms is None:
         return []
-    try:
-        spec, got = tcstats.uplink(run, 0)
-    except LookupError as e:
-        tcstats.note(f"{e}: no upq")
+    u = uplink(run)
+    if u.get("error"):
+        note(f"{u['error']}: no upq")
         return []
-    if got and got[-1][1].rate is None:
-        tcstats.note(f"{run}: the seed's {spec} link's queue ({got[-1][1].kind} 10:) has no rate to time it by: no upq")
-    return [((ms - start_ms) * 1000, q.held / q.rate * 1000) for ms, q in got if q.rate]
+    got = u["samples"]
+    if got and got[-1][3] is None:
+        note(f"{run}: the seed's {u['spec']} link's queue ({u['kind']} 10:) has no rate to time it by: no upq")
+    return [((ms - start_ms) * 1000, held / rate * 1000) for ms, _, held, rate in got if rate]
 
 
 def tc_drops(run):
     """What the seed's uplink queue dropped over the run, from tc-0.log's
     last sample."""
-    try:
-        spec, got = tcstats.uplink(run, 0)
-    except LookupError as e:
-        tcstats.note(f"{e}: no drops")
+    u = uplink(run)
+    if u.get("error"):
+        note(f"{u['error']}: no drops")
         return None
-    return got[-1][1].drops if got else None
+    return u["samples"][-1][1] if u["samples"] else None
 
 
 def tc_compete(run, start_ms):
@@ -197,23 +225,13 @@ def frames(run):
     """Whether the run's uplink queue took frames (run.sh's ifb segments
     TCP's GSO buffers ahead of the modem, the link class's qdisc 10:, eth0's
     root or with slots ifbm's), as against GSO buffers (a netem root with a
-    tbf child, before)."""
-    p = os.path.join(run, "qdisc-0.txt")
-    if not os.path.exists(p):
-        return False
-    with open(p) as f:
-        text = f.read()
-    try:
-        qs = tcstats.parse_text(text)
-    except ValueError as e:
-        # A file cut short: a root 10:, of any class, as its header line
-        # shows one (`dev eth0`, or a slotted class's `dev ifbm`, in it
-        # since qdisc-<i>.txt has every device).
-        tcstats.note(f"{p}: {e}; taking a root 10: header in it for frames")
-        return re.search(r"^qdisc \S+ 10: (?:dev (?:eth0|ifbm) )?root\b", text, re.M) is not None
-    # Every device's (`tc -s -d qdisc show`), or eth0's and the ifb's before.
-    q = tcstats.find(qs, "10:", dev="eth0") or tcstats.find(qs, "10:")
-    return q is not None and q.parent is None
+    tbf child, before): its qdisc tree, as the tables key it (uplink's
+    `qdisc`), isn't that netem root's."""
+    q = uplink(run).get("qdisc")
+    if q is None:
+        note(f"{run}: no qdisc tree known; taking frames")
+        return True
+    return q != "netem>tbf"
 
 
 def metrics(nodes, sched, cls, t0_us, queue=None, compete=None, packets=False):

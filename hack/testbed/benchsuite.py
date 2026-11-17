@@ -30,7 +30,10 @@ times (default: each 8 s). `bursts` prints, unfloored, what a shaper's
 bucket moves first: each data link's bursts' first record's one-way delay
 and their arrival spread (first record read to last), p50/p90, the testbed
 against the arms (with --repeat all, each repeat's).
-Comparisons take repeat R (default r1) and the cases that ran.
+Comparisons take repeat R (default r1) and the cases that ran. They
+read each testbed run's uplink queue and qdisc tree through bench.py,
+which needs a release testbed_tables (TABLES_BIN, else `cargo build
+--release -p strims-sim --example testbed_tables`).
 """
 
 import math
