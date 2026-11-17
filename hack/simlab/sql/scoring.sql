@@ -1378,8 +1378,9 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 0, hi_s := 1e9, full_packet :
     -- of its link over its near-saturated windows, S_c its runner's
     -- channel bytes over vnic's. A testbed run's A and S_t come from its
     -- tc rates, steps and capture (strims-sim's testbed::gate), and its
-    -- S_c is 1: its node has no data_bytes counter yet, so its readings
-    -- over this truth run high by its channel share.
+    -- S_c is 1: its node has no data_bytes counter yet, so this truth
+    -- reads high, by 1 / S_c, and its readings over it (capacity over
+    -- truth) read low.
     truth AS (
         SELECT m.k, m.src, m.t_ms, m.capacity_bps, m.avail_bps AS truth_bps
         FROM meter_samples m SEMI JOIN j USING (k, src)
