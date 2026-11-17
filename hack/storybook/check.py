@@ -1085,7 +1085,7 @@ def start_server(port, log_dir, dist=None, log_name="server.log"):
     proc = subprocess.Popen(
         [os.environ.get(SERVER_PYTHON) or sys.executable, str(ROOT / "hack" / "console" / "server.py"),
          "--port", str(port),
-         "--host", "127.0.0.1", "--no-index", *(["--dist", str(dist)] if dist else [])],
+         "--host", "127.0.0.1", "--no-index", "--no-state", *(["--dist", str(dist)] if dist else [])],
         cwd=ROOT, stdin=subprocess.DEVNULL, stdout=log, stderr=log)
     base = f"http://127.0.0.1:{port}"
     deadline = time.monotonic() + 60

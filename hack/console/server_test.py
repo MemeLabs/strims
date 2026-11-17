@@ -1327,6 +1327,51 @@ class State(unittest.TestCase):
         server.remove_state(first_state)
         self.assertTrue(first_state.exists())
 
+    def checkout(self, name):
+        """A checkout of its own, its state dir made, and the server's environment for it."""
+        repo = DIR / name
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        states = repo / "target" / "console" / "servers"
+        states.mkdir(parents=True)
+        return states, {**os.environ, "SIM_DB_ROOT": str(DIR), "GIT_DIR": str(repo / ".git")}
+
+    def serve(self, env, *flags):
+        return subprocess.Popen([sys.executable, str(HERE / "server.py"), "--port", "0", "--host", "127.0.0.1",
+                                 "--no-index", *flags], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                text=True)
+
+    def test_no_state_serves_without_a_state_file(self):
+        states, env = self.checkout("checkout-no-state")
+        p = self.serve(env, "--no-state")
+        try:
+            # Its first line names its URL: "console: http://127.0.0.1:PORT/ (catalog …)".
+            port = int(p.stderr.readline().split("127.0.0.1:")[1].split("/")[0])
+            self.assertEqual(status_at("127.0.0.1", port), 200)
+            self.assertEqual(list(states.iterdir()), [])
+        finally:
+            p.send_signal(signal.SIGTERM)
+            p.wait(timeout=60)
+            p.stderr.close()
+        self.assertEqual(p.returncode, 0)
+        self.assertEqual(list(states.iterdir()), [])
+
+    def test_a_state_file_it_cant_write_stops_it_at_its_start(self):
+        states, env = self.checkout("checkout-read-only-state")
+        states.chmod(0o555)
+        try:
+            p = self.serve(env)
+            try:
+                _, err = p.communicate(timeout=60)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.communicate()
+                self.fail("it serves without its state file")
+        finally:
+            states.chmod(0o755)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("PermissionError", err)
+        self.assertEqual(list(states.iterdir()), [])
+
 
 def status_at(addr, port, headers=None):
     """GET /console/views's status at `addr`, with `headers`."""

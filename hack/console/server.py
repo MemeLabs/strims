@@ -6,7 +6,7 @@
 into it, and the console's page.
 
   python3 hack/console/server.py [--port 8086] [--host ADDR] [--connections 2]
-                                 [--memory 8GB] [--threads 8] [--no-index] [--build]
+                                 [--memory 8GB] [--threads 8] [--no-index] [--no-state] [--build]
                                  [--dist DIR] [--allow-host NAME]... [--allow-origin ORIGIN]...
 
 It listens on every interface, IPv6's and IPv4's where the machine has
@@ -99,7 +99,10 @@ they were opened at.
 While it runs, target/console/servers/PORT.json in the main checkout says
 where ({pid, port, urls}: its loopback URL, then those for the network),
 for hack/console/ui.py (simlab.views.server_states); it goes at exit.
-Each server has its own, so servers on other ports run side by side.
+Each server has its own, so servers on other ports run side by side. One
+it can't write stops the server at its start. `--no-state` writes none,
+for a server only the process that starts it uses and no tool should
+find: hack/storybook/check.py's.
 
 A saved view is hack/console/views/NAME.sql (one statement, with `$exp`,
 `$cell`, `$arm`, `$seed`, `$delay` and the like for the UI's pickers),
@@ -1292,6 +1295,8 @@ def main(argv=None):
     p.add_argument("--memory", default="8GB", help="the readers' memory limit")
     p.add_argument("--threads", type=int, default=8, help="the readers' threads")
     p.add_argument("--no-index", action="store_true", help="no index every 2 minutes")
+    p.add_argument("--no-state", action="store_true",
+                   help="no state file: a server only the process that starts it uses")
     p.add_argument("--build", action="store_true", help=f"{' '.join(BUILD)} first")
     p.add_argument("--dist", type=Path, default=DIST, metavar="DIR",
                    help="the page's build to serve (default this checkout's target/console/dist)")
@@ -1323,16 +1328,11 @@ def main(argv=None):
     else:
         urls = [f"http://{address_name(server.server_address[0])}:{port}/"]
         print(f"console: {urls[0]} (catalog {lake})", file=sys.stderr)
-    state = views.state_path(port)
+    state = None if a.no_state else views.state_path(port)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
-        try:
+        if state:
             write_state(state, port, urls)
-        except OSError as e:
-            # A checkout mounted read-only, as in hack/storybook/check.py's
-            # box, whose network nothing outside it reaches: no state.
-            print(f"console: no state file ({e})", file=sys.stderr)
-            state = None
         server.serve_forever()
     except KeyboardInterrupt:
         pass
