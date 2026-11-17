@@ -107,7 +107,11 @@
 //!   controller's choices; without it nothing is drawn;
 //! - with [`Scenario::seed_pin`], a `random` or `whole` pin's viewers come
 //!   from the same rng after the mix's, before the controller's choices
-//!   ([`seed_pin::resolve`]); no other pin, and no pin, draws anything.
+//!   ([`seed_pin::resolve`]); no other pin, and no pin, draws anything;
+//! - with [`Scenario::timer_lateness`], each host's lateness (its node
+//!   task's wake-ups and its frame writer's writes, [`late`]) comes from an
+//!   rng forked per host from one of its own, seeded from the run's seed,
+//!   which no other choice draws from; without it nothing is drawn.
 //!
 //! The schedule stays fixed because every host, the controller and every
 //! task run on the turmoil thread, shared state is `Rc<RefCell<…>>` over
@@ -137,6 +141,7 @@ mod fast_map;
 mod fields;
 mod host;
 mod hostile;
+pub mod late;
 pub mod link;
 pub mod loops;
 pub mod measures;

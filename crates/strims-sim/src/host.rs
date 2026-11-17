@@ -109,7 +109,16 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
     // The node's clock, off true time by the host's offset
     // (`Scenario::clock_skew`), as is the transfers' timer below.
     let clock = SimClock::turmoil(w.clock_epoch(h));
-    let (node, events) = Node::spawn(config, net, clock).await?;
+    // Its timers fire late (`Scenario::timer_lateness`).
+    let late = w
+        .lateness
+        .get(h)
+        .map(|l| crate::late::LateClock::new(clock, l.clone()));
+    let (node, events) = if let Some(late) = late {
+        strims_node::spawn_with_tls(config, net, late, strims_node::LinkTls::default()).await?
+    } else {
+        Node::spawn(config, net, clock).await?
+    };
     // Peers may link before the setup below finishes; they must know us.
     w.register_id(h, node.host_id());
 
@@ -204,7 +213,13 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
                 .await?;
             match spec.media {
                 Some(m) => spawn_local(media_writer_task(w.clone(), h, s, writer, m)),
-                None => spawn_local(writer_task(w.clone(), h, s, writer)),
+                None => spawn_local(writer_task(
+                    w.clone(),
+                    h,
+                    s,
+                    writer,
+                    w.lateness.get(h).cloned(),
+                )),
             };
             // `pool-find`: the writer names itself the swarm's source.
             if w.spec.exp.contains("pool-find")
@@ -693,9 +708,18 @@ async fn exchange(w: &World, h: HostIx, to: HostIx, n: usize, node: &Node) -> Re
 }
 
 /// Writes `frames_per_write` frames every `write_interval` from `start` to
-/// `stop`. The write index comes from the simulated time, so a restarted
-/// seed continues the numbering.
-async fn writer_task(w: Rc<World>, h: HostIx, s: usize, mut writer: SwarmWriter) {
+/// `stop`, each write as late as the host's timers fire (`late`,
+/// [`crate::late`]). A frame carries its write's due time, the report's
+/// (`Report::written_at`), as the testbed node's frames do, so a viewer's
+/// lag counts the writer's lateness. The write index comes from the
+/// simulated time, so a restarted seed continues the numbering.
+async fn writer_task(
+    w: Rc<World>,
+    h: HostIx,
+    s: usize,
+    mut writer: SwarmWriter,
+    late: Option<crate::late::Lateness>,
+) {
     let Some(spec) = w.spec.swarms.get(s).cloned() else {
         return;
     };
@@ -714,14 +738,17 @@ async fn writer_task(w: Rc<World>, h: HostIx, s: usize, mut writer: SwarmWriter)
         if at >= spec.stop {
             break;
         }
-        tokio::time::sleep(at.saturating_sub(sim_now())).await;
+        let late_by = late
+            .as_ref()
+            .map_or(Duration::ZERO, |l| l.draw().to_std().unwrap_or_default());
+        tokio::time::sleep((at + late_by).saturating_sub(sim_now())).await;
         if w.take_writer_reset(s) {
             match writer.reset().await {
                 Ok(()) => w.log(&me, format!("swarm {s} writer reset")),
                 Err(e) => w.log(&me, format!("swarm {s} writer reset failed: {e}")),
             }
         }
-        let t = sim_now_ms();
+        let t = u64::try_from(at.as_millis()).unwrap_or(u64::MAX);
         for (j, f) in buf.chunks_mut(FRAME_LEN).enumerate() {
             encode_frame(w.seed, s as u32, k * fpw + j as u64, t, f);
         }

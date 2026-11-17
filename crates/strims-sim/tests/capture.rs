@@ -1640,8 +1640,10 @@ fn every_read_and_answer_has_its_hold(r: &strims_sim::Report, d: &Path) {
 }
 
 /// Every viewer stored each chunk it read before it read a frame of it,
-/// the seed each chunk at its frames' write, and the forecast's `held_ms`
-/// is the sampled peer's own first store, empty (never -1) without one.
+/// the seed each chunk at its frames' write (when it was due, or at most
+/// 2 ms after with `Scenario::timer_lateness`), and the forecast's
+/// `held_ms` is the sampled peer's own first store, empty (never -1)
+/// without one.
 fn held_truth_meets_the_reads(r: &strims_sim::Report, d: &Path) {
     let swarm = &r.scenario.swarms[0];
     let per = (swarm.options.chunk_size / 1024) as u64;
@@ -1668,7 +1670,14 @@ fn held_truth_meets_the_reads(r: &strims_sim::Report, d: &Path) {
     assert!(!seed.is_empty());
     for (&c, &at) in &seed {
         let written = r.written_at(0, c * per + per - 1);
-        assert_eq!(at, written, "the seed's chunk {c}");
+        if r.scenario.timer_lateness {
+            assert!(
+                (written..=written + Duration::from_millis(2)).contains(&at),
+                "the seed's chunk {c}: due {written:?}, stored {at:?}"
+            );
+        } else {
+            assert_eq!(at, written, "the seed's chunk {c}");
+        }
     }
     let csv = strims_sim::tables::read_table(d, "forecast").unwrap();
     let mut rows = csv.lines();

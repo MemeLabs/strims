@@ -302,6 +302,10 @@ pub(crate) struct World {
     /// How far each host's clock reads ahead of true time
     /// ([`Scenario::clock_skew`]); empty without skew.
     pub clock_offsets: Vec<strims_base::time::Duration>,
+    /// Each host's timers' and stream writer's lateness
+    /// ([`Scenario::timer_lateness`]), its incarnations' in turn; empty
+    /// without it.
+    pub lateness: Vec<crate::late::Lateness>,
     /// With the tables, the nodes' parent sinks' channel
     /// ([`NodeConfig::parent_log`]): they send from inside the nodes'
     /// passes, and the records take what came at each stats sample, so it
@@ -351,6 +355,16 @@ impl World {
                 s.media.map(|m| m.encoder.trace(&mut rng, span))
             })
             .collect();
+        // The lateness streams come from an rng of their own, so turning
+        // them on moves no other draw.
+        let lateness = if spec.timer_lateness {
+            let mut late = det_rng(seed ^ crate::late::RNG_SALT);
+            (0..spec.hosts.len())
+                .map(|_| crate::late::Lateness::new(strims_base::rng::fork(&mut late)))
+                .collect()
+        } else {
+            Vec::new()
+        };
         let clock_offsets = crate::skew::offsets(spec.clock_skew, spec.hosts.len(), &mut rng);
         crate::arrivals::resolve(&mut spec, &mut rng);
         crate::hostile::draw_mix(&mut spec, &mut rng);
@@ -398,6 +412,7 @@ impl World {
             wan: SharedWan::default(),
             media_traces,
             clock_offsets,
+            lateness,
             parent_tx,
             parent_rx,
             stopped_tx,

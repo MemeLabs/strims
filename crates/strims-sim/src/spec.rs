@@ -590,6 +590,11 @@ pub struct Scenario {
     /// [`MAX_SKEW`](crate::skew::MAX_SKEW): as user machines' clocks are
     /// ([`ClockSkew::Real`]) by default.
     pub clock_skew: ClockSkew,
+    /// Whether each host's node task wakes and its frame writer writes a
+    /// millisecond or two late, as a real node's do ([`crate::late`] says
+    /// which timers that covers): off by default, when they run at their
+    /// deadlines and nothing is drawn.
+    pub timer_lateness: bool,
     /// When the first swarm's viewers arrive ([`crate::arrivals`]): with
     /// the run by default ([`Arrivals::T0`]). The run resolves it into
     /// [`HostSpec::arrive_at`] and lays the links out in arrival order.
@@ -850,6 +855,7 @@ impl Scenario {
             discovery: None,
             exp: BTreeSet::new(),
             clock_skew: ClockSkew::Real,
+            timer_lateness: false,
             arrivals: Arrivals::T0,
             departures: None,
             mix: false,

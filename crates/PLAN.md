@@ -523,7 +523,7 @@ and dropped are in `TRIED.md`.
     twin): the access kinds' buckets (`STRIMS_SIM_UPLINK_BURST=profiles`),
     framing (`STRIMS_SIM_FRAMING`), slots (`STRIMS_SIM_UPLINK_SLOTS`),
     capacity traces, and the timer-lateness model
-    (`STRIMS_SIM_TIMER_LATENESS`, on branch `twin-calibration`).
+    (`STRIMS_SIM_TIMER_LATENESS`).
   - At 20 Mbit/s the twin's seed serves more children, keeps a larger
     budget and cuts its copies less often than the testbed's. Find the
     cause and model it; the seed's budget is one of the meter search's

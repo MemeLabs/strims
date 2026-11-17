@@ -1052,7 +1052,10 @@ impl Report {
         }
     }
 
-    /// When frame `seq` of swarm `swarm` was written, in run time.
+    /// When frame `seq` of swarm `swarm` was due, in run time: its media
+    /// unit's time, or its write's due time, which the frame carries as
+    /// its stamp; a late writer ([`crate::Scenario::timer_lateness`])
+    /// writes it up to 2 ms after.
     pub fn written_at(&self, swarm: usize, seq: u64) -> Duration {
         let Some(s) = self.scenario.swarms.get(swarm) else {
             return Duration::ZERO;

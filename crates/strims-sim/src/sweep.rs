@@ -139,6 +139,11 @@
 //!   [`MAX_SKEW`](crate::skew::MAX_SKEW) (more fails the test); `0` draws
 //!   the signs alone; `off` skews and draws nothing. Unset, a scenario
 //!   keeps its own, `real` unless it says otherwise.
+//! - `STRIMS_SIM_TIMER_LATENESS=on` makes every node task's wake-ups and
+//!   the frame writers' writes a millisecond or two late, as a real
+//!   node's are ([`Scenario::timer_lateness`]; [`crate::late`] says which
+//!   timers that covers); `off` keeps them at their deadlines. Unset, a
+//!   scenario keeps its own, off unless it says otherwise.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), which the run second by second
 //!   (`Report::series_data`) and the tables' `seconds` take.
@@ -499,6 +504,18 @@ fn clock_skew_knob() -> Option<ClockSkew> {
     )
 }
 
+/// `STRIMS_SIM_TIMER_LATENESS` ([`Scenario::timer_lateness`]): `on` or
+/// `off`, if set and not blank.
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn timer_lateness_knob() -> Option<bool> {
+    let v = env("STRIMS_SIM_TIMER_LATENESS").filter(|v| !v.trim().is_empty())?;
+    match v.trim() {
+        "on" => Some(true),
+        "off" => Some(false),
+        other => panic!("STRIMS_SIM_TIMER_LATENESS={other}: on or off"),
+    }
+}
+
 /// `STRIMS_SIM_SEED_PIN` ([`crate::seed_pin::SeedPin::parse`]), if set
 /// and not `off`.
 #[allow(clippy::panic)] // a mistyped setting fails its test
@@ -736,6 +753,7 @@ fn sweep_seeds(
     let arrivals: Option<Arrivals> = knob("STRIMS_SIM_ARRIVALS");
     let departures = depart_knob();
     let clock_skew = clock_skew_knob();
+    let timer_lateness = timer_lateness_knob();
     let seed_pin = seed_pin_knob();
     let seed_links = seed_links_knob();
     let loops = knob::<u32>("STRIMS_SIM_LOOPS") == Some(1);
@@ -896,6 +914,9 @@ fn sweep_seeds(
         }
         if let Some(skew) = clock_skew {
             spec.clock_skew = skew;
+        }
+        if let Some(late) = timer_lateness {
+            spec.timer_lateness = late;
         }
         if let Some(pin) = &seed_pin {
             if let Err(e) = pin.check(&spec) {
