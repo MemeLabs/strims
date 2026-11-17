@@ -135,8 +135,9 @@ prefix.
             rise until it reads 80 % of it, the share of the uplink the seed's
             chunks used, the median viewer's first frame (seconds into the
             stream) and the honest viewers' lag p50 over their startup
-            (the verdict's phases), and the row's off_drop and off_rise
-            medians when it has them; --runs prints each run
+            (the verdict's phases), and the row's meter_off_drop_seeds and
+            meter_off_rise_seeds medians when it has them; --runs prints
+            each run
   delays    how the node's queueing delay readings follow its true uplink
             queue, per cell: for the meter's pings (qd), vnic's path excess
             (qdv) and its queued bytes over the delivery rate (qdb), the
@@ -785,6 +786,10 @@ def pair(a):
 
 
 TRACK_RISE = 0.8
+# The row's fields of how the seeds' meters tracked each drop and rise of
+# their available upload (`meter_off_{change}_{role}` in
+# crates/strims-wan/fields.toml); `track` shows their medians.
+TRACK_OFF = ("meter_off_drop_seeds", "meter_off_rise_seeds")
 
 
 def track_run(s, row):
@@ -808,7 +813,7 @@ def track_run(s, row):
         "fall": falls, "climb": climbs, "used": used,
         "first": med([x for x in firsts if x is not None]),
         "startup": quantile(phase_lags(s).get("startup", []), 50),
-        "off_drop": off("off_drop"), "off_rise": off("off_rise"),
+        **{k: off(k) for k in TRACK_OFF},
     }
 
 
@@ -822,13 +827,14 @@ def track(a):
     f = lambda x, fmt=".2f": "-" if x is None else format(x, fmt)
     lst = lambda xs: ",".join("-" if x is None else str(x) for x in xs) or "-"
     if a.runs_:
-        print("run | reading/uplink p10 p50 p90 | fall_s | climb_s | used | first_s startup_ms | off_drop off_rise")
+        print("run | reading/uplink p10 p50 p90 | fall_s | climb_s | used | first_s startup_ms | " + " ".join(TRACK_OFF))
         for label, env, t in done:
             cell = " ".join(f"{short(k)}={env.get(k)}" for k in group)
             r = t["ratio"]
             print(
                 f"{label} {cell} | {f(r[0])} {f(r[1])} {f(r[2])} | {lst(t['fall'])} | {lst(t['climb'])} |"
-                f" {f(t['used'])} | {f(t['first'], 'd')} {f(t['startup'], '.0f')} | {f(t['off_drop'])} {f(t['off_rise'])}"
+                f" {f(t['used'])} | {f(t['first'], 'd')} {f(t['startup'], '.0f')} | "
+                + " ".join(f(t[k]) for k in TRACK_OFF)
             )
         return
     cells = collections.defaultdict(list)
@@ -837,7 +843,8 @@ def track(a):
     num = lambda x: (0, float(x)) if x.replace(".", "", 1).isdigit() else (1, x)
     # A drop or rise the reading never followed counts as the stream's length.
     never = lambda ts, k: med([x if x is not None else 10**6 for t in ts for x in t[k]])
-    print(" ".join(short(k) for k in group) + " | n | reading/uplink p10 p50 p90 | fall_s | climb_s | used | first_s startup_ms | off_drop off_rise")
+    print(" ".join(short(k) for k in group) + " | n | reading/uplink p10 p50 p90 | fall_s | climb_s | used | first_s startup_ms | "
+          + " ".join(TRACK_OFF))
     for cell in sorted(cells, key=lambda c: [num(x) for x in c]):
         ts = cells[cell]
         r = [med([t["ratio"][i] for t in ts if t["ratio"][i] is not None]) for i in range(3)]
@@ -846,8 +853,8 @@ def track(a):
         print(
             f"{' '.join(x or '-' for x in cell)} | {len(ts)} | {f(r[0])} {f(r[1])} {f(r[2])} | {nv(fall)} | {nv(climb)} |"
             f" {f(med([t['used'] for t in ts if t['used'] is not None]))} | {f(med([t['first'] for t in ts if t['first'] is not None]), '.1f')}"
-            f" {f(med([t['startup'] for t in ts if t['startup'] is not None]), '.0f')} |"
-            f" {f(med([t['off_drop'] for t in ts if t['off_drop'] is not None]))} {f(med([t['off_rise'] for t in ts if t['off_rise'] is not None]))}"
+            f" {f(med([t['startup'] for t in ts if t['startup'] is not None]), '.0f')} | "
+            + " ".join(f(med([t[k] for t in ts if t[k] is not None])) for k in TRACK_OFF)
         )
 
 
