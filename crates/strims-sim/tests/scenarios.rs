@@ -2472,19 +2472,21 @@ fn withholders(seed: u64) -> Scenario {
 }
 
 /// Withholders take push subscriptions, send a peer only the chunks it
-/// asked of them, and send their STREAM_CLOSEs as STREAM_OPENs, so their
-/// children prune them for the pushes that never come. At every seed:
-/// some honest viewer takes a withholder as a parent, every change away
-/// from one is a prune (`Report::parent_changes`), and none taken before
-/// the stream's last 2 s is kept at the end; every chunk an honest viewer
-/// stored from a withholder it had asked of that withholder by then (the
-/// request logs), and its held log names it an answer (the arrivals'
-/// `how`); no STREAM_CLOSE of a withholder's reaches an honest
-/// viewer and the STREAM_OPENs they read of it are its opens and closes,
-/// none in flight at the end (each withholder's admissions, declines,
-/// sheds and subscribers, which queue them, settled 4 s before it), and
-/// some withholder declines; and every honest viewer reads the whole
-/// stream, which the withholders answer requests for.
+/// asked of them, one copy a request, and send their STREAM_CLOSEs as
+/// STREAM_OPENs, so their children prune them for the pushes that never
+/// come. At every seed: some honest viewer takes a withholder as a
+/// parent, every change away from one is a prune
+/// (`Report::parent_changes`), and none taken before the stream's last
+/// 2 s is kept at the end; every chunk an honest viewer stored from a
+/// withholder it had asked of that withholder by then (the request logs),
+/// and its held log names it an answer (the arrivals' `how`); no honest
+/// viewer had more chunks from a withholder than it asked of it; no
+/// STREAM_CLOSE of a withholder's reaches an honest viewer and the
+/// STREAM_OPENs they read of it are its opens and closes, none in flight
+/// at the end (each withholder's admissions, declines, sheds and
+/// subscribers, which queue them, settled 4 s before it), and some
+/// withholder declines; and every honest viewer reads the whole stream,
+/// which the withholders answer requests for.
 #[test]
 fn withholders_keep_streams_open_and_get_pruned() {
     sweep(
@@ -2557,10 +2559,13 @@ fn withholders_keep_streams_open_and_get_pruned() {
                     r.hosts[k.0].name, r.hosts[*p].name, k.1
                 ));
             }
-            // A withholder sends a child only chunks the child asked of it:
-            // the request logs show the asks, and the held log names each
-            // an answer, one that lands just after its request timed out
-            // too.
+            // A withholder sends a child only chunks the child asked of it,
+            // one copy a request: the request logs show the asks, the held
+            // log names each an answer, one that lands just after its
+            // request timed out too, and the child's chunks from it are at
+            // most its requests of it (each a chunk), which a push of a
+            // chunk it had already had in answer would pass, unless the
+            // child had asked for it again.
             for (h, host) in r.hosts.iter().enumerate() {
                 if !honest(r, h) {
                     continue;
@@ -2570,6 +2575,16 @@ fn withholders_keep_streams_open_and_get_pruned() {
                         "{} lost {} requests",
                         host.name, host.requests_lost
                     ));
+                }
+                for &(peer, sw, m) in &host.messages {
+                    if let Some(w) = peer.filter(|p| sw == 0 && held.contains(p))
+                        && m.chunks_in > m.requests_out
+                    {
+                        return Err(format!(
+                            "{} had {} chunks from {} for {} requests",
+                            host.name, m.chunks_in, r.hosts[w].name, m.requests_out
+                        ));
+                    }
                 }
                 for a in &host.arrivals {
                     let Some(w) = a.peer.filter(|p| held.contains(p)) else {

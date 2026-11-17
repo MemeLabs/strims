@@ -25,9 +25,10 @@
 //!   left out) and ignores being choked (the CHOKEs and UNCHOKEs sent to
 //!   it are left out before its runner reads them).
 //! - `withholder`: takes push subscriptions and keeps them, but sends a
-//!   peer only the DATA that peer requested, and its STREAM_CLOSEs go out
-//!   as STREAM_OPENs: its children keep it as a parent until they notice
-//!   the pushes don't come.
+//!   peer only the DATA that peer requested, one copy a request (so a
+//!   push of a chunk it asked for after the answer is left out too), and
+//!   its STREAM_CLOSEs go out as STREAM_OPENs: its children keep it as a
+//!   parent until they notice the pushes don't come.
 //! - `colluder`: a liar whose reports to the seed are false too. A run's
 //!   colluders form a [`Group`], as if coordinated outside the protocol.
 //!   Its own reports to the seed (the peer that asked it for them) are
@@ -377,6 +378,19 @@ fn append<'m>(
     (off + cw.finish(), sent)
 }
 
+/// Whether a peer requested every chunk of `bin` of a withholder
+/// (`requested`, the chunks it asked for and hasn't had), forgetting them
+/// if so: each request lets one copy of its chunk through.
+fn take_requested(requested: &mut BTreeSet<Bin>, bin: Bin) -> bool {
+    if !chunks_of(bin, REQUEST_MEMORY).all(|c| requested.contains(&c)) {
+        return false;
+    }
+    for c in chunks_of(bin, REQUEST_MEMORY) {
+        requested.remove(&c);
+    }
+    true
+}
+
 /// The chunk bins `bin` spans, at most `max`.
 fn chunks_of(bin: Bin, max: usize) -> impl Iterator<Item = Bin> {
     let (first, last) = bin.base();
@@ -479,7 +493,7 @@ impl Adversary for Grab {
 /// A withholder's frames (the module docs' `withholder`).
 struct WithholdPush {
     cfg: ReaderConfig,
-    /// The chunks each peer requested of it on each swarm.
+    /// The chunks each peer requested of it on each swarm and hasn't had.
     requested: BTreeMap<(HostId, SwarmKey), BTreeSet<Bin>>,
 }
 
@@ -510,12 +524,12 @@ impl Adversary for WithholdPush {
 
     fn egress(&mut self, peer: AdversaryPeer<'_>, _: Time, frame: &mut [u8], len: usize) -> usize {
         let id = *peer.host_id;
-        let requested = &self.requested;
+        let requested = &mut self.requested;
         edit(frame, len, self.cfg, |channel, m| match m {
             Message::Data(d) => peer
                 .swarm_to(channel)
-                .and_then(|s| requested.get(&(id, s)))
-                .is_some_and(|r| r.contains(&d.bin.base_left()))
+                .and_then(|s| requested.get_mut(&(id, s)))
+                .is_some_and(|r| take_requested(r, d.bin))
                 .then_some(m),
             Message::StreamClose(c) => Some(Message::StreamOpen(StreamOpen {
                 stream: c.stream,
@@ -781,6 +795,25 @@ mod tests {
         assert_eq!(got, vec![Bin(0), Bin(2), Bin(4), Bin(6)]);
         assert_eq!(chunks_of(Bin(3), 2).count(), 2);
         assert_eq!(chunks_of(Bin(10), 16).collect::<Vec<_>>(), vec![Bin(10)]);
+    }
+
+    #[test]
+    fn a_withholder_lets_one_copy_of_each_requested_chunk_through() {
+        // Chunks 0 and 2 (bin 1) and 8 asked for; 4, 6 and 10 not.
+        let mut requested: BTreeSet<Bin> = chunks_of(Bin(1), REQUEST_MEMORY).collect();
+        requested.insert(Bin(8));
+        // A bin with a chunk never asked for goes nowhere, and forgets
+        // nothing: none of its chunks asked for (bin 5, chunks 4 and 6),
+        // or only its first (bin 9, chunks 8 and 10).
+        assert!(!take_requested(&mut requested, Bin(5)));
+        assert!(!take_requested(&mut requested, Bin(9)));
+        assert_eq!(requested.len(), 3);
+        // A requested bin goes once.
+        assert!(take_requested(&mut requested, Bin(1)));
+        assert!(!take_requested(&mut requested, Bin(0)));
+        assert!(take_requested(&mut requested, Bin(8)));
+        assert!(!take_requested(&mut requested, Bin(8)));
+        assert!(requested.is_empty());
     }
 
     #[test]
