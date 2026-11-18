@@ -1,0 +1,46 @@
+# The seed's writes in the testbed tier's star-7-5 (native, its captures
+# from 25 to 45 s): every 250 ms the stream's 64 KiB reaches the seed,
+# which writes each child its share at once in 4 KiB chunks, the
+# children's shares 64, 16 and 2 KiB (the capture's 66, 17 and 2 KB a
+# period, 54 % of a 5 Mbit/s uplink). The four other links take 1.5 small
+# packets a period each, as the captures' do: a 25-byte write 2 ms after
+# the burst every other period and 52 ms after in the rest (the captures'
+# a third at 0-4 ms and a third at 40-60), and a probe every 500 ms,
+# 97-187 ms in. The children take a probe every 200 ms. The viewers'
+# writes back make up the rest of the captures' packets to the seed (17 a
+# second from the largest child, 15 from the next, 8 from the smallest and
+# 5-6 from the other four), each a record of the bench's least, 25 bytes
+# (the captures' are 9-25), but for the 752 bytes every viewer but the
+# largest child writes too, once a second, the next child every two.
+# env: VIEWERS=7 SEED_UP_MBIT=5 SECS=30
+burst 0 1 0 250 65536 4096
+burst 0 2 0 250 16384 4096
+burst 0 3 0 250 2048 2048
+burst 0 4 2 500 25 25
+burst 0 5 252 500 25 25
+burst 0 6 2 500 25 25
+burst 0 7 252 500 25 25
+burst 0 4 302 500 25 25
+burst 0 5 52 500 25 25
+burst 0 6 302 500 25 25
+burst 0 7 52 500 25 25
+burst 1 0 5 83 25 25
+burst 2 0 21 106 25 25
+burst 3 0 37 435 25 25
+burst 4 0 53 312 25 25
+burst 5 0 9 555 25 25
+burst 6 0 29 416 25 25
+burst 7 0 41 357 25 25
+burst 2 0 389 2000 752 752
+burst 3 0 501 1000 752 752
+burst 4 0 613 1000 752 752
+burst 5 0 727 1000 752 752
+burst 6 0 839 1000 752 752
+burst 7 0 953 1000 752 752
+probe 0 1 7 200
+probe 0 2 37 200
+probe 0 3 67 200
+probe 0 4 97 500
+probe 0 5 127 500
+probe 0 6 157 500
+probe 0 7 187 500
