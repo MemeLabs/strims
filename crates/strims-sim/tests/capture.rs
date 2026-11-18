@@ -104,6 +104,11 @@ fn wan_mesh() -> Scenario {
 /// [`wan_mesh`] with `n` viewers, and the seed's uplink `seed_up` bytes a
 /// second if set.
 fn wan_mesh_of(n: usize, seed_up: Option<u64>) -> Scenario {
+    wan_mesh_at(n, seed_up, 64 * 1024)
+}
+
+/// [`wan_mesh_of`] streaming `rate` bytes a second.
+fn wan_mesh_at(n: usize, seed_up: Option<u64>, rate: u64) -> Scenario {
     let mut s = Scenario::new("capture_wan");
     let site = Site::new(City::Chicago, Access::Cable);
     let src = s.host_at("seed", seed_up.map_or(site, |up| site.with_up(up)));
@@ -128,7 +133,7 @@ fn wan_mesh_of(n: usize, seed_up: Option<u64>) -> Scenario {
         SwarmSpec::live(
             src,
             viewers,
-            64 * 1024,
+            rate,
             Duration::from_secs(2),
             Duration::from_secs(8),
         )
@@ -186,9 +191,10 @@ fn a_captured_wan_run_samples_every_link() {
 
 /// [`wan_mesh`] as browsers link: over WebRTC, each link a data channel of
 /// the window model on Chromium's or Firefox's SCTP, and to a signalling
-/// relay over TCP.
+/// relay over TCP; at 256 KiB/s, so that a write's burst to a viewer
+/// (64 KiB) passes a channel's cap.
 fn wan_browsers() -> Scenario {
-    let mut s = wan_mesh();
+    let mut s = wan_mesh_at(3, None, 256 * 1024);
     s.over_webrtc(&[Some(SctpProfile::CHROMIUM), Some(SctpProfile::FIREFOX)]);
     s
 }
@@ -1773,6 +1779,17 @@ fn link_logs_say_what_they_are(r: &strims_sim::Report, d: &Path, run: &str) {
                 .any(|w| w["kind"] == "webrtc" && !w["unsent_before"].is_empty()),
             "{run}: a channel's writes read their amount"
         );
+        // A Chromium page's writer, reading its own count of the amount,
+        // waits for its own cap.
+        assert!(
+            writes.iter().any(|w| {
+                w["wait"] == "channel"
+                    && r.scenario.hosts[int(w, "node").unwrap() as usize]
+                        .rtc_stack
+                        .is_some_and(|p| p.amount_at_sends)
+            }),
+            "{run}: a Chromium writer held for its own cap"
+        );
     } else {
         assert_eq!(kinds, BTreeSet::from(["tcp"]), "{run}");
     }
@@ -1809,6 +1826,30 @@ fn link_logs_say_what_they_are(r: &strims_sim::Report, d: &Path, run: &str) {
             "{run}: {x:?} outside a held write"
         );
         assert!(!x["buffered_bytes"].is_empty(), "{run}: {x:?}");
+    }
+    // A page that counts its channel's amount itself
+    // (`SctpProfile::amount_at_sends`) reads it fall, and fires its
+    // `bufferedamountlow`, only on its stack's answer to its last write,
+    // within a ms of it, or as its channel empties.
+    for x in samples.iter().filter(|x| x["cause"] == "low") {
+        let node = int(x, "node").unwrap();
+        let shown = r.scenario.hosts[node as usize]
+            .rtc_stack
+            .is_some_and(|p| p.amount_at_sends);
+        if !shown {
+            continue;
+        }
+        let t = int(x, "t_us").unwrap();
+        let last = written.get(&key(x)).and_then(|ws| {
+            ws.iter()
+                .map(|&(_, _, done)| done)
+                .filter(|&d| d <= t)
+                .max()
+        });
+        assert!(
+            int(x, "buffered_bytes") == Some(0) || last.is_some_and(|d| t - d <= 1000),
+            "{run}: {x:?} woke at {t} past its last write {last:?}"
+        );
     }
 }
 

@@ -149,6 +149,15 @@ pub struct SctpProfile {
     /// pacers see none of the flight (on the testbed their hosts read a
     /// least round trip of 0 ms, from writes and those readings).
     pub buffered_flight: bool,
+    /// Whether a page reads a channel's buffered amount as its own count:
+    /// its last reading and each message it sends since, set to the stack's
+    /// amount as the stack answers the page's last send on the channel
+    /// (after the sends it makes at once) and to 0 once the stack's queue
+    /// for it empties, but never falling as the stack sends between:
+    /// Chromium's page reads it so, its `bufferedamountlow` coming as it
+    /// reads the fall. A node's writer waiting for its mark then wakes on
+    /// the answer to its own last sends, or as its channel empties.
+    pub amount_at_sends: bool,
 }
 
 /// A DATA chunk's header, and a SACK chunk's with no gaps.
@@ -213,6 +222,7 @@ impl SctpProfile {
         delayed_sack: Duration::from_millis(200),
         max_burst: None,
         buffered_flight: true,
+        amount_at_sends: false,
     };
 
     /// dcSCTP's options as Chromium runs it: 1191-byte packets (a chunk of
@@ -236,14 +246,17 @@ impl SctpProfile {
         delayed_sack: Duration::from_millis(200),
         max_burst: Some(4),
         buffered_flight: false,
+        amount_at_sends: true,
     };
 
     /// dcSCTP as Firefox 158 runs it: Chromium's options but a 16 MiB
-    /// receive window and a delayed SACK of 50 ms. (Between two Firefoxes
-    /// its chunks are I-DATA, 4 bytes longer.)
+    /// receive window and a delayed SACK of 50 ms, the amount its page
+    /// reads taken as its stack's. (Between two Firefoxes its chunks are
+    /// I-DATA, 4 bytes longer.)
     pub const FIREFOX: SctpProfile = SctpProfile {
         rwnd: 16 << 20,
         delayed_sack: Duration::from_millis(50),
+        amount_at_sends: false,
         ..SctpProfile::CHROMIUM
     };
 

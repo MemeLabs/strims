@@ -43,7 +43,14 @@
 //! and the host's channels together under a [`HostPacer`]'s, each waiting
 //! for its mark once refused: one the host holds reads the host's load
 //! again at each acknowledgement and every [`HOST_POLL`], as the browser's
-//! writer polls it. A
+//! writer polls it. On a stack whose page counts a channel's amount itself
+//! ([`SctpProfile::amount_at_sends`]), a node's writer and its host's
+//! pacer read the amount so: its last reading and each message written
+//! since, the stack's as the stack answers the writer's last write, after
+//! the sends it makes at once (within [`ANSWER`]), and 0 once the
+//! channel's bytes have all gone; between, as the stack sends, it holds. A
+//! writer waiting for its mark wakes on the answer to its own last writes,
+//! or as its channel empties. A
 //! write goes to turmoil as segments of a DATA chunk's payload at most,
 //! which the window model's association sends as packets.
 //!
@@ -130,6 +137,11 @@ struct Conn {
     /// fires the event.
     threshold: u64,
     above: bool,
+    /// On a stack whose page counts the amount itself
+    /// ([`SctpProfile::amount_at_sends`]), a node's channel's amount as its
+    /// writer reads it (see the module docs), and when it last wrote.
+    shown: Option<u64>,
+    wrote: Time,
     /// The node's link log, and the link's name in it ([`Net::log_link`]).
     log: Option<(u64, LinkSink)>,
 }
@@ -152,7 +164,17 @@ impl Conn {
     fn buffered(&self) -> u64 {
         self.unsent + if self.flight { self.unacked } else { 0 }
     }
+
+    /// A data channel's buffered amount as its writer reads it.
+    fn amount(&self) -> u64 {
+        self.shown.unwrap_or_else(|| self.buffered())
+    }
 }
+
+/// How soon after a page's write its stack's answer comes, with the
+/// amount left after the sends it made at once
+/// ([`SctpProfile::amount_at_sends`]): the scheduler's step.
+const ANSWER: strims_base::time::Duration = strims_base::time::Duration::from_millis(1);
 
 /// The most a socket's buffer takes before Linux checks
 /// `TCP_NOTSENT_LOWAT` again: a GSO segment, 64 KiB less its headers in
@@ -194,7 +216,7 @@ impl HostChannels {
         let mut sum = HostSum::default();
         for c in self.channels.iter().filter_map(|k| conns.get(k)) {
             if let Some(p) = &c.pacer {
-                sum.add(p, now, c.buffered() as usize, c.waits);
+                sum.add(p, now, c.amount() as usize, c.waits);
             }
         }
         sum
@@ -284,6 +306,7 @@ impl SendBuffers {
                 c.threshold = cap / 2;
                 c.flight = profile.buffered_flight;
                 c.pacer = paced.then(ChannelPacer::default);
+                c.shown = (paced && profile.amount_at_sends).then_some(0);
                 if paced {
                     b.hosts.entry(conn.0.ip()).or_default().channels.push(conn);
                 }
@@ -303,11 +326,11 @@ impl SendBuffers {
         })
     }
 
-    /// Data channel `conn`'s buffered amount.
+    /// Data channel `conn`'s buffered amount, as its writer reads it.
     pub fn buffered(&self, conn: ConnKey) -> Option<u64> {
         self.with(|b| {
             let c = b.conns.get(&conn)?;
-            c.channel.map(|_| c.buffered())
+            c.channel.map(|_| c.amount())
         })
     }
 }
@@ -444,6 +467,11 @@ impl LinkProbe for SimProbe {
 fn release(b: &mut Buffers, conn: ConnKey, at: Time) -> Option<Waker> {
     let Buffers { conns, hosts, .. } = b;
     let c = conns.get_mut(&conn)?;
+    // A page that counts the amount reads it fall as the stack answers its
+    // last write, and once the channel empties.
+    if c.shown.is_some() && (c.buffered() == 0 || at <= c.wrote + ANSWER) {
+        c.shown = Some(c.buffered());
+    }
     if c.pacer.is_some()
         && let Some(h) = hosts.get_mut(&conn.0.ip())
         && !h.waiting.is_empty()
@@ -460,7 +488,7 @@ fn release(b: &mut Buffers, conn: ConnKey, at: Time) -> Option<Waker> {
     }
     let c = conns.get_mut(&conn)?;
     let (cap, _) = c.channel?;
-    let buffered = c.buffered();
+    let buffered = c.amount();
     if c.pacer.is_some() {
         // The browser's `bufferedamountlow`: the amount fell to the
         // threshold from above.
@@ -554,7 +582,7 @@ impl SendBuffers {
             let Buffers { conns, hosts, .. } = x;
             let c = conns.get_mut(key)?;
             let (cap, _) = c.channel?;
-            let buffered = c.buffered();
+            let buffered = c.amount();
             let may = match &mut c.pacer {
                 Some(p) => {
                     p.observe(now, buffered as usize);
@@ -649,7 +677,13 @@ impl SendBuffers {
                     ch.cut(n);
                 }
                 c.unsent = c.unsent.saturating_add(n as u64);
-                c.above = c.buffered() > c.threshold;
+                // A page that counts the amount adds the message to its
+                // last reading.
+                if let Some(s) = &mut c.shown {
+                    *s = s.saturating_add(n as u64);
+                    c.wrote = now;
+                }
+                c.above = c.amount() > c.threshold;
                 c.writes.push_back((stamp, end));
                 if let Some(p) = &mut c.pacer {
                     p.wrote(now, n);
@@ -992,6 +1026,10 @@ mod tests {
         sim_time(std::time::Duration::from_millis(t))
     }
 
+    fn us(t: u64) -> Time {
+        sim_time(std::time::Duration::from_micros(t))
+    }
+
     /// A writer's waker, counting its wakes.
     #[derive(Default)]
     struct Wakes(AtomicUsize);
@@ -1143,5 +1181,57 @@ mod tests {
         b.admit(k[1], 20_000, ms(7));
         assert_eq!(wakes.count(), 1);
         assert!(b.channel_write(&k[0], ms(7), &w) == Some(ChannelWrite::Go));
+    }
+
+    /// A Chromium page counts its channel's amount itself: each message on
+    /// its last reading, the stack's amount as the stack answers its last
+    /// write (within [`ANSWER`]), 0 once the channel empties, and nothing
+    /// as the stack sends between.
+    #[test]
+    fn a_chromium_page_counts_its_channels_amount() {
+        let (b, k, _) = channels(&SctpProfile::CHROMIUM, 1);
+        let read = || b.buffered(k[0]).unwrap();
+        b.wrote(&k[0], 1000, true, us(0));
+        b.wrote(&k[0], 500, true, us(100));
+        assert_eq!(read(), 1500);
+        // The answer to the last write: the stack sent 1000 at once.
+        b.admit(k[0], 1000, us(600));
+        assert_eq!(read(), 500);
+        // Past the answer the reading holds as the stack sends ...
+        b.wrote(&k[0], 2000, true, ms(2));
+        b.admit(k[0], 1000, ms(5));
+        assert_eq!(read(), 2500);
+        // ... and the next message adds to it, not to the stack's 1500.
+        b.wrote(&k[0], 300, true, ms(6));
+        assert_eq!(read(), 2800);
+        // Empty, it reads 0.
+        b.admit(k[0], 1800, ms(9));
+        assert_eq!(read(), 0);
+    }
+
+    /// A Chromium writer refused while its reading holds above the cap
+    /// waits though its stack holds far less, until its channel empties;
+    /// Firefox's reads its stack's amount and goes at its mark.
+    #[test]
+    fn a_chromium_writer_waits_out_its_channel() {
+        let (b, k, log) = channels(&SctpProfile::CHROMIUM, 1);
+        let (_, w) = waker();
+        b.wrote(&k[0], FLOOR as usize, true, ms(0));
+        assert!(b.channel_write(&k[0], ms(0), &w) == Some(ChannelWrite::Wait));
+        // The answer: 4000 sent at once, the reading still over the mark.
+        assert!(b.admit(k[0], 4000, us(500)).is_none());
+        assert!(b.admit(k[0], (FLOOR - 4000 - 1) as usize, ms(10)).is_none());
+        assert_eq!(b.buffered(k[0]), Some(FLOOR - 4000));
+        assert!(b.admit(k[0], 1, ms(20)).is_some(), "empty");
+        assert_eq!(lows(&log, 0), [0]);
+
+        let (b, k, _) = channels(&SctpProfile::FIREFOX, 1);
+        b.wrote(&k[0], FLOOR as usize, true, ms(0));
+        assert!(b.channel_write(&k[0], ms(0), &w) == Some(ChannelWrite::Wait));
+        assert!(b.admit(k[0], 4000, us(500)).is_none());
+        assert!(
+            b.admit(k[0], (FLOOR - LOW - 4000) as usize, ms(10))
+                .is_some()
+        );
     }
 }
