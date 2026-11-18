@@ -203,6 +203,73 @@ class WritePath(unittest.TestCase):
         finally:
             self.conn.execute("ROLLBACK")
 
+    def refused(self, *statements, cols="pass", a=TW, b=TB):
+        """write_fit_of's error with `statements` applied, then undone."""
+        import duckdb
+
+        self.conn.execute("BEGIN")
+        try:
+            for s in statements:
+                self.conn.execute(s)
+            with self.assertRaises(duckdb.Error) as e:
+                self.q(f"SELECT {cols} FROM write_fit_of(?, ?)", a, b)
+            return str(e.exception)
+        finally:
+            self.conn.execute("ROLLBACK")
+
+    def test_a_model_side_without_a_stages_table_is_refused(self):
+        # A twin without the packet log has no side of the first packet's
+        # stages: the fit names the table, the knob, the run and the
+        # stages, whatever columns are asked for.
+        for cols in ("pass", "stage"):
+            self.assertRegex(self.refused("DELETE FROM packets WHERE k = 'tw'", cols=cols),
+                             r"write_fit_of: a_side's runs tw hold no packets rows at node 0 "
+                             r"\(STRIMS_SIM_PACKET_LOG\), which 7a empty: to first packet, 7b empty: packet to "
+                             r"arrival, 7c empty: arrival to read read: their model side is missing, not failed")
+        # The peer's reads of the node's writes.
+        self.assertRegex(self.refused("UPDATE link_reads SET peer = 2 WHERE k = 'tw'"),
+                         r"runs tw hold no link_reads rows at node 0 \(STRIMS_SIM_LINK_LOG\), which 7 done to read, "
+                         r"7a empty: to first packet, 7b empty: packet to arrival, 7c empty: arrival to read, 8 read "
+                         r"to take read:")
+        self.assertRegex(self.refused("DELETE FROM seed_sends WHERE k = 'tw'"),
+                         r"runs tw hold no seed_sends rows at node 0 \(STRIMS_SIM_SPEC\), which 1 push: runner read:")
+        self.assertRegex(self.refused("DELETE FROM link_samples WHERE k = 'tw'"),
+                         r"runs tw hold no link_samples rows at node 0 \(STRIMS_SIM_LINK_LOG\), which 6 low reading "
+                         r"read:")
+
+    def test_a_side_of_runs_with_a_table_and_without_reads_those_with(self):
+        # A second twin run whose packets the cache lacks: the first
+        # packet's stages are the other's alone.
+        self.conn.execute("BEGIN")
+        try:
+            self.conn.execute("INSERT INTO jobs SELECT 'tw2', src, sim, env FROM jobs WHERE k = 'tw'")
+            for t in ("link_writes", "link_reads", "link_samples", "seed_sends", "hosts"):
+                self.conn.execute(f"INSERT INTO {t} SELECT x.* REPLACE ('tw2' AS k) FROM {t} x WHERE x.k = 'tw'")
+            got = self.q("SELECT stage, a_runs FROM write_fit_of(?, ?) WHERE stage IN ('7a empty: to first packet', "
+                         "'2 driver queue') ORDER BY stage", TW + [{"k": "tw2"}], TB)
+            self.assertEqual(got, [("2 driver queue", 2), ("7a empty: to first packet", 1)])
+        finally:
+            self.conn.execute("ROLLBACK")
+
+    def test_a_testbed_side_as_the_models_names_runshs_setting(self):
+        err = self.refused("DELETE FROM packets WHERE k = 'tb1'", "DELETE FROM packets WHERE k = 'tb2'",
+                           a=TB, b=TW)
+        self.assertRegex(err, r"write_fit_of: a_side's runs tb1, tb2 hold no packets rows at node 0 \(PCAP=1\)")
+
+    def test_a_stages_table_the_testbed_lacks_fails_or_reads_nothing(self):
+        # The testbed's runs without packets: their stages 7a-c are the
+        # model's alone, and fail; without them on either side, no stage.
+        self.conn.execute("BEGIN")
+        try:
+            self.conn.execute("DELETE FROM packets WHERE k IN ('tb1', 'tb2')")
+            got = self.q("SELECT stage, a_runs, b_runs, pass FROM write_fit_of(?, ?) WHERE stage LIKE '7a%'", TW, TB)
+            self.assertEqual(got, [("7a empty: to first packet", 1, None, False)])
+            self.conn.execute("DELETE FROM packets")
+            got = self.q("SELECT stage FROM write_fit_of(?, ?) WHERE stage LIKE '7_ %'", TW, TB)
+            self.assertEqual(got, [])
+        finally:
+            self.conn.execute("ROLLBACK")
+
     def test_a_side_of_no_runs_is_refused(self):
         import duckdb
 

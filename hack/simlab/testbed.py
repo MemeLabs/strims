@@ -41,7 +41,7 @@ its knobs (`tb-<hash>`).
                  the runs of its cell (1, 2, ...), as a twin's seeds pair
                  with it, `run` its run dir
   twins(src, binary, name, seeds=8, arm="twin", env=None, kind="one",
-        side_arm="one", replace=False) -> (src, [job])
+        side_arm="one", replace=False, packet_hosts="seed") -> (src, [job])
                  each cell's twin of the runs testbed_side(src, kind,
                  side_arm) names (src a source's LIKE pattern) run at seeds
                  1..N (a scenarios test binary's calibration_star with the
@@ -49,9 +49,13 @@ its knobs (`tb-<hash>`).
                  source testbed/<name>: the scoring macros then pair a
                  twin seed with a testbed run of its number (effects,
                  pairs: testbed/<name> arm `arm` against src arm testbed)
-  cells_in(src_like, kind="one", arm="one") -> {cell: env}
+  cells_in(src_like, kind="one", arm="one", packet_hosts="seed")
+                 -> {cell: env}
                  a side's cells and their twins' knobs, from the catalog
-                 (twin_cells refuses what no one twin stands for)
+                 (twin_cells refuses what no one twin stands for), a cell
+                 whose runs hold packets (PCAP=1's) logging those of
+                 `packet_hosts` (logged_hosts: the seed, all, or host
+                 numbers) that they hold (PACKET_LOG, packet_log)
   tier_cells() -> [(kind, cell)]
                  the testbed tier: the robust tier's calibration_star cells
                  a testbed hosts on native nodes and the browsers tier's on
@@ -321,18 +325,60 @@ def median_measured(cell, knob, values):
     return " ".join(out)
 
 
-def cells_in(src_like, kind="one", arm="one"):
+def cells_in(src_like, kind="one", arm="one", packet_hosts="seed"):
     """The cells of the testbed runs a side names (testbed_side(src_like,
     kind, arm) over the catalog: a local ingest's testbed/<name>, a farm
-    run's farm/<run>/%), {cell: env}, their twins' knobs (twin_cells); the
+    run's farm/<run>/%), {cell: env}, their twins' knobs (twin_cells), each
+    with PACKET_LOG naming those of `packet_hosts` (logged_hosts) whose
+    packets its runs hold (the macro packet_hosts_of), where any; the
     catalog's, so `simdb.py index` first."""
     from . import catalog
 
+    side = (f"testbed_side({store_host.q(src_like)}, kind := {store_host.q(kind)}, "
+            f"arm := {store_host.q(arm)})")
     rows = catalog.lake(f"SELECT DISTINCT j.stored_cell AS cell, j.env FROM jobs j SEMI JOIN (SELECT unnest("
-                        f"testbed_side({store_host.q(src_like)}, kind := {store_host.q(kind)}, "
-                        f"arm := {store_host.q(arm)}), recursive := true)) s ON s.k = j.k ORDER BY 1;")
+                        f"{side}, recursive := true)) s ON s.k = j.k ORDER BY 1;")
     envs = [r["env"] if isinstance(r["env"], dict) else dict(r["env"]) for r in rows]
-    return twin_cells([(r["cell"], {k: v for k, v in e.items() if k not in JOB_KNOBS}) for r, e in zip(rows, envs)])
+    out = twin_cells([(r["cell"], {k: v for k, v in e.items() if k not in JOB_KNOBS}) for r, e in zip(rows, envs)])
+    if out:
+        for r in catalog.lake(f"SELECT cell, hosts FROM packet_hosts_of({side}) ORDER BY cell;"):
+            if hosts := logged_hosts(r["hosts"], packet_hosts):
+                out[r["cell"]][PACKET_LOG] = packet_log(hosts)
+    return out
+
+
+# The knob a twin logs the packets its hosts offered their uplinks by
+# (`packets`; strims-sim's packet_log_hosts), which a testbed run with
+# PCAP=1 holds of every node and the wire fits compare (sctp_fit_of,
+# write_fit_of, at their at_node). PCAP is no knob of a run's (a capture
+# would key its cell apart), so a twin's hosts are among those whose
+# packets its side holds.
+PACKET_LOG = "STRIMS_SIM_PACKET_LOG"
+# The host the wire fits read by default (their at_node): the first
+# swarm's seed, the testbed's node 0 and its twin's host 0. A twin logs its
+# packets alone unless asked for more: the log is held to the run's end,
+# and every host of star-31-5's 30 s held 1.17 M rows, 180 MB more at the
+# peak (fields.toml's packets), for each of twins' parallel runs.
+SEED_HOST = 0
+
+
+def logged_hosts(held, want="seed"):
+    """The hosts of `held` (those whose packets a cell's runs hold) that
+    `want` names: `seed` (SEED_HOST), `all`, or host numbers; in order."""
+    if want == "all":
+        names = set(held)
+    elif want == "seed":
+        names = {SEED_HOST}
+    else:
+        names = {int(h) for h in want}
+    return sorted(h for h in held if h in names)
+
+
+def packet_log(hosts):
+    """PACKET_LOG's value naming `hosts`, their numbers joined by commas: a
+    lone host 1 named twice, as `1` alone reads as every host."""
+    v = ",".join(str(h) for h in sorted(set(hosts)))
+    return "1,1" if v == "1" else v
 
 
 # The tables a twin writes beyond a sim job's: each node's bins and
@@ -342,13 +388,14 @@ TWIN_TABLES = {"STRIMS_SIM_BIN_NODES": "1"}
 
 
 def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8, kind="one", side_arm="one",
-          replace=False):
+          replace=False, packet_hosts="seed"):
     """Each cell's twin of the testbed runs side (src, kind, side_arm)
     names (cells_in: `src` a source's LIKE pattern): strims-sim's
     calibration_star (the scenarios test binary `binary`) at seeds 1..N
-    with the cell's knobs (its TESTBED_QDISC left out), TWIN_TABLES and
-    `env`'s, one
-    farm job's way each (STRIMS_SIM_JOB=1), their tables folded into the
+    with the cell's knobs (cells_in's, the packet log of those of
+    `packet_hosts` whose packets the cell's runs hold among them; its
+    TESTBED_QDISC left out), TWIN_TABLES and `env`'s, one farm job's way
+    each (STRIMS_SIM_JOB=1), their tables folded into the
     cache as source testbed/<name> (refused over one, unless `replace`),
     each a job of its cell, `arm` and seed. Returns the source and the
     jobs."""
@@ -358,7 +405,7 @@ def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8, kind="on
     with open(binary, "rb") as f:
         digest = hashlib.file_digest(f, "sha256").hexdigest()
     refuse_existing(f"testbed/{name}", replace)
-    cells = cells_in(src, kind, side_arm)
+    cells = cells_in(src, kind, side_arm, packet_hosts)
     if not cells:
         raise ValueError(f"no testbed runs in {src} ({kind}, {side_arm}): simdb.py index takes a source in")
     work = Path(tempfile.mkdtemp(prefix="twins-", dir=ROOT / "target"))

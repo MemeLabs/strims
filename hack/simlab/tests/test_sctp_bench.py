@@ -345,8 +345,24 @@ class SctpBench(unittest.TestCase):
         self.assertEqual(got["2 buffered at write"][2:4], (12288, 65536))
         self.assertIs(got["2 buffered at write"][-1], False)
 
+    def refused(self, *statements, cols=("pass",), **sides):
+        """The fit's error with `statements` applied, then undone."""
+        import duckdb
+
+        self.conn.execute("BEGIN")
+        try:
+            for s, *args in statements:
+                self.conn.execute(s, args)
+            with self.assertRaises(duckdb.Error) as e:
+                self.fit(*cols, **sides)
+            return str(e.exception)
+        finally:
+            self.conn.execute("ROLLBACK")
+
     def test_a_ruled_reading_one_side_lacks_fails(self):
-        got = self.rolled_back(("DELETE FROM packets WHERE k LIKE 'tw%'",))
+        # The model's packets all before the window: its wire readings have
+        # none to read there.
+        got = self.rolled_back(("UPDATE packets SET t_us = 1000 + n WHERE k LIKE 'tw%'",))
         self.assertEqual((got["1 one-way delay"][0], got["1 one-way delay"][-1]), (None, False))
         for r in (G100, G400, GAPS):
             self.assertIs(got[r][-1], False, r)
@@ -357,11 +373,61 @@ class SctpBench(unittest.TestCase):
         got = self.rolled_back(("DELETE FROM sctp_events WHERE k LIKE 'tw%' AND node = 1",))
         self.assertIsNone(got["7 packets a SACK"][4])
         self.assertIs(got["7 packets a SACK"][-1], False)
-        # Resends a drop, the model's runs or the testbed's without a log.
-        for side in ("tw", "tb"):
-            got = self.rolled_back((f"DELETE FROM sctp_events WHERE k LIKE '{side}%'",))
-            self.assertIsNone(got["9 resends a drop"][0 if side == "tw" else 1], side)
-            self.assertIs(got["9 resends a drop"][-1], False, side)
+        # Resends a drop, the model's runs without a drop or the testbed's
+        # without a log.
+        got = self.rolled_back(("UPDATE bins SET seed_drops = 0 WHERE k LIKE 'tw%'",))
+        self.assertIsNone(got["9 resends a drop"][0])
+        self.assertIs(got["9 resends a drop"][-1], False)
+        got = self.rolled_back(("DELETE FROM sctp_events WHERE k LIKE 'tb%'",))
+        self.assertIsNone(got["9 resends a drop"][1])
+        self.assertIs(got["9 resends a drop"][-1], False)
+
+    def test_a_model_side_without_a_readings_table_is_refused(self):
+        # A twin without the packet log has no side of the wire readings:
+        # the fit names the table, the knob and the runs, whatever columns
+        # are asked for.
+        for cols in (("pass",), ("reading", "source")):
+            err = self.refused(("DELETE FROM packets WHERE k LIKE 'tw%'",), cols=cols)
+            self.assertRegex(err, r"sctp_fit_of: a_side's runs tw1, tw2 hold no packets rows at node 0 "
+                                  r"\(STRIMS_SIM_PACKET_LOG\), which 1 one-way delay, 3 packets a send opportunity, "
+                                  r"100 µs, 3 packets a send opportunity, 400 µs, 4 drain, 5 drain rate, 12 send gaps "
+                                  r"read: their model side is missing, not failed")
+        # None at the node the readings read, none of their writes or of
+        # their SCTP log.
+        self.assertIn("runs tw1, tw2 hold no packets rows at node 0",
+                      self.refused(("UPDATE packets SET node = 1 WHERE k LIKE 'tw%'",)))
+        self.assertRegex(self.refused(("DELETE FROM link_writes WHERE k LIKE 'tw%'",)),
+                         r"runs tw1, tw2 hold no link_writes rows at node 0 \(STRIMS_SIM_LINK_LOG\), which 2 buffered "
+                         r"at write read:")
+        self.assertRegex(self.refused(("DELETE FROM sctp_events WHERE k LIKE 'tw%'",)),
+                         r"runs tw1, tw2 hold no sctp_events rows at node 0 \(STRIMS_SIM_TRACE_SCTP\), which 7 "
+                         r"packets a SACK, 8 SACK delay, 9 resends a drop, 10 resend spacing, 11 flight at sends read:")
+        # Two tables, each named.
+        err = self.refused(("DELETE FROM packets WHERE k LIKE 'tw%'",), ("DELETE FROM link_writes WHERE k LIKE 'tw%'",))
+        self.assertRegex(err, r"runs tw1, tw2 hold no link_writes rows at node 0 \(STRIMS_SIM_LINK_LOG\), which 2 "
+                              r"buffered at write read, and tw1, tw2 hold no packets rows at node 0 "
+                              r"\(STRIMS_SIM_PACKET_LOG\)")
+        # A testbed's runs as the model's side: run.sh's setting.
+        self.assertRegex(self.refused(cols=("pass",), a=TB),
+                         r"sctp_fit_of: a_side's runs tb1, tb2 hold no packets rows at node 0 \(PCAP=1\), which 1 "
+                         r"one-way delay")
+
+    def test_a_side_of_runs_with_a_table_and_without_reads_those_with(self):
+        # The log-off cell's twin beside the logged one's (one source's
+        # twins of the SCTP matrices' log axis): the log's readings are the
+        # logged twin's runs', the wire's both.
+        for s in (("DELETE FROM sctp_events WHERE k = 'tw2'",), ("DELETE FROM packets WHERE k = 'tw2'",),
+                  ("DELETE FROM link_writes WHERE k = 'tw2'",)):
+            got = self.rolled_back(s)
+            table = s[0].split()[2]
+            reading = {"sctp_events": "7 packets a SACK", "packets": "1 one-way delay",
+                       "link_writes": "2 buffered at write"}[table]
+            self.assertEqual(got[reading][0], 1, table)
+
+    def test_a_table_neither_side_holds_has_no_reading(self):
+        got = self.rolled_back(("DELETE FROM link_writes",))
+        self.assertNotIn("2 buffered at write", got)
+        self.assertIn("1 one-way delay", got)
 
     def test_the_counts_total_variation(self):
         got = self.fit("tv", "tv_bound", "b_tv", "pass")

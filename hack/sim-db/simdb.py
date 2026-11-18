@@ -29,7 +29,7 @@
   hack/sim-db/simdb.py testbed RUN_DIR... --name NAME [--arm A] [--knob KEY=VALUE ...] [--bin PATH]
                        [--replace]
   hack/sim-db/simdb.py twin SRC_LIKE --name NAME --bin SCENARIOS [--seeds N] [--arm A] [--kind K]
-                       [--side-arm A] [--env KEY=VALUE ...] [--replace]
+                       [--side-arm A] [--env KEY=VALUE ...] [--packet-hosts seed|all|N,...] [--replace]
   hack/sim-db/simdb.py testbed-tier DIR [--repeats N] [--ref REF]
 
 `describe`, `lake`, `view`, `index` and `fetch` are the catalog's
@@ -546,8 +546,9 @@ def cmd_twin(a):
     from simlab import testbed
 
     env = dict(kv.split("=", 1) for kv in a.env or [])
+    hosts = a.packet_hosts if a.packet_hosts in ("seed", "all") else [int(h) for h in a.packet_hosts.split(",")]
     src, jobs = testbed.twins(a.src, a.bin, a.name, seeds=a.seeds, arm=a.arm, env=env, kind=a.kind,
-                              side_arm=a.side_arm, replace=a.replace)
+                              side_arm=a.side_arm, replace=a.replace, packet_hosts=hosts)
     for j in jobs:
         print(f"{src} {j['k']} {j['cell']} {j['arm']} seed {j['seed']}")
     print("simdb.py index takes them in")
@@ -698,6 +699,9 @@ def main():
     w.add_argument("--seeds", type=int, default=8)
     w.add_argument("--arm", default="twin")
     w.add_argument("--env", action="append", help="a sim setting KEY=VALUE every twin takes too")
+    w.add_argument("--packet-hosts", default="seed",
+                   help="the hosts whose packets a twin logs, of those its cell's runs hold (PCAP=1's): seed (the "
+                        "default, the wire fits' at_node), all, or host numbers N,... (simlab.testbed.logged_hosts)")
     a = ap.parse_args()
     if a.cmd == "duckdb":
         print(duckdb_bin())

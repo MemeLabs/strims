@@ -158,7 +158,17 @@ crates differ from those the page was built from builds its own page.
   cell's knobs (a scenarios test binary from `cargo test --release -p
   strims-sim --test scenarios --no-run`), its runs a side's from the
   catalog (index first; `farm/RUN/%` for a farm run's, `--kind` and
-  `--side-arm` as testbed_side's). The macros `twin_runs_of` and
+  `--side-arm` as testbed_side's). A cell's twin logs the seed's packets
+  where its runs hold them in the catalog (a PCAP=1 run's every node:
+  `STRIMS_SIM_PACKET_LOG`, which `testbed.cells_in` adds), which the wire
+  fits read at their `at_node`; `--packet-hosts all` (or host numbers)
+  logs more of the hosts the runs hold, a log held to the run's end. A
+  fit none of whose model runs holds a row of a table a reading takes (a
+  twin without that log) fails the query, naming the table and its knob,
+  rather than score the reading a fail. sctp_fit_of's model side is the
+  twin of the testbed's logged cell (TRACE_SCTP), whose wire is the
+  log-off cell's twin's (the sim's SCTP log moves nothing).
+  The macros `twin_runs_of` and
   `twin_fit_of` compare the two over the same tables (`simdb.py describe
   twin_fit_of`): a side is `testbed_side(SRC_LIKE, kind := ..., arm :=
   ...)`, and twin_fit_of gives each cell's medians and the testbed runs'
@@ -185,7 +195,12 @@ crates differ from those the page was built from builds its own page.
   'src': src}) FROM jobs WHERE src = 'testbed/NAME'),
   testbed_side(SRC_LIKE))` joins them packet by packet and applies the
   shaper bench's pass rule per node (`simdb.py describe shaper_fit_of`;
-  it has no backlog rule, and a trace link no replay). `shaper_replay
+  it has no backlog rule, and a trace link no replay). A source of the
+  testbed side that holds packets and has no replay among the first
+  argument's jobs (a run left out of the replay, one whose links have
+  none) fails the fit, so name the replayed runs alone:
+  `(SELECT list(s) FROM (SELECT unnest(testbed_side(SRC_LIKE)) AS s) WHERE
+  s.k IN (SELECT env['SOURCE_K'] FROM jobs WHERE src = 'testbed/NAME'))`. `shaper_replay
   --bench OUT TABLES` reads a bench run's captures alone and writes the
   bench's `packets` and both replays'.
 - **On the farm.** A `kind = "testbed"` matrix runs run.sh as a black box

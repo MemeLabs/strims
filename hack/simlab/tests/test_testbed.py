@@ -189,6 +189,139 @@ class Measured(unittest.TestCase):
             testbed.twin_cells([("c", runs[0]), ("c", {**base, "STRIMS_SIM_CAL_COMPETE_MS": "10201:30"})])
 
 
+# A stand-in for strims-sim's scenarios binary: its one row names the
+# packet log it ran with, and it writes a packet a host of the log's
+# numbers into its STRIMS_SIM_OUT, as calibration_star's packets table.
+FAKE_SCENARIOS = """\
+import json, os
+from pathlib import Path
+out = Path(os.environ["STRIMS_SIM_OUT"])
+out.mkdir(parents=True, exist_ok=True)
+log = os.environ.get("STRIMS_SIM_PACKET_LOG")
+if log and log not in ("seed", "all", "viewers"):
+    (out / "packets.schema.json").write_text(json.dumps({"columns": [{"name": "node", "type": "BIGINT"},
+                                                                     {"name": "n", "type": "BIGINT"}]}))
+    (out / "packets.csv").write_text("node,n\\n" + "".join(f"{h},0\\n" for h in sorted(set(log.split(",")))))
+print("ROW " + json.dumps({"packet_log": log}))
+"""
+
+
+class Twins(unittest.TestCase):
+    """twins over a side of the catalog (a fixture of its jobs and packets
+    tables, testbed_side's and packet_hosts_of's macros made over them as
+    a catalog's reader makes them): source testbed/x's runs of cell a hold
+    the packets of nodes 0 and 1, and of 0, 1 and 2 (PCAP=1's captures),
+    cell b's none, cell c's node 1's alone; another source's run of cell a
+    holds node 5's. A lake without packets (main's, before any testbed
+    run's capture) has no packets table at all."""
+
+    JOBS = [("ta1", "testbed/x", "a", 1), ("ta2", "testbed/x", "a", 2), ("tb1", "testbed/x", "b", 1),
+            ("tc1", "testbed/x", "c", 1), ("to1", "testbed/other", "a", 1)]
+    PACKETS = {"ta1": [0, 1], "ta2": [0, 1, 2], "tc1": [1], "to1": [5]}
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.d = Path(tmp.name)
+        p = mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(self.d / "sim-db")})
+        p.start()
+        self.addCleanup(p.stop)
+        self.fake = self.d / "scenarios"
+        self.fake.write_text(f"#!{sys.executable}\n{FAKE_SCENARIOS}")
+        self.fake.chmod(0o755)
+
+    def lake(self, packets=True):
+        """catalog.lake over the fixture, with a packets table or none, its
+        macros made as a reader of such a catalog makes them
+        (catalog.needed: packet_hosts_of's fallback where it lacks
+        packets)."""
+        import duckdb
+
+        from simlab import catalog
+
+        conn = duckdb.connect()
+        self.addCleanup(conn.close)
+        conn.execute("CREATE TABLE jobs (k VARCHAR, src VARCHAR, sim VARCHAR, stored_cell VARCHAR, "
+                     "stored_arm VARCHAR, seed BIGINT, env MAP(VARCHAR, VARCHAR))")
+        for k, src, cell, seed in self.JOBS:
+            env = {"STRIMS_SIM_CAL_VIEWERS": {"a": "2", "b": "3", "c": "1"}[cell], "STRIMS_SIM_TCP": "1",
+                   "TESTBED_QDISC": "clsact>ifb-netem>root-class", "STRIMS_SIM_SEED": str(seed)}
+            conn.execute("INSERT INTO jobs VALUES (?, ?, 'testbed', ?, 'testbed', ?, MAP(?::VARCHAR[], ?::VARCHAR[]))",
+                         [k, src, cell, seed, list(env), list(env.values())])
+        if packets:
+            conn.execute("CREATE TABLE packets (k VARCHAR, src VARCHAR, node BIGINT, n BIGINT)")
+            srcs = {k: src for k, src, _, _ in self.JOBS}
+            for k, nodes in self.PACKETS.items():
+                for node in nodes:
+                    conn.executemany("INSERT INTO packets VALUES (?, ?, ?, ?)",
+                                     [(k, srcs[k], node, n) for n in range(3)])
+        have = {"packets": {"k", "src", "node", "n"}} if packets else {}
+        text = catalog.needed(catalog.scoring_text(catalog.scoring_consts()), have)
+        for m in catalog.MACRO.finditer(text):
+            if m.group(2) in ("testbed_side", "packet_hosts_of"):
+                conn.execute(text[m.start():catalog.STATEMENT_END.search(text, m.end()).end()])
+
+        def lake(sql, **kw):
+            cur = conn.execute(sql)
+            names = [d[0] for d in cur.description]
+            return [dict(zip(names, r)) for r in cur.fetchall()]
+
+        p = mock.patch.object(catalog, "lake", lake)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def logs(self, jobs):
+        """Each twin's packet log, as its knobs give it and as it ran."""
+        return {(j["cell"], j["seed"]): (j["env"].get("STRIMS_SIM_PACKET_LOG"), j["row"]["packet_log"]) for j in jobs}
+
+    def test_a_pcap_runs_twin_logs_its_seeds_packets(self):
+        # By default each cell's twin logs the seed's packets where its
+        # runs hold them, the side's alone: cell c's hold host 1's alone,
+        # cell b's none.
+        self.lake()
+        cells = testbed.cells_in("testbed/x")
+        self.assertEqual({c: e.get("STRIMS_SIM_PACKET_LOG") for c, e in cells.items()}, {"a": "0", "b": None, "c": None})
+        src, jobs = testbed.twins("testbed/x", self.fake, "x-twin", seeds=2)
+        self.assertEqual(src, "testbed/x-twin")
+        self.assertEqual(self.logs(jobs), {("a", 1): ("0", "0"), ("a", 2): ("0", "0"), ("b", 1): (None, None),
+                                           ("b", 2): (None, None), ("c", 1): (None, None), ("c", 2): (None, None)})
+        # The twins' packets in the cache: the seed's in each of cell a's
+        # two runs.
+        manifest = json.loads((self.d / "sim-db" / "cache" / "testbed" / "x-twin" / "manifest.json").read_text())
+        self.assertEqual(manifest["tables"]["packets"]["rows"], 2)
+
+    def test_a_twin_logs_the_hosts_it_is_asked_for_that_its_side_holds(self):
+        self.lake()
+        _, jobs = testbed.twins("testbed/x", self.fake, "x-twin", seeds=1, packet_hosts="all")
+        self.assertEqual(self.logs(jobs), {("a", 1): ("0,1,2", "0,1,2"), ("b", 1): (None, None),
+                                           ("c", 1): ("1,1", "1,1")})
+        _, jobs = testbed.twins("testbed/x", self.fake, "x-twin", seeds=1, packet_hosts=[2, 5], replace=True)
+        self.assertEqual(self.logs(jobs), {("a", 1): ("2", "2"), ("b", 1): (None, None), ("c", 1): (None, None)})
+        self.assertEqual(testbed.logged_hosts([0, 1, 2], "seed"), [0])
+        self.assertEqual(testbed.logged_hosts([1, 2], "seed"), [])
+        self.assertEqual(testbed.logged_hosts([0, 1, 2], ["2", 0]), [0, 2])
+
+    def test_a_lake_without_packets_twins_without_a_log(self):
+        # No source holds packets: the catalog has no such table, and the
+        # twins log none; a side of no runs says so.
+        self.lake(packets=False)
+        _, jobs = testbed.twins("testbed/x", self.fake, "x-twin", seeds=1, packet_hosts="all")
+        self.assertEqual(self.logs(jobs), {("a", 1): (None, None), ("b", 1): (None, None), ("c", 1): (None, None)})
+        with self.assertRaisesRegex(ValueError, r"no testbed runs in testbed/none \(one, one\)"):
+            testbed.twins("testbed/none", self.fake, "none-twin")
+
+    def test_a_setting_the_caller_gives_stands(self):
+        self.lake()
+        _, jobs = testbed.twins("testbed/x", self.fake, "x-twin", seeds=1, env={"STRIMS_SIM_PACKET_LOG": "seed"})
+        self.assertEqual({j["cell"]: j["row"]["packet_log"] for j in jobs}, {"a": "seed", "b": "seed", "c": "seed"})
+
+    def test_the_packet_logs_value_names_the_hosts(self):
+        self.assertEqual(testbed.packet_log([2, 0, 1, 0]), "0,1,2")
+        self.assertEqual(testbed.packet_log([3]), "3")
+        # A lone 1 reads as every host (`all`'s `1`): host 1 twice.
+        self.assertEqual(testbed.packet_log([1]), "1,1")
+
+
 class Tier(unittest.TestCase):
     def test_the_binary_is_where_cargo_writes_it(self):
         # $CARGO_TARGET_DIR, relative to the checkout or absolute, else
@@ -453,10 +586,12 @@ class ShaperFit(unittest.TestCase):
         for m in re.finditer(r"^CREATE OR REPLACE MACRO sketch_\w+.*?;$", text, re.M | re.S):
             conn.execute(m.group(0))
         conn.execute("CREATE TABLE jobs (k VARCHAR, src VARCHAR, env MAP(VARCHAR, VARCHAR))")
+        nodes = {"REPLAY_NODES": "0,1,2"}
         for k, src, env in (("tb", "testbed/s", {}),
-                            ("ro", "testbed/r", {"SOURCE_K": "tb", "REPLAY_OFFERS": "offered"}),
-                            ("rc", "testbed/r", {"SOURCE_K": "tb", "REPLAY_OFFERS": "carried"}),
-                            ("ro2", "testbed/r2", {"SOURCE_K": "tb", "REPLAY_OFFERS": "offered"})):
+                            ("ro", "testbed/r", {"SOURCE_K": "tb", "REPLAY_OFFERS": "offered", **nodes}),
+                            ("rc", "testbed/r", {"SOURCE_K": "tb", "REPLAY_OFFERS": "carried", **nodes}),
+                            ("ro2", "testbed/r2", {"SOURCE_K": "tb", "REPLAY_OFFERS": "offered", **nodes}),
+                            ("tw", "testbed/tw", {"STRIMS_SIM_CAL_VIEWERS": "2"})):
             conn.execute("INSERT INTO jobs VALUES (?, ?, MAP(?::VARCHAR[], ?::VARCHAR[]))",
                          [k, src, list(env), list(env.values())])
         srcs = {"tb": "testbed/s", "ro": "testbed/r", "rc": "testbed/r"}
@@ -504,6 +639,38 @@ class ShaperFit(unittest.TestCase):
             self.fit(["ro", "rc", "ro2"])
         with self.assertRaisesRegex(duckdb.Error, "source tb has 1 offered and 0 carried replays"):
             self.fit(["ro"])
+        # A source whose packets have no replay in a_jobs (a twin's jobs,
+        # which replay nothing) has no model side.
+        with self.assertRaisesRegex(duckdb.Error, "source tb has 0 offered and 0 carried replays"):
+            self.fit(["tw"])
+
+    def rolled_back(self, *statements, replays=("ro", "rc")):
+        """fit's rows with `statements` applied, then undone."""
+        self.conn.execute("BEGIN")
+        try:
+            for s in statements:
+                self.conn.execute(s)
+            return self.fit(list(replays))
+        finally:
+            self.conn.execute("ROLLBACK")
+
+    def test_a_replay_without_the_packets_of_a_node_it_replayed_is_refused(self):
+        import duckdb
+
+        for k, kind in (("ro", "offered"), ("rc", "carried")):
+            with self.assertRaisesRegex(duckdb.Error, f"shaper_fit_of: the {kind} replay {k} of source tb holds no "
+                                                      r"packets rows of node 2, which it replayed \(REPLAY_NODES\)"):
+                self.rolled_back(f"DELETE FROM packets WHERE k = '{k}' AND node = 2")
+        # A node it didn't replay is none of its fit's.
+        got = self.rolled_back("DELETE FROM packets WHERE k IN ('ro', 'rc') AND node = 2",
+                               "UPDATE jobs SET env = map_concat(env, MAP {'REPLAY_NODES': '0,1'}) "
+                               "WHERE k IN ('ro', 'rc')")
+        self.assertEqual({node for node, _, _ in got}, {0, 1})
+        # The carried replay of a node the testbed carried none of holds
+        # none.
+        got = self.rolled_back("UPDATE packets SET sent_us = NULL, lost = 'queue' WHERE k = 'tb' AND node = 2",
+                               "DELETE FROM packets WHERE k = 'rc' AND node = 2")
+        self.assertEqual(got[(2, None, "carried")][0], 0)
 
 
 class LinkOpens(unittest.TestCase):

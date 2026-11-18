@@ -1600,6 +1600,20 @@ CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
                           []) AS side
           FROM r));
 
+-- The hosts whose packets each cell's runs of a side hold (`side`: structs
+-- of a run's `cell`, `k` and `src`, as testbed_side gives them), a row a
+-- cell whose runs hold any: cell and hosts (the packets table's nodes, in
+-- order), whose packets a twin of the cell can log (simlab.testbed's
+-- cells_in). A catalog without packets has no rows of it, rather than a
+-- macro that fails.
+-- needs: packets
+-- else none: cell VARCHAR, hosts BIGINT[]
+CREATE OR REPLACE MACRO packet_hosts_of(side) AS TABLE
+    WITH s AS (SELECT unnest(side, recursive := true))
+    SELECT s.cell, list_sort(list(DISTINCT p.node)) AS hosts
+    FROM packets p JOIN s ON s.k = p.k AND s.src = p.src
+    GROUP BY s.cell;
+
 -- Twin rows against testbed rows (`a_rows` the twin's, `b_rows` the
 -- testbed's: lists of {cell, measure, k, value, basis}, a run's measure
 -- each, as twin_runs_of gives them): each cell and measure both sides have,
@@ -1827,8 +1841,14 @@ CREATE OR REPLACE MACRO first_checks_of(jobs) AS TABLE
 -- a queue without a limit, whose departures the departures' rules read: a
 -- packet the model and the tbf disagree on dropping moves every later
 -- departure of its busy period by its frame, so the shaper's timing is
--- read where both queues hold the same packets. A source with no replay of a kind, or two (two builds',
--- say), fails. A row per cell, source run (k, seed), node (and with per :=
+-- read where both queues hold the same packets. A source holding packets
+-- with no replay of a kind (a_jobs a twin's, which replay nothing, or a
+-- run left out of the replay: b_jobs names the replayed runs alone), or
+-- one with two (two builds', say), fails the query; so does a replay holding
+-- no packets of a node it replayed (its env's REPLAY_NODES) whose packets
+-- its source holds, the carried replay of one the testbed carried a packet
+-- of (a replay whose packets the cache lacks), rather than score a model
+-- side that is missing as a fail. A row per cell, source run (k, seed), node (and with per :=
 -- 'peer' its peer: a link's packets apart), and measure, with the node's
 -- role and link spec, the measure's value, its bound and pass; and a row
 -- of measure `pass` per group, every rule's.
@@ -1863,42 +1883,72 @@ CREATE OR REPLACE MACRO first_checks_of(jobs) AS TABLE
 CREATE OR REPLACE MACRO shaper_fit_of(a_jobs, b_jobs, per := 'node') AS TABLE
     WITH a AS (SELECT unnest(a_jobs, recursive := true)),
     b AS (SELECT unnest(b_jobs, recursive := true)),
+    srcs AS (SELECT DISTINCT b.cell, b.seed, b.k, coalesce(b.src, jb.src) AS src FROM b JOIN jobs jb ON jb.k = b.k),
+    -- Each job's packets, each read once: the sources' (b_jobs').
+    tb AS MATERIALIZED (
+        SELECT s.cell, s.seed, s.k, t.node, t.n, t.peer, t.t_us, t.sent_us, t.lost
+        FROM packets t JOIN srcs s ON t.k = s.k AND t.src = s.src),
     reps AS (
-        SELECT b.cell, b.seed, b.k, coalesce(b.src, jb.src) AS src, a.k AS m_k, coalesce(a.src, ja.src) AS m_src,
-               ja.env['REPLAY_OFFERS'] AS offers
+        SELECT b.k, a.k AS m_k, coalesce(a.src, ja.src) AS m_src, ja.env['REPLAY_OFFERS'] AS offers,
+               ja.env['REPLAY_NODES'] AS m_nodes
         FROM a JOIN jobs ja ON ja.k = a.k
-        JOIN b ON b.k = ja.env['SOURCE_K']
-        JOIN jobs jb ON jb.k = b.k),
-    -- Each source with its two replays, one of each kind.
+        JOIN b ON b.k = ja.env['SOURCE_K']),
+    -- Each source with its replays, one of each kind: every source a_jobs
+    -- replays, and every one holding packets, so that one a_jobs replays
+    -- nothing of (a twin's jobs, say) fails too.
     pairs AS (
-        SELECT cell, seed, k, any_value(src) AS src,
-               count(*) FILTER (WHERE offers = 'offered') AS n_offered,
-               count(*) FILTER (WHERE offers = 'carried') AS n_carried,
-               any_value(m_k) FILTER (WHERE offers = 'offered') AS o_k,
-               any_value(m_src) FILTER (WHERE offers = 'offered') AS o_src,
-               any_value(m_k) FILTER (WHERE offers = 'carried') AS c_k,
-               any_value(m_src) FILTER (WHERE offers = 'carried') AS c_src
-        FROM reps GROUP BY cell, seed, k),
+        SELECT s.cell, s.seed, s.k, any_value(s.src) AS src,
+               count(r.m_k) FILTER (WHERE r.offers = 'offered') AS n_offered,
+               count(r.m_k) FILTER (WHERE r.offers = 'carried') AS n_carried,
+               any_value(r.m_k) FILTER (WHERE r.offers = 'offered') AS o_k,
+               any_value(r.m_src) FILTER (WHERE r.offers = 'offered') AS o_src,
+               any_value(r.m_nodes) FILTER (WHERE r.offers = 'offered') AS o_nodes,
+               any_value(r.m_k) FILTER (WHERE r.offers = 'carried') AS c_k,
+               any_value(r.m_src) FILTER (WHERE r.offers = 'carried') AS c_src,
+               any_value(r.m_nodes) FILTER (WHERE r.offers = 'carried') AS c_nodes
+        FROM srcs s LEFT JOIN reps r ON r.k = s.k
+        WHERE r.m_k IS NOT NULL OR s.k IN (SELECT k FROM tb)
+        GROUP BY s.cell, s.seed, s.k),
     checked AS (
         SELECT * FROM pairs
         WHERE CASE WHEN n_offered = 1 AND n_carried = 1 THEN true
                    ELSE error('shaper_fit_of: source ' || k || ' has ' || n_offered || ' offered and '
                               || n_carried || ' carried replays in a_jobs: it takes one of each') END),
+    -- The nodes each replay replayed (its env's REPLAY_NODES) whose packets
+    -- its source holds: the offered replay owes each one's, and the carried
+    -- replay each one's the testbed carried a packet of. A replay holding
+    -- none of such a node has no model side of it (a replay whose packets
+    -- the cache lacks), and fails the fit.
+    owed AS (
+        SELECT r.* FROM (
+            SELECT p.k, 'offered' AS kind, p.o_k AS m_k, p.o_src AS m_src, TRY_CAST(trim(u.x) AS BIGINT) AS node
+            FROM checked p, unnest(string_split(p.o_nodes, ',')) AS u(x)
+            UNION ALL
+            SELECT p.k, 'carried', p.c_k, p.c_src, TRY_CAST(trim(u.x) AS BIGINT)
+            FROM checked p, unnest(string_split(p.c_nodes, ',')) AS u(x)) r
+        SEMI JOIN tb ON tb.k = r.k AND tb.node = r.node AND (r.kind = 'offered' OR tb.sent_us IS NOT NULL)),
+    held AS (SELECT DISTINCT m.k, m.src, m.node FROM packets m SEMI JOIN owed o ON o.m_k = m.k AND o.m_src = m.src),
+    gaps AS (
+        SELECT o.k, arg_min('the ' || o.kind || ' replay ' || o.m_k || ' of source ' || o.k
+                            || ' holds no packets rows of node ' || o.node, [(o.kind <> 'offered')::INT, o.node]) AS what
+        FROM owed o ANTI JOIN held h ON h.k = o.m_k AND h.src = o.m_src AND h.node = o.node
+        GROUP BY o.k),
+    ready AS (
+        SELECT p.* FROM checked p LEFT JOIN gaps USING (k)
+        WHERE CASE WHEN gaps.what IS NULL THEN true
+                   ELSE error('shaper_fit_of: ' || gaps.what || ', which it replayed (REPLAY_NODES): '
+                              || 'its model side is missing, not failed') END),
     link AS (
         SELECT p.k, x.node, x.role, x.link_spec,
                coalesce(x.link_spec LIKE '%slot=%' AND x.link_spec NOT LIKE '%slot=off%', false)
                    OR coalesce(x.link_spec LIKE 'cable%' AND x.link_spec NOT LIKE '%slot=%', false) AS slots
-        FROM checked p JOIN hosts x ON x.k = p.k AND x.src = p.src),
-    -- Each job's packets, each read once.
-    tb AS MATERIALIZED (
-        SELECT p.cell, p.seed, p.k, t.node, t.n, t.peer, t.t_us, t.sent_us, t.lost
-        FROM packets t JOIN checked p ON t.k = p.k AND t.src = p.src),
+        FROM ready p JOIN hosts x ON x.k = p.k AND x.src = p.src),
     mo AS MATERIALIZED (
         SELECT p.k, m.node, m.n, m.lost
-        FROM packets m JOIN checked p ON m.k = p.o_k AND m.src = p.o_src),
+        FROM packets m JOIN ready p ON m.k = p.o_k AND m.src = p.o_src),
     mc AS MATERIALIZED (
         SELECT p.k, m.node, m.n, m.sent_us
-        FROM packets m JOIN checked p ON m.k = p.c_k AND m.src = p.c_src),
+        FROM packets m JOIN ready p ON m.k = p.c_k AND m.src = p.c_src),
     pk AS MATERIALIZED (
         SELECT t.cell, t.seed, t.k, t.node, CASE WHEN per = 'peer' THEN t.peer END AS peer,
                t.sent_us IS NOT NULL AS tb_sent, c.sent_us - t.sent_us AS residual_us,
@@ -2229,7 +2279,14 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
 -- runs' range widened by counting noise at each end, twice a Poisson
 -- count's standard deviation (2√n of the end's count), so a stage's times
 -- pass only with about as many of them. `pass` is every one of the
--- stage's; a stage one side lacks fails.
+-- stage's; a stage one side lacks fails. A stage the testbed's runs have
+-- whose table none of the model's runs holds a row of at the node, in
+-- its window or not (twins without its log: seed_sends, STRIMS_SIM_SPEC;
+-- link_*, STRIMS_SIM_LINK_LOG; packets for 7a-c, STRIMS_SIM_PACKET_LOG),
+-- fails the query, naming the table, the runs, the stages and the knob
+-- (run.sh's setting where the runs are a testbed's), rather than score a
+-- model side that is missing as a fail; a side of runs with the log and
+-- without it reads the former's.
 -- needs: link_writes link_reads link_samples seed_sends packets hosts jobs.sim jobs.env
 CREATE OR REPLACE MACRO write_fit_of(a_side, b_side, at_node := 0, lo_s := 20, hi_s := -1, floor_ms := 0.2,
                                      floor_bytes := 0) AS TABLE
@@ -2252,10 +2309,58 @@ CREATE OR REPLACE MACRO write_fit_of(a_side, b_side, at_node := 0, lo_s := 20, h
     g AS (
         SELECT *, a_p50 BETWEEN lo50 - fl AND hi50 + fl AS pass50, a_p90 BETWEEN lo90 - fl AND hi90 + fl AS pass90,
                CASE WHEN counted THEN a_n BETWEEN lo_n - 2 * sqrt(lo_n) AND hi_n + 2 * sqrt(hi_n) END AS pass_n
-        FROM f)
+        FROM f),
+    -- The log tables the stages take that none of the model's runs holds
+    -- a row of at the node, in their window or not (twins made without the
+    -- log, testbed runs without its setting, runs whose log the cache
+    -- lacks), each with the knob a sim's runs keep it by, or the setting a
+    -- testbed's do.
+    aw AS (
+        SELECT DISTINCT w.k, w.src, j.sim
+        FROM twin_window_of(from_json(to_json(a_side), '[{"k": "VARCHAR"}]')) w
+        JOIN jobs j ON j.k = w.k AND j.src = w.src),
+    held AS (
+        SELECT 'seed_sends' AS tbl FROM seed_sends x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        WHERE x.node = at_node
+        UNION SELECT 'link_writes' FROM link_writes x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        WHERE x.node = at_node
+        UNION SELECT 'link_reads' FROM link_reads x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        WHERE x.peer = at_node
+        UNION SELECT 'link_samples' FROM link_samples x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        WHERE x.node = at_node
+        UNION SELECT 'packets' FROM packets x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        WHERE x.node = at_node),
+    lack AS (
+        SELECT t.tbl, string_agg(aw.k, ', ' ORDER BY aw.k) AS runs,
+               CASE WHEN bool_and(aw.sim <> 'testbed') THEN t.knob WHEN bool_and(aw.sim = 'testbed') THEN t.setting
+                    ELSE t.knob || ' or ' || t.setting END AS how
+        FROM aw CROSS JOIN (VALUES ('seed_sends', 'STRIMS_SIM_SPEC', 'SPEC=1'),
+                                   ('link_writes', 'STRIMS_SIM_LINK_LOG', 'LINK_LOG'),
+                                   ('link_reads', 'STRIMS_SIM_LINK_LOG', 'LINK_LOG'),
+                                   ('link_samples', 'STRIMS_SIM_LINK_LOG', 'LINK_LOG'),
+                                   ('packets', 'STRIMS_SIM_PACKET_LOG', 'PCAP=1')) AS t(tbl, knob, setting)
+        WHERE t.tbl NOT IN (SELECT tbl FROM held)
+        GROUP BY t.tbl, t.knob, t.setting),
+    -- Each such table with the stages of it the testbed's runs have: those
+    -- have no model side.
+    need AS (
+        SELECT b.stage, t.tbl
+        FROM b, unnest(CASE WHEN b.stage LIKE '1 %' THEN ['seed_sends'] WHEN b.stage LIKE '6 %' THEN ['link_samples']
+                            WHEN b.stage LIKE '7 %' OR b.stage LIKE '8 %' THEN ['link_writes', 'link_reads']
+                            WHEN b.stage LIKE '7%' THEN ['link_writes', 'link_reads', 'packets']
+                            ELSE ['link_writes'] END) AS t(tbl)),
+    missing AS (
+        SELECT string_agg(l.runs || ' hold no ' || l.tbl || ' rows at node ' || at_node || ' (' || l.how
+                          || '), which ' || n.stages || ' read', ', and ' ORDER BY l.tbl) AS what
+        FROM lack l JOIN (SELECT tbl, string_agg(stage, ', ' ORDER BY stage) AS stages FROM need GROUP BY tbl) n
+            USING (tbl))
     SELECT stage, a_runs, b_runs, b_p50s, a_p50, pass50, b_p90s, a_p90, pass90, b_ns, a_n, pass_n,
            coalesce(pass50 AND pass90 AND (pass_n OR NOT counted), false) AS pass
-    FROM g ORDER BY stage;
+    FROM g, missing
+    WHERE CASE WHEN missing.what IS NULL THEN true
+               ELSE error('write_fit_of: a_side''s runs ' || missing.what
+                          || ': their model side is missing, not failed') END
+    ORDER BY stage;
 
 -- The SCTP bench's readings (C3) of a side's runs (`side`, as
 -- side_window_of takes it: testbed_side's, or a twin's jobs) at the seed
@@ -2481,7 +2586,19 @@ CREATE OR REPLACE MACRO sctp_logged_side(side, who, logged) AS (
 --   the log having perhaps moved the ratio too (their wire bytes put the
 --   log-off runs' lower).
 -- The other readings (4, 5, 6, 8, 10, 11) carry no rule (pass NULL):
--- the plan rules none of them. A ruled reading either side lacks fails.
+-- the plan rules none of them. A ruled reading either side lacks fails. A
+-- reading the testbed's runs have whose table none of the model's runs
+-- holds a row of at the node, in its window or not (twins without its
+-- log: the wire's packets, STRIMS_SIM_PACKET_LOG; the writes' link_writes,
+-- STRIMS_SIM_LINK_LOG; the log's sctp_events, STRIMS_SIM_TRACE_SCTP),
+-- fails the query, naming the table, the runs, the readings and the knob
+-- (run.sh's setting where the runs are a testbed's), rather than score a
+-- model side that is missing as a fail. The model's side is the twin of
+-- the testbed's logged cell (TRACE_SCTP, its twin's STRIMS_SIM_TRACE_SCTP)
+-- alone: the sim's SCTP log moves nothing, so its wire and writes are the
+-- log-off cell's twin's; a side of both twins (one source's, the SCTP
+-- matrices' log axis twinned together) reads the log from the logged
+-- twin's runs and weighs each wire reading twice.
 -- needs: packets hosts bins sctp_events link_writes jobs.sim jobs.env
 CREATE OR REPLACE MACRO sctp_fit_of(a_side, b_side, t_side, at_node := 0, lo_s := 20, hi_s := -1,
                                     short_gap_us := 100, long_gap_us := 400, gap_floor_us := 50, floor_ms := 1,
@@ -2546,8 +2663,44 @@ CREATE OR REPLACE MACRO sctp_fit_of(a_side, b_side, t_side, at_node := 0, lo_s :
         SELECT *, split_part(reading, ' ', 1) AS num,
                CASE split_part(reading, ' ', 1) WHEN '1' THEN floor_ms WHEN '2' THEN floor_bytes END AS fl,
                CASE WHEN split_part(reading, ' ', 1) IN ('3', '7', '12')
-                    THEN greatest(max_tv::DOUBLE, coalesce(b_tv, 0)) END AS tv_bound
-        FROM f)
+                    THEN greatest(max_tv::DOUBLE, coalesce(b_tv, 0)) END AS tv_bound,
+               CASE WHEN split_part(reading, ' ', 1) IN ('1', '3', '4', '5', '12') THEN 'packets'
+                    WHEN split_part(reading, ' ', 1) = '2' THEN 'link_writes'
+                    WHEN split_part(reading, ' ', 1) IN ('7', '8', '9', '10', '11') THEN 'sctp_events' END AS tbl
+        FROM f),
+    -- The log tables the readings take that none of the model's runs
+    -- holds a row of at the node, in their window or not (twins made
+    -- without the log, testbed runs without its setting, runs whose log
+    -- the cache lacks), each with the knob a sim's runs keep it by, or the
+    -- setting a testbed's do.
+    aw AS (
+        SELECT DISTINCT w.k, w.src, j.sim
+        FROM twin_window_of(from_json(to_json(a_side), '[{"k": "VARCHAR"}]')) w
+        JOIN jobs j ON j.k = w.k AND j.src = w.src),
+    held AS (
+        SELECT 'packets' AS tbl FROM packets x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        WHERE x.node = at_node
+        UNION SELECT 'link_writes' FROM link_writes x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        WHERE x.node = at_node
+        UNION SELECT 'sctp_events' FROM sctp_events x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        WHERE x.node = at_node OR x.peer = at_node),
+    lack AS (
+        SELECT t.tbl, string_agg(aw.k, ', ' ORDER BY aw.k) AS runs,
+               CASE WHEN bool_and(aw.sim <> 'testbed') THEN t.knob WHEN bool_and(aw.sim = 'testbed') THEN t.setting
+                    ELSE t.knob || ' or ' || t.setting END AS how
+        FROM aw CROSS JOIN (VALUES ('packets', 'STRIMS_SIM_PACKET_LOG', 'PCAP=1'),
+                                   ('link_writes', 'STRIMS_SIM_LINK_LOG', 'LINK_LOG'),
+                                   ('sctp_events', 'STRIMS_SIM_TRACE_SCTP', 'TRACE_SCTP')) AS t(tbl, knob, setting)
+        WHERE t.tbl NOT IN (SELECT tbl FROM held)
+        GROUP BY t.tbl, t.knob, t.setting),
+    -- Each such table with the readings of it the testbed's runs have:
+    -- those have no model side.
+    missing AS (
+        SELECT string_agg(l.runs || ' hold no ' || l.tbl || ' rows at node ' || at_node || ' (' || l.how
+                          || '), which ' || r.readings || ' read', ', and ' ORDER BY l.tbl) AS what
+        FROM lack l
+        JOIN (SELECT tbl, string_agg(reading, ', ' ORDER BY num::INT, reading) AS readings
+              FROM g WHERE b_runs IS NOT NULL GROUP BY tbl) r USING (tbl))
     SELECT reading, source, against, against = 'log on' AS perturbed, a_runs, b_runs, b_p50s, a_p50, b_p90s, a_p90,
            b_ns, a_n, tv, tv_bound, b_tv,
            CASE WHEN num IN ('1', '2')
@@ -2555,4 +2708,8 @@ CREATE OR REPLACE MACRO sctp_fit_of(a_side, b_side, t_side, at_node := 0, lo_s :
                 WHEN num IN ('3', '7', '12') THEN coalesce(tv <= tv_bound, false)
                 WHEN num = '9' THEN coalesce(a_p50 BETWEEN lo50 - 2 * lo_noise AND hi50 + 2 * hi_noise, false)
            END AS pass
-    FROM g ORDER BY num::INT, reading;
+    FROM g, missing
+    WHERE CASE WHEN missing.what IS NULL THEN true
+               ELSE error('sctp_fit_of: a_side''s runs ' || missing.what
+                          || ': their model side is missing, not failed') END
+    ORDER BY num::INT, reading;
