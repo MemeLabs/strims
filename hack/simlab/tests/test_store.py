@@ -204,13 +204,13 @@ class FoldExport(Scratch):
         """golden_cli's jobs, written as the sim writes them, with the
         meter samples', speculative requests', parks', arrivals', asks',
         haves', the seed log's, the peer samples', a testbed run's sockets',
-        the packets', the hosts', the parent checks' and the timers' tables
-        golden_cli's don't write: the suite's, then the farm's (whose reads,
-        asks and haves are zstd-compressed, `<table>.csv.zst`, as the sim
-        writes its large tables, and the seed log's, the peer samples', the
-        sockets', the packets', the parent checks' and the timers' too, so
-        the fold takes the tables registered last in either form), then a job
-        folded again."""
+        the packets', the hosts', the parent checks', the timers' and the
+        link log's tables golden_cli's don't write: the suite's, then the
+        farm's (whose reads, asks and haves are zstd-compressed,
+        `<table>.csv.zst`, as the sim writes its large tables, and the seed
+        log's, the peer samples', the sockets', the packets', the parent
+        checks', the timers' and the link log's too, so the fold takes the
+        tables registered last in either form), then a job folded again."""
         jobs = [golden_cli.job_dir(self.dir / "jobs" / f"{i:02d}", j) for i, j in enumerate(golden_cli.JOBS)]
         for n, j in enumerate(jobs):
             d = Path(j["dir"])
@@ -268,9 +268,30 @@ class FoldExport(Scratch):
                                    [(1_001_000 + n, 0, 0, "node_task", 990_000, 1_000_000 + n, 1000 - n, 10_000,
                                      "task"),
                                     (1_251_000, 0, 1, "writer", 1_000_000, 1_250_000, 1000, 250_000, "task")])
+            # The seed's write to node 1 on their first link, its viewer's read
+            # of it, and the seed's reading of the link's queues.
+            golden_cli.write_table(d, "link_writes", [("t_us", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
+                                                      ("link", "BIGINT"), ("kind", "VARCHAR"), ("off", "BIGINT"),
+                                                      ("n", "BIGINT"), ("bytes", "BIGINT"), ("queued_us", "BIGINT"),
+                                                      ("done_us", "BIGINT"), ("unsent_before", "BIGINT"),
+                                                      ("wait", "VARCHAR"), ("rec_kind", "VARCHAR"),
+                                                      ("seq", "BIGINT")],
+                                   [(1_000_200 + n, 0, 1, 0, "webrtc", 0, 0, 1200, 1_000_000, 1_000_300, 900,
+                                     "channel", None, None)])
+            golden_cli.write_table(d, "link_reads", [("t_us", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
+                                                     ("link", "BIGINT"), ("kind", "VARCHAR"), ("off", "BIGINT"),
+                                                     ("n", "BIGINT"), ("bytes", "BIGINT"), ("taken_us", "BIGINT"),
+                                                     ("rec_kind", "VARCHAR"), ("seq", "BIGINT")],
+                                   [(1_020_000 + n, 1, 0, 0, "webrtc", 0, 0, 1200, 1_020_400, None, None)])
+            golden_cli.write_table(d, "link_samples", [("t_us", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
+                                                       ("link", "BIGINT"), ("source", "VARCHAR"),
+                                                       ("cause", "VARCHAR"), ("link_pending_bytes", "BIGINT"),
+                                                       ("write_held", "BIGINT"), ("qos_backlog_bytes", "BIGINT")],
+                                   [(1_000_000 + n, 0, 1, 0, "queues", "sample", 4096, 2, None)])
             if ":" in j["sim"]:
                 for t in ("reads", "asks", "haves", "seed_decisions", "seed_sends", "peer_samples", "sockets",
-                          "packets", "parent_checks", "timers"):
+                          "packets", "parent_checks", "timers", "link_writes",
+                          "link_reads", "link_samples"):
                     csv = d / f"{t}.csv"
                     (d / f"{t}.csv.zst").write_bytes(zstd.compress(csv.read_bytes()))
                     csv.unlink()
@@ -340,6 +361,10 @@ class FoldExport(Scratch):
         self.assertEqual(sorted(r[names.index("k")] for r in rows), sorted(2 * list(runs["k"])))
         self.assertEqual(len({(r[names.index("k")], r[names.index("node")], r[names.index("n")]) for r in rows}),
                          len(rows))
+        # A row of each link table a job.
+        for t in ("link_writes", "link_reads", "link_samples"):
+            cols, rows = parquet(self.dir / "module" / f"{t}.parquet")
+            self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(runs["k"]), t)
 
     def test_an_empty_store_exports_nothing(self):
         sm = simdb()

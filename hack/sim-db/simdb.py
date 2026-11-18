@@ -362,10 +362,11 @@ the same rows but keeps both `src` columns, to name as runs.src. Beside
 (k, src) the views join on their own columns: reads and viewer_seconds to
 viewers USING (k, src, viewer), as stalls does; events, parents,
 parent_checks, node_bins, meter_samples, peer_samples, sockets, timers,
-forecast, arrivals, spec_requests, parks, asks, haves, packets and hosts
-to viewers USING (k, src, node) (`node`, the viewers' `host`), packets to
-hosts the same, a shaper replay's packets to its source run's ON (the
-replay's env SOURCE_K = k, node, n),
+link_writes, link_reads, link_samples, forecast, arrivals, spec_requests,
+parks, asks, haves, packets and hosts to viewers USING (k, src, node)
+(`node`, the viewers' `host`), packets to hosts the same, a shaper
+replay's packets to its source run's ON (the replay's env SOURCE_K = k,
+node, n),
 and asks and haves to arrivals on the peer's holds (arrivals.node =
 asks.peer, seq, arrivals.incarnation = asks.peer_incarnation, as haves':
 the views' truth); seed_decisions and seed_sends (the seed's, node the

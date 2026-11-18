@@ -484,7 +484,7 @@ class Cells(unittest.TestCase):
                 self.assertEqual(c["env"][k], v)
         self.assertEqual(neutral.LOGS[lab.SIM], {"STRIMS_SIM_FORECAST": "1", "STRIMS_SIM_SPEC": "1",
                                                  "STRIMS_SIM_PARENT_CHECKS": "1", "STRIMS_SIM_TIMER_LOG": "all",
-                                                 "STRIMS_SIM_BIN_NODES": "1"})
+                                                 "STRIMS_SIM_LINK_LOG": "seed", "STRIMS_SIM_BIN_NODES": "1"})
         # The vocabulary's: the audit's, then cells of their own names.
         vocab = neutral.cell_set("vocab")
         self.assertEqual(vocab[:len(audit)], audit)

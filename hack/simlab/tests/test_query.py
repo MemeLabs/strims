@@ -672,6 +672,31 @@ class TimerLog(unittest.TestCase):
         self.assertIn('SELECT x.* FROM raw."timers" x', sql)
 
 
+class LinkLog(unittest.TestCase):
+    """The link log's tables: sampled (a row a write, read or reading of
+    every link), with their keys, their joins (a write to its peer's read
+    by their bytes) and their knob."""
+
+    TABLES = ("link_writes", "link_reads", "link_samples")
+
+    def test_the_tables_are_sampled_with_their_keys_and_joins(self):
+        for t in self.TABLES:
+            self.assertIn(t, store_host.TABLES)
+            self.assertIn(t, store_host.SAMPLE_TABLES)
+            self.assertEqual(query.TABLE_KNOBS[t], ("LINK_LOG",))
+            self.assertIn("hosts USING (k, src, node)", catalog.STANDARD_JOINS[t])
+        self.assertEqual({t: catalog.STANDARD_KEYS[t] for t in self.TABLES},
+                         {"link_writes": "k, node, peer, link, off", "link_reads": "k, node, peer, link, off",
+                          "link_samples": "k, node, peer, link, t_us, source, cause"})
+        self.assertIn("link_reads.off + link_reads.bytes >= link_writes.off + link_writes.bytes",
+                      catalog.STANDARD_JOINS["link_writes"])
+        self.assertIn("link_writes.off <= link_reads.off", catalog.STANDARD_JOINS["link_reads"])
+        with self.assertRaisesRegex(query.Refused, r"^the selection has no link_writes \(nor does S3: run with "
+                                                   r"STRIMS_SIM_LINK_LOG=1\)"):
+            query.need({"reads"}, "link_writes")
+        query.need(set(self.TABLES), *self.TABLES)
+
+
 # Testbed runs' knobs that key to three tier cells (simlab.testbed.cell_sql):
 # robust's star-31-5, and thin-15-10 in robust and in browsers.
 TESTBED_ENV = {"STRIMS_SIM_CAL_MESH": "full", "STRIMS_SIM_CAL_SECS": "60", "STRIMS_SIM_CAL_SEED_BURST": "3028",

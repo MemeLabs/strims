@@ -258,7 +258,8 @@ are `experiment_jobs e JOIN reads USING (k, src) WHERE e.exp_id = ...`.
 `JOIN experiment_jobs USING (k, src)` gives a job's experiments, cells,
 arms and seeds. Beside them the tables join on their own columns: reads,
 viewer_seconds and stalls to viewers USING (k, src, viewer); events,
-node_bins, meter_samples, peer_samples, sockets, timers, parents,
+node_bins, meter_samples, peer_samples, sockets, timers, link_writes,
+link_reads, link_samples, parents,
 parent_checks, forecast, arrivals, spec_requests, parks, packets and hosts
 to viewers USING (k, src, node), and packets to hosts the same (a node's
 link spec, role and kind); a shaper replay's packets to its source run's

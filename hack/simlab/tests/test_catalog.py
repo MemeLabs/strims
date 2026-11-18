@@ -1426,6 +1426,21 @@ class Tables(Fixture):
             "t_us", "node", "n", "source", "armed_us", "deadline_us", "late_us", "requested_us", "context")],
             [(1_001_200, 0, 0, "node_task", 990_000, 1_000_000, 1200, 10_000, "task"),
              (1_249_900, 1, 0, "pacer", 1_245_000, 1_250_000, -100, 5000, "worker")])
+        # The seed's two writes to node 1 on their first link, a message
+        # each; node 1's reads of them; and the seed's reading of the
+        # channel's bufferedamountlow.
+        golden_cli.write_table(d, "link_writes", [(c, "VARCHAR" if c in ("kind", "wait") else "BIGINT") for c in (
+            "t_us", "node", "peer", "link", "kind", "off", "n", "bytes", "queued_us", "done_us", "unsent_before",
+            "wait")],
+            [(1_000_000, 0, 1, 0, "webrtc", 0, 0, 900, 999_800, 1_000_100, 0, "none"),
+             (1_002_000, 0, 1, 0, "webrtc", 900, 1, 600, 1_001_900, 1_060_000, 33_000, "channel")])
+        golden_cli.write_table(d, "link_reads", [(c, "VARCHAR" if c == "kind" else "BIGINT") for c in (
+            "t_us", "node", "peer", "link", "kind", "off", "n", "bytes", "taken_us")],
+            [(1_030_000, 1, 0, 0, "webrtc", 0, 0, 900, 1_030_050),
+             (1_090_000, 1, 0, 0, "webrtc", 900, 1, 600, 1_090_100)])
+        golden_cli.write_table(d, "link_samples", [(c, "VARCHAR" if c in ("source", "cause") else "BIGINT") for c in (
+            "t_us", "node", "peer", "link", "source", "cause", "buffered_bytes")],
+            [(1_059_000, 0, 1, 0, "webrtc", "low", 0)])
         db = self.root / "jobs-tables" / f"{src.replace('/', '~')}.duckdb"
         store_host.fold(db, [meta], src)
         store_host.export(db, store_host.cache_root() / "cache" / src)
@@ -1501,6 +1516,18 @@ class Tables(Fixture):
                                {"node": 1, "n": 0, "source": "pacer", "late_us": -100, "context": "worker"}])
         got = catalog.lake("SELECT keys, joins FROM table_catalog WHERE name = 'timers';")
         self.assertEqual(got, [{"keys": "k, node, n", "joins": "hosts, viewers USING (k, src, node)"}])
+        # The link log: each write meets its peer's read of its last byte by
+        # their offsets (table_catalog's join), and the low its reading.
+        got = catalog.lake("SELECT w.n, w.wait, r.t_us - w.done_us AS delay FROM link_writes w ASOF JOIN link_reads r "
+                           "ON r.k = w.k AND r.src = w.src AND r.node = w.peer AND r.peer = w.node AND r.link = w.link "
+                           f"AND r.off + r.bytes >= w.off + w.bytes WHERE w.k = {catalog.q(tail)} ORDER BY w.n;")
+        self.assertEqual(got, [{"n": 0, "wait": "none", "delay": 29_900}, {"n": 1, "wait": "channel", "delay": 30_000}])
+        got = catalog.lake(f"SELECT cause, buffered_bytes FROM link_samples WHERE k = {catalog.q(tail)};")
+        self.assertEqual(got, [{"cause": "low", "buffered_bytes": 0}])
+        got = {r["name"]: r["keys"] for r in catalog.lake(
+            "SELECT name, keys FROM table_catalog WHERE name IN ('link_writes', 'link_reads', 'link_samples');")}
+        self.assertEqual(got, {"link_reads": "k, node, peer, link, off", "link_samples": "k, node, peer, link, t_us, "
+                               "source, cause", "link_writes": "k, node, peer, link, off"})
         # Parents: each node's changes in order, n, and n NULL where a
         # run's table has none.
         parents = catalog.lake("SELECT k, node, n, parent FROM parents WHERE k IN "
