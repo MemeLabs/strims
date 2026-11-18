@@ -93,6 +93,7 @@ use std::time::Duration as StdDuration;
 use futures_util::future::join_all;
 use strims_base::time::{Duration, Time};
 use strims_node::{CaptureSample, LinkProbe, Net, TcpOptions, TcpSocketConfig};
+use strims_wan::framing::Framing;
 use strims_wan::{Access, Bucket, City, Options, Site};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Notify;
@@ -950,7 +951,10 @@ pub struct BenchSite {
     /// Its access link class (`run.sh`'s `SEED_LINK`, `VIEWER_LINK` and
     /// `LINKS`), if the run gave one: its framing, slots, bucket and
     /// trace in the sim ([`crate::link`]), which then takes the run's
-    /// bucket whatever [`Bench::buckets`] says.
+    /// bucket whatever [`Bench::buckets`] says. Without one the node had
+    /// `run.sh`'s default class, a tbf, whose queue and rate count each
+    /// packet's Ethernet header ([`Framing::ETHERNET`]), as the sim's
+    /// uplink then does, with the bucket as [`Bench::buckets`] says.
     pub link: Option<crate::link::TestbedLink>,
 }
 
@@ -1207,10 +1211,13 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
             .with_bucket(bench.buckets.then_some(run_bucket));
         if let Some(link) = &s.link {
             site = link.site(site, Some(run_bucket), top)?;
-        } else if bench.buckets
-            && let Some(p) = s.peak
-        {
-            strims_wan::testbed::check_peak(p, top)?;
+        } else {
+            site = site.with_framing(Framing::ETHERNET);
+            if bench.buckets
+                && let Some(p) = s.peak
+            {
+                strims_wan::testbed::check_peak(p, top)?;
+            }
         }
         if let Some(d) = s.down {
             site = site.with_down(d);
@@ -1855,10 +1862,11 @@ mod tests {
         assert!(tbf > 65_000, "tbf's burst took {tbf} us");
     }
 
-    /// A pure ACK and a SACK cost what their link charges them: Ethernet's 14
-    /// bytes more a packet on a viewer that charges it for a TCP ACK, and
-    /// the same for a data channel's SACK, whose datagram carries those 14
-    /// bytes of its own where the link charges none.
+    /// A pure ACK and a SACK cost what their link charges them: a TCP ACK
+    /// its IP bytes and Ethernet's 14 on a viewer of `run.sh`'s default
+    /// class, a tbf, as on one that names it, and 18 on fiber; a data
+    /// channel's SACK the same with a link spec or without, its datagram
+    /// carrying those 14 bytes of its own where the link charges none.
     #[test]
     fn acknowledgements_count_their_links_charge() {
         let per_ack = |settings: &str, topology: &str| {
@@ -1876,9 +1884,13 @@ mod tests {
             bytes as f64 / acks as f64
         };
         let tcp = "VIEWERS=1\nSECS=4";
-        let plain = per_ack(tcp, "");
-        let framed = per_ack(&format!("{tcp}\nVIEWER_LINK=tbf"), "");
-        assert!((framed - plain - 14.0).abs() < 1e-9, "{plain} {framed}");
+        let bare = strims_wan::wire::tcp_wire(0).0 as f64;
+        let default = per_ack(tcp, "");
+        let tbf = per_ack(&format!("{tcp}\nVIEWER_LINK=tbf"), "");
+        let fiber = per_ack(&format!("{tcp}\nVIEWER_LINK=fiber"), "");
+        assert!((default - bare - 14.0).abs() < 1e-9, "{bare} {default}");
+        assert!((tbf - bare - 14.0).abs() < 1e-9, "{bare} {tbf}");
+        assert!((fiber - bare - 18.0).abs() < 1e-9, "{bare} {fiber}");
         let rtc = "VIEWERS=1\nSECS=4\nNODE_ARGS=--webrtc";
         let topology = "node 0 10.77.0.10:4000\nnode 1 10.77.0.11:4000 chromium\nlink 0 1\n";
         let plain = per_ack(rtc, topology);
