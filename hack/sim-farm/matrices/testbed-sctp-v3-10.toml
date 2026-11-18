@@ -1,0 +1,44 @@
+# The SCTP bench's testbed runs (target/component-benches C3) at
+# 10 Mbit/s on dedicated hosts: the thin star, a seed and 3 viewers each
+# linked to the seed alone, every node Chromium over WebRTC, each node's
+# links' I/O logged (LINK_LOG), with the packets (PCAP), the forecast and
+# the request logs, and every node's dcSCTP's packet log off and on
+# (TRACE_SCTP): sctp_fit_of scores their twins against the runs with it
+# off for the wire and the writes and with it on for what the log alone
+# holds. TRACE_SCTP needs run.sh from the SCTP log's batch on.
+
+kind = "testbed"
+repeats = 3
+host_cores = 4
+paired = false
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node --example testbed_tables", "cargo build --release --locked -p strims-testbed --example testbed_browser", "export PATH=$HOME/.nvm/versions/node/v26.11.1/bin:$PATH && pnpm install --frozen-lockfile --offline && pnpm exec webpack --mode production --env TARGET=wasm-testbed"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
+BROWSER_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_browser"
+WEB_BUNDLE = "dist/wasm-testbed"
+
+[files]
+TOPOLOGY = "topologies/thin-v3"
+
+[arms]
+main = "main"
+
+[env]
+VIEWERS = "3"
+SEED_UP_MBIT = "10"
+SECS = "60"
+NODE_ARGS = "--chunk 4096 --munro 32768"
+KINDS = "chromium chromium chromium chromium"
+BROWSER_LINKS = "webrtc"
+BROWSER_ARGS = "--chunk 4096 --munro 32768"
+LINK_LOG = "all"
+PCAP = "1"
+FORECAST = "1"
+SPEC = "1"
+
+[axes]
+TRACE_SCTP = ["", "all"]
