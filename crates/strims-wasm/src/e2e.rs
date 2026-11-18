@@ -37,7 +37,7 @@
 //! |---|---|---|
 //! | `started` | `hostId` | The node runs. |
 //! | `dialed` | `uri`, `hostId` | A dial linked to `hostId`. |
-//! | `connecting` | `hostId`, `started` | A `connectPeer` returned; `started` is false when the host is this node, already a peer, or being exchanged with. |
+//! | `connecting` | `hostId`, `started`, `atMs` | A `connectPeer` returned; `started` is false when the host is this node, already a peer, or being exchanged with. `atMs` is when the command came (Unix ms). |
 //! | `peerAdded` | `hostId`, `kind` (`tcp`, `ws`, `webrtc` or `other`), `dialed` | A link finished its handshake; `dialed` is set when this node dialed or offered it. |
 //! | `peerRemoved` | `hostId` | A peer went away. |
 //! | `exchangeClosed` | `hostId`, `outcome` | A peer exchange ended; `outcome` is the `ExchangeOutcome`'s debug form. |
@@ -275,6 +275,7 @@ impl Control {
                 }));
             }
             "connectPeer" => {
+                let at = js_sys::Date::now();
                 let host = host(cmd, "hostId")?;
                 let out = self.out.clone();
                 drop(runtime::spawn(async move {
@@ -283,6 +284,7 @@ impl Control {
                             ("type", "connecting".into()),
                             ("hostId", host_id(host)),
                             ("started", started.into()),
+                            ("atMs", at.into()),
                         ]),
                         Err(e) => out.post(&[
                             ("type", "error".into()),

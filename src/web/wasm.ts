@@ -64,6 +64,36 @@ export type WindowSignal =
   | { type: "closed"; conn: number; reason: string }
   | { type: "visibility"; hidden: boolean; forceHUP: boolean };
 
+/**
+ * When the window did each part of a connection's signalling, in ms of the
+ * host's clock (`performance.timeOrigin + performance.now()`): its
+ * `create`; a `describe`'s arrival (`asked`), its start after the
+ * connection's earlier operations, its offer or answer made (`created`),
+ * applied (`set`) and gathered (`gathered`, as the local description is
+ * posted); a `remote`'s arrival, start and its description applied.
+ */
+export type SignalTiming =
+  | { step: "create"; conn: number; at: number }
+  | {
+      step: "describe";
+      conn: number;
+      sdpType: "offer" | "answer";
+      asked: number;
+      start: number;
+      created: number;
+      set: number;
+      gathered: number;
+    }
+  | { step: "remote"; conn: number; asked: number; start: number; set: number };
+
+/** What a page hooks into its node: the testbed's reads of its signalling. */
+export interface WasmNodeHooks {
+  onSignalTiming?: (t: SignalTiming) => void;
+}
+
+// The host's clock, in ms with the performance clock's precision.
+const hostMs = () => performance.timeOrigin + performance.now();
+
 /** What the window posts on the feeds port (crates/strims-wasm's feed module). */
 export type FeedRequest =
   | ({ type: "open"; id: number; port: MessagePort; replaces?: number } & StreamRequest)
@@ -201,19 +231,36 @@ interface Peer {
 class PeerHost {
   private peers = new Map<number, Peer>();
 
-  constructor(private post: (msg: WindowSignal, transfer?: Transferable[]) => void) {}
+  constructor(
+    private post: (msg: WindowSignal, transfer?: Transferable[]) => void,
+    private timing?: (t: SignalTiming) => void
+  ) {}
 
   handle(msg: WorkerSignal): void {
     switch (msg.type) {
       case "create":
         this.create(msg.conn, msg.iceServers, msg.gatherTimeoutMs);
         break;
-      case "describe":
+      case "describe": {
+        const asked = hostMs();
         this.enqueue(msg.conn, async ({ pc, gatherTimeoutMs }) => {
+          const start = hostMs();
           const description =
             msg.sdpType === "offer" ? await pc.createOffer() : await pc.createAnswer();
+          const created = hostMs();
           await pc.setLocalDescription(description);
+          const set = hostMs();
           await gathered(pc, gatherTimeoutMs);
+          this.timing?.({
+            step: "describe",
+            conn: msg.conn,
+            sdpType: msg.sdpType,
+            asked,
+            start,
+            created,
+            set,
+            gathered: hostMs(),
+          });
           return {
             type: "local",
             conn: msg.conn,
@@ -221,11 +268,16 @@ class PeerHost {
           };
         });
         break;
-      case "remote":
+      }
+      case "remote": {
+        const asked = hostMs();
         this.enqueue(msg.conn, async ({ pc }) => {
+          const start = hostMs();
           await pc.setRemoteDescription(JSON.parse(msg.description) as RTCSessionDescriptionInit);
+          this.timing?.({ step: "remote", conn: msg.conn, asked, start, set: hostMs() });
         });
         break;
+      }
       case "close":
         this.enqueue(msg.conn, (peer) => {
           this.forget(msg.conn, peer);
@@ -255,6 +307,7 @@ class PeerHost {
     }
     const peer: Peer = { pc, gatherTimeoutMs, chain: Promise.resolve(), connected: false };
     this.peers.set(conn, peer);
+    this.timing?.({ step: "create", conn, at: hostMs() });
     peerConnections.push(pc);
     pc.onconnectionstatechange = () => this.onConnectionStateChange(conn, peer);
 
@@ -352,7 +405,7 @@ const startPsiWorker = (logLevel: number, port: MessagePort): Worker => {
 
 // Starts a strims-wasm node in a new dedicated worker, and its PSI worker.
 // The browser link tests' bare node runs no PSI, and gets no PSI worker.
-export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
+export const startWasmNode = (options: WasmNodeOptions, hooks: WasmNodeHooks = {}): WasmNode => {
   const worker = spawnWorker("svc");
   const psi = options.e2e ? undefined : new MessageChannel();
   const psiWorker = psi && startPsiWorker(options.logLevel, psi.port2);
@@ -361,7 +414,10 @@ export const startWasmNode = (options: WasmNodeOptions): WasmNode => {
   const feedPorts = new MessageChannel();
   const feeds = new FeedHost(feedPorts.port1);
   const bus = new PortBus(frontend.port1);
-  const peers = new PeerHost((msg, transfer) => signal.port1.postMessage(msg, transfer ?? []));
+  const peers = new PeerHost(
+    (msg, transfer) => signal.port1.postMessage(msg, transfer ?? []),
+    hooks.onSignalTiming
+  );
 
   const onVisibilityChange = () =>
     signal.port1.postMessage({

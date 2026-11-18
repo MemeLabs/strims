@@ -52,7 +52,11 @@
 //! `post_ms` the page's clock as it posted the line, and `host_t_ms` the
 //! harness's clock when the line arrived: the page's clock and the
 //! container's agree when `host_t_ms` stays a few ms past `post_ms`. Everything else (the browser's output, the node's errors and
-//! peers) goes to stderr. The harness ends 5 s after the stream does,
+//! peers) goes to stderr, each event of the page's with the harness's
+//! clock ahead of it: among them the page's `rtcTiming` (its
+//! connections' signalling, `src/web/wasm.ts`'s `SignalTiming`) and the
+//! node's `connecting` (its `atMs` when the command came), and the
+//! harness's own `ask` of each peer exchange as it sends it. The harness ends 5 s after the stream does,
 //! like `testbed_node`, and kills the browser.
 //!
 //! With `--units`, the stream is media in the unit format
@@ -475,6 +479,7 @@ impl Control {
     async fn exchange(&self, host: &str) -> bool {
         let mut events = self.events.subscribe();
         let cmd = json!({"type": "connectPeer", "hostId": host});
+        eprintln!("{} ask {cmd}", now_ms());
         let started = self
             .ask(cmd, |e| e["type"] == "connecting" && e["hostId"] == host)
             .await;

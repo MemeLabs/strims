@@ -13,13 +13,15 @@
 // second the page sends the harness a `player` event: the player's stats
 // as window.__strims_players__ has them, the video's events since the last
 // one, and when the stream started (`dataMs`), and the first `playing` and
-// rendered frame came.
+// rendered frame came. The page also sends each part of its connections'
+// signalling as it ends (an `rtcTiming` event: wasm.ts's SignalTiming), so
+// the testbed reads what the browser took to make each description.
 
 import { Feed } from "../lib/media/feed";
 import { UNITS_MIME_TYPE } from "../lib/media/mime";
 import { UnitsPlayer } from "../lib/media/units";
 import { WSReadWriter } from "../lib/ws";
-import { startWasmNode } from "./wasm";
+import { SignalTiming, startWasmNode } from "./wasm";
 
 const params = new URLSearchParams(location.search);
 const count = Math.max(1, parseInt(params.get("count") ?? "1") >> 0);
@@ -136,8 +138,13 @@ class Viewer {
 }
 
 for (let i = 0; i < count; i++) {
-  const node = startWasmNode({ logLevel, allowInsecureWs: true, iceServers: [], e2e: true });
   const ws = new WSReadWriter(`${scheme}//${location.host}/control?i=${i}`);
+  const onSignalTiming = (t: SignalTiming) =>
+    ws.write(new TextEncoder().encode(JSON.stringify({ type: "rtcTiming", ...t })));
+  const node = startWasmNode(
+    { logLevel, allowInsecureWs: true, iceServers: [], e2e: true },
+    { onSignalTiming }
+  );
   let viewer: Viewer | null = null;
 
   // The node's own stream: the request's fields name nothing it reads.

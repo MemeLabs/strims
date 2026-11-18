@@ -306,7 +306,11 @@
 #   node-<i>.jsonl         a JSON line per second from each node
 #                          (strims-testbed's node module); a browser's adds
 #                          post_ms and host_t_ms (testbed_browser's)
-#   node-<i>.err
+#   node-<i>.err           the node's errors; a browser node's harness logs
+#                          there each of its page's events with its clock
+#                          (testbed_browser's), its signalling timings
+#                          (`rtcTiming`) among them, and each peer
+#                          exchange it asks for
 #   cpu-<i>.log            the container's CPU time and memory once a
 #                          second: ms since the epoch, the cgroup's
 #                          usage_usec, and its memory.current in bytes,
