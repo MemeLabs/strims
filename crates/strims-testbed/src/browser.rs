@@ -8,9 +8,19 @@
 //! - **Server** ([`Site`]). One listener on 127.0.0.1 serves a [`Bundle`]
 //!   at its root. Every WebSocket upgrade goes to the [`Site::sockets`]
 //!   receiver, with its path and query: e2e.html's `/control?i=<n>`, or
-//!   whatever a page was told to connect to.
+//!   whatever a page was told to connect to. [`Site::serve_isolated`]
+//!   serves it cross-origin isolated, for a measurement of timers: the
+//!   browsers then read `performance.now()` at their isolated pages'
+//!   finer clamp. Firefox's `Date.now()`, a browser node's own clock
+//!   (strims-wasm's `clock::now`), returns whole ms on either page, but
+//!   isolation likely changes whether that ms is jittered (its 1-ms clamp
+//!   jitters a plain page's), so a Firefox node's deadlines may fall
+//!   otherwise than on a plain page; Chromium's `Date.now()` is the same
+//!   on either. The farm's testbed-timers-control.toml compares Firefox's
+//!   runs with the timer log off and on.
 //! - **Firefox** runs `--headless --no-remote` on a profile with
-//!   [`FIREFOX_PREFS`] ([`firefox_profile`]).
+//!   [`FIREFOX_PREFS`] ([`firefox_profile`]), which leaves its timer
+//!   precision at its defaults.
 //! - **Chromium** runs headless with [`CHROMIUM_FLAGS`].
 //!
 //! Both browsers keep ICE host candidates as addresses, so pages link over
@@ -66,12 +76,20 @@ fn read_tree(
     Ok(())
 }
 
+/// The headers that make a page cross-origin isolated
+/// ([`Site::serve_isolated`]): every response of the bundle's is
+/// same-origin, so each takes them.
+const ISOLATED: &str =
+    "Cross-Origin-Opener-Policy: same-origin\r\nCross-Origin-Embedder-Policy: require-corp\r\n";
+
 /// Serves one HTTP request: a file of the bundle, or a WebSocket upgrade
-/// handed to `sockets` with its path and query.
+/// handed to `sockets` with its path and query; each response with
+/// `extra`'s headers.
 async fn serve(
     mut conn: TcpStream,
     bundle: &Bundle,
     sockets: &mpsc::UnboundedSender<(String, Socket)>,
+    extra: &str,
 ) -> std::io::Result<()> {
     let mut head = Vec::new();
     let mut buf = [0u8; 4096];
@@ -89,7 +107,7 @@ async fn serve(
         let mut headers = [httparse::EMPTY_HEADER; 64];
         let mut req = httparse::Request::new(&mut headers);
         if !matches!(req.parse(&head), Ok(httparse::Status::Complete(_))) {
-            return respond(conn, "400 Bad Request", "text/plain", b"").await;
+            return respond(conn, "400 Bad Request", "text/plain", b"", extra).await;
         }
         let header = |name: &str| {
             req.headers
@@ -128,8 +146,10 @@ async fn serve(
         path = "index.html";
     }
     match bundle.0.get(path) {
-        Some(body) if method == "GET" => respond(conn, "200 OK", content_type(path), body).await,
-        _ => respond(conn, "404 Not Found", "text/plain", b"").await,
+        Some(body) if method == "GET" => {
+            respond(conn, "200 OK", content_type(path), body, extra).await
+        }
+        _ => respond(conn, "404 Not Found", "text/plain", b"", extra).await,
     }
 }
 
@@ -138,10 +158,11 @@ async fn respond(
     status: &str,
     content_type: &str,
     body: &[u8],
+    extra: &str,
 ) -> std::io::Result<()> {
     let head = format!(
         "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\
-         Cache-Control: no-store\r\nConnection: close\r\n\r\n",
+         Cache-Control: no-store\r\n{extra}Connection: close\r\n\r\n",
         body.len()
     );
     conn.write_all(head.as_bytes()).await?;
@@ -184,6 +205,17 @@ impl Drop for Site {
 impl Site {
     /// Serves `bundle` on a port of 127.0.0.1 the system picks.
     pub async fn serve(bundle: Arc<Bundle>) -> std::io::Result<Site> {
+        Site::serve_with(bundle, "").await
+    }
+
+    /// [`Site::serve`], each response with the headers that make its pages
+    /// cross-origin isolated (`Cross-Origin-Opener-Policy: same-origin`,
+    /// `Cross-Origin-Embedder-Policy: require-corp`).
+    pub async fn serve_isolated(bundle: Arc<Bundle>) -> std::io::Result<Site> {
+        Site::serve_with(bundle, ISOLATED).await
+    }
+
+    async fn serve_with(bundle: Arc<Bundle>, extra: &'static str) -> std::io::Result<Site> {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
         let (tx, sockets) = mpsc::unbounded_channel();
@@ -191,7 +223,7 @@ impl Site {
             while let Ok((conn, _)) = listener.accept().await {
                 let (bundle, tx) = (bundle.clone(), tx.clone());
                 tokio::spawn(async move {
-                    let _ = serve(conn, &bundle, &tx).await;
+                    let _ = serve(conn, &bundle, &tx, extra).await;
                 });
             }
         });

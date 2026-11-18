@@ -80,7 +80,9 @@ use strims_base::stats::WaitHistogram;
 use strims_base::time::Time;
 use strims_ppspp::{ParentAction, ParentWhy};
 use strims_testbed::record::logs::Logs;
-use strims_testbed::record::{BIN_MS, Gated, MeterSample, NODE_BIN_COUNTERS, SeedSample};
+use strims_testbed::record::{
+    BIN_MS, Gated, MeterSample, NODE_BIN_COUNTERS, SeedSample, timers_of,
+};
 use strims_testbed::stream::{FrameInfo, Parsed};
 use strims_testbed::transfer::{PeerTransfer, TransferSample};
 
@@ -88,10 +90,10 @@ use crate::calibration::{self, Calibration, WAN_RATE, calibration_star};
 use crate::report::{
     ACK_WHYS, AckWaits, ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport,
     NodeBinRecord, ParentCheckRecord, ParentRecord, Report, RequestHostRecord,
-    SeedDecisionHostRecord, SeedSendHostRecord, SocketSample, ViewerReport, WanHostReport,
-    WanReport,
+    SeedDecisionHostRecord, SeedSendHostRecord, SocketSample, TimerHostRecord, ViewerReport,
+    WanHostReport, WanReport,
 };
-use crate::spec::{Competing, Fault, HostIx, Scenario};
+use crate::spec::{Competing, Fault, HostIx, HostSet, Scenario};
 use crate::stream::{SeqSet, ViewerStats};
 use crate::wan::{SctpProfile, UP_COUNTERS};
 
@@ -131,10 +133,11 @@ const RECORDING: [&str; 11] = [
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
-const TWIN_SETTINGS: [&str; 29] = [
+const TWIN_SETTINGS: [&str; 30] = [
     "FORECAST",
     "SPEC",
     "PARENT_CHECKS",
+    "TIMER_LOG",
     "VIEWERS",
     "SEED_UP_MBIT",
     "VIEWER_UP_MBIT",
@@ -271,11 +274,13 @@ fn num(x: f64) -> String {
 /// (`STRIMS_SIM_HOSTILE=off`) and one clock (`STRIMS_SIM_CLOCK_SKEW=off`)
 /// always; the scheduler's logs the nodes kept (run.sh's `FORECAST=1`,
 /// `SPEC=1`, `PARENT_CHECKS=1`: `STRIMS_SIM_FORECAST=1`,
-/// `STRIMS_SIM_SPEC=1`, `STRIMS_SIM_PARENT_CHECKS=1`), so the twin writes
-/// the log tables the run does; the viewers, the seed's uplink and
-/// the stream's length always; the viewers' joins (`JOIN_AT`, and each of
-/// `JOINS`'s to the ms, `STRIMS_SIM_CAL_JOINS`: [`Run::read`] leaves the
-/// latter out where its caller names the arrivals profile they drew);
+/// `STRIMS_SIM_SPEC=1`, `STRIMS_SIM_PARENT_CHECKS=1`) and the nodes that
+/// kept their timers (`TIMER_LOG`: `STRIMS_SIM_TIMER_LOG`, their numbers),
+/// so the twin writes the log tables the run does; the viewers, the seed's
+/// uplink and the stream's length always; the viewers' joins (`JOIN_AT`,
+/// and each of `JOINS`'s to the ms, `STRIMS_SIM_CAL_JOINS`: [`Run::read`]
+/// leaves the latter out where its caller names the arrivals profile they
+/// drew);
 /// the other links' settings where they aren't the twin's defaults; the
 /// seed's steps as factors of its uplink (`STRIMS_SIM_CAL_SEED_UP_SCALE`);
 /// both tbf buckets (run.sh's 3028 bytes where unset) and the peak rates
@@ -345,6 +350,28 @@ pub fn knobs_of(
         {
             return Err(format!("{k}={v}: the twin's uplinks are whole Mbit/s"));
         }
+    }
+    // The nodes that kept their timers (TIMER_LOG: `all`, or node
+    // indices of the run's), whose hosts the twin's log keeps too, by
+    // number (`hosts:...`, which no bare number reads as): the twin's
+    // other hosts (a relay) keep none, as the testbed's don't.
+    if let Some(v) = get("TIMER_LOG").map(str::trim).filter(|v| !v.is_empty()) {
+        let mut hosts = std::collections::BTreeSet::new();
+        for w in v.split_whitespace() {
+            if w == "all" {
+                hosts.extend(0..=viewers);
+                continue;
+            }
+            let i = w
+                .parse::<usize>()
+                .ok()
+                .filter(|i| i.to_string() == w && *i <= viewers)
+                .ok_or_else(|| {
+                    format!("TIMER_LOG={v}: all, or node indices of the run's 0 to {viewers}")
+                })?;
+            hosts.insert(i);
+        }
+        put("STRIMS_SIM_TIMER_LOG", HostSet::Only(hosts).knob());
     }
     put("STRIMS_SIM_CAL_VIEWERS", viewers.to_string());
     put("STRIMS_SIM_CAL_SEED_UP_MBIT", num(seed_up));
@@ -788,6 +815,10 @@ impl Run {
         s.forecast_log = on("STRIMS_SIM_FORECAST");
         s.request_logs = on("STRIMS_SIM_SPEC");
         s.parent_checks = on("STRIMS_SIM_PARENT_CHECKS");
+        s.timer_log = self
+            .knobs
+            .get("STRIMS_SIM_TIMER_LOG")
+            .and_then(|v| HostSet::parse(v).ok().flatten());
         // The arrivals profile JOINS drew (a tier matrix's knob), as the
         // twin's row names it; the times are the run's.
         if let Some(a) = self
@@ -933,6 +964,14 @@ impl Run {
                     rec.get("checks_lost").and_then(Value::as_u64).unwrap_or(0);
                 if let Some(logs) = rec.get("logs").and_then(|v| Logs::parse(v, origin)) {
                     add_logs(host, logs, epoch);
+                }
+                if let Some((rows, lost, context)) =
+                    rec.get("timers").and_then(|v| timers_of(v, origin))
+                {
+                    host.timers
+                        .extend(rows.into_iter().map(|r| TimerHostRecord::of(r, epoch)));
+                    host.timers_lost += lost;
+                    host.timer_context = Some(context);
                 }
                 if is_viewer {
                     for r in rec
@@ -4774,6 +4813,157 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(on.join("series_meta.json")).unwrap())
                 .unwrap();
         assert_eq!(meta["parent_checks_lost"], 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run whose nodes kept their timers (TIMER_LOG) writes them as the
+    /// twin's table has them, the twin keeping the same nodes' (the relay
+    /// none): times from the stream's start, each node's context, and the
+    /// lost count.
+    #[test]
+    fn a_runs_timer_logs_are_its_twins_table() {
+        use strims_node::event::{TimerRecord, TimerSource};
+        use strims_testbed::record::{TimerContext, timers_json};
+        let dir = fixture("timers");
+        let origin = Time::from_unix_millis(START as i64);
+        let at = |us: i64| origin + strims_base::time::Duration::from_micros(us);
+        let row = |source, armed, deadline, fired, requested| TimerRecord {
+            source,
+            armed: at(armed),
+            deadline: at(deadline),
+            fired: at(fired),
+            requested: strims_base::time::Duration::from_micros(requested),
+        };
+        let rows = [
+            (
+                0,
+                vec![
+                    row(TimerSource::NodeTask, 1_200, 4_000, 5_130, 3_000),
+                    row(TimerSource::Writer, -400, 0, 1_020, 1_000),
+                ],
+                TimerContext::Task,
+                0,
+            ),
+            (
+                1,
+                vec![row(TimerSource::Pacer, 9_000, 14_000, 13_900, 5_000)],
+                TimerContext::Worker,
+                3,
+            ),
+        ];
+        for (i, rows, context, lost) in &rows {
+            let path = dir.join(format!("node-{i}.jsonl"));
+            let text = std::fs::read_to_string(&path).unwrap();
+            let mut lines: Vec<Value> = text
+                .lines()
+                .map(|l| serde_json::from_str(l).unwrap())
+                .collect();
+            let v: Value =
+                serde_json::from_str(&timers_json(rows, *lost, *context, origin)).unwrap();
+            lines[0]["rec"]["timers"] = v;
+            let out: String = lines.iter().map(|l| format!("{l}\n")).collect();
+            std::fs::write(&path, out).unwrap();
+        }
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        let bin = Duration::from_millis(BIN_MS.unsigned_abs());
+        // Off: no table, though the lines held timers.
+        let off = dir.join("tables-off");
+        Run::read(&dir, &BTreeMap::new())
+            .unwrap()
+            .report()
+            .write_tables(&off, bin, true)
+            .unwrap();
+        assert!(crate::tables::read_table(&off, "timers").is_err());
+        std::fs::write(dir.join("settings"), format!("{settings}TIMER_LOG=all\n")).unwrap();
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        // The fixture's seed and viewer, by number.
+        assert_eq!(run.knobs["STRIMS_SIM_TIMER_LOG"], "hosts:0,1");
+        assert!(!run.knobs.contains_key("TESTBED_TIMER_LOG"));
+        let on = dir.join("tables-on");
+        run.report().write_tables(&on, bin, true).unwrap();
+        let rows = table_rows(&on, "timers");
+        let got: Vec<Vec<&str>> = rows
+            .iter()
+            .map(|r| {
+                [
+                    "t_us",
+                    "node",
+                    "n",
+                    "source",
+                    "armed_us",
+                    "deadline_us",
+                    "late_us",
+                    "requested_us",
+                    "context",
+                ]
+                .iter()
+                .map(|c| r[*c].as_str())
+                .collect()
+            })
+            .collect();
+        assert_eq!(
+            got,
+            [
+                [
+                    "5130",
+                    "0",
+                    "0",
+                    "node_task",
+                    "1200",
+                    "4000",
+                    "1130",
+                    "3000",
+                    "task"
+                ],
+                [
+                    "1020", "0", "1", "writer", "-400", "0", "1020", "1000", "task"
+                ],
+                [
+                    "13900", "1", "0", "pacer", "9000", "14000", "-100", "5000", "worker"
+                ],
+            ]
+        );
+        let meta: Value =
+            serde_json::from_str(&std::fs::read_to_string(on.join("series_meta.json")).unwrap())
+                .unwrap();
+        assert_eq!(meta["timers_lost"], 3);
+        // One node: its number, which no bare number reads as: the seed
+        // alone (0), or the viewer alone (1), the twin's other hosts none.
+        for (v, want, nodes) in [("0", "hosts:0", ["0"]), ("1", "hosts:1", ["1"])] {
+            std::fs::write(dir.join("settings"), format!("{settings}TIMER_LOG={v}\n")).unwrap();
+            let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+            assert_eq!(run.knobs["STRIMS_SIM_TIMER_LOG"], want);
+            let r = run.report();
+            let set = r.scenario.timer_log.clone().unwrap();
+            assert_eq!(
+                (0..r.scenario.hosts.len())
+                    .filter(|&h| set.contains(&r.scenario, h))
+                    .map(|h| h.to_string())
+                    .collect::<Vec<_>>(),
+                nodes
+            );
+        }
+        std::fs::write(dir.join("settings"), format!("{settings}TIMER_LOG=1 0\n")).unwrap();
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs["STRIMS_SIM_TIMER_LOG"], "hosts:0,1");
+        std::fs::write(dir.join("settings"), format!("{settings}TIMER_LOG=seed\n")).unwrap();
+        assert!(
+            Run::read(&dir, &BTreeMap::new())
+                .err()
+                .unwrap()
+                .contains("TIMER_LOG=seed: all, or node indices of the run's 0 to 1")
+        );
+        // A node the run lacks, a number written otherwise, and a word.
+        for v in ["2", "01", "seed"] {
+            std::fs::write(dir.join("settings"), format!("{settings}TIMER_LOG={v}\n")).unwrap();
+            let err = Run::read(&dir, &BTreeMap::new()).err().unwrap();
+            assert!(
+                err.contains(&format!(
+                    "TIMER_LOG={v}: all, or node indices of the run's 0 to 1"
+                )),
+                "{err}"
+            );
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

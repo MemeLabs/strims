@@ -7,7 +7,9 @@
 //! upload meter samples beside their uplinks, with `nodes` each node's bins
 //! (`node_bins`) and channels with each peer at each transfer sample
 //! (`peer_samples`), its timed events and its
-//! forecast logs, and a testbed run's TCP sockets (`sockets`,
+//! forecast logs, its hosts' timers as they fired (`timers`, with
+//! [`Scenario::timer_log`](crate::Scenario::timer_log)), and a testbed
+//! run's TCP sockets (`sockets`,
 //! [`Report::sockets`], which a sim run has none of), as CSV files
 //! each with a `<table>.schema.json` of its columns'
 //! names and types, for `hack/sim-db` to load without guessing them. Times
@@ -29,9 +31,10 @@
 //! with `STRIMS_SIM_SPEC=1`, the held log's, the HAVE log's and the request
 //! log's (`held_lost`, `haves_lost`, `asks_lost`: requests, each with its
 //! rivals). With it too, the seed log's decisions and sends its caps left
-//! out are `seed_log_lost`. With `STRIMS_SIM_PARENT_CHECKS=1`, the
-//! `parent_checks` table, and the tap's events of any kind the nodes'
-//! buffers left out (`parent_checks_lost`).
+//! out are `seed_log_lost`, and with the timer log the timers its logs'
+//! caps left out, every host's, `timers_lost`. With
+//! `STRIMS_SIM_PARENT_CHECKS=1`, the `parent_checks` table, and the tap's
+//! events of any kind the nodes' buffers left out (`parent_checks_lost`).
 //!
 //! The runners' counters reach the bins from the nodes themselves
 //! (`NodeConfig::stats_bins`), read at each edge before the node's first
@@ -821,6 +824,9 @@ impl Report {
         if !packets.is_empty() || !self.scenario.packet_log.is_empty() {
             write_packets(dir, start.into(), &packets)?;
         }
+        if self.scenario.timer_log.is_some() {
+            self.timers_table(dir, start)?.finish()?;
+        }
         let mut t = Table::new(
             dir,
             &[
@@ -891,6 +897,12 @@ impl Report {
         if self.scenario.parent_checks {
             let lost: u64 = self.hosts.iter().map(|h| h.parent_checks_lost).sum();
             meta.int(MetaInt::ParentChecksLost, lost);
+        }
+        if self.scenario.timer_log.is_some() {
+            meta.int(
+                MetaInt::TimersLost,
+                self.hosts.iter().map(|h| h.timers_lost).sum::<u64>(),
+            );
         }
         if self.scenario.request_logs {
             let sum = |f: fn(&HostReport) -> u64| -> u64 { self.hosts.iter().map(f).sum() };
@@ -1354,6 +1366,46 @@ impl Report {
                 opt(x.delivery_rate_bps),
                 opt(x.pacing_rate_bps),
             ]);
+        }
+        Ok(t)
+    }
+
+    /// The `timers` table: every host's timers in the order its log kept
+    /// them, host by host, each numbered from 0 in that order (`n`, its
+    /// key with the node), times in µs from `start`.
+    fn timers_table(&self, dir: &Path, start: Duration) -> io::Result<Table> {
+        let mut t = Table::new(
+            dir,
+            &[
+                cols::Timers::TUs,
+                cols::Timers::Node,
+                cols::Timers::N,
+                cols::Timers::Source,
+                cols::Timers::ArmedUs,
+                cols::Timers::DeadlineUs,
+                cols::Timers::LateUs,
+                cols::Timers::RequestedUs,
+                cols::Timers::Context,
+            ],
+        )?;
+        let start = i64::try_from(start.as_micros()).unwrap_or(i64::MAX);
+        for (h, host) in self.hosts.iter().enumerate() {
+            let Some(context) = host.timer_context.map(|c| c.name()) else {
+                continue;
+            };
+            for (n, r) in host.timers.iter().enumerate() {
+                t.fields(&[
+                    (r.fired_us - start).to_string(),
+                    h.to_string(),
+                    n.to_string(),
+                    r.source.name().to_owned(),
+                    (r.armed_us - start).to_string(),
+                    (r.deadline_us - start).to_string(),
+                    (r.fired_us - r.deadline_us).to_string(),
+                    r.requested_us.to_string(),
+                    context.to_owned(),
+                ]);
+            }
         }
         Ok(t)
     }

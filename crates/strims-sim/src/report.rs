@@ -205,6 +205,39 @@ pub struct HostReport {
     /// `hosts` table's row, [`crate::testbed`]); `None` for a sim run's,
     /// which its scenario gives ([`Report::host_rows`]).
     pub host_row: Option<HostRow>,
+    /// With [`Scenario::timer_log`], its timers that fired, every
+    /// incarnation, in the order they fired ([`TimerHostRecord`]), where
+    /// they ran (`None` without the log), and those its log's cap left
+    /// out.
+    pub timers: Vec<TimerHostRecord>,
+    pub timer_context: Option<strims_testbed::record::TimerContext>,
+    pub timers_lost: u64,
+}
+
+/// A timer of a host's that fired ([`HostReport::timers`],
+/// `strims_node::event::TimerRecord`): its times in µs of true time from the
+/// run's start, and the delay it was armed for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TimerHostRecord {
+    pub source: strims_node::event::TimerSource,
+    pub armed_us: i64,
+    pub deadline_us: i64,
+    pub fired_us: i64,
+    pub requested_us: i64,
+}
+
+impl TimerHostRecord {
+    /// Record `r` of a node whose clock read `epoch` at the run's start.
+    pub fn of(r: strims_node::event::TimerRecord, epoch: strims_base::time::Time) -> Self {
+        let us = |t: strims_base::time::Time| (t - epoch).as_nanos().div_euclid(1000);
+        TimerHostRecord {
+            source: r.source,
+            armed_us: us(r.armed),
+            deadline_us: us(r.deadline),
+            fired_us: us(r.fired),
+            requested_us: r.requested.as_nanos().div_euclid(1000),
+        }
+    }
 }
 
 /// A decision of a seed's ([`HostReport::seed_decisions`]): when (true

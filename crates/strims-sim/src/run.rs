@@ -451,12 +451,20 @@ fn report(
             }
         }
     }
+    // The timer logs move into the reports, uncopied.
+    let timers: Vec<_> = st
+        .hosts
+        .iter_mut()
+        .map(|s| std::mem::take(&mut s.timers))
+        .collect();
     let hosts = st
         .hosts
         .iter()
+        .zip(timers)
         .enumerate()
-        .map(|(h, s)| {
+        .map(|(h, (s, timers))| {
             let mut r = s.report();
+            r.timers = timers;
             r.name = w.name(h).to_owned();
             r.clock_offset = w.clock_offset(h);
             r.messages = s

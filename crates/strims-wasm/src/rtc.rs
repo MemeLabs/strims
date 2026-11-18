@@ -65,7 +65,10 @@ use js_sys::{Array, ArrayBuffer, Object, Reflect, Uint8Array};
 use strims_base::time::Time;
 use strims_node_core::rtc::pace::{ChannelPacer, HOST_POLL, HostPacer, HostSum};
 use strims_node_core::rtc::proxy::MAX_CONN_ID;
-use strims_node_core::{Input, Inputs, LinkKey, RtcCommand, RtcConn, RtcInput, RtcSignal};
+use strims_node_core::{
+    Input, Inputs, LinkKey, RtcCommand, RtcConn, RtcInput, RtcSignal, TimerRecord, TimerSink,
+    TimerSource,
+};
 use strims_vnic::LinkConfig;
 use strims_vnic::webrtc::{DATA_CHANNEL_MTU, SessionDescription};
 use tokio::sync::mpsc;
@@ -142,14 +145,20 @@ impl SignalPort {
     /// Takes over `port`, whose messages are handled from now on, and
     /// makes a panic post `fatal` on it. `commands` are the node's
     /// [`ProxyRtc`](strims_node_core::ProxyRtc)'s; `max_buffered_amount`
-    /// is `WebRtcConfig::max_buffered_amount`.
+    /// is `WebRtcConfig::max_buffered_amount`. The channels' writers hand
+    /// each host pacer poll to `timers` (`NodeConfig::timer_log`,
+    /// [`TimerSource::Pacer`]).
     pub fn new(
         port: MessagePort,
         commands: mpsc::UnboundedReceiver<RtcCommand>,
         max_buffered_amount: usize,
+        timers: Option<TimerSink>,
     ) -> SignalPort {
         let (events_tx, events) = mpsc::unbounded_channel();
-        let host = Rc::new(Host::default());
+        let host = Rc::new(Host {
+            timers,
+            ..Host::default()
+        });
         let on_message = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
             on_message(&events_tx, &e.data(), max_buffered_amount, &host);
         });
@@ -463,6 +472,8 @@ struct Host {
     pacer: RefCell<HostPacer>,
     /// Bound: the port's open channels.
     channels: RefCell<Vec<Weak<Dc>>>,
+    /// Where the writers' host polls go ([`SignalPort::new`]).
+    timers: Option<TimerSink>,
 }
 
 impl Host {
@@ -680,7 +691,17 @@ impl DcSocket {
                 Some(mark) if self.0.host.at_mark(now, mark) => break b,
                 Some(_) => {}
             }
+            let armed = self.0.host.timers.as_ref().map(|_| clock::precise_now());
             clock::Sleep::until(now + HOST_POLL).await;
+            if let (Some(log), Some(armed)) = (&self.0.host.timers, armed) {
+                (log.0)(TimerRecord {
+                    source: TimerSource::Pacer,
+                    armed,
+                    deadline: now + HOST_POLL,
+                    fired: clock::precise_now(),
+                    requested: HOST_POLL,
+                });
+            }
         };
         c.send_with_u8_array(buf).map_err(|e| js::describe(&e))?;
         let now = clock::now();

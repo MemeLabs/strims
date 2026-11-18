@@ -228,6 +228,10 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
         self.clock.now()
     }
 
+    fn precise_now(&self) -> Time {
+        self.clock.precise_now()
+    }
+
     fn new_sleep(&self) -> Sleep {
         tokio::time::sleep_until(tokio::time::Instant::now())
     }

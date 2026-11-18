@@ -504,6 +504,62 @@ pub fn max_pending_requests() -> usize {
     strims_ppspp::scheduler_peer::max_pending_requests(LIVE_WINDOW as u64)
 }
 
+/// Some of a scenario's hosts ([`Scenario::timer_log`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HostSet {
+    All,
+    /// The hosts that seed a swarm.
+    Seeds,
+    Only(BTreeSet<HostIx>),
+}
+
+impl HostSet {
+    /// Whether host `h` of `s` is one of them.
+    pub fn contains(&self, s: &Scenario, h: HostIx) -> bool {
+        match self {
+            HostSet::All => h < s.hosts.len(),
+            HostSet::Seeds => s.swarms.iter().any(|w| w.seed == h),
+            HostSet::Only(hs) => hs.contains(&h),
+        }
+    }
+
+    /// A knob's set: `all` or `1`, `seed`, or `hosts:` and host indices
+    /// split by commas (`hosts:0`, `hosts:0,3`), each written as a number
+    /// is (`7`, never `07`); `None` for `off`, `0` or nothing. A bare
+    /// number is the knob's on and off, never a host's.
+    pub fn parse(v: &str) -> Result<Option<HostSet>, String> {
+        let list = match v.trim() {
+            "" | "off" | "0" => return Ok(None),
+            "all" | "1" => return Ok(Some(HostSet::All)),
+            "seed" => return Ok(Some(HostSet::Seeds)),
+            x => x.strip_prefix("hosts:").ok_or_else(|| {
+                format!("{x}: all or 1, seed, off or 0, or hosts: and host indices")
+            })?,
+        };
+        list.split(',')
+            .map(|x| {
+                x.parse::<HostIx>()
+                    .ok()
+                    .filter(|h| h.to_string() == x)
+                    .ok_or_else(|| format!("hosts:{list}: {x} is no host index"))
+            })
+            .collect::<Result<BTreeSet<_>, _>>()
+            .map(|hs| Some(HostSet::Only(hs)))
+    }
+
+    /// The knob's form of the set ([`HostSet::parse`] reads it back).
+    pub fn knob(&self) -> String {
+        match self {
+            HostSet::All => "all".to_owned(),
+            HostSet::Seeds => "seed".to_owned(),
+            HostSet::Only(hs) => {
+                let list: Vec<String> = hs.iter().map(HostIx::to_string).collect();
+                format!("hosts:{}", list.join(","))
+            }
+        }
+    }
+}
+
 /// A fault and when it happens.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TimedFault {
@@ -628,6 +684,11 @@ pub struct Scenario {
     /// which timers that covers): off by default, when they run at their
     /// deadlines and nothing is drawn.
     pub timer_lateness: bool,
+    /// With [`Scenario::wire_bins`], the hosts that keep their timers as
+    /// they fire for the tables' `timers` (`NodeConfig::timer_log`, and
+    /// their frame writers' and probes' waits): none by default. Changes
+    /// no trace.
+    pub timer_log: Option<HostSet>,
     /// When the first swarm's viewers arrive ([`crate::arrivals`]): with
     /// the run by default ([`Arrivals::T0`]). The run resolves it into
     /// [`HostSpec::arrive_at`] and lays the links out in arrival order.
@@ -892,6 +953,7 @@ impl Scenario {
             exp: BTreeSet::new(),
             clock_skew: ClockSkew::Real,
             timer_lateness: false,
+            timer_log: None,
             arrivals: Arrivals::T0,
             departures: None,
             mix: false,
@@ -1161,5 +1223,34 @@ impl Scenario {
         n.sort_unstable();
         n.dedup();
         n
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A host set's knob: its words, `hosts:` and indices as numbers are
+    /// written, and never a bare number for a host.
+    #[test]
+    fn a_host_sets_knob_names_its_hosts_unambiguously() {
+        let only = |hs: &[HostIx]| Some(HostSet::Only(hs.iter().copied().collect()));
+        assert_eq!(HostSet::parse("1"), Ok(Some(HostSet::All)));
+        assert_eq!(HostSet::parse("all"), Ok(Some(HostSet::All)));
+        assert_eq!(HostSet::parse("0"), Ok(None));
+        assert_eq!(HostSet::parse(" off "), Ok(None));
+        assert_eq!(HostSet::parse(""), Ok(None));
+        assert_eq!(HostSet::parse("seed"), Ok(Some(HostSet::Seeds)));
+        assert_eq!(HostSet::parse("hosts:0"), Ok(only(&[0])));
+        assert_eq!(HostSet::parse("hosts:1"), Ok(only(&[1])));
+        assert_eq!(HostSet::parse("hosts:3,0"), Ok(only(&[0, 3])));
+        for bad in [
+            "2", "0,2", "hosts:", "hosts:07", "hosts:1,", "hosts:x", "seeds",
+        ] {
+            assert!(HostSet::parse(bad).is_err(), "{bad}");
+        }
+        for set in [HostSet::All, HostSet::Seeds, HostSet::Only([0, 5].into())] {
+            assert_eq!(HostSet::parse(&set.knob()), Ok(Some(set.clone())));
+        }
     }
 }

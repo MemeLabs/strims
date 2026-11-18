@@ -41,6 +41,13 @@
 //! queued dials after each pass ([`NodeIo::dial`]). See
 //! [Determinism](crate#determinism) for the rest of what keeps runs
 //! reproducible.
+//!
+//! **The timer log.** With [`NodeConfig::timer_log`], the loop reads the
+//! driver's precise clock ([`NodeIo::precise_now`]) when it arms its timer
+//! for a new deadline and when the timer's arm of the wait wins, and hands
+//! the sink each timer that fired. A pass that input woke fired no timer:
+//! its deadline's lateness is never seen. Off, the loop reads no clock for
+//! it.
 
 use std::fmt;
 use std::future::Future;
@@ -53,8 +60,9 @@ use strims_base::time::{Duration, Time};
 use strims_vnic::{DialTarget, LinkConfig, LinkDescription, LinkInterface, PeerKey as LinkKey};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::config::{BufferConfig, NodeConfig};
+use crate::config::{BufferConfig, NodeConfig, TimerSink};
 use crate::error::NodeError;
+use crate::event::{TimerRecord, TimerSource};
 use crate::handle::{Node, NodeEvents, NodeInfo};
 use crate::rpc::Outgoing;
 use crate::rtc::{RtcConn, RtcFactory, RtcInput};
@@ -334,6 +342,13 @@ pub trait NodeIo: 'static {
     /// The current time, at `Time::PRECISION`.
     fn now(&self) -> Time;
 
+    /// The current time at the driver's finest precision, for the timer
+    /// log ([`NodeConfig::timer_log`]), which alone reads it: nothing the
+    /// node decides does. By default [`NodeIo::now`].
+    fn precise_now(&self) -> Time {
+        self.now()
+    }
+
     /// A timer, not yet armed for any deadline the node cares about.
     fn new_sleep(&self) -> Self::Sleep;
 
@@ -385,6 +400,7 @@ pub struct NodeTask<I: NodeIo> {
     /// When the node's last pass ran: the time of the snapshot its drop
     /// hands over ([`NodeConfig::last_metrics`]).
     passed: Time,
+    timer_log: Option<TimerSink>,
 }
 
 /// A node task that goes (it stopped, or a simulated crash dropped it
@@ -466,6 +482,7 @@ pub fn start<I: NodeIo>(
         query_delay: config.query_delay,
         shutdown: None,
         passed,
+        timer_log: config.timer_log.clone(),
     };
     Ok((node, NodeEvents::new(events), task))
 }
@@ -479,6 +496,9 @@ impl<I: NodeIo> NodeTask<I> {
         // The deadline the timer is armed for. A wakeup that moves no
         // deadline (a query) leaves the timer untouched.
         let mut armed: Option<Time> = None;
+        // With the timer log, when the timer was armed for `armed` (the
+        // driver's precise clock) and the delay that was, by the node's.
+        let mut armed_at: Option<(Time, Duration)> = None;
         let mut again = false;
         let mut last = self.io.now();
         loop {
@@ -500,6 +520,9 @@ impl<I: NodeIo> NodeTask<I> {
                 {
                     self.io.reset_sleep(sleep.as_mut(), t);
                     armed = Some(t);
+                    if self.timer_log.is_some() {
+                        armed_at = Some((self.io.precise_now(), t - self.io.now()));
+                    }
                 }
                 // Each arm reads the stats bins before it changes anything
                 // (`NodeConfig::stats_bins`).
@@ -530,7 +553,10 @@ impl<I: NodeIo> NodeTask<I> {
                         self.state.sample_bins(self.io.now());
                         self.state.outgoing(o);
                     }
-                    () = &mut sleep, if deadline.is_some() => self.state.sample_bins(self.io.now()),
+                    () = &mut sleep, if deadline.is_some() => {
+                        self.log_timer(deadline, armed_at);
+                        self.state.sample_bins(self.io.now());
+                    }
                 }
             }
             for _ in 0..BATCH {
@@ -580,6 +606,23 @@ impl<I: NodeIo> NodeTask<I> {
         if let Some(done) = self.shutdown.take() {
             let _ = done.send(());
         }
+    }
+
+    /// Hands the timer that fired for `deadline`, armed at `armed_at`, to
+    /// the timer log, if the node keeps one.
+    fn log_timer(&self, deadline: Option<Time>, armed_at: Option<(Time, Duration)>) {
+        let (Some(log), Some(deadline), Some((armed, requested))) =
+            (&self.timer_log, deadline, armed_at)
+        else {
+            return;
+        };
+        (log.0)(TimerRecord {
+            source: TimerSource::NodeTask,
+            armed,
+            deadline,
+            fired: self.io.precise_now(),
+            requested,
+        });
     }
 
     fn start_dials(&mut self) {

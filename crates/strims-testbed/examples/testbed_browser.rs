@@ -13,7 +13,7 @@
 //!                 [--hosts <dir>] [--capture <dir>] [--player <file>]
 //!                 [--cpu-profile <dir> [--cpu-profile-at <s>]
 //!                  [--cpu-profile-secs <s>] [--cpu-profile-us <us>]]
-//!                 [--forecast] [--spec] [--parent-checks]
+//!                 [--forecast] [--spec] [--parent-checks] [--timer-log]
 //! ```
 //!
 //! The node's kind (`firefox` or `chromium`) comes from the topology
@@ -28,8 +28,11 @@
 //! 1. starts the node with node `<i>`'s profile key, in the testbed
 //!    network, keeping the records strims-sim's tables take (its stats
 //!    bins and parent log, with `--forecast` and `--spec` its
-//!    scheduler's forecast log and its request and seed logs, and with
-//!    `--parent-checks` its parent checks, as testbed_node's flags do),
+//!    scheduler's forecast log and its request and seed logs, with
+//!    `--parent-checks` its parent checks, and with `--timer-log` its
+//!    timers as they fire, as testbed_node's flags do, the page then served
+//!    cross-origin isolated,
+//!    [`Site::serve_isolated`](strims_testbed::browser::Site::serve_isolated)),
 //!    and has it run the testbed's swarm
 //!    (`testbed`), with
 //!    `--arrive` as a viewer that arrives into the running stream
@@ -135,6 +138,17 @@ struct Args {
     forecast: bool,
     spec: bool,
     parent_checks: bool,
+    timer_log: bool,
+}
+
+impl Args {
+    /// Whether a log reads the page's high-resolution clock (the timer
+    /// log), so the page is served cross-origin isolated
+    /// ([`Site::serve_isolated`]): every log that reads it names itself
+    /// here.
+    fn fine_clock(&self) -> bool {
+        self.timer_log
+    }
 }
 
 fn args() -> Result<Args, String> {
@@ -164,6 +178,7 @@ fn args() -> Result<Args, String> {
         forecast: false,
         spec: false,
         parent_checks: false,
+        timer_log: false,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -191,6 +206,7 @@ fn args() -> Result<Args, String> {
             "--forecast" => a.forecast = true,
             "--spec" => a.spec = true,
             "--parent-checks" => a.parent_checks = true,
+            "--timer-log" => a.timer_log = true,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -573,9 +589,15 @@ async fn run() -> Result<(), String> {
     if !bundle.0.contains_key("e2e.html") {
         return Err(format!("no e2e.html in {}", a.web.display()));
     }
-    let mut site = Site::serve(Arc::new(bundle))
-        .await
-        .map_err(|e| format!("serve: {e}"))?;
+    // A log that reads the page's high-resolution clock reads it at an
+    // isolated page's clamp: the page is served isolated then alone, as a
+    // user's page needn't be.
+    let mut site = if a.fine_clock() {
+        Site::serve_isolated(Arc::new(bundle)).await
+    } else {
+        Site::serve(Arc::new(bundle)).await
+    }
+    .map_err(|e| format!("serve: {e}"))?;
     let profile = std::env::temp_dir().join(format!("testbed-browser-{}", a.index));
     let _ = std::fs::remove_dir_all(&profile);
     if me.kind == Kind::Firefox {
@@ -751,6 +773,7 @@ async fn run() -> Result<(), String> {
             "forecastLog": a.forecast,
             "requestLog": a.spec,
             "parentChecks": a.parent_checks,
+            "timerLog": a.timer_log,
         });
         if a.capture.is_some() {
             start["capture"] = json!({

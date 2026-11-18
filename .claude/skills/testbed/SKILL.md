@@ -64,6 +64,16 @@ crates differ from those the page was built from builds its own page.
   parent checks (the tables' parent_checks, as the twin's knob of that
   name); it takes the tap a capture would, so run.sh refuses it with
   `CAPTURE=1`.
+- `TIMER_LOG=all` (or node indices) keeps those nodes' timers as they
+  fire, as the sim's `STRIMS_SIM_TIMER_LOG` keeps a simulated node's:
+  the tables' `timers`, its twin's for the same nodes. A browser's page
+  is then served cross-origin isolated, so its worker's clock reads at
+  the browser's isolated grain (Chromium's 5 µs, Firefox's 20 µs); the
+  profiles' prefs stay at their defaults, as a user's are. Firefox's
+  `Date.now()`, the node's own clock, still returns whole ms, but
+  isolation likely changes whether that ms is jittered, so its timers
+  may run otherwise with the log on (the farm's
+  testbed-timers-control.toml compares them).
 - `SEED_LINK`, `VIEWER_LINK` and `LINKS` give nodes access link
   classes: tbf, cable, dsl, fiber or trace (`hack/testbed/links.sh`
   documents each).

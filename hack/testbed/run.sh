@@ -84,7 +84,15 @@
 # relay (tb-relay, 10.77.0.5, unshaped; RELAY=0 leaves it out): a native
 # node in the testbed network that runs no swarm. Every node dials it and
 # joins the network, and browsers make their WebRTC links by peer exchange
-# through it.
+# through it. With a log that reads a browser's fine clock on (TIMER_LOG),
+# the harness serves the page cross-origin isolated (strims-testbed's
+# Site::serve_isolated), so the worker's performance clock reads at the
+# browser's isolated grain; otherwise as a plain page. Either way the
+# browsers' prefs stay at their defaults. A node's deadlines go by
+# Date.now(), whole ms in either browser either way: Chromium's is the
+# same on both pages, and isolation likely changes whether Firefox's ms
+# is jittered, so a Firefox node's timers may run otherwise with the log
+# on (hack/sim-farm/matrices/testbed-timers-control.toml compares them).
 # Natives link to natives over TCP; a browser links to a native over a
 # WebSocket (BROWSER_LINKS=ws) or WebRTC (webrtc), and to a browser over
 # WebRTC. The topology file's header (strims-testbed's topology module)
@@ -216,6 +224,12 @@
 #                          parent_checks. Off (0) by default. It takes the
 #                          tap a capture would, so run.sh refuses it with
 #                          CAPTURE=1
+#   TIMER_LOG=<nodes>      these nodes keep their timers as they fire
+#                          (testbed_node's and testbed_browser's
+#                          --timer-log): `all`, or node indices of the
+#                          run's (`0 2`; 0 the seed), as strims-sim's
+#                          STRIMS_SIM_TIMER_LOG keeps a simulated node's:
+#                          the tables' timers. Unset, none
 #   CAPTURE=1              ppspp captures in <out dir>/capture, one dump
 #                          per node (native and browser), named by host id
 #   PCAP=1                 each node's packets on its eth0, both ways, in
@@ -417,6 +431,20 @@ done
 if [ "${PARENT_CHECKS:-0}" = 1 ] && [ "${CAPTURE:-0}" = 1 ]; then
   echo "PARENT_CHECKS=1 takes the tap CAPTURE=1 would: not both" >&2; exit 1
 fi
+# The nodes that keep their timers (TIMER_LOG), as the sim's knob of that
+# name keeps a simulated node's.
+read -r -a timer_nodes <<< "${TIMER_LOG:-}"
+for t in "${timer_nodes[@]}"; do
+  if [ "$t" != all ] && ! { [[ $t =~ ^(0|[1-9][0-9]*)$ ]] && [ "$t" -le "$viewers" ]; }; then
+    echo "TIMER_LOG=$TIMER_LOG: all, or node indices of the run's 0 to $viewers" >&2; exit 1
+  fi
+done
+timer_args_of() {
+  local t
+  for t in "${timer_nodes[@]}"; do
+    if [ "$t" = all ] || [ "$t" = "$1" ]; then echo --timer-log; return; fi
+  done
+}
 bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
 browser_bin=${BROWSER_BIN:-$root/target/release/examples/testbed_browser}
 web=${WEB_BUNDLE:-$root/dist/wasm-testbed}
@@ -681,7 +709,7 @@ nov6=(--sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv6.conf.default.d
 # the tree changes it, so runs of two trees don't pool. Its root is the
 # node's access link class's (the `links` file names each node's).
 SHAPER="clsact>ifb-netem>root-class"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD|FORECAST|SPEC|PARENT_CHECKS)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD|FORECAST|SPEC|PARENT_CHECKS|TIMER_LOG)=' \
   > "$out/settings" || true
 echo "QDISC=$SHAPER" >> "$out/settings"
 echo "STAMPS=clock" >> "$out/settings"
@@ -790,6 +818,7 @@ $(sampled sssample "$i" "-i $ss_ms" ss)"
   if [ "${CAPTURE:-0}" = 1 ]; then capture="--capture /out/capture"; fi
   join=$(join_of "$i")
   arrive_arg=$(arrive_of "$i")
+  timer_args=$(timer_args_of "$i")
   media_mount=()
   media_arg=""
   if [ -n "$media" ] && [ "$i" -eq 0 ]; then
@@ -829,7 +858,7 @@ $(cpu_log "$i")
 $(netstat_log "$i")
 $wait_start
 $(link_attached "$i")
-exec /testbed_node --index $i --topology /out/topology --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $media_arg $record_arg $hosts $capture $log_args $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec /testbed_node --index $i --topology /out/topology --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $media_arg $record_arg $hosts $capture $log_args $timer_args $node_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   else
     # The browser runs as the image's unprivileged user, after root has
     # shaped the link. Its profile, in /tmp, stays in memory, so its
@@ -853,7 +882,7 @@ $sample
 $(cpu_log "$i")
 $wait_start
 $(link_attached "$i")
-exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $log_args $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $log_args $timer_args $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   fi
 done
 

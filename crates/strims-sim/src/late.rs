@@ -113,6 +113,9 @@ impl LateClock {
     }
 }
 
+/// The most a timer fires late, in ms ([`lateness`]).
+pub const MAX_LATE_MS: i64 = 2;
+
 /// How late a timer fires: 0 ms one time in ten, 1 ms six in ten, 2 ms
 /// three in ten.
 pub(crate) fn lateness(rng: &mut DetRng) -> Duration {
@@ -126,6 +129,10 @@ pub(crate) fn lateness(rng: &mut DetRng) -> Duration {
 impl Clock for LateClock {
     fn now(&self) -> Time {
         self.inner.now()
+    }
+
+    fn precise_now(&self) -> Time {
+        self.inner.precise_now()
     }
 
     fn deadline(&self, t: Time) -> Instant {

@@ -27,6 +27,7 @@ use strims_node::{
     WebRtcConfig,
 };
 use strims_proto::types::Key;
+use strims_testbed::record::{TimerContext, TimerLog};
 use strims_wan::live::Au;
 
 use crate::memory::{GroupCounters, MemoryGroup};
@@ -34,7 +35,7 @@ use crate::net::SendBuffers;
 use crate::report::{
     ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport, MediaLog, NodeBinRecord,
     ParentCheckRecord, ParentLoss, ParentRecord, RequestHostRecord, SeedDecisionHostRecord,
-    SeedSendHostRecord, VpnReport,
+    SeedSendHostRecord, TimerHostRecord, VpnReport,
 };
 use crate::skew::OffsetCapture;
 use crate::spec::{HostIx, Scenario, Transport};
@@ -146,6 +147,10 @@ pub(crate) struct HostState {
     pub parents_lost: u64,
     /// See [`HostReport::parent_checks_lost`].
     pub parent_checks_lost: u64,
+    /// See [`HostReport::timers`].
+    pub timers: Vec<TimerHostRecord>,
+    pub timer_context: Option<TimerContext>,
+    pub timers_lost: u64,
     /// When it left for good ([`crate::Fault::Depart`]), in ms.
     pub departed: Option<u64>,
     /// Crashed, and not restarted yet.
@@ -182,6 +187,8 @@ impl HostState {
         r.seed_log_lost = self.seed_log_lost;
         r.parents_lost = self.parents_lost;
         r.parent_checks_lost = self.parent_checks_lost;
+        r.timer_context = self.timer_context;
+        r.timers_lost = self.timers_lost;
         r
     }
 
@@ -316,6 +323,11 @@ pub(crate) struct World {
     /// ([`Scenario::timer_lateness`]), its incarnations' in turn; empty
     /// without it.
     pub lateness: Vec<crate::late::Lateness>,
+    /// Each host's timer log ([`Scenario::timer_log`]), its incarnations'
+    /// in turn; `None` for a host without one. They are made with the
+    /// world, outside the nodes' and the records' memory, and taken in the
+    /// records' at each stats sample ([`World::observe_bins`]).
+    timer_logs: Vec<Option<TimerLog>>,
     /// With the tables, the nodes' parent sinks' channel
     /// ([`NodeConfig::parent_log`]): they send from inside the nodes'
     /// passes, and the records take what came at each stats sample, so it
@@ -380,6 +392,14 @@ impl World {
         } else {
             Vec::new()
         };
+        let timer_logs = (0..spec.hosts.len())
+            .map(|h| {
+                spec.timer_log
+                    .as_ref()
+                    .filter(|set| spec.wire_bins.is_some() && set.contains(&spec, h))
+                    .map(|_| TimerLog::new(TimerContext::Task))
+            })
+            .collect();
         let clock_offsets = crate::skew::offsets(spec.clock_skew, spec.hosts.len(), &mut rng);
         crate::arrivals::resolve(&mut spec, &mut rng);
         crate::hostile::draw_mix(&mut spec, &mut rng);
@@ -430,6 +450,7 @@ impl World {
             media_traces,
             clock_offsets,
             lateness,
+            timer_logs,
             parent_tx,
             parent_rx,
             stopped_tx,
@@ -579,6 +600,7 @@ impl World {
             });
             c.forecast_log = self.spec.forecast_log;
             c.request_log = self.spec.request_logs;
+            c.timer_log = self.timer_log(h).map(TimerLog::sink);
             let tx = self.stopped_tx.clone();
             c.last_metrics = Some(MetricsSink(Arc::new(move |m| {
                 let _ = tx.send((h, m));
@@ -1259,6 +1281,7 @@ impl World {
     /// hands them over once, so every caller of `Node::metrics` passes its
     /// snapshot here.
     pub fn observe_bins(&self, h: HostIx, m: &NodeMetrics) {
+        self.observe_timers(h);
         let (Some(width), Some(swarm)) = (self.spec.wire_bins, self.spec.swarms.first()) else {
             return;
         };
@@ -1342,6 +1365,29 @@ impl World {
             hs.haves_lost += m.haves_lost;
             hs.requests_lost += m.requests_lost;
             hs.seed_log_lost += m.seed_log_lost;
+        });
+    }
+
+    /// Host `h`'s timer log ([`Scenario::timer_log`]), if it keeps one.
+    pub(crate) fn timer_log(&self, h: HostIx) -> Option<&TimerLog> {
+        self.timer_logs.get(h).and_then(Option::as_ref)
+    }
+
+    /// Takes what host `h`'s timer log kept since the last take into its
+    /// records ([`HostReport::timers`]).
+    fn observe_timers(&self, h: HostIx) {
+        let Some(log) = self.timer_log(h) else {
+            return;
+        };
+        let epoch = self.clock_epoch(h);
+        self.record(|st| {
+            let (rows, lost) = log.take();
+            if let Some(hs) = st.hosts.get_mut(h) {
+                hs.timers
+                    .extend(rows.into_iter().map(|r| TimerHostRecord::of(r, epoch)));
+                hs.timer_context = Some(log.context());
+                hs.timers_lost += lost;
+            }
         });
     }
 

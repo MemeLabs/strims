@@ -21,6 +21,13 @@ pub trait Clock: Clone + Send + Sync + 'static {
     /// The current time, at [`Time::PRECISION`].
     fn now(&self) -> Time;
 
+    /// The current time at the clock's finest precision, for the timer log
+    /// (`NodeConfig::timer_log`), which alone reads it. By default
+    /// [`Clock::now`].
+    fn precise_now(&self) -> Time {
+        self.now()
+    }
+
     /// The runtime instant at which [`Clock::now`] reaches `t`. Never
     /// earlier than `t`, so a timer set for it fires at or after the
     /// deadline.
@@ -48,6 +55,17 @@ impl Clock for SystemClock {
         #[allow(clippy::disallowed_methods)]
         let t = std::time::SystemTime::now();
         Time::from_system(t)
+    }
+
+    fn precise_now(&self) -> Time {
+        // The wall clock, as `now` reads it, for the timer log alone.
+        #[allow(clippy::disallowed_methods)]
+        let t = std::time::SystemTime::now();
+        let n = match t.duration_since(std::time::UNIX_EPOCH) {
+            Ok(d) => i64::try_from(d.as_nanos()).unwrap_or(i64::MAX),
+            Err(e) => i64::try_from(e.duration().as_nanos()).map_or(i64::MIN, |n| -n),
+        };
+        Time::from_unix_nanos(n)
     }
 
     fn deadline(&self, t: Time) -> Instant {
@@ -100,8 +118,12 @@ impl SimClock {
 
 impl Clock for SimClock {
     fn now(&self) -> Time {
+        self.precise_now().truncate(Time::PRECISION)
+    }
+
+    fn precise_now(&self) -> Time {
         let elapsed = Instant::now().saturating_duration_since(self.base);
-        (self.epoch + Duration::from(elapsed)).truncate(Time::PRECISION)
+        self.epoch + Duration::from(elapsed)
     }
 
     fn deadline(&self, t: Time) -> Instant {

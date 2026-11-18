@@ -30,7 +30,9 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use futures_util::Stream;
+use strims_base::time::Time;
 use strims_node::app::{NodeTimer, PeerHandler, PeerServices};
+use strims_node::event::{TimerRecord, TimerSource};
 use strims_node::{
     HostId, NetworkId, NetworkOptions, Node, NodeError, NodeEvent, NodeEvents,
     PeerIndexPublisherId, PeerIndexSearch, PeerInfo, ReadError, SimClock, SwarmId, SwarmKey,
@@ -784,10 +786,11 @@ async fn exchange(w: &World, h: HostIx, to: HostIx, n: usize, node: &Node) -> Re
 
 /// Writes `frames_per_write` frames every `write_interval` from `start` to
 /// `stop`, each write as late as the host's timers fire (`late`,
-/// [`crate::late`]). A frame carries its write's due time, the report's
-/// (`Report::written_at`), as the testbed node's frames do, so a viewer's
-/// lag counts the writer's lateness. The write index comes from the
-/// simulated time, so a restarted seed continues the numbering.
+/// [`crate::late`]), and with the host's timer log each write's wait for
+/// its time, by the node's clock. A frame carries its write's due time,
+/// the report's (`Report::written_at`), as the testbed node's frames do,
+/// so a viewer's lag counts the writer's lateness. The write index comes
+/// from the simulated time, so a restarted seed continues the numbering.
 async fn writer_task(
     w: Rc<World>,
     h: HostIx,
@@ -816,7 +819,18 @@ async fn writer_task(
         let late_by = late
             .as_ref()
             .map_or(Duration::ZERO, |l| l.draw().to_std().unwrap_or_default());
-        tokio::time::sleep((at + late_by).saturating_sub(sim_now())).await;
+        let armed = sim_now();
+        tokio::time::sleep((at + late_by).saturating_sub(armed)).await;
+        if let Some(log) = w.timer_log(h) {
+            let clock = |t: Duration| w.clock_at(h, t);
+            log.push(TimerRecord {
+                source: TimerSource::Writer,
+                armed: clock(armed),
+                deadline: clock(at),
+                fired: clock(sim_now()),
+                requested: clock(at) - clock(armed).truncate(Time::PRECISION),
+            });
+        }
         if w.take_writer_reset(s) {
             match writer.reset().await {
                 Ok(()) => w.log(&me, format!("swarm {s} writer reset")),

@@ -199,7 +199,7 @@ fn signalling() -> Signalling {
     };
     let rtc = ProxyRtc::new(&config, 0, commands);
     let port = channel.port1();
-    let signal = SignalPort::new(port.clone(), commands_rx, config.max_buffered_amount);
+    let signal = SignalPort::new(port.clone(), commands_rx, config.max_buffered_amount, None);
     let (done_tx, done) = oneshot::channel();
     drop(runtime::spawn(async move {
         signal.run(inputs_tx).await;

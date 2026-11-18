@@ -160,10 +160,13 @@
 //!   `STRIMS_SIM_PACKET_LOG=<hosts>` every packet those hosts offered their
 //!   uplinks (`packets`, large and held to the run's end:
 //!   [`Scenario::packet_log`]; `all` or `1`, `seed`, `viewers`, or host
-//!   numbers, [`packet_log_hosts`]), and `STRIMS_SIM_PARENT_CHECKS=1`
-//!   their parent checks (`parent_checks`: [`Scenario::parent_checks`]),
-//!   which take the tap a capture would, so it fails with
-//!   `STRIMS_SIM_CAPTURE`. None of them changes the trace.
+//!   numbers, [`packet_log_hosts`]), `STRIMS_SIM_PARENT_CHECKS=1` their
+//!   parent checks (`parent_checks`: [`Scenario::parent_checks`]), which
+//!   take the tap a capture would, so it fails with `STRIMS_SIM_CAPTURE`,
+//!   and `STRIMS_SIM_TIMER_LOG=<hosts>` those hosts' timers as they fire
+//!   (`timers`: [`Scenario::timer_log`]; `all` or `1`, `seed`, or `hosts:`
+//!   and host indices, `hosts:0,3`, [`HostSet::parse`]). None of them
+//!   changes the trace.
 //! - `STRIMS_SIM_ROWS=1` prints each run's measures as one line,
 //!   `ROW {json}`, on stdout ([`Report::row`]).
 //! - `STRIMS_SIM_JOB=1` runs the sweep as one sim farm job
@@ -195,7 +198,7 @@ use strims_wan::live::{Encoder, Sign};
 use crate::report::Report;
 use crate::run::run;
 use crate::skew::ClockSkew;
-use crate::spec::{Arrivals, Departures, HostIx, Scenario, SendBuffer};
+use crate::spec::{Arrivals, Departures, HostIx, HostSet, Scenario, SendBuffer};
 use crate::wan::SctpProfile;
 
 /// A media swarm's chunk size without `STRIMS_SIM_CHUNK`: a video swarm's.
@@ -523,6 +526,13 @@ fn timer_lateness_knob() -> Option<bool> {
     }
 }
 
+/// `STRIMS_SIM_TIMER_LOG` ([`Scenario::timer_log`], [`HostSet::parse`]).
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn timer_log_knob() -> Option<HostSet> {
+    let v = env("STRIMS_SIM_TIMER_LOG")?;
+    HostSet::parse(&v).unwrap_or_else(|e| panic!("STRIMS_SIM_TIMER_LOG={v}: {e}"))
+}
+
 /// `STRIMS_SIM_SEED_PIN` ([`crate::seed_pin::SeedPin::parse`]), if set
 /// and not `off`.
 #[allow(clippy::panic)] // a mistyped setting fails its test
@@ -796,6 +806,7 @@ fn sweep_seeds(
     let departures = depart_knob();
     let clock_skew = clock_skew_knob();
     let timer_lateness = timer_lateness_knob();
+    let timer_log = timer_log_knob();
     let seed_pin = seed_pin_knob();
     let seed_links = seed_links_knob();
     let loops = knob::<u32>("STRIMS_SIM_LOOPS") == Some(1);
@@ -821,6 +832,7 @@ fn sweep_seeds(
             spec.request_logs = request_logs;
             spec.node_bins = bin_nodes;
             spec.parent_checks = parent_checks;
+            spec.timer_log.clone_from(&timer_log);
         }
         if segment.is_some() {
             spec.tcp_segment = segment;

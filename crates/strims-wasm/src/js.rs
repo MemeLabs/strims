@@ -7,7 +7,7 @@
 use js_sys::Reflect;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
-use web_sys::{Crypto, IdbFactory};
+use web_sys::{Crypto, IdbFactory, Performance};
 
 #[wasm_bindgen]
 extern "C" {
@@ -16,6 +16,9 @@ extern "C" {
 
     #[wasm_bindgen(method, getter, structural)]
     pub(crate) fn crypto(this: &Scope) -> Option<Crypto>;
+
+    #[wasm_bindgen(method, getter, structural)]
+    pub(crate) fn performance(this: &Scope) -> Option<Performance>;
 
     /// Throws `SecurityError` where storage is denied, e.g. on opaque
     /// origins.

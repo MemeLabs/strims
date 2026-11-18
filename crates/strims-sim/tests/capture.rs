@@ -29,7 +29,8 @@ use strims_ppspp_capture::{Dir, Reader, Record, sample_kind};
 use strims_sim::tables::UP_COUNTERS;
 use strims_sim::topology::random_mesh;
 use strims_sim::{
-    Departure, Fault, Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport, WanHostReport, run,
+    Departure, Fault, HostSet, Scenario, SctpProfile, SendBuffer, SwarmSpec, Transport,
+    WanHostReport, run,
 };
 use strims_wan::playout::DELAYS_MS;
 use strims_wan::{Access, City, Site};
@@ -214,6 +215,7 @@ fn a_run_with_tables_keeps_its_trace() {
             spec.packet_log = (0..spec.hosts.len()).collect();
             spec.node_bins = true;
             spec.parent_checks = true;
+            spec.timer_log = Some(HostSet::All);
             let r = run(spec, 1).unwrap();
             assert_eq!(
                 (&plain.trace_hash, plain.reads_hash()),
@@ -337,6 +339,7 @@ fn a_run_with_tables_keeps_its_trace() {
             );
             held_truth_meets_the_reads(&r, &d);
             request_logs_say_what_they_are(&r, &d);
+            timers_say_what_they_are(&r, &d);
             stalls_say_how_playout_went(&d);
             parents_say_how_the_trees_changed(&r, &d);
             packets_say_what_they_are(&r, &d, name);
@@ -355,6 +358,7 @@ fn a_run_with_tables_keeps_its_trace() {
         spec.forecast_log = true;
         spec.request_logs = true;
         spec.parent_checks = true;
+        spec.timer_log = Some(HostSet::All);
         let r = run(spec, 1).unwrap();
         assert_eq!(
             (&plain.trace_hash, plain.reads_hash()),
@@ -362,6 +366,44 @@ fn a_run_with_tables_keeps_its_trace() {
             "{how}"
         );
         assert!(!r.parent_losses.is_empty(), "{how}: no parent departed");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The timer log reads the lateness the run draws: the same trace with the
+/// log as without it, lateness on and off, and its rows as
+/// [`timers_say_what_they_are`] says.
+#[test]
+fn a_timer_log_reads_the_lateness_drawn() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "a_timer_log_reads_the_lateness_drawn-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    for late in [false, true] {
+        let mut spec = wan_mesh();
+        spec.timer_lateness = late;
+        let plain = run(spec, 2).unwrap();
+        let mut spec = wan_mesh();
+        spec.timer_lateness = late;
+        spec.wire_bins = Some(Duration::from_secs(1));
+        spec.timer_log = Some(HostSet::All);
+        let r = run(spec, 2).unwrap();
+        assert_eq!(
+            (&plain.trace_hash, plain.reads_hash()),
+            (&r.trace_hash, r.reads_hash()),
+            "lateness {late}"
+        );
+        let d = dir.join(format!("late-{late}"));
+        r.write_tables(&d, Duration::from_secs(1), false).unwrap();
+        timers_say_what_they_are(&r, &d);
+        if late {
+            let rows = table_rows(&d, "timers");
+            assert!(
+                rows.iter().any(|x| int(x, "late_us") != Some(0)),
+                "no timer drawn late"
+            );
+        }
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -1517,6 +1559,80 @@ fn table_rows(d: &Path, t: &str) -> Vec<BTreeMap<String, String>> {
 /// A row's integer, `None` for an empty field.
 fn int(r: &BTreeMap<String, String>, c: &str) -> Option<i64> {
     r[c].parse().ok()
+}
+
+/// The timer log's table (`Scenario::timer_log`, every host's) against the
+/// run: each host's node task fired timers and the seed's writer waited;
+/// a timer fired at its deadline plus the lateness the run draws (none
+/// without `Scenario::timer_lateness`, else whole milliseconds within
+/// `strims_sim::late`'s draws), after it was armed; its delay is its
+/// deadline less the whole ms it was armed at; and a node's timers of a
+/// source fire in order, its node task's a millisecond apart at least.
+fn timers_say_what_they_are(r: &strims_sim::Report, d: &Path) {
+    let rows = table_rows(d, "timers");
+    let meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(d.join("series_meta.json")).unwrap())
+            .unwrap();
+    assert_eq!(meta["timers_lost"], 0);
+    let seed = r.scenario.swarms[0].seed;
+    let mut last: BTreeMap<(i64, String), i64> = BTreeMap::new();
+    let mut sources: BTreeMap<i64, BTreeSet<String>> = BTreeMap::new();
+    let mut ns: BTreeMap<i64, Vec<i64>> = BTreeMap::new();
+    // A node task's deadline can fall within a millisecond, and its timer
+    // then fires at the simulation's next tick past it.
+    let most = if r.scenario.timer_lateness {
+        strims_sim::late::MAX_LATE_MS * 1000
+    } else {
+        0
+    };
+    for row in &rows {
+        let x = |c: &str| int(row, c).unwrap();
+        let (t, node) = (x("t_us"), x("node"));
+        ns.entry(node).or_default().push(x("n"));
+        assert_eq!(row["context"], "task", "{row:?}");
+        assert_eq!(x("late_us"), t - x("deadline_us"), "{row:?}");
+        let late = x("late_us");
+        if row["source"] == "node_task" {
+            assert!((0..most + 1000).contains(&late), "{row:?}");
+        } else {
+            assert_eq!(x("deadline_us") % 1000, 0, "{row:?}");
+            assert!(late % 1000 == 0 && (0..=most).contains(&late), "{row:?}");
+        }
+        assert!(x("armed_us") <= t, "{row:?}");
+        let floor = x("armed_us").div_euclid(1000) * 1000;
+        assert_eq!(x("requested_us"), x("deadline_us") - floor, "{row:?}");
+        // A node task's next deadline is a millisecond past its last pass
+        // at least; a writer behind its schedule writes at once.
+        let key = (node, row["source"].clone());
+        if let Some(&before) = last.get(&key) {
+            let gap = if row["source"] == "node_task" {
+                1000
+            } else {
+                0
+            };
+            assert!(t >= before + gap, "{row:?} after {before}");
+        }
+        last.insert(key, t);
+        sources
+            .entry(node)
+            .or_default()
+            .insert(row["source"].clone());
+    }
+    // Each node's rows are numbered from 0 in the order its log kept them,
+    // so (node, n) is a row's own.
+    for (node, n) in &ns {
+        let want: Vec<i64> = (0..n.len() as i64).collect();
+        assert_eq!(n, &want, "node {node}");
+    }
+    for h in 0..r.scenario.hosts.len() as i64 {
+        let have = sources.get(&h).cloned().unwrap_or_default();
+        assert!(have.contains("node_task"), "host {h}: {have:?}");
+        assert_eq!(
+            have.contains("writer"),
+            h == seed as i64,
+            "host {h}: {have:?}"
+        );
+    }
 }
 
 /// The request log's tables (`Scenario::request_logs`) against the run:

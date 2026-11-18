@@ -290,7 +290,7 @@ pub(crate) trait Column: Key {
 }
 
 /// The tables strims-sim writes zstd-compressed, `<name>.csv.zst`.
-pub(crate) const ZSTD: [&str; 11] = [
+pub(crate) const ZSTD: [&str; 12] = [
     "reads",
     "events",
     "parent_checks",
@@ -302,6 +302,7 @@ pub(crate) const ZSTD: [&str; 11] = [
     "peer_samples",
     "sockets",
     "packets",
+    "timers",
 ];
 
 /// The row's fields that hold an integer.
@@ -2939,6 +2940,10 @@ pub(crate) enum MetaInt {
     /// buffers and logs left out, every host's, summed: events of every kind
     /// the tap keeps, so at most that many checks.
     ParentChecksLost,
+    /// With the timer log on, the timers its logs' caps left out
+    /// (`strims_testbed::record::TimerLog::CAP` between two takes), every
+    /// host's, summed.
+    TimersLost,
     /// With the request logs on, the held log's records the caps left out.
     HeldLost,
     /// With the request logs on, the HAVE log's records the caps left out.
@@ -2968,6 +2973,7 @@ impl MetaInt {
             MetaInt::ForecastsLost => "forecasts_lost",
             MetaInt::ParentsLost => "parents_lost",
             MetaInt::ParentChecksLost => "parent_checks_lost",
+            MetaInt::TimersLost => "timers_lost",
             MetaInt::HeldLost => "held_lost",
             MetaInt::HavesLost => "haves_lost",
             MetaInt::AsksLost => "asks_lost",
@@ -5756,6 +5762,105 @@ pub(crate) mod cols {
                 Hosts::Name | Hosts::Role | Hosts::Kind | Hosts::Stack | Hosts::LinkSpec => {
                     Ty::Text
                 }
+            }
+        }
+    }
+
+    /// The `timers` table's columns: a row per timer of a node's that fired:
+    /// its node task's, its line's, its stream writer's, a browser's host
+    /// pacer's or its probe's.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum Timers {
+        /// When the code the timer woke ran, in µs of true time from the
+        /// stream's start, by the node's precise clock.
+        ///
+        /// Unit: us.
+        TUs,
+        /// The node whose timer fired, as `events` numbers hosts.
+        Node,
+        /// The timer's place among the node's, from 0, in the order its log
+        /// kept them, across its incarnations: two of a node's timers can fire
+        /// at one `t_us` (a browser's clock reads in 100 µs steps, a stalled
+        /// harness fires its late timers at once).
+        N,
+        /// Whose timer it was: `node_task` (the node task's one timer, which
+        /// wakes the pass that runs its state machines' deadlines), `record` (a
+        /// testbed node's line a second), `writer` (the seed's frame writer,
+        /// each write waiting for its time), `pacer` (a browser node's host
+        /// pacer, reading its channels' load again while it holds a write) or
+        /// `probe` (the scripted timers of `TIMER_PROBE`, each of a fixed
+        /// delay).
+        Source,
+        /// When the timer was armed for its deadline, in µs of true time from
+        /// the stream's start, by the node's precise clock.
+        ///
+        /// Unit: us.
+        ArmedUs,
+        /// The time the timer was armed for, in µs of true time from the
+        /// stream's start, as the code that armed it reckons time: a harness's
+        /// timers (the line's, the writer's, the probe's, a host pacer's) at a
+        /// whole millisecond, the node task's at its state machines' deadline,
+        /// which can fall within one.
+        ///
+        /// Unit: us.
+        DeadlineUs,
+        /// How long past its deadline the woken code ran (`t_us` less
+        /// `deadline_us`), in µs; negative only where the node's precise clock
+        /// reads behind the clock its deadline is by.
+        ///
+        /// Unit: us.
+        LateUs,
+        /// The delay the timer was armed for, in µs: its deadline less the
+        /// arming code's own reading of the time as it armed it, which a
+        /// millisecond clock gives (whole milliseconds for a harness's timers,
+        /// the deadline's fraction for the node task's); negative for a
+        /// deadline already past then.
+        ///
+        /// Unit: us.
+        RequestedUs,
+        /// Where the timer ran: `task` (a native node's tokio task, and a
+        /// simulated node's) or `worker` (a browser node's worker).
+        Context,
+    }
+
+    impl Timers {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                Timers::TUs => "t_us",
+                Timers::Node => "node",
+                Timers::N => "n",
+                Timers::Source => "source",
+                Timers::ArmedUs => "armed_us",
+                Timers::DeadlineUs => "deadline_us",
+                Timers::LateUs => "late_us",
+                Timers::RequestedUs => "requested_us",
+                Timers::Context => "context",
+            }
+        }
+    }
+
+    impl sealed::Sealed for Timers {}
+
+    impl Key for Timers {
+        fn name(self) -> &'static str {
+            Timers::name(self)
+        }
+    }
+
+    impl Column for Timers {
+        const TABLE: &'static str = "timers";
+
+        fn ty(self) -> Ty {
+            match self {
+                Timers::TUs
+                | Timers::Node
+                | Timers::N
+                | Timers::ArmedUs
+                | Timers::DeadlineUs
+                | Timers::LateUs
+                | Timers::RequestedUs => Ty::Int,
+                Timers::Source | Timers::Context => Ty::Text,
             }
         }
     }

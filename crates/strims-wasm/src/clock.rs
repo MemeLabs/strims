@@ -16,6 +16,12 @@
 //!   polls in the microtask it was already running, so time moves on
 //!   between turns and never within one, and a long turn ends with the
 //!   time it started at.
+//! - [`precise_now`] reads the high-resolution clock,
+//!   `performance.timeOrigin + performance.now()`, at every call, for the
+//!   timer log alone (`NodeConfig::timer_log`): it is as fine as the
+//!   browser lets a page read it (Chromium clamps it to 100 µs, 5 µs in a
+//!   cross-origin isolated page; Firefox to its `privacy.reduceTimerPrecision`
+//!   prefs' resolution).
 //! - A [`Sleep`] waits on `setTimeout`. A timer can fire before [`now`]
 //!   reaches its deadline: delays are clamped to 2^31−1 ms, and browsers
 //!   round timers and the clock differently. A sleep woken early arms a
@@ -80,6 +86,16 @@ pub fn now() -> Time {
         js::queue_microtask(t.forget.as_ref().unchecked_ref());
         now
     })
+}
+
+/// The current wall time by the high-resolution clock, read now (see the
+/// [module docs](self)); [`now`] where the scope has no `performance`.
+pub fn precise_now() -> Time {
+    match js::scope().performance() {
+        // `as` saturates, and NaN is 0.
+        Some(p) => Time::from_unix_nanos(((p.time_origin() + p.now()) * 1e6) as i64),
+        None => now(),
+    }
 }
 
 /// A sleep that is already due: the driver loop's timer before its first

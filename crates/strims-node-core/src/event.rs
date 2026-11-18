@@ -330,6 +330,68 @@ pub enum ParentLogEntry {
     Lost(u64),
 }
 
+/// Whose timer a [`TimerRecord`] is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TimerSource {
+    /// The node task's one timer ([`crate::NodeIo::reset_sleep`]), which
+    /// wakes the pass that runs its state machines' deadlines.
+    NodeTask,
+    /// A harness's sampling timer: the testbed node's line a second.
+    Record,
+    /// A stream writer's: each write waits for the time it is due.
+    Writer,
+    /// A browser driver's host pacer, which reads its channels' load again
+    /// while it holds a write.
+    Pacer,
+    /// A harness's scripted timer of a fixed delay.
+    Probe,
+}
+
+impl TimerSource {
+    /// Every source, in order.
+    pub const ALL: [TimerSource; 5] = [
+        TimerSource::NodeTask,
+        TimerSource::Record,
+        TimerSource::Writer,
+        TimerSource::Pacer,
+        TimerSource::Probe,
+    ];
+
+    /// Its name in the tables: `node_task`, `record`, `writer`, `pacer`,
+    /// `probe`.
+    pub fn name(self) -> &'static str {
+        match self {
+            TimerSource::NodeTask => "node_task",
+            TimerSource::Record => "record",
+            TimerSource::Writer => "writer",
+            TimerSource::Pacer => "pacer",
+            TimerSource::Probe => "probe",
+        }
+    }
+
+    /// The source named `name` ([`TimerSource::name`]).
+    pub fn parse(name: &str) -> Option<TimerSource> {
+        TimerSource::ALL.into_iter().find(|s| s.name() == name)
+    }
+}
+
+/// A timer that fired ([`crate::NodeConfig::timer_log`]). Every time is by
+/// the clock of the code that armed it at that clock's finest precision
+/// ([`crate::NodeIo::precise_now`]), but `deadline`, which is the time the
+/// timer was armed for, as that code reckons time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TimerRecord {
+    pub source: TimerSource,
+    /// When it was armed for `deadline`.
+    pub armed: Time,
+    pub deadline: Time,
+    /// When the code it woke ran.
+    pub fired: Time,
+    /// The delay it was armed for: `deadline` less the arming code's own
+    /// reading of the time when it armed it.
+    pub requested: Duration,
+}
+
 /// An event of the ppspp runner's tap ([`crate::NodeConfig::decision_log`],
 /// ppspp's `TapEvent`): when, by the node's clock (the pass that made it),
 /// its swarm, the peer it is about by host (`None` for none, or one the

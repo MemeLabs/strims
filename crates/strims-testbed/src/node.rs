@@ -41,7 +41,7 @@
 //! | `tick_late_ms` | how late the timer of this line fired |
 //! | `write_late_ms` | at the seed, the latest of that second's writes past its time; `null` without writes |
 //! | `wakeups` | passes of the node's loop since the last line (`null` on the first): it follows traffic, so it shows load only next to a native node's |
-//! | `rec` | the line's records as strims-sim's tables take them (`Records`): the meter sample, the seed's state, the stats bins and parent changes since the last line, and every frame read since; with the node's scheduler logs on (its driver's `NodeConfig::forecast_log` and `request_log`: testbed_node's and testbed_browser's `--forecast` and `--spec`), what they logged since ([`record::logs`]) |
+//! | `rec` | the line's records as strims-sim's tables take them (`Records`): the meter sample, the seed's state, the stats bins and parent changes since the last line, and every frame read since; with the node's scheduler logs on (its driver's `NodeConfig::forecast_log` and `request_log`: testbed_node's and testbed_browser's `--forecast` and `--spec`), what they logged since ([`record::logs`]); with its timer log (`NodeConfig::timer_log`, `--timer-log`), the timers that fired since: its node task's, the line's own, the frame writer's and a browser's host pacer's ([`record::TimerLog`]) |
 //! | `media` | of a media stream, `null` otherwise: at the seed, [`SeedStats`]: the unit writer's `records`, `units`, `gops`, `bytes` and `padding`, `early_signs` and `dropped` units; at a viewer, [`ViewerStats`]: `units` and `keyframes` read whole, the `messages` that took records to the player (Data messages, or the batches of a browser player's feed) and their records' `bytes`, `first_message_ms`, the egress reader's `discontinuities`, `corrupt_frames`, `losses`, `records` and `rewinds`/`refused_rewinds`/`overtaken_rewinds`, and the join: `first_read_ms`, the first rewind's `rewind_start_ms`, `rewind_end_ms`, outcome (`granted`, `refused`, `timed_out`, `overtaken`) and bytes back from the reader's position, `rewind_back`. Times are Unix ms. |
 //!
 //! `tick_late_ms` and `write_late_ms` show a throttled timer or an
@@ -53,7 +53,7 @@ use std::future::Future;
 use strims_base::time::{Duration, Time};
 use strims_node_core::{
     DecisionInfo, HostId, LinkKind, Node, NodeMetrics, ParentLogEntry, PeerInfo, ReadError,
-    SwarmId, SwarmKey, SwarmReader, SwarmWriter, WriterOptions,
+    SwarmId, SwarmKey, SwarmReader, SwarmWriter, TimerRecord, TimerSource, WriterOptions,
 };
 use strims_ppspp::{DeliveryMode, SwarmOptions, TapKind};
 use strims_transfer::SwarmRead;
@@ -61,7 +61,7 @@ use tokio::sync::mpsc;
 
 use crate::media::{self, FlvFile, SeedStats, TagKind, ViewerStats};
 use crate::record::logs::Logs;
-use crate::record::{self, DecisionLog, ParentLog};
+use crate::record::{self, DecisionLog, ParentLog, TimerContext, TimerLog};
 use crate::shape::LiveShape;
 use crate::stream::{FRAME_LEN, FrameParser, Parsed, encode_frame};
 use crate::topology::{index_of, swarm_key};
@@ -74,6 +74,11 @@ const RUN_SEED: u64 = 1;
 pub trait Runtime {
     /// The wall clock in Unix milliseconds.
     fn now_ms(&self) -> u64;
+    /// The wall clock at its finest precision, for the timer log alone
+    /// ([`TimerLog`]). By default [`Runtime::now_ms`].
+    fn precise_now(&self) -> Time {
+        Time::from_unix_millis(i64::try_from(self.now_ms()).unwrap_or(i64::MAX))
+    }
     /// Resolves once the wall clock reaches `at_ms`.
     fn sleep_until_ms(&self, at_ms: u64) -> impl Future<Output = ()>;
     /// The driver's CPU time so far in milliseconds, if it can tell.
@@ -135,21 +140,35 @@ pub struct Settings {
     pub stream: Stream,
 }
 
+/// The logs a node's config hands its records to, which its lines take,
+/// each `None` while off.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NodeLogs<'a> {
+    /// Its parent changes (`NodeConfig::parent_log`).
+    pub parents: Option<&'a ParentLog>,
+    /// Its tap's events (`NodeConfig::decision_log`).
+    pub checks: Option<&'a DecisionLog>,
+    /// Its timers (`NodeConfig::timer_log`), which the line's timer and
+    /// the frame writer add theirs to.
+    pub timers: Option<&'a TimerLog>,
+}
+
 /// Runs the node's part (see the [module docs](self)), taking the node's
 /// peers from `peers` as they're added. The seed of a media stream writes
-/// `file`. `parents` is the log the node's config hands its parent
-/// changes to (`NodeConfig::parent_log`), and `checks` the one it hands
-/// its tap's events to (`NodeConfig::decision_log`), which the lines'
-/// records take.
+/// `file`. `logs` are the logs the node's config hands its records to.
 pub async fn run<R: Runtime + Clone + 'static>(
     node: &Node,
     mut peers: mpsc::UnboundedReceiver<PeerInfo>,
     s: Settings,
     file: Option<&FlvFile>,
-    parents: Option<&ParentLog>,
-    checks: Option<&DecisionLog>,
+    logs: NodeLogs<'_>,
     rt: &R,
 ) -> Result<(), String> {
+    let NodeLogs {
+        parents,
+        checks,
+        timers,
+    } = logs;
     let seed = s.index == 0;
     let mut shape = LiveShape::testbed(s.rate);
     let (options, signing) = match s.stream {
@@ -239,7 +258,18 @@ pub async fn run<R: Runtime + Clone + 'static>(
                 )
                 .await
             }
-            _ => write_frames(&mut writer, &shape, s.start_ms, end_ms, rt, &write_late).await,
+            _ => {
+                write_frames(
+                    &mut writer,
+                    &shape,
+                    s.start_ms,
+                    end_ms,
+                    rt,
+                    &write_late,
+                    timers,
+                )
+                .await
+            }
         };
         if let Err(e) = written {
             rt.error(e);
@@ -281,9 +311,13 @@ pub async fn run<R: Runtime + Clone + 'static>(
         let mut next = s.start_ms.saturating_sub(5000);
         let mut loops = None;
         loop {
+            let armed = timers.map(|_| (rt.precise_now(), rt.now_ms()));
             rt.sleep_until_ms(next).await;
             let t = rt.now_ms();
             let tick_late = t.saturating_sub(next);
+            if let (Some(log), Some(armed)) = (timers, armed) {
+                log.push(fired(rt, TimerSource::Record, armed, next));
+            }
             // A node that started late, or stalled, skips the seconds it
             // missed.
             while next <= t {
@@ -310,6 +344,10 @@ pub async fn run<R: Runtime + Clone + 'static>(
                 parents: parents.map(ParentLog::take).unwrap_or_default(),
                 checks: checks.map(DecisionLog::take),
                 reads: std::mem::take(&mut *reads.borrow_mut()),
+                timers: timers.map(|log| {
+                    let (rows, lost) = log.take();
+                    (rows, lost, log.context())
+                }),
                 now,
                 origin: Time::from_unix_millis(i64::try_from(s.start_ms).unwrap_or(i64::MAX)),
             }
@@ -355,10 +393,29 @@ fn frames_options(shape: &LiveShape, seed: bool, arrives: bool) -> SwarmOptions 
     options
 }
 
+/// A timer of `source` that was armed for `deadline_ms` when the precise
+/// clock and the ms clock read `armed`, and fired now.
+fn fired(
+    rt: &impl Runtime,
+    source: TimerSource,
+    armed: (Time, u64),
+    deadline_ms: u64,
+) -> TimerRecord {
+    let ms = |t: u64| i64::try_from(t).unwrap_or(i64::MAX);
+    TimerRecord {
+        source,
+        armed: armed.0,
+        deadline: Time::from_unix_millis(ms(deadline_ms)),
+        fired: rt.precise_now(),
+        requested: Duration::from_millis(ms(deadline_ms) - ms(armed.1)),
+    }
+}
+
 /// Writes the self-checking frames of `shape` from `start_ms` until
 /// `end_ms`, each stamped with the time its write was due (strims-sim's
 /// `Report::written_at`), so a viewer's lag counts a late write; the
-/// latest write past its time in `late`.
+/// latest write past its time in `late`, and with `timers` each write's
+/// wait for its time.
 async fn write_frames(
     writer: &mut SwarmWriter,
     shape: &LiveShape,
@@ -366,6 +423,7 @@ async fn write_frames(
     end_ms: u64,
     rt: &impl Runtime,
     late: &Cell<Option<u64>>,
+    timers: Option<&TimerLog>,
 ) -> Result<(), String> {
     let fpw = shape.frames_per_write as u64;
     let step = shape.write_interval.as_millis() as u64;
@@ -375,9 +433,13 @@ async fn write_frames(
         if at >= end_ms {
             break;
         }
+        let armed = timers.map(|_| (rt.precise_now(), rt.now_ms()));
         rt.sleep_until_ms(at).await;
         let t = rt.now_ms();
         late.set(Some(late.get().unwrap_or(0).max(t.saturating_sub(at))));
+        if let (Some(log), Some(armed)) = (timers, armed) {
+            log.push(fired(rt, TimerSource::Writer, armed, at));
+        }
         for (j, f) in buf.chunks_mut(FRAME_LEN).enumerate() {
             encode_frame(RUN_SEED, 0, k * fpw + j as u64, at, f);
         }
@@ -435,7 +497,10 @@ async fn read_frames(
 /// lags in µs (`null`: none). With the node's scheduler logs on
 /// (`NodeConfig::forecast_log`, `request_log`), what they logged since
 /// the last line too, `"logs": Logs` ([`record::logs`], times from
-/// `origin`, the stream's start); a node with them off writes none.
+/// `origin`, the stream's start); a node with them off writes none. With
+/// its timer log, the timers that fired since, `"timers": {...}`
+/// ([`record::timers_json`], times in µs from `origin`); a node without
+/// one writes none.
 struct Records<'a> {
     t_ms: u64,
     swarm: SwarmKey,
@@ -444,6 +509,8 @@ struct Records<'a> {
     parents: (Vec<ParentLogEntry>, u64),
     checks: Option<(Vec<DecisionInfo>, u64)>,
     reads: Vec<[u64; 3]>,
+    /// The timer log's take, and where its timers run.
+    timers: Option<(Vec<TimerRecord>, u64, TimerContext)>,
     now: Time,
     origin: Time,
 }
@@ -541,8 +608,17 @@ impl Records<'_> {
         } else {
             format!(",\"logs\":{}", logs.json(self.origin))
         };
+        let timers = self
+            .timers
+            .as_ref()
+            .map_or(String::new(), |(rows, lost, context)| {
+                format!(
+                    ",\"timers\":{}",
+                    record::timers_json(rows, *lost, *context, self.origin)
+                )
+            });
         format!(
-            "{{\"meter\":{},\"seed\":{seed},\"bins\":[{}],\"parents\":[{}],\"parents_lost\":{lost},\"reads\":[{}]{checks}{logs}}}",
+            "{{\"meter\":{},\"seed\":{seed},\"bins\":[{}],\"parents\":[{}],\"parents_lost\":{lost},\"reads\":[{}]{checks}{logs}{timers}}}",
             meter.map_or("null".to_owned(), |m| m.json()),
             bins.join(","),
             parents.join(","),

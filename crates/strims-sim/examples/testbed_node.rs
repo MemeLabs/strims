@@ -12,7 +12,7 @@
 //!              [--rate <bytes/s>] [--chunk <bytes> --munro <bytes>]
 //!              [--units <chunks per signature> [--media <flv file>]]
 //!              [--record <file>] [--join-at <s>] [--arrive] [--hosts <dir>]
-//!              [--capture <dir>] [--forecast] [--spec] [--parent-checks]
+//!              [--capture <dir>] [--forecast] [--spec] [--parent-checks] [--timer-log]
 //! testbed_node --relay-only --topology <file> [--secs <s>] [--start <unix ms>]
 //! ```
 //!
@@ -53,6 +53,11 @@
 //! [`DecisionLog`]), as `STRIMS_SIM_PARENT_CHECKS=1` keeps a simulated
 //! node's; it takes the tap a capture would, so it fails with
 //! `--capture`.
+//! ([`strims_testbed::record::logs`]). `--timer-log` keeps its timers as
+//! they fire (`NodeConfig::timer_log`, [`TimerLog`]): its node task's, its
+//! line's and its frame writer's, each read by the wall clock to the
+//! nanosecond, which its lines' records carry, as strims-sim's
+//! `STRIMS_SIM_TIMER_LOG` keeps a simulated node's.
 //!
 //! `--relay-only` runs the relay: it listens where the topology's `relay`
 //! line says, joins the testbed network, runs no swarm, and stops 5 s
@@ -70,12 +75,13 @@ use std::time::Duration;
 use strims_base::time::{Duration as Span, Time};
 use strims_node::config::StatsBins;
 use strims_node::{
-    CaptureConfig, NetworkOptions, Node, NodeConfig, NodeEvent, SystemClock, TokioNet, WebRtcConfig,
+    CaptureConfig, Clock, NetworkOptions, Node, NodeConfig, NodeEvent, SystemClock, TokioNet,
+    WebRtcConfig,
 };
 use strims_testbed::media::FlvFile;
 use strims_testbed::native::{now_ms, self_cpu_ms, write_host};
 use strims_testbed::node::{Runtime, Settings, Stream};
-use strims_testbed::record::{BIN_MS, DecisionLog, ParentLog};
+use strims_testbed::record::{BIN_MS, DecisionLog, ParentLog, TimerContext, TimerLog};
 use strims_testbed::shape::RATE;
 use strims_testbed::topology::{
     BIND_PORT, BrowserLinks, Link, Topology, key_of, network_key, relay_key,
@@ -101,6 +107,7 @@ struct Args {
     forecast: bool,
     spec: bool,
     parent_checks: bool,
+    timer_log: bool,
 }
 
 fn args() -> Result<Args, String> {
@@ -126,6 +133,7 @@ fn args() -> Result<Args, String> {
         forecast: false,
         spec: false,
         parent_checks: false,
+        timer_log: false,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -149,6 +157,7 @@ fn args() -> Result<Args, String> {
             "--forecast" => a.forecast = true,
             "--spec" => a.spec = true,
             "--parent-checks" => a.parent_checks = true,
+            "--timer-log" => a.timer_log = true,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -177,6 +186,10 @@ struct Native {
 impl Runtime for Native {
     fn now_ms(&self) -> u64 {
         now_ms()
+    }
+
+    fn precise_now(&self) -> Time {
+        SystemClock.precise_now()
     }
 
     async fn sleep_until_ms(&self, at_ms: u64) {
@@ -281,6 +294,8 @@ async fn run() -> Result<(), String> {
     config.request_log = a.spec;
     let checks = a.parent_checks.then(DecisionLog::default);
     config.decision_log = checks.as_ref().map(DecisionLog::sink);
+    let timers = a.timer_log.then(|| TimerLog::new(TimerContext::Task));
+    config.timer_log = timers.as_ref().map(TimerLog::sink);
     if topo.relay.is_some() {
         let at = me.browser_addr().to_string();
         match topo.browser_links {
@@ -367,7 +382,18 @@ async fn run() -> Result<(), String> {
     };
     let ran = tokio::select! {
         biased;
-        r = strims_testbed::node::run(&node, peers, settings, file.as_ref(), Some(&parents), checks.as_ref(), &rt) => r,
+        r = strims_testbed::node::run(
+            &node,
+            peers,
+            settings,
+            file.as_ref(),
+            strims_testbed::node::NodeLogs {
+                parents: Some(&parents),
+                checks: checks.as_ref(),
+                timers: timers.as_ref(),
+            },
+            &rt,
+        ) => r,
         () = async { tokio::join!(forward, links); } => Ok(()),
     };
     let _ = node.shutdown().await;

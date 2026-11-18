@@ -165,14 +165,15 @@ mod world;
 
 pub use report::{
     ACK_WHYS, AckWaits, HostReport, LookupPhase, MediaLog, ParentLoss, Percentiles, Report,
-    SeedDecisionHostRecord, SeedSendHostRecord, ViewerReport, VpnReport, WanHostReport, WanReport,
+    SeedDecisionHostRecord, SeedSendHostRecord, TimerHostRecord, ViewerReport, VpnReport,
+    WanHostReport, WanReport,
 };
 pub use run::run;
 pub use skew::ClockSkew;
 pub use spec::{
-    Arrivals, Binding, Competing, Departure, Departures, Fault, HostClass, HostIx, HostSpec,
-    Invariants, LinkSpec, MediaSpec, NetworkSpec, Scenario, SendBuffer, SwarmSpec, Transport,
-    VpnProbes,
+    Arrivals, Binding, Competing, Departure, Departures, Fault, HostClass, HostIx, HostSet,
+    HostSpec, Invariants, LinkSpec, MediaSpec, NetworkSpec, Scenario, SendBuffer, SwarmSpec,
+    Transport, VpnProbes,
 };
 pub use stats::{
     Echoes, Peaks, PeerMessages, PeerTransfer, RunnerReport, SwarmCounters, TransferSample,

@@ -10,7 +10,8 @@
 //! and log the records ([`crate::node`]'s `rec`), which strims-sim's
 //! `testbed` module reads back into a run's report. A testbed node keeps
 //! its parent log in a [`ParentLog`] between its lines, and its parent
-//! checks in a [`DecisionLog`], and with its scheduler's logs on hands
+//! checks in a [`DecisionLog`], with its timer log on its timers in a
+//! [`TimerLog`], and with its scheduler's logs on hands
 //! each line their records ([`logs`]).
 
 pub mod logs;
@@ -28,7 +29,7 @@ use strims_base::stats::WaitHistogram;
 use strims_base::time::Time;
 use strims_node_core::{
     DecisionInfo, DecisionLogEntry, DecisionSink, NodeBin, NodeMetrics, ParentLogEntry, ParentSink,
-    SwarmBin, SwarmKey,
+    SwarmBin, SwarmKey, TimerRecord, TimerSink, TimerSource,
 };
 use strims_ppspp::PushMode;
 use strims_ppspp::TapKind;
@@ -408,6 +409,156 @@ impl DecisionLog {
     }
 }
 
+/// Where a node's timers run ([`TimerLog`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TimerContext {
+    /// A native node's tokio task (a simulated node's too).
+    Task,
+    /// A browser node's worker.
+    Worker,
+}
+
+impl TimerContext {
+    /// Its name in the tables: `task`, `worker`.
+    pub fn name(self) -> &'static str {
+        match self {
+            TimerContext::Task => "task",
+            TimerContext::Worker => "worker",
+        }
+    }
+
+    /// The context named `name` ([`TimerContext::name`]).
+    pub fn parse(name: &str) -> Option<TimerContext> {
+        [TimerContext::Task, TimerContext::Worker]
+            .into_iter()
+            .find(|c| c.name() == name)
+    }
+}
+
+/// The timers of a node that fired, kept until the next take: those its
+/// node task's log hands over ([`strims_node_core::NodeConfig::timer_log`],
+/// the sink [`TimerLog::sink`]) and its harness's own ([`TimerLog::push`]),
+/// all run in one `context`. It keeps at most [`TimerLog::CAP`] between
+/// two takes, in a buffer it allocates once, and counts those past it as
+/// lost. A testbed node's line takes them ([`crate::node`]), and
+/// strims-sim takes a simulated node's at its stats samples.
+#[derive(Clone, Debug)]
+pub struct TimerLog {
+    tx: SyncSender<TimerRecord>,
+    rx: Rc<Receiver<TimerRecord>>,
+    lost: Arc<AtomicU64>,
+    context: TimerContext,
+}
+
+impl TimerLog {
+    /// The timers a log keeps between two takes.
+    pub const CAP: usize = 4096;
+
+    /// An empty log of timers that run in `context`.
+    pub fn new(context: TimerContext) -> TimerLog {
+        let (tx, rx) = sync_channel(Self::CAP);
+        TimerLog {
+            tx,
+            rx: Rc::new(rx),
+            lost: Arc::default(),
+            context,
+        }
+    }
+
+    /// Where the timers run.
+    pub fn context(&self) -> TimerContext {
+        self.context
+    }
+
+    /// The sink for the node's config.
+    pub fn sink(&self) -> TimerSink {
+        let (tx, lost) = (self.tx.clone(), self.lost.clone());
+        TimerSink(Arc::new(move |r| {
+            if tx.try_send(r).is_err() {
+                lost.fetch_add(1, Ordering::Relaxed);
+            }
+        }))
+    }
+
+    /// Keeps a timer of the harness's.
+    pub fn push(&self, r: TimerRecord) {
+        if self.tx.try_send(r).is_err() {
+            self.lost.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    /// The timers since the last take, in the order they fired, and those
+    /// left out.
+    pub fn take(&self) -> (Vec<TimerRecord>, u64) {
+        (
+            self.rx.try_iter().collect(),
+            self.lost.swap(0, Ordering::Relaxed),
+        )
+    }
+}
+
+/// µs from `origin` to `t`, floored.
+fn us_since(t: Time, origin: Time) -> i64 {
+    t.unix_nanos()
+        .saturating_sub(origin.unix_nanos())
+        .div_euclid(1000)
+}
+
+/// `rows` as a line's records hold them ([`crate::node`]'s `rec.timers`),
+/// with their log's `context` and its `lost` count: `{"context": name,
+/// "lost": n, "rows": [[source, armed_us, deadline_us, fired_us,
+/// requested_us], ...]}`, times in µs from `origin`, floored.
+pub fn timers_json(rows: &[TimerRecord], lost: u64, context: TimerContext, origin: Time) -> String {
+    let mut s = format!(
+        "{{\"context\":\"{}\",\"lost\":{lost},\"rows\":[",
+        context.name()
+    );
+    for (i, r) in rows.iter().enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        let _ = write!(
+            s,
+            "[\"{}\",{},{},{},{}]",
+            r.source.name(),
+            us_since(r.armed, origin),
+            us_since(r.deadline, origin),
+            us_since(r.fired, origin),
+            r.requested.as_nanos().div_euclid(1000),
+        );
+    }
+    s.push_str("]}");
+    s
+}
+
+/// A line's `rec.timers` ([`timers_json`]) read back, times from
+/// `origin`: its rows, its lost count and their context; `None` for one
+/// that isn't that object. A row that doesn't parse is left out.
+pub fn timers_of(
+    v: &serde_json::Value,
+    origin: Time,
+) -> Option<(Vec<TimerRecord>, u64, TimerContext)> {
+    let context = TimerContext::parse(v.get("context")?.as_str()?)?;
+    let lost = v.get("lost")?.as_u64()?;
+    let at = |us: i64| origin + strims_base::time::Duration::from_micros(us);
+    let rows = v
+        .get("rows")?
+        .as_array()?
+        .iter()
+        .filter_map(|r| {
+            let n = |k: usize| r.get(k).and_then(serde_json::Value::as_i64);
+            Some(TimerRecord {
+                source: TimerSource::parse(r.get(0)?.as_str()?)?,
+                armed: at(n(1)?),
+                deadline: at(n(2)?),
+                fired: at(n(3)?),
+                requested: strims_base::time::Duration::from_micros(n(4)?),
+            })
+        })
+        .collect();
+    Some((rows, lost, context))
+}
+
 /// `v`, or `null`.
 fn opt(v: Option<impl ToString>) -> String {
     v.map_or("null".to_owned(), |v| v.to_string())
@@ -476,8 +627,66 @@ pub fn waits_json(h: &WaitHistogram) -> String {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
-    use super::*;
+    use strims_base::time::Duration as Span;
     use strims_ppspp::{ParentAction, ParentChoice};
+
+    use super::*;
+
+    fn row(source: TimerSource, ms: i64) -> TimerRecord {
+        let t = Time::from_unix_millis(1_700_000_000_000 + ms);
+        TimerRecord {
+            source,
+            armed: t - Span::from_micros(2_500),
+            deadline: t - Span::from_micros(300),
+            fired: t,
+            requested: Span::from_millis(2),
+        }
+    }
+
+    /// A log keeps what its sink and its harness hand it in order, up to
+    /// its cap between takes, counting the rest as lost, and a take
+    /// empties it.
+    #[test]
+    fn a_timer_log_keeps_its_cap_between_takes() {
+        let log = TimerLog::new(TimerContext::Task);
+        let sink = log.sink();
+        (sink.0)(row(TimerSource::NodeTask, 0));
+        log.push(row(TimerSource::Record, 1));
+        let (rows, lost) = log.take();
+        assert_eq!(
+            rows,
+            [row(TimerSource::NodeTask, 0), row(TimerSource::Record, 1)]
+        );
+        assert_eq!(lost, 0);
+        for i in 0..TimerLog::CAP + 5 {
+            (sink.0)(row(TimerSource::NodeTask, i as i64));
+        }
+        let (rows, lost) = log.take();
+        assert_eq!((rows.len(), lost), (TimerLog::CAP, 5));
+        assert_eq!(log.take(), (Vec::new(), 0));
+        // The harness's own timers count past the cap too.
+        for i in 0..TimerLog::CAP + 3 {
+            log.push(row(TimerSource::Writer, i as i64));
+        }
+        let (rows, lost) = log.take();
+        assert_eq!((rows.len(), lost), (TimerLog::CAP, 3));
+    }
+
+    /// A line's timers read back as they were written, to the µs, times
+    /// before the origin too.
+    #[test]
+    fn timers_read_back_as_written() {
+        let origin = Time::from_unix_millis(1_700_000_000_010);
+        let rows = [row(TimerSource::Probe, 0), row(TimerSource::Pacer, 25)];
+        let json = timers_json(&rows, 7, TimerContext::Worker, origin);
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["rows"][0][1], -12_500);
+        let (back, lost, context) = timers_of(&v, origin).unwrap();
+        assert_eq!(
+            (back.as_slice(), lost, context),
+            (&rows[..], 7, TimerContext::Worker)
+        );
+    }
 
     /// The log keeps the tap's parent checks alone, up to its cap, and
     /// counts as lost those past it and the events the tap left out.

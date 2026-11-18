@@ -146,7 +146,12 @@ impl WasmIo {
             dial_timeout: config.dial_timeout,
             ws: config.ws,
             max_buffered,
-            signal: Some(SignalPort::new(signal, commands_rx, max_buffered)),
+            signal: Some(SignalPort::new(
+                signal,
+                commands_rx,
+                max_buffered,
+                config.timer_log.clone(),
+            )),
             _commands: commands,
         };
         Ok((setup, io))
@@ -244,6 +249,10 @@ impl NodeIo for WasmIo {
 
     fn now(&self) -> Time {
         clock::now()
+    }
+
+    fn precise_now(&self) -> Time {
+        clock::precise_now()
     }
 
     fn new_sleep(&self) -> Sleep {

@@ -177,6 +177,14 @@ pub struct NodeConfig {
     /// logs since the last snapshot no later one can take; `None` (the
     /// default, and every real node's) takes none. It changes no decision.
     pub last_metrics: Option<MetricsSink>,
+    /// Hands every timer of the node task's that fires, as it fires, to the
+    /// sink ([`crate::TimerSource::NodeTask`]): when the loop armed it, its
+    /// deadline, when the wake-up ran and the delay it was armed for, read
+    /// by the driver's precise clock ([`crate::NodeIo::precise_now`]); a
+    /// driver that has timers of its own hands them too (a browser's host
+    /// pacer, [`crate::TimerSource::Pacer`]). `None` (the default, and every
+    /// real node's) reads no clock for it. It changes no decision.
+    pub timer_log: Option<TimerSink>,
 }
 
 /// Where a node's parent changes go ([`NodeConfig::parent_log`]), for a
@@ -209,6 +217,19 @@ pub struct MetricsSink(pub Arc<dyn Fn(crate::NodeMetrics) + Send + Sync>);
 impl fmt::Debug for MetricsSink {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("MetricsSink")
+    }
+}
+
+/// Where a node's timers go as they fire ([`NodeConfig::timer_log`]),
+/// for a harness's or a simulation's tables. It is called from the node
+/// task's pass, so it must not block, and it holds what it keeps in a
+/// bound of its own.
+#[derive(Clone)]
+pub struct TimerSink(pub Arc<dyn Fn(crate::event::TimerRecord) + Send + Sync>);
+
+impl fmt::Debug for TimerSink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("TimerSink")
     }
 }
 
@@ -348,6 +369,7 @@ impl NodeConfig {
             parent_log: None,
             decision_log: None,
             last_metrics: None,
+            timer_log: None,
             node_platform: String::new(),
             node_version: "dev".to_owned(),
             ppspp_capture: None,
