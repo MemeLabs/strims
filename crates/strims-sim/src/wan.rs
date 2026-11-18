@@ -414,12 +414,21 @@ const HYSTART_LOW_WINDOW: f64 = 16.0 * MSS;
 
 /// A host's uplink counters in WAN mode (`Scheduler::up_counters`), as the
 /// tables name them: wire bytes, packets and small packets through the
-/// uplink, stream messages that lost a packet, packets lost (the network's
-/// and the window model's full access queues'), the window model's window
-/// falls and timeouts, and the acknowledgements alone its uplink carried,
-/// packets and wire bytes: TCP's pure ACKs, then the data channels' SACKs.
-/// The acknowledgements aren't in the first three; the two kinds add up to
-/// a host's [`WanHostReport::acks`] and [`WanHostReport::ack_bytes`].
+/// uplink, stream messages that lost a packet, packets lost, the window
+/// model's window falls and timeouts, and the acknowledgements alone its
+/// uplink carried, packets and wire bytes: TCP's pure ACKs, then the data
+/// channels' SACKs. The acknowledgements aren't in the first three; the
+/// two kinds add up to a host's [`WanHostReport::acks`] and
+/// [`WanHostReport::ack_bytes`].
+///
+/// The packets lost are the host's datagrams the path lost (its sites'
+/// loss), and with the window model the packets a full access queue lost
+/// that the host sent, a frame each: its connections' segments' frames
+/// and its data channels' packets at its uplink queue or at their
+/// receiver's downlink queue, its datagrams at either, its SACKs at its
+/// uplink queue, and its competing uploads' frames at its uplink queue.
+/// A testbed run's column is its tbf's drops, the frames its uplink queue
+/// lost, pure TCP ACKs among them, which the model's queues always take.
 pub const UP_COUNTERS: [&str; 11] = [
     "up_bytes",
     "up_packets",
@@ -3597,7 +3606,7 @@ impl Scheduler {
             s.up_packets,
             s.small_packets,
             s.retransmits,
-            s.drops + at(&self.drops),
+            s.drops + at(&self.drop_packets) + at(&self.cross_drop_packets),
             at(&self.cuts),
             at(&self.rtos),
             at(&self.acks).saturating_sub(at(&self.sacks)),
@@ -4400,18 +4409,18 @@ mod tests {
         loss: f64,
         seed: u64,
     ) -> (i64, WanHostReport) {
-        let (got, a, _) = beside_an_upload_traced(bytes, competing, loss, seed);
+        let (got, a, _, _) = beside_an_upload_traced(bytes, competing, loss, seed);
         (got, a)
     }
 
-    /// [`beside_an_upload_drawn`] and the window model's TCP trace, the
-    /// upload's sink host 2.
+    /// [`beside_an_upload_drawn`], the window model's TCP trace, the
+    /// upload's sink host 2, and `a`'s uplink counters at the end.
     fn beside_an_upload_traced(
         bytes: usize,
         competing: (u64, u64),
         loss: f64,
         seed: u64,
-    ) -> (i64, WanHostReport, Vec<TcpEvent>) {
+    ) -> (i64, WanHostReport, Vec<TcpEvent>, [u64; UP_COUNTERS.len()]) {
         let mut sim = build();
         let sites = [
             (
@@ -4470,7 +4479,13 @@ mod tests {
         wan.trace_tcp();
         drive(&mut sim, &mut wan);
         let trace = wan.take_tcp_trace();
-        (got.get(), wan.report(&spec).hosts.swap_remove(0), trace)
+        let counters = wan.up_counters(0);
+        (
+            got.get(),
+            wan.report(&spec).hosts.swap_remove(0),
+            trace,
+            counters,
+        )
     }
 
     /// Bytes `a`'s competing uploads had sent `s` seconds in.
@@ -4520,6 +4535,25 @@ mod tests {
     }
 
     #[test]
+    fn an_uplinks_drops_are_the_frames_its_full_queue_lost() {
+        // A connection's writes beside a competing upload: both lose frames
+        // to the full uplink queue, segments of several frames among them.
+        // The uplink's drops (the tables' `drops` column) are the frames
+        // lost, as the testbed's tbf counts them, not the segments that
+        // lost them.
+        let (_, a, _, up) = beside_an_upload_traced(1_448_000, (0, 30), 0.0, 1);
+        let at = |name: &str| UP_COUNTERS.iter().position(|&c| c == name).unwrap();
+        let frames = a.queue_drop_packets + a.competing_drop_packets;
+        let segments = a.queue_drops + a.competing_drops;
+        assert_eq!(up[at("drops")], a.stats.drops + frames);
+        assert!(
+            a.queue_drops > 0 && frames > segments,
+            "{frames} frames in {segments} segments, {} of them the connection's",
+            a.queue_drops
+        );
+    }
+
+    #[test]
     fn a_segment_that_loses_a_later_packet_on_its_path_resends_the_rest_alone() {
         // Over 5 % site loss and a queue that never fills, a segment whose
         // path loses a packet past its first goes again from that packet,
@@ -4528,7 +4562,7 @@ mod tests {
         let mut rest = 0;
         let mut whole = 0;
         for seed in 1..=4 {
-            let (_, _, trace) = beside_an_upload_traced(289_600, (30, 30), 0.05, seed);
+            let (_, _, trace, _) = beside_an_upload_traced(289_600, (30, 30), 0.05, seed);
             let link: Vec<_> = trace.iter().filter(|e| e.from == 0 && e.to == 1).collect();
             assert!(link.iter().all(|e| e.what != "drop"), "a queue drop");
             let mut sent = BTreeMap::new();
@@ -4556,7 +4590,7 @@ mod tests {
         let mut rest = 0;
         let mut whole = 0;
         for seed in 1..=4 {
-            let (_, _, trace) = beside_an_upload_traced(0, (0, 10), 0.05, seed);
+            let (_, _, trace, _) = beside_an_upload_traced(0, (0, 10), 0.05, seed);
             let up: Vec<_> = trace.iter().filter(|e| e.to == 2).collect();
             assert!(up.iter().all(|e| e.what != "drop"), "a queue drop");
             let mut sent = BTreeMap::new();
@@ -4661,7 +4695,7 @@ mod tests {
         // data, each with the loss's probability; what a lost one
         // acknowledged goes with the next, so its segments aren't sent
         // again.
-        let (_, _, trace) = beside_an_upload_traced(0, (0, 10), 0.05, 1);
+        let (_, _, trace, _) = beside_an_upload_traced(0, (0, 10), 0.05, 1);
         let upload = |what: &str| {
             trace
                 .iter()
