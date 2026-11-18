@@ -622,11 +622,35 @@ and dropped are in `TRIED.md`.
     The same item takes the other peer services a deployed node's links
     carry from their start: replication, bootstrap's `GetPublishEnabled`
     (one call a link) and the transfers' discovery.
-  - Fit how fast the window model's dcSCTP releases a burst's chunks from
-    a channel's buffered amount (the SCTP bench's next step,
-    `sctp_fit_of` against quiet hosts' runs with the SCTP log off). Look
-    at the window's room past the flight, `max_burst` and the uplink's
-    admission, with the bench's offered captures.
+  - Hand a Chromium page its stack's answers inside the scheduler's step,
+    so a writer held on its own cap wakes as the browser's does, when its
+    network thread ends the send opportunity that answers it (the SCTP
+    bench's next step; `SctpProfile::packet_cost`,
+    `SendBuffers::answered`), and give the thread a step's writes before
+    the work that came after them in the step. At a channel's write, run
+    its host's thread up to the write (its associations' SACKs and timers
+    due by then, the step's earlier writes) and then the message's send
+    opportunity, matching its chunks to turmoil's segments at the walk;
+    give the page's writes the time a browser's worker takes for them.
+    Then fit against the quiet hosts' runs: the write path's holds and
+    lows (`write_fit_of`'s stages 3, 4 and 6, stage 6's p90 among them),
+    its stages 1 and 7c at 20 Mbit/s and 7b at 10; the buffered amount at
+    writes, the trains a send opportunity sends at both rates and the
+    one-way delay at 20 Mbit/s (`sctp_fit_of`'s readings 2, 3 and 1).
+  - Charge a Chromium host's network thread for the packets it takes in:
+    its DATA and SACKs are handled there (WebRTC's
+    media/sctp/dcsctp_transport.cc:744-747), where the model charges only
+    the packets it sends. Measure what an inbound packet takes on a
+    Chromium viewer that receives and relays, and charge it.
+  - Find out whether a Firefox host's data channels send through one
+    thread, and what a packet takes of it, from a Firefox seed's captures
+    (PCAP=1) and Firefox's sources, and give `SctpProfile::FIREFOX` what
+    they show.
+  - Find why strims-sim's swarm changes mode at a finer turmoil step
+    (`Scenario::tick`): whether the sim assumes a 1 ms step somewhere, or
+    the node's choice between pushing a chunk and answering a request for
+    it depends on how fast it reacts. Compare the seed's pushes and
+    answers a run at a 1 ms step and at 100 µs with the testbed's.
   - Browser timing tables (`timers`, `channel_writes`,
     `channel_buffered`, `channel_reads`): build them only if the
     testbed–twin fit shows browser timing matters.
