@@ -3175,11 +3175,13 @@ def scoring_consts(suite=None):
             # the one past the verdict's seconds (viewer_phases_of's and
             # coverage_chunks_in's); the parents reasons
             # seed_subscriptions_in orders a millisecond's rows by; the
-            # event kinds coverage_causes_in reads as a child's departure.
+            # event kinds coverage_causes_in reads as a child's departure,
+            # and the one link_opens_of and first_checks_of time from.
             "phases": "[" + ", ".join(q(p) for p in a.VOCAB["phases"]) + "]",
             "tail": q(query.TAIL),
             "reason_switch": q(vocab.named("reasons", "switch")), "reason_open": q(vocab.named("reasons", "open")),
             "kind_depart": q(vocab.named("kinds", "depart")), "kind_crash": q(vocab.named("kinds", "crash")),
+            "kind_join": q(vocab.named("kinds", "join")),
             # simlab.sketch's buckets a doubling (sketch_floor's).
             "sketch_sub": sketch.SUB,
             **{f"t975_g{i}": double(c) for i, c in enumerate(g, 1)}}

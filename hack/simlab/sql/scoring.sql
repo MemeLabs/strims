@@ -1240,6 +1240,17 @@ CREATE OR REPLACE MACRO twin_window_of(jobs, lo_s := 10, hi_s := -1) AS TABLE
     FROM (SELECT unnest(jobs, recursive := true)) u JOIN jobs b ON b.k = u.k
     GROUP BY b.k, b.src;
 
+-- The jobs of a side (`side`: a list of structs that hold a job's `k`,
+-- as testbed_side gives them; a literal [] too), their k, src and the
+-- window twin_window_of gives them over [lo_s, hi_s) s of each stream;
+-- a side of no runs fails, naming `who`, as does a NULL one (a subquery's
+-- list of no rows: a src that names none).
+-- needs: jobs.env
+CREATE OR REPLACE MACRO side_window_of(side, who, lo_s := 10, hi_s := -1) AS TABLE
+    FROM twin_window_of(CASE WHEN side IS NULL OR len(side) = 0 THEN error(who || ': a side of no runs')
+                             ELSE from_json(to_json(side), '[{"k": "VARCHAR"}]') END,
+                        lo_s := lo_s, hi_s := hi_s);
+
 -- The testbed and its twin (simlab.testbed): each run of the jobs `jobs`
 -- (a side: structs of a job's `k`, its `cell` and `seed`) over the stream's
 -- seconds [lo_s, hi_s) (twin_window_of's: by default from 10 s, past the
@@ -1662,6 +1673,150 @@ CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 10, hi_s := -1, full
          FROM twin_runs_of(b_jobs, lo_s := lo_s, hi_s := hi_s,
                            full_packet := full_packet, growth_x := growth_x)));
 
+-- The links each viewer of the runs `jobs` (a side, as side_window_of
+-- takes it: one of no runs fails) made at its join (events' @{kind_join}) with the neighbours there
+-- before it, in ms after the join: open_ms when its channel with the
+-- neighbour opened (its haves' earliest channel_open_ms from 50 ms before
+-- the join to 4 s after it),
+-- first_have_ms when the neighbour's first HAVE reached it (its
+-- handshake's), and peer_open_ms when the neighbour's channel with it
+-- opened (the neighbour's haves of the viewer, in the same span). nb is
+-- 'seed' for node 0 (a calibration run's seed), else 'viewer'; arrival the
+-- join's rank in its run (1 the first, whose one neighbour is the seed);
+-- open_rank the link's rank among the viewer's `links` by open_ms. A twin's
+-- runs number their nodes as its testbed runs do, so the two sides' links
+-- compare node by node.
+-- needs: events haves jobs.env
+CREATE OR REPLACE MACRO link_opens_of(jobs) AS TABLE
+    WITH j AS (SELECT DISTINCT k, src FROM side_window_of(jobs, 'link_opens_of')),
+    joins AS (
+        SELECT e.k, e.src, e.node, e.t_ms AS t_join,
+               rank() OVER (PARTITION BY e.k, e.src ORDER BY e.t_ms, e.node) AS arrival
+        FROM events e SEMI JOIN j USING (k, src) WHERE e.kind = @{kind_join}),
+    mine AS (
+        SELECT h.k, h.src, h.node, h.peer, min(h.channel_open_ms) AS open_ms, min(h.t_ms) AS first_have_ms
+        FROM haves h SEMI JOIN j USING (k, src) JOIN joins USING (k, src, node)
+        LEFT JOIN joins p ON p.k = h.k AND p.src = h.src AND p.node = h.peer
+        WHERE h.channel_open_ms BETWEEN joins.t_join - 50 AND joins.t_join + 4000
+          AND (p.t_join IS NULL OR p.arrival < joins.arrival) GROUP BY ALL),
+    theirs AS (
+        SELECT h.k, h.src, h.peer AS node, h.node AS peer, min(h.channel_open_ms) AS peer_open_ms
+        FROM haves h SEMI JOIN j USING (k, src)
+        JOIN joins ON joins.k = h.k AND joins.src = h.src AND joins.node = h.peer
+        WHERE h.channel_open_ms BETWEEN joins.t_join - 50 AND joins.t_join + 4000 GROUP BY ALL)
+    SELECT m.k, m.src, m.node, m.peer, CASE WHEN m.peer = 0 THEN 'seed' ELSE 'viewer' END AS nb, joins.arrival,
+           m.open_ms - joins.t_join AS open_ms, m.first_have_ms - joins.t_join AS first_have_ms,
+           t.peer_open_ms - joins.t_join AS peer_open_ms,
+           rank() OVER (PARTITION BY m.k, m.src, m.node ORDER BY m.open_ms) AS open_rank,
+           count(*) OVER (PARTITION BY m.k, m.src, m.node) AS links
+    FROM mine m JOIN joins USING (k, src, node) LEFT JOIN theirs t USING (k, src, node, peer);
+
+-- The link-setup bench's rule (component bench C6, the plan's general
+-- rule): a model's runs (`a_side`) against the testbed's (`b_side`),
+-- sides as side_window_of takes them (testbed_side's; a side of no runs,
+-- a src that names none, fails), each run in its cell (jobs.stored_cell),
+-- over link_opens_of's links but each run's first joiner's (the seed its
+-- one neighbour). Per cell, neighbour class (nb) and measure (open_ms, the
+-- joiner's channel open after its join; peer_open_ms, the neighbour's):
+-- each side's runs, links and median (sketch_quantile's p50 over its
+-- links); diff (b less a); spread, the testbed's repeat spread (its runs'
+-- own medians, the largest less the smallest; 0 for one run); bound,
+-- spread plus floor_ms; and pass, |diff| within the bound. A cell, class
+-- or measure one side lacks fails. floor_ms, by default 10 ms, is the
+-- ms the opens are stamped in and the sim's whole-ms steps: about a
+-- millisecond for each of the dozen deliveries of a browser link's setup
+-- to its open (the offer and the answer through the relay, two checks,
+-- DTLS 1.3's two flights, SCTP's four chunks and vnic's PeerInit; the
+-- link-setup scenario, browser_links_take_their_stacks_trips, finds its
+-- links 2-14 ms past their trips). A native link's setup over TCP takes
+-- a handful, so a native cell's links take a smaller floor_ms. A fold
+-- made before testbed runs carried the NEIGHBOURS marker keys its runs
+-- whose containers resolved their peers by ARP as static ones, pooling
+-- both in one cell until it is folded again.
+-- needs: events haves jobs.env jobs.stored_cell
+CREATE OR REPLACE MACRO link_open_fit_of(a_side, b_side, floor_ms := 10) AS TABLE
+    WITH sides AS (
+        SELECT 'a' AS side, j.stored_cell AS cell, w.k
+        FROM side_window_of(a_side, 'link_open_fit_of') w JOIN jobs j ON j.k = w.k
+        UNION ALL
+        SELECT 'b' AS side, j.stored_cell AS cell, w.k
+        FROM side_window_of(b_side, 'link_open_fit_of') w JOIN jobs j ON j.k = w.k),
+    l AS (
+        SELECT s.side, s.cell, o.k, o.nb, m.measure, m.ms
+        FROM link_opens_of((SELECT list({'k': k}) FROM sides)) o JOIN sides s USING (k)
+        CROSS JOIN (VALUES ('open_ms'), ('peer_open_ms')) AS v(measure)
+        CROSS JOIN LATERAL (SELECT v.measure,
+                                   CASE v.measure WHEN 'open_ms' THEN o.open_ms ELSE o.peer_open_ms END AS ms) m
+        WHERE o.arrival > 1 AND m.ms IS NOT NULL),
+    run AS (SELECT side, cell, nb, measure, k, sketch_quantile(ms, 50) AS median FROM l GROUP BY ALL),
+    agg AS (
+        SELECT side, cell, nb, measure, count(DISTINCT k) AS runs, count(*) AS links,
+               sketch_quantile(ms, 50) AS median
+        FROM l GROUP BY ALL),
+    sp AS (SELECT cell, nb, measure, max(median) - min(median) AS spread FROM run WHERE side = 'b' GROUP BY ALL),
+    f AS (
+        SELECT coalesce(a.cell, b.cell) AS cell, coalesce(a.nb, b.nb) AS nb,
+               coalesce(a.measure, b.measure) AS measure, a.runs AS a_runs, b.runs AS b_runs,
+               a.links AS a_links, b.links AS b_links, a.median AS a_median, b.median AS b_median,
+               b.median - a.median AS diff
+        FROM (FROM agg WHERE side = 'a') a
+        FULL JOIN (FROM agg WHERE side = 'b') b ON a.cell = b.cell AND a.nb = b.nb AND a.measure = b.measure)
+    SELECT f.*, coalesce(sp.spread, 0)::DOUBLE AS spread, (coalesce(sp.spread, 0) + floor_ms)::DOUBLE AS bound,
+           coalesce(abs(f.diff) <= coalesce(sp.spread, 0) + floor_ms, false) AS pass
+    FROM f LEFT JOIN sp ON sp.cell = f.cell AND sp.nb = f.nb AND sp.measure = f.measure
+    ORDER BY f.cell, f.nb, f.measure;
+
+-- Each viewer's first parent check at or after its join, of the runs
+-- `jobs`, the first viewer's left out (the seed its one neighbour): per
+-- stream, the check's best lag, and the seed's (node 0) and the best other
+-- neighbour's lags then, each that neighbour's forecast of the stream from
+-- the join to the check as parent_checks' description reads one (its last
+-- sample: mean_ms moved an eighth toward sample_ms, sample_ms at the
+-- first); and per join, medians over its streams: k, src, node, arrival
+-- (link_opens_of's), check_ms (the check's ms after the join), streams,
+-- best_seed (the share of its streams whose best was the seed), seed_ms,
+-- best_viewer_ms, seed_minus_best_ms (of each stream's seed lag less its
+-- best viewer's) and best_lag_ms. A weak measure of the seed's lag: a
+-- join's first check comes soon after its link to the seed opens, often
+-- before the seed's first HAVEs, so seed_ms is NULL for many joins (most
+-- in testbed runs whose containers resolved their peers by ARP,
+-- TESTBED_NEIGHBOURS=arp, whose links opened later; 4 of the 18 in the
+-- link-setup bench's static runs), and elsewhere the first HAVE batch's
+-- backlog age. The link-setup bench scores link_open_fit_of. `jobs` is a
+-- side as side_window_of takes it: one of no runs fails.
+-- needs: events parent_checks forecast jobs.env
+CREATE OR REPLACE MACRO first_checks_of(jobs) AS TABLE
+    WITH j AS (SELECT DISTINCT k, src FROM side_window_of(jobs, 'first_checks_of')),
+    joins AS (
+        SELECT e.k, e.src, e.node, e.t_ms AS t_join,
+               rank() OVER (PARTITION BY e.k, e.src ORDER BY e.t_ms, e.node) AS arrival
+        FROM events e SEMI JOIN j USING (k, src) WHERE e.kind = @{kind_join}),
+    first AS (
+        SELECT c.k, c.src, c.node, min(c.t_us) AS t_us
+        FROM parent_checks c SEMI JOIN j USING (k, src) JOIN joins USING (k, src, node)
+        WHERE joins.arrival > 1 AND c.t_us >= joins.t_join * 1000 GROUP BY ALL),
+    lags AS (
+        SELECT f.k, f.src, f.node, f.peer, f.stream,
+               arg_max(CASE WHEN f.mean_ms IS NULL THEN f.sample_ms
+                            ELSE f.mean_ms + (f.sample_ms - f.mean_ms) / 8.0 END,
+                       f.t_ms * 1000000 + f.samples) AS lag_ms
+        FROM forecast f SEMI JOIN j USING (k, src) JOIN joins USING (k, src, node) JOIN first USING (k, src, node)
+        WHERE f.t_ms BETWEEN joins.t_join AND first.t_us / 1000 GROUP BY ALL),
+    streams AS (
+        SELECT c.k, c.src, c.node, c.stream, any_value(c.best_peer) AS best,
+               any_value(c.best_lag_us) / 1000.0 AS best_lag_ms,
+               max(CASE WHEN l.peer = 0 THEN l.lag_ms END) AS seed_ms,
+               min(CASE WHEN l.peer <> 0 THEN l.lag_ms END) AS best_viewer_ms
+        FROM parent_checks c JOIN first USING (k, src, node, t_us)
+        LEFT JOIN lags l USING (k, src, node, stream) GROUP BY ALL)
+    SELECT s.k, s.src, s.node, joins.arrival, any_value(first.t_us) / 1000.0 - joins.t_join AS check_ms,
+           count(*) AS streams, avg((s.best = 0)::INT) AS best_seed,
+           sketch_quantile(s.seed_ms, 50) AS seed_ms, sketch_quantile(s.best_viewer_ms, 50) AS best_viewer_ms,
+           sketch_quantile(s.seed_ms - s.best_viewer_ms, 50) AS seed_minus_best_ms,
+           sketch_quantile(s.best_lag_ms, 50) AS best_lag_ms
+    FROM streams s JOIN joins USING (k, src, node) JOIN first USING (k, src, node)
+    GROUP BY s.k, s.src, s.node, joins.arrival, joins.t_join;
+
 -- The shaper bench: replays of testbed runs' packets through each node's
 -- link in the model (`a_jobs`, a side of shaper_replay jobs) against the
 -- runs they replay (`b_jobs`, testbed_side's), each replay paired with its
@@ -1812,17 +1967,6 @@ CREATE OR REPLACE MACRO shaper_fit_of(a_jobs, b_jobs, per := 'node') AS TABLE
     SELECT cell, seed, k, node, peer, role, link_spec, 'pass', NULL, NULL, bool_and(pass)
     FROM rs WHERE pass IS NOT NULL GROUP BY ALL
     ORDER BY cell, seed, node, peer NULLS FIRST, measure;
-
--- The jobs of a side (`side`: a list of structs that hold a job's `k`,
--- as testbed_side gives them; a literal [] too), their k, src and the
--- window twin_window_of gives them over [lo_s, hi_s) s of each stream;
--- a side of no runs fails, naming `who`, as does a NULL one (a subquery's
--- list of no rows: a src that names none).
--- needs: jobs.env
-CREATE OR REPLACE MACRO side_window_of(side, who, lo_s := 10, hi_s := -1) AS TABLE
-    FROM twin_window_of(CASE WHEN side IS NULL OR len(side) = 0 THEN error(who || ': a side of no runs')
-                             ELSE from_json(to_json(side), '[{"k": "VARCHAR"}]') END,
-                        lo_s := lo_s, hi_s := hi_s);
 
 -- Each run's timers of a side (`side`, as side_window_of takes it; the
 -- timers table, TIMER_LOG) that fired in its window (side_window_of: by

@@ -27,6 +27,13 @@ their shaper replays.
            read the offered replay, the departures' the carried one, a
            link with slots its delays' distance; a source with two
            replays of a kind fails
+  LinkOpens  scoring.sql's link_opens_of, first_checks_of and
+           link_open_fit_of over a fixture: each joiner's links in ms after
+           its join, both ends' opens and the first HAVE, outside the
+           join's span or with a later joiner left out; its first parent
+           check's lags from the forecast as the scheduler moves them, the
+           first joiner's left out; the bench's rule, a model's median
+           within the testbed's repeat spread and a floor
 
   python3 hack/simlab/tests/test_testbed.py
 """
@@ -496,6 +503,175 @@ class ShaperFit(unittest.TestCase):
             self.fit(["ro", "rc", "ro2"])
         with self.assertRaisesRegex(duckdb.Error, "source tb has 1 offered and 0 carried replays"):
             self.fit(["ro"])
+
+
+class LinkOpens(unittest.TestCase):
+    """link_opens_of and first_checks_of over one run: the seed (node 0)
+    from the start, viewer 1 joining at 1000 ms and viewer 2 at 2000; a
+    second (c) with viewer 3 at 3000 too, whose links and forecasts reach
+    outside its join's span; and the bench's rule over copies of the first
+    and over runs of two joiners to the seed (u1, u2, n1)."""
+
+    EVENTS = [(1000, "join", 1), (2000, "join", 2), (1500, "first_read", 1)]
+    HAVES = [  # t_ms, node, peer, channel_open_ms
+        (1160, 1, 0, 1150), (1170, 1, 0, 1150), (1145, 0, 1, 1140),
+        (2350, 2, 0, 2300), (2320, 0, 2, 2310), (2210, 2, 1, 2200), (2200, 1, 2, 2190),
+        (9010, 2, 1, 9000),
+    ]
+    FORECAST = [  # t_ms, node, peer, stream, sample_ms, mean_ms, samples
+        (2350, 2, 0, 0, 100, None, 1), (2380, 2, 0, 0, 120, 100, 2), (2250, 2, 1, 0, 10, None, 1),
+        (2390, 2, 0, 1, 80, None, 1), (2450, 2, 0, 1, 500, 80, 2), (1190, 1, 0, 0, 30, None, 1),
+    ]
+    CHECKS = [  # t_us, node, stream, best_peer, best_lag_us
+        (2_400_000, 2, 0, 1, 10_000), (2_400_000, 2, 1, 0, 80_000), (2_500_000, 2, 0, 0, 5_000),
+        (1_200_000, 1, 0, 0, 30_000),
+    ]
+    # Run c: viewer 3's channel with viewer 1 opens 30 ms before its join
+    # (within the span's 50), with viewer 2 100 ms before (outside it), and
+    # with the seed past the span's 4 s; viewer 1's with it opens 100 ms
+    # before the join (outside) and 100 ms after.
+    EVENTS_C = [(1000, "join", 1), (2000, "join", 2), (3000, "join", 3)]
+    HAVES_C = [(3005, 3, 1, 2970), (3010, 3, 2, 2900), (9100, 3, 0, 9050), (2950, 1, 3, 2900),
+               (3150, 1, 3, 3100)]
+    # Its first check's neighbours: on stream 0 the seed and two viewers
+    # (40 and 20 ms), on stream 1 the seed and a viewer forecast before the
+    # join alone; viewer 2's first check at its join's ms.
+    FORECAST_C = [(3100, 3, 0, 0, 90, None, 1), (3100, 3, 1, 0, 40, None, 1), (3150, 3, 2, 0, 20, None, 1),
+                  (3100, 3, 0, 1, 70, None, 1), (2500, 3, 1, 1, 5, None, 1)]
+    CHECKS_C = [(3_200_000, 3, 0, 0, 90_000), (3_200_000, 3, 1, 0, 70_000), (2_000_000, 2, 0, 0, 50_000),
+                (2_100_000, 2, 0, 0, 40_000)]
+    # Runs u1, u2 (a testbed side) and n1 (a model's), cell d: viewers 2
+    # and 3 link to the seed, 100 ms after the join and 300, 400 and 300.
+    U_OPENS = {"u1": (100, 300), "u2": (100, 400), "n1": (100, 300)}
+
+    @classmethod
+    def setUpClass(cls):
+        import duckdb
+
+        from simlab import catalog
+
+        consts = catalog.scoring_consts()
+        text = catalog.CONST.sub(lambda m: str(consts[m.group(1)]), catalog.SCORING.read_text())
+        conn = duckdb.connect()
+        for m in re.finditer(r"^CREATE OR REPLACE MACRO sketch_\w+.*?;$", text, re.M | re.S):
+            conn.execute(m.group(0))
+        conn.execute("CREATE TABLE jobs (k VARCHAR, src VARCHAR, stored_cell VARCHAR, env MAP(VARCHAR, VARCHAR))")
+        conn.execute("CREATE TABLE events (k VARCHAR, src VARCHAR, t_ms BIGINT, kind VARCHAR, node BIGINT)")
+        conn.execute("CREATE TABLE haves (k VARCHAR, src VARCHAR, t_ms BIGINT, node BIGINT, peer BIGINT, "
+                     "channel_open_ms BIGINT)")
+        conn.execute("CREATE TABLE forecast (k VARCHAR, src VARCHAR, t_ms BIGINT, node BIGINT, peer BIGINT, "
+                     "stream BIGINT, sample_ms BIGINT, mean_ms BIGINT, samples BIGINT)")
+        conn.execute("CREATE TABLE parent_checks (k VARCHAR, src VARCHAR, t_us BIGINT, node BIGINT, "
+                     "stream BIGINT, best_peer BIGINT, best_lag_us BIGINT)")
+
+        def run(k, cell, events, haves=(), forecast=(), checks=()):
+            conn.execute("INSERT INTO jobs VALUES (?, 's', ?, MAP {})", [k, cell])
+            for table, rows in (("events", events), ("haves", haves), ("forecast", forecast),
+                                ("parent_checks", checks)):
+                if rows:
+                    marks = ", ".join("?" * len(rows[0]))
+                    conn.executemany(f"INSERT INTO {table} VALUES ('{k}', 's', {marks})", rows)
+
+        run("a", "c", cls.EVENTS, cls.HAVES, cls.FORECAST, cls.CHECKS)
+        run("b", "c", [])
+        # Two runs of a testbed side (t1, t2) and one of a model's (m1), each
+        # the fixture's run, its channels opening that much later; and a
+        # model's run of no links between viewers (m2).
+        for k, shift in (("t1", 0), ("t2", 20), ("m1", 50)):
+            run(k, "c", cls.EVENTS, [(t + shift, n, p, o + shift) for t, n, p, o in cls.HAVES])
+        run("m2", "c", cls.EVENTS, [h for h in cls.HAVES if h[1] == 0 or h[2] == 0])
+        run("c", "c", cls.EVENTS_C, cls.HAVES_C, cls.FORECAST_C, cls.CHECKS_C)
+        for k, (two, three) in cls.U_OPENS.items():
+            run(k, "d", cls.EVENTS_C, [(2000 + two, 2, 0, 2000 + two), (3000 + three, 3, 0, 3000 + three)])
+        names = ["twin_window_of", "side_window_of", "link_opens_of", "first_checks_of", "link_open_fit_of"]
+        for macro in catalog.scoring_statements(
+                names, {"events", "haves", "parent_checks", "forecast", "jobs.env", "jobs.stored_cell"}):
+            conn.execute(macro)
+        cls.conn = conn
+
+    @staticmethod
+    def side(*ks, cell="c"):
+        return "[" + ", ".join(f"{{'cell': '{cell}', 'seed': 1, 'k': '{k}', 'src': 's'}}" for k in ks) + "]"
+
+    def fit(self, a, b, cols="nb, measure, a_runs, b_runs, a_median, b_median, diff, spread, bound, pass", **kw):
+        args = "".join(f", {name} := {value}" for name, value in kw.items())
+        return self.conn.execute(f"SELECT {cols} FROM link_open_fit_of({a}, {b}{args})").fetchall()
+
+    def test_the_bench_rule_bounds_the_model_by_the_testbeds_repeat_spread(self):
+        rows = self.fit(self.side("m1"), self.side("t1", "t2"))
+        # Viewer 2's links: the testbed's opens 300 and 320 ms after its
+        # join (the seed's), 200 and 220 (viewer 1's), a median of two the
+        # lower, its spread 20; the model's 50 ms past t1's, past 20 + 10.
+        self.assertEqual(rows, [
+            ("seed", "open_ms", 1, 2, 350.0, 300.0, -50.0, 20.0, 30.0, False),
+            ("seed", "peer_open_ms", 1, 2, 360.0, 310.0, -50.0, 20.0, 30.0, False),
+            ("viewer", "open_ms", 1, 2, 250.0, 200.0, -50.0, 20.0, 30.0, False),
+            ("viewer", "peer_open_ms", 1, 2, 240.0, 190.0, -50.0, 20.0, 30.0, False),
+        ])
+        # A floor that covers the rest passes.
+        rows = self.fit(self.side("m1"), self.side("t1", "t2"), cols="pass", floor_ms=30)
+        self.assertEqual(rows, [(True,)] * 4)
+
+    def test_a_class_the_model_lacks_fails(self):
+        rows = self.fit(self.side("m2"), self.side("t1", "t2"),
+                        cols="nb, measure, a_runs, b_runs, a_links, b_links, a_median, b_median, diff, pass")
+        self.assertEqual(rows, [
+            ("seed", "open_ms", 1, 2, 1, 2, 300.0, 300.0, 0.0, True),
+            ("seed", "peer_open_ms", 1, 2, 1, 2, 310.0, 310.0, 0.0, True),
+            ("viewer", "open_ms", None, 2, None, 2, None, 200.0, None, False),
+            ("viewer", "peer_open_ms", None, 2, None, 2, None, 190.0, None, False),
+        ])
+
+    def test_the_spread_is_of_each_runs_median(self):
+        # u1's links 100 and 300, u2's 100 and 400: both runs' medians (of
+        # two, the lower) 100, a spread of none, where their means' would be
+        # 50; the cell is each run's job's, whatever the side names.
+        rows = self.fit(self.side("n1", cell="x"), self.side("u1", "u2", cell="x"),
+                        cols="cell, nb, measure, a_links, b_links, a_median, b_median, spread, bound, pass")
+        self.assertEqual(rows, [("d", "seed", "open_ms", 2, 4, 100.0, 100.0, 0.0, 10.0, True)])
+
+    def test_a_side_of_no_runs_fails(self):
+        import duckdb
+
+        none = "(SELECT list({'k': k}) FROM jobs WHERE src = 'typo')"
+        for sql in (f"FROM link_open_fit_of([], {self.side('t1')})",
+                    f"FROM link_open_fit_of({none}, {self.side('t1')})",
+                    f"FROM link_open_fit_of({self.side('m1')}, {none})",
+                    "FROM link_opens_of([])", f"FROM link_opens_of({none})", "FROM first_checks_of([])"):
+            with self.subTest(sql=sql), self.assertRaisesRegex(duckdb.Error, r"_of: a side of no runs"):
+                self.conn.execute(sql).fetchall()
+
+    def test_each_joiners_links_in_ms_after_its_join(self):
+        cols = "node, peer, nb, arrival, open_ms, first_have_ms, peer_open_ms, open_rank, links"
+        rows = self.conn.execute(f"SELECT {cols} FROM link_opens_of([{{'k': 'a'}}]) ORDER BY node, peer").fetchall()
+        self.assertEqual(rows, [
+            (1, 0, "seed", 1, 150, 160, 140, 1, 1),
+            (2, 0, "seed", 2, 300, 350, 310, 2, 2),
+            (2, 1, "viewer", 2, 200, 210, 190, 1, 2),
+        ])
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM link_opens_of([{'k': 'b'}])").fetchone(), (0,))
+        # Run c: of viewer 3's channels, the one that opened within 50 ms
+        # before its join alone; and of viewer 1's with it, the one in the
+        # span. Viewer 1's with viewer 3, a later joiner, isn't its link.
+        rows = self.conn.execute(f"SELECT {cols} FROM link_opens_of([{{'k': 'c'}}]) ORDER BY node, peer").fetchall()
+        self.assertEqual(rows, [(3, 1, "viewer", 3, -30, 5, 100, 1, 1)])
+
+    def test_the_first_check_reads_each_neighbours_last_forecast(self):
+        cols = ("node, arrival, check_ms, streams, best_seed, seed_ms, best_viewer_ms, seed_minus_best_ms, "
+                "best_lag_ms")
+        rows = self.conn.execute(f"SELECT {cols} FROM first_checks_of([{{'k': 'a'}}])").fetchall()
+        # Stream 0: the seed's 100 moved an eighth toward 120, the viewer's
+        # 10; stream 1: the seed's 80 and no viewer's. Medians of two take
+        # the lower.
+        self.assertEqual(rows, [(2, 2, 400.0, 2, 0.5, 80.0, 10.0, 92.5, 10.0)])
+        # Run c: viewer 2's first check the one at its join's ms, with no
+        # forecasts; viewer 3's stream 0's best viewer the nearer of two
+        # (20), stream 1's none (its one viewer's forecast came before the
+        # join); both streams' best the seed.
+        rows = self.conn.execute(f"SELECT {cols} FROM first_checks_of([{{'k': 'c'}}]) ORDER BY node").fetchall()
+        self.assertEqual(rows, [(2, 2, 0.0, 1, 1.0, None, None, None, 50.0),
+                                (3, 3, 200.0, 2, 1.0, 70.0, 20.0, 70.0, 70.0)])
+
 
 if __name__ == "__main__":
     unittest.main()
