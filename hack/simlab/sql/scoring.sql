@@ -2256,3 +2256,303 @@ CREATE OR REPLACE MACRO write_fit_of(a_side, b_side, at_node := 0, lo_s := 20, h
     SELECT stage, a_runs, b_runs, b_p50s, a_p50, pass50, b_p90s, a_p90, pass90, b_ns, a_n, pass_n,
            coalesce(pass50 AND pass90 AND (pass_n OR NOT counted), false) AS pass
     FROM g ORDER BY stage;
+
+-- The SCTP bench's readings (C3) of a side's runs (`side`, as
+-- side_window_of takes it: testbed_side's, or a twin's jobs) at the seed
+-- (node `at_node`, the first swarm's seed: the drops are bins' seed_drops)
+-- and its peers, each run over its window (side_window_of's: by default
+-- from 20 s to its stream's end): a row per run (k), with its source's sim,
+-- reading and its source (`wire`, `writes` or `log`, the table it reads):
+-- its values n, their p50 and p90 (sketch_quantile's), and for the counts
+-- and the send gaps each value's share (dist: a list of {v, share}). A
+-- per-run reading (6, 9) is one value a run, its p50 and p90 that value
+-- and n its count. Each run of the side has its per-run readings, a run of
+-- none of what they count reading 0. The readings, uncapped:
+-- - from the wire (`packets`, PACKET_LOG; a testbed run's PCAP=1):
+--   `1 one-way delay` (ms), each packet of DATA the seed offered a peer,
+--   from its offer to reaching the peer (one lost has none): its t_us to
+--   arrived_us, a testbed run's t_us less the seed's egress delay
+--   (hosts.delay_us), which a testbed run's delay holds ahead of the
+--   queue and the model's path after it; `3 packets a send opportunity,
+--   <gap> µs`, at each gap, `short_gap_us` and `long_gap_us`, the seed's
+--   trains of packets of DATA to a peer, each within the gap of the one
+--   before and no other packet to the peer between; `4 drain` (ms) and `5 drain
+--   rate` (bytes a ms), its busy spells to a peer, packets of DATA each
+--   within `idle_us` of the last, from the first to the last and their IP
+--   bytes over that time, spells of two packets or more; `12 send gaps`
+--   (µs), from each packet of DATA the seed offered a peer to its next,
+--   every gap, its dist in bins doubling from `gap_floor_us` (a bin's v
+--   its lower edge, 0 for the gaps under it);
+-- - from the bins: `6 queue drops`, the seed's uplink's drops a run;
+-- - from the writes (`link_writes`, LINK_LOG): `2 buffered at write`
+--   (bytes), the buffered amount each of the seed's writes to a data
+--   channel read that nothing held;
+-- - from the log (`sctp_events`, TRACE_SCTP): `7 packets a SACK`, at each
+--   peer the packets of the seed's DATA it took since its last SACK, at
+--   each SACK it sent (alone or on its DATA), a trailing run without one
+--   left out; `8 SACK delay` (ms), from the last of those packets to its
+--   SACK; `9 resends a drop`, the chunks the seed resent a run (a packet's
+--   chunks less the new TSNs it took) over its drops (6), none without a
+--   drop; `10 resend spacing`, the SACKs the seed took between two sends
+--   of a resend packet's first TSN; `11 flight at sends` (bytes), the
+--   seed's flight as each packet of DATA left it.
+-- The bases: with the log off a testbed seed's back to back packets to a
+-- peer enter its uplink 8-32 µs apart (what its host spends a packet; the
+-- model's leave at one instant), its pauses between sends from 0.4 ms,
+-- and few gaps fall between: `short_gap_us` and `long_gap_us`, 100 and
+-- 400 µs, are that valley's edges, both read as a train's count moves
+-- with its gap (two gaps, not a list: a macro's list default breaks
+-- DuckLake's attach of a catalog that serves it);
+-- `gap_floor_us`, 50 µs, lies past the back to back gaps, which share
+-- its first bin (no uplink tells them apart: a full packet takes 0.5 ms
+-- at 20 Mbit/s), and puts a full packet's time at 20 Mbit/s and at 10
+-- inside a bin (400-800 µs, 800-1600), not at an edge; `idle_us`, 20 ms,
+-- a tenth of a burst's 250 ms period.
+-- needs: packets hosts bins sctp_events link_writes jobs.sim jobs.env
+CREATE OR REPLACE MACRO sctp_stages_of(side, at_node := 0, lo_s := 20, hi_s := -1, short_gap_us := 100,
+                                       long_gap_us := 400, gap_floor_us := 50, idle_us := 20000) AS TABLE
+    WITH j AS (
+        SELECT DISTINCT w.k, w.src, w.lo * 1000000 AS lo_us, w.hi * 1000000 AS hi_us, b.sim
+        FROM side_window_of(side, 'sctp_stages_of', lo_s := lo_s, hi_s := hi_s) w JOIN jobs b USING (k, src)),
+    pk AS (
+        SELECT x.k, x.peer, x.n, x.t_us, x.arrived_us, x.lost, x.ip_bytes, x.kind IN ('data', 'data_sack') AS dat,
+               x.t_us - CASE WHEN j.sim = 'testbed' THEN coalesce(h.delay_us, 0) ELSE 0 END AS offered_us
+        FROM packets x JOIN j USING (k, src) LEFT JOIN hosts h ON h.k = x.k AND h.src = x.src AND h.node = x.node
+        WHERE x.node = at_node AND x.peer IS NOT NULL AND x.t_us >= j.lo_us AND x.t_us < j.hi_us),
+    owd AS (
+        SELECT k, (arrived_us - offered_us) / 1000.0 AS v FROM pk WHERE dat AND lost IS NULL AND arrived_us IS NOT NULL),
+    lg AS (
+        SELECT k, peer, n, t_us, dat, lag(dat) OVER w AS pd, lag(t_us) OVER w AS pt
+        FROM pk WINDOW w AS (PARTITION BY k, peer ORDER BY n)),
+    gp AS (SELECT short_gap_us AS gap UNION SELECT long_gap_us),
+    tr AS (
+        SELECT lg.k, lg.peer, gp.gap, lg.dat,
+               sum((lg.dat AND NOT (coalesce(lg.pd, false) AND lg.t_us - lg.pt <= gp.gap))::INT)
+                   OVER (PARTITION BY lg.k, lg.peer, gp.gap ORDER BY lg.n) AS g
+        FROM lg, gp),
+    opp AS (SELECT k, gap, count(*)::DOUBLE AS v FROM tr WHERE dat GROUP BY k, peer, gap, g),
+    dl AS (
+        SELECT k, peer, n, t_us, ip_bytes, lag(t_us) OVER (PARTITION BY k, peer ORDER BY n) AS pt
+        FROM pk WHERE dat),
+    sp AS (
+        SELECT k, peer, t_us, ip_bytes,
+               sum((pt IS NULL OR t_us - pt > idle_us)::INT) OVER (PARTITION BY k, peer ORDER BY n) AS spell
+        FROM dl),
+    dr AS (
+        SELECT k, (max(t_us) - min(t_us)) / 1000.0 AS ms, sum(ip_bytes) AS bytes
+        FROM sp GROUP BY k, peer, spell HAVING count(*) >= 2),
+    drops AS (
+        SELECT j.k, coalesce(sum(b.seed_drops), 0)::DOUBLE AS v
+        FROM j LEFT JOIN bins b ON b.k = j.k AND b.src = j.src AND b.t_ms * 1000 >= j.lo_us AND b.t_ms * 1000 < j.hi_us
+        GROUP BY j.k),
+    buf AS (
+        SELECT w.k, w.unsent_before::DOUBLE AS v
+        FROM link_writes w JOIN j USING (k, src)
+        WHERE w.node = at_node AND w.kind = 'webrtc' AND coalesce(w.wait, 'none') = 'none'
+          AND w.unsent_before IS NOT NULL AND w.t_us >= j.lo_us AND w.t_us < j.hi_us),
+    e AS (
+        SELECT x.*, j.lo_us, j.hi_us FROM sctp_events x JOIN j USING (k, src)
+        WHERE x.node = at_node OR x.peer = at_node),
+    theirs AS (
+        SELECT k, node, link, n, t_us, dir = 'in' AND chunks > 0 AS got, dir = 'out' AND cum_tsn IS NOT NULL AS ack
+        FROM e WHERE peer = at_node AND t_us >= lo_us AND t_us < hi_us),
+    seg AS (
+        SELECT *, coalesce(sum(ack::INT) OVER (PARTITION BY k, node, link ORDER BY n
+                                               ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS s
+        FROM theirs),
+    per AS (
+        SELECT k, count(*) FILTER (WHERE got) AS pkts, max(t_us) FILTER (WHERE got) AS last_us,
+               max(t_us) FILTER (WHERE ack) AS ack_us
+        FROM seg GROUP BY k, node, link, s HAVING bool_or(ack)),
+    mine AS (
+        SELECT k, peer, link, n, t_us, dir, what, chunks, tsn_lo, tsn_hi, flight_bytes, cum_tsn, lo_us, hi_us,
+               max(tsn_hi) FILTER (WHERE dir = 'out' AND chunks > 0) OVER (PARTITION BY k, peer, link ORDER BY n
+                   ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS prev_hi,
+               sum((dir = 'in' AND cum_tsn IS NOT NULL)::INT) OVER (PARTITION BY k, peer, link ORDER BY n) AS sacks
+        FROM e WHERE node = at_node),
+    inw AS (FROM mine WHERE t_us >= lo_us AND t_us < hi_us),
+    rs AS (
+        SELECT k, sum(chunks - least(chunks, greatest(0, tsn_hi - greatest(coalesce(prev_hi, tsn_lo - 1),
+                                                                             tsn_lo - 1)))) AS n
+        FROM inw WHERE dir = 'out' AND chunks > 0 GROUP BY k),
+    rpd AS (
+        SELECT d.k, coalesce(rs.n, 0) AS n, coalesce(rs.n, 0) / d.v AS v
+        FROM drops d LEFT JOIN rs USING (k) WHERE d.v > 0),
+    spc AS (
+        SELECT k, (sacks - lag(sacks) OVER (PARTITION BY k, peer, link, tsn_lo ORDER BY n))::DOUBLE AS v
+        FROM inw WHERE dir = 'out' AND what IN ('rtx', 'fast_rtx')),
+    st AS (
+        SELECT k, '1 one-way delay' AS reading, 'wire' AS source, v, NULL::BIGINT AS cnt FROM owd
+        UNION ALL SELECT k, '2 buffered at write', 'writes', v, NULL FROM buf
+        UNION ALL SELECT k, '3 packets a send opportunity, ' || gap::VARCHAR || ' µs', 'wire', v, NULL FROM opp
+        UNION ALL SELECT k, '4 drain', 'wire', ms, NULL FROM dr
+        UNION ALL SELECT k, '5 drain rate', 'wire', bytes / ms, NULL FROM dr WHERE ms > 0
+        UNION ALL SELECT k, '6 queue drops', 'wire', v, v::BIGINT FROM drops
+        UNION ALL SELECT k, '7 packets a SACK', 'log', pkts::DOUBLE, NULL FROM per WHERE pkts > 0
+        UNION ALL SELECT k, '8 SACK delay', 'log', (ack_us - last_us) / 1000.0, NULL FROM per WHERE pkts > 0
+        UNION ALL SELECT k, '9 resends a drop', 'log', v, n FROM rpd
+            WHERE k IN (SELECT DISTINCT k FROM e)
+        UNION ALL SELECT k, '10 resend spacing', 'log', v, NULL FROM spc WHERE v IS NOT NULL
+        UNION ALL SELECT k, '11 flight at sends', 'log', flight_bytes::DOUBLE, NULL FROM inw
+            WHERE dir = 'out' AND chunks > 0 AND flight_bytes IS NOT NULL
+        UNION ALL SELECT k, '12 send gaps', 'wire', (t_us - pt)::DOUBLE, NULL FROM dl WHERE pt IS NOT NULL),
+    q AS (
+        SELECT k, reading, any_value(source) AS source,
+               CASE WHEN reading IN ('6 queue drops', '9 resends a drop') THEN any_value(cnt) ELSE count(*) END AS n,
+               CASE WHEN reading IN ('6 queue drops', '9 resends a drop') THEN any_value(v)
+                    ELSE sketch_quantile(v, 50) END AS p50,
+               CASE WHEN reading IN ('6 queue drops', '9 resends a drop') THEN any_value(v)
+                    ELSE sketch_quantile(v, 90) END AS p90
+        FROM st GROUP BY k, reading),
+    h AS (
+        SELECT k, reading,
+               CASE WHEN reading <> '12 send gaps' THEN v WHEN v < gap_floor_us THEN 0
+                    ELSE gap_floor_us * pow(2, floor(log2(v / gap_floor_us))) END AS v,
+               count(*)::DOUBLE AS c
+        FROM st
+        WHERE reading LIKE '3 %' OR reading IN ('7 packets a SACK', '10 resend spacing', '12 send gaps')
+        GROUP BY ALL),
+    d AS (
+        SELECT k, reading, list({'v': v, 'share': share} ORDER BY v) AS dist
+        FROM (SELECT k, reading, v, c / sum(c) OVER (PARTITION BY k, reading) AS share FROM h)
+        GROUP BY k, reading)
+    SELECT q.k, j.sim, q.reading, q.source, q.n, q.p50, q.p90, d.dist
+    FROM q JOIN (SELECT DISTINCT k, sim FROM j) j USING (k) LEFT JOIN d USING (k, reading)
+    ORDER BY q.k, q.reading;
+
+-- A side for sctp_fit_of (`side`, as side_window_of takes it) whose
+-- testbed runs all have the SCTP log on (`logged`: jobs.env's
+-- STRIMS_SIM_TRACE_SCTP, run.sh's TRACE_SCTP) or all have it off: the
+-- side, or an error naming `who` and the testbed runs of the other kind.
+-- A sim's runs stand on either side (a stack's real code in the sim, as
+-- str0m's, is its own testbed).
+-- needs: jobs.sim jobs.env
+CREATE OR REPLACE MACRO sctp_logged_side(side, who, logged) AS (
+    SELECT CASE WHEN count(*) > 0
+                THEN error('sctp_fit_of: ' || who || ' holds testbed runs with the SCTP log '
+                           || CASE WHEN logged THEN 'off' ELSE 'on' END || ' (TRACE_SCTP): '
+                           || string_agg(k, ', ' ORDER BY k))
+                ELSE side END
+    FROM jobs
+    WHERE sim = 'testbed' AND (coalesce(trim(env['STRIMS_SIM_TRACE_SCTP']), '') <> '') <> logged
+      AND list_contains(list_transform(from_json(to_json(side), '[{"k": "VARCHAR"}]'), lambda x: x.k), k));
+
+-- The SCTP bench's pass (C3): a model's readings (`a_side`, a twin's
+-- runs) against the testbed's, sctp_stages_of's over the same window at
+-- the same node, each reading against the testbed side its source allows.
+-- The SCTP log (TRACE_SCTP) slows a Chromium node's sending, which moves
+-- its run's timing and counts alike (its drops, its trains on the wire),
+-- so the wire, the bins and the writes (readings 1-6 and 12) are judged
+-- against `t_side`, the testbed's runs with the log off, and the log's
+-- readings (7-11) against `b_side`, its runs with it on, which the log
+-- moved too (`perturbed`). A testbed run of t_side with the log on, or of
+-- b_side with it off, fails the fit (sctp_logged_side); a sim's runs may
+-- stand on either. A row per reading either side has: its source, the
+-- testbed side it was judged against (`against`: `log off` or `log on`),
+-- each side's runs, the testbed's runs' p50s, p90s and counts in their
+-- order (b_p50s, b_p90s, b_ns), the model's medians of them over its runs
+-- (a_p50, a_p90, a_n: quantile_cont's); for the counts and the send gaps
+-- (3, 7, 10, 12) tv, the total variation distance of the model's pooled
+-- shares from the testbed's, and b_tv, the testbed's own (the largest
+-- between two of its runs), and for the ruled ones tv_bound. The rules,
+-- each reading's pass:
+-- - the one-way delay and the buffered amount, by the plan's general rule
+--   (the testbed's repeat spread widened by a floor) with its C3 floors:
+--   the model's median p50 and its median p90 both within the testbed's
+--   runs' range of each, widened by `floor_ms` (1 ms) and `floor_bytes`
+--   (4 KiB);
+-- - packets a send opportunity (at each gap), packets a SACK and the send
+--   gaps: tv at most tv_bound, the larger of `max_tv` (0.1), the plan's
+--   C3 bound, and b_tv, as alloc_step_fit_of takes the larger of its
+--   bound and 2 se: a model as near the testbed as its own repeats are
+--   to each other passes where those differ by more than the plan's
+--   bound (b_tv none, one testbed run, counts as 0);
+-- - resends a drop: the model's median within the testbed's runs' range
+--   widened at each end by twice its ratio's counting noise,
+--   r·√(1/resends + 1/drops), as write_fit_of widens a count by 2√n. That
+--   treats resends and drops as independent counts; resends follow drops,
+--   and given the drops the ratio's noise is r·√(1/resends), which the
+--   bound's noise exceeds by √(1 + r), about 2.6 times at r ≈ 6: the
+--   bound is conservative. The plan's rule is resends within ±10 %, a
+--   count; a run's resends follow its drops, which the log moves (431-479
+--   a run with it on against 761-878 off at 20 Mbit/s) and which a
+--   model's run need not share, so the bench judges resends a drop,
+--   against the logged runs' range, the only runs that count resends,
+--   the log having perhaps moved the ratio too (their wire bytes put the
+--   log-off runs' lower).
+-- The other readings (4, 5, 6, 8, 10, 11) carry no rule (pass NULL):
+-- the plan rules none of them. A ruled reading either side lacks fails.
+-- needs: packets hosts bins sctp_events link_writes jobs.sim jobs.env
+CREATE OR REPLACE MACRO sctp_fit_of(a_side, b_side, t_side, at_node := 0, lo_s := 20, hi_s := -1,
+                                    short_gap_us := 100, long_gap_us := 400, gap_floor_us := 50, floor_ms := 1,
+                                    floor_bytes := 4096, max_tv := 0.1) AS TABLE
+    WITH a AS (FROM sctp_stages_of(a_side, at_node := at_node, lo_s := lo_s, hi_s := hi_s, short_gap_us := short_gap_us,
+                                   long_gap_us := long_gap_us, gap_floor_us := gap_floor_us)),
+    lb AS (FROM sctp_stages_of(sctp_logged_side(b_side, 'b_side', true), at_node := at_node, lo_s := lo_s,
+                               hi_s := hi_s, short_gap_us := short_gap_us, long_gap_us := long_gap_us,
+                               gap_floor_us := gap_floor_us)
+           WHERE source = 'log'),
+    tb AS (FROM sctp_stages_of(sctp_logged_side(t_side, 't_side', false), at_node := at_node, lo_s := lo_s,
+                               hi_s := hi_s, short_gap_us := short_gap_us, long_gap_us := long_gap_us,
+                               gap_floor_us := gap_floor_us)
+           WHERE source <> 'log'),
+    b AS (SELECT *, 'log on' AS against FROM lb UNION ALL SELECT *, 'log off' FROM tb),
+    am AS (
+        SELECT reading, any_value(source) AS source, count(*) AS runs, quantile_cont(p50, 0.5) AS p50,
+               quantile_cont(p90, 0.5) AS p90, quantile_cont(n, 0.5) AS n
+        FROM a GROUP BY reading),
+    bm AS (
+        SELECT reading, any_value(source) AS source, any_value(against) AS against, count(*) AS runs,
+               list(p50 ORDER BY k) AS p50s, list(p90 ORDER BY k) AS p90s, list(n ORDER BY k) AS ns,
+               min(p50) AS lo50, max(p50) AS hi50, min(p90) AS lo90, max(p90) AS hi90,
+               min_by(p50 * sqrt(1.0 / nullif(n, 0) + p50 / nullif(n, 0)), p50) AS lo_noise,
+               max_by(p50 * sqrt(1.0 / nullif(n, 0) + p50 / nullif(n, 0)), p50) AS hi_noise
+        FROM b GROUP BY reading),
+    sh AS (
+        SELECT 'a' AS side, k, reading, x.v, x.share * n AS c FROM a, unnest(dist) AS u(x) WHERE dist IS NOT NULL
+        UNION ALL
+        SELECT 'b', k, reading, x.v, x.share * n FROM b, unnest(dist) AS u(x) WHERE dist IS NOT NULL),
+    pooled AS (
+        SELECT side, reading, v, sum(c) / sum(sum(c)) OVER (PARTITION BY side, reading) AS share
+        FROM sh GROUP BY side, reading, v),
+    tv AS (
+        SELECT reading, 0.5 * sum(abs(coalesce(x.share, 0) - coalesce(y.share, 0))) AS tv
+        FROM (FROM pooled WHERE side = 'a') x FULL JOIN (FROM pooled WHERE side = 'b') y USING (reading, v)
+        GROUP BY reading
+        HAVING count(x.share) > 0 AND count(y.share) > 0),
+    runs AS (
+        SELECT k, reading, v, c / sum(c) OVER (PARTITION BY k, reading) AS share FROM sh WHERE side = 'b'),
+    pairs AS (
+        SELECT x.k AS k1, y.k AS k2, reading
+        FROM (SELECT DISTINCT k, reading FROM runs) x JOIN (SELECT DISTINCT k, reading FROM runs) y
+            USING (reading) WHERE x.k < y.k),
+    grid AS (SELECT p.reading, p.k1, p.k2, x.v FROM pairs p JOIN (SELECT DISTINCT reading, v FROM runs) x USING (reading)),
+    spread AS (
+        SELECT reading, max(d) AS tv
+        FROM (SELECT g.reading, g.k1, g.k2, 0.5 * sum(abs(coalesce(r1.share, 0) - coalesce(r2.share, 0))) AS d
+              FROM grid g
+              LEFT JOIN runs r1 ON r1.k = g.k1 AND r1.reading = g.reading AND r1.v = g.v
+              LEFT JOIN runs r2 ON r2.k = g.k2 AND r2.reading = g.reading AND r2.v = g.v
+              GROUP BY ALL)
+        GROUP BY reading),
+    f AS (
+        SELECT coalesce(am.reading, bm.reading) AS reading, coalesce(am.source, bm.source) AS source,
+               coalesce(bm.against, CASE WHEN am.source = 'log' THEN 'log on' ELSE 'log off' END) AS against,
+               am.runs AS a_runs, bm.runs AS b_runs, bm.p50s AS b_p50s, am.p50 AS a_p50, bm.p90s AS b_p90s,
+               am.p90 AS a_p90, bm.ns AS b_ns, am.n AS a_n, tv.tv, spread.tv AS b_tv,
+               bm.lo50, bm.hi50, bm.lo90, bm.hi90, bm.lo_noise, bm.hi_noise
+        FROM am FULL JOIN bm USING (reading) LEFT JOIN tv USING (reading) LEFT JOIN spread USING (reading)),
+    g AS (
+        SELECT *, split_part(reading, ' ', 1) AS num,
+               CASE split_part(reading, ' ', 1) WHEN '1' THEN floor_ms WHEN '2' THEN floor_bytes END AS fl,
+               CASE WHEN split_part(reading, ' ', 1) IN ('3', '7', '12')
+                    THEN greatest(max_tv::DOUBLE, coalesce(b_tv, 0)) END AS tv_bound
+        FROM f)
+    SELECT reading, source, against, against = 'log on' AS perturbed, a_runs, b_runs, b_p50s, a_p50, b_p90s, a_p90,
+           b_ns, a_n, tv, tv_bound, b_tv,
+           CASE WHEN num IN ('1', '2')
+                    THEN coalesce(a_p50 BETWEEN lo50 - fl AND hi50 + fl AND a_p90 BETWEEN lo90 - fl AND hi90 + fl, false)
+                WHEN num IN ('3', '7', '12') THEN coalesce(tv <= tv_bound, false)
+                WHEN num = '9' THEN coalesce(a_p50 BETWEEN lo50 - 2 * lo_noise AND hi50 + 2 * hi_noise, false)
+           END AS pass
+    FROM g ORDER BY num::INT, reading;
