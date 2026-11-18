@@ -74,12 +74,21 @@
 //!   acknowledged past it.
 //! - Each SACK marks a miss for the chunks between its gap blocks, up to
 //!   the highest one it newly acknowledges (in fast recovery when the
-//!   cumulative point advances, up to its last gap block); a chunk resent
-//!   takes misses only from chunks sent after it. A third miss marks a
-//!   chunk lost: it leaves the flight, starts fast recovery if none runs
-//!   (to the highest chunk outstanding), and goes in a packet of its own
-//!   past the window at the next send opportunity, the rest it doesn't
-//!   fit marked for retransmission.
+//!   cumulative point advances, up to its last gap block), a resent chunk
+//!   too, from any SACK (WebRTC's branch-heads/8078, the dcSCTP Chromium
+//!   156 and Firefox 158 run: net/dcsctp/tx/outstanding_data.cc's
+//!   `NackBetweenAckBlocks` nacks every chunk between the blocks, and
+//!   `Item::MarkAsRetransmitted` only clears its count). So a SACK its
+//!   receiver sent before a resend reached it reads the chunk missing
+//!   again: behind a full queue a lost chunk goes again every third SACK
+//!   until its first resend arrives (on the testbed's thin star the
+//!   seed's resends are some five a queue drop, most three SACKs apart).
+//!   A third miss marks a chunk lost and it leaves the flight. Outside
+//!   fast recovery it starts one (to the highest chunk outstanding) and
+//!   goes in a packet of its own past the window at the next send
+//!   opportunity, the rest it doesn't fit marked for retransmission; in
+//!   fast recovery it is marked for retransmission within the window
+//!   (`NackItem`'s `do_fast_retransmit` is `!is_in_fast_recovery`).
 //! - The timeout is RFC 6298's with the variation at least
 //!   [`SctpProfile::min_rttvar`], from SACKs without gaps (on the testbed's
 //!   thin relays it sits at its 400 ms floor); when the timer fires every
@@ -243,6 +252,12 @@ impl SctpProfile {
     /// and 400 ms-60 s with a variation of 27.5 ms at least (its 220 ms
     /// option over 8) and its timers backing off to 3 s at most, the
     /// delayed SACK 200 ms at most, and four packets a send opportunity.
+    /// Its misses are Chromium 156's (WebRTC's branch-heads/8078, see the
+    /// module docs); WebRTC's main takes a resent chunk's misses only from
+    /// SACKs that newly acknowledge a chunk sent after the resend
+    /// (`IsMissIndication`) and fast-retransmits a loss found in recovery,
+    /// so a profile of a Chromium that ships it takes those rules, as
+    /// [`SctpProfile::FIREFOX`] would of a Firefox past 158.
     pub const CHROMIUM: SctpProfile = SctpProfile {
         stack: Stack::DcSctp,
         mtu: 1191,
@@ -360,11 +375,9 @@ struct Chunk {
     /// Its record and payload bytes.
     id: u64,
     len: usize,
-    /// When it first went out, how often it went, and the sequence number
-    /// past the furthest sent when it last went.
+    /// When it first went out, and how often it went.
     sent: Time,
     nsent: u32,
-    boundary: u64,
     misses: u32,
     /// Marked to go again within the window, or (dcSCTP) as a fast
     /// retransmission past it.
@@ -377,13 +390,12 @@ struct Chunk {
 }
 
 impl Chunk {
-    fn new(id: u64, len: usize, sent: Time, boundary: u64) -> Chunk {
+    fn new(id: u64, len: usize, sent: Time) -> Chunk {
         Chunk {
             id,
             len,
             sent,
             nsent: 1,
-            boundary,
             misses: 0,
             retransmit: false,
             fast: false,
@@ -707,7 +719,7 @@ impl Assoc {
             self.measure_from = seq;
         }
         self.next_seq = self.next_seq.max(seq + 1);
-        let c = Chunk::new(id, len, at, self.next_seq);
+        let c = Chunk::new(id, len, at);
         self.in_flight += c.flight(self.stack());
         self.out.insert(seq, c);
     }
@@ -910,12 +922,10 @@ impl Scheduler {
                         continue;
                     }
                     bytes += size;
-                    let next = a.next_seq;
                     let (id, len) = (c.id, c.len);
                     a.update(seq, |c| {
                         c.fast = false;
                         c.nsent += 1;
-                        c.boundary = next;
                         c.misses = 0;
                     });
                     packet.push(Send {
@@ -954,12 +964,10 @@ impl Scheduler {
                         continue;
                     }
                     room -= size;
-                    let next = a.next_seq;
                     let (id, len) = (c.id, c.len);
                     a.update(seq, |c| {
                         c.retransmit = false;
                         c.nsent += 1;
-                        c.boundary = next;
                         c.misses = 0;
                     });
                     packet.push(Send {
@@ -1730,7 +1738,7 @@ fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
         Some(&end) if a.in_recovery && advanced => end,
         _ => highest,
     };
-    let mut loss = false;
+    let (mut loss, recovering) = (false, a.in_recovery);
     let holes: Vec<u64> = a
         .out
         .range(sack.cum + 1..top.max(sack.cum + 1))
@@ -1741,14 +1749,12 @@ fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
         let Some(c) = a.out.get(&seq) else {
             continue;
         };
-        // A resent chunk takes misses only from chunks sent after it.
-        if c.nsent > 1 && highest < c.boundary {
-            continue;
-        }
         let lost = c.misses + 1 >= 3;
         a.update(seq, |c| {
             c.misses += 1;
-            if lost {
+            if lost && recovering {
+                c.retransmit = true;
+            } else if lost {
                 c.fast = true;
             }
         });
@@ -1878,6 +1884,79 @@ mod tests {
         assert!(chunk_size(tail) + chunk_size(fill) <= 1179);
         // Once the chunks before it went, a message starts a packet.
         assert_eq!(cuts(c, &[8192, 8192], false)[1].first(), Some(&full));
+    }
+
+    /// An association of `CHROMIUM`'s with chunks 1 to `n` of 1000 bytes
+    /// out, and the time they went.
+    fn sent(n: u64) -> (Assoc, Time) {
+        let mut a = Assoc::new(SctpProfile::CHROMIUM);
+        a.cwnd = 1 << 20;
+        let t = Time::from_unix_millis(1_000);
+        for seq in 1..=n {
+            a.launch(t, seq, seq, 1000);
+        }
+        (a, t)
+    }
+
+    /// A SACK of cumulative point `cum` and the chunks `above` it held.
+    fn take(a: &mut Assoc, t: Time, cum: u64, above: impl IntoIterator<Item = u64>) {
+        let cum0 = a.cum.unwrap();
+        let sack = Sack {
+            cum,
+            above: above.into_iter().collect(),
+            rode: None,
+        };
+        rfc_sacked(a, t, &sack, cum0);
+    }
+
+    /// Resends chunk `seq`, as a send opportunity does.
+    fn resend(a: &mut Assoc, seq: u64) {
+        a.update(seq, |c| {
+            c.fast = false;
+            c.retransmit = false;
+            c.nsent += 1;
+            c.misses = 0;
+        });
+    }
+
+    #[test]
+    fn dcsctp_resends_a_chunk_every_third_sack_that_reads_it_missing() {
+        let (mut a, t) = sent(20);
+        // Chunk 2 lost: three SACKs past it make it a fast retransmission,
+        // and start fast recovery.
+        for top in 3..=5 {
+            take(&mut a, t, 1, 3..=top);
+        }
+        assert!(a.out[&2].fast && a.in_recovery);
+        resend(&mut a, 2);
+        // The SACKs its receiver sent before the resend reached it read it
+        // missing again: the third marks it lost again.
+        for top in 6..=7 {
+            take(&mut a, t, 1, 3..=top);
+            assert!(!a.out[&2].retransmit && !a.out[&2].fast, "after {top}");
+        }
+        take(&mut a, t, 1, 3..=8);
+        assert_eq!(a.out[&2].misses, 3);
+        assert!(a.out[&2].retransmit);
+    }
+
+    #[test]
+    fn dcsctp_resends_a_loss_found_in_fast_recovery_within_the_window() {
+        let (mut a, t) = sent(20);
+        for top in 3..=5 {
+            take(&mut a, t, 1, 3..=top);
+        }
+        assert!(a.in_recovery);
+        take(&mut a, t, 1, 3..=6);
+        // Chunk 7 lost too, found as recovery runs.
+        for top in 8..=10 {
+            take(&mut a, t, 1, (3..=6).chain(8..=top));
+        }
+        assert!(a.in_recovery);
+        let c = &a.out[&7];
+        assert!(c.retransmit && !c.fast, "{c:?}");
+        // It left the flight all the same.
+        assert_eq!(c.flight(Stack::DcSctp), 0);
     }
 
     #[test]
