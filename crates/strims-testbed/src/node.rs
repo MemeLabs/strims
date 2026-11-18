@@ -138,6 +138,10 @@ pub struct Settings {
     /// `None` keeps [`LiveShape::testbed`]'s. Frames only.
     pub chunks: Option<(usize, usize)>,
     pub stream: Stream,
+    /// Whether the node runs the timer probe ([`probe`]) while the stream
+    /// runs, its timers in the node's timer log: testbed_node's and
+    /// testbed_browser's `--timer-probe`, which needs `--timer-log`.
+    pub probe: bool,
 }
 
 /// The logs a node's config hands its records to, which its lines take,
@@ -374,12 +378,55 @@ pub async fn run<R: Runtime + Clone + 'static>(
             }
         }
     };
+    let probing = async {
+        if let (true, Some(log)) = (s.probe, timers) {
+            probe(rt, log, s.start_ms, end_ms).await;
+        }
+    };
     tokio::select! {
         biased;
         () = sample => {}
-        () = async { tokio::join!(accept, write, read); } => {}
+        () = async { tokio::join!(accept, write, read, probing); } => {}
     }
     Ok(())
+}
+
+/// The probe's timers' delays in ms, which it arms in turn, one a
+/// [`PROBE_PERIOD_MS`].
+pub const PROBE_DELAYS_MS: [u64; 6] = [0, 1, 4, 10, 16, 50];
+
+/// How often the probe arms a timer, in ms: past its longest delay, so
+/// one fires before the next is armed.
+pub const PROBE_PERIOD_MS: u64 = 60;
+
+/// Arms the probe's timers from `from_ms` until `until_ms` (Unix ms, the
+/// wall clock's): at the start of each [`PROBE_PERIOD_MS`] by that clock,
+/// a timer of the next of [`PROBE_DELAYS_MS`] from the time then, each
+/// kept in `log` as it fires ([`TimerSource::Probe`]). One that starts
+/// late, or restarts, begins at the next period. Every side runs this
+/// schedule: a testbed node on its runtime's timers, strims-sim's hosts on
+/// the model's.
+pub async fn probe(rt: &impl Runtime, log: &TimerLog, from_ms: u64, until_ms: u64) {
+    let mut k = rt
+        .now_ms()
+        .saturating_sub(from_ms)
+        .div_ceil(PROBE_PERIOD_MS);
+    loop {
+        let start = from_ms + k * PROBE_PERIOD_MS;
+        if start >= until_ms {
+            return;
+        }
+        rt.sleep_until_ms(start).await;
+        let delay = PROBE_DELAYS_MS
+            .get(usize::try_from(k).unwrap_or(0) % PROBE_DELAYS_MS.len())
+            .copied()
+            .unwrap_or(0);
+        let now = rt.now_ms();
+        let armed = (rt.precise_now(), now);
+        rt.sleep_until_ms(now + delay).await;
+        log.push(fired(rt, TimerSource::Probe, armed, now + delay));
+        k += 1;
+    }
 }
 
 /// The swarm options of the frames of `shape` at a node: the shape's, in

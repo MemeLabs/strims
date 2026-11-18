@@ -230,6 +230,11 @@
 #                          run's (`0 2`; 0 the seed), as strims-sim's
 #                          STRIMS_SIM_TIMER_LOG keeps a simulated node's:
 #                          the tables' timers. Unset, none
+#   TIMER_PROBE=1          TIMER_LOG's nodes run the timer probe through
+#                          the stream (--timer-probe: strims-testbed's
+#                          node::probe, timers of fixed delays), as
+#                          STRIMS_SIM_TIMER_PROBE=1 has the twin's run it.
+#                          Off (0) by default
 #   CAPTURE=1              ppspp captures in <out dir>/capture, one dump
 #                          per node (native and browser), named by host id
 #   PCAP=1                 each node's packets on its eth0, both ways, in
@@ -439,10 +444,16 @@ for t in "${timer_nodes[@]}"; do
     echo "TIMER_LOG=$TIMER_LOG: all, or node indices of the run's 0 to $viewers" >&2; exit 1
   fi
 done
+case "${TIMER_PROBE:-0}" in
+  0) probe_arg="" ;;
+  1) probe_arg=" --timer-probe"
+     [ "${#timer_nodes[@]}" -gt 0 ] || { echo "TIMER_PROBE=1 needs TIMER_LOG" >&2; exit 1; } ;;
+  *) echo "TIMER_PROBE=$TIMER_PROBE: 1 or 0" >&2; exit 1 ;;
+esac
 timer_args_of() {
   local t
   for t in "${timer_nodes[@]}"; do
-    if [ "$t" = all ] || [ "$t" = "$1" ]; then echo --timer-log; return; fi
+    if [ "$t" = all ] || [ "$t" = "$1" ]; then echo "--timer-log$probe_arg"; return; fi
   done
 }
 bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
@@ -709,7 +720,7 @@ nov6=(--sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv6.conf.default.d
 # the tree changes it, so runs of two trees don't pool. Its root is the
 # node's access link class's (the `links` file names each node's).
 SHAPER="clsact>ifb-netem>root-class"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD|FORECAST|SPEC|PARENT_CHECKS|TIMER_LOG)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD|FORECAST|SPEC|PARENT_CHECKS|TIMER_LOG|TIMER_PROBE)=' \
   > "$out/settings" || true
 echo "QDISC=$SHAPER" >> "$out/settings"
 echo "STAMPS=clock" >> "$out/settings"

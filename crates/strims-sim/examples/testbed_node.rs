@@ -13,6 +13,7 @@
 //!              [--units <chunks per signature> [--media <flv file>]]
 //!              [--record <file>] [--join-at <s>] [--arrive] [--hosts <dir>]
 //!              [--capture <dir>] [--forecast] [--spec] [--parent-checks] [--timer-log]
+//!              [--timer-probe]
 //! testbed_node --relay-only --topology <file> [--secs <s>] [--start <unix ms>]
 //! ```
 //!
@@ -57,7 +58,10 @@
 //! they fire (`NodeConfig::timer_log`, [`TimerLog`]): its node task's, its
 //! line's and its frame writer's, each read by the wall clock to the
 //! nanosecond, which its lines' records carry, as strims-sim's
-//! `STRIMS_SIM_TIMER_LOG` keeps a simulated node's.
+//! `STRIMS_SIM_TIMER_LOG` keeps a simulated node's; with `--timer-probe`
+//! the node runs the timer probe through the stream
+//! ([`strims_testbed::node::probe`]), as `STRIMS_SIM_TIMER_PROBE=1` has a
+//! simulated node run it.
 //!
 //! `--relay-only` runs the relay: it listens where the topology's `relay`
 //! line says, joins the testbed network, runs no swarm, and stops 5 s
@@ -108,6 +112,7 @@ struct Args {
     spec: bool,
     parent_checks: bool,
     timer_log: bool,
+    timer_probe: bool,
 }
 
 fn args() -> Result<Args, String> {
@@ -134,6 +139,7 @@ fn args() -> Result<Args, String> {
         spec: false,
         parent_checks: false,
         timer_log: false,
+        timer_probe: false,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -158,6 +164,7 @@ fn args() -> Result<Args, String> {
             "--spec" => a.spec = true,
             "--parent-checks" => a.parent_checks = true,
             "--timer-log" => a.timer_log = true,
+            "--timer-probe" => a.timer_probe = true,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -166,6 +173,9 @@ fn args() -> Result<Args, String> {
     }
     if a.chunk.is_some() != a.munro.is_some() {
         return Err("--chunk and --munro go together".to_owned());
+    }
+    if a.timer_probe && !a.timer_log {
+        return Err("--timer-probe needs --timer-log".to_owned());
     }
     if a.media.is_some() && a.units.is_none() {
         return Err("--media needs --units".to_owned());
@@ -371,6 +381,7 @@ async fn run() -> Result<(), String> {
         stream: a.units.map_or(Stream::Frames, |cps| Stream::Units {
             chunks_per_signature: cps,
         }),
+        probe: a.timer_probe,
     };
     let rt = Native {
         record: match &a.record {

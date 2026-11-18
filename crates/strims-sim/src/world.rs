@@ -328,6 +328,11 @@ pub(crate) struct World {
     /// world, outside the nodes' and the records' memory, and taken in the
     /// records' at each stats sample ([`World::observe_bins`]).
     timer_logs: Vec<Option<TimerLog>>,
+    /// With [`Scenario::timer_probe`] and [`Scenario::timer_lateness`],
+    /// each host's probe's lateness ([`crate::late`]), forked after the
+    /// hosts' own streams, so the probe moves none of their draws; empty
+    /// otherwise.
+    pub probe_lateness: Vec<crate::late::Lateness>,
     /// With the tables, the nodes' parent sinks' channel
     /// ([`NodeConfig::parent_log`]): they send from inside the nodes'
     /// passes, and the records take what came at each stats sample, so it
@@ -384,13 +389,22 @@ impl World {
             .collect();
         // The lateness streams come from an rng of their own, so turning
         // them on moves no other draw.
-        let lateness = if spec.timer_lateness {
+        let (lateness, probe_lateness) = if spec.timer_lateness {
             let mut late = det_rng(seed ^ crate::late::RNG_SALT);
-            (0..spec.hosts.len())
-                .map(|_| crate::late::Lateness::new(strims_base::rng::fork(&mut late)))
-                .collect()
+            let mut streams = || -> Vec<crate::late::Lateness> {
+                (0..spec.hosts.len())
+                    .map(|_| crate::late::Lateness::new(strims_base::rng::fork(&mut late)))
+                    .collect()
+            };
+            let hosts = streams();
+            let probes = if spec.timer_probe {
+                streams()
+            } else {
+                Vec::new()
+            };
+            (hosts, probes)
         } else {
-            Vec::new()
+            (Vec::new(), Vec::new())
         };
         let timer_logs = (0..spec.hosts.len())
             .map(|h| {
@@ -451,6 +465,7 @@ impl World {
             clock_offsets,
             lateness,
             timer_logs,
+            probe_lateness,
             parent_tx,
             parent_rx,
             stopped_tx,

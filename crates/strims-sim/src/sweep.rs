@@ -165,8 +165,10 @@
 //!   take the tap a capture would, so it fails with `STRIMS_SIM_CAPTURE`,
 //!   and `STRIMS_SIM_TIMER_LOG=<hosts>` those hosts' timers as they fire
 //!   (`timers`: [`Scenario::timer_log`]; `all` or `1`, `seed`, or `hosts:`
-//!   and host indices, `hosts:0,3`, [`HostSet::parse`]). None of them
-//!   changes the trace.
+//!   and host indices, `hosts:0,3`, [`HostSet::parse`]), with
+//!   `STRIMS_SIM_TIMER_PROBE=1` their timer probe's too
+//!   ([`Scenario::timer_probe`]). The logs change no trace; the probe
+//!   changes no decision, and runs a task of its own on each host.
 //! - `STRIMS_SIM_ROWS=1` prints each run's measures as one line,
 //!   `ROW {json}`, on stdout ([`Report::row`]).
 //! - `STRIMS_SIM_JOB=1` runs the sweep as one sim farm job
@@ -807,6 +809,7 @@ fn sweep_seeds(
     let clock_skew = clock_skew_knob();
     let timer_lateness = timer_lateness_knob();
     let timer_log = timer_log_knob();
+    let timer_probe = knob::<u32>("STRIMS_SIM_TIMER_PROBE") == Some(1);
     let seed_pin = seed_pin_knob();
     let seed_links = seed_links_knob();
     let loops = knob::<u32>("STRIMS_SIM_LOOPS") == Some(1);
@@ -833,6 +836,7 @@ fn sweep_seeds(
             spec.node_bins = bin_nodes;
             spec.parent_checks = parent_checks;
             spec.timer_log.clone_from(&timer_log);
+            spec.timer_probe = timer_probe;
         }
         if segment.is_some() {
             spec.tcp_segment = segment;

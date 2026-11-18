@@ -372,7 +372,7 @@ fn a_run_with_tables_keeps_its_trace() {
 
 /// The timer log reads the lateness the run draws: the same trace with the
 /// log as without it, lateness on and off, and its rows as
-/// [`timers_say_what_they_are`] says.
+/// [`timers_say_what_they_are`] says, the timer probe's too.
 #[test]
 fn a_timer_log_reads_the_lateness_drawn() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
@@ -397,6 +397,16 @@ fn a_timer_log_reads_the_lateness_drawn() {
         let d = dir.join(format!("late-{late}"));
         r.write_tables(&d, Duration::from_secs(1), false).unwrap();
         timers_say_what_they_are(&r, &d);
+        // And the probe's, on the same model.
+        let mut spec = wan_mesh();
+        spec.timer_lateness = late;
+        spec.wire_bins = Some(Duration::from_secs(1));
+        spec.timer_log = Some(HostSet::All);
+        spec.timer_probe = true;
+        let p = run(spec, 2).unwrap();
+        let pd = dir.join(format!("probe-{late}"));
+        p.write_tables(&pd, Duration::from_secs(1), false).unwrap();
+        timers_say_what_they_are(&p, &pd);
         if late {
             let rows = table_rows(&d, "timers");
             assert!(
@@ -1602,7 +1612,8 @@ fn timers_say_what_they_are(r: &strims_sim::Report, d: &Path) {
         let floor = x("armed_us").div_euclid(1000) * 1000;
         assert_eq!(x("requested_us"), x("deadline_us") - floor, "{row:?}");
         // A node task's next deadline is a millisecond past its last pass
-        // at least; a writer behind its schedule writes at once.
+        // at least; a writer behind its schedule writes at once, as a probe
+        // behind its periods arms at once.
         let key = (node, row["source"].clone());
         if let Some(&before) = last.get(&key) {
             let gap = if row["source"] == "node_task" {
@@ -1632,6 +1643,40 @@ fn timers_say_what_they_are(r: &strims_sim::Report, d: &Path) {
             h == seed as i64,
             "host {h}: {have:?}"
         );
+        assert_eq!(
+            have.contains("probe"),
+            r.scenario.timer_probe,
+            "host {h}: {have:?}"
+        );
+    }
+    if !r.scenario.timer_probe {
+        return;
+    }
+    // The probe arms its delays in turn, one a period, through the
+    // stream: a host's rows cycle through them from wherever it began.
+    let delays = strims_testbed::node::PROBE_DELAYS_MS.map(|d| d as i64 * 1000);
+    let swarm = &r.scenario.swarms[0];
+    let periods = (swarm.stop - swarm.start).as_millis() as usize
+        / strims_testbed::node::PROBE_PERIOD_MS as usize;
+    for h in 0..r.scenario.hosts.len() as i64 {
+        let asked: Vec<i64> = rows
+            .iter()
+            .filter(|x| x["source"] == "probe" && int(x, "node") == Some(h))
+            .map(|x| int(x, "requested_us").unwrap())
+            .collect();
+        assert!(
+            asked.len() + 2 >= periods,
+            "host {h}: {} of {periods}",
+            asked.len()
+        );
+        let first = delays.iter().position(|&d| d == asked[0]).unwrap();
+        for (i, d) in asked.iter().enumerate() {
+            assert_eq!(
+                *d,
+                delays[(first + i) % delays.len()],
+                "host {h}: probe {i}"
+            );
+        }
     }
 }
 

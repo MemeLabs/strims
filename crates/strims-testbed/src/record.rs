@@ -672,6 +672,55 @@ mod tests {
         assert_eq!((rows.len(), lost), (TimerLog::CAP, 3));
     }
 
+    /// The probe's timers: its delays in turn, one a period, each kept as
+    /// it fires, from the period after a late start, on a clock whose
+    /// timers fire on time.
+    #[test]
+    fn the_probe_arms_its_delays_in_turn() {
+        use crate::node::{PROBE_DELAYS_MS, PROBE_PERIOD_MS, Runtime, probe};
+        use std::cell::Cell;
+        use std::future::Future;
+        use std::pin::pin;
+        use std::task::{Context, Poll, Waker};
+
+        /// A clock that jumps to each deadline it is waited for.
+        struct Jump(Cell<u64>);
+        impl Runtime for Jump {
+            fn now_ms(&self) -> u64 {
+                self.0.get()
+            }
+            fn sleep_until_ms(&self, at_ms: u64) -> impl Future<Output = ()> {
+                self.0.set(self.0.get().max(at_ms));
+                std::future::ready(())
+            }
+            fn cpu_ms(&self) -> Option<u64> {
+                None
+            }
+            fn emit(&self, _: String) {}
+            fn error(&self, _: String) {}
+        }
+        let start = 1_700_000_000_000;
+        let rt = Jump(Cell::new(start + 70));
+        let log = TimerLog::new(TimerContext::Task);
+        let fut = pin!(probe(&rt, &log, start, start + 10 * PROBE_PERIOD_MS));
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(matches!(fut.poll(&mut cx), Poll::Ready(())));
+        let (rows, lost) = log.take();
+        assert_eq!(lost, 0);
+        // It started 70 ms in: at the second period, the second delay.
+        assert_eq!(rows.len(), 8);
+        for (i, r) in rows.iter().enumerate() {
+            let k = i as u64 + 2;
+            let d = PROBE_DELAYS_MS[k as usize % PROBE_DELAYS_MS.len()];
+            assert_eq!(r.source, TimerSource::Probe);
+            assert_eq!(r.requested, Span::from_millis(d as i64));
+            let armed = start + k * PROBE_PERIOD_MS;
+            assert_eq!(r.armed, Time::from_unix_millis(armed as i64));
+            assert_eq!(r.deadline, Time::from_unix_millis((armed + d) as i64));
+            assert_eq!(r.fired, r.deadline);
+        }
+    }
+
     /// A line's timers read back as they were written, to the µs, times
     /// before the origin too.
     #[test]

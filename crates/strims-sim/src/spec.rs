@@ -689,6 +689,12 @@ pub struct Scenario {
     /// their frame writers' and probes' waits): none by default. Changes
     /// no trace.
     pub timer_log: Option<HostSet>,
+    /// Every host of [`Scenario::timer_log`] runs the timer probe through
+    /// the first swarm's stream (`strims_testbed::node::probe`, as a
+    /// testbed node does with `TIMER_PROBE=1`), its timers as late as
+    /// [`Scenario::timer_lateness`] draws them from a stream of its own:
+    /// off by default.
+    pub timer_probe: bool,
     /// When the first swarm's viewers arrive ([`crate::arrivals`]): with
     /// the run by default ([`Arrivals::T0`]). The run resolves it into
     /// [`HostSpec::arrive_at`] and lays the links out in arrival order.
@@ -954,6 +960,7 @@ impl Scenario {
             clock_skew: ClockSkew::Real,
             timer_lateness: false,
             timer_log: None,
+            timer_probe: false,
             arrivals: Arrivals::T0,
             departures: None,
             mix: false,

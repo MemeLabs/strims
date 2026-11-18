@@ -133,11 +133,12 @@ const RECORDING: [&str; 11] = [
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
-const TWIN_SETTINGS: [&str; 30] = [
+const TWIN_SETTINGS: [&str; 31] = [
     "FORECAST",
     "SPEC",
     "PARENT_CHECKS",
     "TIMER_LOG",
+    "TIMER_PROBE",
     "VIEWERS",
     "SEED_UP_MBIT",
     "VIEWER_UP_MBIT",
@@ -275,7 +276,8 @@ fn num(x: f64) -> String {
 /// always; the scheduler's logs the nodes kept (run.sh's `FORECAST=1`,
 /// `SPEC=1`, `PARENT_CHECKS=1`: `STRIMS_SIM_FORECAST=1`,
 /// `STRIMS_SIM_SPEC=1`, `STRIMS_SIM_PARENT_CHECKS=1`) and the nodes that
-/// kept their timers (`TIMER_LOG`: `STRIMS_SIM_TIMER_LOG`, their numbers),
+/// kept their timers (`TIMER_LOG`: `STRIMS_SIM_TIMER_LOG`, their numbers)
+/// with the probe they ran (`TIMER_PROBE=1`: `STRIMS_SIM_TIMER_PROBE=1`),
 /// so the twin writes the log tables the run does; the viewers, the seed's
 /// uplink and the stream's length always; the viewers' joins (`JOIN_AT`,
 /// and each of `JOINS`'s to the ms, `STRIMS_SIM_CAL_JOINS`: [`Run::read`]
@@ -372,6 +374,11 @@ pub fn knobs_of(
             hosts.insert(i);
         }
         put("STRIMS_SIM_TIMER_LOG", HostSet::Only(hosts).knob());
+    }
+    match get("TIMER_PROBE").map(str::trim) {
+        None | Some("" | "0") => {}
+        Some("1") => put("STRIMS_SIM_TIMER_PROBE", "1".to_owned()),
+        Some(v) => return Err(format!("TIMER_PROBE={v}: 1 or 0")),
     }
     put("STRIMS_SIM_CAL_VIEWERS", viewers.to_string());
     put("STRIMS_SIM_CAL_SEED_UP_MBIT", num(seed_up));
@@ -819,6 +826,7 @@ impl Run {
             .knobs
             .get("STRIMS_SIM_TIMER_LOG")
             .and_then(|v| HostSet::parse(v).ok().flatten());
+        s.timer_probe = on("STRIMS_SIM_TIMER_PROBE");
         // The arrivals profile JOINS drew (a tier matrix's knob), as the
         // twin's row names it; the times are the run's.
         if let Some(a) = self
@@ -4946,12 +4954,21 @@ mod tests {
         std::fs::write(dir.join("settings"), format!("{settings}TIMER_LOG=1 0\n")).unwrap();
         let run = Run::read(&dir, &BTreeMap::new()).unwrap();
         assert_eq!(run.knobs["STRIMS_SIM_TIMER_LOG"], "hosts:0,1");
-        std::fs::write(dir.join("settings"), format!("{settings}TIMER_LOG=seed\n")).unwrap();
+        // The probe: its knob, and a value it hasn't refused.
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}TIMER_LOG=all\nTIMER_PROBE=1\n"),
+        )
+        .unwrap();
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs["STRIMS_SIM_TIMER_PROBE"], "1");
+        assert!(run.report().scenario.timer_probe);
+        std::fs::write(dir.join("settings"), format!("{settings}TIMER_PROBE=2\n")).unwrap();
         assert!(
             Run::read(&dir, &BTreeMap::new())
                 .err()
                 .unwrap()
-                .contains("TIMER_LOG=seed: all, or node indices of the run's 0 to 1")
+                .contains("TIMER_PROBE=2: 1 or 0")
         );
         // A node the run lacks, a number written otherwise, and a word.
         for v in ["2", "01", "seed"] {

@@ -347,7 +347,63 @@ fn spawn_tasks(w: &Rc<World>, h: HostIx, node: &Node) {
     }) {
         spawn_local(control(w.clone(), h, node.clone()));
     }
+    if w.spec.timer_probe
+        && let (Some(log), Some(s)) = (w.timer_log(h), w.spec.swarms.first())
+    {
+        let ms = |t: Duration| u64::try_from(w.clock_at(h, t).unix_millis()).unwrap_or(0);
+        let (from, until) = (ms(s.start), ms(s.stop));
+        let probe = ProbeClock {
+            w: w.clone(),
+            h,
+            late: w.probe_lateness.get(h).cloned(),
+        };
+        let log = log.clone();
+        spawn_local(async move { strims_testbed::node::probe(&probe, &log, from, until).await });
+    }
     spawn_local(supervisor(w.clone(), h, node.clone()));
+}
+
+/// A host's side of the timer probe ([`Scenario::timer_probe`]): its
+/// node's clock, and timers as late as its probe's lateness stream draws
+/// them, on time without one.
+///
+/// [`Scenario::timer_probe`]: crate::Scenario::timer_probe
+struct ProbeClock {
+    w: Rc<World>,
+    h: HostIx,
+    late: Option<crate::late::Lateness>,
+}
+
+impl strims_testbed::node::Runtime for ProbeClock {
+    fn now_ms(&self) -> u64 {
+        u64::try_from(self.precise_now().unix_millis()).unwrap_or(0)
+    }
+
+    fn precise_now(&self) -> Time {
+        self.w.clock_at(self.h, sim_now())
+    }
+
+    async fn sleep_until_ms(&self, at_ms: u64) {
+        let at = Time::from_unix_millis(i64::try_from(at_ms).unwrap_or(i64::MAX));
+        let at = (at - self.w.clock_epoch(self.h))
+            .to_std()
+            .unwrap_or_default();
+        let late = self
+            .late
+            .as_ref()
+            .map_or(Duration::ZERO, |l| l.draw().to_std().unwrap_or_default());
+        tokio::time::sleep((at + late).saturating_sub(sim_now())).await;
+    }
+
+    fn cpu_ms(&self) -> Option<u64> {
+        None
+    }
+
+    fn emit(&self, _: String) {}
+
+    fn error(&self, message: String) {
+        self.w.log(self.w.name(self.h), message);
+    }
 }
 
 /// Publishes the host's hash table record and peer index entry at

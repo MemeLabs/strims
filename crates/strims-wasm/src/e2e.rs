@@ -29,7 +29,7 @@
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
 //! | `stats` | | Reports `stats`. |
-//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, `arrives`, and optionally `rate`, `chunk` with `munro`, and `units` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. A viewer that `arrives` (a boolean) reads from the live edge ([`Settings::arrives`]): the harness makes its links into the running stream. With `units`, the stream is media in the unit format in a swarm of `units` chunks per signature ([`strims_testbed::media`]), which the node reads as a viewer and feeds the page's player (see below). Only the first `testbed` runs. |
+//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, `arrives`, and optionally `rate`, `chunk` with `munro`, `units` and `timerProbe` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. A viewer that `arrives` (a boolean) reads from the live edge ([`Settings::arrives`]): the harness makes its links into the running stream. With `units`, the stream is media in the unit format in a swarm of `units` chunks per signature ([`strims_testbed::media`]), which the node reads as a viewer and feeds the page's player (see below). With `timerProbe` (a boolean) and `start`'s `timerLog`, it runs the timer probe too ([`strims_testbed::node::probe`]). Only the first `testbed` runs. |
 //!
 //! Events, from the node:
 //!
@@ -354,6 +354,7 @@ impl Control {
                     rate,
                     chunks,
                     stream,
+                    probe: property(cmd, "timerProbe").as_bool().unwrap_or(false),
                 };
                 let out = self.out.clone();
                 let feeds = self.feeds.clone();

@@ -13,7 +13,7 @@
 //!                 [--hosts <dir>] [--capture <dir>] [--player <file>]
 //!                 [--cpu-profile <dir> [--cpu-profile-at <s>]
 //!                  [--cpu-profile-secs <s>] [--cpu-profile-us <us>]]
-//!                 [--forecast] [--spec] [--parent-checks] [--timer-log]
+//!                 [--forecast] [--spec] [--parent-checks] [--timer-log [--timer-probe]]
 //! ```
 //!
 //! The node's kind (`firefox` or `chromium`) comes from the topology
@@ -33,7 +33,8 @@
 //!    timers as they fire, as testbed_node's flags do, the page then served
 //!    cross-origin isolated,
 //!    [`Site::serve_isolated`](strims_testbed::browser::Site::serve_isolated)),
-//!    and has it run the testbed's swarm
+//!    and has it run the testbed's swarm, with `--timer-probe` the timer
+//!    probe too (strims-testbed's `node::probe`)
 //!    (`testbed`), with
 //!    `--arrive` as a viewer that arrives into the running stream
 //!    ([`Settings::arrives`](strims_testbed::node::Settings::arrives));
@@ -139,6 +140,7 @@ struct Args {
     spec: bool,
     parent_checks: bool,
     timer_log: bool,
+    timer_probe: bool,
 }
 
 impl Args {
@@ -179,6 +181,7 @@ fn args() -> Result<Args, String> {
         spec: false,
         parent_checks: false,
         timer_log: false,
+        timer_probe: false,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -207,6 +210,7 @@ fn args() -> Result<Args, String> {
             "--spec" => a.spec = true,
             "--parent-checks" => a.parent_checks = true,
             "--timer-log" => a.timer_log = true,
+            "--timer-probe" => a.timer_probe = true,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -794,6 +798,7 @@ async fn run() -> Result<(), String> {
             "secs": a.secs,
             "arrives": a.arrive,
             "rate": a.rate,
+            "timerProbe": a.timer_probe,
         });
         if let (Some(chunk), Some(munro)) = (a.chunk, a.munro) {
             testbed["chunk"] = json!(chunk);
