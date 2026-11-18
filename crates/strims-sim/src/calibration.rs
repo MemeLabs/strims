@@ -95,9 +95,15 @@ fn value<T: std::str::FromStr>(get: &impl Fn(&str) -> Option<String>, name: &str
 ///   stream starts arrive then
 ///   ([`HostSpec::arrive_at`](crate::spec::HostSpec::arrive_at)) and read
 ///   from the live edge, as the testbed's late viewers do; at or before
-///   it, each boots by a restart of a host down from the run's start, and
-///   reads as the swarm's options say, as the testbed's viewers at the
-///   start do.
+///   it, each boots with the run and makes its links then (with
+///   `STRIMS_SIM_CAL_HARNESS_LINKS=0`, it boots by a restart of a host
+///   down from the run's start), and reads as the swarm's options say, as
+///   the testbed's viewers at the start do.
+/// - `STRIMS_SIM_CAL_JOINS="<i>:<s> ..."`, the testbed's `JOINS`: viewer
+///   `i` (the topology's node `i`) joins `s` seconds after the stream
+///   starts, to the ms, so a join falls anywhere within its second, and
+///   arrives then whatever the time (0 too), as run.sh's `--arrive` has
+///   it; a viewer it doesn't name joins at JOIN_AT's time.
 /// - `STRIMS_SIM_CAL_SEED_BURST=<bytes>` and `STRIMS_SIM_CAL_VIEWER_BURST=<bytes>`
 ///   give the seed's and each viewer's uplink a shaper bucket that size
 ///   (`strims_wan::Bucket`, leaving at once), as `run.sh`'s `SEED_BURST`
@@ -131,6 +137,9 @@ pub struct Calibration {
     /// negative), arriving if after it; `None` with the seed, at the start
     /// of the run.
     pub join_at_ms: Option<i64>,
+    /// Each viewer's own join, in place of `join_at_ms`'s: (node `i`, ms
+    /// after the stream starts), arriving then.
+    pub joins: Vec<(usize, u64)>,
     /// The viewers make their links as the testbed's harness does
     /// ([`HostSpec::links_at`](crate::spec::HostSpec::links_at)).
     pub harness_links: bool,
@@ -214,6 +223,7 @@ impl Calibration {
                     .filter(|&s| s > 0)
                     .map(|s| s * 1000)
             }),
+            joins: joins(&get, viewers),
             harness_links: value::<u64>(&get, "STRIMS_SIM_CAL_HARNESS_LINKS")
                 .is_none_or(|v| v != 0),
             slow_down_kbit: value(&get, "STRIMS_SIM_CAL_SLOW_DOWN_KBIT"),
@@ -291,6 +301,31 @@ pub fn mesh6(viewers: usize) -> &'static str {
         63 => include_str!("../../../hack/sim-farm/matrices/topologies/mesh6-v63"),
         n => panic!("no mesh6 topology for {n} viewers: 3, 7, 15, 31 or 63"),
     }
+}
+
+/// `STRIMS_SIM_CAL_JOINS`'s `<i>:<s> ...`: each viewer `i` of `viewers`
+/// (from 1) and its join's ms, `s` seconds rounded as run.sh's
+/// `--join-at` rounds them.
+fn joins(get: &impl Fn(&str) -> Option<String>, viewers: usize) -> Vec<(usize, u64)> {
+    let mut out: Vec<(usize, u64)> = Vec::new();
+    for pair in get("STRIMS_SIM_CAL_JOINS")
+        .unwrap_or_default()
+        .split_whitespace()
+    {
+        let parsed = pair.split_once(':').and_then(|(i, s)| {
+            let (i, s): (usize, f64) = (i.parse().ok()?, s.parse().ok()?);
+            (s.is_finite() && s >= 0.0).then(|| (i, (s * 1000.0).round() as u64))
+        });
+        match parsed {
+            Some((i, ms)) if (1..=viewers).contains(&i) && out.iter().all(|&(x, _)| x != i) => {
+                out.push((i, ms));
+            }
+            _ => panic!(
+                "STRIMS_SIM_CAL_JOINS: {pair} isn't <viewer 1..={viewers}>:<seconds, 0 or more>, once a viewer"
+            ),
+        }
+    }
+    out
 }
 
 /// `<a>:<b> ...` from knob `name`.
@@ -449,25 +484,29 @@ pub fn calibration_star(c: &Calibration) -> Scenario {
             Duration::from_millis(c.viewer_delay_ms),
         ),
     );
-    // Each viewer's join, where the testbed's harness makes its links: the
-    // stream's start, or JOIN_AT after it, arriving if after it, and at or
-    // before it booted by a restart of a host down from the run's start.
-    let join = Duration::from_millis(
-        u64::try_from(5000 + c.join_at_ms.unwrap_or(0))
-            .unwrap_or(0)
-            .max(1),
-    );
-    for &v in &vs {
+    // Each viewer's join, where the testbed's harness makes its links: its
+    // JOINS time, arriving then, else the stream's start or JOIN_AT after
+    // it, arriving if after it; at or before it, the harness's viewer
+    // boots with the run, and one without booted by a restart of a host
+    // down from the run's start.
+    for (i, &v) in vs.iter().enumerate() {
+        let own = c
+            .joins
+            .iter()
+            .find(|&&(x, _)| x == i + 1)
+            .map(|&(_, ms)| ms);
+        let ms = own.map(|ms| ms as i64).or(c.join_at_ms);
+        let join = Duration::from_millis(u64::try_from(5000 + ms.unwrap_or(0)).unwrap_or(0).max(1));
         if c.harness_links {
             s.hosts[v].links_at = Some(join);
         }
-        match c.join_at_ms {
-            Some(ms) if ms > 0 => s.hosts[v].arrive_at = Some(join),
-            Some(_) => {
+        match ms {
+            Some(ms) if ms > 0 || own.is_some() => s.hosts[v].arrive_at = Some(join),
+            Some(_) if !c.harness_links => {
                 s.at(Duration::ZERO, Fault::Crash(v));
                 s.at(join, Fault::Restart(v));
             }
-            None => {}
+            _ => {}
         }
     }
     let mut swarm = SwarmSpec::live(seed_host, vs, WAN_RATE, secs(5), secs(5 + c.secs))
@@ -494,17 +533,21 @@ mod tests {
     use super::*;
 
     /// Viewers that join after the stream starts (5 s into the run) arrive
-    /// then, with no crash or restart; at or before it, each is down from
-    /// the run's start and restarts at its join. The seed is there from
-    /// the start either way. Every viewer makes its links at its join, as
-    /// the testbed's harness does: the stream's start without a join.
+    /// then, with no crash or restart; at or before it, each boots with the
+    /// run, or without the harness's links is down from the run's start and
+    /// restarts at its join. The seed is there from the start either way.
+    /// Every viewer makes its links at its join, as the testbed's harness
+    /// does: the stream's start without a join.
     #[test]
-    fn viewers_joining_after_the_start_arrive_and_the_rest_restart() {
-        let star = |ms: i64| {
-            calibration_star(&Calibration::from_knobs(|k| {
-                (k == "STRIMS_SIM_CAL_JOIN_AT_MS").then(|| ms.to_string())
+    fn viewers_joining_after_the_start_arrive_and_the_rest_link_at_their_join() {
+        let star_of = |ms: i64, harness: bool| {
+            calibration_star(&Calibration::from_knobs(|k| match k {
+                "STRIMS_SIM_CAL_JOIN_AT_MS" => Some(ms.to_string()),
+                "STRIMS_SIM_CAL_HARNESS_LINKS" if !harness => Some("0".to_owned()),
+                _ => None,
             }))
         };
+        let star = |ms: i64| star_of(ms, true);
         let joins = |s: &Scenario| -> Vec<(Duration, String)> {
             let mut v: Vec<(Duration, String)> = s
                 .faults
@@ -521,6 +564,9 @@ mod tests {
             assert_eq!(s.hosts.len(), 4, "JOIN_AT_MS={join_ms}");
             let links: Vec<Option<Duration>> = s.hosts.iter().map(|h| h.links_at).collect();
             assert_eq!(links, [None, Some(up), Some(up), Some(up)]);
+            assert_eq!(joins(&s), [], "JOIN_AT_MS={join_ms}");
+            let s = star_of(join_ms, false);
+            assert!(s.hosts.iter().all(|h| h.links_at.is_none()));
             assert!(
                 s.hosts.iter().all(|h| h.arrive_at.is_none()),
                 "JOIN_AT_MS={join_ms}"
@@ -562,5 +608,32 @@ mod tests {
             (k == "STRIMS_SIM_CAL_HARNESS_LINKS").then(|| "0".to_owned())
         }));
         assert!(off.hosts.iter().all(|h| h.links_at.is_none()));
+    }
+
+    /// A viewer of JOINS arrives at its own time, to the ms, whatever the
+    /// time (the stream's start too), and makes its links then; the others
+    /// join at JOIN_AT's.
+    #[test]
+    fn a_viewer_of_joins_arrives_at_its_own_time_to_the_ms() {
+        let star = |joins: &str, join_at: Option<&str>| {
+            calibration_star(&Calibration::from_knobs(|k| match k {
+                "STRIMS_SIM_CAL_JOINS" => Some(joins.to_owned()),
+                "STRIMS_SIM_CAL_JOIN_AT_MS" => join_at.map(str::to_owned),
+                _ => None,
+            }))
+        };
+        let ms = |m: u64| Some(Duration::from_millis(m));
+        let s = star("1:2.0004 3:0.25", None);
+        let arrivals: Vec<Option<Duration>> = s.hosts.iter().map(|h| h.arrive_at).collect();
+        assert_eq!(arrivals, [None, ms(7000), None, ms(5250)]);
+        let links: Vec<Option<Duration>> = s.hosts.iter().map(|h| h.links_at).collect();
+        assert_eq!(links, [None, ms(7000), ms(5000), ms(5250)]);
+        let s = star("2:0", Some("1500"));
+        let arrivals: Vec<Option<Duration>> = s.hosts.iter().map(|h| h.arrive_at).collect();
+        assert_eq!(arrivals, [None, ms(6500), ms(5000), ms(6500)]);
+        for bad in ["0:2", "4:2", "1:-1", "1:2 1:3", "1"] {
+            let refused = std::panic::catch_unwind(|| star(bad, None)).is_err();
+            assert!(refused, "JOINS={bad}");
+        }
     }
 }

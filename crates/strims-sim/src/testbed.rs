@@ -10,7 +10,9 @@
 //!   twin's ([`calibration_star`]), with what the testbed measured in place
 //!   of what the twin schedules: the seed's uplink steps (steps.log), the
 //!   competing uploads' starts (compete.log) and each viewer's join
-//!   (`JOINS`). Time is the twin's: the stream starts 5 s into the run.
+//!   (`JOINS`, which is the twin's own knob unless the joins draw an
+//!   arrivals profile). Time is the twin's: the stream starts 5 s into the
+//!   run.
 //! - **The nodes.** Each node's lines (`node-<i>.jsonl`) carry its records
 //!   (`strims_testbed::node`'s `rec`, made by the functions strims-sim's
 //!   own nodes' samples go through, [`strims_testbed::record`]): its meter
@@ -266,7 +268,9 @@ fn num(x: f64) -> String {
 /// always; the scheduler's logs the nodes kept (run.sh's `FORECAST=1`,
 /// `SPEC=1`: `STRIMS_SIM_FORECAST=1`, `STRIMS_SIM_SPEC=1`), so the twin
 /// writes the log tables the run does; the viewers, the seed's uplink and
-/// the stream's length always;
+/// the stream's length always; the viewers' joins (`JOIN_AT`, and each of
+/// `JOINS`'s to the ms, `STRIMS_SIM_CAL_JOINS`: [`Run::read`] leaves the
+/// latter out where its caller names the arrivals profile they drew);
 /// the other links' settings where they aren't the twin's defaults; the
 /// seed's steps as factors of its uplink (`STRIMS_SIM_CAL_SEED_UP_SCALE`);
 /// both tbf buckets (run.sh's 3028 bytes where unset) and the peak rates
@@ -368,6 +372,29 @@ pub fn knobs_of(
         } else if ms > 0 {
             put("STRIMS_SIM_CAL_JOIN_AT_MS", ms.to_string());
         }
+    }
+    // Each viewer's own join (JOINS), to the ms --join-at takes, as the
+    // twin's knob takes it: whole seconds as `2`, the rest as `2.25`.
+    if let Some(j) = get("JOINS").filter(|j| !j.trim().is_empty()) {
+        let (mut joins, mut named) = (Vec::new(), Vec::new());
+        for pair in j.split_whitespace() {
+            let parsed = pair.split_once(':').and_then(|(i, s)| {
+                let (i, s): (usize, f64) = (i.parse().ok()?, s.parse().ok()?);
+                (s.is_finite() && s >= 0.0).then(|| (i, (s * 1000.0).round() as u64))
+            });
+            match parsed {
+                Some((i, ms)) if (1..=viewers).contains(&i) && !named.contains(&i) => {
+                    named.push(i);
+                    joins.push(format!("{i}:{}", num(ms as f64 / 1000.0)));
+                }
+                _ => {
+                    return Err(format!(
+                        "JOINS: {pair} isn't <viewer 1..={viewers}>:<seconds>, once a viewer"
+                    ));
+                }
+            }
+        }
+        put("STRIMS_SIM_CAL_JOINS", joins.join(" "));
     }
     if let Some(steps) = get("SEED_UP_STEPS").filter(|s| !s.trim().is_empty()) {
         let mut scale = Vec::new();
@@ -575,11 +602,9 @@ impl Run {
         // Each viewer's join (JOINS) is a draw of an arrivals profile where
         // the caller names it (STRIMS_SIM_ARRIVALS, as a tier matrix's
         // knobs do), which the twin draws its own of; else the joins
-        // themselves, which no knob takes.
-        if let Some(j) = settings.get("JOINS").filter(|j| !j.trim().is_empty())
-            && !knobs.contains_key("STRIMS_SIM_ARRIVALS")
-        {
-            knobs.insert("TESTBED_JOINS".to_owned(), j.clone());
+        // themselves, the twin's STRIMS_SIM_CAL_JOINS.
+        if knobs.contains_key("STRIMS_SIM_ARRIVALS") {
+            knobs.remove("STRIMS_SIM_CAL_JOINS");
         }
         let viewers: usize = knobs
             .get("STRIMS_SIM_CAL_VIEWERS")
@@ -767,7 +792,9 @@ impl Run {
                     && i > 0
                     && let Some(h) = s.hosts.get_mut(i)
                 {
-                    h.arrive_at = Some(LEAD + Duration::from_secs_f64(at.max(0.0)));
+                    // To the ms, as --join-at takes it.
+                    h.arrive_at =
+                        Some(LEAD + Duration::from_millis((at.max(0.0) * 1000.0).round() as u64));
                 }
             }
         }
@@ -3215,16 +3242,37 @@ mod tests {
         std::fs::remove_dir_all(&other).unwrap();
     }
 
+    /// A run's joins are its twin's knob, to the ms its nodes took them,
+    /// unless they draw an arrivals profile its caller names; a join that
+    /// names no viewer of the run's is an error.
     #[test]
-    fn a_runs_joins_key_it_unless_they_draw_its_arrivals() {
+    fn a_runs_joins_are_its_twins_knob_unless_they_draw_its_arrivals() {
         let dir = fixture("joins");
         let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
-        std::fs::write(dir.join("settings"), format!("{settings}JOINS=1:4\n")).unwrap();
-        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
-        assert_eq!(run.knobs["TESTBED_JOINS"], "1:4");
+        let joins = |j: &str| {
+            std::fs::write(dir.join("settings"), format!("{settings}JOINS={j}\n")).unwrap();
+        };
+        let ms = |m: u64| Some(Duration::from_millis(m));
+        for (j, knob, at) in [
+            ("1:4.0", "1:4", 9000),
+            ("1:10.2504", "1:10.25", 15_250),
+            ("1:0", "1:0", 5000),
+        ] {
+            joins(j);
+            let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+            assert_eq!(run.knobs["STRIMS_SIM_CAL_JOINS"], knob);
+            assert!(!run.knobs.keys().any(|k| k.starts_with("TESTBED_J")));
+            let arrivals: Vec<Option<Duration>> =
+                run.scenario().hosts.iter().map(|h| h.arrive_at).collect();
+            assert_eq!(&arrivals[..2], [None, ms(at)], "JOINS={j}");
+        }
         let drawn = BTreeMap::from([("STRIMS_SIM_ARRIVALS".to_owned(), "trickle".to_owned())]);
         let run = Run::read(&dir, &drawn).unwrap();
-        assert_eq!(run.knobs.get("TESTBED_JOINS"), None);
+        assert_eq!(run.knobs.get("STRIMS_SIM_CAL_JOINS"), None);
+        for bad in ["2:4", "1:4 1:5"] {
+            joins(bad);
+            assert!(Run::read(&dir, &BTreeMap::new()).is_err(), "JOINS={bad}");
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
