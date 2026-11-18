@@ -344,7 +344,9 @@ fn pairs(get: &impl Fn(&str) -> Option<String>, name: &str) -> Vec<(f64, f64)> {
 /// whatever the seed doesn't push its viewers pull from it, so its load is
 /// the viewers times the stream rate), or as the topology says. No jitter
 /// or loss; fixed delays; no upload limits unless
-/// `STRIMS_SIM_CAL_RATE_LIMIT_PCT` sets them; send buffers.
+/// `STRIMS_SIM_CAL_RATE_LIMIT_PCT` sets them; send buffers; as browsers,
+/// the signalling relay on the hosts' bridge
+/// ([`Scenario::signal_on_bridge`]), as the testbed's.
 pub fn calibration_star(c: &Calibration) -> Scenario {
     let mut s = Scenario::new("calibration_star");
     let link =
@@ -525,6 +527,7 @@ pub fn calibration_star(c: &Calibration) -> Scenario {
     };
     s.duration = secs(5 + c.secs + 10);
     s.transfer_samples = true;
+    s.signal_on_bridge = true;
     striped(s, STRIPES, ADAPTIVE)
 }
 

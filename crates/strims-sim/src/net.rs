@@ -82,8 +82,8 @@ use strims_base::time::Time;
 use strims_node::config::LinkSink;
 use strims_node::event::{LinkEvent, SampleSource, WriteWait};
 use strims_node::{
-    CaptureSample, ChannelPacer, HOST_POLL, HostPacer, HostSum, LinkProbe, Net, TcpOptions,
-    TcpSocketConfig, TurmoilNet,
+    CaptureSample, ChannelPacer, HOST_POLL, HostPacer, HostSum, LinkProbe, LinkSetup, Net,
+    TcpOptions, TcpSocketConfig, TurmoilNet,
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -298,19 +298,31 @@ impl SendBuffers {
 impl SendBuffers {
     /// `conn` carries a data channel of `cap` bytes buffered at most, sent
     /// as `profile` sends (its chunks, and whether its buffered amount
-    /// counts the flight), its writer paced if `paced`.
-    fn open_channel(&self, conn: ConnKey, cap: u64, profile: &SctpProfile, paced: bool) {
+    /// counts the flight).
+    fn open_channel(&self, conn: ConnKey, cap: u64, profile: &SctpProfile) {
         self.with(|b| {
             if let Some(c) = b.conns.get_mut(&conn) {
                 c.channel = Some((cap, Chunking::new(profile)));
                 // The browser's `DcSocket::new`: half the channel's cap.
                 c.threshold = cap / 2;
                 c.flight = profile.buffered_flight;
-                c.pacer = paced.then(ChannelPacer::default);
-                c.shown = (paced && profile.amount_at_sends).then_some(0);
-                if paced {
-                    b.hosts.entry(conn.0.ip()).or_default().channels.push(conn);
-                }
+            }
+        });
+    }
+
+    /// Data channel `conn`'s writer paces it from now on, as a node's page
+    /// paces its link's messages, among its host's paced channels, and on a
+    /// stack whose page counts the amount (`profile`'s), counts it from
+    /// none.
+    fn pace(&self, conn: ConnKey, profile: &SctpProfile) {
+        self.with(|b| {
+            if let Some(c) = b.conns.get_mut(&conn)
+                && c.channel.is_some()
+                && c.pacer.is_none()
+            {
+                c.pacer = Some(ChannelPacer::default());
+                c.shown = profile.amount_at_sends.then_some(0);
+                b.hosts.entry(conn.0.ip()).or_default().channels.push(conn);
             }
         });
     }
@@ -375,19 +387,18 @@ impl SimNet {
 
     /// `stream`'s connection carries a modelled data channel from now on,
     /// buffering `cap` bytes at most and sent as `profile` sends (see the
-    /// module docs and the WAN scheduler). Returns the connection, or
-    /// `None` without send buffers and the WAN model.
+    /// module docs and the WAN scheduler), unpaced. Returns the
+    /// connection, or `None` without send buffers and the WAN model.
     pub fn open_channel_as(
         &self,
         stream: &SimTcpStream,
         cap: u64,
         profile: SctpProfile,
-        paced: bool,
     ) -> Option<ConnKey> {
         let ((key, b), wan) = (stream.conn.as_ref()?, self.wan.as_ref()?);
         let mut guard = wan.lock();
         let sched = guard.as_mut()?;
-        b.open_channel(*key, cap, &profile, paced);
+        b.open_channel(*key, cap, &profile);
         sched.open_channel(*key, profile);
         Some(*key)
     }
@@ -953,10 +964,28 @@ impl Net for SimNet {
         self.rtc_stack.is_some()
     }
 
-    /// As the host's stack sends ([`SimNet::with_rtc_stack`]).
+    /// As the host's stack sends ([`SimNet::with_rtc_stack`]), unpaced
+    /// while the stack's own flights set it up.
     fn open_channel(&self, stream: &SimTcpStream, cap: usize) -> bool {
         self.rtc_stack
-            .is_some_and(|p| self.open_channel_as(stream, cap as u64, p, true).is_some())
+            .is_some_and(|p| self.open_channel_as(stream, cap as u64, p).is_some())
+    }
+
+    /// The page's writer paces the channel from now on, its pacer and its
+    /// host's seeing none of the setup's flights, as a browser's stack
+    /// sends its DTLS records and SCTP's control chunks past the page's
+    /// `DcSocket`; and its association's round trips start here, as
+    /// dcSCTP's estimate takes no sample from its handshake.
+    fn channel_up(&self, stream: &SimTcpStream) {
+        let (Some((key, b)), Some(profile)) = (stream.conn.as_ref(), self.rtc_stack) else {
+            return;
+        };
+        b.pace(*key, &profile);
+        if let Some(wan) = &self.wan
+            && let Some(sched) = wan.lock().as_mut()
+        {
+            sched.channel_up(*key);
+        }
     }
 
     /// str0m's channels stand for a native node's in-process ones. Its
@@ -971,6 +1000,17 @@ impl Net for SimNet {
     /// pass) hold the burst in the runner and cut it finer.
     fn channels_in_process(&self) -> bool {
         self.rtc_stack.is_some_and(|p| p.native())
+    }
+
+    /// The host's stack's ([`SimNet::with_rtc_stack`]): Chromium's,
+    /// Firefox's, else str0m's.
+    fn link_setup(&self) -> LinkSetup {
+        use crate::wan::SctpProfile;
+        match self.rtc_stack {
+            Some(p) if p == SctpProfile::CHROMIUM => LinkSetup::CHROMIUM,
+            Some(p) if p == SctpProfile::FIREFOX => LinkSetup::FIREFOX,
+            _ => LinkSetup::STR0M,
+        }
     }
 
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send {
@@ -1074,7 +1114,8 @@ mod tests {
                 b.with(|x| {
                     x.conns.entry(key).or_default().log = Some((u64::from(i), sink.clone()));
                 });
-                b.open_channel(key, 1 << 20, profile, true);
+                b.open_channel(key, 1 << 20, profile);
+                b.pace(key, profile);
                 key
             })
             .collect();
@@ -1103,6 +1144,52 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// A channel's setup goes past its writer's pacers, as a browser's
+    /// stack sends its handshake past the page's: its flights go at once,
+    /// whatever their bytes, and neither pacer counts them; once it is up
+    /// its writer paces it, among its host's channels.
+    #[test]
+    fn a_channel_is_paced_from_its_setups_end() {
+        for p in [SctpProfile::CHROMIUM, SctpProfile::FIREFOX] {
+            let b = SendBuffers::new(SendBuffer {
+                uplink_queue: std::time::Duration::from_millis(50),
+                window: true,
+            });
+            let key: ConnKey = (
+                "10.0.0.1:1000".parse().unwrap(),
+                "10.0.1.1:2000".parse().unwrap(),
+            );
+            b.with(|x| {
+                x.conns.entry(key).or_default();
+            });
+            b.open_channel(key, 1 << 20, &p);
+            let (_, w) = waker();
+            for _ in 0..4 {
+                assert!(b.channel_write(&key, ms(0), &w) == Some(ChannelWrite::Go));
+                b.wrote(&key, FLOOR as usize, true, ms(0));
+            }
+            b.with(|x| {
+                assert!(x.conns[&key].pacer.is_none());
+                assert!(
+                    x.hosts
+                        .get(&key.0.ip())
+                        .is_none_or(|h| h.channels.is_empty())
+                );
+            });
+            let _ = b.admit(key, 4 * FLOOR as usize, ms(0));
+            let _ = b.acked(key, 4 * FLOOR as usize, ms(0));
+            b.pace(key, &p);
+            b.with(|x| {
+                assert!(x.conns[&key].pacer.is_some());
+                assert_eq!(x.conns[&key].shown, p.amount_at_sends.then_some(0));
+                assert_eq!(x.hosts[&key.0.ip()].channels, [key]);
+            });
+            assert!(b.channel_write(&key, ms(1), &w) == Some(ChannelWrite::Go));
+            b.wrote(&key, FLOOR as usize, true, ms(1));
+            assert!(b.channel_write(&key, ms(1), &w) == Some(ChannelWrite::Wait));
+        }
     }
 
     /// A writer refused at its own cap waits for the amount to fall to its

@@ -1188,19 +1188,7 @@ impl Report {
             None if hs.webrtc => "str0m",
             None => "model-tcp",
         };
-        // What it sends is delayed by the latency faults at time 0 that
-        // time it, where they all agree.
-        let mut delays =
-            s.faults
-                .iter()
-                .filter(|f| f.at.is_zero())
-                .filter_map(|f| match &f.fault {
-                    crate::Fault::LatencyFrom(from, _, d) if from.contains(&h) => Some(*d),
-                    crate::Fault::Latency(a, b, d) if a.contains(&h) || b.contains(&h) => Some(*d),
-                    _ => None,
-                });
-        let first = delays.next();
-        let delay = first.filter(|&d| delays.all(|x| x == d));
+        let delay = s.egress_delay(h);
         let us = |d: Duration| i64::try_from(d.as_micros()).unwrap_or(i64::MAX);
         HostRow {
             role,

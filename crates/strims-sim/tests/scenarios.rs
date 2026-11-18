@@ -3823,6 +3823,128 @@ fn the_twins_viewers_link_their_swarm_at_their_join() {
     );
 }
 
+/// A browser's link takes its stacks' trips at its path's round trip
+/// (strims-node's `model_rtc`), on a quiet path of one delay `d` either
+/// way and the signalling relay on the bridge: the joiner's offer is ready
+/// its stack's `offer_ready` after its join and reaches the seed a delay
+/// later, the seed checks it (a round trip) and sends its hello, its answer
+/// ready its `answer_ready` after the offer and a delay on its way, then
+/// the joiner's check (a round trip), DTLS 1.3's server flight and the
+/// client's last (a round trip), the SCTP INITs and cookies (a round trip)
+/// and vnic's `PeerInit` (a round trip): the joiner's peer is up
+/// `offer_ready + answer_ready` and five round trips after its join, the
+/// seed's a round trip and a half sooner. A Firefox seed sends its hello
+/// once the joiner's check reaches it, so the hello comes as that check
+/// succeeds; a Chromium seed's comes earlier, and a Firefox joiner drops
+/// it and waits for the first of Chromium's resends, at twice the seed's
+/// check and doubling, to come after it, each on the next tick of
+/// Chromium's metronome. The sim's whole-millisecond steps add about a
+/// millisecond a flight, the same at either round trip.
+#[test]
+fn browser_links_take_their_stacks_trips() {
+    use strims_node::LinkSetup;
+    const JOIN_MS: u64 = 6000;
+    // How much later a resend on its stack's tick may come.
+    const TICK_MS: u64 = 16;
+    let ms = |t: Duration| t.as_millis() as u64;
+    // Each side's peer up after the join, by the trips (joiner, seed), and
+    // what a resend's tick may add.
+    let want = |seed: &LinkSetup, joiner: &LinkSetup, d: u64| {
+        let rtt = 2 * d;
+        let checked = ms(joiner.offer_ready) + d + rtt;
+        let reached = ms(joiner.offer_ready) + ms(seed.answer_ready) + rtt + d;
+        let hello_sent = if seed.hello_after_peer_check {
+            checked.max(reached)
+        } else {
+            checked
+        };
+        let writable = ms(joiner.offer_ready) + ms(seed.answer_ready) + 2 * rtt;
+        // The server's flight: once its check succeeds, at a hello it has
+        // kept, or at the first of the client's resends to come after it.
+        let (flight, tick) = if joiner.drops_early_hello && hello_sent + d < writable {
+            let mut wait = ms(seed.resend_min).max(u64::from(seed.resend_rtts) * rtt);
+            let mut at = hello_sent + wait;
+            while at + d < writable {
+                wait *= 2;
+                at += wait;
+            }
+            (
+                at + d,
+                if seed.resend_tick.is_some() {
+                    TICK_MS
+                } else {
+                    0
+                },
+            )
+        } else {
+            (writable.max(hello_sent + d), 0)
+        };
+        ((flight + 3 * rtt, flight + 2 * rtt + d), tick)
+    };
+    let profile = |s: &LinkSetup| {
+        if s.name == LinkSetup::FIREFOX.name {
+            SctpProfile::FIREFOX
+        } else {
+            SctpProfile::CHROMIUM
+        }
+    };
+    let got = |seed: &LinkSetup, joiner: &LinkSetup, d: u64| {
+        let mut c = collapse_case(1, 20, 3);
+        c.harness_links = true;
+        c.seed_delay_ms = d;
+        c.viewer_delay_ms = d;
+        c.joins = vec![(1, JOIN_MS - 5000)];
+        let stacks = [Some(profile(seed)), Some(profile(joiner))];
+        let name = format!("browser_links_{}_{}_{d}", seed.name, joiner.name);
+        let r = sweep_n(
+            &name,
+            1,
+            |s| {
+                let mut s = calibration_star_scenario(s, &c);
+                s.over_webrtc(&stacks);
+                s
+            },
+            |_| Ok(()),
+        );
+        let up = |who: &str, dir: &str| {
+            r.first()?.trace.iter().find_map(|l| {
+                let (t, rest) = l.split_once(' ')?;
+                rest.strip_prefix(who)?
+                    .strip_prefix(" peer+ ")?
+                    .strip_prefix(dir)?
+                    .ends_with("WebRtc")
+                    .then(|| t.parse::<u64>().ok())?
+                    .map(|t| t.saturating_sub(JOIN_MS))
+            })
+        };
+        let up = (up("v0", "to seed"), up("seed", "from v0"));
+        (up.0.unwrap_or(u64::MAX), up.1.unwrap_or(u64::MAX))
+    };
+    for seed in [LinkSetup::CHROMIUM, LinkSetup::FIREFOX] {
+        for joiner in [LinkSetup::CHROMIUM, LinkSetup::FIREFOX] {
+            let pair = format!("{} to a {} seed", joiner.name, seed.name);
+            let runs = [10, 30].map(|d| (d, got(&seed, &joiner, d), want(&seed, &joiner, d)));
+            for &(d, g, (w, tick)) in &runs {
+                for (g, w) in [(g.0, w.0), (g.1, w.1)] {
+                    assert!(
+                        (w..=w + 20 + tick).contains(&g),
+                        "{pair} at {d} ms: a peer up {g} ms after the join, its trips {w}"
+                    );
+                }
+            }
+            // Past the trips by as much at either round trip, but for a
+            // resend's tick.
+            let [near, far] =
+                runs.map(|(_, g, (w, _))| (g.0 as i64 - w.0 as i64, g.1 as i64 - w.1 as i64));
+            let slack = 4 + runs[0].2.1.max(runs[1].2.1) as i64;
+            assert!(
+                (far.0 - near.0).abs() <= slack && (far.1 - near.1).abs() <= slack,
+                "{pair}: past the trips by {near:?} ms at 10 ms, {far:?} at 30"
+            );
+        }
+    }
+}
+
 /// The twin's buckets send at the testbed's peak (`run.sh`'s
 /// `SEED_PEAK_MBIT`), its link classes' too, as `testbed_bench --sim` does.
 #[test]

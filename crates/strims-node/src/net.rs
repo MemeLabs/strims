@@ -19,6 +19,7 @@ use strims_vnic::TcpOptions;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::config::TcpSocketConfig;
+use crate::model_rtc::LinkSetup;
 
 /// TCP and UDP sockets. Addresses are `host:port` strings, resolved by the
 /// implementation (DNS for tokio, turmoil's host names in a simulation).
@@ -89,6 +90,13 @@ pub trait Net: Clone + Send + Sync + 'static {
         false
     }
 
+    /// The modelled channel on `stream` is up: what it carries from now
+    /// on is its link's, which a browser's page writes and paces, where its
+    /// setup's flights were its stack's own. The default does nothing.
+    fn channel_up(&self, stream: &Self::TcpStream) {
+        let _ = stream;
+    }
+
     /// Whether the modelled channels stand for a native node's in-process
     /// ones (str0m's, written by the node task), not a browser's (written
     /// by the driver from its write buffers): the driver then hands their
@@ -97,6 +105,12 @@ pub trait Net: Clone + Send + Sync + 'static {
     /// default: a browser's.
     fn channels_in_process(&self) -> bool {
         false
+    }
+
+    /// How the node's WebRTC stack sets up a connection over modelled
+    /// channels (`crate::model_rtc`). The default: str0m's.
+    fn link_setup(&self) -> LinkSetup {
+        LinkSetup::STR0M
     }
 
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send;

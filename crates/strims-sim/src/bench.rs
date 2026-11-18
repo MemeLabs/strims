@@ -497,7 +497,7 @@ impl BenchNet for SimNet {
         cap: usize,
         profile: SctpProfile,
     ) -> Option<ChannelProbe> {
-        let conn = self.open_channel_as(s, cap as u64, profile, false)?;
+        let conn = self.open_channel_as(s, cap as u64, profile)?;
         Some(ChannelProbe {
             conn,
             buffers: self.buffers()?,

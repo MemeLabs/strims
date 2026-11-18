@@ -674,6 +674,12 @@ pub struct Scenario {
     /// transfer discovery's peer index searches, then a peer exchange to
     /// each host found. `None`: the scenario's links are the topology.
     pub discovery: Option<usize>,
+    /// The browsers' signalling relay ([`Scenario::over_webrtc`]) sits on
+    /// the hosts' bridge, unshaped, as the Docker testbed's does
+    /// (`hack/testbed/run.sh`'s tb-relay): each host reaches it after its
+    /// own egress delay ([`Scenario::egress_delay`]), and it reaches each
+    /// at once. Off, it is a host of the WAN.
+    pub signal_on_bridge: bool,
     /// Experiment flags (`STRIMS_SIM_EXP`), each one of [`EXP_FLAGS`].
     pub exp: BTreeSet<&'static str>,
     /// How far each host's clock is off true time ([`ClockSkew`]), at most
@@ -963,6 +969,7 @@ impl Scenario {
             tcp_segment: None,
             stored_chunks: false,
             discovery: None,
+            signal_on_bridge: false,
             exp: BTreeSet::new(),
             clock_skew: ClockSkew::Real,
             timer_lateness: true,
@@ -1096,6 +1103,9 @@ impl Scenario {
     /// Returns the relay.
     pub fn over_webrtc(&mut self, stacks: &[Option<SctpProfile>]) -> HostIx {
         let (relay, net) = self.signalling();
+        if self.signal_on_bridge {
+            self.bridge(relay);
+        }
         for l in &mut self.links {
             l.transport = Transport::WebRtc(net);
         }
@@ -1108,6 +1118,37 @@ impl Scenario {
             self.link(h, relay, Transport::Tcp);
         }
         relay
+    }
+
+    /// Puts `relay` on the hosts' bridge ([`Scenario::signal_on_bridge`]):
+    /// each host before it with an egress delay reaches it after that
+    /// delay, and it reaches every one at once.
+    fn bridge(&mut self, relay: HostIx) {
+        for h in 0..relay {
+            if let Some(d) = self.egress_delay(h) {
+                self.at(Duration::ZERO, Fault::LatencyFrom(vec![h], vec![relay], d));
+            }
+        }
+        self.at(
+            Duration::ZERO,
+            Fault::LatencyFrom(vec![relay], (0..relay).collect(), Duration::ZERO),
+        );
+    }
+
+    /// The delay host `h`'s egress holds what it sends: that of the latency
+    /// faults at time 0 that time it, where they all agree.
+    pub fn egress_delay(&self, h: HostIx) -> Option<Duration> {
+        let mut delays = self
+            .faults
+            .iter()
+            .filter(|f| f.at.is_zero())
+            .filter_map(|f| match &f.fault {
+                Fault::LatencyFrom(from, _, d) if from.contains(&h) => Some(*d),
+                Fault::Latency(a, b, d) if a.contains(&h) || b.contains(&h) => Some(*d),
+                _ => None,
+            });
+        let first = delays.next();
+        first.filter(|&d| delays.all(|x| x == d))
     }
 
     /// Adds the signalling relay: a host every other may link to (in WAN

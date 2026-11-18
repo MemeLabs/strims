@@ -157,6 +157,7 @@ pub use event::{
     RunnerMetrics, RunnerPeerInfo, StoreInfo, SwarmInfo, WriterInfo,
 };
 pub use link_tls::LinkTls;
+pub use model_rtc::{Flights, LinkSetup};
 pub use native::spawn_with_tls;
 #[cfg(feature = "turmoil")]
 pub use net::TurmoilNet;

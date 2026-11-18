@@ -507,6 +507,17 @@ impl Assoc {
         }
     }
 
+    /// Forgets the round trips sampled so far, its timeout back at its
+    /// profile's first: chunks sent before now sample none.
+    fn restart_round_trips(&mut self) {
+        self.srtt_ms = 0;
+        self.rttvar_ms = 0.0;
+        self.srtt = Duration::ZERO;
+        self.rttvar = Duration::ZERO;
+        self.rto = self.profile.rto_initial;
+        self.measure_from = self.next_seq;
+    }
+
     pub(super) fn profile(&self) -> SctpProfile {
         self.profile
     }
@@ -633,6 +644,15 @@ impl Scheduler {
     /// `conn` carries a data channel from now on, sent as `profile` sends.
     pub(crate) fn open_channel(&mut self, conn: ConnKey, profile: SctpProfile) {
         self.assocs.insert(conn, Assoc::new(profile));
+    }
+
+    /// Channel `conn` is up: its round trips start from its next chunk,
+    /// as an association's estimate takes none from its handshake, whose
+    /// flights the model sends as data.
+    pub(crate) fn channel_up(&mut self, conn: ConnKey) {
+        if let Some(a) = self.assocs.get_mut(&conn) {
+            a.restart_round_trips();
+        }
     }
 
     /// Data record `id` of channel `conn` was written by `at`, the last of
@@ -1413,6 +1433,7 @@ fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
     let flight_before = a.in_flight;
     if sack.above.is_empty()
         && sack.cum > cum0
+        && sack.cum >= a.measure_from
         && let Some(c) = a.out.get(&sack.cum)
         && c.nsent == 1
     {
@@ -1539,6 +1560,52 @@ mod tests {
                 pieces
             })
             .collect()
+    }
+
+    /// An association that comes up forgets the round trips its setup's
+    /// flights sampled: its timeout is its profile's first again, a chunk
+    /// sent before samples none, and its link's first chunk samples.
+    #[test]
+    fn an_association_up_starts_its_round_trips() {
+        let t = |ms: i64| Time::EPOCH + Duration::from_millis(ms);
+        let p = SctpProfile::CHROMIUM;
+        let mut a = Assoc::new(p);
+        a.launch(t(0), 1, 10, 100);
+        a.launch(t(0), 2, 11, 100);
+        rfc_sacked(
+            &mut a,
+            t(20),
+            &Sack {
+                cum: 10,
+                above: Vec::new(),
+            },
+            9,
+        );
+        assert_eq!(a.srtt, Duration::from_millis(20), "the setup's sample");
+        assert_ne!(a.rto, p.rto_initial);
+        a.restart_round_trips();
+        assert_eq!((a.srtt, a.rto), (Duration::ZERO, p.rto_initial));
+        rfc_sacked(
+            &mut a,
+            t(30),
+            &Sack {
+                cum: 11,
+                above: Vec::new(),
+            },
+            10,
+        );
+        assert_eq!(a.srtt, Duration::ZERO, "a setup chunk acked after");
+        a.launch(t(40), 3, 12, 100);
+        rfc_sacked(
+            &mut a,
+            t(65),
+            &Sack {
+                cum: 12,
+                above: Vec::new(),
+            },
+            11,
+        );
+        assert_eq!(a.srtt, Duration::from_millis(25), "the link's first");
     }
 
     #[test]
