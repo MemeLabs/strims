@@ -150,21 +150,16 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
             }
             next += 1;
         }
-        // The counters as they stood at each edge passed: before this
-        // walk's sends, and without adding to the schedule.
-        if let Some((width, next_edge)) = bins.as_mut()
-            && sim.elapsed() >= *next_edge
-            && let Some(s) = w.wan.lock().as_ref()
-        {
-            let c: Vec<_> = (0..spec.hosts.len()).map(|h| s.up_counters(h)).collect();
-            while sim.elapsed() >= *next_edge {
-                w.record_wire_bin(c.clone());
-                *next_edge += *width;
-            }
-        }
+        // The walk hands its uplinks the step's writes and runs their
+        // events up to the step's time: an edge the step passed over is
+        // read before them, which come after it, and one at the step's
+        // time once they are in.
+        let now = sim.elapsed();
+        read_edges(w, spec.hosts.len(), &mut bins, |edge| edge < now);
         if let Some(s) = w.wan.lock().as_mut() {
             s.walk(&sim)?;
         }
+        read_edges(w, spec.hosts.len(), &mut bins, |edge| edge <= now);
         match sim.step() {
             Ok(true) => break,
             Ok(false) => {}
@@ -199,6 +194,30 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
         );
     }
     Ok((secs, wan))
+}
+
+/// Records `hosts` hosts' uplink counters at each of `bins`' edges (its
+/// width and next edge) that `due` takes, in order, without adding to the
+/// schedule: what each uplink had carried by the edge, and the rest as
+/// they stand.
+fn read_edges(
+    w: &World,
+    hosts: usize,
+    bins: &mut Option<(Duration, Duration)>,
+    due: impl Fn(Duration) -> bool,
+) {
+    let Some((width, next_edge)) = bins.as_mut() else {
+        return;
+    };
+    let wan = w.wan.lock();
+    let Some(s) = wan.as_ref() else {
+        return;
+    };
+    while due(*next_edge) {
+        let edge = crate::wan::sim_time(*next_edge);
+        w.record_wire_bin((0..hosts).map(|h| s.up_counters(h, edge)).collect());
+        *next_edge += *width;
+    }
 }
 
 fn names(w: &World, hs: &[HostIx]) -> String {

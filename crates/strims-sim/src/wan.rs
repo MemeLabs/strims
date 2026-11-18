@@ -142,7 +142,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
-use strims_wan::network::{RTO_MIN, overflows};
+use strims_wan::network::{Carried, Departures, RTO_MIN, overflows};
 use strims_wan::wire::{tcp_wire, tx_time, udp_wire};
 use strims_wan::{Carrier, Network, Options, Site};
 use turmoil::{Protocol, Segment, Sim};
@@ -169,6 +169,16 @@ pub use sctp::SctpProfile;
 /// carries depends on those sizes, so the loss of one datagram would make
 /// the handshake recover differently from run to run.
 const NOMINAL_DATAGRAM: usize = 1228;
+
+/// An acknowledgement alone that its link charged `wire` bytes, as its
+/// uplink carries it.
+fn alone(wire: usize) -> Carried {
+    Carried {
+        bytes: wire as u64,
+        packets: 1,
+        small_packets: 0,
+    }
+}
 
 /// The run's clock at `elapsed` since its start.
 pub(crate) fn sim_time(elapsed: std::time::Duration) -> Time {
@@ -417,13 +427,29 @@ const HYSTART_SAMPLES: u32 = 8;
 const HYSTART_LOW_WINDOW: f64 = 16.0 * MSS;
 
 /// A host's uplink counters in WAN mode (`Scheduler::up_counters`), as the
-/// tables name them: wire bytes, packets and small packets through the
-/// uplink, stream messages that lost a packet, packets lost, the window
-/// model's window falls and timeouts, and the acknowledgements alone its
-/// uplink carried, packets and wire bytes: TCP's pure ACKs, then the data
-/// channels' SACKs. The acknowledgements aren't in the first three; the
-/// two kinds add up to a host's [`WanHostReport::acks`] and
-/// [`WanHostReport::ack_bytes`].
+/// tables name them: the bytes its link charged, the packets and the small
+/// packets its uplink carried, its resends of stream data its path lost,
+/// packets lost, the window model's window falls and timeouts, and the
+/// acknowledgements alone its uplink carried, packets and the bytes its
+/// link charged: TCP's pure ACKs, then the data channels' SACKs. What the
+/// uplink carried counts each packet once its last bit has left
+/// ([`Network::up_carried`]), as a capture past the queue sees it; a frame
+/// its queue dropped never left. The acknowledgements aren't in the first
+/// three. [`WanHostReport::acks`] and [`WanHostReport::ack_bytes`] count
+/// both kinds as their uplink took them, so at the run's end they hold
+/// these and those still queued, and those a crash's queue forgot, which
+/// never left.
+///
+/// A resend counts once it has left: the window model's next transmission
+/// of a segment its path lost a packet of (the tail from that packet, or
+/// the whole segment from its first), the bytes its uplink carried before,
+/// as a testbed capture sees a resend; a resend of what its own queue
+/// dropped is no retransmit (that frame counts in the packets lost).
+/// Without the window model, a stream message that lost a packet arrives
+/// late by its [`retransmission`](strims_wan::network::retransmission)
+/// delay, and its resend counts that delay after the message left.
+/// [`EndStats::retransmits`](strims_wan::network::EndStats::retransmits)
+/// counts the losses themselves, as their messages were handed over.
 ///
 /// The packets lost are the host's datagrams the path lost (its sites'
 /// loss), and with the window model the packets a full access queue lost
@@ -544,6 +570,10 @@ struct Flow {
     /// it dropped, by sequence number ([`Tail`]). Bound: the segments in
     /// flight.
     tails: BTreeMap<u64, Tail>,
+    /// Segments the path lost a packet of, by sequence number, until the
+    /// uplink sends them again: their next transmission resends bytes it
+    /// carried. Bound: the segments in flight.
+    path_lost: BTreeSet<u64>,
     /// The bytes of the connection's stream its new segments have carried:
     /// the next one's first byte, as an offset from the stream's first.
     off_end: u64,
@@ -646,6 +676,7 @@ impl Default for Flow {
             loss_high: None,
             sacked: BTreeMap::new(),
             tails: BTreeMap::new(),
+            path_lost: BTreeSet::new(),
             off_end: 0,
         }
     }
@@ -1226,6 +1257,9 @@ pub(crate) struct Scheduler {
     frozen: BTreeSet<(HostIx, HostIx)>,
     partitioned: BTreeSet<(HostIx, HostIx)>,
     tick: Duration,
+    /// The time of the walk running, or of the last: a bin edge is read no
+    /// earlier ([`Scheduler::up_counters`]).
+    walked: Time,
     buffers: Option<SendBuffers>,
     /// Data segments waiting for room in their sender's uplink queue, by
     /// admission time and record: their connection and length. Bound: the
@@ -1280,6 +1314,13 @@ pub(crate) struct Scheduler {
     ack_bytes: Vec<u64>,
     sacks: Vec<u64>,
     sack_bytes: Vec<u64>,
+    /// Per host, what its uplink carried of its pure ACKs and of its SACKs
+    /// alone, each from when it left ([`Scheduler::up_counters`]).
+    ack_out: Vec<Departures>,
+    sack_out: Vec<Departures>,
+    /// Per host, its resends of stream data its path lost, each from when
+    /// it left (packets: one a resend; [`Scheduler::up_counters`]).
+    retx_out: Vec<Departures>,
     /// Per host, the bytes it handed its transports that went out, resends
     /// left out: its wire bytes less these are the transports' framing and
     /// resends ([`Scheduler::sent`]).
@@ -1467,6 +1508,7 @@ impl Scheduler {
             frozen: BTreeSet::new(),
             partitioned: BTreeSet::new(),
             tick: Duration::from(spec.tick),
+            walked: Time::NIL,
             buffers,
             admits: BTreeMap::new(),
             room_moved: Vec::new(),
@@ -1490,6 +1532,9 @@ impl Scheduler {
             ack_bytes: vec![0; spec.hosts.len()],
             sacks: vec![0; spec.hosts.len()],
             sack_bytes: vec![0; spec.hosts.len()],
+            ack_out: vec![Departures::default(); spec.hosts.len()],
+            sack_out: vec![Departures::default(); spec.hosts.len()],
+            retx_out: vec![Departures::default(); spec.hosts.len()],
             app_bytes: vec![0; spec.hosts.len()],
             resent_bytes: vec![0; spec.hosts.len()],
             cross_drops: vec![0; spec.hosts.len()],
@@ -1661,6 +1706,7 @@ impl Scheduler {
     /// One walk, between two steps (see the module docs).
     pub fn walk(&mut self, sim: &Sim<'_>) -> Result<(), String> {
         let now = sim_time(sim.elapsed());
+        self.walked = now;
         self.run_events(now);
         for i in 0..self.cross.len() {
             let Some(&Cross {
@@ -2163,6 +2209,7 @@ impl Scheduler {
             g.acked += len;
             if g.acked >= g.len {
                 f.segments.remove(&seq);
+                f.path_lost.remove(&seq);
             }
         }
         // A head's acknowledgement leaves its tail out; the tail's ends it.
@@ -2468,7 +2515,7 @@ impl Scheduler {
         let ack = tcp_wire(0).0;
         let held = self.held(to, t);
         let depart = self.net.occupy_up(t, to, ack, 1);
-        self.ack_sent(to, self.net.up_charge(to, ack, 1));
+        self.ack_sent(to, self.net.up_charge(to, ack, 1), t, depart);
         let lost = self.net.lost(depart, to, from, 1);
         self.offered(&Offered {
             at: t,
@@ -3109,6 +3156,13 @@ impl Scheduler {
         let t = self
             .net
             .send(at, from, to, head_wire, took, Carrier::Lossless);
+        if self
+            .flows
+            .get_mut(&conn)
+            .is_some_and(|f| f.path_lost.remove(&seq))
+        {
+            self.retransmitted(from, at, t.depart);
+        }
         // What went out of the segment: a tail the queue dropped goes again
         // as a resend.
         let went = (took as usize * MSS as usize).min(len);
@@ -3118,6 +3172,11 @@ impl Scheduler {
             self.resent(from, charge);
         }
         let lost = self.net.first_lost(t.depart, from, to, took);
+        if lost.is_some()
+            && let Some(f) = self.flows.get_mut(&conn)
+        {
+            f.path_lost.insert(seq);
+        }
         offer.transit = Some((t.depart, t.arrival));
         offer.path_lost = lost;
         self.offered(&offer);
@@ -3581,6 +3640,10 @@ impl Scheduler {
         let from = r.from;
         let t = self.net.send(at, r.from, r.to, r.wire, r.packets, carrier);
         self.sent(from, app);
+        if t.retransmit > Duration::ZERO {
+            // Its resend arrives the delay late, so leaves the delay late.
+            self.retransmitted(from, at, t.depart + t.retransmit);
+        }
         offer.transit = Some((t.depart, t.arrival + t.retransmit));
         offer.path_lost = t.dropped.then_some(0);
         self.offered(&offer);
@@ -3793,6 +3856,16 @@ impl Scheduler {
     /// `h` lost power at `now`: its access links forget their queues.
     pub fn crashed(&mut self, h: HostIx, now: Time) {
         self.net.reset(h, now);
+        for d in [
+            self.ack_out.get_mut(h),
+            self.sack_out.get_mut(h),
+            self.retx_out.get_mut(h),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            d.forget(now);
+        }
         let ip_host = &self.ip_host;
         self.flows.retain(|(src, dst), _| {
             ip_host.get(&src.ip()) != Some(&h) && ip_host.get(&dst.ip()) != Some(&h)
@@ -3816,43 +3889,89 @@ impl Scheduler {
         }
     }
 
-    /// `h`'s uplink carried an acknowledgement alone that its link charged
-    /// `wire` bytes ([`Network::up_charge`]: its IP bytes, and its framing
-    /// at a site that charges it).
-    fn ack_sent(&mut self, h: usize, wire: usize) {
+    /// `h`'s uplink took a pure ACK that its link charged `wire` bytes
+    /// ([`Network::up_charge`]: its IP bytes, and its framing at a site that
+    /// charges it), handed to it at `at`, its last bit out at `depart`.
+    fn ack_sent(&mut self, h: usize, wire: usize, at: Time, depart: Time) {
+        self.count_ack(h, wire);
+        let settled = self.settled(at);
+        if let Some(d) = self.ack_out.get_mut(h) {
+            d.add(settled, depart, alone(wire));
+        }
+    }
+
+    /// `h`'s uplink took a SACK alone, as [`Scheduler::ack_sent`] takes a
+    /// pure ACK: an acknowledgement the tables tell apart.
+    fn sack_sent(&mut self, h: usize, wire: usize, at: Time, depart: Time) {
+        self.count_ack(h, wire);
+        if let (Some(n), Some(b)) = (self.sacks.get_mut(h), self.sack_bytes.get_mut(h)) {
+            *n += 1;
+            *b += wire as u64;
+        }
+        let settled = self.settled(at);
+        if let Some(d) = self.sack_out.get_mut(h) {
+            d.add(settled, depart, alone(wire));
+        }
+    }
+
+    /// Counts an acknowledgement alone of `wire` charged bytes among `h`'s.
+    fn count_ack(&mut self, h: usize, wire: usize) {
         if let (Some(n), Some(b)) = (self.acks.get_mut(h), self.ack_bytes.get_mut(h)) {
             *n += 1;
             *b += wire as u64;
         }
     }
 
-    /// `h`'s uplink carried a SACK alone that its link charged `wire`
-    /// bytes: an acknowledgement ([`Scheduler::ack_sent`]) the tables tell
-    /// apart.
-    fn sack_sent(&mut self, h: usize, wire: usize) {
-        self.ack_sent(h, wire);
-        if let (Some(n), Some(b)) = (self.sacks.get_mut(h), self.sack_bytes.get_mut(h)) {
-            *n += 1;
-            *b += wire as u64;
+    /// `h` resent, at `depart`, stream data its path had lost of a message
+    /// handed to its uplink at `at`.
+    fn retransmitted(&mut self, h: usize, at: Time, depart: Time) {
+        let settled = self.settled(at);
+        if let Some(d) = self.retx_out.get_mut(h) {
+            let one = Carried {
+                packets: 1,
+                ..Carried::default()
+            };
+            d.add(settled, depart, one);
         }
     }
 
-    /// Host `h`'s uplink counters so far ([`UP_COUNTERS`]).
-    pub fn up_counters(&self, h: HostIx) -> [u64; UP_COUNTERS.len()] {
+    /// The hand-over time a ledger takes for one at `at`: no later than the
+    /// walk's, at or after which every bin edge is read; a receiver's
+    /// acknowledgement goes as its downlink delivered what it acknowledges,
+    /// which can be past the walk's time.
+    fn settled(&self, at: Time) -> Time {
+        if self.walked.is_nil() {
+            at
+        } else {
+            at.min(self.walked)
+        }
+    }
+
+    /// Host `h`'s uplink counters at `at` ([`UP_COUNTERS`]), no earlier
+    /// than the latest message handed to its uplink: what its uplink
+    /// carried before `at`, each packet from when it left, and the rest as
+    /// they stand.
+    pub fn up_counters(&self, h: HostIx, at: Time) -> [u64; UP_COUNTERS.len()] {
         let s = self.net.stats(h);
-        let at = |v: &Vec<u64>| v.get(h).copied().unwrap_or(0);
+        let n = |v: &Vec<u64>| v.get(h).copied().unwrap_or(0);
+        let out = |v: &Vec<Departures>| v.get(h).map_or_else(Carried::default, |d| d.before(at));
+        let (up, acks, sacks) = (
+            self.net.up_carried(h, at),
+            out(&self.ack_out),
+            out(&self.sack_out),
+        );
         [
-            s.up_bytes,
-            s.up_packets,
-            s.small_packets,
-            s.retransmits,
-            s.drops + at(&self.drop_packets) + at(&self.cross_drop_packets),
-            at(&self.cuts),
-            at(&self.rtos),
-            at(&self.acks).saturating_sub(at(&self.sacks)),
-            at(&self.ack_bytes).saturating_sub(at(&self.sack_bytes)),
-            at(&self.sacks),
-            at(&self.sack_bytes),
+            up.bytes,
+            up.packets,
+            up.small_packets,
+            out(&self.retx_out).packets,
+            s.drops + n(&self.drop_packets) + n(&self.cross_drop_packets),
+            n(&self.cuts),
+            n(&self.rtos),
+            acks.packets,
+            acks.bytes,
+            sacks.packets,
+            sacks.bytes,
         ]
     }
 
@@ -4666,7 +4785,34 @@ mod tests {
         loss: f64,
         seed: u64,
     ) -> (i64, WanHostReport, Vec<TcpEvent>, [u64; UP_COUNTERS.len()]) {
+        let (mut sim, mut wan, spec, got) = upload(bytes, (0, competing), loss, None, seed);
+        drive(&mut sim, &mut wan);
+        let trace = wan.take_tcp_trace();
+        let counters = wan.up_counters(0, Time::MAX);
+        (
+            got.get(),
+            wan.report(&spec).hosts.swap_remove(0),
+            trace,
+            counters,
+        )
+    }
+
+    /// `a` (host 0) writing `bytes` to `b` (host 1) from 1 s in the window
+    /// model, behind 100 ms uplink queues: `a`'s uplink at 10 Mbit/s,
+    /// losing `loss`, `b`'s at `b_up` bytes a second (else its site's), and
+    /// a competing upload on host `compete.0` over the seconds
+    /// `compete.1`, the WAN's draws from `seed` and its TCP trace on.
+    /// Returns the simulation, its scheduler and scenario, and when `b` had
+    /// read it all (ms from 1 s).
+    fn upload(
+        bytes: usize,
+        compete: (HostIx, (u64, u64)),
+        loss: f64,
+        b_up: Option<u64>,
+        seed: u64,
+    ) -> (Sim<'static>, Scheduler, Scenario, Rc<Cell<i64>>) {
         let mut sim = build();
+        let b = Site::new(City::Frankfurt, Access::Fiber).with_loss(0.0);
         let sites = [
             (
                 "a",
@@ -4674,10 +4820,7 @@ mod tests {
                     .with_up(1_250_000)
                     .with_loss(loss),
             ),
-            (
-                "b",
-                Site::new(City::Frankfurt, Access::Fiber).with_loss(0.0),
-            ),
+            ("b", b_up.map_or(b, |up| b.with_up(up))),
         ];
         let buffers = SendBuffers::new(SendBuffer {
             uplink_queue: StdDuration::from_millis(100),
@@ -4710,9 +4853,10 @@ mod tests {
             Ok(())
         });
         let mut spec = spec(&sites);
-        spec.hosts[0].competing = vec![Competing {
-            start: StdDuration::from_secs(competing.0),
-            stop: StdDuration::from_secs(competing.1),
+        let (host, (start, stop)) = compete;
+        spec.hosts[host].competing = vec![Competing {
+            start: StdDuration::from_secs(start),
+            stop: StdDuration::from_secs(stop),
             rtt: StdDuration::from_millis(30),
         }];
         let options = Options {
@@ -4722,15 +4866,133 @@ mod tests {
         let mut wan = Scheduler::new(&sim, &spec, options, seed, Some(buffers)).unwrap();
         wan.set_latency(0, 1, Duration::from_millis(15));
         wan.trace_tcp();
-        drive(&mut sim, &mut wan);
-        let trace = wan.take_tcp_trace();
-        let counters = wan.up_counters(0);
-        (
-            got.get(),
-            wan.report(&spec).hosts.swap_remove(0),
-            trace,
-            counters,
-        )
+        (sim, wan, spec, got)
+    }
+
+    /// The index of an [`UP_COUNTERS`] counter.
+    fn up_ix(name: &str) -> usize {
+        UP_COUNTERS.iter().position(|&c| c == name).unwrap()
+    }
+
+    #[test]
+    fn a_pure_ack_counts_once_it_has_left_and_never_after_a_crash_queued_it() {
+        // `b` acknowledges `a`'s writes while its own competing upload keeps
+        // its 10 Mbit/s uplink's queue full, so its pure ACKs wait there:
+        // read after each step's walk, the uplink's count holds those that
+        // left, never more than it took, and fewer while some wait. A crash
+        // while some wait forgets them: they never count.
+        let (mut sim, mut wan, _, _) = upload(1_448_000, (1, (0, 30)), 0.0, Some(1_250_000), 1);
+        let ack = up_ix("up_ack_packets");
+        let took = |wan: &Scheduler| wan.acks[1] - wan.sacks[1];
+        let mut waiting = 0;
+        let (left, before) = loop {
+            wan.walk(&sim).unwrap();
+            let now = sim_time(sim.elapsed());
+            let out = wan.up_counters(1, now)[ack];
+            assert!(out <= took(&wan), "{out} of {} out at {now:?}", took(&wan));
+            if out < took(&wan) {
+                waiting += 1;
+                if waiting == 100 {
+                    let left = wan.up_counters(1, now + Duration::from_nanos(1))[ack];
+                    let before = took(&wan);
+                    wan.crashed(1, now);
+                    break (left, before);
+                }
+            }
+            assert!(
+                !sim.step().unwrap(),
+                "{waiting} steps with a pure ACK queued"
+            );
+        };
+        assert!(left < before, "{left} of {before}");
+        assert_eq!(wan.up_counters(1, Time::MAX)[ack], left);
+    }
+
+    #[test]
+    fn a_queued_sack_or_resend_counts_once_it_has_left_and_never_after_a_crash() {
+        // `b`'s 10 Mbit/s uplink holds 100 ms of frames: a SACK alone
+        // handed to it behind them counts at an edge once it has left, and
+        // one still queued when the host loses power never does; so does a
+        // resend, which counts from its own departure.
+        let mut sim = build();
+        echo(&mut sim, "a");
+        echo(&mut sim, "b");
+        let sites = [
+            ("a", Site::new(City::Frankfurt, Access::Fiber)),
+            (
+                "b",
+                Site::new(City::Frankfurt, Access::Fiber).with_up(1_250_000),
+            ),
+        ];
+        let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1, None).unwrap();
+        let ms = Duration::from_millis;
+        let ns = Duration::from_nanos(1);
+        let got = |wan: &Scheduler, at| {
+            let c = wan.up_counters(1, at);
+            (
+                c[up_ix("up_sack_packets")],
+                c[up_ix("up_ack_packets")],
+                c[up_ix("retransmits")],
+            )
+        };
+        let sack = |wan: &mut Scheduler, at| {
+            wan.net.occupy_up(at, 1, 125_000, 84);
+            let d = wan.net.occupy_up(at, 1, 80, 1);
+            wan.sack_sent(1, wan.net.up_charge(1, 80, 1), at, d);
+            d
+        };
+        let t0 = sim_time(StdDuration::from_secs(1));
+        let d = sack(&mut wan, t0);
+        assert!(d >= t0 + ms(100), "{d:?}");
+        assert_eq!(got(&wan, t0 + ms(50)), (0, 0, 0));
+        assert_eq!(got(&wan, d), (0, 0, 0));
+        assert_eq!(got(&wan, d + ns), (1, 0, 0));
+        // A resend handed over at `d` that leaves 300 ms later.
+        wan.retransmitted(1, d, d + ms(300));
+        assert_eq!(got(&wan, d + ms(300)), (1, 0, 0));
+        assert_eq!(got(&wan, d + ms(300) + ns), (1, 0, 1));
+        let t1 = d + ms(400);
+        let d1 = sack(&mut wan, t1);
+        wan.retransmitted(1, t1, t1 + ms(300));
+        wan.crashed(1, t1 + ms(50));
+        assert!(d1 > t1 + ms(50), "{d1:?}");
+        assert_eq!(got(&wan, Time::MAX), (1, 0, 1));
+    }
+
+    #[test]
+    fn a_retransmit_counts_once_its_resend_has_left() {
+        // Over 5 % site loss and a queue that never fills, a segment the
+        // path lost counts as a retransmit once its resend has left, so read
+        // after each step's walk no more have counted than the trace's
+        // resends handed over before then; the stats count each loss as its
+        // segment went, so at least as many by the end.
+        let mut counted = 0;
+        for seed in 1..=2 {
+            let (mut sim, mut wan, _, _) = upload(289_600, (0, (30, 30)), 0.05, None, seed);
+            let rtx = up_ix("retransmits");
+            let (mut resends, mut seen) = (0, 0);
+            loop {
+                wan.walk(&sim).unwrap();
+                let now = sim_time(sim.elapsed());
+                let trace = wan.tcp_trace.as_deref().unwrap_or_default();
+                for e in trace.get(seen..).unwrap_or_default() {
+                    resends += u64::from(e.from == 0 && e.what == "rtx");
+                }
+                seen = trace.len();
+                let got = wan.up_counters(0, now)[rtx];
+                assert!(
+                    got <= resends,
+                    "seed {seed}: {got} counted, {resends} resent by {now:?}"
+                );
+                if sim.step().unwrap() {
+                    break;
+                }
+            }
+            let end = wan.up_counters(0, Time::MAX)[rtx];
+            assert!(end <= wan.net.stats(0).retransmits, "seed {seed}");
+            counted += end;
+        }
+        assert!(counted > 0, "no resend of a path's loss");
     }
 
     /// Bytes `a`'s competing uploads had sent `s` seconds in.

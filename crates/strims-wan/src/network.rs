@@ -58,8 +58,15 @@
 //! - **Framing.** An uplink charges each message what its site's
 //!   [`Framing`] says its packets cost past their IP bytes, its full TCP
 //!   packets and the rest ([`Framing::message`]): its serialization, its
-//!   bucket's tokens, its queue's bytes and its stats' `up_bytes` count
-//!   those. [`Framing::NONE`] charges the IP bytes alone.
+//!   bucket's tokens, its queue's bytes, its stats' `up_bytes` and what it
+//!   carried ([`Network::up_carried`]) count those. [`Framing::NONE`]
+//!   charges the IP bytes alone.
+//! - **Counts.** An uplink's stats count each message as it is handed to
+//!   the uplink; what it carried ([`Network::up_carried`]) counts each
+//!   packet as its last bit leaves, as a capture past its queue sees it.
+//!   Neither holds what a queue dropped: the caller hands the uplink only
+//!   what its queue took, and what a host's [`Network::reset`] forgets of
+//!   its queue never leaves.
 //! - **Slots.** An uplink whose site has [`Slots`] sends what its shaper
 //!   passed when the next slot opens ([`SlotState::depart`]), a packet at
 //!   a time, each as the shaper passes it ([`Framing::packets`]): a slot
@@ -149,10 +156,11 @@ pub struct Transit {
 /// One host's counters.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct EndStats {
-    /// Bytes through the uplink, as its link charged them (its framing
-    /// in).
+    /// Bytes handed to the uplink, as its link charged them (its framing
+    /// in), each message's as it was handed over ([`Network::up_carried`]
+    /// counts them as they leave).
     pub up_bytes: u64,
-    /// The IP bytes of the messages through the uplink, before its
+    /// The IP bytes of the messages handed to the uplink, before its
     /// framing.
     pub up_ip_bytes: u64,
     /// Wire bytes through the downlink.
@@ -165,10 +173,86 @@ pub struct EndStats {
     pub retransmits: u64,
     /// Datagrams it sent that were lost.
     pub drops: u64,
-    /// Packets through the uplink, and the small ones among them
+    /// Packets handed to the uplink, and the small ones among them
     /// ([`crate::wire::small_packets`]).
     pub up_packets: u64,
     pub small_packets: u64,
+}
+
+/// What an uplink carried: bytes, as its link charged them (its framing
+/// in), packets, and the small ones among them
+/// ([`crate::wire::small_packets`]: a message's last packet, of
+/// [`crate::wire::SMALL_PACKET`] IP bytes or less).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Carried {
+    pub bytes: u64,
+    pub packets: u64,
+    pub small_packets: u64,
+}
+
+impl std::ops::AddAssign for Carried {
+    fn add_assign(&mut self, o: Carried) {
+        self.bytes = self.bytes.saturating_add(o.bytes);
+        self.packets = self.packets.saturating_add(o.packets);
+        self.small_packets = self.small_packets.saturating_add(o.small_packets);
+    }
+}
+
+/// What an uplink carried, each packet counted from when its last bit
+/// left: its packets go in as they are handed to the uplink, each with
+/// when it leaves ([`Departures::add`]), and come out by when they left
+/// ([`Departures::before`]).
+#[derive(Clone, Debug, Default)]
+pub struct Departures {
+    /// What the packets that left before the latest hand-over carried.
+    left: Carried,
+    /// The rest, by when they leave: when each leaves, and what it
+    /// carries. Bound: the packets the uplink held at the latest hand-over
+    /// (its queue's and its slots').
+    pending: VecDeque<(Time, Carried)>,
+    /// The latest hand-over, which a read may not precede.
+    latest: Time,
+}
+
+impl Departures {
+    /// A packet carrying `c`, handed to the uplink at `now`, that leaves
+    /// at `depart`.
+    pub fn add(&mut self, now: Time, depart: Time, c: Carried) {
+        while let Some(&(t, x)) = self.pending.front()
+            && t < now
+        {
+            self.left += x;
+            self.pending.pop_front();
+        }
+        self.latest = self.latest.max(now);
+        // An uplink's packets leave in the order it took them, at the back;
+        // a caller's own departures (a resend's) may come earlier.
+        let at = self.pending.partition_point(|&(t, _)| t <= depart);
+        self.pending.insert(at, (depart, c));
+    }
+
+    /// What the packets that left before `at` carried, `at` no earlier
+    /// than the latest hand-over (what left before that is counted
+    /// whole).
+    pub fn before(&self, at: Time) -> Carried {
+        debug_assert!(
+            at >= self.latest,
+            "read at {at:?}, before the latest hand-over at {:?}",
+            self.latest
+        );
+        let mut c = self.left;
+        for &(_, x) in self.pending.iter().take_while(|&&(t, _)| t < at) {
+            c += x;
+        }
+        c
+    }
+
+    /// Forgets the packets that hadn't left by `now`: a queue that loses
+    /// what it holds never sends it.
+    pub fn forget(&mut self, now: Time) {
+        let keep = self.pending.partition_point(|&(t, _)| t <= now);
+        self.pending.truncate(keep);
+    }
 }
 
 /// The extra delay of a stream message of `packets` packets that lost one,
@@ -338,6 +422,9 @@ struct End {
     down_jitter: Jitter,
     bursts: Option<BurstState>,
     stats: EndStats,
+    /// What the messages [`Network::send`] handed the uplink carried
+    /// through it, each packet as it left.
+    carried: Departures,
 }
 
 /// An end's [`Bursts`] and the slots it read last.
@@ -615,6 +702,7 @@ impl Network {
                     down_jitter: Jitter::new(down, site.profile.jitter),
                     bursts,
                     stats: EndStats::default(),
+                    carried: Departures::default(),
                 }
             })
             .collect();
@@ -777,6 +865,19 @@ impl Network {
             .saturating_add(u64::from(small_packets(wire, packets)));
         end.stats.up_queue_max = end.stats.up_queue_max.max(start - sent);
         let depart = end.grant(pass, start, wire, packets);
+        // Each packet's charge from when it left, the message's small one
+        // its last.
+        let framing = end.site.profile.framing;
+        let last = end.up_last.len().saturating_sub(1);
+        let small = u64::from(small_packets(wire, packets));
+        for (k, (charge, &left)) in framing.packets(wire, packets).zip(&end.up_last).enumerate() {
+            let c = Carried {
+                bytes: charge as u64,
+                packets: 1,
+                small_packets: if k == last { small } else { 0 },
+            };
+            end.carried.add(sent, left, c);
+        }
         self.transit(depart, a, b, packets, carrier)
     }
 
@@ -1035,6 +1136,7 @@ impl Network {
         let end = self.end_mut(h);
         end.up_free = now;
         end.up_spans.clear();
+        end.carried.forget(now);
         // What it forgets takes no tokens past `now`, and no capacity.
         end.tokens_at = end.tokens_at.min(now);
         end.slot_last = end.slot_last.min(now);
@@ -1057,6 +1159,15 @@ impl Network {
 
     pub fn stats(&self, h: usize) -> EndStats {
         self.end(h).stats
+    }
+
+    /// What `h`'s uplink carried of the messages [`Network::send`] handed
+    /// it: its packets whose last bit left before `at` (no earlier than the
+    /// latest message's hand-over), as its shaper passed each or, with
+    /// slots, as its slot sent it. What a [`Network::reset`] forgot never
+    /// left.
+    pub fn up_carried(&self, h: usize, at: Time) -> Carried {
+        self.end(h).carried.before(at)
     }
 }
 
@@ -1940,5 +2051,165 @@ mod tests {
         assert_eq!(n.up_backlog(0, t(1)), Duration::ZERO);
         let d = n.send(t(2), 0, 1, 100, 1, Carrier::Stream).depart;
         assert!(d <= t(3), "{d:?}");
+    }
+
+    #[test]
+    fn an_uplink_counts_each_packet_from_when_its_last_bit_left() {
+        // 10 Mbit/s, Ethernet framing and a bucket of two frames: of a
+        // message of three full TCP packets, two leave at once and the
+        // third a frame's time later, and a small message handed over
+        // with it leaves after that. The stats count both as handed over.
+        let up = 1_250_000;
+        let sites = [
+            Site::new(City::Frankfurt, Access::Fiber)
+                .with_up(up)
+                .with_framing(Framing::ETHERNET)
+                .with_bucket(Some(Bucket::of(3028))),
+            Site::new(City::Frankfurt, Access::Fiber),
+        ];
+        let mut n = net(&sites, QUIET);
+        let (wire, packets) = tcp_wire(3 * crate::wire::MSS);
+        n.send(t(0), 0, 1, wire, packets, Carrier::Stream);
+        let (small, one) = tcp_wire(100);
+        let d = n.send(t(0), 0, 1, small, one, Carrier::Stream).depart;
+        let frame = tx_time(1514, up);
+        assert_eq!(d, t(0) + frame + tx_time(166, up));
+        let ns = Duration::from_nanos(1);
+        let got = |at| {
+            let c = n.up_carried(0, at);
+            (c.bytes, c.packets, c.small_packets)
+        };
+        assert_eq!(got(t(0)), (0, 0, 0));
+        assert_eq!(got(t(0) + ns), (3028, 2, 0));
+        assert_eq!(got(t(0) + frame), (3028, 2, 0));
+        assert_eq!(got(t(0) + frame + ns), (4542, 3, 0));
+        assert_eq!(got(d), (4542, 3, 0));
+        assert_eq!(got(d + ns), (4708, 4, 1));
+        let s = n.stats(0);
+        assert_eq!((s.up_bytes, s.up_packets, s.small_packets), (4708, 4, 1));
+    }
+
+    #[test]
+    fn what_a_reset_forgets_never_leaves() {
+        // 10 Mbit/s without a bucket: of ten full packets handed over at
+        // once, a power cut three and a half frames' time in forgets the
+        // seven still queued, and the uplink carried three.
+        let up = 1_250_000;
+        let sites = [
+            Site::new(City::Frankfurt, Access::Fiber).with_up(up),
+            Site::new(City::Frankfurt, Access::Fiber),
+        ];
+        let mut n = net(&sites, QUIET);
+        let (wire, packets) = tcp_wire(10 * crate::wire::MSS);
+        n.send(t(0), 0, 1, wire, packets, Carrier::Stream);
+        let frame = tx_time(1500, up);
+        n.reset(0, t(0) + frame * 3 + frame / 2);
+        let c = n.up_carried(0, Time::MAX);
+        assert_eq!((c.bytes, c.packets), (4500, 3));
+        assert_eq!(n.stats(0).up_bytes, 15_000);
+    }
+
+    #[test]
+    fn departures_count_by_when_they_left_in_whatever_order_they_came() {
+        // A resend handed over with a later departure than the packet after
+        // it: each counts from its own departure, and a power cut keeps
+        // what had left by then.
+        let one = Carried {
+            bytes: 100,
+            packets: 1,
+            small_packets: 0,
+        };
+        let mut d = Departures::default();
+        d.add(t(0), t(30), one);
+        d.add(t(0), t(10), Carried { bytes: 7, ..one });
+        assert_eq!(d.before(t(10)).bytes, 0);
+        assert_eq!(d.before(t(11)).bytes, 7);
+        assert_eq!(d.before(t(31)).bytes, 107);
+        d.add(t(20), t(40), one);
+        assert_eq!(d.before(t(20)).bytes, 7);
+        d.forget(t(35));
+        assert_eq!(
+            d.before(Time::MAX),
+            Carried {
+                bytes: 107,
+                packets: 2,
+                small_packets: 0
+            }
+        );
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "before the latest hand-over")]
+    fn departures_are_read_no_earlier_than_the_latest_hand_over() {
+        let mut d = Departures::default();
+        d.add(t(20), t(40), Carried::default());
+        d.before(t(10));
+    }
+
+    #[test]
+    fn a_span_carries_no_more_than_its_link_could() {
+        // Messages of up to 20 packets handed over in bursts, read at each
+        // 10 ms edge as the edge passes: what left in each span is at most
+        // the rate's bytes over it and its bucket's tokens, with slots what
+        // the shaper passed in it and the longest slot wait before it, and
+        // with neither a frame more (the one on the way at its start).
+        use crate::slots::Slots;
+        let up = 1_250_000;
+        let base = Site::new(City::Frankfurt, Access::Fiber)
+            .with_up(up)
+            .with_framing(Framing::ETHERNET);
+        let slots = Slots {
+            min: Duration::from_millis(1),
+            max: Duration::from_millis(4),
+        };
+        let width = Duration::from_millis(10);
+        let bytes_in = |d: Duration| d.as_nanos().unsigned_abs() * up / 1_000_000_000;
+        for (name, site, extra) in [
+            ("rate", base, 1514),
+            (
+                "bucket",
+                base.with_bucket(Some(Bucket {
+                    bytes: 16_384,
+                    peak: Some(12_500_000),
+                })),
+                16_384,
+            ),
+            (
+                "slots",
+                base.with_bucket(Some(Bucket::of(3028)))
+                    .with_slots(Some(slots)),
+                3028 + bytes_in(slots.max),
+            ),
+        ] {
+            let mut n = net(&[site, Site::new(City::Frankfurt, Access::Fiber)], QUIET);
+            let mut rng = det_rng(5);
+            let (mut at, mut edge, mut edges) = (t(0), t(0), Vec::new());
+            for _ in 0..2000 {
+                at += Duration::from_micros((unit(&mut rng) * 3000.0) as i64);
+                while edge <= at {
+                    edges.push(n.up_carried(0, edge).bytes);
+                    edge += width;
+                }
+                let k = 1 + (unit(&mut rng) * 20.0) as usize;
+                let (wire, packets) = tcp_wire(k * crate::wire::MSS - k * 7);
+                n.send(at, 0, 1, wire, packets, Carrier::Stream);
+            }
+            let cap = bytes_in(width) + extra;
+            let most = edges
+                .iter()
+                .zip(edges.iter().skip(1))
+                .map(|(a, b)| b - a)
+                .max()
+                .unwrap_or(0);
+            assert!(
+                most <= cap,
+                "{name}: {most} bytes in {width:?}, at most {cap}"
+            );
+            assert!(
+                most > cap / 2,
+                "{name}: {most} bytes in {width:?}: the link never filled"
+            );
+        }
     }
 }

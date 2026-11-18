@@ -3375,37 +3375,43 @@ pub(crate) mod cols {
         /// closing the subscription (`shed`) and subscribers closed for a
         /// saturated uplink (`sheds_sent`), outbound message bytes by kind,
         /// payloads and those of HAVEs alone (from the node's
-        /// `NODE_BIN_COUNTERS`), then stream messages that lost a packet and
-        /// packets lost (the network's `UP_COUNTERS`). A testbed run's
-        /// retransmits are each native node's TCP segments to a swarm node that
-        /// its capture (`PCAP=1`) saw resend bytes its link had carried before:
-        /// a segment lost past its queue, as the window model's are its path's
-        /// losses, a resend of what its own queue dropped counting in drops
-        /// (its tc log's) alone. A testbed run's drops are its own queue's (its
-        /// tc log's) and those of its packets a receiver's downlink queue
-        /// dropped (SLOW_DOWN_KBIT's viewer 1, its ifb's tbf), each its resend
-        /// of carried bytes to that receiver, which isn't a retransmit, as the
-        /// window model counts a full downlink queue's loss as the sender's
-        /// drop (with SEED_LOSS_PCT too, the seed's resends to it are that
-        /// loss's as well: its drops and retransmits are empty; and a data
-        /// channel's to it can't be told: its sender's drops are empty); a
-        /// spurious resend (a tail-loss probe's or an early timeout's of a
-        /// segment that had arrived) counts there and not in the sim; a
-        /// browser's, its data channels' resends inside DTLS, are empty, as are
-        /// a native node's with a data channel to a browser (WebRTC). What a
-        /// bin's waits give: pushes written and answers sent in it, and the p50
-        /// and p99 of their waits, of the node's WaitHistogram, quarter-octave
-        /// buckets read at their lower bound (never above the wait, at most a
-        /// sixth under it below 46 s; empty without any). The window model's
-        /// acknowledgements alone through a host's uplink, as `UP_COUNTERS`
-        /// names them (TCP's pure ACKs and the data channels' SACKs): of each,
-        /// the packets and the bytes their links charge for them (their IP
-        /// bytes, plus their framing at a site that charges it). The row's
-        /// `packets_ack` and `up_acks` count both kinds, over the whole run and
-        /// every host. A testbed run writes IP bytes there: each pure TCP ACK's
-        /// IP length from its node's capture, and no SACKs (a data channel's,
-        /// inside DTLS, count with its data: the up_sack columns are empty);
-        /// the queries add its class's overhead (scoring.sql's link_overhead).
+        /// `NODE_BIN_COUNTERS`), then resends of stream data the path lost,
+        /// each in the bin it left the uplink in (the window model's next
+        /// transmission of a segment its path lost a packet of; without the
+        /// window model, a message that lost a packet, its retransmission delay
+        /// after it left), and packets lost (the network's `UP_COUNTERS`). A
+        /// testbed run's retransmits are each native node's TCP segments to a
+        /// swarm node that its capture (`PCAP=1`) saw resend bytes its link had
+        /// carried before, at its capture time: a segment lost past its queue,
+        /// as the window model's are its path's losses, a resend of what its
+        /// own queue dropped counting in drops (its tc log's) alone. A testbed
+        /// run's drops are its own queue's (its tc log's) and those of its
+        /// packets a receiver's downlink queue dropped (SLOW_DOWN_KBIT's viewer
+        /// 1, its ifb's tbf), each its resend of carried bytes to that
+        /// receiver, which isn't a retransmit, as the window model counts a
+        /// full downlink queue's loss as the sender's drop (with SEED_LOSS_PCT
+        /// too, the seed's resends to it are that loss's as well: its drops and
+        /// retransmits are empty; and a data channel's to it can't be told: its
+        /// sender's drops are empty); a spurious resend (a tail-loss probe's or
+        /// an early timeout's of a segment that had arrived) counts there and
+        /// not in the sim; a browser's, its data channels' resends inside DTLS,
+        /// are empty, as are a native node's with a data channel to a browser
+        /// (WebRTC). What a bin's waits give: pushes written and answers sent
+        /// in it, and the p50 and p99 of their waits, of the node's
+        /// WaitHistogram, quarter-octave buckets read at their lower bound
+        /// (never above the wait, at most a sixth under it below 46 s; empty
+        /// without any). The window model's acknowledgements alone through a
+        /// host's uplink, as `UP_COUNTERS` names them (TCP's pure ACKs and the
+        /// data channels' SACKs): of each, the packets and the bytes their
+        /// links charge for them (their IP bytes, plus their framing at a site
+        /// that charges it), each in the bin its last bit left the uplink's
+        /// queue in (`Network::up_carried`'s count). The row's `packets_ack`
+        /// and `up_acks` count both kinds, over the whole run and every host. A
+        /// testbed run writes IP bytes there: each pure TCP ACK's IP length
+        /// from its node's capture past the queue, at its capture time, and no
+        /// SACKs (a data channel's, inside DTLS, count with its data: the
+        /// up_sack columns are empty); the queries add its class's overhead
+        /// (scoring.sql's link_overhead).
         ///
         /// None is written as -1.
         WhoCounter(u16),
@@ -3479,34 +3485,44 @@ pub(crate) mod cols {
         /// None is written as -1.
         ViewerOvh,
         /// Bytes through the honest viewers present's uplinks in the bin, as
-        /// their links charged them (WAN mode). A sim's twin counts
-        /// `EndStats::up_bytes`: each message's IP bytes and its packets'
-        /// framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link
-        /// class (the testbed's tbf class an Ethernet header, 14 bytes), pure
-        /// acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing
-        /// uploads apart; a testbed run counts each packet's IP length from its
-        /// capture, its pure TCP ACKs apart, a data channel's SACKs with its
-        /// data (inside DTLS: its up_sack columns empty). The queries convert
-        /// by the class (scoring.sql's link_overhead).
+        /// their links charged them (WAN mode): each packet in the bin its last
+        /// bit left the uplink's queue in, so no bin holds more than the link
+        /// could carry in it and a frame the queue dropped isn't there. A sim's
+        /// twin counts what its uplink carried (`Network::up_carried`: each
+        /// packet as its shaper passed it, with slots as its slot sent it), its
+        /// IP bytes and its framing at a site that charges it,
+        /// `STRIMS_SIM_FRAMING` or a link class (the testbed's tbf class an
+        /// Ethernet header, 14 bytes), pure acknowledgements (`up_ack_bytes`,
+        /// `up_sack_bytes`) and competing uploads apart; a testbed run counts
+        /// each packet's IP length from its capture past the queue
+        /// (`pcap-<i>.pcap`, at its capture time, past the node's egress delay
+        /// too, which run.sh puts ahead of the queue), its pure TCP ACKs apart,
+        /// a data channel's SACKs with its data (inside DTLS: its up_sack
+        /// columns empty). The queries convert by the class (scoring.sql's
+        /// link_overhead).
         ///
         /// Unit: bytes. None is written as -1.
         ViewerUpBytes,
         /// Packets through the honest viewers present's uplinks in the bin (WAN
-        /// mode). A sim's twin counts its data packets, its pure ACKs and a
-        /// data channel's SACK datagrams apart (the up_ack and up_sack
-        /// columns); a testbed run counts each packet its capture saw to a
-        /// swarm node, its pure TCP ACKs apart, a data channel's SACK datagrams
-        /// with its data (inside DTLS: its up_sack columns empty).
+        /// mode), each in the bin its last bit left the uplink's queue in: a
+        /// frame the queue dropped isn't there. A sim's twin counts its data
+        /// packets as its uplink carried them (`Network::up_carried`), its pure
+        /// ACKs and a data channel's SACK datagrams apart (the up_ack and
+        /// up_sack columns); a testbed run counts each packet its capture past
+        /// the queue saw to a swarm node, its pure TCP ACKs apart, a data
+        /// channel's SACK datagrams with its data (inside DTLS: its up_sack
+        /// columns empty).
         ///
         /// None is written as -1.
         ViewerUpPackets,
         /// Small packets through the honest viewers present's uplinks in the
-        /// bin (WAN mode). A sim's twin counts a data message's last packet of
-        /// 256 wire bytes or less (strims_wan::wire::small_packets), its pure
-        /// ACKs and a data channel's SACK datagrams apart; a testbed run counts
-        /// each packet of 256 IP bytes or less its capture saw to a swarm node,
-        /// its pure TCP ACKs apart, a data channel's SACK datagrams with its
-        /// data.
+        /// bin (WAN mode), each in the bin its last bit left the uplink's queue
+        /// in. A sim's twin counts a data message's last packet of 256 wire
+        /// bytes or less (strims_wan::wire::small_packets) as its uplink
+        /// carried it, its pure ACKs and a data channel's SACK datagrams apart;
+        /// a testbed run counts each packet of 256 IP bytes or less its capture
+        /// past the queue saw to a swarm node, its pure TCP ACKs apart, a data
+        /// channel's SACK datagrams with its data.
         ///
         /// None is written as -1.
         ViewerSmallPackets,
@@ -3543,33 +3559,43 @@ pub(crate) mod cols {
         /// None is written as -1.
         SeedOvh,
         /// Bytes through the seed's uplink in the bin, as its link charged them
-        /// (WAN mode). A sim's twin counts `EndStats::up_bytes`: each message's
-        /// IP bytes and its packets' framing at a site that charges it,
-        /// `STRIMS_SIM_FRAMING` or a link class (the testbed's tbf class an
-        /// Ethernet header, 14 bytes), pure acknowledgements (`up_ack_bytes`,
-        /// `up_sack_bytes`) and competing uploads apart; a testbed run counts
-        /// each packet's IP length from its capture, its pure TCP ACKs apart, a
-        /// data channel's SACKs with its data (inside DTLS: its up_sack columns
-        /// empty). The queries convert by the class (scoring.sql's
-        /// link_overhead).
+        /// (WAN mode): each packet in the bin its last bit left the uplink's
+        /// queue in, so no bin holds more than the link could carry in it and a
+        /// frame the queue dropped isn't there. A sim's twin counts what its
+        /// uplink carried (`Network::up_carried`: each packet as its shaper
+        /// passed it, with slots as its slot sent it), its IP bytes and its
+        /// framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link
+        /// class (the testbed's tbf class an Ethernet header, 14 bytes), pure
+        /// acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing
+        /// uploads apart; a testbed run counts each packet's IP length from its
+        /// capture past the queue (`pcap-<i>.pcap`, at its capture time, past
+        /// the node's egress delay too, which run.sh puts ahead of the queue),
+        /// its pure TCP ACKs apart, a data channel's SACKs with its data
+        /// (inside DTLS: its up_sack columns empty). The queries convert by the
+        /// class (scoring.sql's link_overhead).
         ///
         /// Unit: bytes. None is written as -1.
         SeedUpBytes,
-        /// Packets through the seed's uplink in the bin (WAN mode). A sim's
-        /// twin counts its data packets, its pure ACKs and a data channel's
-        /// SACK datagrams apart (the up_ack and up_sack columns); a testbed run
-        /// counts each packet its capture saw to a swarm node, its pure TCP
-        /// ACKs apart, a data channel's SACK datagrams with its data (inside
-        /// DTLS: its up_sack columns empty).
+        /// Packets through the seed's uplink in the bin (WAN mode), each in the
+        /// bin its last bit left the uplink's queue in: a frame the queue
+        /// dropped isn't there. A sim's twin counts its data packets as its
+        /// uplink carried them (`Network::up_carried`), its pure ACKs and a
+        /// data channel's SACK datagrams apart (the up_ack and up_sack
+        /// columns); a testbed run counts each packet its capture past the
+        /// queue saw to a swarm node, its pure TCP ACKs apart, a data channel's
+        /// SACK datagrams with its data (inside DTLS: its up_sack columns
+        /// empty).
         ///
         /// None is written as -1.
         SeedUpPackets,
-        /// Small packets through the seed's uplink in the bin (WAN mode). A
-        /// sim's twin counts a data message's last packet of 256 wire bytes or
-        /// less (strims_wan::wire::small_packets), its pure ACKs and a data
-        /// channel's SACK datagrams apart; a testbed run counts each packet of
-        /// 256 IP bytes or less its capture saw to a swarm node, its pure TCP
-        /// ACKs apart, a data channel's SACK datagrams with its data.
+        /// Small packets through the seed's uplink in the bin (WAN mode), each
+        /// in the bin its last bit left the uplink's queue in. A sim's twin
+        /// counts a data message's last packet of 256 wire bytes or less
+        /// (strims_wan::wire::small_packets) as its uplink carried it, its pure
+        /// ACKs and a data channel's SACK datagrams apart; a testbed run counts
+        /// each packet of 256 IP bytes or less its capture past the queue saw
+        /// to a swarm node, its pure TCP ACKs apart, a data channel's SACK
+        /// datagrams with its data.
         ///
         /// None is written as -1.
         SeedSmallPackets,
@@ -3989,37 +4015,43 @@ pub(crate) mod cols {
         /// closing the subscription (`shed`) and subscribers closed for a
         /// saturated uplink (`sheds_sent`), outbound message bytes by kind,
         /// payloads and those of HAVEs alone (from the node's
-        /// `NODE_BIN_COUNTERS`), then stream messages that lost a packet and
-        /// packets lost (the network's `UP_COUNTERS`). A testbed run's
-        /// retransmits are each native node's TCP segments to a swarm node that
-        /// its capture (`PCAP=1`) saw resend bytes its link had carried before:
-        /// a segment lost past its queue, as the window model's are its path's
-        /// losses, a resend of what its own queue dropped counting in drops
-        /// (its tc log's) alone. A testbed run's drops are its own queue's (its
-        /// tc log's) and those of its packets a receiver's downlink queue
-        /// dropped (SLOW_DOWN_KBIT's viewer 1, its ifb's tbf), each its resend
-        /// of carried bytes to that receiver, which isn't a retransmit, as the
-        /// window model counts a full downlink queue's loss as the sender's
-        /// drop (with SEED_LOSS_PCT too, the seed's resends to it are that
-        /// loss's as well: its drops and retransmits are empty; and a data
-        /// channel's to it can't be told: its sender's drops are empty); a
-        /// spurious resend (a tail-loss probe's or an early timeout's of a
-        /// segment that had arrived) counts there and not in the sim; a
-        /// browser's, its data channels' resends inside DTLS, are empty, as are
-        /// a native node's with a data channel to a browser (WebRTC). What a
-        /// bin's waits give: pushes written and answers sent in it, and the p50
-        /// and p99 of their waits, of the node's WaitHistogram, quarter-octave
-        /// buckets read at their lower bound (never above the wait, at most a
-        /// sixth under it below 46 s; empty without any). The window model's
-        /// acknowledgements alone through a host's uplink, as `UP_COUNTERS`
-        /// names them (TCP's pure ACKs and the data channels' SACKs): of each,
-        /// the packets and the bytes their links charge for them (their IP
-        /// bytes, plus their framing at a site that charges it). The row's
-        /// `packets_ack` and `up_acks` count both kinds, over the whole run and
-        /// every host. A testbed run writes IP bytes there: each pure TCP ACK's
-        /// IP length from its node's capture, and no SACKs (a data channel's,
-        /// inside DTLS, count with its data: the up_sack columns are empty);
-        /// the queries add its class's overhead (scoring.sql's link_overhead).
+        /// `NODE_BIN_COUNTERS`), then resends of stream data the path lost,
+        /// each in the bin it left the uplink in (the window model's next
+        /// transmission of a segment its path lost a packet of; without the
+        /// window model, a message that lost a packet, its retransmission delay
+        /// after it left), and packets lost (the network's `UP_COUNTERS`). A
+        /// testbed run's retransmits are each native node's TCP segments to a
+        /// swarm node that its capture (`PCAP=1`) saw resend bytes its link had
+        /// carried before, at its capture time: a segment lost past its queue,
+        /// as the window model's are its path's losses, a resend of what its
+        /// own queue dropped counting in drops (its tc log's) alone. A testbed
+        /// run's drops are its own queue's (its tc log's) and those of its
+        /// packets a receiver's downlink queue dropped (SLOW_DOWN_KBIT's viewer
+        /// 1, its ifb's tbf), each its resend of carried bytes to that
+        /// receiver, which isn't a retransmit, as the window model counts a
+        /// full downlink queue's loss as the sender's drop (with SEED_LOSS_PCT
+        /// too, the seed's resends to it are that loss's as well: its drops and
+        /// retransmits are empty; and a data channel's to it can't be told: its
+        /// sender's drops are empty); a spurious resend (a tail-loss probe's or
+        /// an early timeout's of a segment that had arrived) counts there and
+        /// not in the sim; a browser's, its data channels' resends inside DTLS,
+        /// are empty, as are a native node's with a data channel to a browser
+        /// (WebRTC). What a bin's waits give: pushes written and answers sent
+        /// in it, and the p50 and p99 of their waits, of the node's
+        /// WaitHistogram, quarter-octave buckets read at their lower bound
+        /// (never above the wait, at most a sixth under it below 46 s; empty
+        /// without any). The window model's acknowledgements alone through a
+        /// host's uplink, as `UP_COUNTERS` names them (TCP's pure ACKs and the
+        /// data channels' SACKs): of each, the packets and the bytes their
+        /// links charge for them (their IP bytes, plus their framing at a site
+        /// that charges it), each in the bin its last bit left the uplink's
+        /// queue in (`Network::up_carried`'s count). The row's `packets_ack`
+        /// and `up_acks` count both kinds, over the whole run and every host. A
+        /// testbed run writes IP bytes there: each pure TCP ACK's IP length
+        /// from its node's capture past the queue, at its capture time, and no
+        /// SACKs (a data channel's, inside DTLS, count with its data: the
+        /// up_sack columns are empty); the queries add its class's overhead
+        /// (scoring.sql's link_overhead).
         ///
         /// None is written as an empty field.
         Counter(u16),
@@ -4047,31 +4079,41 @@ pub(crate) mod cols {
         /// bin.
         Ovh,
         /// Bytes through the node's uplink in the bin, as its link charged them
-        /// (WAN mode). A sim's twin counts `EndStats::up_bytes`: each message's
-        /// IP bytes and its packets' framing at a site that charges it,
-        /// `STRIMS_SIM_FRAMING` or a link class (the testbed's tbf class an
-        /// Ethernet header, 14 bytes), pure acknowledgements (`up_ack_bytes`,
-        /// `up_sack_bytes`) and competing uploads apart; a testbed run counts
-        /// each packet's IP length from its capture, its pure TCP ACKs apart, a
-        /// data channel's SACKs with its data (inside DTLS: its up_sack columns
-        /// empty). The queries convert by the class (scoring.sql's
-        /// link_overhead).
+        /// (WAN mode): each packet in the bin its last bit left the uplink's
+        /// queue in, so no bin holds more than the link could carry in it and a
+        /// frame the queue dropped isn't there. A sim's twin counts what its
+        /// uplink carried (`Network::up_carried`: each packet as its shaper
+        /// passed it, with slots as its slot sent it), its IP bytes and its
+        /// framing at a site that charges it, `STRIMS_SIM_FRAMING` or a link
+        /// class (the testbed's tbf class an Ethernet header, 14 bytes), pure
+        /// acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing
+        /// uploads apart; a testbed run counts each packet's IP length from its
+        /// capture past the queue (`pcap-<i>.pcap`, at its capture time, past
+        /// the node's egress delay too, which run.sh puts ahead of the queue),
+        /// its pure TCP ACKs apart, a data channel's SACKs with its data
+        /// (inside DTLS: its up_sack columns empty). The queries convert by the
+        /// class (scoring.sql's link_overhead).
         ///
         /// Unit: bytes.
         UpBytes,
-        /// Packets through the node's uplink in the bin (WAN mode). A sim's
-        /// twin counts its data packets, its pure ACKs and a data channel's
-        /// SACK datagrams apart (the up_ack and up_sack columns); a testbed run
-        /// counts each packet its capture saw to a swarm node, its pure TCP
-        /// ACKs apart, a data channel's SACK datagrams with its data (inside
-        /// DTLS: its up_sack columns empty).
+        /// Packets through the node's uplink in the bin (WAN mode), each in the
+        /// bin its last bit left the uplink's queue in: a frame the queue
+        /// dropped isn't there. A sim's twin counts its data packets as its
+        /// uplink carried them (`Network::up_carried`), its pure ACKs and a
+        /// data channel's SACK datagrams apart (the up_ack and up_sack
+        /// columns); a testbed run counts each packet its capture past the
+        /// queue saw to a swarm node, its pure TCP ACKs apart, a data channel's
+        /// SACK datagrams with its data (inside DTLS: its up_sack columns
+        /// empty).
         UpPackets,
-        /// Small packets through the node's uplink in the bin (WAN mode). A
-        /// sim's twin counts a data message's last packet of 256 wire bytes or
-        /// less (strims_wan::wire::small_packets), its pure ACKs and a data
-        /// channel's SACK datagrams apart; a testbed run counts each packet of
-        /// 256 IP bytes or less its capture saw to a swarm node, its pure TCP
-        /// ACKs apart, a data channel's SACK datagrams with its data.
+        /// Small packets through the node's uplink in the bin (WAN mode), each
+        /// in the bin its last bit left the uplink's queue in. A sim's twin
+        /// counts a data message's last packet of 256 wire bytes or less
+        /// (strims_wan::wire::small_packets) as its uplink carried it, its pure
+        /// ACKs and a data channel's SACK datagrams apart; a testbed run counts
+        /// each packet of 256 IP bytes or less its capture past the queue saw
+        /// to a swarm node, its pure TCP ACKs apart, a data channel's SACK
+        /// datagrams with its data.
         SmallPackets,
         /// The window model's window falls on the node's links in the bin: a
         /// recovery started and a timeout's cut outside one. A testbed run's

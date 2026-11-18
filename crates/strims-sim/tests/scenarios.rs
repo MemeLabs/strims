@@ -21,7 +21,9 @@ use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy, SendFate, SendHow};
 use strims_sim::calibration::{
     self, ADAPTIVE, Calibration, STRIPES, UPLINK_QUEUE, WAN_RATE, WAN_WINDOW, full_mesh, striped,
 };
+use strims_sim::report::PacketKind;
 use strims_sim::stream::Join;
+use strims_sim::tables::UP_COUNTERS;
 use strims_sim::topology::{random_graph, random_hub, random_mesh};
 use strims_sim::{
     Arrivals, Binding, ClockSkew, Competing, Fault, HostClass, HostIx, Invariants, NetworkSpec,
@@ -3613,6 +3615,98 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
         links: Vec::new(),
         jitter: knob::<u64>("STRIMS_SIM_CAL_JITTER").unwrap_or(0) == 1,
     }
+}
+
+/// A bin's uplink columns count what each uplink carried in it, each
+/// packet from when its last bit left, as a testbed run's capture past its
+/// queue does: they are the packet log's packets that left in the bin
+/// (its data, control and data-channel packets' charges and count, its
+/// pure ACKs' and its SACKs' charges), and no bin holds more than its link
+/// could carry in it (its fastest rate's bytes and its bucket's tokens, or
+/// without a bucket the frame on the way at the bin's start; with slots,
+/// what its shaper passed in the bin and the longest slot wait before it),
+/// its acknowledgements alone and its data together, and the frames a full
+/// queue dropped never left. A 2 Mbit/s seed of a star of three viewers
+/// keeps its queue full and drops, its links' buckets run.sh's two frames.
+#[test]
+fn a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry() {
+    let mut c = collapse_case(3, 2, 15);
+    c.topology = None;
+    (c.seed_burst, c.viewer_burst) = (Some(3028), Some(3028));
+    let width = Duration::from_millis(100);
+    let build = |seed| {
+        let mut s = calibration_star_scenario(seed, &c);
+        s.wire_bins = Some(width);
+        s.packet_log = (0..s.hosts.len()).collect();
+        s
+    };
+    sweep_n(
+        "a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry",
+        2,
+        build,
+        |r| {
+            let ix = |c: &str| UP_COUNTERS.iter().position(|&n| n == c).unwrap();
+            let carried = ["up_bytes", "up_ack_bytes", "up_sack_bytes"].map(ix);
+            let seed = r.scenario.swarms[0].seed;
+            let drops = r.wire_bins.last().map_or(0, |e| e[seed][ix("drops")]);
+            if drops == 0 {
+                return Err("the seed's queue dropped nothing".into());
+            }
+            let cols = ["up_bytes", "up_packets", "up_ack_bytes", "up_sack_bytes"].map(ix);
+            let start = r.scenario.swarms[0].start.as_nanos() as i64;
+            let wan = r.wan.as_ref().ok_or("no WAN report")?;
+            for (h, w) in wan.hosts.iter().enumerate() {
+                let mut want = vec![[0u64; 4]; r.wire_bins.len().saturating_sub(1)];
+                for p in &w.packets {
+                    let Some(ns) = p.sent.map(|t| t.as_nanos() - start) else {
+                        continue;
+                    };
+                    let k = usize::try_from(ns / width.as_nanos() as i64).ok();
+                    let Some(b) = k.filter(|_| ns >= 0).and_then(|k| want.get_mut(k)) else {
+                        continue;
+                    };
+                    let charge = u64::from(p.charged_bytes.unwrap_or(0));
+                    match p.kind {
+                        PacketKind::Data | PacketKind::DataSack | PacketKind::Control => {
+                            b[0] += charge;
+                            b[1] += 1;
+                        }
+                        PacketKind::Ack => b[2] += charge,
+                        PacketKind::Sack => b[3] += charge,
+                        PacketKind::Competing => {}
+                    }
+                }
+                for (k, (e, want)) in r.wire_bins.windows(2).zip(&want).enumerate() {
+                    let got = cols.map(|c| e[1][h][c] - e[0][h][c]);
+                    if got != *want {
+                        return Err(format!(
+                            "{}: bin {k} counted {got:?}, its packets left {want:?}",
+                            w.name
+                        ));
+                    }
+                }
+            }
+            for (h, host) in r.scenario.hosts.iter().enumerate() {
+                let Some(site) = host.site else { continue };
+                let p = site.profile;
+                let rate = host.up_steps.iter().map(|&(_, r)| r).fold(p.up, u64::max);
+                let wait = p.slots.map_or(0, |s| s.max.as_nanos().unsigned_abs());
+                let ns = width.as_nanos() as u64 + wait;
+                let cap = ns.saturating_mul(rate) / 1_000_000_000
+                    + p.bucket.map_or(p.framing.packet(1500) as u64, |b| b.bytes);
+                for (k, w) in r.wire_bins.windows(2).enumerate() {
+                    let bin: u64 = carried.iter().map(|&c| w[1][h][c] - w[0][h][c]).sum();
+                    if bin > cap {
+                        return Err(format!(
+                            "{}: bin {k} carried {bin} bytes, its link at most {cap}",
+                            host.name
+                        ));
+                    }
+                }
+            }
+            Ok(())
+        },
+    );
 }
 
 /// The twin's buckets send at the testbed's peak (`run.sh`'s
