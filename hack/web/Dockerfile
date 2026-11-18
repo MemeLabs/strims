@@ -48,6 +48,8 @@ COPY .cargo ./.cargo
 # strims-proto's build script compiles the protos in schema/
 COPY schema ./schema
 COPY crates ./crates
+# Cargo.toml's [patch.crates-io] builds turmoil from here
+COPY third_party ./third_party
 # cache the crates strims-wasm builds from; build scripts and proc macros
 # compile for the host, so its dependencies are fetched too
 RUN cargo fetch --locked --target wasm32-unknown-unknown --target host-tuple
