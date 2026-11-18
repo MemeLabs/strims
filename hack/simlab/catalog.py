@@ -259,7 +259,10 @@ are `experiment_jobs e JOIN reads USING (k, src) WHERE e.exp_id = ...`.
 arms and seeds. Beside them the tables join on their own columns: reads,
 viewer_seconds and stalls to viewers USING (k, src, viewer); events,
 node_bins, meter_samples, peer_samples, sockets, parents, forecast,
-arrivals, spec_requests and parks to viewers USING (k, src, node); bins to node_bins USING (k, src,
+arrivals, spec_requests, parks, packets and hosts to viewers USING (k, src, node), and packets
+to hosts the same (a node's link spec, role and kind); a shaper replay's packets
+to its source run's ON (replay's env SOURCE_K = k, node, n), as shaper_fit_of
+joins them; bins to node_bins USING (k, src,
 bin); seconds to verdict_seconds USING (k, src, sec); a viewer's second
 (viewer_seconds, a read's or a stall's t_ms // 1000) to
 viewer_phases_of(runs) ON (k, src, viewer) with start <= sec < stop, its
