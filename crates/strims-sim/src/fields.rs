@@ -6130,9 +6130,11 @@ pub(crate) mod cols {
         Source,
         /// Why it was read: `sample` (the node's reading every capture
         /// interval), `write` (the writer's check of the transport as it
-        /// decided whether a write may go) or `low` (the transport woke a
-        /// writer it held for its own cap: a data channel's
-        /// `bufferedamountlow`, read as it fired).
+        /// decided whether a write may go) or `low` (a data channel's
+        /// `bufferedamountlow`, read as it fired: its amount fell to the
+        /// threshold its writer set at its last refusal for its own cap, half
+        /// the channel's cap before one (the browser sets it so as it opens the
+        /// channel), whether the writer waited then or not).
         Cause,
         /// Bytes written to the transport and not yet sent: a TCP socket's
         /// unsent bytes (`tcpi_notsent_bytes`), a modelled connection's not yet
