@@ -1812,3 +1812,184 @@ CREATE OR REPLACE MACRO shaper_fit_of(a_jobs, b_jobs, per := 'node') AS TABLE
     SELECT cell, seed, k, node, peer, role, link_spec, 'pass', NULL, NULL, bool_and(pass)
     FROM rs WHERE pass IS NOT NULL GROUP BY ALL
     ORDER BY cell, seed, node, peer NULLS FIRST, measure;
+
+-- The jobs of a side (`side`: a list of structs that hold a job's `k`,
+-- as testbed_side gives them; a literal [] too), their k, src and the
+-- window twin_window_of gives them over [lo_s, hi_s) s of each stream;
+-- a side of no runs fails, naming `who`, as does a NULL one (a subquery's
+-- list of no rows: a src that names none).
+-- needs: jobs.env
+CREATE OR REPLACE MACRO side_window_of(side, who, lo_s := 10, hi_s := -1) AS TABLE
+    FROM twin_window_of(CASE WHEN side IS NULL OR len(side) = 0 THEN error(who || ': a side of no runs')
+                             ELSE from_json(to_json(side), '[{"k": "VARCHAR"}]') END,
+                        lo_s := lo_s, hi_s := hi_s);
+
+-- Each run's timers of a side (`side`, as side_window_of takes it; the
+-- timers table, TIMER_LOG) that fired in its window (side_window_of: by
+-- default its stream from 10 s) and were armed for a delay of 0 or more
+-- (one armed for a deadline already past says nothing of a timer's
+-- lateness), by their node's kind (the hosts table's) and their source,
+-- and with by_delay by the delay they were armed for in whole ms
+-- (delay_ms; NULL without): the run's k and cell (jobs.stored_cell: its
+-- repeats share it), nodes, timers (those with a lateness; missing,
+-- those without, which count in nothing else), the shares of their
+-- lateness in whole ms, 0, 1, 2 and 3 or more (ms0 .. ms3; a negative
+-- lateness, a clock behind the deadline's, reads as 0), its mean and its
+-- p99 in ms (mean_ms, p99_ms: sketch_quantile's, of the lateness as
+-- measured, a negative one as 0).
+-- needs: timers hosts jobs.env jobs.stored_cell
+CREATE OR REPLACE MACRO timer_runs_of(side, lo_s := 10, hi_s := -1, by_delay := false) AS TABLE
+    WITH w AS (FROM side_window_of(side, 'timer_runs_of', lo_s := lo_s, hi_s := hi_s)),
+    t AS (
+        SELECT t.k, j.stored_cell AS cell, t.node, t.source, h.kind,
+               CASE WHEN by_delay THEN t.requested_us // 1000 END AS delay_ms,
+               CASE WHEN t.late_us IS NOT NULL THEN greatest(t.late_us, 0) END AS late_us
+        FROM timers t JOIN w USING (k, src) JOIN hosts h USING (k, src, node) JOIN jobs j ON j.k = t.k
+        WHERE t.requested_us >= 0 AND t.t_us >= w.lo * 1000000 AND t.t_us < w.hi * 1000000)
+    SELECT kind, source, delay_ms, k, any_value(cell) AS cell, count(DISTINCT node) AS nodes,
+           count(late_us) AS timers, count(*) - count(late_us) AS missing,
+           avg((late_us < 1000)::INT) AS ms0, avg((late_us >= 1000 AND late_us < 2000)::INT) AS ms1,
+           avg((late_us >= 2000 AND late_us < 3000)::INT) AS ms2, avg((late_us >= 3000)::INT) AS ms3,
+           avg(late_us) / 1000 AS mean_ms, sketch_quantile(late_us, 99) / 1000 AS p99_ms
+    FROM t GROUP BY kind, source, delay_ms, k;
+
+-- A side's timers by kind and source (and with by_delay, delay), from
+-- its runs' (timer_runs_of): runs, nodes, timers, missing, the shares of
+-- 0, 1, 2 and 3+ ms late (late_ms0 .. late_ms3), mean_ms and p99_ms,
+-- each the mean over the runs (a run weighs as any other, however many
+-- timers it fired, so a side of cells repeated alike weighs its cells
+-- alike), and the side's repeat spread of the mean and the p99
+-- (mean_spread_ms, p99_spread_ms): each cell's range over its repeats
+-- (its runs' largest less their smallest), the mean over the cells of
+-- two runs or more; NULL with none.
+-- needs: timers hosts jobs.env jobs.stored_cell
+CREATE OR REPLACE MACRO timer_shares_of(side, lo_s := 10, hi_s := -1, by_delay := false) AS TABLE
+    WITH r AS (FROM timer_runs_of(side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
+    c AS (
+        SELECT kind, source, delay_ms, cell, max(mean_ms) - min(mean_ms) AS mean_range,
+               max(p99_ms) - min(p99_ms) AS p99_range
+        FROM r WHERE timers > 0 GROUP BY ALL HAVING count(*) > 1),
+    s AS (
+        SELECT kind, source, delay_ms, avg(mean_range) AS mean_spread_ms, avg(p99_range) AS p99_spread_ms
+        FROM c GROUP BY ALL),
+    p AS (
+        SELECT kind, source, delay_ms, count(*) FILTER (WHERE timers > 0) AS runs, sum(nodes)::BIGINT AS nodes,
+               sum(timers)::BIGINT AS timers, sum(missing)::BIGINT AS missing, avg(ms0) AS late_ms0,
+               avg(ms1) AS late_ms1, avg(ms2) AS late_ms2, avg(ms3) AS late_ms3, avg(mean_ms) AS mean_ms,
+               avg(p99_ms) AS p99_ms
+        FROM r GROUP BY ALL)
+    SELECT p.*, s.mean_spread_ms, s.p99_spread_ms
+    FROM p LEFT JOIN s ON p.kind = s.kind AND p.source = s.source AND p.delay_ms IS NOT DISTINCT FROM s.delay_ms;
+
+-- A model's timer lateness against the testbed's (the timer bench): each
+-- kind, source (and with by_delay, delay) either side has, `a_side` the
+-- model's runs (a twin's) and `b_side` the testbed's, over the same
+-- windows (timer_shares_of): each side's runs and timers, its shares of 0,
+-- 1, 2 and 3+ ms late (a_ms0 .. a_ms3, b_ms0 .. b_ms3), its mean and p99
+-- lateness in ms; the shares' total-variation distance (tv: half the sum
+-- of their differences) with its bound, the plan's 0.05; the means' and
+-- p99s' differences (b less a) with theirs, by the plan's general rule:
+-- the testbed's own repeat spread (timer_shares_of's mean_spread_ms and
+-- p99_spread_ms of the runs of `spread_side`, its repeats; none counts
+-- as 0) plus a floor, mean_floor 0.1 ms (a tenth of the ms the
+-- deadlines' clocks count) and p99_floor 1 ms (one such ms); and pass,
+-- all three within their bounds. A source the model keeps no rows of
+-- (`unmodelled`, joined by commas: the testbed's record timer, a
+-- browser's host pacer) has the testbed's numbers alone, its checks and
+-- pass NULL; any other kind and source one side lacks fails. A held-out
+-- score names as spread_side the testbed runs whose repeats measure it,
+-- its b_side holding one repeat of each cell; timer_fit_of takes
+-- b_side's own.
+-- needs: timers hosts jobs.env jobs.stored_cell
+CREATE OR REPLACE MACRO timer_fit_spread_of(a_side, b_side, spread_side, lo_s := 10, hi_s := -1,
+                                            by_delay := false, bound := 0.05, mean_floor := 0.1,
+                                            p99_floor := 1.0, unmodelled := 'record,pacer') AS TABLE
+    WITH a AS (FROM timer_shares_of(a_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
+    b AS (FROM timer_shares_of(b_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
+    sp AS (FROM timer_shares_of(spread_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
+    f AS (
+        SELECT coalesce(a.kind, b.kind) AS kind, coalesce(a.source, b.source) AS source,
+               coalesce(a.delay_ms, b.delay_ms) AS delay_ms, a.runs AS a_runs, b.runs AS b_runs,
+               a.timers AS a_timers, b.timers AS b_timers,
+               a.late_ms0 AS a_ms0, a.late_ms1 AS a_ms1, a.late_ms2 AS a_ms2, a.late_ms3 AS a_ms3,
+               b.late_ms0 AS b_ms0, b.late_ms1 AS b_ms1, b.late_ms2 AS b_ms2, b.late_ms3 AS b_ms3,
+               a.mean_ms AS a_mean_ms, b.mean_ms AS b_mean_ms, a.p99_ms AS a_p99_ms, b.p99_ms AS b_p99_ms,
+               (abs(a.late_ms0 - b.late_ms0) + abs(a.late_ms1 - b.late_ms1) + abs(a.late_ms2 - b.late_ms2)
+                + abs(a.late_ms3 - b.late_ms3)) / 2 AS tv,
+               b.mean_ms - a.mean_ms AS mean_diff_ms, b.p99_ms - a.p99_ms AS p99_diff_ms,
+               coalesce(sp.mean_spread_ms, 0) + mean_floor AS mean_bound,
+               coalesce(sp.p99_spread_ms, 0) + p99_floor AS p99_bound,
+               a.kind IS NULL AND list_contains(string_split(unmodelled, ','), b.source) AS expected
+        FROM a FULL JOIN b ON a.kind = b.kind AND a.source = b.source
+                              AND a.delay_ms IS NOT DISTINCT FROM b.delay_ms
+        LEFT JOIN sp ON sp.kind = coalesce(a.kind, b.kind) AND sp.source = coalesce(a.source, b.source)
+                        AND sp.delay_ms IS NOT DISTINCT FROM coalesce(a.delay_ms, b.delay_ms))
+    SELECT * EXCLUDE (expected, mean_bound, p99_bound), bound::DOUBLE AS bound, mean_bound::DOUBLE AS mean_bound,
+           p99_bound::DOUBLE AS p99_bound,
+           CASE WHEN expected THEN NULL
+                ELSE coalesce(tv <= bound AND abs(mean_diff_ms) <= mean_bound AND abs(p99_diff_ms) <= p99_bound,
+                              false) END AS pass
+    FROM f ORDER BY kind, source, delay_ms;
+
+-- timer_fit_spread_of with the testbed's repeat spread from b_side's own
+-- runs, as the plan's rule has it.
+-- needs: timers hosts jobs.env jobs.stored_cell
+CREATE OR REPLACE MACRO timer_fit_of(a_side, b_side, lo_s := 10, hi_s := -1, by_delay := false,
+                                     bound := 0.05, mean_floor := 0.1, p99_floor := 1.0,
+                                     unmodelled := 'record,pacer') AS TABLE
+    FROM timer_fit_spread_of(a_side, b_side, b_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay,
+                             bound := bound, mean_floor := mean_floor, p99_floor := p99_floor,
+                             unmodelled := unmodelled);
+
+-- The seed's allocation checks over a side's runs (`side`, as
+-- side_window_of takes it; seed_decisions, SPEC): each check of a
+-- window's phase check in the run's window, and its step from the
+-- check before it of the seed's stream. A check is due a second after
+-- the pass that ran the last one, and runs at the first pass then, so a
+-- step of 1050 to 1150 ms (`slipped`) is one that waited out the next
+-- 100-ms tick, the rest of those from 950 ms (`on_time`) one that
+-- didn't. By the seed's kind (the hosts table's): runs, steps (on_time
+-- and slipped, summed over the runs), others (steps outside both), and
+-- slipped_share, the side's slipped over its steps.
+-- needs: seed_decisions hosts jobs.env
+CREATE OR REPLACE MACRO alloc_steps_of(side, lo_s := 10, hi_s := -1) AS TABLE
+    WITH w AS (FROM side_window_of(side, 'alloc_steps_of', lo_s := lo_s, hi_s := hi_s)),
+    c AS (
+        SELECT d.k, d.node, h.kind, d.t_ms, w.lo, w.hi,
+               d.t_ms - lag(d.t_ms) OVER (PARTITION BY d.k, d.node, d.stream ORDER BY d.n) AS step_ms
+        FROM seed_decisions d JOIN w USING (k, src) JOIN hosts h USING (k, src, node)
+        WHERE d.kind = 'window' AND d.why = 'check'),
+    s AS (FROM c WHERE step_ms IS NOT NULL AND t_ms >= lo * 1000 AND t_ms < hi * 1000),
+    r AS (
+        SELECT kind, k, count(*) FILTER (WHERE step_ms >= 950 AND step_ms < 1050) AS on_time,
+               count(*) FILTER (WHERE step_ms >= 1050 AND step_ms < 1150) AS slipped,
+               count(*) FILTER (WHERE step_ms < 950 OR step_ms >= 1150) AS others
+        FROM s GROUP BY ALL)
+    SELECT kind, count(*) AS runs, sum(on_time)::BIGINT AS on_time, sum(slipped)::BIGINT AS slipped,
+           sum(others)::BIGINT AS others, sum(slipped) / sum(on_time + slipped) AS slipped_share
+    FROM r WHERE on_time + slipped > 0 GROUP BY ALL;
+
+-- A model's allocation-check steps against the testbed's (the timer
+-- bench's second rule): each seed kind either side has, `a_side` the
+-- model's runs and `b_side` the testbed's (alloc_steps_of): each side's
+-- runs, steps and slipped share; diff (b less a); se, the difference's
+-- binomial standard error (sqrt(a(1 - a)/a_steps + b(1 - b)/b_steps));
+-- lo and hi, diff less and plus 2 se; allowance, the larger of the bound
+-- (the plan's 5 points) and 2 se, so two sides of one share fail at
+-- most about one time in twenty however few their steps; and pass,
+-- |diff| within it. A kind one side lacks fails.
+-- needs: seed_decisions hosts jobs.env
+CREATE OR REPLACE MACRO alloc_step_fit_of(a_side, b_side, lo_s := 10, hi_s := -1, bound := 0.05) AS TABLE
+    WITH a AS (FROM alloc_steps_of(a_side, lo_s := lo_s, hi_s := hi_s)),
+    b AS (FROM alloc_steps_of(b_side, lo_s := lo_s, hi_s := hi_s)),
+    f AS (
+        SELECT coalesce(a.kind, b.kind) AS kind, a.runs AS a_runs, b.runs AS b_runs,
+               a.on_time + a.slipped AS a_steps, b.on_time + b.slipped AS b_steps,
+               a.slipped_share AS a_share, b.slipped_share AS b_share, b.slipped_share - a.slipped_share AS diff,
+               sqrt(a.slipped_share * (1 - a.slipped_share) / (a.on_time + a.slipped)
+                    + b.slipped_share * (1 - b.slipped_share) / (b.on_time + b.slipped)) AS se
+        FROM a FULL JOIN b ON a.kind = b.kind)
+    SELECT kind, a_runs, b_runs, a_steps, b_steps, a_share, b_share, diff, se, diff - 2 * se AS lo,
+           diff + 2 * se AS hi, bound::DOUBLE AS bound, greatest(bound, 2 * se) AS allowance,
+           coalesce(abs(diff) <= greatest(bound, 2 * se), false) AS pass
+    FROM f ORDER BY kind;
