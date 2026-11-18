@@ -52,16 +52,16 @@ use std::future::Future;
 
 use strims_base::time::{Duration, Time};
 use strims_node_core::{
-    HostId, LinkKind, Node, NodeMetrics, ParentLogEntry, PeerInfo, ReadError, SwarmId, SwarmKey,
-    SwarmReader, SwarmWriter, WriterOptions,
+    DecisionInfo, HostId, LinkKind, Node, NodeMetrics, ParentLogEntry, PeerInfo, ReadError,
+    SwarmId, SwarmKey, SwarmReader, SwarmWriter, WriterOptions,
 };
-use strims_ppspp::{DeliveryMode, SwarmOptions};
+use strims_ppspp::{DeliveryMode, SwarmOptions, TapKind};
 use strims_transfer::SwarmRead;
 use tokio::sync::mpsc;
 
 use crate::media::{self, FlvFile, SeedStats, TagKind, ViewerStats};
 use crate::record::logs::Logs;
-use crate::record::{self, ParentLog};
+use crate::record::{self, DecisionLog, ParentLog};
 use crate::shape::LiveShape;
 use crate::stream::{FRAME_LEN, FrameParser, Parsed, encode_frame};
 use crate::topology::{index_of, swarm_key};
@@ -138,13 +138,16 @@ pub struct Settings {
 /// Runs the node's part (see the [module docs](self)), taking the node's
 /// peers from `peers` as they're added. The seed of a media stream writes
 /// `file`. `parents` is the log the node's config hands its parent
-/// changes to (`NodeConfig::parent_log`), which the lines' records take.
+/// changes to (`NodeConfig::parent_log`), and `checks` the one it hands
+/// its tap's events to (`NodeConfig::decision_log`), which the lines'
+/// records take.
 pub async fn run<R: Runtime + Clone + 'static>(
     node: &Node,
     mut peers: mpsc::UnboundedReceiver<PeerInfo>,
     s: Settings,
     file: Option<&FlvFile>,
     parents: Option<&ParentLog>,
+    checks: Option<&DecisionLog>,
     rt: &R,
 ) -> Result<(), String> {
     let seed = s.index == 0;
@@ -305,6 +308,7 @@ pub async fn run<R: Runtime + Clone + 'static>(
                 m: &m,
                 ids: &ids.borrow(),
                 parents: parents.map(ParentLog::take).unwrap_or_default(),
+                checks: checks.map(DecisionLog::take),
                 reads: std::mem::take(&mut *reads.borrow_mut()),
                 now,
                 origin: Time::from_unix_millis(i64::try_from(s.start_ms).unwrap_or(i64::MAX)),
@@ -422,7 +426,13 @@ async fn read_frames(
 /// "parents": [[t_ms, stream, peer, why], ...], "parents_lost": n,
 /// "reads": [[seq, stamp_ms, read_ms], ...]}`, times Unix ms, peers by
 /// index (`null`: none, or one without), waits as
-/// [`record::waits_json`]. With the node's scheduler logs on
+/// [`record::waits_json`]. With the node's decision log
+/// ([`DecisionLog`]), its parent checks since the last line too,
+/// `"checks": [[t_us, stream, action, best, best_lag_us, runner_up,
+/// runner_up_lag_us, parent, parent_have_us, parent_push_us, unready,
+/// subscriber, backed_off, stale, behind, votes], ...], "checks_lost": n`:
+/// `t_us` in Unix µs, the action by its name (`ParentAction::name`), the
+/// lags in µs (`null`: none). With the node's scheduler logs on
 /// (`NodeConfig::forecast_log`, `request_log`), what they logged since
 /// the last line too, `"logs": Logs` ([`record::logs`], times from
 /// `origin`, the stream's start); a node with them off writes none.
@@ -432,6 +442,7 @@ struct Records<'a> {
     m: &'a NodeMetrics,
     ids: &'a [(HostId, usize)],
     parents: (Vec<ParentLogEntry>, u64),
+    checks: Option<(Vec<DecisionInfo>, u64)>,
     reads: Vec<[u64; 3]>,
     now: Time,
     origin: Time,
@@ -490,6 +501,40 @@ impl Records<'_> {
             .iter()
             .map(|[q, s, r]| format!("[{q},{s},{r}]"))
             .collect();
+        let checks = self
+            .checks
+            .as_ref()
+            .map_or(String::new(), |(checks, lost)| {
+                let us = |d: Option<Duration>| opt(d.map(|d| d.as_micros()));
+                let rows: Vec<String> = checks
+                    .iter()
+                    .filter(|d| d.swarm == Some(swarm))
+                    .filter_map(|d| {
+                        let TapKind::ParentChoice { stream, choice: c } = d.kind else {
+                            return None;
+                        };
+                        Some(format!(
+                            "[{},{stream},\"{}\",{},{},{},{},{},{},{},{},{},{},{},{},{}]",
+                            d.at.unix_nanos() / 1000,
+                            c.action.name(),
+                            opt(d.peer.as_ref().and_then(index)),
+                            us(c.best.map(|b| b.1)),
+                            opt(d.runner_up.as_ref().and_then(index)),
+                            us(c.runner_up.map(|r| r.1)),
+                            opt(d.parent.as_ref().and_then(index)),
+                            us(c.parent_have),
+                            us(c.parent_push),
+                            c.unready,
+                            c.subscriber,
+                            c.backed_off,
+                            c.stale,
+                            c.behind,
+                            c.votes,
+                        ))
+                    })
+                    .collect();
+                format!(",\"checks\":[{}],\"checks_lost\":{lost}", rows.join(","))
+            });
         let logs = Logs::of(self.m, swarm, index);
         let logs = if logs.is_empty() {
             String::new()
@@ -497,7 +542,7 @@ impl Records<'_> {
             format!(",\"logs\":{}", logs.json(self.origin))
         };
         format!(
-            "{{\"meter\":{},\"seed\":{seed},\"bins\":[{}],\"parents\":[{}],\"parents_lost\":{lost},\"reads\":[{}]{logs}}}",
+            "{{\"meter\":{},\"seed\":{seed},\"bins\":[{}],\"parents\":[{}],\"parents_lost\":{lost},\"reads\":[{}]{checks}{logs}}}",
             meter.map_or("null".to_owned(), |m| m.json()),
             bins.join(","),
             parents.join(","),

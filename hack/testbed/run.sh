@@ -210,6 +210,12 @@
 #                          arrivals, haves, asks, seed_decisions and
 #                          seed_sends. Both off (0) by default; a line's
 #                          records hold no logs then
+#   PARENT_CHECKS=1        every node keeps its parent checks
+#                          (--parent-checks: its decision log's), as
+#                          STRIMS_SIM_PARENT_CHECKS=1 does: the tables'
+#                          parent_checks. Off (0) by default. It takes the
+#                          tap a capture would, so run.sh refuses it with
+#                          CAPTURE=1
 #   CAPTURE=1              ppspp captures in <out dir>/capture, one dump
 #                          per node (native and browser), named by host id
 #   PCAP=1                 each node's packets on its eth0, both ways, in
@@ -398,16 +404,19 @@ fi
 node_args=${NODE_ARGS:-}
 browser_args=${BROWSER_ARGS:-}
 rate_arg=${RATE:+--rate $RATE}
-# The scheduler's logs every node keeps (FORECAST, SPEC), as the sim's
-# knobs of those names keep a simulated node's.
+# The scheduler's logs every node keeps (FORECAST, SPEC, PARENT_CHECKS),
+# as the sim's knobs of those names keep a simulated node's.
 log_args=""
-for k in FORECAST SPEC; do
+for k in FORECAST SPEC PARENT_CHECKS; do
   case "${!k:-0}" in
     0) ;;
-    1) log_args="$log_args --$(echo "$k" | tr '[:upper:]' '[:lower:]')" ;;
+    1) log_args="$log_args --$(echo "$k" | tr '[:upper:]_' '[:lower:]-')" ;;
     *) echo "$k=${!k}: 1 or 0" >&2; exit 1 ;;
   esac
 done
+if [ "${PARENT_CHECKS:-0}" = 1 ] && [ "${CAPTURE:-0}" = 1 ]; then
+  echo "PARENT_CHECKS=1 takes the tap CAPTURE=1 would: not both" >&2; exit 1
+fi
 bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
 browser_bin=${BROWSER_BIN:-$root/target/release/examples/testbed_browser}
 web=${WEB_BUNDLE:-$root/dist/wasm-testbed}
@@ -672,7 +681,7 @@ nov6=(--sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv6.conf.default.d
 # the tree changes it, so runs of two trees don't pool. Its root is the
 # node's access link class's (the `links` file names each node's).
 SHAPER="clsact>ifb-netem>root-class"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD|FORECAST|SPEC)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD|FORECAST|SPEC|PARENT_CHECKS)=' \
   > "$out/settings" || true
 echo "QDISC=$SHAPER" >> "$out/settings"
 echo "STAMPS=clock" >> "$out/settings"

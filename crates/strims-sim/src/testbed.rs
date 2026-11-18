@@ -22,8 +22,10 @@
 //!   ([`ViewerStats::record`]); with run.sh's `FORECAST=1` or `SPEC=1`,
 //!   its scheduler's logs too (`rec.logs`, [`strims_testbed::record::logs`]),
 //!   which its report takes as a simulated node's samples hand theirs
-//!   (`add_logs`). Reading a run holds every node's lines at once, so its
-//!   memory grows with them: lines with the logs take about twelve times
+//!   (`add_logs`), and with `PARENT_CHECKS=1` its parent checks
+//!   (`rec.checks`, its decision log's). Reading a run holds every node's
+//!   lines at once, so its memory grows with them: lines with the logs
+//!   take about twelve times
 //!   their bytes.
 //! - **The network.** The WAN columns ([`crate::tables::UP_COUNTERS`])
 //!   count each uplink's packets and bytes, its pure acknowledgements and
@@ -76,7 +78,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use strims_base::stats::WaitHistogram;
 use strims_base::time::Time;
-use strims_ppspp::ParentWhy;
+use strims_ppspp::{ParentAction, ParentWhy};
 use strims_testbed::record::logs::Logs;
 use strims_testbed::record::{BIN_MS, Gated, MeterSample, NODE_BIN_COUNTERS, SeedSample};
 use strims_testbed::stream::{FrameInfo, Parsed};
@@ -85,8 +87,9 @@ use strims_testbed::transfer::{PeerTransfer, TransferSample};
 use crate::calibration::{self, Calibration, WAN_RATE, calibration_star};
 use crate::report::{
     ACK_WHYS, AckWaits, ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport,
-    NodeBinRecord, ParentRecord, Report, RequestHostRecord, SeedDecisionHostRecord,
-    SeedSendHostRecord, SocketSample, ViewerReport, WanHostReport, WanReport,
+    NodeBinRecord, ParentCheckRecord, ParentRecord, Report, RequestHostRecord,
+    SeedDecisionHostRecord, SeedSendHostRecord, SocketSample, ViewerReport, WanHostReport,
+    WanReport,
 };
 use crate::spec::{Competing, Fault, HostIx, Scenario};
 use crate::stream::{SeqSet, ViewerStats};
@@ -128,9 +131,10 @@ const RECORDING: [&str; 11] = [
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
-const TWIN_SETTINGS: [&str; 28] = [
+const TWIN_SETTINGS: [&str; 29] = [
     "FORECAST",
     "SPEC",
+    "PARENT_CHECKS",
     "VIEWERS",
     "SEED_UP_MBIT",
     "VIEWER_UP_MBIT",
@@ -266,8 +270,9 @@ fn num(x: f64) -> String {
 /// The window model (`STRIMS_SIM_TCP=1`), honest viewers
 /// (`STRIMS_SIM_HOSTILE=off`) and one clock (`STRIMS_SIM_CLOCK_SKEW=off`)
 /// always; the scheduler's logs the nodes kept (run.sh's `FORECAST=1`,
-/// `SPEC=1`: `STRIMS_SIM_FORECAST=1`, `STRIMS_SIM_SPEC=1`), so the twin
-/// writes the log tables the run does; the viewers, the seed's uplink and
+/// `SPEC=1`, `PARENT_CHECKS=1`: `STRIMS_SIM_FORECAST=1`,
+/// `STRIMS_SIM_SPEC=1`, `STRIMS_SIM_PARENT_CHECKS=1`), so the twin writes
+/// the log tables the run does; the viewers, the seed's uplink and
 /// the stream's length always; the viewers' joins (`JOIN_AT`, and each of
 /// `JOINS`'s to the ms, `STRIMS_SIM_CAL_JOINS`: [`Run::read`] leaves the
 /// latter out where its caller names the arrivals profile they drew);
@@ -318,7 +323,7 @@ pub fn knobs_of(
     put("STRIMS_SIM_CLOCK_SKEW", "off".to_owned());
     // The scheduler's logs the nodes kept, which the twin keeps too: its
     // knobs are the sim's.
-    for k in ["FORECAST", "SPEC"] {
+    for k in ["FORECAST", "SPEC", "PARENT_CHECKS"] {
         match get(k).map(str::trim) {
             None | Some("" | "0") => {}
             Some("1") => put(&format!("STRIMS_SIM_{k}"), "1".to_owned()),
@@ -711,6 +716,12 @@ impl Run {
         ms.checked_sub(run0).map(Duration::from_millis)
     }
 
+    /// The run time of Unix µs `us`, as [`Run::at`].
+    fn at_us(&self, us: u64) -> Option<Duration> {
+        let run0 = self.start_ms.checked_sub(LEAD.as_millis() as u64)?;
+        us.checked_sub(run0 * 1000).map(Duration::from_micros)
+    }
+
     fn file(&self, name: &str) -> Option<String> {
         std::fs::read_to_string(self.dir.join(name)).ok()
     }
@@ -776,6 +787,7 @@ impl Run {
         let on = |k: &str| self.knobs.get(k).is_some_and(|v| v == "1");
         s.forecast_log = on("STRIMS_SIM_FORECAST");
         s.request_logs = on("STRIMS_SIM_SPEC");
+        s.parent_checks = on("STRIMS_SIM_PARENT_CHECKS");
         // The arrivals profile JOINS drew (a tier matrix's knob), as the
         // twin's row names it; the times are the run's.
         if let Some(a) = self
@@ -847,6 +859,7 @@ impl Run {
             .collect();
         let mut viewers = Vec::new();
         let mut parent_changes = Vec::new();
+        let mut parent_checks = Vec::new();
         let swarm = scenario.swarms.first();
         let seed = swarm.map_or(0, |s| s.seed);
         // The logs' times are from the stream's start (record::logs), and
@@ -906,6 +919,18 @@ impl Run {
                     }
                 }
                 host.parents_lost += rec.get("parents_lost").and_then(Value::as_u64).unwrap_or(0);
+                for c in rec
+                    .get("checks")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Some(r) = self.check_of(i, c) {
+                        parent_checks.push(r);
+                    }
+                }
+                host.parent_checks_lost +=
+                    rec.get("checks_lost").and_then(Value::as_u64).unwrap_or(0);
                 if let Some(logs) = rec.get("logs").and_then(|v| Logs::parse(v, origin)) {
                     add_logs(host, logs, epoch);
                 }
@@ -939,6 +964,7 @@ impl Run {
             }
         }
         parent_changes.sort_by_key(|p: &ParentRecord| (p.at, p.node));
+        parent_checks.sort_by_key(|c: &ParentCheckRecord| (c.at, c.node, c.stream));
         let mut written = SeqSet::default();
         if let Some(s) = swarm {
             for seq in s.frames_between(s.start, s.stop) {
@@ -990,6 +1016,7 @@ impl Run {
                 .collect(),
             parent_losses: Vec::new(),
             parent_changes,
+            parent_checks,
             loops: None,
             skipped_faults,
             scenario,
@@ -1069,6 +1096,37 @@ impl Run {
             incarnation: 1,
             counters,
             waits: [waits(2), waits(3)],
+        })
+    }
+
+    /// A line's parent check (`strims_testbed::node`'s `rec.checks`).
+    fn check_of(&self, node: HostIx, c: &Value) -> Option<ParentCheckRecord> {
+        let host = |k: usize| c.get(k).and_then(Value::as_u64).map(|x| x as usize);
+        let lag = |k: usize| {
+            c.get(k)
+                .and_then(Value::as_i64)
+                .map(strims_base::time::Duration::from_micros)
+        };
+        let n = |k: usize| c.get(k).and_then(Value::as_u64);
+        let action = c.get(2)?.as_str()?;
+        Some(ParentCheckRecord {
+            at: self.at_us(c.get(0)?.as_u64()?)?,
+            node,
+            stream: u16::try_from(c.get(1)?.as_u64()?).ok()?,
+            action: ParentAction::ALL.into_iter().find(|a| a.name() == action)?,
+            best: host(3),
+            best_lag: lag(4),
+            runner_up: host(5),
+            runner_up_lag: lag(6),
+            parent: host(7),
+            parent_have: lag(8),
+            parent_push: lag(9),
+            unready: n(10)?,
+            subscriber: n(11)?,
+            backed_off: n(12)?,
+            stale: n(13)?,
+            behind: n(14)?,
+            votes: n(15)?,
         })
     }
 
@@ -4646,6 +4704,76 @@ mod tests {
                 .unwrap()
                 .contains("SPEC=2: 1 or 0")
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run whose nodes kept their parent checks (PARENT_CHECKS=1) keys
+    /// its twin with the sim's knob, and its lines' checks fill the
+    /// `parent_checks` table as a sim run's decision logs fill it: each
+    /// check's time in µs from the stream's start, its hosts by index, a
+    /// graft's chosen peer its best, its losses in series_meta. A run
+    /// whose knob is off writes no table.
+    #[test]
+    fn a_runs_parent_checks_fill_the_table_its_twin_writes() {
+        let dir = fixture("checks");
+        let path = dir.join("node-1.jsonl");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut lines: Vec<Value> = text
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        let us = (START + 310) * 1000 + 250;
+        lines[0]["rec"]["checks"] = serde_json::from_str(&format!(
+            "[[{us},3,\"graft\",0,12000,null,null,null,null,null,0,0,0,1,0,0]]"
+        ))
+        .unwrap();
+        lines[0]["rec"]["checks_lost"] = Value::from(1);
+        let out: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        std::fs::write(&path, out).unwrap();
+        let bin = Duration::from_millis(BIN_MS.unsigned_abs());
+        let off = dir.join("tables-off");
+        Run::read(&dir, &BTreeMap::new())
+            .unwrap()
+            .report()
+            .write_tables(&off, bin, true)
+            .unwrap();
+        assert!(crate::tables::read_table(&off, "parent_checks").is_err());
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        std::fs::write(dir.join("settings"), format!("{settings}PARENT_CHECKS=1\n")).unwrap();
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs["STRIMS_SIM_PARENT_CHECKS"], "1");
+        let r = run.report();
+        assert_eq!(r.parent_checks.len(), 1);
+        assert_eq!(r.parent_checks[0].at, LEAD + Duration::from_micros(310_250));
+        let on = dir.join("tables-on");
+        r.write_tables(&on, bin, true).unwrap();
+        let rows = table_rows(&on, "parent_checks");
+        let row: Vec<&str> = [
+            "t_us",
+            "node",
+            "stream",
+            "action",
+            "chosen",
+            "best_peer",
+            "best_lag_us",
+            "runner_up_peer",
+            "parent",
+            "stale",
+            "votes",
+        ]
+        .iter()
+        .map(|c| rows[0][*c].as_str())
+        .collect();
+        assert_eq!(
+            row,
+            [
+                "310250", "1", "3", "graft", "0", "0", "12000", "", "", "1", "0"
+            ]
+        );
+        let meta: Value =
+            serde_json::from_str(&std::fs::read_to_string(on.join("series_meta.json")).unwrap())
+                .unwrap();
+        assert_eq!(meta["parent_checks_lost"], 1);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

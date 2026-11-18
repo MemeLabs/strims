@@ -9,8 +9,9 @@
 //! testbed's nodes run the same functions on their own samples and bins
 //! and log the records ([`crate::node`]'s `rec`), which strims-sim's
 //! `testbed` module reads back into a run's report. A testbed node keeps
-//! its parent log in a [`ParentLog`] between its lines, and with its
-//! scheduler's logs on hands each line their records ([`logs`]).
+//! its parent log in a [`ParentLog`] between its lines, and its parent
+//! checks in a [`DecisionLog`], and with its scheduler's logs on hands
+//! each line their records ([`logs`]).
 
 pub mod logs;
 
@@ -25,8 +26,12 @@ use std::time::Duration;
 use strims_base::path;
 use strims_base::stats::WaitHistogram;
 use strims_base::time::Time;
-use strims_node_core::{NodeBin, NodeMetrics, ParentLogEntry, ParentSink, SwarmBin, SwarmKey};
+use strims_node_core::{
+    DecisionInfo, DecisionLogEntry, DecisionSink, NodeBin, NodeMetrics, ParentLogEntry, ParentSink,
+    SwarmBin, SwarmKey,
+};
 use strims_ppspp::PushMode;
+use strims_ppspp::TapKind;
 
 /// The width of the tables' bins, in ms, unless a sim run sets its own
 /// (`STRIMS_SIM_BIN_MS`): the testbed's nodes keep their stats bins at it.
@@ -352,6 +357,57 @@ impl ParentLog {
     }
 }
 
+/// The parent checks a testbed node's decision log hands over
+/// ([`strims_node_core::NodeConfig::decision_log`]: the tap's
+/// `ParentChoice`s, its other events left out), kept until its next line
+/// takes them: at most [`DecisionLog::CAP`], those past it counted as
+/// lost, as are the events the tap's buffers left out, of any kind.
+#[derive(Clone, Debug)]
+pub struct DecisionLog {
+    tx: SyncSender<DecisionInfo>,
+    rx: Rc<Receiver<DecisionInfo>>,
+    lost: Arc<AtomicU64>,
+}
+
+impl Default for DecisionLog {
+    fn default() -> DecisionLog {
+        let (tx, rx) = sync_channel(Self::CAP);
+        DecisionLog {
+            tx,
+            rx: Rc::new(rx),
+            lost: Arc::default(),
+        }
+    }
+}
+
+impl DecisionLog {
+    /// The checks a log keeps between two takes.
+    pub const CAP: usize = 4096;
+
+    /// The sink for the node's config.
+    pub fn sink(&self) -> DecisionSink {
+        let (tx, lost) = (self.tx.clone(), self.lost.clone());
+        DecisionSink(Arc::new(move |e| {
+            let n = match e {
+                DecisionLogEntry::Lost(n) => n,
+                DecisionLogEntry::Decision(d) if matches!(d.kind, TapKind::ParentChoice { .. }) => {
+                    u64::from(tx.try_send(d).is_err())
+                }
+                DecisionLogEntry::Decision(_) => 0,
+            };
+            lost.fetch_add(n, Ordering::Relaxed);
+        }))
+    }
+
+    /// The checks since the last take, and the events left out.
+    pub fn take(&self) -> (Vec<DecisionInfo>, u64) {
+        (
+            self.rx.try_iter().collect(),
+            self.lost.swap(0, Ordering::Relaxed),
+        )
+    }
+}
+
 /// `v`, or `null`.
 fn opt(v: Option<impl ToString>) -> String {
     v.map_or("null".to_owned(), |v| v.to_string())
@@ -414,4 +470,57 @@ pub fn waits_json(h: &WaitHistogram) -> String {
     }
     s.push(']');
     s
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
+    use super::*;
+    use strims_ppspp::{ParentAction, ParentChoice};
+
+    /// The log keeps the tap's parent checks alone, up to its cap, and
+    /// counts as lost those past it and the events the tap left out.
+    #[test]
+    fn the_decision_log_keeps_parent_checks_and_counts_the_rest_lost() {
+        let log = DecisionLog::default();
+        let sink = log.sink();
+        let choice = ParentChoice {
+            action: ParentAction::Graft,
+            parent: None,
+            best: None,
+            runner_up: None,
+            unready: 0,
+            subscriber: 0,
+            backed_off: 0,
+            stale: 0,
+            behind: 0,
+            votes: 0,
+            parent_have: None,
+            parent_push: None,
+        };
+        let event = |kind| {
+            DecisionLogEntry::Decision(DecisionInfo {
+                at: Time::from_unix_millis(1),
+                swarm: None,
+                peer: None,
+                runner_up: None,
+                parent: None,
+                kind,
+            })
+        };
+        for _ in 0..DecisionLog::CAP + 2 {
+            (sink.0)(event(TapKind::ParentChoice { stream: 1, choice }));
+        }
+        (sink.0)(event(TapKind::HolderJoined));
+        (sink.0)(DecisionLogEntry::Lost(3));
+        let (checks, lost) = log.take();
+        assert_eq!((checks.len(), lost), (DecisionLog::CAP, 5));
+        assert!(
+            checks
+                .iter()
+                .all(|d| matches!(d.kind, TapKind::ParentChoice { stream: 1, .. }))
+        );
+        assert_eq!(log.take().1, 0);
+    }
 }

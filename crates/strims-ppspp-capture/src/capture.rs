@@ -1193,6 +1193,7 @@ mod tests {
                 stream: 1,
                 choice: ParentChoice {
                     action: ParentAction::Vote,
+                    parent: None,
                     best: Some((peer, d)),
                     runner_up: None,
                     unready: 1,

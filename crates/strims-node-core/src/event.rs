@@ -334,18 +334,27 @@ pub enum ParentLogEntry {
 /// ppspp's `TapEvent`): when, by the node's clock (the pass that made it),
 /// its swarm, the peer it is about by host (`None` for none, or one the
 /// node can't name), and what happened. The peer keys inside `kind` (a
-/// `ParentChoice`'s candidates, a `Switched`'s `from`) are the runner's
-/// own: only `peer` is named by host.
+/// `ParentChoice`'s candidates and parent, a `Switched`'s `from`) are the
+/// runner's own: `peer` is named by host, and so are a `ParentChoice`'s
+/// runner-up and parent, for a log's rows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DecisionInfo {
     pub at: Time,
     pub swarm: Option<SwarmKey>,
     pub peer: Option<ID>,
+    /// A `ParentChoice`'s runner-up by host; `None` for none, another
+    /// kind, or one the node can't name.
+    pub runner_up: Option<ID>,
+    /// A `ParentChoice`'s parent by host, as `runner_up`.
+    pub parent: Option<ID>,
     pub kind: TapKind,
 }
 
 /// What a node's decision log hands its sink
 /// ([`crate::NodeConfig::decision_log`]).
+// An entry goes to the sink by value, one at a time: boxing the large
+// variant would allocate for every event.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DecisionLogEntry {
     /// An event of the tap.

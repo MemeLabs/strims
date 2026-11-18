@@ -29,7 +29,9 @@
 //! with `STRIMS_SIM_SPEC=1`, the held log's, the HAVE log's and the request
 //! log's (`held_lost`, `haves_lost`, `asks_lost`: requests, each with its
 //! rivals). With it too, the seed log's decisions and sends its caps left
-//! out are `seed_log_lost`.
+//! out are `seed_log_lost`. With `STRIMS_SIM_PARENT_CHECKS=1`, the
+//! `parent_checks` table, and the tap's events of any kind the nodes'
+//! buffers left out (`parent_checks_lost`).
 //!
 //! The runners' counters reach the bins from the nodes themselves
 //! (`NodeConfig::stats_bins`), read at each edge before the node's first
@@ -761,6 +763,9 @@ impl Report {
             *n += 1;
         }
         t.finish()?;
+        if self.scenario.parent_checks {
+            self.parent_checks_table(dir, start)?.finish()?;
+        }
         let hostile = |h: HostIx| {
             matches!(
                 self.scenario.hosts.get(h).map(|x| x.class),
@@ -883,6 +888,10 @@ impl Report {
             .int(MetaInt::BinMs, width.as_millis())
             .int(MetaInt::ForecastsLost, lost)
             .int(MetaInt::ParentsLost, parents_lost);
+        if self.scenario.parent_checks {
+            let lost: u64 = self.hosts.iter().map(|h| h.parent_checks_lost).sum();
+            meta.int(MetaInt::ParentChecksLost, lost);
+        }
         if self.scenario.request_logs {
             let sum = |f: fn(&HostReport) -> u64| -> u64 { self.hosts.iter().map(f).sum() };
             meta.int(MetaInt::HeldLost, sum(|h| h.held_lost))
@@ -893,6 +902,68 @@ impl Report {
         let mut meta = meta.finish();
         meta.push('\n');
         std::fs::write(dir.join("series_meta.json"), meta)
+    }
+
+    /// The `parent_checks` table ([`Report::parent_checks`]), times in µs
+    /// from `start`: a check's `chosen` its best candidate where it asked
+    /// it (a graft, a switch).
+    fn parent_checks_table(&self, dir: &Path, start: Duration) -> io::Result<Table> {
+        let mut t = Table::new(
+            dir,
+            &[
+                cols::ParentChecks::TUs,
+                cols::ParentChecks::Node,
+                cols::ParentChecks::Stream,
+                cols::ParentChecks::Action,
+                cols::ParentChecks::Chosen,
+                cols::ParentChecks::BestPeer,
+                cols::ParentChecks::BestLagUs,
+                cols::ParentChecks::RunnerUpPeer,
+                cols::ParentChecks::RunnerUpLagUs,
+                cols::ParentChecks::Parent,
+                cols::ParentChecks::ParentHaveUs,
+                cols::ParentChecks::ParentPushUs,
+                cols::ParentChecks::Unready,
+                cols::ParentChecks::Subscriber,
+                cols::ParentChecks::BackedOff,
+                cols::ParentChecks::Stale,
+                cols::ParentChecks::Behind,
+                cols::ParentChecks::Votes,
+            ],
+        )?;
+        let us = |at: Duration| -> i64 {
+            match at.checked_sub(start) {
+                Some(d) => d.as_micros() as i64,
+                None => -(start.saturating_sub(at).as_micros() as i64),
+            }
+        };
+        let host = |h: Option<HostIx>| h.map_or(String::new(), |h| h.to_string());
+        let lag = |d: Option<strims_base::time::Duration>| {
+            d.map_or(String::new(), |d| d.as_micros().to_string())
+        };
+        for c in &self.parent_checks {
+            t.fields(&[
+                us(c.at).to_string(),
+                c.node.to_string(),
+                c.stream.to_string(),
+                c.action.name().to_owned(),
+                host(c.best.filter(|_| c.action.asks())),
+                host(c.best),
+                lag(c.best_lag),
+                host(c.runner_up),
+                lag(c.runner_up_lag),
+                host(c.parent),
+                lag(c.parent_have),
+                lag(c.parent_push),
+                c.unready.to_string(),
+                c.subscriber.to_string(),
+                c.backed_off.to_string(),
+                c.stale.to_string(),
+                c.behind.to_string(),
+                c.votes.to_string(),
+            ]);
+        }
+        Ok(t)
     }
 
     /// Viewer `v`'s reads as the `reads` table has them: `(t_ms, seq,

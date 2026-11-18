@@ -163,7 +163,8 @@ pub struct NodeConfig {
     /// Turns the ppspp runner's tap on (`Runner::set_tap` at
     /// `TapLevel::All`: its decisions, and its peers', swarms' and
     /// channels' comings and goings) and hands every event to the sink,
-    /// its peer named by host, and how many the tap's buffers left out: at
+    /// its peer named by host (a parent check's runner-up and parent too:
+    /// `DecisionInfo`), and how many the tap's buffers left out: at
     /// the end of the node's pass that made it, before the pass forgets
     /// the peer it names; `None` (the default, and every real node's)
     /// leaves the tap off. It changes no decision. A capture

@@ -290,9 +290,10 @@ pub(crate) trait Column: Key {
 }
 
 /// The tables strims-sim writes zstd-compressed, `<name>.csv.zst`.
-pub(crate) const ZSTD: [&str; 10] = [
+pub(crate) const ZSTD: [&str; 11] = [
     "reads",
     "events",
+    "parent_checks",
     "node_bins",
     "forecast",
     "arrivals",
@@ -2934,6 +2935,10 @@ pub(crate) enum MetaInt {
     ForecastsLost,
     /// The parent changes the logs' caps left out.
     ParentsLost,
+    /// With the parent checks on (PARENT_CHECKS), the tap's events the nodes'
+    /// buffers and logs left out, every host's, summed: events of every kind
+    /// the tap keeps, so at most that many checks.
+    ParentChecksLost,
     /// With the request logs on, the held log's records the caps left out.
     HeldLost,
     /// With the request logs on, the HAVE log's records the caps left out.
@@ -2962,6 +2967,7 @@ impl MetaInt {
             MetaInt::BinMs => "bin_ms",
             MetaInt::ForecastsLost => "forecasts_lost",
             MetaInt::ParentsLost => "parents_lost",
+            MetaInt::ParentChecksLost => "parent_checks_lost",
             MetaInt::HeldLost => "held_lost",
             MetaInt::HavesLost => "haves_lost",
             MetaInt::AsksLost => "asks_lost",
@@ -4001,6 +4007,155 @@ pub(crate) mod cols {
                     Ty::Int
                 }
                 Parents::Reason => Ty::Text,
+            }
+        }
+    }
+
+    /// The `parent_checks` table's columns: a row per parent check of a stream
+    /// of the first swarm that did something, at a viewer (the tap's
+    /// `ParentChoice`).
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum ParentChecks {
+        /// When the node checked the stream's parent, in µs of true time from
+        /// the stream's start: the end of the node's pass that checked it.
+        ///
+        /// Unit: us.
+        TUs,
+        /// the viewer that checked, as in `events`
+        Node,
+        /// The stream whose parent the node checked.
+        Stream,
+        /// What the check did (`strims_ppspp::ParentAction`): `graft` (the
+        /// stream had no open parent, and the check asked its best candidate to
+        /// push it), `none` (no open parent and no candidate), `vote` (a
+        /// candidate beat the open parent, at fewer checks in a row than a
+        /// switch takes), `switch` (a candidate beat it at enough checks in a
+        /// row, and the check asked it), `reset` (no candidate beats the parent
+        /// any more, and its votes start over).
+        Action,
+        /// The host the check asked to push the stream: its best candidate at a
+        /// graft or a switch; empty at a vote, a reset or none.
+        ///
+        /// None is written as an empty field.
+        Chosen,
+        /// The candidate with the lowest mean announcement lag, the open parent
+        /// aside: of the neighbours with a handshake that don't choke the node,
+        /// aren't backed off from the stream or its subscribers for it,
+        /// announced it recently (`CANDIDATE_FRESHNESS`) and announced a chunk
+        /// of it the node lacked. Empty for none.
+        ///
+        /// None is written as an empty field.
+        BestPeer,
+        /// best_peer's mean announcement lag of the stream as the check
+        /// compared it: its HAVEs' arrivals less the node's first sight of each
+        /// chunk, averaged (`LagEwma`). Empty with no best.
+        ///
+        /// Unit: us. None is written as an empty field.
+        BestLagUs,
+        /// The candidate with the second lowest mean announcement lag; empty
+        /// for none.
+        ///
+        /// None is written as an empty field.
+        RunnerUpPeer,
+        /// runner_up_peer's mean announcement lag of the stream as the check
+        /// compared it; empty with no runner-up.
+        ///
+        /// Unit: us. None is written as an empty field.
+        RunnerUpLagUs,
+        /// The stream's open parent at the check, which is no candidate; empty
+        /// at a graft or none, the checks of a stream without one.
+        ///
+        /// None is written as an empty field.
+        Parent,
+        /// The open parent's mean announcement lag of the stream, while recent;
+        /// empty otherwise, and without a parent.
+        ///
+        /// Unit: us. None is written as an empty field.
+        ParentHaveUs,
+        /// The mean delay of the open parent's pushes of the stream, once it
+        /// pushed four; empty before, and without a parent.
+        ///
+        /// Unit: us. None is written as an empty field.
+        ParentPushUs,
+        /// Neighbours the check passed over with no handshake yet, choking the
+        /// node, or with no push state for the swarm.
+        Unready,
+        /// Neighbours the check passed over as the node's own subscribers for
+        /// the stream.
+        Subscriber,
+        /// Neighbours the check passed over as backed off from the stream,
+        /// after a prune, a decline or a timeout.
+        BackedOff,
+        /// Neighbours the check passed over as having announced the stream too
+        /// long ago.
+        Stale,
+        /// Neighbours the check passed over as having announced nothing of the
+        /// stream the node lacked recently: they may take it from the node,
+        /// through any chain.
+        Behind,
+        /// At a vote or a switch, the checks in a row at which a candidate beat
+        /// the open parent, this one's included; at a reset, those it ends; 0
+        /// at a graft or none.
+        Votes,
+    }
+
+    impl ParentChecks {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                ParentChecks::TUs => "t_us",
+                ParentChecks::Node => "node",
+                ParentChecks::Stream => "stream",
+                ParentChecks::Action => "action",
+                ParentChecks::Chosen => "chosen",
+                ParentChecks::BestPeer => "best_peer",
+                ParentChecks::BestLagUs => "best_lag_us",
+                ParentChecks::RunnerUpPeer => "runner_up_peer",
+                ParentChecks::RunnerUpLagUs => "runner_up_lag_us",
+                ParentChecks::Parent => "parent",
+                ParentChecks::ParentHaveUs => "parent_have_us",
+                ParentChecks::ParentPushUs => "parent_push_us",
+                ParentChecks::Unready => "unready",
+                ParentChecks::Subscriber => "subscriber",
+                ParentChecks::BackedOff => "backed_off",
+                ParentChecks::Stale => "stale",
+                ParentChecks::Behind => "behind",
+                ParentChecks::Votes => "votes",
+            }
+        }
+    }
+
+    impl sealed::Sealed for ParentChecks {}
+
+    impl Key for ParentChecks {
+        fn name(self) -> &'static str {
+            ParentChecks::name(self)
+        }
+    }
+
+    impl Column for ParentChecks {
+        const TABLE: &'static str = "parent_checks";
+
+        fn ty(self) -> Ty {
+            match self {
+                ParentChecks::TUs
+                | ParentChecks::Node
+                | ParentChecks::Stream
+                | ParentChecks::Chosen
+                | ParentChecks::BestPeer
+                | ParentChecks::BestLagUs
+                | ParentChecks::RunnerUpPeer
+                | ParentChecks::RunnerUpLagUs
+                | ParentChecks::Parent
+                | ParentChecks::ParentHaveUs
+                | ParentChecks::ParentPushUs
+                | ParentChecks::Unready
+                | ParentChecks::Subscriber
+                | ParentChecks::BackedOff
+                | ParentChecks::Stale
+                | ParentChecks::Behind
+                | ParentChecks::Votes => Ty::Int,
+                ParentChecks::Action => Ty::Text,
             }
         }
     }

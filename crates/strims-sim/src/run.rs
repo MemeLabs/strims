@@ -427,8 +427,10 @@ fn report(
     memory: Option<MemoryReport>,
     wan: Option<WanReport>,
 ) -> Report {
-    // The nodes' last parent log entries, their lost counts the hosts'.
+    // The nodes' last parent log entries and checks, their lost counts the
+    // hosts'.
     w.take_parents();
+    w.take_checks();
     let mut st = w.st.borrow_mut();
     let mut vpn = st.vpn.clone();
     if w.spec.probes.is_some() {
@@ -486,6 +488,7 @@ fn report(
     let loops = st.loops.as_ref().map(crate::loops::Loops::report);
     drop(st);
     let parent_changes = w.parent_changes();
+    let parent_checks = w.parent_checks();
     if w.spec.probes.is_some() {
         vpn.unicast_by_phase = control::unicast_phases(w);
         vpn.lookups_by_phase = control::lookup_phases(w);
@@ -517,6 +520,7 @@ fn report(
         sockets: Vec::new(),
         parent_losses,
         parent_changes,
+        parent_checks,
         loops,
         skipped_faults,
     };

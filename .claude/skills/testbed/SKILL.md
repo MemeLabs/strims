@@ -60,7 +60,10 @@ crates differ from those the page was built from builds its own page.
   seed_sends. The lines grow large (a 3-viewer mesh's 40 s: about 5 MB a
   node), and folding a run holds every line in memory (testbed_tables:
   229 MB for that run's 19 MB): measure a run's lines and the fold's RSS
-  before a matrix turns the logs on.
+  before a matrix turns the logs on. `PARENT_CHECKS=1` keeps each node's
+  parent checks (the tables' parent_checks, as the twin's knob of that
+  name); it takes the tap a capture would, so run.sh refuses it with
+  `CAPTURE=1`.
 - `SEED_LINK`, `VIEWER_LINK` and `LINKS` give nodes access link
   classes: tbf, cable, dsl, fiber or trace (`hack/testbed/links.sh`
   documents each).

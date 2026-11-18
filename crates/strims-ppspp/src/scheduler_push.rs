@@ -2674,6 +2674,7 @@ impl PeerSwarmScheduler {
         };
         let mut c = ParentChoice {
             action,
+            parent,
             best: None,
             runner_up: None,
             unready: 0,

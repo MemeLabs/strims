@@ -1767,17 +1767,30 @@ impl State {
             return;
         };
         runner.drain_tap(|e| {
+            let host = |p: Option<PpsppPeer>| {
+                p.and_then(|pp| match gone {
+                    Some((g, host)) if g == pp => Some(host),
+                    _ => Some(peers.get(*ppspp_peers.get(pp)?)?.host_id),
+                })
+            };
             let entry = match e.kind {
                 TapKind::Lost { count } => DecisionLogEntry::Lost(count),
-                kind => DecisionLogEntry::Decision(DecisionInfo {
-                    at: now,
-                    swarm: e.swarm,
-                    peer: e.peer.and_then(|pp| match gone {
-                        Some((g, host)) if g == pp => Some(host),
-                        _ => Some(peers.get(*ppspp_peers.get(pp)?)?.host_id),
-                    }),
-                    kind,
-                }),
+                kind => {
+                    let (runner_up, parent) = match kind {
+                        TapKind::ParentChoice { choice, .. } => {
+                            (host(choice.runner_up.map(|r| r.0)), host(choice.parent))
+                        }
+                        _ => (None, None),
+                    };
+                    DecisionLogEntry::Decision(DecisionInfo {
+                        at: now,
+                        swarm: e.swarm,
+                        peer: host(e.peer),
+                        runner_up,
+                        parent,
+                        kind,
+                    })
+                }
             };
             (sink.0)(entry);
         });

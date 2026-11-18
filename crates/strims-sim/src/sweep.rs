@@ -156,11 +156,14 @@
 //!   channels with each peer (`peer_samples`), and
 //!   `STRIMS_SIM_FORECAST=1` the nodes' forecast logs (`forecast`, large:
 //!   [`Scenario::forecast_log`]), `STRIMS_SIM_SPEC=1` their request logs
-//!   (`arrivals`, `haves`, `asks`, large: [`Scenario::request_logs`]), and
+//!   (`arrivals`, `haves`, `asks`, large: [`Scenario::request_logs`]),
 //!   `STRIMS_SIM_PACKET_LOG=<hosts>` every packet those hosts offered their
 //!   uplinks (`packets`, large and held to the run's end:
 //!   [`Scenario::packet_log`]; `all` or `1`, `seed`, `viewers`, or host
-//!   numbers, [`packet_log_hosts`]). None of them changes the trace.
+//!   numbers, [`packet_log_hosts`]), and `STRIMS_SIM_PARENT_CHECKS=1`
+//!   their parent checks (`parent_checks`: [`Scenario::parent_checks`]),
+//!   which take the tap a capture would, so it fails with
+//!   `STRIMS_SIM_CAPTURE`. None of them changes the trace.
 //! - `STRIMS_SIM_ROWS=1` prints each run's measures as one line,
 //!   `ROW {json}`, on stdout ([`Report::row`]).
 //! - `STRIMS_SIM_JOB=1` runs the sweep as one sim farm job
@@ -776,6 +779,7 @@ fn sweep_seeds(
     let forecast = knob::<u32>("STRIMS_SIM_FORECAST") == Some(1);
     let request_logs = knob::<u32>("STRIMS_SIM_SPEC") == Some(1);
     let packet_log = env("STRIMS_SIM_PACKET_LOG");
+    let parent_checks = knob::<u32>("STRIMS_SIM_PARENT_CHECKS") == Some(1);
     let chunk: Option<usize> = knob("STRIMS_SIM_CHUNK");
     let munro: Option<usize> = knob("STRIMS_SIM_MUNRO");
     let stream_secs: Option<u64> = knob("STRIMS_SIM_STREAM_SECS");
@@ -816,6 +820,7 @@ fn sweep_seeds(
             spec.forecast_log = forecast;
             spec.request_logs = request_logs;
             spec.node_bins = bin_nodes;
+            spec.parent_checks = parent_checks;
         }
         if segment.is_some() {
             spec.tcp_segment = segment;
@@ -918,6 +923,14 @@ fn sweep_seeds(
         }
         if seed_links {
             spec.link_seed_to_viewers();
+        }
+        if spec.parent_checks && capture.is_some() {
+            fail(
+                test,
+                seed,
+                "STRIMS_SIM_PARENT_CHECKS takes the tap STRIMS_SIM_CAPTURE would",
+                &[],
+            );
         }
         if loops {
             if capture.is_some() {

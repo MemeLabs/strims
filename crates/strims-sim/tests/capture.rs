@@ -213,6 +213,7 @@ fn a_run_with_tables_keeps_its_trace() {
             spec.request_logs = true;
             spec.packet_log = (0..spec.hosts.len()).collect();
             spec.node_bins = true;
+            spec.parent_checks = true;
             let r = run(spec, 1).unwrap();
             assert_eq!(
                 (&plain.trace_hash, plain.reads_hash()),
@@ -339,6 +340,7 @@ fn a_run_with_tables_keeps_its_trace() {
             stalls_say_how_playout_went(&d);
             parents_say_how_the_trees_changed(&r, &d);
             packets_say_what_they_are(&r, &d, name);
+            parent_checks_say_what_they_are(&r, &d);
         }
     }
     // The departure path: a node that goes hands over its last snapshot
@@ -352,6 +354,7 @@ fn a_run_with_tables_keeps_its_trace() {
         spec.wire_bins = Some(Duration::from_secs(1));
         spec.forecast_log = true;
         spec.request_logs = true;
+        spec.parent_checks = true;
         let r = run(spec, 1).unwrap();
         assert_eq!(
             (&plain.trace_hash, plain.reads_hash()),
@@ -1674,6 +1677,159 @@ fn parents_say_how_the_trees_changed(r: &strims_sim::Report, d: &Path) {
         serde_json::from_str(&std::fs::read_to_string(d.join("series_meta.json")).unwrap())
             .unwrap();
     assert_eq!(meta["parents_lost"], 0, "{meta}");
+}
+
+/// The parent checks (`Scenario::parent_checks`) against what they say
+/// and the parent log: a viewer's checks of its streams, each with the
+/// columns its action has (a parent and votes with a parent, a chosen
+/// peer where it asked its best, a best where it found one: always but at
+/// none and a reset, whose parent may stand alone), two candidates apart,
+/// the best's lag the lowest, and its parent the stream's open parent at
+/// some point of its pass, as the parents table has the changes (a pass's
+/// share its ms, in order). Returns the checks' count by action.
+fn parent_checks_say_what_they_are(r: &strims_sim::Report, d: &Path) -> BTreeMap<String, u64> {
+    let rows = table_rows(d, "parent_checks");
+    assert!(!rows.is_empty());
+    let swarm = &r.scenario.swarms[0];
+    let streams = swarm.options.stream_count.max(1) as i64;
+    let viewers: BTreeSet<i64> = swarm.viewers.iter().map(|&v| v as i64).collect();
+    // Each (node, stream)'s parent from each change on: (t_ms, parent).
+    type Changes = Vec<(i64, Option<i64>)>;
+    let mut history: BTreeMap<(i64, i64), Changes> = BTreeMap::new();
+    for p in table_rows(d, "parents") {
+        let key = (int(&p, "node").unwrap(), int(&p, "stream").unwrap());
+        let parent = int(&p, "parent").filter(|&x| x >= 0);
+        history
+            .entry(key)
+            .or_default()
+            .push((int(&p, "t_ms").unwrap(), parent));
+    }
+    let mut last = i64::MIN;
+    let mut actions: BTreeMap<String, u64> = BTreeMap::new();
+    for c in &rows {
+        let (t, node, stream) = (
+            int(c, "t_us").unwrap(),
+            int(c, "node").unwrap(),
+            int(c, "stream").unwrap(),
+        );
+        assert!(t >= last, "{c:?}: out of order");
+        last = t;
+        assert!(
+            viewers.contains(&node) && (0..streams).contains(&stream),
+            "{c:?}"
+        );
+        let (best, runner_up, parent, chosen) = (
+            int(c, "best_peer"),
+            int(c, "runner_up_peer"),
+            int(c, "parent"),
+            int(c, "chosen"),
+        );
+        let (best_lag, runner_up_lag) = (int(c, "best_lag_us"), int(c, "runner_up_lag_us"));
+        let votes = int(c, "votes").unwrap();
+        let action = c["action"].as_str();
+        let asks = matches!(action, "graft" | "switch");
+        let parented = matches!(action, "vote" | "switch" | "reset");
+        assert!(
+            ["graft", "none", "vote", "switch", "reset"].contains(&action),
+            "{c:?}"
+        );
+        assert_eq!(chosen, best.filter(|_| asks), "{c:?}");
+        assert_eq!(parent.is_some(), parented, "{c:?}");
+        assert_eq!(votes > 0, parented, "{c:?}");
+        if !parented {
+            assert!(
+                c["parent_have_us"].is_empty() && c["parent_push_us"].is_empty(),
+                "{c:?}"
+            );
+        }
+        match action {
+            "none" => assert!(best_lag.is_none(), "{c:?}"),
+            "reset" => {}
+            _ => assert!(best_lag.is_some(), "{c:?}"),
+        }
+        assert!(runner_up_lag.is_none() || best_lag.is_some(), "{c:?}");
+        assert!(runner_up.is_none() || runner_up != best, "{c:?}");
+        assert!(
+            best_lag.zip(runner_up_lag).is_none_or(|(b, u)| b <= u),
+            "{c:?}"
+        );
+        assert!(
+            best != Some(node) && runner_up != Some(node) && parent != Some(node),
+            "{c:?}"
+        );
+        assert!(best.is_none() || best != parent, "{c:?}");
+        // The stream's parent before the check's ms, and after each change
+        // in it.
+        let ms = t.div_euclid(1000);
+        let changes = history.get(&(node, stream)).map_or(&[][..], Vec::as_slice);
+        let before = changes
+            .iter()
+            .rev()
+            .find(|&&(at, _)| at < ms)
+            .and_then(|&(_, p)| p);
+        let mut could = vec![before];
+        could.extend(changes.iter().filter(|&&(at, _)| at == ms).map(|&(_, p)| p));
+        assert!(
+            could.contains(&parent),
+            "{c:?}: the stream's parents then {could:?}"
+        );
+        *actions.entry(action.to_owned()).or_default() += 1;
+    }
+    assert!(actions.get("graft").is_some_and(|&n| n > 0), "{actions:?}");
+    let meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(d.join("series_meta.json")).unwrap())
+            .unwrap();
+    assert_eq!(meta["parent_checks_lost"], 0, "{meta}");
+    actions
+}
+
+/// The parent checks of a twin whose parents switch: seven viewers in a
+/// full mesh behind a 5 Mbit/s seed, the window model on, their checks
+/// voting, switching and resetting, as the tables say
+/// ([`parent_checks_say_what_they_are`]); the log changes no trace.
+#[test]
+fn parent_checks_say_what_they_are_where_parents_switch() {
+    let build = || {
+        let mut c = strims_sim::calibration::Calibration::from_knobs(|k| {
+            match k {
+                "STRIMS_SIM_CAL_VIEWERS" => Some("7"),
+                "STRIMS_SIM_CAL_SEED_UP_MBIT" => Some("5"),
+                "STRIMS_SIM_CAL_MESH" => Some("full"),
+                "STRIMS_SIM_CAL_SECS" => Some("15"),
+                _ => None,
+            }
+            .map(str::to_owned)
+        });
+        c.window = true;
+        c.chunks = Some((4096, 32 * 1024));
+        let mut s = strims_sim::calibration::calibration_star(&c);
+        s.transfer_samples = true;
+        s
+    };
+    let plain = run(build(), 1).unwrap();
+    let bin = Duration::from_millis(100);
+    let mut spec = build();
+    spec.wire_bins = Some(bin);
+    spec.parent_checks = true;
+    let r = run(spec, 1).unwrap();
+    assert_eq!(
+        (&plain.trace_hash, plain.reads_hash()),
+        (&r.trace_hash, r.reads_hash())
+    );
+    let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "parent_checks_say_what_they_are_where_parents_switch-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&d);
+    r.write_tables(&d, bin, true).unwrap();
+    let actions = parent_checks_say_what_they_are(&r, &d);
+    for a in ["vote", "switch", "reset"] {
+        assert!(
+            actions.get(a).is_some_and(|&n| n > 0),
+            "no {a}: {actions:?}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&d);
 }
 
 /// Every honest peer's HAVE and answer came once it held the chunk, and

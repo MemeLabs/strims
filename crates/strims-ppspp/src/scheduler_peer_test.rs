@@ -2699,6 +2699,8 @@ fn the_tap_gives_misses_and_prunes_their_deadlines_and_rules() {
     assert_eq!(c.action, crate::ParentAction::Graft);
     assert_eq!(c.best.map(|b| b.0), Some(other));
     assert_eq!((c.runner_up, c.backed_off, c.stale), (None, 1, 0));
+    // A graft's stream has no open parent.
+    assert_eq!(c.parent, None);
 }
 
 #[test]

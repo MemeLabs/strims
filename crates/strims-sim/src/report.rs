@@ -188,6 +188,10 @@ pub struct HostReport {
     /// (`NodeConfig::parent_log`, [`Report::parent_changes`]) the runner's
     /// caps left out, every incarnation.
     pub parents_lost: u64,
+    /// With [`Scenario::parent_checks`], the tap events its buffers and
+    /// decision log left out, of every kind, every incarnation: at most
+    /// that many of its [`Report::parent_checks`].
+    pub parent_checks_lost: u64,
     /// Its messages with each peer on each scenario swarm, every
     /// incarnation, at its stats samples: (the peer's host, `None` for one
     /// it can't name, the swarm, the counts).
@@ -826,6 +830,12 @@ pub struct Report {
     /// end of the node's pass that made it, a pass's in the order the node
     /// made them.
     pub parent_changes: Vec<ParentRecord>,
+    /// With [`Scenario::parent_checks`] (and the tables), every parent
+    /// check of a stream of the first swarm that did something, at every
+    /// node, in time order (nodes' and streams' at one time in their
+    /// order): the nodes' decision logs (`NodeConfig::decision_log`), each
+    /// check at the end of the node's pass that made it.
+    pub parent_checks: Vec<ParentCheckRecord>,
     /// With [`Scenario::loops`], how push loops formed and the grafts and
     /// switches asked ([`crate::loops`]).
     pub loops: Option<crate::loops::LoopReport>,
@@ -884,6 +894,65 @@ pub struct ParentRecord {
     pub stream: u16,
     pub parent: Option<HostIx>,
     pub why: strims_ppspp::ParentWhy,
+}
+
+/// A parent check of `node`'s ([`Report::parent_checks`], the tap's
+/// `ParentChoice`): when, in run time, its stream and what it did; its
+/// best candidate and runner-up and their mean announcement lags, and the
+/// stream's open parent and its lags (hosts `None` for none, or one the
+/// node couldn't name; lags `None` unmeasured); and the neighbours it
+/// passed over and why, and its votes, as `ParentChoice` counts them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParentCheckRecord {
+    pub at: Duration,
+    pub node: HostIx,
+    pub stream: u16,
+    pub action: strims_ppspp::ParentAction,
+    pub best: Option<HostIx>,
+    pub best_lag: Option<strims_base::time::Duration>,
+    pub runner_up: Option<HostIx>,
+    pub runner_up_lag: Option<strims_base::time::Duration>,
+    pub parent: Option<HostIx>,
+    pub parent_have: Option<strims_base::time::Duration>,
+    pub parent_push: Option<strims_base::time::Duration>,
+    pub unready: u64,
+    pub subscriber: u64,
+    pub backed_off: u64,
+    pub stale: u64,
+    pub behind: u64,
+    pub votes: u64,
+}
+
+impl ParentCheckRecord {
+    /// The check `choice` of `stream` at `node`, at `at`, its hosts as
+    /// named.
+    pub fn of(
+        at: Duration,
+        node: HostIx,
+        stream: u16,
+        c: &strims_ppspp::ParentChoice,
+        [best, runner_up, parent]: [Option<HostIx>; 3],
+    ) -> ParentCheckRecord {
+        ParentCheckRecord {
+            at,
+            node,
+            stream,
+            action: c.action,
+            best,
+            best_lag: c.best.map(|b| b.1),
+            runner_up,
+            runner_up_lag: c.runner_up.map(|r| r.1),
+            parent,
+            parent_have: c.parent_have,
+            parent_push: c.parent_push,
+            unready: c.unready,
+            subscriber: c.subscriber,
+            backed_off: c.backed_off,
+            stale: c.stale,
+            behind: c.behind,
+            votes: c.votes,
+        }
+    }
 }
 
 /// A host that departed ([`crate::Fault::Depart`]) while it was a push

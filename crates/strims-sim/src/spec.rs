@@ -594,6 +594,12 @@ pub struct Scenario {
     ///
     /// [`WanHostReport::offers`]: crate::report::WanHostReport::offers
     pub node_bins: bool,
+    /// With [`Scenario::wire_bins`], every node's decision log
+    /// (`NodeConfig::decision_log`) keeps its parent checks for the
+    /// tables' `parent_checks` (`STRIMS_SIM_PARENT_CHECKS=1`). The log
+    /// changes no decision, so no trace; a capture takes the tap it would,
+    /// so the two don't mix.
+    pub parent_checks: bool,
     /// TCP writes in pieces of at most this many bytes, as segments: the
     /// window model ([`SendBuffer::window`]) then fills a window segment by
     /// segment, as real TCP does, where a whole write of up to a GSO
@@ -879,6 +885,7 @@ impl Scenario {
             request_logs: false,
             packet_log: BTreeSet::new(),
             node_bins: false,
+            parent_checks: false,
             tcp_segment: None,
             stored_chunks: false,
             discovery: None,

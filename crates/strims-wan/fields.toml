@@ -2165,6 +2165,11 @@ sims = ["strims-sim"]
 type = "int"
 description = "The parent changes the logs' caps left out."
 
+[meta.parent_checks_lost]
+sims = ["strims-sim"]
+type = "int"
+description = "With the parent checks on (PARENT_CHECKS), the tap's events the nodes' buffers and logs left out, every host's, summed: events of every kind the tap keeps, so at most that many checks."
+
 [meta.held_lost]
 sims = ["strims-sim"]
 type = "int"
@@ -2724,6 +2729,120 @@ description = "the host from then on, -1 for none"
 sims = ["strims-sim"]
 type = "text"
 description = "`open` and `switch` (a STREAM_OPEN gave the stream a parent, or replaced it), `prune` (the node cancelled it), `shed` (the parent closed the subscription), `lost` (their channel closed, the stream started anew, or the node stopped without closing its links: a crash, an abrupt departure)"
+
+[tables.parent_checks]
+sims = ["strims-sim"]
+grain = "parent check of a stream of the first swarm that did something, at a viewer (the tap's `ParentChoice`)"
+keys = "k, node, t_us, stream"
+joins = "viewers USING (k, src, node)"
+knobs = ["PARENT_CHECKS"]
+sample = false
+zstd = true
+normalized = "chosen, best_peer, runner_up_peer and parent NULL for none, or a peer the node couldn't name; the lags NULL where unmeasured."
+description = "Each viewer's parent checks of the first swarm's streams that did something: a graft, a vote, a switch or a reset, and a check of a stream without a parent that found no candidate. Each gives the two candidates the check weighed lowest, by their mean announcement lag, the stream's open parent and its lags, and the neighbours it passed over and why. A check of a stream whose open parent no candidate beats, after none did at the check before, has no row. A neighbour's lag at a check where no column names it (the seed's, where it was neither the best nor the runner-up) is the `forecast` table's: of its samples of the node, the neighbour and the stream, the last before the check, its mean_ms moved an eighth of the way to its sample_ms (its sample_ms where mean_ms is NULL), as the node's estimate moves."
+
+[columns.parent_checks.t_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+description = "When the node checked the stream's parent, in µs of true time from the stream's start: the end of the node's pass that checked it."
+
+[columns.parent_checks.node]
+sims = ["strims-sim"]
+type = "int"
+description = "the viewer that checked, as in `events`"
+
+[columns.parent_checks.stream]
+sims = ["strims-sim"]
+type = "int"
+description = "The stream whose parent the node checked."
+
+[columns.parent_checks.action]
+sims = ["strims-sim"]
+type = "text"
+description = "What the check did (`strims_ppspp::ParentAction`): `graft` (the stream had no open parent, and the check asked its best candidate to push it), `none` (no open parent and no candidate), `vote` (a candidate beat the open parent, at fewer checks in a row than a switch takes), `switch` (a candidate beat it at enough checks in a row, and the check asked it), `reset` (no candidate beats the parent any more, and its votes start over)."
+
+[columns.parent_checks.chosen]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The host the check asked to push the stream: its best candidate at a graft or a switch; empty at a vote, a reset or none."
+
+[columns.parent_checks.best_peer]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The candidate with the lowest mean announcement lag, the open parent aside: of the neighbours with a handshake that don't choke the node, aren't backed off from the stream or its subscribers for it, announced it recently (`CANDIDATE_FRESHNESS`) and announced a chunk of it the node lacked. Empty for none."
+
+[columns.parent_checks.best_lag_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "best_peer's mean announcement lag of the stream as the check compared it: its HAVEs' arrivals less the node's first sight of each chunk, averaged (`LagEwma`). Empty with no best."
+
+[columns.parent_checks.runner_up_peer]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The candidate with the second lowest mean announcement lag; empty for none."
+
+[columns.parent_checks.runner_up_lag_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "runner_up_peer's mean announcement lag of the stream as the check compared it; empty with no runner-up."
+
+[columns.parent_checks.parent]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The stream's open parent at the check, which is no candidate; empty at a graft or none, the checks of a stream without one."
+
+[columns.parent_checks.parent_have_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "The open parent's mean announcement lag of the stream, while recent; empty otherwise, and without a parent."
+
+[columns.parent_checks.parent_push_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "The mean delay of the open parent's pushes of the stream, once it pushed four; empty before, and without a parent."
+
+[columns.parent_checks.unready]
+sims = ["strims-sim"]
+type = "int"
+description = "Neighbours the check passed over with no handshake yet, choking the node, or with no push state for the swarm."
+
+[columns.parent_checks.subscriber]
+sims = ["strims-sim"]
+type = "int"
+description = "Neighbours the check passed over as the node's own subscribers for the stream."
+
+[columns.parent_checks.backed_off]
+sims = ["strims-sim"]
+type = "int"
+description = "Neighbours the check passed over as backed off from the stream, after a prune, a decline or a timeout."
+
+[columns.parent_checks.stale]
+sims = ["strims-sim"]
+type = "int"
+description = "Neighbours the check passed over as having announced the stream too long ago."
+
+[columns.parent_checks.behind]
+sims = ["strims-sim"]
+type = "int"
+description = "Neighbours the check passed over as having announced nothing of the stream the node lacked recently: they may take it from the node, through any chain."
+
+[columns.parent_checks.votes]
+sims = ["strims-sim"]
+type = "int"
+description = "At a vote or a switch, the checks in a row at which a candidate beat the open parent, this one's included; at a reset, those it ends; 0 at a graft or none."
 
 [tables.node_bins]
 sims = ["strims-sim"]

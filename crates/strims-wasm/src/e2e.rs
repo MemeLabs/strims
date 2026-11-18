@@ -24,7 +24,7 @@
 //!
 //! | `type` | fields | what the node does |
 //! |---|---|---|
-//! | `start` | `profileKey: {type, private, public}`, `rngSeed`, `networkKey`, `bindPort`, `echoPort`, `replyPort`, and optionally `maxBufferedAmount`, `statsBins: {originMs, widthMs}`, `parentLog`, `forecastLog`, `requestLog` and `capture: {maxFileBytes, tap, label}` | Starts a node of [`node::browser_config`] with `ws://` dials allowed and no ICE servers (host candidates only), and `WebRtcConfig::max_buffered_amount` when given. `statsBins` keeps its stats bins (`NodeConfig::stats_bins`) of `widthMs` from `originMs` (Unix ms), `parentLog` its parent log (`NodeConfig::parent_log`), and `forecastLog` and `requestLog` (booleans) its scheduler's forecast log and its request and seed logs (`NodeConfig::forecast_log`, `request_log`), for the testbed's records. With `capture`, the node captures its ppspp traffic (`NodeConfig::ppspp_capture`, labelled `label`) and sends the dump's bytes (see below). It joins the network `networkKey` with `NetworkOptions::auto_bind_port` `bindPort`, handles vpn messages on `echoPort` and `replyPort`, and reports `started`. Only the first `start` runs. |
+//! | `start` | `profileKey: {type, private, public}`, `rngSeed`, `networkKey`, `bindPort`, `echoPort`, `replyPort`, and optionally `maxBufferedAmount`, `statsBins: {originMs, widthMs}`, `parentLog`, `parentChecks`, `forecastLog`, `requestLog` and `capture: {maxFileBytes, tap, label}` | Starts a node of [`node::browser_config`] with `ws://` dials allowed and no ICE servers (host candidates only), and `WebRtcConfig::max_buffered_amount` when given. `statsBins` keeps its stats bins (`NodeConfig::stats_bins`) of `widthMs` from `originMs` (Unix ms), `parentLog` its parent log (`NodeConfig::parent_log`), `parentChecks` its parent checks (`NodeConfig::decision_log`'s `ParentChoice`s, which take the tap `capture` would: not both), and `forecastLog` and `requestLog` (booleans) its scheduler's forecast log and its request and seed logs (`NodeConfig::forecast_log`, `request_log`), for the testbed's records. With `capture`, the node captures its ppspp traffic (`NodeConfig::ppspp_capture`, labelled `label`) and sends the dump's bytes (see below). It joins the network `networkKey` with `NetworkOptions::auto_bind_port` `bindPort`, handles vpn messages on `echoPort` and `replyPort`, and reports `started`. Only the first `start` runs. |
 //! | `dial` | `uri` | Dials `uri` and reports `dialed`. |
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
@@ -103,7 +103,7 @@ use strims_node_core::{
 use strims_proto::types::Key;
 use strims_testbed::media::Viewer;
 use strims_testbed::node::{Runtime, Settings, Stream, kind_name};
-use strims_testbed::record::ParentLog;
+use strims_testbed::record::{DecisionLog, ParentLog};
 use strims_testbed::shape::RATE;
 use strims_transfer::SwarmRead;
 use strims_video::{EgressPiece, VideoError};
@@ -204,6 +204,8 @@ struct Running {
     counts: Rc<Counts>,
     /// With `start`'s `parentLog`, the node's parent log.
     parents: Option<ParentLog>,
+    /// With `start`'s `parentChecks`, the node's parent checks.
+    checks: Option<DecisionLog>,
 }
 
 #[derive(Default)]
@@ -365,6 +367,7 @@ impl Control {
                         settings,
                         None,
                         r.parents.as_ref(),
+                        r.checks.as_ref(),
                         &rt,
                     )
                     .await
@@ -409,6 +412,10 @@ impl Control {
             .as_bool()
             .unwrap_or(false)
             .then(ParentLog::default);
+        let checks = property(cmd, "parentChecks")
+            .as_bool()
+            .unwrap_or(false)
+            .then(DecisionLog::default);
         let forecast_log = property(cmd, "forecastLog").as_bool().unwrap_or(false);
         let request_log = property(cmd, "requestLog").as_bool().unwrap_or(false);
         let capture = match property(cmd, "capture") {
@@ -449,6 +456,7 @@ impl Control {
         }
         config.stats_bins = stats_bins;
         config.parent_log = parents.as_ref().map(ParentLog::sink);
+        config.decision_log = checks.as_ref().map(DecisionLog::sink);
         config.forecast_log = forecast_log;
         config.request_log = request_log;
         let (node, events) = node::spawn(config, signal).map_err(|e| e.to_string())?;
@@ -471,6 +479,7 @@ impl Control {
             reply_port,
             counts: Rc::default(),
             parents,
+            checks,
         };
         let (peers_tx, peers) = mpsc::unbounded_channel();
         self.peers = Some(peers);

@@ -13,7 +13,7 @@
 //!                 [--hosts <dir>] [--capture <dir>] [--player <file>]
 //!                 [--cpu-profile <dir> [--cpu-profile-at <s>]
 //!                  [--cpu-profile-secs <s>] [--cpu-profile-us <us>]]
-//!                 [--forecast] [--spec]
+//!                 [--forecast] [--spec] [--parent-checks]
 //! ```
 //!
 //! The node's kind (`firefox` or `chromium`) comes from the topology
@@ -27,9 +27,10 @@
 //!
 //! 1. starts the node with node `<i>`'s profile key, in the testbed
 //!    network, keeping the records strims-sim's tables take (its stats
-//!    bins and parent log, and with `--forecast` and `--spec` its
-//!    scheduler's forecast log and its request and seed logs, as
-//!    testbed_node's flags do), and has it run the testbed's swarm
+//!    bins and parent log, with `--forecast` and `--spec` its
+//!    scheduler's forecast log and its request and seed logs, and with
+//!    `--parent-checks` its parent checks, as testbed_node's flags do),
+//!    and has it run the testbed's swarm
 //!    (`testbed`), with
 //!    `--arrive` as a viewer that arrives into the running stream
 //!    ([`Settings::arrives`](strims_testbed::node::Settings::arrives));
@@ -133,6 +134,7 @@ struct Args {
     cpu_profile_us: u64,
     forecast: bool,
     spec: bool,
+    parent_checks: bool,
 }
 
 fn args() -> Result<Args, String> {
@@ -161,6 +163,7 @@ fn args() -> Result<Args, String> {
         cpu_profile_us: 500,
         forecast: false,
         spec: false,
+        parent_checks: false,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -187,6 +190,7 @@ fn args() -> Result<Args, String> {
             "--cpu-profile-us" => a.cpu_profile_us = num(value()?)?,
             "--forecast" => a.forecast = true,
             "--spec" => a.spec = true,
+            "--parent-checks" => a.parent_checks = true,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -195,6 +199,9 @@ fn args() -> Result<Args, String> {
     }
     if a.chunk.is_some() != a.munro.is_some() {
         return Err("--chunk and --munro go together".to_owned());
+    }
+    if a.parent_checks && a.capture.is_some() {
+        return Err("--parent-checks takes the tap --capture would".to_owned());
     }
     Ok(a)
 }
@@ -743,6 +750,7 @@ async fn run() -> Result<(), String> {
             "parentLog": true,
             "forecastLog": a.forecast,
             "requestLog": a.spec,
+            "parentChecks": a.parent_checks,
         });
         if a.capture.is_some() {
             start["capture"] = json!({

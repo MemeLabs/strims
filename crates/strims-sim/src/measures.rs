@@ -3181,6 +3181,7 @@ mod tests {
             sockets: Vec::new(),
             parent_losses: Vec::new(),
             parent_changes: Vec::new(),
+            parent_checks: Vec::new(),
             loops: None,
             skipped_faults: Vec::new(),
         }

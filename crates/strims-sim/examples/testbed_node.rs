@@ -12,7 +12,7 @@
 //!              [--rate <bytes/s>] [--chunk <bytes> --munro <bytes>]
 //!              [--units <chunks per signature> [--media <flv file>]]
 //!              [--record <file>] [--join-at <s>] [--arrive] [--hosts <dir>]
-//!              [--capture <dir>] [--forecast] [--spec]
+//!              [--capture <dir>] [--forecast] [--spec] [--parent-checks]
 //! testbed_node --relay-only --topology <file> [--secs <s>] [--start <unix ms>]
 //! ```
 //!
@@ -48,7 +48,11 @@
 //! (`NodeConfig::forecast_log`, `request_log`), as strims-sim's
 //! `STRIMS_SIM_FORECAST=1` and `STRIMS_SIM_SPEC=1` keep a simulated
 //! node's, and its lines' records carry them
-//! ([`strims_testbed::record::logs`]).
+//! ([`strims_testbed::record::logs`]). `--parent-checks` keeps its
+//! parent checks (`NodeConfig::decision_log`'s `ParentChoice`s, a
+//! [`DecisionLog`]), as `STRIMS_SIM_PARENT_CHECKS=1` keeps a simulated
+//! node's; it takes the tap a capture would, so it fails with
+//! `--capture`.
 //!
 //! `--relay-only` runs the relay: it listens where the topology's `relay`
 //! line says, joins the testbed network, runs no swarm, and stops 5 s
@@ -71,7 +75,7 @@ use strims_node::{
 use strims_testbed::media::FlvFile;
 use strims_testbed::native::{now_ms, self_cpu_ms, write_host};
 use strims_testbed::node::{Runtime, Settings, Stream};
-use strims_testbed::record::{BIN_MS, ParentLog};
+use strims_testbed::record::{BIN_MS, DecisionLog, ParentLog};
 use strims_testbed::shape::RATE;
 use strims_testbed::topology::{
     BIND_PORT, BrowserLinks, Link, Topology, key_of, network_key, relay_key,
@@ -96,6 +100,7 @@ struct Args {
     capture: Option<String>,
     forecast: bool,
     spec: bool,
+    parent_checks: bool,
 }
 
 fn args() -> Result<Args, String> {
@@ -120,6 +125,7 @@ fn args() -> Result<Args, String> {
         capture: None,
         forecast: false,
         spec: false,
+        parent_checks: false,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -142,6 +148,7 @@ fn args() -> Result<Args, String> {
             "--capture" => a.capture = Some(value()?),
             "--forecast" => a.forecast = true,
             "--spec" => a.spec = true,
+            "--parent-checks" => a.parent_checks = true,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -153,6 +160,9 @@ fn args() -> Result<Args, String> {
     }
     if a.media.is_some() && a.units.is_none() {
         return Err("--media needs --units".to_owned());
+    }
+    if a.parent_checks && a.capture.is_some() {
+        return Err("--parent-checks takes the tap --capture would".to_owned());
     }
     Ok(a)
 }
@@ -269,6 +279,8 @@ async fn run() -> Result<(), String> {
     config.parent_log = Some(parents.sink());
     config.forecast_log = a.forecast;
     config.request_log = a.spec;
+    let checks = a.parent_checks.then(DecisionLog::default);
+    config.decision_log = checks.as_ref().map(DecisionLog::sink);
     if topo.relay.is_some() {
         let at = me.browser_addr().to_string();
         match topo.browser_links {
@@ -355,7 +367,7 @@ async fn run() -> Result<(), String> {
     };
     let ran = tokio::select! {
         biased;
-        r = strims_testbed::node::run(&node, peers, settings, file.as_ref(), Some(&parents), &rt) => r,
+        r = strims_testbed::node::run(&node, peers, settings, file.as_ref(), Some(&parents), checks.as_ref(), &rt) => r,
         () = async { tokio::join!(forward, links); } => Ok(()),
     };
     let _ = node.shutdown().await;

@@ -403,6 +403,34 @@ pub enum ParentAction {
     Reset,
 }
 
+impl ParentAction {
+    /// Every action, in [`ParentAction::name`]'s order.
+    pub const ALL: [ParentAction; 5] = [
+        ParentAction::Graft,
+        ParentAction::None,
+        ParentAction::Vote,
+        ParentAction::Switch,
+        ParentAction::Reset,
+    ];
+
+    /// Its name for a table: `graft`, `none`, `vote`, `switch` or `reset`.
+    pub fn name(self) -> &'static str {
+        match self {
+            ParentAction::Graft => "graft",
+            ParentAction::None => "none",
+            ParentAction::Vote => "vote",
+            ParentAction::Switch => "switch",
+            ParentAction::Reset => "reset",
+        }
+    }
+
+    /// Whether the check asked its best candidate for the stream: a graft
+    /// or a switch.
+    pub fn asks(self) -> bool {
+        matches!(self, ParentAction::Graft | ParentAction::Switch)
+    }
+}
+
 /// A parent check's weighing of the candidates for a stream: those that
 /// announced it within
 /// [`CANDIDATE_FRESHNESS`](crate::scheduler_peer::push::CANDIDATE_FRESHNESS), by their mean
@@ -411,6 +439,8 @@ pub enum ParentAction {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ParentChoice {
     pub action: ParentAction,
+    /// The stream's open parent at the check: none at a graft or `None`.
+    pub parent: Option<PeerKey>,
     pub best: Option<(PeerKey, Duration)>,
     pub runner_up: Option<(PeerKey, Duration)>,
     /// No handshake yet, or it chokes us.

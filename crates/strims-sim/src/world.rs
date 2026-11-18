@@ -33,8 +33,8 @@ use crate::memory::{GroupCounters, MemoryGroup};
 use crate::net::SendBuffers;
 use crate::report::{
     ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport, MediaLog, NodeBinRecord,
-    ParentLoss, ParentRecord, RequestHostRecord, SeedDecisionHostRecord, SeedSendHostRecord,
-    VpnReport,
+    ParentCheckRecord, ParentLoss, ParentRecord, RequestHostRecord, SeedDecisionHostRecord,
+    SeedSendHostRecord, VpnReport,
 };
 use crate::skew::OffsetCapture;
 use crate::spec::{HostIx, Scenario, Transport};
@@ -144,6 +144,8 @@ pub(crate) struct HostState {
     pub seed_log_lost: u64,
     /// See [`HostReport::parents_lost`].
     pub parents_lost: u64,
+    /// See [`HostReport::parent_checks_lost`].
+    pub parent_checks_lost: u64,
     /// When it left for good ([`crate::Fault::Depart`]), in ms.
     pub departed: Option<u64>,
     /// Crashed, and not restarted yet.
@@ -179,6 +181,7 @@ impl HostState {
         r.seed_sends = self.seed_sends.clone();
         r.seed_log_lost = self.seed_log_lost;
         r.parents_lost = self.parents_lost;
+        r.parent_checks_lost = self.parent_checks_lost;
         r
     }
 
@@ -266,12 +269,19 @@ pub(crate) struct WorldState {
     /// them ([`World::parent_changes`]): the host, its incarnation, the
     /// change.
     pub parents: Vec<(HostIx, u32, ParentInfo)>,
+    /// With [`Scenario::parent_checks`], every node's parent checks as its
+    /// decision log gave them ([`World::parent_checks`]): the host, its
+    /// incarnation, the check.
+    pub checks: Vec<(HostIx, u32, DecisionInfo)>,
     /// With [`Scenario::loops`], the loop analysis ([`crate::loops`]).
     pub loops: Option<crate::loops::Loops>,
 }
 
 /// What a node's parent and decision logs hand the loop analysis
 /// ([`Scenario::loops`]).
+// Entries go through a channel by value, one at a time, as the decision
+// log hands them (node-core's `DecisionLogEntry`).
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Copy, Debug)]
 enum LoopEntry {
     Parent(ParentInfo),
@@ -317,6 +327,11 @@ pub(crate) struct World {
     /// goes, which [`World::observe_stopped`] takes.
     stopped_tx: mpsc::Sender<(HostIx, NodeMetrics)>,
     stopped_rx: mpsc::Receiver<(HostIx, NodeMetrics)>,
+    /// With [`Scenario::parent_checks`], the nodes' decision logs' channel,
+    /// their parent checks and lost counts alone: the records take what
+    /// came at each stats sample, as the parent sinks'.
+    checks_tx: mpsc::Sender<(HostIx, u32, DecisionLogEntry)>,
+    checks_rx: mpsc::Receiver<(HostIx, u32, DecisionLogEntry)>,
     /// With [`Scenario::loops`], the nodes' parent and decision logs'
     /// channel, in the order the nodes made the entries: the analysis
     /// takes what came at each stats sample ([`World::take_loops`]).
@@ -394,11 +409,13 @@ impl World {
             parent_losses: Vec::new(),
             skipped_faults: Vec::new(),
             parents: Vec::new(),
+            checks: Vec::new(),
             loops: spec.loops.then(crate::loops::Loops::default),
         };
         let send_buffers = spec.wan.and(spec.send_buffer).map(SendBuffers::new);
         let (parent_tx, parent_rx) = mpsc::channel();
         let (stopped_tx, stopped_rx) = mpsc::channel();
+        let (checks_tx, checks_rx) = mpsc::channel();
         let (loops_tx, loops_rx) = mpsc::channel();
         World {
             seed,
@@ -417,6 +434,8 @@ impl World {
             parent_rx,
             stopped_tx,
             stopped_rx,
+            checks_tx,
+            checks_rx,
             loops_tx,
             loops_rx,
             st: RefCell::new(st),
@@ -578,9 +597,24 @@ impl World {
                 }
             })));
         }
-        if self.spec.loops {
-            let tx = self.loops_tx.clone();
+        let checks = (tables && self.spec.parent_checks).then(|| self.checks_tx.clone());
+        if self.spec.loops || checks.is_some() {
+            let loops = self.spec.loops.then(|| self.loops_tx.clone());
             c.decision_log = Some(DecisionSink(Arc::new(move |e| {
+                if let Some(tx) = &checks {
+                    let check = match e {
+                        DecisionLogEntry::Decision(d) => {
+                            matches!(d.kind, strims_ppspp::TapKind::ParentChoice { .. })
+                        }
+                        DecisionLogEntry::Lost(_) => true,
+                    };
+                    if check {
+                        let _ = tx.send((h, incarnation, e));
+                    }
+                }
+                let Some(tx) = &loops else {
+                    return;
+                };
                 let entry = match e {
                     DecisionLogEntry::Decision(d) if crate::loops::Decision::kept(&d.kind) => {
                         LoopEntry::Decision(d)
@@ -1443,6 +1477,7 @@ impl World {
     /// `asked` is when the controller asked for the sample, which its
     /// meter sample's truth is read at (`MeterSample::asked`).
     pub fn observe_stats(&self, h: HostIx, m: &NodeMetrics, asked: Duration) {
+        self.take_checks();
         self.observe_bins(h, m);
         self.take_parents();
         if self.spec.departures.is_some() {
@@ -1686,6 +1721,52 @@ impl World {
                 }
             }
         });
+    }
+
+    /// Moves what the nodes' decision logs sent into the records: the
+    /// parent checks, and each host's count of the tap events its buffers
+    /// left out ([`HostState::parent_checks_lost`]).
+    pub(crate) fn take_checks(&self) {
+        self.record(|st| {
+            for (h, inc, e) in self.checks_rx.try_iter() {
+                match e {
+                    DecisionLogEntry::Decision(d) => st.checks.push((h, inc, d)),
+                    DecisionLogEntry::Lost(n) => {
+                        if let Some(hs) = st.hosts.get_mut(h) {
+                            hs.parent_checks_lost += n;
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /// Every node's parent checks of the first scenario swarm
+    /// ([`crate::Report::parent_checks`]), in run time, its peers named by
+    /// index.
+    pub fn parent_checks(&self) -> Vec<ParentCheckRecord> {
+        self.take_checks();
+        let st = self.st.borrow();
+        let named = |id: Option<HostId>| id.and_then(|id| st.ids.get(&id).copied());
+        let mut out: Vec<ParentCheckRecord> = st
+            .checks
+            .iter()
+            .filter_map(|&(h, inc, d)| {
+                let hs = st.hosts.get(h)?;
+                let key = hs.first_swarm.iter().find(|&&(i, _)| i == inc)?.1;
+                if key.is_none() || key != d.swarm {
+                    return None;
+                }
+                let strims_ppspp::TapKind::ParentChoice { stream, choice } = d.kind else {
+                    return None;
+                };
+                let at = (d.at - self.clock_epoch(h)).to_std().unwrap_or_default();
+                let hosts = [named(d.peer), named(d.runner_up), named(d.parent)];
+                Some(ParentCheckRecord::of(at, h, stream, &choice, hosts))
+            })
+            .collect();
+        out.sort_by_key(|r| (r.at, r.node, r.stream));
+        out
     }
 
     /// Every node's parent changes of the first scenario swarm
