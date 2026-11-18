@@ -42,8 +42,9 @@
 //! paced as the browser's `DcSocket` paces it: under its own pacer's cap,
 //! and the host's channels together under a [`HostPacer`]'s, each waiting
 //! for its mark once refused: one the host holds reads the host's load
-//! again every [`HOST_POLL`], as the browser's writer polls it, and
-//! nothing else wakes it. On a stack whose page counts a channel's amount itself
+//! again every [`HOST_POLL`] from its hold, as the browser's writer polls
+//! it, against the mark the host held it for, and goes once the load is
+//! at it; nothing else wakes it. On a stack whose page counts a channel's amount itself
 //! ([`SctpProfile::amount_at_sends`]), a node's writer and its host's
 //! pacer read the amount so: its last reading and each message written
 //! since, the stack's as the stack answers the writer's last write, after
@@ -131,6 +132,9 @@ struct Conn {
     low: u64,
     /// The pacer refused the last write: the channel waits on its own cap.
     waits: bool,
+    /// The host's pacer held the writer's write: the host's load it waits
+    /// for, until the write goes.
+    held: Option<usize>,
     /// The channel's `bufferedAmountLowThreshold`: the mark its writer set
     /// at its last refusal, half the channel's cap before one; and whether
     /// its amount was above it at its last reading, so that a fall to it
@@ -203,11 +207,8 @@ struct Buffers {
 #[derive(Debug, Default)]
 struct HostChannels {
     pacer: HostPacer,
-    /// The load the channels the host holds wait for.
-    low: usize,
-    /// Bound: the host's open paced channels, as `waiting`.
+    /// Bound: the host's open paced channels.
     channels: Vec<ConnKey>,
-    waiting: Vec<ConnKey>,
 }
 
 impl HostChannels {
@@ -504,6 +505,82 @@ fn release(b: &mut Buffers, conn: ConnKey, at: Time) -> Option<Waker> {
     }
 }
 
+/// The check of data channel `key`'s writer at `now`, as a browser's
+/// `DcSocket::send` makes it at each turn of its loop: its own pacer first,
+/// which a refusal waits on; then its host's, which holds the write once,
+/// for the mark it sets then, and whose load the writer then reads against
+/// that mark at each poll, sending once it is there. `waker` wakes the
+/// writer left waiting. The link log gets each check's reading and each
+/// hold, as the browser's.
+fn check(x: &mut Buffers, key: &ConnKey, now: Time, waker: &Waker) -> ChannelWrite {
+    let Buffers { conns, hosts, .. } = x;
+    let Some(c) = conns.get_mut(key) else {
+        return ChannelWrite::Go;
+    };
+    let Some((cap, _)) = c.channel else {
+        return ChannelWrite::Go;
+    };
+    c.waker = None;
+    let buffered = c.amount();
+    let may = match &mut c.pacer {
+        Some(p) => {
+            p.observe(now, buffered as usize);
+            c.low = p.low_mark(now, cap as usize) as u64;
+            let may = p.may_write(now, buffered as usize, cap as usize);
+            c.waits = !may;
+            if !may {
+                c.threshold = c.low;
+                c.above = buffered > c.threshold;
+            }
+            may
+        }
+        None => buffered < cap,
+    };
+    let paced = c.pacer.is_some();
+    c.record(LinkEvent::Checked {
+        source: SampleSource::Model,
+        buffered,
+        low: (paced && !may).then_some(c.low),
+    });
+    if !may {
+        c.waker = Some(waker.clone());
+        c.record(LinkEvent::Held(WriteWait::Channel));
+        return ChannelWrite::Wait;
+    }
+    let held = c.held;
+    let Some(h) = hosts.get_mut(&key.0.ip()).filter(|_| paced) else {
+        return ChannelWrite::Go;
+    };
+    let sum = h.sum(conns, now);
+    let at = match held {
+        None => {
+            h.pacer.observe(now, &sum);
+            h.pacer.may_write(now, &sum)
+        }
+        Some(mark) => {
+            let at = sum.load <= mark;
+            if at {
+                h.pacer.observe(now, &sum);
+            }
+            at
+        }
+    };
+    let mark = (held.is_none() && !at).then(|| h.pacer.low_mark(now, &sum));
+    let Some(c) = conns.get_mut(key) else {
+        return ChannelWrite::Go;
+    };
+    if at {
+        c.held = None;
+        return ChannelWrite::Go;
+    }
+    c.waker = Some(waker.clone());
+    if let Some(mark) = mark {
+        c.held = Some(mark);
+        c.record(LinkEvent::Held(WriteWait::Host));
+    }
+    ChannelWrite::Held
+}
+
 /// The simulation's time, as the scheduler's and the hosts' clocks read
 /// it (outside a host, the run's start).
 fn sim_now() -> Time {
@@ -522,14 +599,14 @@ pub(crate) struct SimTcpStream {
     host_poll: Option<Pin<Box<tokio::time::Sleep>>>,
 }
 
-/// What a channel's writer does now ([`SimTcpStream::channel_write`]).
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// What a channel's writer does now ([`SendBuffers::channel_write`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ChannelWrite {
     Go,
     /// For its own amount to fall to its mark.
     Wait,
-    /// For the host's load to fall to the host's mark, or for its next
-    /// poll.
+    /// For its next host poll ([`HOST_POLL`]), to read the host's load
+    /// against the mark the host held it for.
     Held,
 }
 
@@ -542,7 +619,6 @@ impl Drop for SimTcpStream {
                     && let Some(h) = x.hosts.get_mut(&key.0.ip())
                 {
                     h.channels.retain(|k| k != key);
-                    h.waiting.retain(|k| k != key);
                 }
             });
         }
@@ -561,92 +637,31 @@ impl AsyncRead for SimTcpStream {
 
 impl SendBuffers {
     /// For data channel `key`'s writer at `now`, whether a write may go, or
-    /// what the writer, left waiting, waits for (`waker` wakes it).
+    /// what the writer, left waiting, waits for (`waker` wakes it). A
+    /// writer that waits checks again only once woken: at its own mark (by
+    /// [`release`]), or at its host poll ([`SendBuffers::host_poll`]).
     fn channel_write(&self, key: &ConnKey, now: Time, waker: &Waker) -> Option<ChannelWrite> {
         self.with(|x| {
-            let Buffers { conns, hosts, .. } = x;
-            let c = conns.get_mut(key)?;
-            let (cap, _) = c.channel?;
-            let buffered = c.amount();
-            let may = match &mut c.pacer {
-                Some(p) => {
-                    p.observe(now, buffered as usize);
-                    c.low = p.low_mark(now, cap as usize) as u64;
-                    let may = p.may_write(now, buffered as usize, cap as usize);
-                    c.waits = !may;
-                    if !may {
-                        c.threshold = c.low;
-                        c.above = buffered > c.threshold;
-                    }
-                    may
-                }
-                None => buffered < cap,
-            };
-            let waited = c.waker.is_some();
-            let paced = c.pacer.is_some();
-            let mut held = false;
-            if paced
-                && may
-                && !waited
-                && let Some(h) = hosts.get_mut(&key.0.ip())
-            {
-                let sum = h.sum(conns, now);
-                h.pacer.observe(now, &sum);
-                if !h.pacer.may_write(now, &sum) {
-                    held = true;
-                    h.low = h.pacer.low_mark(now, &sum);
-                    if !h.waiting.contains(key) {
-                        h.waiting.push(*key);
-                    }
-                }
-            }
-            let c = conns.get_mut(key)?;
-            if !waited {
-                c.record(LinkEvent::Checked {
-                    source: SampleSource::Model,
-                    buffered,
-                    low: (paced && !may).then_some(c.low),
-                });
-            }
-            if waited || !may || held {
+            let c = x.conns.get_mut(key)?;
+            c.channel?;
+            if c.waker.is_some() {
                 c.waker = Some(waker.clone());
-                if !waited {
-                    c.record(LinkEvent::Held(if held {
-                        WriteWait::Host
-                    } else {
-                        WriteWait::Channel
-                    }));
-                }
-                return Some(if held {
+                return Some(if c.held.is_some() && !c.waits {
                     ChannelWrite::Held
                 } else {
                     ChannelWrite::Wait
                 });
             }
-            Some(ChannelWrite::Go)
+            Some(check(x, key, now, waker))
         })
     }
 
-    /// The poll of the host's pacer for `key`'s writer came at `now`:
-    /// whether the host's load is down to the mark it held its writers for,
-    /// which wakes them, as a browser's writer polls it.
-    fn poll_host(&self, key: &ConnKey, now: Time) -> bool {
+    /// The host poll of `key`'s writer, which its host held, came at `now`:
+    /// it checks again.
+    fn host_poll(&self, key: &ConnKey, now: Time, waker: &Waker) -> Option<ChannelWrite> {
         self.with(|x| {
-            let Buffers { conns, hosts, .. } = x;
-            let Some(h) = hosts.get_mut(&key.0.ip()) else {
-                return true;
-            };
-            let sum = h.sum(conns, now);
-            if sum.load > h.low {
-                return false;
-            }
-            h.pacer.observe(now, &sum);
-            for k in std::mem::take(&mut h.waiting) {
-                if let Some(w) = conns.get_mut(&k).and_then(|o| o.waker.take()) {
-                    w.wake();
-                }
-            }
-            true
+            x.conns.get_mut(key)?.channel?;
+            Some(check(x, key, now, waker))
         })
     }
 
@@ -683,17 +698,15 @@ impl SendBuffers {
 
 impl SimTcpStream {
     /// For a data channel's connection, whether a write may go now, or
-    /// what the writer, left waiting, waits for.
-    fn channel_write(&self, cx: &Context<'_>) -> Option<ChannelWrite> {
+    /// what the writer, left waiting, waits for: at its host poll, if
+    /// `polled`, a check.
+    fn channel_write(&self, cx: &Context<'_>, polled: bool) -> Option<ChannelWrite> {
         let (key, b) = self.conn.as_ref()?;
-        b.channel_write(key, sim_now(), cx.waker())
-    }
-
-    /// The host's pacer's poll came (see [`SendBuffers::poll_host`]).
-    fn poll_host(&mut self) -> bool {
-        self.conn
-            .as_ref()
-            .is_none_or(|(key, b)| b.poll_host(key, sim_now()))
+        if polled {
+            b.host_poll(key, sim_now(), cx.waker())
+        } else {
+            b.channel_write(key, sim_now(), cx.waker())
+        }
     }
 
     /// Writes `buf` as a channel's message: as turmoil segments, the
@@ -740,24 +753,24 @@ impl AsyncWrite for SimTcpStream {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         let this = &mut *self;
-        if let Some(poll) = this.host_poll.as_mut()
-            && poll.as_mut().poll(cx).is_ready()
-        {
+        let polled = this
+            .host_poll
+            .as_mut()
+            .is_some_and(|poll| poll.as_mut().poll(cx).is_ready());
+        if polled {
             this.host_poll = None;
-            if !this.poll_host() {
-                let poll = this.host_poll.insert(Box::pin(tokio::time::sleep(
-                    HOST_POLL.to_std().unwrap_or_default(),
-                )));
-                let _ = poll.as_mut().poll(cx);
-            }
         }
-        if let Some(write) = this.channel_write(cx) {
+        if let Some(write) = this.channel_write(cx, polled) {
             return match write {
                 ChannelWrite::Go => {
                     this.host_poll = None;
                     this.write_message(cx, buf)
                 }
-                ChannelWrite::Wait => Poll::Pending,
+                // Its own cap's wait: no poll.
+                ChannelWrite::Wait => {
+                    this.host_poll = None;
+                    Poll::Pending
+                }
                 ChannelWrite::Held => {
                     let poll = this.host_poll.get_or_insert_with(|| {
                         Box::pin(tokio::time::sleep(std::time::Duration::from_nanos(
@@ -1161,15 +1174,42 @@ mod tests {
         b.wrote(&k[0], 10_000, true, ms(0));
         assert!(b.channel_write(&k[0], ms(1), &w) == Some(ChannelWrite::Held));
         assert_eq!(holds(&log, 0), [WriteWait::Host]);
-        assert!(!b.poll_host(&k[0], ms(6)), "over the host's mark");
+        assert_eq!(
+            b.host_poll(&k[0], ms(6), &w),
+            Some(ChannelWrite::Held),
+            "over the host's mark"
+        );
         // Channel 1's fall, then its own, bring the load to 15 kB, under
         // the mark.
         assert!(b.admit(k[1], 20_000, ms(7)).is_none());
         assert!(b.admit(k[0], 5_000, ms(8)).is_none());
         assert_eq!(wakes.count(), 0);
-        assert!(b.poll_host(&k[0], ms(11)));
-        assert_eq!(wakes.count(), 1);
-        assert!(b.channel_write(&k[0], ms(11), &w) == Some(ChannelWrite::Go));
+        assert_eq!(b.channel_write(&k[0], ms(9), &w), Some(ChannelWrite::Held));
+        assert_eq!(b.host_poll(&k[0], ms(11), &w), Some(ChannelWrite::Go));
+        assert_eq!(holds(&log, 0), [WriteWait::Host]);
+    }
+
+    /// Each writer the host holds polls on its own time and reads the
+    /// host's load against the mark the host held it for: one at its mark
+    /// goes without the host's admission, and its write holds another whose
+    /// poll comes later, which waits on with no hold more.
+    #[test]
+    fn a_held_writer_reads_its_own_mark_at_its_own_poll() {
+        let (b, k, log) = channels(&SctpProfile::FIREFOX, 3);
+        let ((wakes0, w0), (wakes1, w1)) = (waker(), waker());
+        assert_eq!(b.channel_write(&k[2], ms(0), &w0), Some(ChannelWrite::Go));
+        b.wrote(&k[2], 40_000, true, ms(0));
+        assert_eq!(b.channel_write(&k[0], ms(1), &w0), Some(ChannelWrite::Held));
+        assert_eq!(b.channel_write(&k[1], ms(3), &w1), Some(ChannelWrite::Held));
+        b.admit(k[2], 20_000, ms(4));
+        // Channel 0's poll: the load, 20 kB, is at its mark.
+        assert_eq!(b.host_poll(&k[0], ms(6), &w0), Some(ChannelWrite::Go));
+        b.wrote(&k[0], 10_000, true, ms(6));
+        assert_eq!((wakes0.count(), wakes1.count()), (0, 0));
+        // Channel 1's, at 30 kB: over it.
+        assert_eq!(b.host_poll(&k[1], ms(8), &w1), Some(ChannelWrite::Held));
+        assert_eq!(holds(&log, 0), [WriteWait::Host]);
+        assert_eq!(holds(&log, 1), [WriteWait::Host]);
     }
 
     /// A Chromium page counts its channel's amount itself: each message on
