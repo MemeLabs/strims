@@ -27,3 +27,27 @@ messages in flight instead (`src/top.rs`), delivering in the same order:
 Its tests (`cargo test` in a copy outside this workspace, with the
 crate's `.cargo/config.toml`, which sets `--cfg tokio_unstable`) pass, and
 `src/sim.rs` adds `busy_links_are_the_links_with_messages_in_flight`.
+
+## sctp-proto
+
+[sctp-proto](https://github.com/algesten/sctp-proto) 0.10.8 as published on
+crates.io (upstream commit `da1ac299d949c17680bc8070f334010ab91d5b1c`),
+under its MIT or Apache-2.0 licence (`sctp-proto/LICENSE-MIT`,
+`sctp-proto/LICENSE-APACHE`). str0m's data channels run on it.
+
+Every time the crate reads is its caller's but one: `Endpoint::connect`
+gave a new client association `Instant::now()`, and its T1-init timer
+started from it. strims-webrtc maps a node's clock to instants from one
+anchor (`crates/strims-webrtc/src/clock.rs`), so under a simulated clock
+that timer, and the wake-up it asks for, fell wherever the wall clock had
+got to: a strims-sim run with WebRTC replayed differently from one process
+to the next. The patch gives `connect` no time (`src/endpoint/mod.rs`): a
+client association it makes starts its T1-init timer at the first time it
+is given, by `handle_timeout`, `poll_transmit` or an inbound packet
+(`Association::arm_t1_init` in `src/association/mod.rs`), and closing it
+drops a timer it never started. str0m gives it that time as it inits SCTP
+at the SDP negotiation: its connection's last input or timeout, in the
+poll that follows. `Association::new` takes the time as an `Option`, and
+the tests' calls give it one.
+
+Its tests (`cargo test` in a copy outside this workspace) pass.

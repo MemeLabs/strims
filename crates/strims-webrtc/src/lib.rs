@@ -118,7 +118,20 @@
 //!   OS rng, and dimpl's DTLS 1.2 randoms embed the system time. Only
 //!   encrypted contents change.
 //! - Each endpoint reads `Instant::now()` once, as an anchor; only
-//!   differences from it reach str0m.
+//!   differences from it reach str0m. The stack reads no clock of its own
+//!   that its timers follow (`src/clock.rs`), so wall time passing moves
+//!   no wake-up (`tests/sim.rs`'s `wall_time_moves_no_wake_up`).
+//!
+//! Orders per process, which today's links leave without effect:
+//!
+//! - str0m collects a description's remote ICE candidates in a std
+//!   `HashSet`, so candidates of equal priority pair in a per-process
+//!   order. Every sim host has one candidate.
+//! - sctp-proto keys some per-stream state by hash: the bytes acked per
+//!   stream (a std `HashMap`) order `BufferedAmountLow` events, and a
+//!   FORWARD-TSN's streams (a std `HashMap`) and the pending stream resets
+//!   (an `FxHashMap`, a fixed order) are walked in their map's order. A
+//!   link is one reliable stream, so nothing depends on it.
 //!
 //! The schedule of datagrams and events is therefore reproducible as long
 //! as the network model doesn't depend on exact datagram sizes. Never

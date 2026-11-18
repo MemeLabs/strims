@@ -9,6 +9,16 @@
 //! str0m only compares and subtracts instants, so its behaviour depends on
 //! the `Time`s fed in and never on the anchor: the same inputs give the same
 //! outputs in every run.
+//!
+//! That holds while no instant the stack makes itself reaches a timer.
+//! str0m's own are sentinels further from any mapped instant than a run
+//! lasts (`already_happened`, an hour before its first use, and
+//! `not_happening`, a century after), or its SCTP's placeholder
+//! `last_now`, which `init` replaces before an association reads it (SDP
+//! negotiation inits SCTP before DTLS can carry a packet); dimpl's reach
+//! only the DTLS randoms' time field. The workspace's sctp-proto
+//! (`third_party/README.md`) makes a client association with no time, and
+//! it starts its T1-init timer at the first time it is given.
 
 // str0m's API is in `Instant`s; this module is the only place they are made.
 #![allow(clippy::disallowed_types)]

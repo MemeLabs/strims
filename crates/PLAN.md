@@ -229,6 +229,9 @@ on it is in `CONVENTIONS.md`.
   directly from strims-sim's WAN scheduler, without turmoil's topology,
   or move to a release whose topology doesn't walk every pair of hosts
   each step.
+- Retire the vendored sctp-proto (`third_party/sctp-proto`) once
+  upstream's `Endpoint::connect` (algesten/sctp-proto) takes the time and
+  str0m passes it its own.
 
 ### Swarm
 Hybrid (`PushMode::Hybrid`) is the design: push trees carry the stream
@@ -559,9 +562,6 @@ and dropped are in `TRIED.md`.
   - A data channel's message holds one frame, and sctp-proto (str0m) ends
     each in a short chunk alone in its packet; ending messages at the
     sender's chunk boundary past their frames would save those packets.
-  - str0m over UDP under the WAN window model doesn't replay: an SCTP
-    INIT's resend lands a millisecond apart between runs. Find the leak;
-    meanwhile WAN cells run native WebRTC on the `str0m` model.
   - Fit the bare bench's WebRTC links (the window model's data channels,
     `wan::sctp`'s `SctpProfile`s) to the testbed: Chromium's first-second
     losses, `bufferedAmount` steps and chunk sizing; Firefox's shortfall

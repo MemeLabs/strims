@@ -38,7 +38,7 @@ members = [
   "crates/strims-wasm",
 ]
 # Vendored crates build as dependencies only (third_party/README.md).
-exclude = ["third_party/turmoil"]
+exclude = ["third_party/sctp-proto", "third_party/turmoil"]
 
 [workspace.package]
 version = "0.1.0"
@@ -177,6 +177,7 @@ proptest = "1"
 
 # Vendored crates, patched (third_party/README.md).
 [patch.crates-io]
+sctp-proto = { path = "third_party/sctp-proto" }
 turmoil = { path = "third_party/turmoil" }
 
 # Optimize dependencies (not workspace crates) in dev builds. Unoptimized

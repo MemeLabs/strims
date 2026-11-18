@@ -695,6 +695,41 @@ fn unanswered_connections_time_out() {
     assert_eq!(sim.now - now, Duration::from_secs(20));
 }
 
+/// A connection's timers run on the clock the endpoint is given alone: wall
+/// time passing between creating the endpoints and signalling moves none of
+/// the wake-ups. Every datagram is lost, so the connection lives through its
+/// SCTP association's INIT retransmissions until it fails.
+#[test]
+fn wall_time_moves_no_wake_up() {
+    let lost = Conditions {
+        loss_permille: 1000,
+        ..LAN
+    };
+    let run = |pause: std::time::Duration| {
+        let mut sim = Sim::new(9, lost);
+        let a = sim.add_node(&["10.0.0.1:5000"], no_stun());
+        let b = sim.add_node(&["10.0.0.2:6000"], no_stun());
+        // The wall time the property is about.
+        #[allow(clippy::disallowed_methods)]
+        std::thread::sleep(pause);
+        sim.connect(a, b);
+        let mut wakes = Vec::new();
+        loop {
+            sim.settle();
+            if sim.nodes.iter().all(|n| !n.closed.is_empty()) {
+                break;
+            }
+            assert!(sim.step(), "stalled at {}", sim.now);
+            wakes.push(sim.now);
+        }
+        (wakes, sim.trace)
+    };
+    let (w1, t1) = run(std::time::Duration::ZERO);
+    let (w2, t2) = run(std::time::Duration::from_millis(50));
+    assert_eq!(w1, w2);
+    assert_eq!(t1, t2);
+}
+
 #[test]
 fn a_vanished_peer_fails_the_connection() {
     let mut sim = Sim::new(6, LAN);
