@@ -1441,6 +1441,16 @@ class Tables(Fixture):
         golden_cli.write_table(d, "link_samples", [(c, "VARCHAR" if c in ("source", "cause") else "BIGINT") for c in (
             "t_us", "node", "peer", "link", "source", "cause", "buffered_bytes")],
             [(1_059_000, 0, 1, 0, "webrtc", "low", 0)])
+        # The seed's association with node 1: the first write's packet out,
+        # and its SACK in, which leaves the flight empty; a timer has no
+        # direction.
+        golden_cli.write_table(d, "sctp_events", [(c, "VARCHAR" if c in ("dir", "what") else
+                                                   "BOOLEAN" if c == "estimated" else "BIGINT") for c in (
+            "node", "peer", "link", "n", "t_us", "dir", "what", "tsn_lo", "tsn_hi", "chunks", "data_bytes",
+            "packet_bytes", "cum_tsn", "gaps", "cwnd_bytes", "flight_bytes", "estimated")],
+            [(0, 1, 0, 0, 1_000_150, "out", "data", 0, 0, 1, 900, 928, None, None, 11_910, 916, False),
+             (0, 1, 0, 1, 1_029_000, "in", "sack", None, None, 0, 0, 28, 0, 0, 11_910, 0, False),
+             (0, 1, 0, 2, 1_500_000, None, "t3", None, None, 0, 0, 0, None, None, 1191, 0, False)])
         db = self.root / "jobs-tables" / f"{src.replace('/', '~')}.duckdb"
         store_host.fold(db, [meta], src)
         store_host.export(db, store_host.cache_root() / "cache" / src)
@@ -1528,6 +1538,16 @@ class Tables(Fixture):
             "SELECT name, keys FROM table_catalog WHERE name IN ('link_writes', 'link_reads', 'link_samples');")}
         self.assertEqual(got, {"link_reads": "k, node, peer, link, off", "link_samples": "k, node, peer, link, t_us, "
                                "source, cause", "link_writes": "k, node, peer, link, off"})
+        # The SCTP log: a packet meets the write it carried by its link
+        # (table_catalog's join), and a timer's direction is NULL.
+        got = catalog.lake("SELECT e.n, e.dir, e.what, e.data_bytes = w.bytes AS whole FROM sctp_events e JOIN "
+                           "link_writes w ON (e.k, e.src, e.node, e.peer, e.link) = (w.k, w.src, w.node, w.peer, w.link) "
+                           f"AND w.n = 0 WHERE e.k = {catalog.q(tail)} ORDER BY e.n;")
+        self.assertEqual(got, [{"n": 0, "dir": "out", "what": "data", "whole": True},
+                               {"n": 1, "dir": "in", "what": "sack", "whole": False},
+                               {"n": 2, "dir": None, "what": "t3", "whole": False}])
+        got = catalog.lake("SELECT keys FROM table_catalog WHERE name = 'sctp_events';")
+        self.assertEqual(got, [{"keys": "k, node, peer, link, n"}])
         # Parents: each node's changes in order, n, and n NULL where a
         # run's table has none.
         parents = catalog.lake("SELECT k, node, n, parent FROM parents WHERE k IN "

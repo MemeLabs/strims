@@ -697,6 +697,24 @@ class LinkLog(unittest.TestCase):
         query.need(set(self.TABLES), *self.TABLES)
 
 
+class SctpLog(unittest.TestCase):
+    """The SCTP log's table: sampled (a row a packet of every association
+    of the hosts it names), with its keys, its joins (to the writes its
+    association carried) and its knob."""
+
+    def test_the_table_is_sampled_with_its_keys_and_joins(self):
+        self.assertIn("sctp_events", store_host.TABLES)
+        self.assertIn("sctp_events", store_host.SAMPLE_TABLES)
+        self.assertEqual(query.TABLE_KNOBS["sctp_events"], ("TRACE_SCTP",))
+        self.assertEqual(catalog.STANDARD_KEYS["sctp_events"], "k, node, peer, link, n")
+        self.assertIn("hosts USING (k, src, node)", catalog.STANDARD_JOINS["sctp_events"])
+        self.assertIn("link_writes ON (k, src, node, peer, link)", catalog.STANDARD_JOINS["sctp_events"])
+        with self.assertRaisesRegex(query.Refused, r"^the selection has no sctp_events \(nor does S3: run with "
+                                                   r"STRIMS_SIM_TRACE_SCTP=1\)"):
+            query.need({"reads"}, "sctp_events")
+        query.need({"sctp_events"}, "sctp_events")
+
+
 # Testbed runs' knobs that key to three tier cells (simlab.testbed.cell_sql):
 # robust's star-31-5, and thin-15-10 in robust and in browsers.
 TESTBED_ENV = {"STRIMS_SIM_CAL_MESH": "full", "STRIMS_SIM_CAL_SECS": "60", "STRIMS_SIM_CAL_SEED_BURST": "3028",

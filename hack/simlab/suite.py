@@ -578,11 +578,13 @@ MEASURE_ROBUST = ["star-15-10", "star-31-5", "halve-15-10", "halve-31-10", "thin
 MEASURE_PEERS = ["mobile-uncapped"]
 # The logs a measurement keeps, by sim: the forecast log and its truth (the
 # chunks each node stored), the scheduler's park and event logs, its parent
-# checks, every node's timers, and the seed's link log (its links' writes,
-# reads and readings). The tables go to each job's output dir, as every
-# job's do.
+# checks, every node's timers, the seed's link log (its links' writes,
+# reads and readings) and its data channels' SCTP packets (a browser seed's;
+# a native seed over TCP has none). The tables go to each job's output dir,
+# as every job's do.
 MEASURE_LOGS = {SIM: {"STRIMS_SIM_FORECAST": "1", "STRIMS_SIM_SPEC": "1", "STRIMS_SIM_PARENT_CHECKS": "1",
-                      "STRIMS_SIM_TIMER_LOG": "all", "STRIMS_SIM_LINK_LOG": "seed"}}
+                      "STRIMS_SIM_TIMER_LOG": "all", "STRIMS_SIM_LINK_LOG": "seed",
+                      "STRIMS_SIM_TRACE_SCTP": "seed"}}
 MEASURE_SEEDS = 8
 # The logs hold a row per neighbour per chunk: a run's memory grows with
 # its viewers and its stream's length.
