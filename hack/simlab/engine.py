@@ -28,6 +28,8 @@ and autoinstalling off:
                      come with it
   writer(lake)       the catalog for the indexer: new data under data/,
                      none of it inlined in the SQLite file
+  home(conn, lake)   refuses a catalog that keeps another lake's data
+                     (below), as every reader and the writer do first
   close(conn)        a reader's or the writer's end: a transaction left
                      open rolled back and the catalog detached, then closed
   store(db)          a fold's DuckDB file
@@ -44,6 +46,19 @@ retries (simlab.catalog) meet that. A DuckLake whose commit failed keeps
 its metadata's lock, the transaction never rolled back, until it is
 detached: closing the connection leaves it, and every other connection
 then waits on it until the process exits; `close` detaches first.
+
+A catalog's metadata keeps the path of its data (DuckLake's data_path, as
+its first writer gave it) and the absolute paths of the files linked
+into it, so a copy of a lake's dir, or a lake moved, reads the other
+lake's files (or none) while DuckLake's writer refuses it, and a data
+path made relative (store_host.cache_root makes SIM_DB_ROOT absolute)
+reads from the working directory. `home` refuses such a catalog
+(DataPathError, naming how a lake is copied: its cache indexed anew)
+before a reader or the writer attaches it: its data_path, read from the
+metadata, is the lake's own data/, through any symlink. A relative data_path wouldn't do, as the
+files an index links in (ducklake_add_data_files) are kept by their
+absolute paths, and DuckLake's OVERRIDE_DATA_PATH would read the copy's
+own files and the original's linked ones together.
 
 Queries. `run` executes one statement on a connection: `gate` first for
 an untrusted one, its `$name` parameters bound (`bind`), its rows
@@ -106,7 +121,7 @@ except ImportError:
     # connection needs the module (bootstrap.engine).
     duckdb = None
 
-from .store_host import DUCKDB_VERSION
+from .store_host import DUCKDB_VERSION, DuckError
 
 # The extensions' builds for DUCKDB_VERSION, as DuckDB's repository
 # installs them (~/.duckdb/extensions/).
@@ -123,6 +138,25 @@ BUSY_TIMEOUT_S = 300
 
 class PinError(RuntimeError):
     """DuckDB or an extension isn't the pinned build."""
+
+
+class DataPathError(DuckError):
+    """The catalog at `lake` keeps its data at `held`, not under its own
+    lake: a copy of that lake's catalog, or one moved, or one an index made
+    with a relative SIM_DB_ROOT, its data path read from the working
+    directory (the module docs)."""
+
+    def __init__(self, lake, held):
+        lake = Path(lake)
+        why = (f"the catalog at {lake} keeps its data under {Path(held)}, not its own {lake / 'data'}: it was "
+               "copied or moved from there, and its reads would be that lake's files"
+               if Path(held).is_absolute() else
+               f"the catalog at {lake} keeps its data under the relative path {Path(held)} (an index's with a "
+               f"relative SIM_DB_ROOT), which reads from the working directory, not its own {lake / 'data'}")
+        super().__init__(
+            f"{why}. A copy of a lake is its cache indexed anew: remove {lake} and run SIM_DB_ROOT={lake.parent} "
+            f"python3 hack/sim-db/simdb.py index, which makes it again from {lake.parent / 'cache'} (the sim-lab "
+            "skill)")
 
 
 class QueryError(Exception):
@@ -244,10 +278,38 @@ def latest_snapshot(conn, lake):
         conn.execute("DETACH lake_meta")
 
 
+def home(conn, lake):
+    """Refuses (DataPathError) the catalog at `lake` where its metadata
+    keeps its data elsewhere than the lake's data/ (the module docs), read
+    on `conn` (an instance of connect()'s, the catalog not attached there)
+    through the sqlite extension; DuckError where the metadata can't be
+    read (no SQLite database, a lock past BUSY_TIMEOUT_S). A lake without
+    a catalog, or whose catalog.sqlite holds none of DuckLake's metadata
+    (an empty file), has no data path to check, and passes: its attach
+    fails or makes the catalog as it would without the check."""
+    if not catalog_file(lake).exists():
+        return
+    try:
+        conn.execute(f"ATTACH {q(str(catalog_file(lake)))} AS lake_meta (TYPE sqlite, READ_ONLY, "
+                     f"BUSY_TIMEOUT {busy_ms()})")
+        try:
+            got = conn.execute("SELECT value FROM lake_meta.ducklake_metadata WHERE key = 'data_path' "
+                               "AND scope IS NULL").fetchone() if conn.execute(
+                "SELECT count(*) FROM duckdb_tables() WHERE database_name = 'lake_meta' "
+                "AND table_name = 'ducklake_metadata'").fetchone()[0] else None
+        finally:
+            conn.execute("DETACH lake_meta")
+    except duckdb.Error as e:
+        raise DuckError(f"{catalog_file(lake)}: {e}") from None
+    if got and Path(got[0]).resolve() != (Path(lake) / "data").resolve():
+        raise DataPathError(lake, got[0])
+
+
 def reader(lake, guard=None, tmp=None, cursors=0, threads=None, memory=None, pin=False, version=None):
     """The catalog at `lake` attached READ_ONLY, in use: at snapshot
     `version`, or with `pin` the latest as it opens, else each query at the
-    latest as it starts. With `guard` (a Guard), shut in before it
+    latest as it starts; refused (home) where it keeps another lake's
+    data. With `guard` (a Guard), shut in before it
     returns: external access only to the lake's data/ and the spill
     directory `tmp` (made), its limits, the configuration locked. With
     `cursors`, (conn, [cursor, ...]): that many more connections of the
@@ -255,6 +317,7 @@ def reader(lake, guard=None, tmp=None, cursors=0, threads=None, memory=None, pin
     unguarded one's limits."""
     conn = connect()
     try:
+        home(conn, lake)
         if pin and version is None:
             version = latest_snapshot(conn, lake)
         conn.execute(attach_sql(lake, version=version) + "; USE lake;")
@@ -286,9 +349,11 @@ def reader(lake, guard=None, tmp=None, cursors=0, threads=None, memory=None, pin
 
 def writer(lake, threads=None, memory=None, tmp=None):
     """The catalog at `lake` attached for writing, in use: the indexer's
-    (one at a time, under catalog.py's lock)."""
+    (one at a time, under catalog.py's lock); refused (home) where it keeps
+    another lake's data."""
     conn = connect()
     try:
+        home(conn, lake)
         conn.execute(attach_sql(lake, write=True) + "; USE lake;")
         for s in settings_sql(threads, memory, tmp):
             conn.execute(s)

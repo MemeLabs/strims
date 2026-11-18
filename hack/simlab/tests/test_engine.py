@@ -14,7 +14,9 @@ its refresh; scripts as the CLI runs them:
 
 import importlib.util
 import json
+import os
 import re
+import shutil
 import sys
 import tempfile
 import threading
@@ -33,7 +35,7 @@ if __name__ == "__main__":
 
 import duckdb  # noqa: E402
 
-from simlab import engine  # noqa: E402
+from simlab import engine, store_host  # noqa: E402
 
 TESTDATA = Path(__file__).with_name("testdata")
 # The console API's golden query: a column of each DuckDB type.
@@ -416,6 +418,99 @@ class Pool(Lake):
             w.close()
         self.pool.refresh()
         self.assertEqual(self.query("SELECT a FROM added").values(), [[1]])
+
+
+class Copies(unittest.TestCase):
+    """A catalog copied or moved from another lake's dir keeps that lake's
+    data path (DuckLake's metadata) and its files' paths under it: every
+    reader of it and its writer refuse it, naming how a lake is copied,
+    rather than read the other lake's files."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="simlab-engine-copies-")
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        self.lake = self.dir / "a" / "lake"
+        make_lake(self.lake)
+
+    def refusals(self, lake):
+        """What each way of opening the catalog at `lake` raised: a reader,
+        a pinned one, a guarded one, a pool's query and the writer."""
+        guard = engine.Guard("1GB", 1, "1GiB")
+        pool = engine.Pool(lake, self.dir / "spill", size=1, guard=guard)
+        out = []
+        for open_ in (lambda: engine.reader(lake), lambda: engine.reader(lake, pin=True),
+                      lambda: engine.reader(lake, guard, self.dir / "spill"), lambda: pool.query("SELECT 1"),
+                      lambda: engine.writer(lake)):
+            try:
+                got = open_()
+            except Exception as e:  # noqa: BLE001 - each way's failure is the result
+                out.append(e)
+            else:
+                out.append(None)
+                if not isinstance(got, engine.Result):
+                    engine.close(got)
+        pool.close()
+        return out
+
+    def count(self, lake):
+        conn = engine.reader(lake)
+        try:
+            return conn.execute("SELECT count(*) FROM nums").fetchone()[0]
+        finally:
+            engine.close(conn)
+
+    def test_a_copied_lake_reads_nothing_of_the_original(self):
+        copy = self.dir / "b" / "lake"
+        shutil.copytree(self.lake, copy)
+        for e in self.refusals(copy):
+            self.assertIsInstance(e, store_host.DuckError)
+            self.assertIn(f"the catalog at {copy} keeps its data under {self.lake / 'data'}, not its own "
+                          f"{copy / 'data'}", str(e))
+            self.assertIn(f"remove {copy} and run SIM_DB_ROOT={copy.parent} python3 hack/sim-db/simdb.py index",
+                          str(e))
+        self.assertEqual(self.count(self.lake), 100000)
+
+    def test_a_moved_lake_is_refused(self):
+        moved = self.dir / "c" / "lake"
+        moved.parent.mkdir()
+        self.lake.rename(moved)
+        for e in self.refusals(moved):
+            self.assertIsInstance(e, store_host.DuckError)
+            self.assertIn(f"keeps its data under {self.lake / 'data'}", str(e))
+
+    def test_a_lake_read_through_a_symlink_is_its_own(self):
+        via = self.dir / "via"
+        via.symlink_to(self.dir / "a")
+        self.assertEqual(self.count(via / "lake"), 100000)
+
+    def test_a_relative_data_path_reads_from_the_working_directory(self):
+        # A lake made at a relative path keeps it relative: its own from
+        # the directory it was made in, refused from another, saying so.
+        cwd = Path.cwd()
+        self.addCleanup(os.chdir, cwd)
+        os.chdir(self.dir)
+        make_lake(Path("r") / "lake")
+        self.assertEqual(self.count(Path("r") / "lake"), 100000)
+        os.chdir(self.dir / "a")
+        with self.assertRaises(engine.DataPathError) as e:
+            engine.reader(self.dir / "r" / "lake")
+        self.assertIn(f"keeps its data under the relative path {Path('r') / 'lake' / 'data'} (an index's with a "
+                      "relative SIM_DB_ROOT), which reads from the working directory", str(e.exception))
+
+    def test_metadata_it_cant_read_is_a_duck_error(self):
+        lake = self.dir / "d" / "lake"
+        lake.mkdir(parents=True)
+        (lake / "catalog.sqlite").write_bytes(b"not a database, " * 64)
+        conn = engine.connect()
+        self.addCleanup(conn.close)
+        with self.assertRaises(store_host.DuckError) as e:
+            engine.home(conn, lake)
+        self.assertNotIsInstance(e.exception, engine.DataPathError)
+        self.assertIn(str(lake / "catalog.sqlite"), str(e.exception))
+        # An empty one holds no DuckLake's metadata: nothing to check.
+        (lake / "catalog.sqlite").write_bytes(b"")
+        engine.home(conn, lake)
 
 
 class Scripts(unittest.TestCase):

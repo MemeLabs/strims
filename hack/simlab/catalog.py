@@ -158,7 +158,10 @@ makes it again from the cache and the metadata files, the readers
 failing on it meanwhile as they did on its files. A cache file that
 isn't whole Parquet waits, the index saying so, until its source is run
 or fetched again. recorded() raises Damaged, naming the tables and that
-an index repairs them, or says a lock held it up.
+an index repairs them, or says a lock held it up. A catalog that keeps
+another lake's data (a copy of a cache root's lake/, or one moved:
+engine.home) is refused by every reader, and an index of it exits first,
+leaving it as it was: a copy of a lake is its cache indexed anew.
 The verdicts are the derived tables (simlab.verdict's derive_source:
 verdict and run_metrics), made for every source that lacks them in a
 pool of `workers` processes (verdict.derive).
@@ -1453,6 +1456,15 @@ def index(workers=None, progress=None, wait=True):
             say("index", "another index holds lake/index.lock")
             return None
         extensions()
+        # A copy of another lake's catalog, before anything reads it (the
+        # scoring check's record, a repair) or changes it.
+        conn = engine.connect()
+        try:
+            engine.home(conn, lake_root())
+        except engine.DataPathError as e:
+            sys.exit(f"index: {e}")
+        finally:
+            conn.close()
         if why := refused_scoring():
             # Before anything changes the catalog (a repair, a catalog of
             # another CATALOG_VERSION wiped): refused where this checkout

@@ -23,8 +23,9 @@ the exports it is, imports its names.
                  and manifest.json
   recover(store_dir, dest_of)
                  the stores no process holds, exported and removed
-  cache_root()   the cache's root: `SIM_DB_ROOT`, else the main
-                 checkout's target/sim-db (its tmp/ is the CLI's spill)
+  cache_root()   the cache's root: `SIM_DB_ROOT` (absolute), else the
+                 main checkout's target/sim-db (its tmp/ is the CLI's
+                 spill)
 
 TABLES are the sims' tables a job's dir may hold (`<table>.csv`, or the
 large ones zstd-compressed as `<table>.csv.zst`, beside
@@ -96,10 +97,12 @@ def main_checkout():
 
 
 def cache_root():
-    """The cache's root: `SIM_DB_ROOT`, else the main checkout's
-    target/sim-db."""
+    """The cache's root: `SIM_DB_ROOT`, made absolute (the catalog keeps
+    its lake's data path as an index gives it, and a relative one would
+    read from whatever directory a reader runs in), else the main
+    checkout's target/sim-db."""
     if os.environ.get("SIM_DB_ROOT"):
-        return Path(os.environ["SIM_DB_ROOT"])
+        return Path(os.environ["SIM_DB_ROOT"]).absolute()
     return main_checkout() / "target" / "sim-db"
 
 

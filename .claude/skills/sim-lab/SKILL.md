@@ -100,6 +100,19 @@ their joins.
   macros that every session reads as main's. It derives the branch's own
   verdicts into that checkout's `target/sim-db-private`, which its `lake`
   and `view` read. Index a new table from main's checkout.
+- **A lake of your own** is another cache root under `SIM_DB_ROOT`,
+  which every command then reads and `index` writes. Never copy a
+  root's lake/ (cp -r of target/sim-db): its catalog keeps the
+  original's absolute data paths, so the copy's reads would be the
+  original's files, and every reader and `index` refuse it, naming the
+  route. Copy its cache/ and derived/ alone and index the copy, which
+  makes its lake from them: `SIM_DB_ROOT=NEW python3 hack/sim-db/simdb.py
+  index`. cp -al links their files (written whole and never changed in
+  place) at no cost, on the same filesystem only: across one (into /tmp's
+  tmpfs, say) it fails, and cp -a copies them. Without derived/ the
+  copy's index derives every source's verdicts again, over a thousand
+  for main's cache. A copy made whole mends the same way, its lake/
+  removed first.
 - **Tiers and knobs.** hack/sim-suite/suite.py's module docs describe
   the tiers; `suite.py list --tier T` prints a tier's cells, audience and
   settings. peers is the local directional tier (about half an hour of

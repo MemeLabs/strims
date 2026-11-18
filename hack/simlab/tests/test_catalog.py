@@ -287,6 +287,58 @@ class Index(Fixture):
             self.assertIsNone(catalog.state())
 
 
+class Copied(Fixture):
+    def test_a_copied_lake_reads_nothing_of_the_original_and_is_made_again_from_its_cache(self):
+        self.index()
+        jobs = "SELECT count(*) AS n FROM jobs;"
+        want = catalog.lake(jobs)
+        orig = self.root / "target" / "sim-db"
+        copy = self.root / "copy" / "sim-db"
+        shutil.copytree(orig, copy)
+        meta = (copy / "lake" / "catalog.sqlite").read_bytes()
+        refusal = (f"the catalog at {copy / 'lake'} keeps its data under {orig / 'lake' / 'data'}, not its own "
+                   f"{copy / 'lake' / 'data'}")
+        route = f"remove {copy / 'lake'} and run SIM_DB_ROOT={copy} python3 hack/sim-db/simdb.py index"
+        with mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(copy)}):
+            # Its reads would be the original's files: refused, naming how
+            # a lake is copied; so is an index of it, which leaves it as it
+            # was.
+            with self.assertRaises(store_host.DuckError) as e:
+                catalog.lake(jobs)
+            self.assertIn(refusal, str(e.exception))
+            self.assertIn(route, str(e.exception))
+            with self.assertRaises(SystemExit) as e:
+                self.index()
+            self.assertTrue(str(e.exception.code).startswith(f"index: {refusal}"), e.exception.code)
+            # Ahead of a scoring.sql the index would refuse, whose check
+            # reads the catalog's record.
+            with mock.patch.object(catalog, "refused_scoring", lambda: "planted"), \
+                    self.assertRaises(SystemExit) as e:
+                self.index()
+            self.assertTrue(str(e.exception.code).startswith(f"index: {refusal}"), e.exception.code)
+            self.assertEqual((copy / "lake" / "catalog.sqlite").read_bytes(), meta)
+            # The route: its catalog made again from its cache, which reads
+            # as the original did with the original gone.
+            shutil.rmtree(copy / "lake")
+            self.assertTrue(self.index()[0].changed)
+            away = orig.with_name("sim-db-away")
+            orig.rename(away)
+            try:
+                self.assertEqual(catalog.lake(jobs), want)
+            finally:
+                away.rename(orig)
+
+    def test_an_index_of_metadata_it_cant_read_fails_as_a_duck_error(self):
+        root = self.root / "unread" / "sim-db"
+        (root / "lake").mkdir(parents=True)
+        with mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root)}):
+            for text in (b"", b"not a database, " * 64):
+                (root / "lake" / "catalog.sqlite").write_bytes(text)
+                with self.subTest(text=text[:16]), self.assertRaises(store_host.DuckError) as e:
+                    self.index()
+                self.assertNotIsInstance(e.exception, engine.DataPathError)
+
+
 class Snapshot(Fixture):
     def lakes_latest(self):
         """DuckLake's own latest snapshot id."""

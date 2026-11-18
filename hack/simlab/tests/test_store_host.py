@@ -70,6 +70,16 @@ class Host(unittest.TestCase):
         self.addCleanup(p.stop)
         (self.dir / "here").mkdir()
 
+    def test_a_relative_cache_root_is_made_absolute(self):
+        # The catalog keeps the lake's data path as an index gives it: a
+        # relative one would read from whatever directory a reader runs in.
+        cwd = Path.cwd()
+        self.addCleanup(os.chdir, cwd)
+        os.chdir(self.dir)
+        with mock.patch.dict(os.environ, {"SIM_DB_ROOT": "here"}):
+            self.assertEqual(store_host.cache_root(), self.dir / "here")
+        self.assertEqual(store_host.cache_root(), self.dir / "here")
+
     def test_a_host_folds_and_exports_with_the_files_it_is_sent(self):
         farm = self.dir / "farm"
         farm.mkdir()
