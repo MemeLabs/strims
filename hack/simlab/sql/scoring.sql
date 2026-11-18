@@ -1993,3 +1993,122 @@ CREATE OR REPLACE MACRO alloc_step_fit_of(a_side, b_side, lo_s := 10, hi_s := -1
            diff + 2 * se AS hi, bound::DOUBLE AS bound, greatest(bound, 2 * se) AS allowance,
            coalesce(abs(diff) <= greatest(bound, 2 * se), false) AS pass
     FROM f ORDER BY kind;
+
+-- The write path bench's stages (C4) of a side's runs (`side`, as
+-- side_window_of takes it: testbed_side's, or a twin's jobs) at node
+-- `at_node` (the seed by default), each run over its window
+-- (side_window_of's: [lo_s, hi_s) s of its stream, by default from 20 s to
+-- its stream's end, its SECS): a row per run (k), with its source's sim,
+-- and stage: the stage's values n, and their p50 and p90
+-- (sketch_quantile's), in ms but stage 6's, in bytes. The stages:
+-- - `1 push: runner`: each push the node wrote (seed_sends: how 'push',
+--   fate 'written'), queued_ms to t_ms. A push's time in its link's writes
+--   isn't read: the tables keep no push's place in its link's stream, and
+--   the bytes the node's sends wrote can't stand for it (on the bench's
+--   testbed runs a link's stream holds 9-12 bytes a send more than they
+--   do, by link and run: some three of its writes by 20 s);
+-- - each write of the node's links (link_writes): `2 driver queue`,
+--   queued_us to t_us; `3 held: channel`, `4 held: host`, `5 notsent` (a
+--   TCP socket's mark) and `5 unheld`, t_us to done_us, by its wait;
+-- - `6 low reading`: the buffered amount each `bufferedamountlow` read
+--   (link_samples, cause 'low');
+-- - `7 done to read`: a write's done_us to the peer's read of its last
+--   byte (link_reads by the link's byte offsets: the read whose off +
+--   bytes first reaches the write's); and of a write into an empty data
+--   channel (unsent_before 0, kind 'webrtc') the next data packet to the
+--   peer the node's uplink was offered after the write was done, which
+--   carries its first bytes (a datagram's packets keep no offset of its
+--   channel's stream): `7a empty: to first packet` (on the testbed a
+--   packet's t_us is its capture's plus the node's egress delay,
+--   hosts.delay_us, which comes off; the model's is its admission, the
+--   delay after), `7b empty: packet to arrival`, `7c empty: arrival to
+--   read`;
+-- - `8 read to take`: the peer's read's t_us to its node task's take of
+--   it (taken_us).
+-- needs: link_writes link_reads link_samples seed_sends packets hosts jobs.sim jobs.env
+CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := -1) AS TABLE
+    WITH j AS (
+        SELECT DISTINCT w.k, w.src, w.lo * 1000000 AS lo_us, w.hi * 1000000 AS hi_us, b.sim
+        FROM side_window_of(side, 'write_stages_of', lo_s := lo_s, hi_s := hi_s) w JOIN jobs b USING (k, src)),
+    w AS (
+        SELECT x.* FROM link_writes x JOIN j USING (k, src)
+        WHERE x.node = at_node AND x.t_us >= j.lo_us AND x.t_us < j.hi_us),
+    r AS (SELECT x.* FROM link_reads x JOIN j USING (k, src) WHERE x.peer = at_node),
+    arr AS (
+        SELECT w.k, w.peer, w.link, w.off, w.done_us, w.unsent_before, w.kind, r.t_us AS read_us, r.taken_us
+        FROM w ASOF JOIN r ON w.k = r.k AND r.node = w.peer AND r.link = w.link
+            AND r.off + r.bytes >= w.off + w.bytes),
+    p AS (
+        SELECT x.k, (x.t_ms - x.queued_ms)::DOUBLE AS v
+        FROM seed_sends x JOIN j USING (k, src)
+        WHERE x.node = at_node AND x.how = 'push' AND x.fate = 'written'
+          AND x.t_ms * 1000 >= j.lo_us AND x.t_ms * 1000 < j.hi_us),
+    lw AS (
+        SELECT x.k, x.buffered_bytes FROM link_samples x JOIN j USING (k, src)
+        WHERE x.node = at_node AND x.cause = 'low' AND x.t_us >= j.lo_us AND x.t_us < j.hi_us),
+    pk AS (
+        SELECT x.k, x.peer, x.t_us - CASE WHEN j.sim = 'testbed' THEN coalesce(h.delay_us, 0) ELSE 0 END AS t_us,
+               x.arrived_us
+        FROM packets x JOIN j USING (k, src) LEFT JOIN hosts h ON h.k = x.k AND h.src = x.src AND h.node = x.node
+        WHERE x.node = at_node AND x.kind IN ('data', 'data_sack') AND x.lost IS NULL),
+    fp AS (
+        SELECT a.k, a.done_us, a.read_us, pk.t_us AS pkt_us, pk.arrived_us
+        FROM (SELECT * FROM arr WHERE unsent_before = 0 AND kind = 'webrtc') a
+        ASOF JOIN pk ON a.k = pk.k AND a.peer = pk.peer AND pk.t_us >= a.done_us),
+    st AS (
+        SELECT k, '1 push: runner' AS stage, v FROM p
+        UNION ALL SELECT k, '2 driver queue', (t_us - queued_us) / 1000.0 FROM w
+        UNION ALL SELECT k, CASE wait WHEN 'channel' THEN '3 held: channel' WHEN 'host' THEN '4 held: host'
+                                      WHEN 'notsent' THEN '5 notsent' ELSE '5 unheld' END,
+                         (done_us - t_us) / 1000.0 FROM w
+        UNION ALL SELECT k, '6 low reading', buffered_bytes::DOUBLE FROM lw
+        UNION ALL SELECT k, '7 done to read', (read_us - done_us) / 1000.0 FROM arr
+        UNION ALL SELECT k, '7a empty: to first packet', (pkt_us - done_us) / 1000.0 FROM fp
+        UNION ALL SELECT k, '7b empty: packet to arrival', (arrived_us - pkt_us) / 1000.0 FROM fp
+            WHERE arrived_us IS NOT NULL
+        UNION ALL SELECT k, '7c empty: arrival to read', (read_us - arrived_us) / 1000.0 FROM fp
+            WHERE arrived_us IS NOT NULL
+        UNION ALL SELECT k, '8 read to take', (taken_us - read_us) / 1000.0 FROM arr WHERE taken_us IS NOT NULL)
+    SELECT st.k, j.sim, st.stage, count(*) AS n, sketch_quantile(v, 50) AS p50, sketch_quantile(v, 90) AS p90
+    FROM st JOIN (SELECT DISTINCT k, sim FROM j) j USING (k) GROUP BY ALL;
+
+-- The write path bench's pass (C4): a model's stages (`a_side`, a twin's
+-- runs) against the testbed's (`b_side`), write_stages_of's over the same
+-- window at the same node. A row per stage either side has: each side's
+-- runs, the testbed's runs' p50s, p90s and counts in their order (b_p50s,
+-- b_p90s, b_ns), the model's medians of them over its runs (a_p50, a_p90,
+-- a_n: quantile_cont's), and passes, each the plan's rule (the testbed's
+-- repeat range, widened by a floor): pass50 and pass90, the model's median
+-- within the testbed's runs' range widened by `floor_ms` either side (a
+-- byte stage's by floor_bytes); for the holds and the lows (stages 3, 4
+-- and 6) pass_n, the model's median count a run within the testbed's
+-- runs' range widened by counting noise at each end, twice a Poisson
+-- count's standard deviation (2√n of the end's count), so a stage's times
+-- pass only with about as many of them. `pass` is every one of the
+-- stage's; a stage one side lacks fails.
+-- needs: link_writes link_reads link_samples seed_sends packets hosts jobs.sim jobs.env
+CREATE OR REPLACE MACRO write_fit_of(a_side, b_side, at_node := 0, lo_s := 20, hi_s := -1, floor_ms := 0.2,
+                                     floor_bytes := 0) AS TABLE
+    WITH a AS (
+        SELECT stage, count(*) AS runs, quantile_cont(p50, 0.5) AS p50, quantile_cont(p90, 0.5) AS p90,
+               quantile_cont(n, 0.5) AS n
+        FROM write_stages_of(a_side, at_node := at_node, lo_s := lo_s, hi_s := hi_s) GROUP BY stage),
+    b AS (
+        SELECT stage, count(*) AS runs, list(p50 ORDER BY k) AS p50s, list(p90 ORDER BY k) AS p90s,
+               list(n ORDER BY k) AS ns, min(p50) AS lo50, max(p50) AS hi50, min(p90) AS lo90, max(p90) AS hi90,
+               min(n) AS lo_n, max(n) AS hi_n
+        FROM write_stages_of(b_side, at_node := at_node, lo_s := lo_s, hi_s := hi_s) GROUP BY stage),
+    f AS (
+        SELECT coalesce(a.stage, b.stage) AS stage, a.runs AS a_runs, b.runs AS b_runs,
+               b.p50s AS b_p50s, a.p50 AS a_p50, b.p90s AS b_p90s, a.p90 AS a_p90, b.ns AS b_ns, a.n AS a_n,
+               CASE WHEN coalesce(a.stage, b.stage) LIKE '6 %' THEN floor_bytes ELSE floor_ms END AS fl,
+               b.lo50, b.hi50, b.lo90, b.hi90, b.lo_n, b.hi_n,
+               coalesce(a.stage, b.stage)[1] IN ('3', '4', '6') AS counted
+        FROM a FULL JOIN b USING (stage)),
+    g AS (
+        SELECT *, a_p50 BETWEEN lo50 - fl AND hi50 + fl AS pass50, a_p90 BETWEEN lo90 - fl AND hi90 + fl AS pass90,
+               CASE WHEN counted THEN a_n BETWEEN lo_n - 2 * sqrt(lo_n) AND hi_n + 2 * sqrt(hi_n) END AS pass_n
+        FROM f)
+    SELECT stage, a_runs, b_runs, b_p50s, a_p50, pass50, b_p90s, a_p90, pass90, b_ns, a_n, pass_n,
+           coalesce(pass50 AND pass90 AND (pass_n OR NOT counted), false) AS pass
+    FROM g ORDER BY stage;
