@@ -143,6 +143,10 @@ a sizing decision rests on them.
   peaks. Sparser topologies fit more. Size a farm testbed host's
   `host_cores` from the per-node CPU at the run's peer count, leaving the
   host about half idle.
+- PCAP=1's captures come back in each farm run's out dir, at about
+  0.16 MB per viewer-second (a 31-viewer mesh6 run of 60 s, 300 MB):
+  size a matrix's transfer and target/ disk by its viewers, seconds and
+  runs.
 - run.sh keeps browser profiles on tmpfs. Profile writes to the host's
   disk stalled other containers by up to 160 ms.
 - Judge load from cpu-<i>.log and the host's idle, never from lag. A

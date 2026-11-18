@@ -501,10 +501,10 @@ and dropped are in `TRIED.md`.
   - Close the window model's gaps against the testbed's bare TCP bench
     (`hack/testbed/benchsuite.py`): the holders' losses beside each
     other's bursts, the holders' probe round-trip tails and the uplink
-    cut's twin (`testbed-copy-floor`); build its remaining departures from
-    Linux's TCP (HyStart's ACK-train exit, per-packet arrival at the
-    receiver, CUBIC's reset at a timeout, lost retransmissions, F-RTO) if
-    the testbed–twin fit shows they matter.
+    cut's twin (the testbed tier's halve cells); build its remaining
+    departures from Linux's TCP (HyStart's ACK-train exit, per-packet
+    arrival at the receiver, CUBIC's reset at a timeout, lost
+    retransmissions, F-RTO) if the testbed–twin fit shows they matter.
   - Through a halving of the seed's uplink the testbed fell into the
     lock-in deeper than its twin, and its round trips there ran 1.4 times
     the sim's. Recheck with today's frames; if the gap holds, find the
@@ -543,11 +543,7 @@ and dropped are in `TRIED.md`.
     - an arrival run's join and caught-up row fields: the testbed's report
       computes them, but `Report::row` writes them only for a scenario
       with an arrivals profile (`Scenario::profiled`), which the testbed's
-      scenario doesn't set;
-    - the older testbed matrices' runs, which don't fold into the lake:
-      retire `testbed-smoke`, whose tables version is
-      `testbed-tables-smoke`, and give copy-floor, floor, headroom and
-      swarm-size the tables.
+      scenario doesn't set.
   - The WAN model lacks what the testbed's classes build beyond a FIFO:
     DOCSIS-PIE (cable's `aqm=pie`), a home router's fq_codel or cake
     (`router=`), and a trace's varying delay (`delay=`).

@@ -1,8 +1,7 @@
-# The sim twin of testbed-swarm-size.toml: calibration_star in the window
-# model on the same 6-degree meshes, a 10 Mbit seed halved from 60 s to
-# 180 s, viewers joining 30 s in, 1 KiB chunks, 8 seeds a size. Compare
-# the two in the lake (`simdb.py pull --run` of each, then twin_fit_of with
-# testbed_side of the testbed's run).
+# calibration_star in the window model on the farm testbed's 6-degree
+# meshes of 3 to 63 viewers (calibration's mesh6), a 10 Mbit seed halved
+# from 60 s to 180 s, viewers joining 30 s in, 1 KiB chunks, 8 seeds a
+# size.
 
 package = "strims-sim"
 target = "scenarios"
