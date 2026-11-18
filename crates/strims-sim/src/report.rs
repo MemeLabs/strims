@@ -212,6 +212,121 @@ pub struct HostReport {
     pub timers: Vec<TimerHostRecord>,
     pub timer_context: Option<strims_testbed::record::TimerContext>,
     pub timers_lost: u64,
+    /// With [`Scenario::link_log`], its links' writes, reads and readings,
+    /// every incarnation, in the order its log made them
+    /// ([`LinkHostRows`]), and the records its log's caps left out.
+    pub link_rows: LinkHostRows,
+    pub link_log_lost: u64,
+}
+
+/// A link of a host's in its link log's rows ([`HostReport::link_rows`]):
+/// the host at its other end, the link's ordinal among the host's links to
+/// it, and its transport.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LinkHostKey {
+    pub peer: HostIx,
+    pub link: u32,
+    pub kind: strims_node::LinkKind,
+}
+
+/// A host's link log's rows ([`HostReport::link_rows`],
+/// `strims_testbed::record::links`), each with its link, times in µs of
+/// true time from the run's start ([`link_us`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LinkHostRows {
+    pub writes: Vec<(LinkHostKey, strims_testbed::record::links::LinkWrite)>,
+    pub reads: Vec<(LinkHostKey, strims_testbed::record::links::LinkRead)>,
+    pub samples: Vec<(LinkHostKey, LinkSampleHostRecord)>,
+    /// The epoch of the rows' times: true time at the run's start, by the
+    /// clock the log read.
+    pub epoch: Option<strims_base::time::Time>,
+}
+
+impl LinkHostRows {
+    /// Adds a take's rows, each link's key from `key` (rows of a link it
+    /// doesn't know are left out), their times from `epoch`.
+    pub fn extend(
+        &mut self,
+        writes: &[strims_testbed::record::links::LinkWrite],
+        reads: &[strims_testbed::record::links::LinkRead],
+        samples: &[strims_testbed::record::links::LinkSample],
+        key: impl Fn(u64) -> Option<LinkHostKey>,
+        epoch: strims_base::time::Time,
+    ) {
+        self.epoch = Some(epoch);
+        self.writes
+            .extend(writes.iter().filter_map(|w| Some((key(w.link)?, *w))));
+        self.reads
+            .extend(reads.iter().filter_map(|r| Some((key(r.link)?, *r))));
+        self.samples.extend(
+            samples
+                .iter()
+                .filter_map(|s| Some((key(s.link)?, LinkSampleHostRecord::of(s)))),
+        );
+    }
+
+    /// `t` in µs of true time from the run's start.
+    pub fn us(&self, t: strims_base::time::Time) -> i64 {
+        link_us(t, self.epoch.unwrap_or(t))
+    }
+}
+
+/// A link sample as a host's report keeps it ([`LinkHostRows::samples`]),
+/// its reading packed: each of [`LinkState`]'s readings in bytes, bytes a
+/// second or µs, at most `u32::MAX - 1`, and `u32::MAX` for none, so a
+/// run's millions of samples hold a quarter of what they would.
+///
+/// [`LinkState`]: strims_node::event::LinkState
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LinkSampleHostRecord {
+    pub at: strims_base::time::Time,
+    pub source: strims_node::event::SampleSource,
+    pub cause: strims_testbed::record::links::SampleCause,
+    state: [u32; 14],
+}
+
+impl LinkSampleHostRecord {
+    pub fn of(s: &strims_testbed::record::links::LinkSample) -> Self {
+        let n = |v: Option<u64>| v.map_or(u32::MAX, |v| u32::try_from(v).unwrap_or(u32::MAX - 1));
+        let d = |v: Option<strims_base::time::Duration>| {
+            n(v.map(|d| u64::try_from(d.as_nanos().div_euclid(1000)).unwrap_or(0)))
+        };
+        let x = &s.state;
+        LinkSampleHostRecord {
+            at: s.at,
+            source: s.source,
+            cause: s.cause,
+            state: [
+                n(x.unsent),
+                n(x.unacked),
+                n(x.cwnd),
+                n(x.ssthresh),
+                d(x.srtt),
+                d(x.rttvar),
+                n(x.retrans),
+                n(x.delivery_rate),
+                n(x.buffered),
+                n(x.lowat),
+                d(x.uplink_queue),
+                n(x.link_pending),
+                n(x.write_held),
+                n(x.qos_backlog),
+            ],
+        }
+    }
+
+    /// The readings, in the `link_samples` table's order (unsent,
+    /// unacked, cwnd, ssthresh, srtt_us, rttvar_us, retrans,
+    /// delivery_rate, buffered, lowat, uplink_queue_us, link_pending,
+    /// write_held, qos_backlog), `None` for none.
+    pub fn readings(&self) -> [Option<u32>; 14] {
+        self.state.map(|v| (v != u32::MAX).then_some(v))
+    }
+}
+
+/// `t` in µs from `epoch`, floored.
+pub fn link_us(t: strims_base::time::Time, epoch: strims_base::time::Time) -> i64 {
+    (t - epoch).as_nanos().div_euclid(1000)
 }
 
 /// A timer of a host's that fired ([`HostReport::timers`],

@@ -74,6 +74,11 @@ crates differ from those the page was built from builds its own page.
   isolation likely changes whether that ms is jittered, so its timers
   may run otherwise with the log on (the farm's
   testbed-timers-control.toml compares them).
+- `LINK_LOG=all` (or node indices) keeps those nodes' links' I/O as it
+  happens, as the sim's `STRIMS_SIM_LINK_LOG` does: the tables'
+  `link_writes`, `link_reads` and `link_samples`, its twin's for the same
+  nodes, a browser's page served cross-origin isolated as with the timer
+  log. A 20 Mbit/s browser seed's line grows by about 60 kB a second.
 - `SEED_LINK`, `VIEWER_LINK` and `LINKS` give nodes access link
   classes: tbf, cable, dsl, fiber or trace (`hack/testbed/links.sh`
   documents each).

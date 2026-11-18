@@ -211,9 +211,15 @@ pub(crate) async fn writer(
     inputs: Inputs<WasmTransport>,
     write_timeout: Duration,
     buffered: Option<Arc<AtomicU64>>,
+    log: strims_node_core::LinkTap,
 ) {
     while let Some(buf) = writes.recv().await {
-        match ws.send(&buf, write_timeout).await {
+        let sent = log.write(
+            buf.len(),
+            Some(strims_node_core::WriteWait::Notsent),
+            ws.send(&buf, write_timeout),
+        );
+        match sent.await {
             Err(error) => {
                 let _ = inputs.send(Input::LinkDown { link, error }).await;
                 return;

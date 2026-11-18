@@ -504,7 +504,8 @@ pub fn max_pending_requests() -> usize {
     strims_ppspp::scheduler_peer::max_pending_requests(LIVE_WINDOW as u64)
 }
 
-/// Some of a scenario's hosts ([`Scenario::timer_log`]).
+/// Some of a scenario's hosts ([`Scenario::timer_log`],
+/// [`Scenario::link_log`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HostSet {
     All,
@@ -695,6 +696,12 @@ pub struct Scenario {
     /// [`Scenario::timer_lateness`] draws them from a stream of its own:
     /// off by default.
     pub timer_probe: bool,
+    /// With [`Scenario::wire_bins`], the hosts that keep their links' I/O
+    /// as it happens for the tables' `link_writes`, `link_reads` and
+    /// `link_samples` (`NodeConfig::link_log`, and their modelled
+    /// connections' readings and holds under it): none by default.
+    /// Changes no trace.
+    pub link_log: Option<HostSet>,
     /// When the first swarm's viewers arrive ([`crate::arrivals`]): with
     /// the run by default ([`Arrivals::T0`]). The run resolves it into
     /// [`HostSpec::arrive_at`] and lays the links out in arrival order.
@@ -961,6 +968,7 @@ impl Scenario {
             timer_lateness: false,
             timer_log: None,
             timer_probe: false,
+            link_log: None,
             arrivals: Arrivals::T0,
             departures: None,
             mix: false,

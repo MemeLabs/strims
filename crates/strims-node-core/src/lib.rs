@@ -121,20 +121,21 @@ pub mod vpn_port;
 
 pub use adversary::{Adversary, AdversaryFactory, AdversaryPeer};
 pub use config::{
-    BufferConfig, CaptureOpen, DEFAULT_NOTSENT_LOWAT, DecisionSink, MetricsSink, NetworkOptions,
-    NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture, StatsBins, TcpSocketConfig, TimerSink,
-    VpnPortConfig, WebRtcConfig,
+    BufferConfig, CaptureOpen, DEFAULT_NOTSENT_LOWAT, DecisionSink, LinkSink, MetricsSink,
+    NetworkOptions, NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture, StatsBins,
+    TcpSocketConfig, TimerSink, VpnPortConfig, WebRtcConfig,
 };
 pub use driver::{
-    IdleOk, Input, Inputs, Interfaces, LinkChannels, LinkProbe, LinkTasks, NodeIo, NodeSetup,
-    NodeTask, TaskGuard, start,
+    IdleOk, Input, Inputs, Interfaces, LinkChannels, LinkProbe, LinkTap, LinkTasks, NodeIo,
+    NodeSetup, NodeTask, TaskGuard, link_id, start,
 };
 pub use error::{NodeError, ReadError};
 pub use event::{
     ChannelInfo, DecisionInfo, DecisionLogEntry, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo,
-    LinkInfo, LogInfo, NetworkInfo, NodeBin, NodeEvent, NodeMetrics, ParentInfo, ParentLogEntry,
-    PeerInfo, RequestInfo, RunnerMetrics, RunnerPeerInfo, SeedAllocationInfo, SeedNeighbourInfo,
-    StoreInfo, SwarmBin, SwarmInfo, TimerRecord, TimerSource, WriterInfo,
+    LinkEvent, LinkInfo, LinkRecord, LinkState, LogInfo, NetworkInfo, NodeBin, NodeEvent,
+    NodeMetrics, ParentInfo, ParentLogEntry, PeerInfo, RequestInfo, RunnerMetrics, RunnerPeerInfo,
+    SampleSource, SeedAllocationInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo,
+    TimerRecord, TimerSource, WriteWait, WriterInfo,
 };
 pub use handle::{
     HashTableGet, Node, NodeEvents, NodeInfo, PeerIndexSearch, SpawnNode, SwarmReader, SwarmWriter,

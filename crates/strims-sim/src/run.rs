@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use turmoil::Sim;
 
 use crate::memory::MemoryGroup;
-use crate::report::{MemoryReport, Report, ViewerReport, WanReport};
+use crate::report::{HostReport, MemoryReport, Report, ViewerReport, WanReport};
 use crate::spec::{Departure, Fault, HostIx, Scenario};
 use crate::wan::{Scheduler, sim_time};
 use crate::world::World;
@@ -451,27 +451,34 @@ fn report(
             }
         }
     }
-    // The timer logs move into the reports, uncopied.
+    // The timer and link logs move into the reports, uncopied.
     let timers: Vec<_> = st
         .hosts
         .iter_mut()
         .map(|s| std::mem::take(&mut s.timers))
         .collect();
-    let hosts = st
+    let links: Vec<_> = st
+        .hosts
+        .iter_mut()
+        .map(|s| std::mem::take(&mut s.link_rows))
+        .collect();
+    let ids = &st.ids;
+    let hosts: Vec<HostReport> = st
         .hosts
         .iter()
-        .zip(timers)
+        .zip(timers.into_iter().zip(links))
         .enumerate()
-        .map(|(h, (s, timers))| {
+        .map(|(h, (s, (timers, links)))| {
             let mut r = s.report();
             r.timers = timers;
+            r.link_rows = links;
             r.name = w.name(h).to_owned();
             r.clock_offset = w.clock_offset(h);
             r.messages = s
                 .stats
                 .messages()
                 .into_iter()
-                .map(|((id, swarm), m)| (st.ids.get(&id).copied(), swarm, m))
+                .map(|((id, swarm), m)| (ids.get(&id).copied(), swarm, m))
                 .collect();
             r.echoes = s.stats.echoes();
             r

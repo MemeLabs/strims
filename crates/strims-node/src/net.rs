@@ -14,7 +14,7 @@ use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
 
-use strims_node_core::LinkProbe;
+use strims_node_core::{LinkProbe, LinkSink};
 use strims_vnic::TcpOptions;
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -64,6 +64,13 @@ pub trait Net: Clone + Send + Sync + 'static {
     fn link_probe(&self, stream: &Self::TcpStream, ws: bool) -> Option<Box<dyn LinkProbe>> {
         let _ = (stream, ws);
         None
+    }
+
+    /// Has the transport under link `link` hand the node's link log what
+    /// only it can tell (`NodeConfig::link_log`: the holds of its writes,
+    /// its readings as it decides them). The default tells nothing.
+    fn log_link(&self, stream: &Self::TcpStream, link: u64, sink: LinkSink) {
+        let _ = (stream, link, sink);
     }
 
     /// Whether the net carries WebRTC data channels as streams it models

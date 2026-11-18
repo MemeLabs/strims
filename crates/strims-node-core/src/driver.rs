@@ -60,9 +60,9 @@ use strims_base::time::{Duration, Time};
 use strims_vnic::{DialTarget, LinkConfig, LinkDescription, LinkInterface, PeerKey as LinkKey};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::config::{BufferConfig, NodeConfig, TimerSink};
+use crate::config::{BufferConfig, LinkSink, NodeConfig, TimerSink};
 use crate::error::NodeError;
-use crate::event::{TimerRecord, TimerSource};
+use crate::event::{LinkEvent, TimerRecord, TimerSource};
 use crate::handle::{Node, NodeEvents, NodeInfo};
 use crate::rpc::Outgoing;
 use crate::rtc::{RtcConn, RtcFactory, RtcInput};
@@ -207,9 +207,79 @@ pub struct LinkChannels<T> {
     /// ends (the link went), it ends the transport.
     pub writes: mpsc::Receiver<Vec<u8>>,
     pub inputs: Inputs<T>,
-    /// The node captures its ppspp traffic: the driver returns a
-    /// [`LinkProbe`] if it can read the transport.
+    /// The node captures its ppspp traffic or logs its links: the driver
+    /// returns a [`LinkProbe`] if it can read the transport.
     pub probe: bool,
+    /// The node's link log ([`NodeConfig::link_log`]): the link's reader
+    /// and writer, and the transport under them where it can tell, hand it
+    /// what they do, as [`State`] does, under [`link_id`]. `None` keeps
+    /// none.
+    pub log: Option<LinkSink>,
+}
+
+/// Link `link`'s name in the link log ([`crate::LinkRecord::link`]).
+pub fn link_id(link: LinkKey) -> u64 {
+    use slotmap::Key;
+    link.data().as_ffi()
+}
+
+/// A link's tasks' handle on the link log ([`LinkChannels::log`]), under
+/// the link's name ([`link_id`]): what its writer, reader and transport
+/// record. Off (no sink), it records nothing.
+#[derive(Clone, Debug, Default)]
+pub struct LinkTap(Option<(u64, LinkSink)>);
+
+impl LinkTap {
+    pub fn new(link: LinkKey, sink: Option<LinkSink>) -> LinkTap {
+        LinkTap(sink.map(|s| (link_id(link), s)))
+    }
+
+    pub fn on(&self) -> bool {
+        self.0.is_some()
+    }
+
+    pub fn record(&self, event: LinkEvent) {
+        if let Some((link, sink)) = &self.0 {
+            sink.record(*link, event);
+        }
+    }
+
+    /// The sink and the link's name, for a transport that logs itself.
+    pub fn parts(&self) -> Option<(u64, LinkSink)> {
+        self.0.clone()
+    }
+
+    /// Runs the link writer's write `f`, of `bytes`, logging it as it
+    /// begins and ends, and the first time `f` waits as a hold for `wait`,
+    /// where the writer can't tell why its transport held it otherwise.
+    /// Polls `f` as `f.await` does.
+    pub async fn write<F: Future>(
+        &self,
+        bytes: usize,
+        wait: Option<crate::event::WriteWait>,
+        f: F,
+    ) -> F::Output {
+        if !self.on() {
+            return f.await;
+        }
+        self.record(LinkEvent::Began(bytes));
+        let mut f = pin!(f);
+        let mut held = false;
+        let out = std::future::poll_fn(|cx| {
+            let r = f.as_mut().poll(cx);
+            if r.is_pending()
+                && !held
+                && let Some(w) = wait
+            {
+                held = true;
+                self.record(LinkEvent::Held(w));
+            }
+            r
+        })
+        .await;
+        self.record(LinkEvent::Done);
+        out
+    }
 }
 
 /// What [`NodeIo::spawn_link`] started.
@@ -677,6 +747,9 @@ impl<I: NodeIo> NodeTask<I> {
         let now = self.io.now();
         match input {
             Input::Read { link, mut buf, len } => {
+                if let Some(log) = &self.state.link_sink {
+                    log.record(link_id(link), LinkEvent::Taken(len));
+                }
                 if let Some(data) = buf.get_mut(..len) {
                     self.state.handle_read(link, now, data);
                 }
@@ -783,9 +856,16 @@ impl<I: NodeIo> NodeTask<I> {
                 return;
             }
         };
+        if let Some(log) = &self.state.link_sink {
+            log.record(link_id(link), LinkEvent::Opened(kind));
+        }
         let io = self.spawn_link_io(link, transport, max_write, write_buffers, rtc.is_some());
         self.state.insert_link(link, kind, io, dial, rtc);
         if !leftover.is_empty() {
+            if let Some(log) = &self.state.link_sink {
+                log.record(link_id(link), LinkEvent::Read(leftover.len()));
+                log.record(link_id(link), LinkEvent::Taken(leftover.len()));
+            }
             self.state.handle_read(link, now, leftover);
         }
     }
@@ -815,7 +895,8 @@ impl<I: NodeIo> NodeTask<I> {
                 read_free: read_free_rx,
                 writes: write_rx,
                 inputs: self.input_tx.clone(),
-                probe: self.state.capturing(),
+                probe: self.state.capturing() || self.state.link_sink.is_some(),
+                log: self.state.link_sink.clone(),
             },
         );
         LinkIo {

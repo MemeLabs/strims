@@ -27,15 +27,16 @@ use strims_node::{
     WebRtcConfig,
 };
 use strims_proto::types::Key;
+use strims_testbed::record::links::LinkLog;
 use strims_testbed::record::{TimerContext, TimerLog};
 use strims_wan::live::Au;
 
 use crate::memory::{GroupCounters, MemoryGroup};
 use crate::net::SendBuffers;
 use crate::report::{
-    ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport, MediaLog, NodeBinRecord,
-    ParentCheckRecord, ParentLoss, ParentRecord, RequestHostRecord, SeedDecisionHostRecord,
-    SeedSendHostRecord, TimerHostRecord, VpnReport,
+    ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport, LinkHostKey, LinkHostRows,
+    MediaLog, NodeBinRecord, ParentCheckRecord, ParentLoss, ParentRecord, RequestHostRecord,
+    SeedDecisionHostRecord, SeedSendHostRecord, TimerHostRecord, VpnReport,
 };
 use crate::skew::OffsetCapture;
 use crate::spec::{HostIx, Scenario, Transport};
@@ -151,6 +152,11 @@ pub(crate) struct HostState {
     pub timers: Vec<TimerHostRecord>,
     pub timer_context: Option<TimerContext>,
     pub timers_lost: u64,
+    /// See [`HostReport::link_rows`], and each link the log named so far,
+    /// by its name in the rows.
+    pub link_rows: LinkHostRows,
+    pub link_log_lost: u64,
+    pub link_keys: BTreeMap<u64, LinkHostKey>,
     /// When it left for good ([`crate::Fault::Depart`]), in ms.
     pub departed: Option<u64>,
     /// Crashed, and not restarted yet.
@@ -161,7 +167,8 @@ pub(crate) struct HostState {
 }
 
 impl HostState {
-    /// Totals plus the current incarnation's last sample.
+    /// Totals plus the current incarnation's last sample, but the link
+    /// log's rows, which the run's report takes ([`HostState::link_rows`]).
     pub fn report(&self) -> HostReport {
         let mut r = self.totals.clone();
         if let Some(m) = &self.last {
@@ -189,6 +196,7 @@ impl HostState {
         r.parent_checks_lost = self.parent_checks_lost;
         r.timer_context = self.timer_context;
         r.timers_lost = self.timers_lost;
+        r.link_log_lost = self.link_log_lost;
         r
     }
 
@@ -328,6 +336,9 @@ pub(crate) struct World {
     /// world, outside the nodes' and the records' memory, and taken in the
     /// records' at each stats sample ([`World::observe_bins`]).
     timer_logs: Vec<Option<TimerLog>>,
+    /// Each host's link log ([`Scenario::link_log`]), as `timer_logs`, its
+    /// records timed in true time.
+    link_logs: Vec<Option<LinkLog>>,
     /// With [`Scenario::timer_probe`] and [`Scenario::timer_lateness`],
     /// each host's probe's lateness ([`crate::late`]), forked after the
     /// hosts' own streams, so the probe moves none of their draws; empty
@@ -393,6 +404,20 @@ impl World {
                     .as_ref()
                     .filter(|set| spec.wire_bins.is_some() && set.contains(&spec, h))
                     .map(|_| TimerLog::new(TimerContext::Task))
+            })
+            .collect();
+        let link_logs = (0..spec.hosts.len())
+            .map(|h| {
+                spec.link_log
+                    .as_ref()
+                    .filter(|set| spec.wire_bins.is_some() && set.contains(&spec, h))
+                    .map(|_| {
+                        // A record made in the WAN scheduler, outside every
+                        // host, carries its own time.
+                        LinkLog::new(Arc::new(|| {
+                            crate::wan::sim_time(turmoil::sim_elapsed().unwrap_or_default())
+                        }))
+                    })
             })
             .collect();
         let clock_offsets = crate::skew::offsets(spec.clock_skew, spec.hosts.len(), &mut rng);
@@ -470,6 +495,7 @@ impl World {
             clock_offsets,
             lateness,
             timer_logs,
+            link_logs,
             probe_lateness,
             parent_tx,
             parent_rx,
@@ -621,6 +647,7 @@ impl World {
             c.forecast_log = self.spec.forecast_log;
             c.request_log = self.spec.request_logs;
             c.timer_log = self.timer_log(h).map(TimerLog::sink);
+            c.link_log = self.link_log(h).map(LinkLog::sink);
             let tx = self.stopped_tx.clone();
             c.last_metrics = Some(MetricsSink(Arc::new(move |m| {
                 let _ = tx.send((h, m));
@@ -1302,6 +1329,7 @@ impl World {
     /// snapshot here.
     pub fn observe_bins(&self, h: HostIx, m: &NodeMetrics) {
         self.observe_timers(h);
+        self.observe_links(h);
         let (Some(width), Some(swarm)) = (self.spec.wire_bins, self.spec.swarms.first()) else {
             return;
         };
@@ -1385,6 +1413,62 @@ impl World {
             hs.haves_lost += m.haves_lost;
             hs.requests_lost += m.requests_lost;
             hs.seed_log_lost += m.seed_log_lost;
+        });
+    }
+
+    /// Host `h`'s link log ([`Scenario::link_log`]), if it keeps one.
+    pub(crate) fn link_log(&self, h: HostIx) -> Option<&LinkLog> {
+        self.link_logs.get(h).and_then(Option::as_ref)
+    }
+
+    /// Takes what host `h`'s link log made since the last take into its
+    /// records ([`HostReport::link_rows`]), each link by the host at its
+    /// other end.
+    fn observe_links(&self, h: HostIx) {
+        let Some(log) = self.link_log(h) else {
+            return;
+        };
+        let rows = log.take();
+        // A link with an infrastructure host (the signalling relay) at
+        // either end is none of the testbed's nodes' links to each other:
+        // its rows go, the relay's own with them.
+        let node = |x: HostIx| {
+            self.spec
+                .hosts
+                .get(x)
+                .is_some_and(|s| s.class != crate::HostClass::Infra)
+        };
+        if !node(h) {
+            return;
+        }
+        self.record(|st| {
+            let ids = &st.ids;
+            let Some(hs) = st.hosts.get_mut(h) else {
+                return;
+            };
+            for l in &rows.links {
+                if let Some(&peer) = ids.get(&l.peer)
+                    && node(peer)
+                {
+                    hs.link_keys.insert(
+                        l.link,
+                        LinkHostKey {
+                            peer,
+                            link: l.ordinal,
+                            kind: l.kind,
+                        },
+                    );
+                }
+            }
+            let keys = &hs.link_keys;
+            hs.link_rows.extend(
+                &rows.writes,
+                &rows.reads,
+                &rows.samples,
+                |l| keys.get(&l).copied(),
+                crate::wan::sim_time(std::time::Duration::ZERO),
+            );
+            hs.link_log_lost += rows.lost;
         });
     }
 

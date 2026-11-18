@@ -36,8 +36,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use strims_base::time::{Duration, Time};
 use strims_node_core::{
-    CaptureSample, DialId, IdleOk, Input, Inputs, Interfaces, LinkChannels, LinkKey, LinkProbe,
-    LinkTasks, NodeConfig, NodeError, NodeIo, NodeSetup, ProxyRtc, RtcCommand, TaskGuard,
+    CaptureSample, DialId, IdleOk, Input, Inputs, Interfaces, LinkChannels, LinkEvent, LinkKey,
+    LinkProbe, LinkTap, LinkTasks, NodeConfig, NodeError, NodeIo, NodeSetup, ProxyRtc, RtcCommand,
+    TaskGuard,
 };
 use strims_vnic::ws::WsOptions;
 use strims_vnic::{DialTarget, LinkConfig};
@@ -183,6 +184,7 @@ pub(crate) async fn reader(
     inputs: Inputs<WasmTransport>,
     read_timeout: Duration,
     idle_ok: Option<IdleOk>,
+    log: LinkTap,
 ) {
     let error = loop {
         let Some(mut buf) = free.recv().await else {
@@ -198,6 +200,7 @@ pub(crate) async fn reader(
             None => break "read timeout".to_owned(),
             Some(Err(e)) => break e,
             Some(Ok(len)) => {
+                log.record(LinkEvent::Read(len));
                 if inputs.send(Input::Read { link, buf, len }).await.is_err() {
                     return;
                 }
@@ -297,7 +300,9 @@ impl NodeIo for WasmIo {
             writes,
             inputs,
             probe,
+            log,
         } = channels;
+        let log = LinkTap::new(link, log);
         let gauge = probe.then(|| Arc::new(AtomicU64::new(0)));
         match transport {
             WasmTransport::Ws(socket) => {
@@ -309,6 +314,7 @@ impl NodeIo for WasmIo {
                     inputs.clone(),
                     self.ws.read_timeout,
                     Some(flag.clone()),
+                    log.clone(),
                 ));
                 drop(runtime::spawn(ws::writer(
                     link,
@@ -317,6 +323,7 @@ impl NodeIo for WasmIo {
                     inputs,
                     self.ws.write_timeout,
                     gauge.clone(),
+                    log,
                 )));
                 LinkTasks {
                     reader: guard(reader),
@@ -327,6 +334,7 @@ impl NodeIo for WasmIo {
             // ICE and the connection state end a dead channel: no read
             // timeout.
             WasmTransport::Channel(channel) => {
+                channel.set_log(log.clone());
                 let reader = runtime::spawn(reader(
                     link,
                     channel.inbox(),
@@ -334,6 +342,7 @@ impl NodeIo for WasmIo {
                     inputs.clone(),
                     Duration::ZERO,
                     None,
+                    log.clone(),
                 ));
                 drop(runtime::spawn(crate::rtc::writer(
                     link,
@@ -342,6 +351,7 @@ impl NodeIo for WasmIo {
                     inputs,
                     self.max_buffered,
                     gauge.clone(),
+                    log,
                 )));
                 LinkTasks {
                     reader: guard(reader),
@@ -415,6 +425,7 @@ mod tests {
             inputs_tx,
             timeout,
             Some(idle_ok.clone()),
+            LinkTap::default(),
         ));
 
         sleep(timeout * 4).await;
@@ -453,6 +464,7 @@ mod tests {
             inputs_tx,
             Duration::ZERO,
             None,
+            LinkTap::default(),
         ));
         sleep(Duration::from_millis(20)).await;
         assert!(inputs.try_recv().is_err());

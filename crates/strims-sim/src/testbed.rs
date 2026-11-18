@@ -79,6 +79,7 @@ use sha2::{Digest, Sha256};
 use strims_base::stats::WaitHistogram;
 use strims_base::time::Time;
 use strims_ppspp::{ParentAction, ParentWhy};
+use strims_testbed::record::links::{LinkLines, link_log_of};
 use strims_testbed::record::logs::Logs;
 use strims_testbed::record::{
     BIN_MS, Gated, MeterSample, NODE_BIN_COUNTERS, SeedSample, timers_of,
@@ -88,7 +89,7 @@ use strims_testbed::transfer::{PeerTransfer, TransferSample};
 
 use crate::calibration::{self, Calibration, WAN_RATE, calibration_star};
 use crate::report::{
-    ACK_WHYS, AckWaits, ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport,
+    ACK_WHYS, AckWaits, ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport, LinkHostKey,
     NodeBinRecord, ParentCheckRecord, ParentRecord, Report, RequestHostRecord,
     SeedDecisionHostRecord, SeedSendHostRecord, SocketSample, TimerHostRecord, ViewerReport,
     WanHostReport, WanReport,
@@ -133,12 +134,13 @@ const RECORDING: [&str; 11] = [
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
-const TWIN_SETTINGS: [&str; 31] = [
+const TWIN_SETTINGS: [&str; 32] = [
     "FORECAST",
     "SPEC",
     "PARENT_CHECKS",
     "TIMER_LOG",
     "TIMER_PROBE",
+    "LINK_LOG",
     "VIEWERS",
     "SEED_UP_MBIT",
     "VIEWER_UP_MBIT",
@@ -277,7 +279,9 @@ fn num(x: f64) -> String {
 /// `SPEC=1`, `PARENT_CHECKS=1`: `STRIMS_SIM_FORECAST=1`,
 /// `STRIMS_SIM_SPEC=1`, `STRIMS_SIM_PARENT_CHECKS=1`) and the nodes that
 /// kept their timers (`TIMER_LOG`: `STRIMS_SIM_TIMER_LOG`, their numbers)
-/// with the probe they ran (`TIMER_PROBE=1`: `STRIMS_SIM_TIMER_PROBE=1`),
+/// with the probe they ran (`TIMER_PROBE=1`: `STRIMS_SIM_TIMER_PROBE=1`)
+/// and the nodes that kept their links' I/O (`LINK_LOG`:
+/// `STRIMS_SIM_LINK_LOG`, their numbers),
 /// so the twin writes the log tables the run does; the viewers, the seed's
 /// uplink and the stream's length always; the viewers' joins (`JOIN_AT`,
 /// and each of `JOINS`'s to the ms, `STRIMS_SIM_CAL_JOINS`: [`Run::read`]
@@ -374,6 +378,27 @@ pub fn knobs_of(
             hosts.insert(i);
         }
         put("STRIMS_SIM_TIMER_LOG", HostSet::Only(hosts).knob());
+    }
+    // The nodes that kept their links' I/O (LINK_LOG: `all`, or node
+    // indices of the run's), whose hosts the twin's log keeps too, as
+    // TIMER_LOG's are.
+    if let Some(v) = get("LINK_LOG").map(str::trim).filter(|v| !v.is_empty()) {
+        let mut hosts = std::collections::BTreeSet::new();
+        for w in v.split_whitespace() {
+            if w == "all" {
+                hosts.extend(0..=viewers);
+                continue;
+            }
+            let i = w
+                .parse::<usize>()
+                .ok()
+                .filter(|i| i.to_string() == w && *i <= viewers)
+                .ok_or_else(|| {
+                    format!("LINK_LOG={v}: all, or node indices of the run's 0 to {viewers}")
+                })?;
+            hosts.insert(i);
+        }
+        put("STRIMS_SIM_LINK_LOG", HostSet::Only(hosts).knob());
     }
     match get("TIMER_PROBE").map(str::trim) {
         None | Some("" | "0") => {}
@@ -827,6 +852,10 @@ impl Run {
             .get("STRIMS_SIM_TIMER_LOG")
             .and_then(|v| HostSet::parse(v).ok().flatten());
         s.timer_probe = on("STRIMS_SIM_TIMER_PROBE");
+        s.link_log = self
+            .knobs
+            .get("STRIMS_SIM_LINK_LOG")
+            .and_then(|v| HostSet::parse(v).ok().flatten());
         // The arrivals profile JOINS drew (a tier matrix's knob), as the
         // twin's row names it; the times are the run's.
         if let Some(a) = self
@@ -916,6 +945,10 @@ impl Run {
                 stats.start(Self::joined(&scenario, &skipped_faults, i).as_millis() as u64);
             }
             let mut last_seed: Option<SeedSample> = None;
+            // The link log's links and rows: a line names a link once its
+            // peer is known, maybe after the line that holds its first rows.
+            let mut links = BTreeMap::new();
+            let mut link_rows = LinkLines::default();
             for l in lines {
                 let t = l
                     .get("t_ms")
@@ -981,6 +1014,22 @@ impl Run {
                     host.timers_lost += lost;
                     host.timer_context = Some(context);
                 }
+                if let Some(mut x) = rec.get("link_log").and_then(|v| link_log_of(v, origin)) {
+                    for n in &x.links {
+                        links.insert(
+                            n.link,
+                            LinkHostKey {
+                                peer: n.peer,
+                                link: n.ordinal,
+                                kind: n.kind,
+                            },
+                        );
+                    }
+                    link_rows.writes.append(&mut x.writes);
+                    link_rows.reads.append(&mut x.reads);
+                    link_rows.samples.append(&mut x.samples);
+                    host.link_log_lost += x.lost;
+                }
                 if is_viewer {
                     for r in rec
                         .get("reads")
@@ -1001,6 +1050,13 @@ impl Run {
                     }
                 }
             }
+            host.link_rows.extend(
+                &link_rows.writes,
+                &link_rows.reads,
+                &link_rows.samples,
+                |l| links.get(&l).copied(),
+                epoch,
+            );
             if is_viewer {
                 viewers.push(ViewerReport {
                     host: i,
@@ -4979,6 +5035,140 @@ mod tests {
                     "TIMER_LOG={v}: all, or node indices of the run's 0 to 1"
                 )),
                 "{err}"
+            );
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run whose nodes kept their links' I/O (LINK_LOG) writes it as the
+    /// twin's tables have it, the twin keeping the same nodes': rows by the
+    /// link a later line names, times from the stream's start, a link to
+    /// no testbed node left out, and the lost count.
+    #[test]
+    fn a_runs_link_logs_are_its_twins_tables() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicI64, Ordering};
+
+        use strims_node::LinkKind;
+        use strims_node::event::{LinkEvent, WriteWait};
+        use strims_testbed::record::links::{LinkLog, LinkRows, link_log_json};
+        let dir = fixture("links");
+        let origin = Time::from_unix_millis(START as i64);
+        let now = Arc::new(AtomicI64::new(0));
+        let n = now.clone();
+        let log = LinkLog::new(Arc::new(move || {
+            origin + strims_base::time::Duration::from_micros(n.load(Ordering::Relaxed))
+        }));
+        let sink = log.sink();
+        let at = |us: i64| now.store(us, Ordering::Relaxed);
+        let peer = |k: u64| strims_node::HostId([k, 0, 0, 0]);
+        // Link 5 to node 1, and link 6 to the relay, which no index names.
+        at(-2_000);
+        sink.record(5, LinkEvent::Opened(LinkKind::WebRtc));
+        sink.record(6, LinkEvent::Opened(LinkKind::Ws));
+        sink.record(5, LinkEvent::Peer(peer(1)));
+        sink.record(6, LinkEvent::Peer(peer(77)));
+        sink.record(5, LinkEvent::Queued(900));
+        at(1_500);
+        sink.record(5, LinkEvent::Began(900));
+        sink.record(5, LinkEvent::Held(WriteWait::Host));
+        at(7_250);
+        sink.record(5, LinkEvent::Done);
+        sink.record(6, LinkEvent::Queued(10));
+        sink.record(6, LinkEvent::Began(10));
+        sink.record(6, LinkEvent::Done);
+        let rows = log.take();
+        assert_eq!(rows.lost, 0);
+        let index = |p: &strims_node::HostId| (p.0[0] < 10).then_some(p.0[0] as usize);
+        // The rows in the first line, the links named in the second.
+        let first = LinkRows {
+            links: Vec::new(),
+            lost: 2,
+            ..rows.clone()
+        };
+        let second = LinkRows {
+            links: rows.links.clone(),
+            ..LinkRows::default()
+        };
+        let path = dir.join("node-0.jsonl");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut lines: Vec<Value> = text
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        for (i, r) in [(0, &first), (1, &second)] {
+            let v: Value = serde_json::from_str(&link_log_json(r, index, origin)).unwrap();
+            lines[i]["rec"]["link_log"] = v;
+        }
+        let out: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        std::fs::write(&path, out).unwrap();
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        let bin = Duration::from_millis(BIN_MS.unsigned_abs());
+        // Off: no tables, though the lines held the log.
+        let off = dir.join("tables-off");
+        Run::read(&dir, &BTreeMap::new())
+            .unwrap()
+            .report()
+            .write_tables(&off, bin, true)
+            .unwrap();
+        assert!(crate::tables::read_table(&off, "link_writes").is_err());
+        std::fs::write(dir.join("settings"), format!("{settings}LINK_LOG=0\n")).unwrap();
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs["STRIMS_SIM_LINK_LOG"], "hosts:0");
+        assert_eq!(
+            HostSet::parse(&run.knobs["STRIMS_SIM_LINK_LOG"]),
+            Ok(Some(HostSet::Only([0].into())))
+        );
+        let on = dir.join("tables-on");
+        run.report().write_tables(&on, bin, true).unwrap();
+        let got: Vec<Vec<String>> = table_rows(&on, "link_writes")
+            .iter()
+            .map(|r| {
+                [
+                    "t_us",
+                    "node",
+                    "peer",
+                    "link",
+                    "kind",
+                    "off",
+                    "n",
+                    "bytes",
+                    "queued_us",
+                    "done_us",
+                    "unsent_before",
+                    "wait",
+                ]
+                .iter()
+                .map(|c| r[*c].clone())
+                .collect()
+            })
+            .collect();
+        assert_eq!(
+            got,
+            [[
+                "1500", "0", "1", "0", "webrtc", "0", "0", "900", "-2000", "7250", "", "host"
+            ]
+            .map(str::to_owned)]
+        );
+        assert!(table_rows(&on, "link_reads").is_empty());
+        let meta: Value =
+            serde_json::from_str(&std::fs::read_to_string(on.join("series_meta.json")).unwrap())
+                .unwrap();
+        assert_eq!(meta["link_log_lost"], 2);
+        // Nodes the run doesn't have, a number not written plainly, or a
+        // word that isn't `all`: refused.
+        let viewers: usize = run
+            .settings
+            .get("VIEWERS")
+            .map_or(3, |v| v.parse().unwrap());
+        for bad in ["x".to_owned(), "07".to_owned(), (viewers + 1).to_string()] {
+            std::fs::write(dir.join("settings"), format!("{settings}LINK_LOG={bad}\n")).unwrap();
+            let e = Run::read(&dir, &BTreeMap::new()).err().unwrap();
+            assert!(
+                e.contains(&format!(
+                    "LINK_LOG={bad}: all, or node indices of the run's 0 to {viewers}"
+                )),
+                "{e}"
             );
         }
         std::fs::remove_dir_all(&dir).unwrap();

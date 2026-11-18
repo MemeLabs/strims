@@ -27,6 +27,10 @@
 //! the node task marks a TCP link [`IdleOk`] (an established peer that
 //! hasn't sent a keepalive), a read timeout re-arms and the link stays up;
 //! TCP keepalive finds a dead peer.
+//!
+//! With the node's link log ([`LinkTap`]), a writer hands it each write as
+//! it begins and as its transport takes its last byte, and whether the
+//! transport held it; a reader, each read as it returns.
 
 use std::future::Future;
 use std::time::Duration as StdDuration;
@@ -35,7 +39,7 @@ use bytes::Bytes;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use strims_base::time::Duration;
-use strims_node_core::IdleOk;
+use strims_node_core::{IdleOk, LinkEvent, LinkTap, WriteWait};
 use strims_vnic::PeerKey as LinkKey;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
@@ -86,6 +90,7 @@ pub(crate) async fn stream_reader<N: Net, R: AsyncRead + Unpin>(
     input: mpsc::Sender<Input<N>>,
     read_timeout: Duration,
     idle_ok: IdleOk,
+    log: LinkTap,
 ) {
     let error = loop {
         let Some(mut buf) = free.recv().await else {
@@ -102,6 +107,7 @@ pub(crate) async fn stream_reader<N: Net, R: AsyncRead + Unpin>(
             Some(Err(e)) => break e.to_string(),
             Some(Ok(0)) => break "connection closed".to_owned(),
             Some(Ok(len)) => {
+                log.record(LinkEvent::Read(len));
                 if input.send(Input::Read { link, buf, len }).await.is_err() {
                     return;
                 }
@@ -112,16 +118,20 @@ pub(crate) async fn stream_reader<N: Net, R: AsyncRead + Unpin>(
 }
 
 /// Writes a byte stream (TCP). Ends with a shutdown (FIN) when the node
-/// drops the link.
+/// drops the link. A write its transport holds is logged as held for
+/// `wait`, if given (a transport that logs its own holds gets none).
 pub(crate) async fn stream_writer<N: Net, W: AsyncWrite + Unpin>(
     link: LinkKey,
     mut w: W,
     mut bufs: mpsc::Receiver<Vec<u8>>,
     input: mpsc::Sender<Input<N>>,
     write_timeout: Duration,
+    log: LinkTap,
+    wait: Option<WriteWait>,
 ) {
     while let Some(buf) = bufs.recv().await {
-        let error = match with_timeout(write_timeout, w.write_all(&buf)).await {
+        let write = log.write(buf.len(), wait, w.write_all(&buf));
+        let error = match with_timeout(write_timeout, write).await {
             Some(Ok(())) => None,
             Some(Err(e)) => Some(e.to_string()),
             None => Some("write timeout".to_owned()),
@@ -147,6 +157,7 @@ pub(crate) async fn ws_reader<N: Net, S: AsyncRead + AsyncWrite + Unpin>(
     mut free: mpsc::Receiver<Vec<u8>>,
     input: mpsc::Sender<Input<N>>,
     read_timeout: Duration,
+    log: LinkTap,
 ) {
     let error = loop {
         let msg = match with_timeout(read_timeout, stream.next()).await {
@@ -172,6 +183,7 @@ pub(crate) async fn ws_reader<N: Net, S: AsyncRead + AsyncWrite + Unpin>(
                 dst.copy_from_slice(head);
             }
             rest = tail;
+            log.record(LinkEvent::Read(len));
             if input.send(Input::Read { link, buf, len }).await.is_err() {
                 return;
             }
@@ -190,6 +202,7 @@ pub(crate) async fn ws_writer<N: Net, S: AsyncRead + AsyncWrite + Unpin>(
     input: mpsc::Sender<Input<N>>,
     write_timeout: Duration,
     ping_interval: Duration,
+    log: LinkTap,
 ) {
     let mut ping = ping_interval.to_std().filter(|d| !d.is_zero()).map(|d| {
         let mut i = tokio::time::interval_at(tokio::time::Instant::now() + d, d);
@@ -206,7 +219,14 @@ pub(crate) async fn ws_writer<N: Net, S: AsyncRead + AsyncWrite + Unpin>(
             let _ = with_timeout(write_timeout, sink.close()).await;
             return;
         };
-        let error = match with_timeout(write_timeout, sink.send(msg)).await {
+        let send = sink.send(msg);
+        let sent = if let Some(b) = &buf {
+            let send = log.write(b.len(), Some(WriteWait::Notsent), send);
+            with_timeout(write_timeout, send).await
+        } else {
+            with_timeout(write_timeout, send).await
+        };
+        let error = match sent {
             Some(Ok(())) => None,
             Some(Err(e)) => Some(e.to_string()),
             None => Some("write timeout".to_owned()),
@@ -327,6 +347,8 @@ mod tests {
             write_rx,
             input_tx,
             Duration::from_secs(60),
+            LinkTap::default(),
+            None,
         ));
         let mut handed = 0;
         let mut max = 0;
@@ -395,6 +417,7 @@ mod tests {
             input_tx,
             Duration::from_secs(25),
             idle_ok.clone(),
+            LinkTap::default(),
         ));
 
         // A minute of silence: nothing, not even a timeout.

@@ -66,8 +66,8 @@ use strims_base::time::Time;
 use strims_node_core::rtc::pace::{ChannelPacer, HOST_POLL, HostPacer, HostSum};
 use strims_node_core::rtc::proxy::MAX_CONN_ID;
 use strims_node_core::{
-    Input, Inputs, LinkKey, RtcCommand, RtcConn, RtcInput, RtcSignal, TimerRecord, TimerSink,
-    TimerSource,
+    Input, Inputs, LinkEvent, LinkKey, RtcCommand, RtcConn, RtcInput, RtcSignal, SampleSource,
+    TimerRecord, TimerSink, TimerSource, WriteWait,
 };
 use strims_vnic::LinkConfig;
 use strims_vnic::webrtc::{DATA_CHANNEL_MTU, SessionDescription};
@@ -81,6 +81,7 @@ use web_sys::{
 use crate::inbox::Inbox;
 use crate::io::WasmTransport;
 use crate::{clock, js, ws};
+use strims_node_core::LinkTap;
 
 /// What the port's and the channels' callbacks hand the task, in the order
 /// they ran.
@@ -524,6 +525,10 @@ pub struct DcSocket(Rc<Dc>);
 struct Dc {
     channel: RtcDataChannel,
     inbox: Inbox,
+    /// The link log, once the channel is a link ([`DcSocket::set_log`]),
+    /// and the messages and bytes that arrived before it.
+    log: Rc<RefCell<LinkTap>>,
+    before: Rc<Cell<(u64, u64)>>,
     /// `bufferedamountlow`, or the channel ending.
     low: Rc<Notify>,
     pacer: RefCell<ChannelPacer>,
@@ -573,6 +578,8 @@ impl DcSocket {
             .set_buffered_amount_low_threshold(u32::try_from(max_buffered / 2).unwrap_or(u32::MAX));
         let inbox = Inbox::new();
         let low = Rc::new(Notify::default());
+        let log = Rc::new(RefCell::new(LinkTap::default()));
+        let before = Rc::new(Cell::new((0, 0)));
         let on_open = {
             let (inbox, events) = (inbox.clone(), events.clone());
             Closure::<dyn FnMut()>::new(move || {
@@ -581,10 +588,20 @@ impl DcSocket {
             })
         };
         let on_message = {
-            let inbox = inbox.clone();
+            let (inbox, log, before) = (inbox.clone(), log.clone(), before.clone());
             Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
                 match e.data().dyn_into::<ArrayBuffer>() {
-                    Ok(b) => inbox.push(Uint8Array::new(&b)),
+                    Ok(b) => {
+                        let len = b.byte_length() as usize;
+                        let log = log.borrow();
+                        if log.on() {
+                            log.record(LinkEvent::Arrived(len));
+                        } else {
+                            let (n, bytes) = before.get();
+                            before.set((n + 1, bytes + len as u64));
+                        }
+                        inbox.push(Uint8Array::new(&b));
+                    }
                     Err(_) => inbox.end("unexpected text message"),
                 }
             })
@@ -612,8 +629,17 @@ impl DcSocket {
             })
         };
         let on_low = {
-            let low = low.clone();
-            Closure::<dyn FnMut()>::new(move || low.notify())
+            let (low, log, channel) = (low.clone(), log.clone(), channel.clone());
+            Closure::<dyn FnMut()>::new(move || {
+                let log = log.borrow();
+                if log.on() {
+                    log.record(LinkEvent::Low {
+                        source: SampleSource::WebRtc,
+                        buffered: u64::from(channel.buffered_amount()),
+                    });
+                }
+                low.notify();
+            })
         };
         channel.set_onopen(Some(on_open.as_ref().unchecked_ref()));
         channel.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
@@ -626,6 +652,8 @@ impl DcSocket {
         let dc = Rc::new(Dc {
             channel,
             inbox,
+            log,
+            before,
             low,
             pacer: RefCell::new(ChannelPacer::default()),
             waits: Cell::new(false),
@@ -644,6 +672,19 @@ impl DcSocket {
         self.0.inbox.clone()
     }
 
+    /// Hands the link log what the channel does from now on: its messages
+    /// as they arrive, as one record those that arrived before, and its
+    /// `bufferedamountlow` events.
+    pub(crate) fn set_log(&self, log: LinkTap) {
+        let (_, bytes) = self.0.before.replace((0, 0));
+        if bytes > 0 {
+            log.record(LinkEvent::Arrived(
+                usize::try_from(bytes).unwrap_or(usize::MAX),
+            ));
+        }
+        *self.0.log.borrow_mut() = log;
+    }
+
     fn open(&self) -> bool {
         self.0.channel.ready_state() == RtcDataChannelState::Open
     }
@@ -657,9 +698,11 @@ impl DcSocket {
 
     /// Sends `buf` as one message once the channel holds less than its
     /// pacer's cap (`max_buffered` bytes at most) and the host's pacer
-    /// admits it. Returns the buffered amount it sent at.
+    /// admits it. Returns the buffered amount it sent at. Hands the link
+    /// log each reading of the amount it decides on, and each hold.
     async fn send(&self, buf: &[u8], max_buffered: usize) -> Result<u32, String> {
         let c = &self.0.channel;
+        let log = self.0.log.borrow().clone();
         let mut held = None;
         let buffered = loop {
             if c.ready_state() != RtcDataChannelState::Open {
@@ -678,15 +721,24 @@ impl DcSocket {
                 self.0.waits.set(!may);
                 (!may).then(|| pacer.low_mark(now, max_buffered))
             };
+            log.record(LinkEvent::Checked {
+                source: SampleSource::WebRtc,
+                buffered: u64::from(b),
+                low: mark.map(|m| m as u64),
+            });
             if let Some(mark) = mark {
                 c.set_buffered_amount_low_threshold(u32::try_from(mark).unwrap_or(u32::MAX));
+                log.record(LinkEvent::Held(WriteWait::Channel));
                 poll_fn(|cx| self.0.low.poll_wait(cx)).await;
                 continue;
             }
             match held {
                 None => match self.0.host.admits(now) {
                     Ok(()) => break b,
-                    Err(mark) => held = Some(mark),
+                    Err(mark) => {
+                        log.record(LinkEvent::Held(WriteWait::Host));
+                        held = Some(mark);
+                    }
                 },
                 Some(mark) if self.0.host.at_mark(now, mark) => break b,
                 Some(_) => {}
@@ -721,9 +773,13 @@ pub(crate) async fn writer(
     inputs: Inputs<WasmTransport>,
     max_buffered: usize,
     buffered: Option<Arc<AtomicU64>>,
+    log: LinkTap,
 ) {
     while let Some(buf) = writes.recv().await {
-        match channel.send(&buf, max_buffered).await {
+        match log
+            .write(buf.len(), None, channel.send(&buf, max_buffered))
+            .await
+        {
             Err(error) => {
                 let _ = inputs.send(Input::LinkDown { link, error }).await;
                 return;

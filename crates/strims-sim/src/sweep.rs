@@ -168,7 +168,10 @@
 //!   (`timers`: [`Scenario::timer_log`]; `all` or `1`, `seed`, or `hosts:`
 //!   and host indices, `hosts:0,3`, [`HostSet::parse`]), with
 //!   `STRIMS_SIM_TIMER_PROBE=1` their timer probe's too
-//!   ([`Scenario::timer_probe`]). The logs change no trace. The probe
+//!   ([`Scenario::timer_probe`]), and `STRIMS_SIM_LINK_LOG=<hosts>`
+//!   those hosts' links' I/O as it happens (`link_writes`, `link_reads`,
+//!   `link_samples`: [`Scenario::link_log`], as `STRIMS_SIM_TIMER_LOG`
+//!   takes hosts). The logs change no trace. The probe
 //!   runs a task of its own on each host; with lateness off it changes no
 //!   decision, and with it on its lateness streams fork the run's rng
 //!   ([`crate::late`]), so a run whose controller draws after them can
@@ -539,6 +542,13 @@ fn timer_log_knob() -> Option<HostSet> {
     HostSet::parse(&v).unwrap_or_else(|e| panic!("STRIMS_SIM_TIMER_LOG={v}: {e}"))
 }
 
+/// `STRIMS_SIM_LINK_LOG` ([`Scenario::link_log`], [`HostSet::parse`]).
+#[allow(clippy::panic)] // a mistyped setting fails its test
+fn link_log_knob() -> Option<HostSet> {
+    let v = env("STRIMS_SIM_LINK_LOG")?;
+    HostSet::parse(&v).unwrap_or_else(|e| panic!("STRIMS_SIM_LINK_LOG={v}: {e}"))
+}
+
 /// `STRIMS_SIM_SEED_PIN` ([`crate::seed_pin::SeedPin::parse`]), if set
 /// and not `off`.
 #[allow(clippy::panic)] // a mistyped setting fails its test
@@ -814,6 +824,7 @@ fn sweep_seeds(
     let timer_lateness = timer_lateness_knob();
     let timer_log = timer_log_knob();
     let timer_probe = knob::<u32>("STRIMS_SIM_TIMER_PROBE") == Some(1);
+    let link_log = link_log_knob();
     let seed_pin = seed_pin_knob();
     let seed_links = seed_links_knob();
     let loops = knob::<u32>("STRIMS_SIM_LOOPS") == Some(1);
@@ -841,6 +852,7 @@ fn sweep_seeds(
             spec.parent_checks = parent_checks;
             spec.timer_log.clone_from(&timer_log);
             spec.timer_probe = timer_probe;
+            spec.link_log.clone_from(&link_log);
         }
         if segment.is_some() {
             spec.tcp_segment = segment;

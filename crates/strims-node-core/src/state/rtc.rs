@@ -358,6 +358,7 @@ impl State {
                 if let Some(link) = rc.link
                     && self.links.remove(link).is_some()
                 {
+                    self.log_closed(link);
                     // The transport went away.
                     tracing::debug!(?reason, "webrtc link down");
                     self.metrics.transport_failures += 1;

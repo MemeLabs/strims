@@ -46,6 +46,13 @@
 //! writer polls it. A
 //! write goes to turmoil as segments of a DATA chunk's payload at most,
 //! which the window model's association sends as packets.
+//!
+//! With the node's link log (`NodeConfig::link_log`, [`Net::log_link`]), a
+//! connection hands it what the browser's writer would read: its buffered
+//! amount (a TCP socket's unsent bytes) at each write it decides, with the
+//! mark it then waits for, and what holds the write (its own cap, the
+//! host's, or a socket's mark); and a paced channel's wake as its amount
+//! falls to its mark.
 
 // `Net` sockets are `Send`, so the state they share with the scheduler
 // sits behind a lock, which only this module names. Everything runs on
@@ -61,6 +68,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll, Waker};
 
 use strims_base::time::Time;
+use strims_node::config::LinkSink;
+use strims_node::event::{LinkEvent, SampleSource, WriteWait};
 use strims_node::{
     CaptureSample, ChannelPacer, HOST_POLL, HostPacer, HostSum, LinkProbe, Net, TcpOptions,
     TcpSocketConfig, TurmoilNet,
@@ -112,9 +121,17 @@ struct Conn {
     low: u64,
     /// The pacer refused the last write: the channel waits on its own cap.
     waits: bool,
+    /// The node's link log, and the link's name in it ([`Net::log_link`]).
+    log: Option<(u64, LinkSink)>,
 }
 
 impl Conn {
+    fn record(&self, event: LinkEvent) {
+        if let Some((link, sink)) = &self.log {
+            sink.record(*link, event);
+        }
+    }
+
     /// The bytes Linux would count unsent (`tcp_notsent_bytes`): those
     /// written and not yet admitted, less those the window let out at
     /// once.
@@ -443,6 +460,16 @@ fn release(b: &mut Buffers, conn: ConnKey, at: Time) -> Option<Waker> {
         // A browser reads the amount as it falls to the mark it waits for.
         Some(p) if c.waker.is_some() && buffered <= c.low => {
             p.observe(at, buffered as usize);
+            if let Some((link, sink)) = &c.log {
+                sink.record_at(
+                    *link,
+                    at,
+                    LinkEvent::Low {
+                        source: SampleSource::Model,
+                        buffered,
+                    },
+                );
+            }
             c.waker.take()
         }
         Some(_) => None,
@@ -540,8 +567,22 @@ impl SimTcpStream {
                 }
             }
             let c = conns.get_mut(key)?;
+            if !waited {
+                c.record(LinkEvent::Checked {
+                    source: SampleSource::Model,
+                    buffered,
+                    low: (paced && !may).then_some(c.low),
+                });
+            }
             if waited || !may || held {
                 c.waker = Some(cx.waker().clone());
+                if !waited {
+                    c.record(LinkEvent::Held(if held {
+                        WriteWait::Host
+                    } else {
+                        WriteWait::Channel
+                    }));
+                }
                 return Some(if held {
                     ChannelWrite::Held
                 } else {
@@ -684,11 +725,27 @@ impl AsyncWrite for SimTcpStream {
                     c.waker = Some(cx.waker().clone());
                     None
                 } else if c.tail > 0 && c.tail < GSO_SEGMENT {
+                    c.record(LinkEvent::Checked {
+                        source: SampleSource::Model,
+                        buffered: c.notsent(),
+                        low: None,
+                    });
                     Some(GSO_SEGMENT - c.tail)
                 } else if c.notsent() >= lowat {
+                    // Writable again under half the mark.
+                    c.record(LinkEvent::Checked {
+                        source: SampleSource::Model,
+                        buffered: c.notsent(),
+                        low: Some(lowat / 2),
+                    });
                     c.waker = Some(cx.waker().clone());
                     None
                 } else {
+                    c.record(LinkEvent::Checked {
+                        source: SampleSource::Model,
+                        buffered: c.notsent(),
+                        low: None,
+                    });
                     c.tail = 0;
                     Some(GSO_SEGMENT)
                 }
@@ -788,6 +845,18 @@ impl Net for SimNet {
             }
         });
         Ok(Some(lowat))
+    }
+
+    /// The connection hands the log its readings and holds (see the
+    /// module docs).
+    fn log_link(&self, stream: &SimTcpStream, link: u64, sink: LinkSink) {
+        if let Some((key, b)) = &stream.conn {
+            b.with(|x| {
+                if let Some(c) = x.conns.get_mut(key) {
+                    c.log = Some((link, sink));
+                }
+            });
+        }
     }
 
     /// The model's view of the stream's connection: its send buffer, and

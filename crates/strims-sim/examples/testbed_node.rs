@@ -13,7 +13,7 @@
 //!              [--units <chunks per signature> [--media <flv file>]]
 //!              [--record <file>] [--join-at <s>] [--arrive] [--hosts <dir>]
 //!              [--capture <dir>] [--forecast] [--spec] [--parent-checks] [--timer-log]
-//!              [--timer-probe]
+//!              [--timer-probe] [--link-log]
 //! testbed_node --relay-only --topology <file> [--secs <s>] [--start <unix ms>]
 //! ```
 //!
@@ -61,7 +61,11 @@
 //! `STRIMS_SIM_TIMER_LOG` keeps a simulated node's; with `--timer-probe`
 //! the node runs the timer probe through the stream
 //! ([`strims_testbed::node::probe`]), as `STRIMS_SIM_TIMER_PROBE=1` has a
-//! simulated node run it.
+//! simulated node run it. `--link-log` keeps its links' I/O as it happens
+//! (`NodeConfig::link_log`, [`LinkLog`]): its node task's hand-offs and
+//! takes, its link tasks' writes and reads and its sockets' readings, by
+//! the wall clock to the nanosecond, which its lines' records carry, as
+//! strims-sim's `STRIMS_SIM_LINK_LOG` keeps a simulated node's.
 //!
 //! `--relay-only` runs the relay: it listens where the topology's `relay`
 //! line says, joins the testbed network, runs no swarm, and stops 5 s
@@ -74,6 +78,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use strims_base::time::{Duration as Span, Time};
@@ -85,6 +90,7 @@ use strims_node::{
 use strims_testbed::media::FlvFile;
 use strims_testbed::native::{now_ms, self_cpu_ms, write_host};
 use strims_testbed::node::{Runtime, Settings, Stream};
+use strims_testbed::record::links::LinkLog;
 use strims_testbed::record::{BIN_MS, DecisionLog, ParentLog, TimerContext, TimerLog};
 use strims_testbed::shape::RATE;
 use strims_testbed::topology::{
@@ -113,6 +119,7 @@ struct Args {
     parent_checks: bool,
     timer_log: bool,
     timer_probe: bool,
+    link_log: bool,
 }
 
 fn args() -> Result<Args, String> {
@@ -140,6 +147,7 @@ fn args() -> Result<Args, String> {
         parent_checks: false,
         timer_log: false,
         timer_probe: false,
+        link_log: false,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -165,6 +173,7 @@ fn args() -> Result<Args, String> {
             "--parent-checks" => a.parent_checks = true,
             "--timer-log" => a.timer_log = true,
             "--timer-probe" => a.timer_probe = true,
+            "--link-log" => a.link_log = true,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -306,6 +315,11 @@ async fn run() -> Result<(), String> {
     config.decision_log = checks.as_ref().map(DecisionLog::sink);
     let timers = a.timer_log.then(|| TimerLog::new(TimerContext::Task));
     config.timer_log = timers.as_ref().map(TimerLog::sink);
+    let link_log = a.link_log.then(|| {
+        let clock = SystemClock;
+        LinkLog::new(Arc::new(move || clock.precise_now()))
+    });
+    config.link_log = link_log.as_ref().map(LinkLog::sink);
     if topo.relay.is_some() {
         let at = me.browser_addr().to_string();
         match topo.browser_links {
@@ -402,6 +416,7 @@ async fn run() -> Result<(), String> {
                 parents: Some(&parents),
                 checks: checks.as_ref(),
                 timers: timers.as_ref(),
+                links: link_log.as_ref(),
             },
             &rt,
         ) => r,

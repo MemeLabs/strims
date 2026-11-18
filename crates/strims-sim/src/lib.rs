@@ -166,9 +166,9 @@ mod wan;
 mod world;
 
 pub use report::{
-    ACK_WHYS, AckWaits, HostReport, LookupPhase, MediaLog, ParentLoss, Percentiles, Report,
-    SeedDecisionHostRecord, SeedSendHostRecord, TimerHostRecord, ViewerReport, VpnReport,
-    WanHostReport, WanReport,
+    ACK_WHYS, AckWaits, HostReport, LinkHostKey, LinkHostRows, LinkSampleHostRecord, LookupPhase,
+    MediaLog, ParentLoss, Percentiles, Report, SeedDecisionHostRecord, SeedSendHostRecord,
+    TimerHostRecord, ViewerReport, VpnReport, WanHostReport, WanReport,
 };
 pub use run::run;
 pub use skew::ClockSkew;

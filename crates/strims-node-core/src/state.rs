@@ -57,16 +57,16 @@ use tokio::sync::{mpsc, oneshot};
 use crate::CaptureSample;
 use crate::adversary::{self, AdversaryPeer};
 use crate::config::{
-    DecisionSink, MetricsSink, NetworkOptions, NodeConfig, ParentSink, PeerRpcConfig, PpsppCapture,
-    VpnPortConfig,
+    DecisionSink, LinkSink, MetricsSink, NetworkOptions, NodeConfig, ParentSink, PeerRpcConfig,
+    PpsppCapture, VpnPortConfig,
 };
-use crate::driver::{IdleOk, Interfaces, LinkProbe, TaskGuard};
+use crate::driver::{IdleOk, Interfaces, LinkProbe, TaskGuard, link_id};
 use crate::error::{NodeError, ReadError};
 use crate::event::{
     ChannelInfo, DecisionInfo, DecisionLogEntry, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo,
-    LinkInfo, LogInfo, NetworkInfo, NodeBin, NodeEvent, NodeMetrics, ParentInfo, ParentLogEntry,
-    PeerInfo, RequestInfo, RunnerMetrics, RunnerPeerInfo, SeedAllocationInfo, SeedNeighbourInfo,
-    StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
+    LinkEvent, LinkInfo, LinkState, LogInfo, NetworkInfo, NodeBin, NodeEvent, NodeMetrics,
+    ParentInfo, ParentLogEntry, PeerInfo, RequestInfo, RunnerMetrics, RunnerPeerInfo,
+    SeedAllocationInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
 };
 
 /// Bin edges [`NodeConfig::stats_bins`] keeps between snapshots; past it the
@@ -423,6 +423,8 @@ pub(crate) struct State {
     /// See [`NodeConfig::last_metrics`]: the node task's drop hands it
     /// the last snapshot.
     pub(crate) last_metrics: Option<MetricsSink>,
+    /// See [`NodeConfig::link_log`].
+    pub(crate) link_sink: Option<LinkSink>,
     /// Reused by `drain_transmit`.
     scratch_links: Vec<LinkKey>,
     /// ppspp frame errors seen inside vnic's dispatch, handled after it.
@@ -591,6 +593,7 @@ impl State {
             parent_sink: config.parent_log.clone(),
             decision_sink: config.decision_log.clone(),
             last_metrics: config.last_metrics.clone(),
+            link_sink: config.link_log.clone(),
             scratch_links: Vec::new(),
             frame_errors: Vec::new(),
             rtc,
@@ -848,6 +851,13 @@ impl State {
         }
     }
 
+    /// Tells the link log that the node dropped `link`.
+    pub(crate) fn log_closed(&self, link: LinkKey) {
+        if let Some(log) = &self.link_sink {
+            log.record(link_id(link), LinkEvent::Closed);
+        }
+    }
+
     pub(crate) fn return_write_buf(&mut self, link: LinkKey, buf: Vec<u8>) {
         if let Some(LinkSlot {
             io: LinkTransport::Stream(io),
@@ -867,6 +877,7 @@ impl State {
         self.metrics.transport_failures += 1;
         self.vnic.remove_link(link);
         if let Some(slot) = self.links.remove(link) {
+            self.log_closed(link);
             if let Some(conn) = slot.rtc {
                 self.rtc_link_closed(conn, DialError::Connect(error), now);
             } else if let Some(d) = slot.dial {
@@ -883,6 +894,7 @@ impl State {
         let Some(slot) = self.links.remove(link) else {
             return;
         };
+        self.log_closed(link);
         let e = match reason {
             CloseReason::Failed(strims_vnic::Error::PeerInit(PeerInitError::OwnHost)) => {
                 DialError::OwnHost
@@ -979,9 +991,9 @@ impl State {
         self.capture.is_some()
     }
 
-    /// Samples for the capture, at most every [`CAPTURE_SAMPLE_INTERVAL`],
-    /// what is queued for each ppspp peer below the runner's scheduler,
-    /// and the transport under its link.
+    /// Samples for the capture and the link log, at most every
+    /// [`CAPTURE_SAMPLE_INTERVAL`], what is queued for each ppspp peer
+    /// below the runner's scheduler, and the transport under its link.
     fn sample_links(&mut self, now: Time) {
         let State {
             capture,
@@ -991,11 +1003,13 @@ impl State {
             vnic,
             runner,
             rtc,
+            link_sink,
             ..
         } = self;
-        let Some(c) = capture.as_mut() else {
+        let mut c = capture.as_mut();
+        if c.is_none() && link_sink.is_none() {
             return;
-        };
+        }
         if now - *capture_sampled < CAPTURE_SAMPLE_INTERVAL {
             return;
         }
@@ -1032,6 +1046,16 @@ impl State {
                 link_blocked: vnic.link_blocked(link).unwrap_or(false),
                 write_held: held as u64,
                 write_max: max_write as u64,
+            };
+            if let Some(log) = link_sink {
+                for sample in std::iter::once(&queues).chain(transport.as_ref()) {
+                    if let Some((source, state)) = LinkState::of(sample) {
+                        log.record(link_id(link), LinkEvent::Sample { source, state });
+                    }
+                }
+            }
+            let Some(c) = c.as_deref_mut() else {
+                continue;
             };
             c.sample(now, Some(ps.pp), &queues);
             if let Some(t) = transport {
@@ -1080,6 +1104,7 @@ impl State {
             scratch_links,
             metrics,
             rtc,
+            link_sink,
             ..
         } = self;
         scratch_links.clear();
@@ -1130,6 +1155,11 @@ impl State {
                 let n = chunk.len();
                 buf.clear();
                 buf.extend_from_slice(chunk);
+                // Before the hand-off: a writer on another thread may begin
+                // the write at once.
+                if let Some(log) = link_sink {
+                    log.record(link_id(link), LinkEvent::Queued(n));
+                }
                 match io.write_tx.try_send(buf) {
                     Ok(()) => {
                         let _ = vnic.advance_link_transmit(link, n);
@@ -1212,6 +1242,9 @@ impl State {
     /// transfer writer, open its RPC pair, bind it to the auto-bound
     /// networks, and complete its dial.
     fn peer_added(&mut self, peer: LinkKey, host_id: ID, now: Time) {
+        if let Some(log) = &self.link_sink {
+            log.record(link_id(peer), LinkEvent::Peer(host_id));
+        }
         let pp = self.runner.add_peer(&host_id.to_bytes(), now);
         let transfer = match self.vnic.channel(
             peer,

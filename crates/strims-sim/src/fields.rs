@@ -290,7 +290,7 @@ pub(crate) trait Column: Key {
 }
 
 /// The tables strims-sim writes zstd-compressed, `<name>.csv.zst`.
-pub(crate) const ZSTD: [&str; 12] = [
+pub(crate) const ZSTD: [&str; 15] = [
     "reads",
     "events",
     "parent_checks",
@@ -303,6 +303,9 @@ pub(crate) const ZSTD: [&str; 12] = [
     "sockets",
     "packets",
     "timers",
+    "link_writes",
+    "link_reads",
+    "link_samples",
 ];
 
 /// The row's fields that hold an integer.
@@ -2944,6 +2947,11 @@ pub(crate) enum MetaInt {
     /// (`strims_testbed::record::TimerLog::CAP` between two takes), every
     /// host's, summed.
     TimersLost,
+    /// With the link log on, the records its logs' caps left out
+    /// (`strims_testbed::record::links::LinkLog::CAP` I/O records and
+    /// `SAMPLE_CAP` interval readings between two takes), every host's, summed:
+    /// a lost record shifts its link's rows after it.
+    LinkLogLost,
     /// With the request logs on, the held log's records the caps left out.
     HeldLost,
     /// With the request logs on, the HAVE log's records the caps left out.
@@ -2974,6 +2982,7 @@ impl MetaInt {
             MetaInt::ParentsLost => "parents_lost",
             MetaInt::ParentChecksLost => "parent_checks_lost",
             MetaInt::TimersLost => "timers_lost",
+            MetaInt::LinkLogLost => "link_log_lost",
             MetaInt::HeldLost => "held_lost",
             MetaInt::HavesLost => "haves_lost",
             MetaInt::AsksLost => "asks_lost",
@@ -5861,6 +5870,413 @@ pub(crate) mod cols {
                 | Timers::LateUs
                 | Timers::RequestedUs => Ty::Int,
                 Timers::Source | Timers::Context => Ty::Text,
+            }
+        }
+    }
+
+    /// The `link_writes` table's columns: a row per write a node's link writer
+    /// made to its link's transport.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum LinkWrites {
+        /// When the link's writer began the write, in µs of true time from the
+        /// stream's start, by the node's precise clock.
+        ///
+        /// Unit: us.
+        TUs,
+        /// The node that wrote, as `events` numbers hosts.
+        Node,
+        /// The node at the link's other end, as `events` numbers hosts.
+        Peer,
+        /// The link's ordinal among the node's links to the peer, from 0, in
+        /// the order vnic named their peer: a relink is the next, across the
+        /// node's restarts.
+        Link,
+        /// The link's transport: `tcp`, `ws` (a WebSocket) or `webrtc` (a data
+        /// channel, a modelled one in the sim).
+        Kind,
+        /// The offset of the write's first byte from the first byte the node's
+        /// vnic wrote to the link, so it joins the peer's read of the same
+        /// bytes (`link_reads.off`).
+        ///
+        /// Unit: bytes.
+        Off,
+        /// The write's ordinal on the link, from 0: on a data channel, the
+        /// ordinal of the message it sent.
+        N,
+        /// The bytes the write took: one write buffer of the node's, a data
+        /// channel's message.
+        ///
+        /// Unit: bytes.
+        Bytes,
+        /// When the node task handed the write's buffer to the link's writer,
+        /// in µs of true time from the stream's start: before `t_us` by the
+        /// time the buffer waited for the writer (the writer still writing the
+        /// one before it, or not yet run). Empty where the hand-off's record
+        /// was lost.
+        ///
+        /// Unit: us. None is written as an empty field.
+        QueuedUs,
+        /// When the transport took the write's last byte, in µs of true time
+        /// from the stream's start: a socket's write returned, a data channel's
+        /// `send` did.
+        ///
+        /// Unit: us.
+        DoneUs,
+        /// The transport's buffered bytes as the writer last read them before
+        /// the write went: a data channel's `bufferedAmount`, a modelled TCP
+        /// socket's unsent bytes. Empty for a transport the writer doesn't read
+        /// (a real TCP socket, a WebSocket).
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        UnsentBefore,
+        /// What held the write last before it went: `none` (nothing), `notsent`
+        /// (a TCP socket's unsent bytes at its `TCP_NOTSENT_LOWAT`, or its full
+        /// send buffer), `channel` (a data channel's buffered amount at its own
+        /// pacer's cap, waiting for `bufferedamountlow` at the pacer's mark) or
+        /// `host` (the host pacer, the node's channels' load at its cap, read
+        /// again every `HOST_POLL`). The holds before it, and the wakes, are
+        /// the link's `write` and `low` samples (`link_samples`).
+        Wait,
+        /// A bench record's kind; always empty until the TCP bench writes its
+        /// records into the table: a node's swarm's writes carry its vnic
+        /// frames.
+        ///
+        /// None is written as an empty field.
+        RecKind,
+        /// A bench record's ordinal in its schedule; always empty until the TCP
+        /// bench writes its records into the table.
+        ///
+        /// None is written as an empty field.
+        Seq,
+    }
+
+    impl LinkWrites {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                LinkWrites::TUs => "t_us",
+                LinkWrites::Node => "node",
+                LinkWrites::Peer => "peer",
+                LinkWrites::Link => "link",
+                LinkWrites::Kind => "kind",
+                LinkWrites::Off => "off",
+                LinkWrites::N => "n",
+                LinkWrites::Bytes => "bytes",
+                LinkWrites::QueuedUs => "queued_us",
+                LinkWrites::DoneUs => "done_us",
+                LinkWrites::UnsentBefore => "unsent_before",
+                LinkWrites::Wait => "wait",
+                LinkWrites::RecKind => "rec_kind",
+                LinkWrites::Seq => "seq",
+            }
+        }
+    }
+
+    impl sealed::Sealed for LinkWrites {}
+
+    impl Key for LinkWrites {
+        fn name(self) -> &'static str {
+            LinkWrites::name(self)
+        }
+    }
+
+    impl Column for LinkWrites {
+        const TABLE: &'static str = "link_writes";
+
+        fn ty(self) -> Ty {
+            match self {
+                LinkWrites::TUs
+                | LinkWrites::Node
+                | LinkWrites::Peer
+                | LinkWrites::Link
+                | LinkWrites::Off
+                | LinkWrites::N
+                | LinkWrites::Bytes
+                | LinkWrites::QueuedUs
+                | LinkWrites::DoneUs
+                | LinkWrites::UnsentBefore
+                | LinkWrites::Seq => Ty::Int,
+                LinkWrites::Kind | LinkWrites::Wait | LinkWrites::RecKind => Ty::Text,
+            }
+        }
+    }
+
+    /// The `link_reads` table's columns: a row per read a node's link reader
+    /// took from its link's transport, or a data channel message as it arrived.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum LinkReads {
+        /// When the reader returned the read, or the message arrived, in µs of
+        /// true time from the stream's start, by the node's precise clock.
+        ///
+        /// Unit: us.
+        TUs,
+        /// The node that read, as `events` numbers hosts.
+        Node,
+        /// The node that wrote what it read: the one at the link's other end,
+        /// as `events` numbers hosts.
+        Peer,
+        /// The link's ordinal among the node's links to the peer, from 0, in
+        /// the order vnic named their peer: a relink is the next, across the
+        /// node's restarts.
+        Link,
+        /// The link's transport: `tcp`, `ws` (a WebSocket) or `webrtc` (a data
+        /// channel, a modelled one in the sim).
+        Kind,
+        /// The offset of the read's first byte from the first byte the node's
+        /// vnic read from the link (a transport's own handshake left out), so
+        /// it joins the peer's write of the same bytes (`link_writes.off`).
+        ///
+        /// Unit: bytes.
+        Off,
+        /// The row's ordinal on the link, from 0: on a browser's data channel,
+        /// the message's, which is the ordinal of the peer's write that sent
+        /// it, but for the messages that arrived before the channel joined the
+        /// link log, which are one row (`DcSocket::set_log`), so the ordinals
+        /// after it run behind the writes' by as many messages less one;
+        /// elsewhere the read's.
+        N,
+        /// The bytes the read returned, or the message held.
+        ///
+        /// Unit: bytes.
+        Bytes,
+        /// When the node task took the row's last byte from the reader, in µs
+        /// of true time from the stream's start; empty if the link went first.
+        ///
+        /// Unit: us. None is written as an empty field.
+        TakenUs,
+        /// A bench record's kind; always empty until the TCP bench writes its
+        /// records into the table: a node's swarm's reads carry its vnic
+        /// frames.
+        ///
+        /// None is written as an empty field.
+        RecKind,
+        /// A bench record's ordinal in its schedule; always empty until the TCP
+        /// bench writes its records into the table.
+        ///
+        /// None is written as an empty field.
+        Seq,
+    }
+
+    impl LinkReads {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                LinkReads::TUs => "t_us",
+                LinkReads::Node => "node",
+                LinkReads::Peer => "peer",
+                LinkReads::Link => "link",
+                LinkReads::Kind => "kind",
+                LinkReads::Off => "off",
+                LinkReads::N => "n",
+                LinkReads::Bytes => "bytes",
+                LinkReads::TakenUs => "taken_us",
+                LinkReads::RecKind => "rec_kind",
+                LinkReads::Seq => "seq",
+            }
+        }
+    }
+
+    impl sealed::Sealed for LinkReads {}
+
+    impl Key for LinkReads {
+        fn name(self) -> &'static str {
+            LinkReads::name(self)
+        }
+    }
+
+    impl Column for LinkReads {
+        const TABLE: &'static str = "link_reads";
+
+        fn ty(self) -> Ty {
+            match self {
+                LinkReads::TUs
+                | LinkReads::Node
+                | LinkReads::Peer
+                | LinkReads::Link
+                | LinkReads::Off
+                | LinkReads::N
+                | LinkReads::Bytes
+                | LinkReads::TakenUs
+                | LinkReads::Seq => Ty::Int,
+                LinkReads::Kind | LinkReads::RecKind => Ty::Text,
+            }
+        }
+    }
+
+    /// The `link_samples` table's columns: a row per reading of a link's
+    /// transport or queues: the node's every capture interval, its writer's at
+    /// a write, or its transport's wake of a held writer.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum LinkSamples {
+        /// When the reading was taken, in µs of true time from the stream's
+        /// start, by the node's precise clock.
+        ///
+        /// Unit: us.
+        TUs,
+        /// The node whose link it is, as `events` numbers hosts.
+        Node,
+        /// The node at the link's other end, as `events` numbers hosts.
+        Peer,
+        /// The link's ordinal among the node's links to the peer, from 0, in
+        /// the order vnic named their peer: a relink is the next, across the
+        /// node's restarts.
+        Link,
+        /// What was read: `tcp` (the kernel's socket under a TCP link), `ws` (a
+        /// WebSocket's: its kernel socket, or a browser's `bufferedAmount`),
+        /// `webrtc` (a data channel's buffered amount), `model` (the sim's
+        /// model of the link's connection) or `queues` (the node's own queues
+        /// for the link: vnic's link buffer, its write buffers, its ppspp
+        /// writer's QoS session).
+        Source,
+        /// Why it was read: `sample` (the node's reading every capture
+        /// interval), `write` (the writer's check of the transport as it
+        /// decided whether a write may go) or `low` (the transport woke a
+        /// writer it held for its own cap: a data channel's
+        /// `bufferedamountlow`, read as it fired).
+        Cause,
+        /// Bytes written to the transport and not yet sent: a TCP socket's
+        /// unsent bytes (`tcpi_notsent_bytes`), a modelled connection's not yet
+        /// admitted to the uplink. Empty where the source can't tell.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        UnsentBytes,
+        /// Bytes sent and not yet acknowledged: a TCP socket's, a modelled
+        /// connection's in flight in the window model. Empty where the source
+        /// can't tell.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        UnackedBytes,
+        /// The congestion window, in bytes: a TCP socket's, a modelled
+        /// connection's in the window model. Empty where the source can't tell.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        CwndBytes,
+        /// The slow start threshold, in bytes, of a modelled connection in the
+        /// window model. Empty where the source can't tell.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        SsthreshBytes,
+        /// The smoothed round trip a TCP socket's kernel reckons, in µs. Empty
+        /// where the source can't tell.
+        ///
+        /// Unit: us. None is written as an empty field.
+        SrttUs,
+        /// The round trip's variation a TCP socket's kernel reckons, in µs.
+        /// Empty where the source can't tell.
+        ///
+        /// Unit: us. None is written as an empty field.
+        RttvarUs,
+        /// The segments a TCP socket has retransmitted so far
+        /// (`tcpi_total_retrans`). Empty where the source can't tell.
+        ///
+        /// None is written as an empty field.
+        RetransSegments,
+        /// A TCP socket's delivery rate as its kernel last measured it
+        /// (`tcpi_delivery_rate`), in bytes a second. Empty where the source
+        /// can't tell.
+        ///
+        /// Unit: bytes/s. None is written as an empty field.
+        DeliveryRateBps,
+        /// The transport's buffered bytes: a data channel's `bufferedAmount`
+        /// (bytes not yet sent, and those sent and not yet acknowledged by a
+        /// SACK; a modelled channel's as its stack counts them), a browser
+        /// WebSocket's, and at a modelled TCP socket's writes its unsent bytes.
+        /// Empty where the source can't tell.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        BufferedBytes,
+        /// The mark a held write waits under: at a write's check that holds it,
+        /// the buffered amount a data channel's writer waits for (its
+        /// `bufferedAmountLowThreshold`, the pacer's low mark) or the unsent
+        /// bytes a modelled TCP socket's writer waits for (half its
+        /// `TCP_NOTSENT_LOWAT`); in a modelled TCP socket's interval reading,
+        /// its `TCP_NOTSENT_LOWAT`. Empty otherwise.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        LowatBytes,
+        /// The node's uplink queue in the sim's WAN model, as the time it takes
+        /// to drain, in µs. Empty where the source can't tell.
+        ///
+        /// Unit: us. None is written as an empty field.
+        UplinkQueueUs,
+        /// Bytes pending in vnic's link buffer, past QoS and not yet in a write
+        /// buffer. Empty but for the node's queues (`queues`).
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        LinkPendingBytes,
+        /// The node's write buffers the link's writer holds: handed to it and
+        /// not yet back. Empty but for the node's queues (`queues`).
+        ///
+        /// None is written as an empty field.
+        WriteHeld,
+        /// The length of the next frame the link's ppspp writer's QoS session
+        /// has, in bytes; empty with nothing to send, and but for the node's
+        /// queues (`queues`).
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        QosBacklogBytes,
+    }
+
+    impl LinkSamples {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                LinkSamples::TUs => "t_us",
+                LinkSamples::Node => "node",
+                LinkSamples::Peer => "peer",
+                LinkSamples::Link => "link",
+                LinkSamples::Source => "source",
+                LinkSamples::Cause => "cause",
+                LinkSamples::UnsentBytes => "unsent_bytes",
+                LinkSamples::UnackedBytes => "unacked_bytes",
+                LinkSamples::CwndBytes => "cwnd_bytes",
+                LinkSamples::SsthreshBytes => "ssthresh_bytes",
+                LinkSamples::SrttUs => "srtt_us",
+                LinkSamples::RttvarUs => "rttvar_us",
+                LinkSamples::RetransSegments => "retrans_segments",
+                LinkSamples::DeliveryRateBps => "delivery_rate_bps",
+                LinkSamples::BufferedBytes => "buffered_bytes",
+                LinkSamples::LowatBytes => "lowat_bytes",
+                LinkSamples::UplinkQueueUs => "uplink_queue_us",
+                LinkSamples::LinkPendingBytes => "link_pending_bytes",
+                LinkSamples::WriteHeld => "write_held",
+                LinkSamples::QosBacklogBytes => "qos_backlog_bytes",
+            }
+        }
+    }
+
+    impl sealed::Sealed for LinkSamples {}
+
+    impl Key for LinkSamples {
+        fn name(self) -> &'static str {
+            LinkSamples::name(self)
+        }
+    }
+
+    impl Column for LinkSamples {
+        const TABLE: &'static str = "link_samples";
+
+        fn ty(self) -> Ty {
+            match self {
+                LinkSamples::TUs
+                | LinkSamples::Node
+                | LinkSamples::Peer
+                | LinkSamples::Link
+                | LinkSamples::UnsentBytes
+                | LinkSamples::UnackedBytes
+                | LinkSamples::CwndBytes
+                | LinkSamples::SsthreshBytes
+                | LinkSamples::SrttUs
+                | LinkSamples::RttvarUs
+                | LinkSamples::RetransSegments
+                | LinkSamples::DeliveryRateBps
+                | LinkSamples::BufferedBytes
+                | LinkSamples::LowatBytes
+                | LinkSamples::UplinkQueueUs
+                | LinkSamples::LinkPendingBytes
+                | LinkSamples::WriteHeld
+                | LinkSamples::QosBacklogBytes => Ty::Int,
+                LinkSamples::Source | LinkSamples::Cause => Ty::Text,
             }
         }
     }

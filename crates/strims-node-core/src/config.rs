@@ -185,6 +185,14 @@ pub struct NodeConfig {
     /// pacer, [`crate::TimerSource::Pacer`]). `None` (the default, and every
     /// real node's) reads no clock for it. It changes no decision.
     pub timer_log: Option<TimerSink>,
+    /// Hands what every link's I/O does, as it does it, to the sink
+    /// ([`crate::LinkRecord`]): the node task's hand-offs to its writers
+    /// and takes from its readers, the driver's writes and reads, and the
+    /// transport's holds and readings under them, and every capture sample
+    /// interval its links' transports and queues as a capture samples
+    /// them. `None` (the default, and every real node's) records nothing.
+    /// It changes no decision.
+    pub link_log: Option<LinkSink>,
 }
 
 /// Where a node's parent changes go ([`NodeConfig::parent_log`]), for a
@@ -230,6 +238,41 @@ pub struct TimerSink(pub Arc<dyn Fn(crate::event::TimerRecord) + Send + Sync>);
 impl fmt::Debug for TimerSink {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("TimerSink")
+    }
+}
+
+/// Where a node's link I/O goes as it happens ([`NodeConfig::link_log`]),
+/// for a harness's or a simulation's tables. It is called from the node
+/// task, the link tasks and the transports under them, so it must not
+/// block; it stamps each record with the time it is called and holds what
+/// it keeps in a bound of its own.
+#[derive(Clone)]
+pub struct LinkSink(pub Arc<dyn Fn(crate::event::LinkRecord) + Send + Sync>);
+
+impl LinkSink {
+    /// Hands `event` of link `link` over, as it happens.
+    pub fn record(&self, link: u64, event: crate::event::LinkEvent) {
+        (self.0)(crate::event::LinkRecord {
+            link,
+            at: None,
+            event,
+        });
+    }
+
+    /// Hands `event` of link `link` over, which happened `at` by the
+    /// sink's clock.
+    pub fn record_at(&self, link: u64, at: Time, event: crate::event::LinkEvent) {
+        (self.0)(crate::event::LinkRecord {
+            link,
+            at: Some(at),
+            event,
+        });
+    }
+}
+
+impl fmt::Debug for LinkSink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("LinkSink")
     }
 }
 
@@ -370,6 +413,7 @@ impl NodeConfig {
             decision_log: None,
             last_metrics: None,
             timer_log: None,
+            link_log: None,
             node_platform: String::new(),
             node_version: "dev".to_owned(),
             ppspp_capture: None,

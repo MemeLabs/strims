@@ -19,8 +19,9 @@ use std::pin::Pin;
 use futures_util::StreamExt;
 use strims_base::time::Time;
 use strims_node_core::{
-    DialId, IdleOk, Inputs, Interfaces, LinkChannels, LinkKey, LinkTasks, Node, NodeConfig,
-    NodeError, NodeEvents, NodeIo, NodeSetup, RtcFactory, SpawnNode, TaskGuard,
+    DialId, IdleOk, Inputs, Interfaces, LinkChannels, LinkKey, LinkTap, LinkTasks, Node,
+    NodeConfig, NodeError, NodeEvents, NodeIo, NodeSetup, RtcFactory, SpawnNode, TaskGuard,
+    WriteWait,
 };
 use strims_vnic::DialTarget;
 use strims_vnic::tcp::{TcpError, format_tcp_uri};
@@ -313,13 +314,18 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
             writes,
             inputs,
             probe,
+            log,
         } = channels;
+        let log = LinkTap::new(link, log);
         let mut idle_ok = None;
         let mut link_probe = None;
         let reader = match transport {
             Transport::Channel(stream) => {
                 if probe {
                     link_probe = self.net.link_probe(&stream, false);
+                }
+                if let Some((id, sink)) = log.parts() {
+                    self.net.log_link(&stream, id, sink);
                 }
                 let (r, w) = tokio::io::split(stream);
                 let reader = tokio::spawn(link::stream_reader(
@@ -329,19 +335,26 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
                     inputs.clone(),
                     strims_base::time::Duration::ZERO,
                     IdleOk::default(),
+                    log.clone(),
                 ));
+                // The net's channel logs its own holds.
                 tokio::spawn(link::stream_writer(
                     link,
                     w,
                     writes,
                     inputs,
                     strims_base::time::Duration::ZERO,
+                    log,
+                    None,
                 ));
                 reader
             }
             Transport::Tcp(stream) => {
                 if probe {
                     link_probe = self.net.link_probe(&stream, false);
+                }
+                if let Some((id, sink)) = log.parts() {
+                    self.net.log_link(&stream, id, sink);
                 }
                 let (r, w) = tokio::io::split(stream);
                 let flag = IdleOk::default();
@@ -353,6 +366,7 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
                     inputs.clone(),
                     self.io.tcp.read_timeout,
                     flag,
+                    log.clone(),
                 ));
                 tokio::spawn(link::stream_writer(
                     link,
@@ -360,6 +374,8 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
                     writes,
                     inputs,
                     self.io.tcp.write_timeout,
+                    log,
+                    Some(WriteWait::Notsent),
                 ));
                 reader
             }
@@ -367,13 +383,13 @@ impl<N: Net, C: Clock> NodeIo for NativeIo<N, C> {
                 if probe {
                     link_probe = self.net.link_probe(ws.get_ref(), true);
                 }
-                self.spawn_ws(link, *ws, read_free, writes, inputs)
+                self.spawn_ws(link, *ws, read_free, writes, inputs, log)
             }
             Transport::Wss(ws) => {
                 if probe {
                     link_probe = self.net.link_probe(ws.get_ref().get_ref().0, true);
                 }
-                self.spawn_ws(link, *ws, read_free, writes, inputs)
+                self.spawn_ws(link, *ws, read_free, writes, inputs, log)
             }
         };
         LinkTasks {
@@ -399,6 +415,7 @@ impl<N: Net, C: Clock> NativeIo<N, C> {
         read_free: mpsc::Receiver<Vec<u8>>,
         writes: mpsc::Receiver<Vec<u8>>,
         inputs: Inputs<Transport<N>>,
+        log: LinkTap,
     ) -> JoinHandle<()> {
         let (sink, stream) = ws.split();
         let reader = tokio::spawn(link::ws_reader(
@@ -407,6 +424,7 @@ impl<N: Net, C: Clock> NativeIo<N, C> {
             read_free,
             inputs.clone(),
             self.io.ws.read_timeout,
+            log.clone(),
         ));
         tokio::spawn(link::ws_writer(
             link,
@@ -415,6 +433,7 @@ impl<N: Net, C: Clock> NativeIo<N, C> {
             inputs,
             self.io.ws.write_timeout,
             self.io.ws.ping_interval,
+            log,
         ));
         reader
     }

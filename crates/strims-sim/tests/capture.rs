@@ -216,6 +216,7 @@ fn a_run_with_tables_keeps_its_trace() {
             spec.node_bins = true;
             spec.parent_checks = true;
             spec.timer_log = Some(HostSet::All);
+            spec.link_log = Some(HostSet::All);
             let r = run(spec, 1).unwrap();
             assert_eq!(
                 (&plain.trace_hash, plain.reads_hash()),
@@ -340,6 +341,7 @@ fn a_run_with_tables_keeps_its_trace() {
             held_truth_meets_the_reads(&r, &d);
             request_logs_say_what_they_are(&r, &d);
             timers_say_what_they_are(&r, &d);
+            link_logs_say_what_they_are(&r, &d, name);
             stalls_say_how_playout_went(&d);
             parents_say_how_the_trees_changed(&r, &d);
             packets_say_what_they_are(&r, &d, name);
@@ -359,6 +361,7 @@ fn a_run_with_tables_keeps_its_trace() {
         spec.request_logs = true;
         spec.parent_checks = true;
         spec.timer_log = Some(HostSet::All);
+        spec.link_log = Some(HostSet::All);
         let r = run(spec, 1).unwrap();
         assert_eq!(
             (&plain.trace_hash, plain.reads_hash()),
@@ -1680,6 +1683,132 @@ fn timers_say_what_they_are(r: &strims_sim::Report, d: &Path) {
                 "host {h}: probe {i}"
             );
         }
+    }
+}
+
+/// The link log's tables (`Scenario::link_log`, every host's) against the
+/// run: no record lost; a link's writes and reads run on from its first
+/// byte in order, each write handed to the writer before the writer began
+/// it and taken whole after; a read is taken after it was read; a byte is
+/// read after the write that held it was done, its peer's link of the same
+/// ordinal holding the same bytes; holds are a TCP socket's in a `tcp` run
+/// and a channel's or its host's on its data channels in a `browsers` run,
+/// whose writes' checks read the amount they went at; every host reads its
+/// links' transports and queues every capture interval.
+fn link_logs_say_what_they_are(r: &strims_sim::Report, d: &Path, run: &str) {
+    let meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(d.join("series_meta.json")).unwrap())
+            .unwrap();
+    assert_eq!(meta["link_log_lost"], 0, "{run}");
+    type Key = (i64, i64, i64);
+    let writes = table_rows(d, "link_writes");
+    let reads = table_rows(d, "link_reads");
+    let samples = table_rows(d, "link_samples");
+    assert!(!writes.is_empty() && !reads.is_empty(), "{run}");
+    let key = |x: &BTreeMap<String, String>| -> Key {
+        let i = |c: &str| int(x, c).unwrap();
+        (i("node"), i("peer"), i("link"))
+    };
+    // Each link's writes: their byte ranges and when each was done.
+    let mut written: BTreeMap<Key, Vec<(i64, i64, i64)>> = BTreeMap::new();
+    let mut waits: BTreeSet<(String, String)> = BTreeSet::new();
+    for w in &writes {
+        let x = |c: &str| int(w, c).unwrap();
+        let k = key(w);
+        let rows = written.entry(k).or_default();
+        let (off, n) = (x("off"), x("n"));
+        assert_eq!(n, rows.len() as i64, "{run}: {w:?}");
+        assert_eq!(
+            off,
+            rows.last().map_or(0, |&(o, b, _)| o + b),
+            "{run}: {w:?}"
+        );
+        assert!(x("bytes") > 0, "{run}: {w:?}");
+        assert!(x("queued_us") <= x("t_us"), "{run}: {w:?}");
+        assert!(x("t_us") <= x("done_us"), "{run}: {w:?}");
+        rows.push((off, x("bytes"), x("done_us")));
+        waits.insert((w["kind"].clone(), w["wait"].clone()));
+    }
+    let mut read: BTreeMap<Key, i64> = BTreeMap::new();
+    for x in &reads {
+        let i = |c: &str| int(x, c).unwrap();
+        let k = key(x);
+        let next = read.entry(k).or_default();
+        assert_eq!(i("off"), *next, "{run}: {x:?}");
+        *next += i("bytes");
+        if let Some(taken) = int(x, "taken_us") {
+            assert!(taken >= i("t_us"), "{run}: {x:?}");
+        }
+        // The peer's write that held the read's last byte was done before.
+        let (node, peer, link) = k;
+        let last = i("off") + i("bytes") - 1;
+        let w = written
+            .get(&(peer, node, link))
+            .and_then(|ws| ws.iter().find(|&&(o, b, _)| o <= last && last < o + b))
+            .unwrap_or_else(|| panic!("{run}: no write holds {x:?}"));
+        assert!(w.2 <= i("t_us"), "{run}: {x:?} before its write {w:?}");
+    }
+    // Every host wrote, the seed to each viewer.
+    let seed = r.scenario.swarms[0].seed as i64;
+    for &v in &r.scenario.swarms[0].viewers {
+        assert!(
+            written.keys().any(|&(n, p, _)| (n, p) == (seed, v as i64)),
+            "{run}: seed to {v}"
+        );
+    }
+    for (kind, wait) in &waits {
+        let ok: &[&str] = match kind.as_str() {
+            "tcp" => &["none", "notsent"],
+            "webrtc" => &["none", "channel", "host"],
+            _ => &["none"],
+        };
+        assert!(ok.contains(&wait.as_str()), "{run}: {kind} {wait}");
+    }
+    let kinds: BTreeSet<&str> = writes.iter().map(|w| w["kind"].as_str()).collect();
+    if run == "browsers" {
+        assert!(kinds.contains("webrtc"), "{run}: {kinds:?}");
+        assert!(
+            writes
+                .iter()
+                .any(|w| w["kind"] == "webrtc" && !w["unsent_before"].is_empty()),
+            "{run}: a channel's writes read their amount"
+        );
+    } else {
+        assert_eq!(kinds, BTreeSet::from(["tcp"]), "{run}");
+    }
+    let mut sampled: BTreeMap<i64, BTreeSet<(String, String)>> = BTreeMap::new();
+    for x in &samples {
+        sampled
+            .entry(int(x, "node").unwrap())
+            .or_default()
+            .insert((x["source"].clone(), x["cause"].clone()));
+    }
+    for h in std::iter::once(seed).chain(r.scenario.swarms[0].viewers.iter().map(|&v| v as i64)) {
+        let have = sampled.get(&h).cloned().unwrap_or_default();
+        for want in ["queues", "model"] {
+            assert!(
+                have.contains(&(want.to_owned(), "sample".to_owned())),
+                "{run}: host {h}: {have:?}"
+            );
+        }
+    }
+    // A write sample is a check that held its write: it falls within a
+    // write of its link that something held.
+    let mut held: BTreeMap<Key, Vec<(i64, i64)>> = BTreeMap::new();
+    for w in writes.iter().filter(|w| w["wait"] != "none") {
+        let x = |c: &str| int(w, c).unwrap();
+        held.entry(key(w))
+            .or_default()
+            .push((x("t_us"), x("done_us")));
+    }
+    for x in samples.iter().filter(|x| x["cause"] == "write") {
+        let t = int(x, "t_us").unwrap();
+        assert!(
+            held.get(&key(x))
+                .is_some_and(|ws| ws.iter().any(|&(b, d)| b <= t && t <= d)),
+            "{run}: {x:?} outside a held write"
+        );
+        assert!(!x["buffered_bytes"].is_empty(), "{run}: {x:?}");
     }
 }
 

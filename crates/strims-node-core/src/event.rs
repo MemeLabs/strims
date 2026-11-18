@@ -392,6 +392,260 @@ pub struct TimerRecord {
     pub requested: Duration,
 }
 
+/// What a link's I/O did ([`crate::NodeConfig::link_log`]), as the code
+/// that did it saw it: the node task, the driver's reader and writer, or
+/// the transport under them. The sink stamps each with the time it is
+/// handed over, so a record's time is when its code ran, but one that
+/// carries its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LinkRecord {
+    /// The link: its key's ffi value ([`slotmap::KeyData::as_ffi`]), which
+    /// no other link of the node has had.
+    pub link: u64,
+    /// When it happened, by the sink's clock, from code the sink can't
+    /// time as it runs (a simulation's network, outside its hosts).
+    pub at: Option<Time>,
+    pub event: LinkEvent,
+}
+
+/// See [`LinkRecord`]. A link's writes go through its writer in the order
+/// the node queued them, and each write's events (begun, held, checked,
+/// done) come in turn; a read is taken in the order it was read. Bytes
+/// count from the link's first byte in each direction: the first its vnic
+/// wrote, and the first its vnic read (a transport's own handshake left
+/// out).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LinkEvent {
+    /// The node attached the link, over this transport.
+    Opened(LinkKind),
+    /// vnic named the link's peer.
+    Peer(ID),
+    /// The node handed the link's writer a buffer of this many bytes.
+    Queued(usize),
+    /// The writer began writing the next buffer queued, of this many
+    /// bytes.
+    Began(usize),
+    /// The transport held the write in progress for this.
+    Held(WriteWait),
+    /// The writer read the transport's buffered bytes (`source`'s) as it
+    /// decided whether the write may go now: `buffered`, and the mark it
+    /// then waits for if it holds the write for its own cap.
+    Checked {
+        source: SampleSource,
+        buffered: u64,
+        low: Option<u64>,
+    },
+    /// A held writer's transport woke it: its buffered bytes fell to the
+    /// mark it waited for, read as it woke.
+    Low { source: SampleSource, buffered: u64 },
+    /// The transport took the write's last byte.
+    Done,
+    /// A message of this many bytes arrived at a transport that delivers
+    /// messages (a browser's data channel), before the reader took it.
+    Arrived(usize),
+    /// The reader returned a read of this many bytes.
+    Read(usize),
+    /// The node took a read of this many bytes from the reader.
+    Taken(usize),
+    /// The node read the link's transport or its own queues for it.
+    Sample {
+        source: SampleSource,
+        state: LinkState,
+    },
+    /// The node dropped the link.
+    Closed,
+}
+
+/// What a transport held a write for ([`LinkEvent::Held`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum WriteWait {
+    /// A TCP socket's unsent bytes at its `TCP_NOTSENT_LOWAT`, or its full
+    /// send buffer.
+    Notsent,
+    /// A data channel's buffered amount at its own pacer's cap.
+    Channel,
+    /// A data channel's host pacer: the host's channels' load at its cap.
+    Host,
+}
+
+impl WriteWait {
+    /// Its name in the tables: `notsent`, `channel`, `host`.
+    pub fn name(self) -> &'static str {
+        match self {
+            WriteWait::Notsent => "notsent",
+            WriteWait::Channel => "channel",
+            WriteWait::Host => "host",
+        }
+    }
+
+    /// The wait named `name` ([`WriteWait::name`]).
+    pub fn parse(name: &str) -> Option<WriteWait> {
+        [WriteWait::Notsent, WriteWait::Channel, WriteWait::Host]
+            .into_iter()
+            .find(|w| w.name() == name)
+    }
+}
+
+/// What a [`LinkEvent::Sample`] read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SampleSource {
+    /// The kernel's TCP socket under a TCP link.
+    Tcp,
+    /// A WebSocket's: the kernel's socket, or a browser's `bufferedAmount`.
+    Ws,
+    /// A data channel's buffered amount.
+    WebRtc,
+    /// A simulation's model of the link's connection.
+    Model,
+    /// The node's own queues for the link.
+    Queues,
+}
+
+impl SampleSource {
+    /// Every source, in order.
+    pub const ALL: [SampleSource; 5] = [
+        SampleSource::Tcp,
+        SampleSource::Ws,
+        SampleSource::WebRtc,
+        SampleSource::Model,
+        SampleSource::Queues,
+    ];
+
+    /// Its name in the tables: `tcp`, `ws`, `webrtc`, `model`, `queues`.
+    pub fn name(self) -> &'static str {
+        match self {
+            SampleSource::Tcp => "tcp",
+            SampleSource::Ws => "ws",
+            SampleSource::WebRtc => "webrtc",
+            SampleSource::Model => "model",
+            SampleSource::Queues => "queues",
+        }
+    }
+
+    /// The source named `name` ([`SampleSource::name`]).
+    pub fn parse(name: &str) -> Option<SampleSource> {
+        SampleSource::ALL.into_iter().find(|s| s.name() == name)
+    }
+}
+
+/// A link's state as one reading of it gives it ([`LinkEvent::Sample`]):
+/// what its source can tell, `None` for the rest.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LinkState {
+    /// Bytes written and not yet sent.
+    pub unsent: Option<u64>,
+    /// Bytes sent and not yet acknowledged.
+    pub unacked: Option<u64>,
+    pub cwnd: Option<u64>,
+    pub ssthresh: Option<u64>,
+    pub srtt: Option<Duration>,
+    pub rttvar: Option<Duration>,
+    /// Segments retransmitted so far.
+    pub retrans: Option<u64>,
+    /// Bytes a second.
+    pub delivery_rate: Option<u64>,
+    /// A channel's or a browser WebSocket's buffered amount.
+    pub buffered: Option<u64>,
+    /// A socket's `TCP_NOTSENT_LOWAT`.
+    pub lowat: Option<u64>,
+    /// The host's uplink queue, as the time it takes to drain.
+    pub uplink_queue: Option<Duration>,
+    /// vnic's link buffer's pending bytes.
+    pub link_pending: Option<u64>,
+    /// The driver's write buffers the transport's writer holds.
+    pub write_held: Option<u64>,
+    /// The length of the next frame of the link's ppspp writer's QoS
+    /// session.
+    pub qos_backlog: Option<u64>,
+}
+
+impl LinkState {
+    /// A capture sample's reading, and what it read; `None` for a sample
+    /// that reads no link ([`crate::CaptureSample::Path`],
+    /// [`crate::CaptureSample::SimUplink`]).
+    pub fn of(sample: &crate::CaptureSample) -> Option<(SampleSource, LinkState)> {
+        use crate::CaptureSample as S;
+        let s = match *sample {
+            S::Queues {
+                qos_backlog,
+                link_pending,
+                write_held,
+                ..
+            } => (
+                SampleSource::Queues,
+                LinkState {
+                    link_pending: Some(link_pending),
+                    write_held: Some(write_held),
+                    qos_backlog,
+                    ..LinkState::default()
+                },
+            ),
+            S::Tcp {
+                ws,
+                unsent,
+                unacked,
+                cwnd,
+                srtt,
+                rttvar,
+                retrans,
+                delivery_rate,
+            } => (
+                if ws {
+                    SampleSource::Ws
+                } else {
+                    SampleSource::Tcp
+                },
+                LinkState {
+                    unsent: Some(unsent),
+                    unacked: Some(unacked),
+                    cwnd: Some(cwnd),
+                    srtt: Some(srtt),
+                    rttvar: Some(rttvar),
+                    retrans: Some(retrans),
+                    delivery_rate: Some(delivery_rate),
+                    ..LinkState::default()
+                },
+            ),
+            S::WebRtc { buffered } => (
+                SampleSource::WebRtc,
+                LinkState {
+                    buffered: Some(buffered),
+                    ..LinkState::default()
+                },
+            ),
+            S::WebSocket { buffered } => (
+                SampleSource::Ws,
+                LinkState {
+                    buffered: Some(buffered),
+                    ..LinkState::default()
+                },
+            ),
+            S::SimConn {
+                unsent,
+                lowat,
+                cwnd,
+                ssthresh,
+                in_flight,
+                uplink_queue,
+                ..
+            } => (
+                SampleSource::Model,
+                LinkState {
+                    unsent: Some(unsent),
+                    unacked: in_flight,
+                    cwnd,
+                    ssthresh,
+                    lowat,
+                    uplink_queue,
+                    ..LinkState::default()
+                },
+            ),
+            S::SimUplink { .. } | S::Path { .. } => return None,
+        };
+        Some(s)
+    }
+}
+
 /// An event of the ppspp runner's tap ([`crate::NodeConfig::decision_log`],
 /// ppspp's `TapEvent`): when, by the node's clock (the pass that made it),
 /// its swarm, the peer it is about by host (`None` for none, or one the

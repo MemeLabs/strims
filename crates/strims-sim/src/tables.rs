@@ -8,7 +8,9 @@
 //! (`node_bins`) and channels with each peer at each transfer sample
 //! (`peer_samples`), its timed events and its
 //! forecast logs, its hosts' timers as they fired (`timers`, with
-//! [`Scenario::timer_log`](crate::Scenario::timer_log)), and a testbed
+//! [`Scenario::timer_log`](crate::Scenario::timer_log)), its hosts' links'
+//! writes, reads and readings (`link_writes`, `link_reads`, `link_samples`,
+//! with [`Scenario::link_log`](crate::Scenario::link_log)), and a testbed
 //! run's TCP sockets (`sockets`,
 //! [`Report::sockets`], which a sim run has none of), as CSV files
 //! each with a `<table>.schema.json` of its columns'
@@ -31,8 +33,9 @@
 //! with `STRIMS_SIM_SPEC=1`, the held log's, the HAVE log's and the request
 //! log's (`held_lost`, `haves_lost`, `asks_lost`: requests, each with its
 //! rivals). With it too, the seed log's decisions and sends its caps left
-//! out are `seed_log_lost`, and with the timer log the timers its logs'
-//! caps left out, every host's, `timers_lost`. With
+//! out are `seed_log_lost`, with the timer log the timers its logs'
+//! caps left out, every host's, `timers_lost`, and with the link log the
+//! records its logs' caps left out, every host's, `link_log_lost`. With
 //! `STRIMS_SIM_PARENT_CHECKS=1`, the `parent_checks` table, and the tap's
 //! events of any kind the nodes' buffers left out (`parent_checks_lost`).
 //!
@@ -827,6 +830,11 @@ impl Report {
         if self.scenario.timer_log.is_some() {
             self.timers_table(dir, start)?.finish()?;
         }
+        if self.scenario.link_log.is_some() {
+            self.link_writes_table(dir, start)?.finish()?;
+            self.link_reads_table(dir, start)?.finish()?;
+            self.link_samples_table(dir, start)?.finish()?;
+        }
         let mut t = Table::new(
             dir,
             &[
@@ -902,6 +910,12 @@ impl Report {
             meta.int(
                 MetaInt::TimersLost,
                 self.hosts.iter().map(|h| h.timers_lost).sum::<u64>(),
+            );
+        }
+        if self.scenario.link_log.is_some() {
+            meta.int(
+                MetaInt::LinkLogLost,
+                self.hosts.iter().map(|h| h.link_log_lost).sum::<u64>(),
             );
         }
         if self.scenario.request_logs {
@@ -1405,6 +1419,157 @@ impl Report {
                     r.requested_us.to_string(),
                     context.to_owned(),
                 ]);
+            }
+        }
+        Ok(t)
+    }
+
+    /// The `link_writes` table: every host's links' writes in the order
+    /// its log made them, host by host, times in µs from `start`.
+    fn link_writes_table(&self, dir: &Path, start: Duration) -> io::Result<Table> {
+        let mut t = Table::new(
+            dir,
+            &[
+                cols::LinkWrites::TUs,
+                cols::LinkWrites::Node,
+                cols::LinkWrites::Peer,
+                cols::LinkWrites::Link,
+                cols::LinkWrites::Kind,
+                cols::LinkWrites::Off,
+                cols::LinkWrites::N,
+                cols::LinkWrites::Bytes,
+                cols::LinkWrites::QueuedUs,
+                cols::LinkWrites::DoneUs,
+                cols::LinkWrites::UnsentBefore,
+                cols::LinkWrites::Wait,
+                cols::LinkWrites::RecKind,
+                cols::LinkWrites::Seq,
+            ],
+        )?;
+        let start = i64::try_from(start.as_micros()).unwrap_or(i64::MAX);
+        for (h, host) in self.hosts.iter().enumerate() {
+            let rows = &host.link_rows;
+            let us = |t| rows.us(t) - start;
+            for (k, w) in &rows.writes {
+                t.fields(&[
+                    us(w.began).to_string(),
+                    h.to_string(),
+                    k.peer.to_string(),
+                    k.link.to_string(),
+                    link_kind(k.kind).to_owned(),
+                    w.off.to_string(),
+                    w.n.to_string(),
+                    w.bytes.to_string(),
+                    w.queued.map_or(String::new(), |q| us(q).to_string()),
+                    us(w.done).to_string(),
+                    w.unsent_before.map_or(String::new(), |b| b.to_string()),
+                    w.wait.map_or("none", |w| w.name()).to_owned(),
+                    String::new(),
+                    String::new(),
+                ]);
+            }
+        }
+        Ok(t)
+    }
+
+    /// The `link_reads` table: every host's links' reads in the order its
+    /// log made them, host by host, times in µs from `start`.
+    fn link_reads_table(&self, dir: &Path, start: Duration) -> io::Result<Table> {
+        let mut t = Table::new(
+            dir,
+            &[
+                cols::LinkReads::TUs,
+                cols::LinkReads::Node,
+                cols::LinkReads::Peer,
+                cols::LinkReads::Link,
+                cols::LinkReads::Kind,
+                cols::LinkReads::Off,
+                cols::LinkReads::N,
+                cols::LinkReads::Bytes,
+                cols::LinkReads::TakenUs,
+                cols::LinkReads::RecKind,
+                cols::LinkReads::Seq,
+            ],
+        )?;
+        let start = i64::try_from(start.as_micros()).unwrap_or(i64::MAX);
+        for (h, host) in self.hosts.iter().enumerate() {
+            let rows = &host.link_rows;
+            let us = |t| rows.us(t) - start;
+            for (k, r) in &rows.reads {
+                t.fields(&[
+                    us(r.at).to_string(),
+                    h.to_string(),
+                    k.peer.to_string(),
+                    k.link.to_string(),
+                    link_kind(k.kind).to_owned(),
+                    r.off.to_string(),
+                    r.n.to_string(),
+                    r.bytes.to_string(),
+                    r.taken.map_or(String::new(), |q| us(q).to_string()),
+                    String::new(),
+                    String::new(),
+                ]);
+            }
+        }
+        Ok(t)
+    }
+
+    /// The `link_samples` table: every host's links' readings in the order
+    /// its log made them, host by host, times in µs from `start`; of the
+    /// readings of one key at one µs, the last.
+    fn link_samples_table(&self, dir: &Path, start: Duration) -> io::Result<Table> {
+        let mut t = Table::new(
+            dir,
+            &[
+                cols::LinkSamples::TUs,
+                cols::LinkSamples::Node,
+                cols::LinkSamples::Peer,
+                cols::LinkSamples::Link,
+                cols::LinkSamples::Source,
+                cols::LinkSamples::Cause,
+                cols::LinkSamples::UnsentBytes,
+                cols::LinkSamples::UnackedBytes,
+                cols::LinkSamples::CwndBytes,
+                cols::LinkSamples::SsthreshBytes,
+                cols::LinkSamples::SrttUs,
+                cols::LinkSamples::RttvarUs,
+                cols::LinkSamples::RetransSegments,
+                cols::LinkSamples::DeliveryRateBps,
+                cols::LinkSamples::BufferedBytes,
+                cols::LinkSamples::LowatBytes,
+                cols::LinkSamples::UplinkQueueUs,
+                cols::LinkSamples::LinkPendingBytes,
+                cols::LinkSamples::WriteHeld,
+                cols::LinkSamples::QosBacklogBytes,
+            ],
+        )?;
+        let start = i64::try_from(start.as_micros()).unwrap_or(i64::MAX);
+        for (h, host) in self.hosts.iter().enumerate() {
+            let rows = &host.link_rows;
+            let us = |t| rows.us(t) - start;
+            // The last reading of each key at its µs.
+            let mut seen = std::collections::BTreeSet::new();
+            let mut last: Vec<_> = rows
+                .samples
+                .iter()
+                .rev()
+                .filter(|(k, s)| seen.insert((*k, us(s.at), s.source, s.cause)))
+                .collect();
+            last.reverse();
+            for (k, s) in last {
+                let mut fields = vec![
+                    us(s.at).to_string(),
+                    h.to_string(),
+                    k.peer.to_string(),
+                    k.link.to_string(),
+                    s.source.name().to_owned(),
+                    s.cause.name().to_owned(),
+                ];
+                fields.extend(
+                    s.readings()
+                        .map(|v| v.map_or(String::new(), |v| v.to_string())),
+                );
+                t.fields(&fields);
             }
         }
         Ok(t)
@@ -2059,6 +2224,11 @@ const ASK_COLS: [cols::Asks; 25] = [
     cols::Asks::SinceMs,
     cols::Asks::PeerIncarnation,
 ];
+
+/// A link's transport as the link tables name it.
+fn link_kind(kind: strims_node::LinkKind) -> &'static str {
+    strims_testbed::record::links::kind_name(kind).unwrap_or("other")
+}
 
 #[cfg(test)]
 mod tests {

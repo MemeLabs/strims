@@ -2175,6 +2175,11 @@ sims = ["strims-sim"]
 type = "int"
 description = "With the timer log on, the timers its logs' caps left out (`strims_testbed::record::TimerLog::CAP` between two takes), every host's, summed."
 
+[meta.link_log_lost]
+sims = ["strims-sim"]
+type = "int"
+description = "With the link log on, the records its logs' caps left out (`strims_testbed::record::links::LinkLog::CAP` I/O records and `SAMPLE_CAP` interval readings between two takes), every host's, summed: a lost record shifts its link's rows after it."
+
 [meta.held_lost]
 sims = ["strims-sim"]
 type = "int"
@@ -4725,3 +4730,301 @@ description = "The delay the timer was armed for, in µs: its deadline less the 
 sims = ["strims-sim"]
 type = "text"
 description = "Where the timer ran: `task` (a native node's tokio task, and a simulated node's) or `worker` (a browser node's worker)."
+
+[tables.link_writes]
+sims = ["strims-sim"]
+grain = "write a node's link writer made to its link's transport"
+keys = "k, node, peer, link, off"
+joins = "viewers USING (k, src, node); hosts USING (k, src, node) (the node's kind, stack and egress delay); link_reads ON (k, src) and link_reads.node = link_writes.peer, link_reads.peer = link_writes.node, link_reads.link = link_writes.link and link_reads.off + link_reads.bytes >= link_writes.off + link_writes.bytes, the first such row by off (the peer's read of the write's last byte: an ASOF join)"
+knobs = ["LINK_LOG"]
+sample = true
+zstd = true
+description = "Each write a node's link writer made to its transport, from the node's hand-off of the buffer to the writer through the writer's start to the transport taking its last byte, with the transport's buffered bytes the writer last read before it went and what held it, at the write's byte offset and ordinal on the link, so a link's writes join its peer's reads (`link_reads`) byte for byte."
+notes.strims-sim = "Written with `STRIMS_SIM_LINK_LOG=<hosts>` (`Scenario::link_log`: `all` or `1`, `seed`, or `hosts:` and host indices, `hosts:0,3`), each host's link log (strims-node-core's `NodeConfig::link_log`, made into rows by `strims_testbed::record::links::LinkLog`), taken at its stats samples: the node task's hand-off (`State::drain_transmit`), the link writer's start and end (strims-node's `stream_writer`, `ws_writer`), and under them the modelled connection's checks and holds (`SimTcpStream`: a data channel's pacer, its host's pacer, a TCP socket's `TCP_NOTSENT_LOWAT`). A testbed run's are its nodes' (run.sh's `LINK_LOG`, from its lines' records, `crate::testbed`): natively the link tasks over the kernel's sockets, in a browser the worker's `DcSocket::send` and WebSocket writer, each read by the node's own clock at its finest. The sim runs no CPU, so its writes take no time but their waits; a real node's time to write is its worker's or task's. The sim's links with its signalling relay (an infrastructure host) have no rows at either end, as a testbed node's with its relay have none (run.sh's `all` is the nodes, never the relay). A native node's in-process WebRTC links (str0m's channels in the node task, strims-node-core's `state::rtc`) log their opening, peer, hand-offs and takes alone: no link task writes or reads them, so they have no rows here or in `link_reads`."
+
+[columns.link_writes.t_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+description = "When the link's writer began the write, in µs of true time from the stream's start, by the node's precise clock."
+
+[columns.link_writes.node]
+sims = ["strims-sim"]
+type = "int"
+description = "The node that wrote, as `events` numbers hosts."
+
+[columns.link_writes.peer]
+sims = ["strims-sim"]
+type = "int"
+description = "The node at the link's other end, as `events` numbers hosts."
+
+[columns.link_writes.link]
+sims = ["strims-sim"]
+type = "int"
+description = "The link's ordinal among the node's links to the peer, from 0, in the order vnic named their peer: a relink is the next, across the node's restarts."
+
+[columns.link_writes.kind]
+sims = ["strims-sim"]
+type = "text"
+description = "The link's transport: `tcp`, `ws` (a WebSocket) or `webrtc` (a data channel, a modelled one in the sim)."
+
+[columns.link_writes.off]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "The offset of the write's first byte from the first byte the node's vnic wrote to the link, so it joins the peer's read of the same bytes (`link_reads.off`)."
+
+[columns.link_writes.n]
+sims = ["strims-sim"]
+type = "int"
+description = "The write's ordinal on the link, from 0: on a data channel, the ordinal of the message it sent."
+
+[columns.link_writes.bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "The bytes the write took: one write buffer of the node's, a data channel's message."
+
+[columns.link_writes.queued_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "When the node task handed the write's buffer to the link's writer, in µs of true time from the stream's start: before `t_us` by the time the buffer waited for the writer (the writer still writing the one before it, or not yet run). Empty where the hand-off's record was lost."
+
+[columns.link_writes.done_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+description = "When the transport took the write's last byte, in µs of true time from the stream's start: a socket's write returned, a data channel's `send` did."
+
+[columns.link_writes.unsent_before]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The transport's buffered bytes as the writer last read them before the write went: a data channel's `bufferedAmount`, a modelled TCP socket's unsent bytes. Empty for a transport the writer doesn't read (a real TCP socket, a WebSocket)."
+
+[columns.link_writes.wait]
+sims = ["strims-sim"]
+type = "text"
+description = "What held the write last before it went: `none` (nothing), `notsent` (a TCP socket's unsent bytes at its `TCP_NOTSENT_LOWAT`, or its full send buffer), `channel` (a data channel's buffered amount at its own pacer's cap, waiting for `bufferedamountlow` at the pacer's mark) or `host` (the host pacer, the node's channels' load at its cap, read again every `HOST_POLL`). The holds before it, and the wakes, are the link's `write` and `low` samples (`link_samples`)."
+
+[columns.link_writes.rec_kind]
+sims = ["strims-sim"]
+type = "text"
+none = "empty"
+description = "A bench record's kind; always empty until the TCP bench writes its records into the table: a node's swarm's writes carry its vnic frames."
+[columns.link_writes.seq]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "A bench record's ordinal in its schedule; always empty until the TCP bench writes its records into the table."
+[tables.link_reads]
+sims = ["strims-sim"]
+grain = "read a node's link reader took from its link's transport, or a data channel message as it arrived"
+keys = "k, node, peer, link, off"
+joins = "viewers USING (k, src, node); hosts USING (k, src, node); link_writes ON (k, src) and link_writes.node = link_reads.peer, link_writes.peer = link_reads.node, link_writes.link = link_reads.link and link_writes.off <= link_reads.off and link_reads.off < link_writes.off + link_writes.bytes (the peer's write of the read's first byte)"
+knobs = ["LINK_LOG"]
+sample = true
+zstd = true
+description = "Each read a node's link reader returned, or where its transport delivers messages (a browser's data channel) each message as it arrived, and when the node task took its last byte, at its byte offset and ordinal on the link, so a link's reads join its peer's writes (`link_writes`) byte for byte."
+notes.strims-sim = "Written with `STRIMS_SIM_LINK_LOG=<hosts>` as `link_writes` is: the reader's reads (strims-node's `stream_reader`, `ws_reader`) and the node task's takes of them (`Input::Read`). The sim's modelled data channel is a byte stream to its reader, so its rows are reads, as a TCP link's are. A testbed run's browser node's rows on a data channel are its messages, each as its `onmessage` ran (strims-wasm's `DcSocket`), taken when the node task took the read holding its last byte. A read the node never took (its link went first) has no `taken_us`."
+
+[columns.link_reads.t_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+description = "When the reader returned the read, or the message arrived, in µs of true time from the stream's start, by the node's precise clock."
+
+[columns.link_reads.node]
+sims = ["strims-sim"]
+type = "int"
+description = "The node that read, as `events` numbers hosts."
+
+[columns.link_reads.peer]
+sims = ["strims-sim"]
+type = "int"
+description = "The node that wrote what it read: the one at the link's other end, as `events` numbers hosts."
+
+[columns.link_reads.link]
+sims = ["strims-sim"]
+type = "int"
+description = "The link's ordinal among the node's links to the peer, from 0, in the order vnic named their peer: a relink is the next, across the node's restarts."
+
+[columns.link_reads.kind]
+sims = ["strims-sim"]
+type = "text"
+description = "The link's transport: `tcp`, `ws` (a WebSocket) or `webrtc` (a data channel, a modelled one in the sim)."
+
+[columns.link_reads.off]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "The offset of the read's first byte from the first byte the node's vnic read from the link (a transport's own handshake left out), so it joins the peer's write of the same bytes (`link_writes.off`)."
+
+[columns.link_reads.n]
+sims = ["strims-sim"]
+type = "int"
+description = "The row's ordinal on the link, from 0: on a browser's data channel, the message's, which is the ordinal of the peer's write that sent it, but for the messages that arrived before the channel joined the link log, which are one row (`DcSocket::set_log`), so the ordinals after it run behind the writes' by as many messages less one; elsewhere the read's."
+
+[columns.link_reads.bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "The bytes the read returned, or the message held."
+
+[columns.link_reads.taken_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "When the node task took the row's last byte from the reader, in µs of true time from the stream's start; empty if the link went first."
+
+[columns.link_reads.rec_kind]
+sims = ["strims-sim"]
+type = "text"
+none = "empty"
+description = "A bench record's kind; always empty until the TCP bench writes its records into the table: a node's swarm's reads carry its vnic frames."
+[columns.link_reads.seq]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "A bench record's ordinal in its schedule; always empty until the TCP bench writes its records into the table."
+[tables.link_samples]
+sims = ["strims-sim"]
+grain = "reading of a link's transport or queues: the node's every capture interval, its writer's at a write, or its transport's wake of a held writer"
+keys = "k, node, peer, link, t_us, source, cause"
+joins = "viewers USING (k, src, node); hosts USING (k, src, node)"
+knobs = ["LINK_LOG"]
+sample = true
+zstd = true
+description = "A link's transport and the node's own queues for it as the node read them: every capture interval (100 ms) its transport's state as the node's probe reads it and its queues below the runner, at each check of a write the transport's buffered bytes and the mark the writer then waits for, and as the transport woke a held writer its buffered bytes then. Readings of one key at one instant keep the last."
+notes.strims-sim = "Written with `STRIMS_SIM_LINK_LOG=<hosts>` as `link_writes` is. The interval's readings are those a ppspp capture takes (strims-node-core's `State::sample_links`, through each link's `LinkProbe`: the sim's model of the connection, `SimProbe`, as `model`); the writes' and wakes' are the modelled connection's (`SimTcpStream`, `model`). A testbed run's are its nodes': a native node's TCP sockets through `TCP_INFO` (`tcp`, `ws`), a browser node's data channels' `bufferedAmount` as of their latest send (`webrtc`) and as `DcSocket::send` reads it at each check and its `bufferedamountlow` event (`webrtc`)."
+
+[columns.link_samples.t_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+description = "When the reading was taken, in µs of true time from the stream's start, by the node's precise clock."
+
+[columns.link_samples.node]
+sims = ["strims-sim"]
+type = "int"
+description = "The node whose link it is, as `events` numbers hosts."
+
+[columns.link_samples.peer]
+sims = ["strims-sim"]
+type = "int"
+description = "The node at the link's other end, as `events` numbers hosts."
+
+[columns.link_samples.link]
+sims = ["strims-sim"]
+type = "int"
+description = "The link's ordinal among the node's links to the peer, from 0, in the order vnic named their peer: a relink is the next, across the node's restarts."
+
+[columns.link_samples.source]
+sims = ["strims-sim"]
+type = "text"
+description = "What was read: `tcp` (the kernel's socket under a TCP link), `ws` (a WebSocket's: its kernel socket, or a browser's `bufferedAmount`), `webrtc` (a data channel's buffered amount), `model` (the sim's model of the link's connection) or `queues` (the node's own queues for the link: vnic's link buffer, its write buffers, its ppspp writer's QoS session)."
+
+[columns.link_samples.cause]
+sims = ["strims-sim"]
+type = "text"
+description = "Why it was read: `sample` (the node's reading every capture interval), `write` (the writer's check of the transport as it decided whether a write may go) or `low` (the transport woke a writer it held for its own cap: a data channel's `bufferedamountlow`, read as it fired)."
+
+[columns.link_samples.unsent_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "Bytes written to the transport and not yet sent: a TCP socket's unsent bytes (`tcpi_notsent_bytes`), a modelled connection's not yet admitted to the uplink. Empty where the source can't tell."
+
+[columns.link_samples.unacked_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "Bytes sent and not yet acknowledged: a TCP socket's, a modelled connection's in flight in the window model. Empty where the source can't tell."
+
+[columns.link_samples.cwnd_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The congestion window, in bytes: a TCP socket's, a modelled connection's in the window model. Empty where the source can't tell."
+
+[columns.link_samples.ssthresh_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The slow start threshold, in bytes, of a modelled connection in the window model. Empty where the source can't tell."
+
+[columns.link_samples.srtt_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "The smoothed round trip a TCP socket's kernel reckons, in µs. Empty where the source can't tell."
+
+[columns.link_samples.rttvar_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "The round trip's variation a TCP socket's kernel reckons, in µs. Empty where the source can't tell."
+
+[columns.link_samples.retrans_segments]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The segments a TCP socket has retransmitted so far (`tcpi_total_retrans`). Empty where the source can't tell."
+
+[columns.link_samples.delivery_rate_bps]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes/s"
+none = "empty"
+description = "A TCP socket's delivery rate as its kernel last measured it (`tcpi_delivery_rate`), in bytes a second. Empty where the source can't tell."
+
+[columns.link_samples.buffered_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The transport's buffered bytes: a data channel's `bufferedAmount` (bytes not yet sent, and those sent and not yet acknowledged by a SACK; a modelled channel's as its stack counts them), a browser WebSocket's, and at a modelled TCP socket's writes its unsent bytes. Empty where the source can't tell."
+
+[columns.link_samples.lowat_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The mark a held write waits under: at a write's check that holds it, the buffered amount a data channel's writer waits for (its `bufferedAmountLowThreshold`, the pacer's low mark) or the unsent bytes a modelled TCP socket's writer waits for (half its `TCP_NOTSENT_LOWAT`); in a modelled TCP socket's interval reading, its `TCP_NOTSENT_LOWAT`. Empty otherwise."
+
+[columns.link_samples.uplink_queue_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "The node's uplink queue in the sim's WAN model, as the time it takes to drain, in µs. Empty where the source can't tell."
+
+[columns.link_samples.link_pending_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "Bytes pending in vnic's link buffer, past QoS and not yet in a write buffer. Empty but for the node's queues (`queues`)."
+
+[columns.link_samples.write_held]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The node's write buffers the link's writer holds: handed to it and not yet back. Empty but for the node's queues (`queues`)."
+
+[columns.link_samples.qos_backlog_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The length of the next frame the link's ppspp writer's QoS session has, in bytes; empty with nothing to send, and but for the node's queues (`queues`)."

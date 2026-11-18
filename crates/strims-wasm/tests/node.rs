@@ -578,6 +578,7 @@ async fn a_transferred_channel_becomes_a_link() {
             writes,
             inputs: inputs_tx,
             probe: false,
+            log: None,
         },
     );
 
@@ -685,6 +686,7 @@ async fn a_text_message_fails_a_channel_link() {
             writes,
             inputs: inputs_tx,
             probe: false,
+            log: None,
         },
     );
     fire(&channel, "message", &object(&[("data", bytes(&[5]))]));

@@ -14,6 +14,7 @@
 //!                 [--cpu-profile <dir> [--cpu-profile-at <s>]
 //!                  [--cpu-profile-secs <s>] [--cpu-profile-us <us>]]
 //!                 [--forecast] [--spec] [--parent-checks] [--timer-log [--timer-probe]]
+//!                 [--link-log]
 //! ```
 //!
 //! The node's kind (`firefox` or `chromium`) comes from the topology
@@ -30,7 +31,8 @@
 //!    bins and parent log, with `--forecast` and `--spec` its
 //!    scheduler's forecast log and its request and seed logs, with
 //!    `--parent-checks` its parent checks, and with `--timer-log` its
-//!    timers as they fire, as testbed_node's flags do, the page then served
+//!    timers as they fire, and with `--link-log` its links' I/O as it
+//!    happens, as testbed_node's flags do, the page then served
 //!    cross-origin isolated,
 //!    [`Site::serve_isolated`](strims_testbed::browser::Site::serve_isolated)),
 //!    and has it run the testbed's swarm, with `--timer-probe` the timer
@@ -141,15 +143,16 @@ struct Args {
     parent_checks: bool,
     timer_log: bool,
     timer_probe: bool,
+    link_log: bool,
 }
 
 impl Args {
     /// Whether a log reads the page's high-resolution clock (the timer
-    /// log), so the page is served cross-origin isolated
+    /// log, the link log), so the page is served cross-origin isolated
     /// ([`Site::serve_isolated`]): every log that reads it names itself
     /// here.
     fn fine_clock(&self) -> bool {
-        self.timer_log
+        self.timer_log || self.link_log
     }
 }
 
@@ -182,6 +185,7 @@ fn args() -> Result<Args, String> {
         parent_checks: false,
         timer_log: false,
         timer_probe: false,
+        link_log: false,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -211,6 +215,7 @@ fn args() -> Result<Args, String> {
             "--parent-checks" => a.parent_checks = true,
             "--timer-log" => a.timer_log = true,
             "--timer-probe" => a.timer_probe = true,
+            "--link-log" => a.link_log = true,
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -778,6 +783,7 @@ async fn run() -> Result<(), String> {
             "requestLog": a.spec,
             "parentChecks": a.parent_checks,
             "timerLog": a.timer_log,
+            "linkLog": a.link_log,
         });
         if a.capture.is_some() {
             start["capture"] = json!({

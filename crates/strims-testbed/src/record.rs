@@ -11,9 +11,11 @@
 //! `testbed` module reads back into a run's report. A testbed node keeps
 //! its parent log in a [`ParentLog`] between its lines, and its parent
 //! checks in a [`DecisionLog`], with its timer log on its timers in a
-//! [`TimerLog`], and with its scheduler's logs on hands
-//! each line their records ([`logs`]).
+//! [`TimerLog`], with its link log on its links' I/O in a
+//! [`links::LinkLog`], and with its scheduler's logs on hands each line
+//! their records ([`logs`]).
 
+pub mod links;
 pub mod logs;
 
 use std::collections::BTreeMap;

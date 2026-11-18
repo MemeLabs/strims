@@ -41,7 +41,7 @@
 //! | `tick_late_ms` | how late the timer of this line fired |
 //! | `write_late_ms` | at the seed, the latest of that second's writes past its time; `null` without writes |
 //! | `wakeups` | passes of the node's loop since the last line (`null` on the first): it follows traffic, so it shows load only next to a native node's |
-//! | `rec` | the line's records as strims-sim's tables take them (`Records`): the meter sample, the seed's state, the stats bins and parent changes since the last line, and every frame read since; with the node's scheduler logs on (its driver's `NodeConfig::forecast_log` and `request_log`: testbed_node's and testbed_browser's `--forecast` and `--spec`), what they logged since ([`record::logs`]); with its timer log (`NodeConfig::timer_log`, `--timer-log`), the timers that fired since: its node task's, the line's own, the frame writer's and a browser's host pacer's ([`record::TimerLog`]) |
+//! | `rec` | the line's records as strims-sim's tables take them (`Records`): the meter sample, the seed's state, the stats bins and parent changes since the last line, and every frame read since; with the node's scheduler logs on (its driver's `NodeConfig::forecast_log` and `request_log`: testbed_node's and testbed_browser's `--forecast` and `--spec`), what they logged since ([`record::logs`]); with its timer log (`NodeConfig::timer_log`, `--timer-log`), the timers that fired since: its node task's, the line's own, the frame writer's and a browser's host pacer's ([`record::TimerLog`]); with its link log (`NodeConfig::link_log`, `--link-log`), its links' writes, reads and transport readings since ([`record::links`]) |
 //! | `media` | of a media stream, `null` otherwise: at the seed, [`SeedStats`]: the unit writer's `records`, `units`, `gops`, `bytes` and `padding`, `early_signs` and `dropped` units; at a viewer, [`ViewerStats`]: `units` and `keyframes` read whole, the `messages` that took records to the player (Data messages, or the batches of a browser player's feed) and their records' `bytes`, `first_message_ms`, the egress reader's `discontinuities`, `corrupt_frames`, `losses`, `records` and `rewinds`/`refused_rewinds`/`overtaken_rewinds`, and the join: `first_read_ms`, the first rewind's `rewind_start_ms`, `rewind_end_ms`, outcome (`granted`, `refused`, `timed_out`, `overtaken`) and bytes back from the reader's position, `rewind_back`. Times are Unix ms. |
 //!
 //! `tick_late_ms` and `write_late_ms` show a throttled timer or an
@@ -60,6 +60,7 @@ use strims_transfer::SwarmRead;
 use tokio::sync::mpsc;
 
 use crate::media::{self, FlvFile, SeedStats, TagKind, ViewerStats};
+use crate::record::links::{LinkLog, LinkOpen, LinkRows};
 use crate::record::logs::Logs;
 use crate::record::{self, DecisionLog, ParentLog, TimerContext, TimerLog};
 use crate::shape::LiveShape;
@@ -155,6 +156,8 @@ pub struct NodeLogs<'a> {
     /// Its timers (`NodeConfig::timer_log`), which the line's timer and
     /// the frame writer add theirs to.
     pub timers: Option<&'a TimerLog>,
+    /// Its links' I/O (`NodeConfig::link_log`).
+    pub links: Option<&'a LinkLog>,
 }
 
 /// Runs the node's part (see the [module docs](self)), taking the node's
@@ -172,6 +175,7 @@ pub async fn run<R: Runtime + Clone + 'static>(
         parents,
         checks,
         timers,
+        links,
     } = logs;
     let seed = s.index == 0;
     let mut shape = LiveShape::testbed(s.rate);
@@ -314,6 +318,9 @@ pub async fn run<R: Runtime + Clone + 'static>(
     let sample = async {
         let mut next = s.start_ms.saturating_sub(5000);
         let mut loops = None;
+        // Links the log named before the node's peer events named their
+        // peers, and the lines they have waited.
+        let mut unnamed: Vec<(LinkOpen, u32)> = Vec::new();
         loop {
             let armed = timers.map(|_| (rt.precise_now(), rt.now_ms()));
             rt.sleep_until_ms(next).await;
@@ -340,6 +347,25 @@ pub async fn run<R: Runtime + Clone + 'static>(
                 Stream::Units { .. } => Some(viewer_stats.borrow().json()),
             };
             let now = Time::from_unix_millis(i64::try_from(t).unwrap_or(i64::MAX));
+            let link_log = links.map(|log| {
+                let mut rows = log.take();
+                let ids = ids.borrow();
+                let known = |l: &LinkOpen| ids.iter().any(|(id, _)| *id == l.peer);
+                let waiting: Vec<_> = unnamed
+                    .drain(..)
+                    .chain(rows.links.drain(..).map(|l| (l, 0)))
+                    .collect();
+                let (named, later): (Vec<_>, Vec<_>) =
+                    waiting.into_iter().partition(|(l, _)| known(l));
+                rows.links = named.into_iter().map(|(l, _)| l).collect();
+                // A peer the swarm never names (the relay) waits a minute.
+                unnamed = later
+                    .into_iter()
+                    .filter(|&(_, w)| w < 60)
+                    .map(|(l, w)| (l, w + 1))
+                    .collect();
+                rows
+            });
             let rec = Records {
                 t_ms: t,
                 swarm,
@@ -352,6 +378,7 @@ pub async fn run<R: Runtime + Clone + 'static>(
                     let (rows, lost) = log.take();
                     (rows, lost, log.context())
                 }),
+                link_log,
                 now,
                 origin: Time::from_unix_millis(i64::try_from(s.start_ms).unwrap_or(i64::MAX)),
             }
@@ -547,7 +574,9 @@ async fn read_frames(
 /// `origin`, the stream's start); a node with them off writes none. With
 /// its timer log, the timers that fired since, `"timers": {...}`
 /// ([`record::timers_json`], times in µs from `origin`); a node without
-/// one writes none.
+/// one writes none. With its link log, its links' I/O since, `"link_log":
+/// {...}` ([`record::links::link_log_json`], times in µs from `origin`); a
+/// node without one writes none.
 struct Records<'a> {
     t_ms: u64,
     swarm: SwarmKey,
@@ -558,6 +587,8 @@ struct Records<'a> {
     reads: Vec<[u64; 3]>,
     /// The timer log's take, and where its timers run.
     timers: Option<(Vec<TimerRecord>, u64, TimerContext)>,
+    /// The link log's take.
+    link_log: Option<LinkRows>,
     now: Time,
     origin: Time,
 }
@@ -664,8 +695,14 @@ impl Records<'_> {
                     record::timers_json(rows, *lost, *context, self.origin)
                 )
             });
+        let link_log = self.link_log.as_ref().map_or(String::new(), |rows| {
+            format!(
+                ",\"link_log\":{}",
+                record::links::link_log_json(rows, index, self.origin)
+            )
+        });
         format!(
-            "{{\"meter\":{},\"seed\":{seed},\"bins\":[{}],\"parents\":[{}],\"parents_lost\":{lost},\"reads\":[{}]{checks}{logs}{timers}}}",
+            "{{\"meter\":{},\"seed\":{seed},\"bins\":[{}],\"parents\":[{}],\"parents_lost\":{lost},\"reads\":[{}]{checks}{logs}{timers}{link_log}}}",
             meter.map_or("null".to_owned(), |m| m.json()),
             bins.join(","),
             parents.join(","),
