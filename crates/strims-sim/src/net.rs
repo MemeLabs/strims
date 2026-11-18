@@ -42,8 +42,8 @@
 //! paced as the browser's `DcSocket` paces it: under its own pacer's cap,
 //! and the host's channels together under a [`HostPacer`]'s, each waiting
 //! for its mark once refused: one the host holds reads the host's load
-//! again at each acknowledgement and every [`HOST_POLL`], as the browser's
-//! writer polls it. On a stack whose page counts a channel's amount itself
+//! again every [`HOST_POLL`], as the browser's writer polls it, and
+//! nothing else wakes it. On a stack whose page counts a channel's amount itself
 //! ([`SctpProfile::amount_at_sends`]), a node's writer and its host's
 //! pacer read the amount so: its last reading and each message written
 //! since, the stack's as the stack answers the writer's last write, after
@@ -316,8 +316,8 @@ impl SendBuffers {
 
     /// A SACK acknowledged `len` bytes of data channel `conn` at `at`.
     /// Returns the writer to wake once its buffered amount is under half
-    /// its cap, or a paced writer's once it is at its mark; wakes the
-    /// channels its host holds once their load is at the host's mark.
+    /// its cap, or a paced writer's waiting on its own cap once it is at
+    /// its mark.
     pub fn acked(&self, conn: ConnKey, len: usize, at: Time) -> Option<Waker> {
         self.with(|b| {
             let c = b.conns.get_mut(&conn)?;
@@ -461,32 +461,16 @@ impl LinkProbe for SimProbe {
 }
 
 /// `conn`'s buffered amount fell at `at`: the writer to wake once the
-/// amount is under half its cap, or a paced writer's once it is at its
-/// mark; wakes the channels its host holds once their load is at the
-/// host's mark.
+/// amount is under half its cap, or a paced writer's waiting on its own cap
+/// once it is at its mark. One its host holds, and the other channels its
+/// host holds, wait for their poll.
 fn release(b: &mut Buffers, conn: ConnKey, at: Time) -> Option<Waker> {
-    let Buffers { conns, hosts, .. } = b;
-    let c = conns.get_mut(&conn)?;
+    let c = b.conns.get_mut(&conn)?;
     // A page that counts the amount reads it fall as the stack answers its
     // last write, and once the channel empties.
     if c.shown.is_some() && (c.buffered() == 0 || at <= c.wrote + ANSWER) {
         c.shown = Some(c.buffered());
     }
-    if c.pacer.is_some()
-        && let Some(h) = hosts.get_mut(&conn.0.ip())
-        && !h.waiting.is_empty()
-    {
-        let sum = h.sum(conns, at);
-        if sum.load <= h.low {
-            h.pacer.observe(at, &sum);
-            for k in std::mem::take(&mut h.waiting) {
-                if let Some(w) = conns.get_mut(&k).and_then(|o| o.waker.take()) {
-                    w.wake();
-                }
-            }
-        }
-    }
-    let c = conns.get_mut(&conn)?;
     let (cap, _) = c.channel?;
     let buffered = c.amount();
     if c.pacer.is_some() {
@@ -508,8 +492,9 @@ fn release(b: &mut Buffers, conn: ConnKey, at: Time) -> Option<Waker> {
         c.above = buffered > c.threshold;
     }
     match &mut c.pacer {
-        // A browser reads the amount as it falls to the mark it waits for.
-        Some(p) if c.waker.is_some() && buffered <= c.low => {
+        // A browser waiting on its own cap reads the amount as it falls to
+        // its mark; one its host holds sleeps until its poll.
+        Some(p) if c.waker.is_some() && c.waits && buffered <= c.low => {
             p.observe(at, buffered as usize);
             c.waker.take()
         }
@@ -1162,11 +1147,12 @@ mod tests {
     }
 
     /// The host holds a channel's writer while the host's channels' load is
-    /// at its cap (the floor, before a round trip), and frees it once the
-    /// load falls to its mark: as another channel's amount falls, or at
-    /// the writer's poll.
+    /// at its cap (the floor, before a round trip), and frees it only at
+    /// the writer's poll once the load is at its mark: neither another
+    /// channel's fall nor its own wakes it, as nothing wakes a browser's
+    /// writer asleep for its poll.
     #[test]
-    fn a_host_holds_a_writer_while_its_channels_load_is_at_its_cap() {
+    fn a_host_holds_a_writer_until_its_poll() {
         let (b, k, log) = channels(&SctpProfile::FIREFOX, 2);
         let (wakes, w) = waker();
         assert!(b.channel_write(&k[1], ms(0), &w) == Some(ChannelWrite::Go));
@@ -1176,11 +1162,14 @@ mod tests {
         assert!(b.channel_write(&k[0], ms(1), &w) == Some(ChannelWrite::Held));
         assert_eq!(holds(&log, 0), [WriteWait::Host]);
         assert!(!b.poll_host(&k[0], ms(6)), "over the host's mark");
+        // Channel 1's fall, then its own, bring the load to 15 kB, under
+        // the mark.
+        assert!(b.admit(k[1], 20_000, ms(7)).is_none());
+        assert!(b.admit(k[0], 5_000, ms(8)).is_none());
         assert_eq!(wakes.count(), 0);
-        // Channel 1's fall brings the load to 20 kB, under the mark.
-        b.admit(k[1], 20_000, ms(7));
+        assert!(b.poll_host(&k[0], ms(11)));
         assert_eq!(wakes.count(), 1);
-        assert!(b.channel_write(&k[0], ms(7), &w) == Some(ChannelWrite::Go));
+        assert!(b.channel_write(&k[0], ms(11), &w) == Some(ChannelWrite::Go));
     }
 
     /// A Chromium page counts its channel's amount itself: each message on
