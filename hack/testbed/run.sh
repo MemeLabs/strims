@@ -100,6 +100,15 @@
 # WebRTC. The topology file's header (strims-testbed's topology module)
 # says who makes which link.
 #
+# Every container has a MAC of its address (02:77:00:00:00 and the
+# address's last octet, in hex), and a permanent neighbour entry for every
+# other container of the run, set before its node starts: a deployed node
+# reaches its peers through a router whose neighbour it has long resolved,
+# where a container's first packet to a peer would wait for ARP, a round
+# trip through both containers' delays and queues. A container whose eth0
+# lacks its MAC fails before its node starts. The relay, which needs
+# NET_ADMIN for its entries alone, drops it before its node starts.
+#
 # Settings (environment):
 #   VIEWERS=<n>            viewers (default 3)
 #   SEED_UP_MBIT=<m>       the seed's uplink (default 10)
@@ -355,7 +364,12 @@
 #                          strims-testbed's topology module; a run before
 #                          run.sh named it made them one at a time, each
 #                          awaited, seed first, names none, and the testbed
-#                          module keys it apart)
+#                          module keys it apart), and NEIGHBOURS, how a
+#                          container finds its peers' MACs (`static`: from
+#                          its neighbour table, set before its node starts;
+#                          a run before run.sh named it resolved each by
+#                          ARP at its first packet, names none, and the
+#                          testbed module keys it apart)
 #   .ctl                   while the run lasts, its control files, which go
 #                          with it
 # A node's lines carry the records strims-sim's tables take (`rec`), which
@@ -506,6 +520,10 @@ relay=$subnet.5
 # An address on the subnet no container or host holds (the nodes are
 # .10 up, the relay .5, the sink .250, the bridge .1).
 unused=$subnet.254
+# The sink's address (COMPETE's).
+sink=$subnet.250
+# A container's MAC: its address's last octet, locally administered.
+mac_of() { printf '02:77:00:00:00:%02x' "${1##*.}"; }
 # The packets the seed sends, which each viewer and the sink lose
 # SEED_LOSS_PCT of (a tc match).
 from_seed="protocol ip u32 match ip src $subnet.10/32"
@@ -751,6 +769,7 @@ env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST
 echo "QDISC=$SHAPER" >> "$out/settings"
 echo "STAMPS=clock" >> "$out/settings"
 echo "JOIN_LINKS=together" >> "$out/settings"
+echo "NEIGHBOURS=static" >> "$out/settings"
 
 # Milliseconds since the epoch, from bash's clock ($EPOCHREALTIME: seconds
 # and six digits of microseconds, no fork); the containers' samplers stamp
@@ -793,14 +812,34 @@ hosts=""
 if [ "$browsers" = 1 ]; then
   hosts="--hosts /out/hosts"
 fi
+# The run's containers' addresses, and container $1's neighbour entries for
+# the others (the header's), as commands of its script, after a check that
+# Docker gave its eth0 the MAC the others' entries name.
+addrs=()
+for i in $(seq 0 $((n - 1))); do addrs+=("$subnet.$((10 + i))"); done
+if [ "$browsers" = 1 ] && [ "$relay_on" = 1 ]; then addrs+=("$relay"); fi
+if [ -n "$compete" ]; then addrs+=("$sink"); fi
+neighbours() {
+  local a mac
+  mac=$(mac_of "$1")
+  printf '%s\n' 'read -r mac < /sys/class/net/eth0/address' \
+    "[ \"\$mac\" = $mac ] || { echo \"eth0 is at \$mac, not $mac\" >&2; exit 1; }"
+  for a in "${addrs[@]}"; do
+    if [ "$a" != "$1" ]; then
+      echo "ip neigh replace $a lladdr $(mac_of "$a") dev eth0 nud permanent"
+    fi
+  done
+}
 if [ "$browsers" = 1 ] && [ "$relay_on" = 1 ]; then
   names+=(tb-relay)
   docker rm -f tb-relay >/dev/null 2>&1 || true
-  docker run -d --name tb-relay --network "$net" --ip "$relay" "${nov6[@]}" \
-    -v "$bin:/testbed_node:ro" -v "$out:/out" -v "$ctl:/ctl" "$image" \
-    bash -c "$(cpu_log relay)
+  docker run -d --name tb-relay --network "$net" --ip "$relay" --mac-address "$(mac_of "$relay")" \
+    "${nov6[@]}" --cap-add NET_ADMIN -v "$bin:/testbed_node:ro" -v "$out:/out" -v "$ctl:/ctl" "$image" \
+    bash -c "set -e
+$(neighbours "$relay")
+$(cpu_log relay)
 $wait_start
-exec /testbed_node --relay-only --topology /out/topology --start \$start --secs $secs 2> /out/node-relay.err" >/dev/null
+exec setpriv --inh-caps=-net_admin --bounding-set=-net_admin -- /testbed_node --relay-only --topology /out/topology --start \$start --secs $secs 2> /out/node-relay.err" >/dev/null
 fi
 
 : > "$out/links"
@@ -883,11 +922,13 @@ $(sampled sssample "$i" "-i $ss_ms" ss)"
   fi
   name=tb-$i
   names+=("$name")
+  addr=$subnet.$((10 + i))
   docker rm -f "$name" >/dev/null 2>&1 || true
   if [ "$(kind_of "$i")" = native ]; then
-    docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" "${nov6[@]}" \
+    docker run -d --name "$name" --network "$net" --ip "$addr" --mac-address "$(mac_of "$addr")" "${nov6[@]}" \
       --cap-add NET_ADMIN "${link_mounts[@]}" "${sampler_mounts[@]}" -v "$bin:/testbed_node:ro" -v "$out:/out" -v "$ctl:/ctl" "${media_mount[@]}" "$image" \
       bash -c "set -e
+$(neighbours "$addr")
 $shape
 tc -s -d qdisc show > /out/qdisc-$i.txt
 : > /ctl/ready-$i
@@ -907,11 +948,12 @@ exec /testbed_node --index $i --topology /out/topology --start \$start --secs $s
     # holds ($unused) gives it eth0's, and reaches nothing. (One on-link,
     # `default dev eth0`, would reach the host's own addresses off the
     # subnet, which it answers ARP for.)
-    docker run -d --name "$name" --network "$net" --ip "$subnet.$((10 + i))" "${nov6[@]}" \
+    docker run -d --name "$name" --network "$net" --ip "$addr" --mac-address "$(mac_of "$addr")" "${nov6[@]}" \
       --cap-add NET_ADMIN "${link_mounts[@]}" "${sampler_mounts[@]}" --shm-size 1g --tmpfs /tmp:size=1g \
       -v "$browser_bin:/testbed_browser:ro" \
       -v "$web:/web:ro" -v "$out:/out" -v "$ctl:/ctl" "$browser_image" \
       bash -c "set -e
+$(neighbours "$addr")
 $shape
 ip route add default via $unused dev eth0
 tc -s -d qdisc show > /out/qdisc-$i.txt
@@ -976,7 +1018,6 @@ if [ -n "$steps" ]; then
 fi
 
 if [ -n "$compete" ]; then
-  sink=$subnet.250
   # The sink's 10 ms, and, as a viewer does, its loss of what the seed
   # sends it (the upload's data; the seed's own filter takes its acks),
   # each frame alone (no GRO).
@@ -989,8 +1030,10 @@ $(loss_filter "$from_seed" "$loss_every")"
   fi
   names+=(tb-sink)
   docker rm -f tb-sink >/dev/null 2>&1 || true
-  docker run -d --name tb-sink --network "$net" --ip "$sink" "${nov6[@]}" --cap-add NET_ADMIN "$image" \
+  docker run -d --name tb-sink --network "$net" --ip "$sink" --mac-address "$(mac_of "$sink")" "${nov6[@]}" \
+    --cap-add NET_ADMIN "$image" \
     bash -c "set -e
+$(neighbours "$sink")
 $sink_shape
 exec iperf3 -s" >/dev/null
   (

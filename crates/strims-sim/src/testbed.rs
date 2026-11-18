@@ -117,9 +117,9 @@ pub const TEST: &str = "calibration_star";
 /// The sim name a testbed run's records go under.
 pub const SIM: &str = "testbed";
 /// The settings that only record or capture, or say how run.sh ran
-/// (`STAMPS`, `JOIN_LINKS`, which [`knobs_of`] reads apart): no knob of
-/// the twin's.
-const RECORDING: [&str; 11] = [
+/// (`STAMPS`, `JOIN_LINKS`, `NEIGHBOURS`, which [`knobs_of`] reads apart):
+/// no knob of the twin's.
+const RECORDING: [&str; 12] = [
     "STAMPS",
     "CAPTURE",
     "PCAP",
@@ -131,6 +131,7 @@ const RECORDING: [&str; 11] = [
     "BROWSER_BIN",
     "WEB_BUNDLE",
     "JOIN_LINKS",
+    "NEIGHBOURS",
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
@@ -173,6 +174,12 @@ const TWIN_SETTINGS: [&str; 32] = [
 /// (`JOIN_LINKS`): all at once, as strims-testbed's topology module has a
 /// deployed viewer make them, and the twin's viewers make theirs.
 const JOIN_LINKS_TOGETHER: &str = "together";
+
+/// How a run's settings say its containers found their peers' MACs
+/// (`NEIGHBOURS`): from neighbour entries set before their nodes started,
+/// as a deployed node reaches its peers through a router it has long
+/// resolved, and the twin's paths take no ARP.
+const NEIGHBOURS_STATIC: &str = "static";
 
 /// The clock a run's settings name (`STAMPS`) where run.sh stamps its logs
 /// and reckons its waits from bash's clock, which nothing makes late.
@@ -641,6 +648,15 @@ pub fn knobs_of(
     match get("JOIN_LINKS") {
         Some(JOIN_LINKS_TOGETHER) => {}
         other => put("TESTBED_JOIN_LINKS", other.unwrap_or("serial").to_owned()),
+    }
+    // How the containers found their peers' MACs (NEIGHBOURS). A run whose
+    // settings don't say `static` resolved each by ARP at its first packet
+    // to it, a round trip through both containers' delays and queues
+    // ahead of a link's first packet, which its twin's paths don't take:
+    // it keys apart, TESTBED_NEIGHBOURS pairing it with no cell.
+    match get("NEIGHBOURS") {
+        Some(NEIGHBOURS_STATIC) => {}
+        other => put("TESTBED_NEIGHBOURS", other.unwrap_or("arp").to_owned()),
     }
     for (k, v) in settings {
         let twin = RECORDING.contains(&k.as_str())
@@ -3162,7 +3178,7 @@ mod tests {
         let w = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
         w(
             "settings",
-            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\n",
+            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\nNEIGHBOURS=static\n",
         );
         w(
             "topology",
@@ -3257,7 +3273,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let star = "node 0 10.77.0.10:4000\nnode 1 10.77.0.11:4000\nnode 2 10.77.0.12:4000\nlink 0 1\nlink 0 2\n";
         let of = |text: &str, links: Option<&str>| knobs_of(&settings_of(text), star, links, &dir);
-        let base = "VIEWERS=2\nSECS=30\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\n";
+        let base = "VIEWERS=2\nSECS=30\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\nNEIGHBOURS=static\n";
         let k = of(base, None).unwrap();
         assert_eq!(k["TESTBED_QDISC"], "clsact>ifb-netem>root-class");
         assert!(
@@ -4166,6 +4182,29 @@ mod tests {
             .unwrap();
             assert_eq!(
                 Run::read(&dir, &BTreeMap::new()).unwrap().knobs["TESTBED_JOIN_LINKS"],
+                key
+            );
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run whose settings don't say its containers' neighbours were set
+    /// before its nodes started (NEIGHBOURS=static) resolved them by ARP,
+    /// and keys apart; one that says so doesn't.
+    #[test]
+    fn a_run_whose_containers_resolved_their_peers_by_arp_keys_apart() {
+        let dir = fixture("neighbours");
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs.get("TESTBED_NEIGHBOURS"), None);
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        for (setting, key) in [("", "arp"), ("NEIGHBOURS=dynamic\n", "dynamic")] {
+            std::fs::write(
+                dir.join("settings"),
+                settings.replace("NEIGHBOURS=static\n", setting),
+            )
+            .unwrap();
+            assert_eq!(
+                Run::read(&dir, &BTreeMap::new()).unwrap().knobs["TESTBED_NEIGHBOURS"],
                 key
             );
         }

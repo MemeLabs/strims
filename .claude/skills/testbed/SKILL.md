@@ -120,9 +120,15 @@ crates differ from those the page was built from builds its own page.
   JOIN_LINKS=together (its nodes made their links at their joins all at
   once, as a deployed viewer does; before, one at a time, each awaited,
   seed first) keys apart (TESTBED_JOIN_LINKS=serial), and has no twin,
-  whose viewers link as the harness now does. A run folded before the
-  testbed module knew the marker keeps its key until it is folded
-  again.
+  whose viewers link as the harness now does. So does a run whose
+  settings don't say NEIGHBOURS=static (TESTBED_NEIGHBOURS=arp): run.sh
+  gives every container a MAC of its address and a permanent neighbour
+  entry for every other before its node starts, as a deployed node
+  reaches its peers through a router it has long resolved; before, each
+  container's first packet to a peer waited for ARP, a round trip through
+  both delays and queues ahead of a link's first check or SYN. A run
+  folded before the testbed module knew a marker keeps its key until it
+  is folded again.
 - **The twin.** `simdb.py twin 'testbed/NAME' --name NAME-twin --bin
   SCENARIOS --seeds 8` runs strims-sim's `calibration_star` with each
   cell's knobs (a scenarios test binary from `cargo test --release -p
@@ -174,7 +180,12 @@ crates differ from those the page was built from builds its own page.
   testbed tier's matrices (hack/sim-farm/matrices/testbed-tier: the
   tiers' cells the testbed hosts, one a matrix, each repeat its own
   joins). Were run.sh to write STAMPS=date, each matrix's header would
-  say its runs key apart.
+  say its runs key apart. Each arm runs its own bundle's run.sh and
+  TABLES_BIN, so in an A/B whose base predates a marker
+  (NEIGHBOURS=static, JOIN_LINKS=together) the base arm's runs resolve
+  their peers by ARP or link one at a time, and its TABLES_BIN, which
+  doesn't know the marker, keys them in the other arm's cells: such an
+  A/B compares harnesses as well as its change.
 
 ## Browser node costs
 
