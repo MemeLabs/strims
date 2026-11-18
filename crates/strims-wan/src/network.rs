@@ -184,6 +184,31 @@ pub fn retransmission(packets: u32, rtt: Duration) -> Duration {
     }
 }
 
+/// Whether a message taking `tx` to send overflows an access queue that
+/// holds `cap` of transmission time and has `wait` queued: when it doesn't
+/// fit in what's left, as a byte-limited FIFO drops a packet. A message
+/// longer than the whole queue (a write the model keeps whole) is lost
+/// only when the queue is full.
+pub fn overflows(wait: Duration, tx: Duration, cap: Duration) -> bool {
+    if tx > cap {
+        wait >= cap
+    } else {
+        wait + tx > cap
+    }
+}
+
+/// What an uplink's queue took of a message ([`Network::up_admit`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Admitted {
+    /// The wait the queue held as the message came
+    /// ([`Network::up_backlog`]).
+    pub wait: Duration,
+    /// The message's leading packets the queue took, and their IP bytes:
+    /// all of them, or fewer, the rest dropped.
+    pub packets: u32,
+    pub wire: usize,
+}
+
 /// Nanoseconds in a second: bytes times this are byte-nanoseconds, the
 /// unit an uplink's serialization and its bucket's tokens are kept in, so
 /// a step's share of a message stays exact.
@@ -296,6 +321,9 @@ struct End {
     /// when each started through it, when its last bit left, and what it
     /// charged.
     up_spans: VecDeque<(Time, Time, usize)>,
+    /// When each packet of the last message handed to the uplink left it,
+    /// in order.
+    up_last: Vec<Time>,
     /// With a bucket, the tokens it held at `tokens_at`, in
     /// byte-nanoseconds.
     tokens: i128,
@@ -431,12 +459,15 @@ impl End {
         }
         let mut sent = 0;
         let mut depart = self.up_free;
-        for bytes in self.site.profile.framing.packets(wire, packets) {
+        for (k, bytes) in self.site.profile.framing.packets(wire, packets).enumerate() {
             sent += bytes;
             let passed = self.passed(pass, start, sent);
             if let Some(s) = &mut self.slots {
                 depart = s.depart(passed, passed.max(self.slot_last));
                 self.slot_last = depart;
+            }
+            if let Some(t) = self.up_last.get_mut(k) {
+                *t = depart;
             }
         }
         depart
@@ -483,6 +514,7 @@ impl End {
         let framing = self.site.profile.framing;
         let n = packets.max(1) as usize;
         let (mut from, mut through) = (start, 0);
+        self.up_last.clear();
         for (k, charge) in framing.packets(wire, packets).enumerate() {
             through += charge;
             let done = if k + 1 == n {
@@ -491,6 +523,7 @@ impl End {
                 self.passed(pass, start, through)
             };
             self.span(at, from, done, charge);
+            self.up_last.push(done);
             from = done;
         }
         self.up_free = free;
@@ -571,6 +604,7 @@ impl Network {
                     up_steps: Vec::new(),
                     up_free: Time::NIL,
                     up_spans: VecDeque::new(),
+                    up_last: Vec::new(),
                     tokens: i128::from(site.profile.bucket.map_or(0, |b| b.bytes)) * NS,
                     tokens_at: Time::NIL,
                     slots,
@@ -781,6 +815,74 @@ impl Network {
             Some(&(start, _, _)) if start <= at => end.up_free - start,
             _ => (end.up_free - at).max(Duration::ZERO),
         }
+    }
+
+    /// What `h`'s uplink queue, holding at most `cap` of transmission time
+    /// at the uplink's rate, takes at `at` of a message of `wire` IP bytes
+    /// in `packets` packets ([`Framing::message`]'s): the whole message
+    /// where its charge fits in what the queue has left ([`overflows`],
+    /// the wait [`Network::up_backlog`]'s), else its leading packets that
+    /// fit, a packet at a time and short of the last, as a byte-limited
+    /// FIFO (tbf's, bfifo's) takes each packet it has room for whole and
+    /// drops the rest. It hands the uplink nothing: the caller sends what
+    /// it took.
+    pub fn up_admit(
+        &mut self,
+        h: usize,
+        at: Time,
+        cap: Duration,
+        wire: usize,
+        packets: u32,
+    ) -> Admitted {
+        let wait = self.up_backlog(h, at);
+        let rate = self.up_rate(h, at);
+        let framing = self.up_framing(h);
+        let whole = Admitted {
+            wait,
+            packets,
+            wire,
+        };
+        if !overflows(wait, tx_time(framing.message(wire, packets), rate), cap) {
+            return whole;
+        }
+        let (mut took, mut head, mut charge) = (0, 0, 0);
+        for ip in crate::framing::frames(wire, packets) {
+            charge += framing.packet(ip);
+            if took + 1 >= packets || overflows(wait, tx_time(charge, rate), cap) {
+                break;
+            }
+            took += 1;
+            head += ip;
+        }
+        Admitted {
+            wait,
+            packets: took,
+            wire: head,
+        }
+    }
+
+    /// The bytes `h`'s uplink holds at `at`, as its link charges them: the
+    /// frames handed to it whose last bit hasn't left by then, the one it
+    /// is sending whole, or with a capacity schedule what its cursor holds
+    /// past the opportunities that came. It reads the uplink and moves
+    /// nothing.
+    pub fn up_held(&self, h: usize, at: Time) -> usize {
+        let end = self.end(h);
+        if let Some((cap, cursor)) = &end.capacity {
+            return usize::try_from(cursor.held(cap, at)).unwrap_or(usize::MAX);
+        }
+        end.up_spans
+            .iter()
+            .filter(|&&(_, done, _)| done > at)
+            .map(|&(_, _, wire)| wire)
+            .sum()
+    }
+
+    /// When each packet of the last message handed to `h`'s uplink left
+    /// it, in order: as its shaper passed it, or with slots as its slot
+    /// sent it.
+    pub fn up_last_departures(&self, h: usize) -> &[Time] {
+        &self.end(h).up_last
     }
 
     /// A message of `packets` packets crossing from `a` to `b`, its last
@@ -1514,6 +1616,79 @@ mod tests {
             let d = a.send(at, 0, 1, wire, 1, Carrier::Stream).depart;
             assert_eq!(d, through(up, &[], start, wire));
         }
+    }
+
+    #[test]
+    fn a_messages_packets_leave_as_its_shaper_passes_each() {
+        // 10 Mbit/s and a bucket of two frames: of a message of three full
+        // TCP packets, two leave at once and the third at the rate, the
+        // message's own departure; the uplink holds the third until then.
+        let up = 1_250_000;
+        let sites = [
+            Site::new(City::Frankfurt, Access::Fiber)
+                .with_up(up)
+                .with_framing(Framing::ETHERNET)
+                .with_bucket(Some(Bucket::of(3028))),
+            Site::new(City::Frankfurt, Access::Fiber),
+        ];
+        let mut a = net(&sites, QUIET);
+        let (wire, packets) = crate::wire::tcp_wire(3 * crate::wire::MSS);
+        let d = a.send(t(0), 0, 1, wire, packets, Carrier::Stream).depart;
+        let frame = tx_time(1514, up);
+        assert_eq!(a.up_last_departures(0), [t(0), t(0), t(0) + frame]);
+        assert_eq!(d, t(0) + frame);
+        assert_eq!(a.up_held(0, t(0)), 1514);
+        assert_eq!(a.up_held(0, t(0) + frame), 0);
+        // With slots, each packet leaves with the slot that sends it.
+        let slotted = [
+            sites[0].with_slots(Some(Slots {
+                min: Duration::from_millis(2),
+                max: Duration::from_millis(2),
+            })),
+            sites[1],
+        ];
+        let mut b = net(&slotted, QUIET);
+        let d = b.send(t(0), 0, 1, wire, packets, Carrier::Stream).depart;
+        let last = b.up_last_departures(0);
+        assert_eq!(last.len(), 3);
+        assert_eq!(last.last().copied(), Some(d));
+        assert!(last.iter().all(|&x| x >= t(0) + Duration::from_millis(2)));
+    }
+
+    #[test]
+    fn a_full_queue_takes_the_leading_packets_that_fit() {
+        // 10 Mbit/s, Ethernet framing and a queue of five full frames'
+        // time, three frames already in it: of a message of four full TCP
+        // packets the queue takes the leading two, their IP bytes, and
+        // says the wait it found; with five frames in it, none; a message
+        // that fits goes whole, and so does one longer than the whole
+        // queue, into a queue that isn't full.
+        let up = 1_250_000;
+        let sites = [
+            Site::new(City::Frankfurt, Access::Fiber)
+                .with_up(up)
+                .with_framing(Framing::ETHERNET),
+            Site::new(City::Frankfurt, Access::Fiber),
+        ];
+        let frame = tx_time(1514, up);
+        let cap = frame * 5;
+        let mut a = net(&sites, QUIET);
+        let (three, n) = tcp_wire(3 * crate::wire::MSS);
+        a.send(t(0), 0, 1, three, n, Carrier::Stream);
+        let (four, packets) = tcp_wire(4 * crate::wire::MSS);
+        let got = a.up_admit(0, t(0), cap, four, packets);
+        assert_eq!((got.wait, got.packets, got.wire), (frame * 3, 2, four / 2));
+        let (one, single) = tcp_wire(crate::wire::MSS);
+        let got = a.up_admit(0, t(0), cap, one, single);
+        assert_eq!((got.packets, got.wire), (1, one));
+        a.send(t(0), 0, 1, four / 2, 2, Carrier::Stream);
+        let got = a.up_admit(0, t(0), cap, four, packets);
+        assert_eq!((got.wait, got.packets, got.wire), (frame * 5, 0, 0));
+        let mut b = net(&sites, QUIET);
+        let (eight, many) = tcp_wire(8 * crate::wire::MSS);
+        b.send(t(0), 0, 1, three, n, Carrier::Stream);
+        let got = b.up_admit(0, t(0), cap, eight, many);
+        assert_eq!((got.packets, got.wire), (8, eight));
     }
 
     /// The peak bucket `run.sh` gives tbf: two frames.

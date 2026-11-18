@@ -35,6 +35,7 @@
 //! | [`capacity`] | an uplink capacity as a schedule of delivery opportunities |
 //! | [`network`] | uplink and downlink FIFOs, uplink buckets, paths, jitter, loss |
 //! | [`playout`] | a live player's stalls at a fixed delay |
+//! | [`replay`] | an uplink replayed packet by packet, the shaper benched open loop |
 //! | [`sample`] | seeded draws |
 //! | [`slots`] | medium access in slots (a cable modem's grants, a Wi-Fi station's aggregates) |
 //! | [`testbed`] | the Docker testbed's access link specs, for its links and the sims' twins |
@@ -48,6 +49,7 @@ pub mod framing;
 pub mod live;
 pub mod network;
 pub mod playout;
+pub mod replay;
 pub mod sample;
 pub mod slots;
 pub mod testbed;

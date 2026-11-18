@@ -45,7 +45,7 @@
 
 use strims_base::time::Duration;
 
-use crate::access::{Bucket, CABLE_GRANTS};
+use crate::access::{Bucket, CABLE_GRANTS, Site};
 use crate::framing::{Framing, Line};
 use crate::slots::Slots;
 
@@ -358,6 +358,32 @@ impl Spec {
             Class::Tbf | Class::Fiber => given(run),
             Class::Trace => Ok(run),
         }
+    }
+
+    /// `site` shaped as the link is: its framing, slots and bucket, the
+    /// run's `bucket` where the class takes it (`None`: none), its rate
+    /// reaching `top` bytes per second at its highest (its start's or a
+    /// step's); fails as the testbed does on a bucket smaller than the
+    /// link's largest frame or a peak at or under `top` ([`Spec::bucket`],
+    /// which also drops cable's default peak at or under it). A trace's
+    /// schedule isn't the site's: its uplink takes it apart
+    /// ([`crate::Network::set_up_capacity`]).
+    pub fn shape(&self, site: Site, bucket: Option<Bucket>, top: u64) -> Result<Site, String> {
+        let up = site.profile.up;
+        let bucket = match self.class {
+            Class::Tbf | Class::Fiber => bucket.map(|b| self.bucket(up, top, b)).transpose()?,
+            Class::Trace => bucket,
+            Class::Cable | Class::Dsl => Some(self.bucket(up, top, Bucket::of(0))?),
+        };
+        if let Some(b) = bucket
+            && self.class != Class::Trace
+        {
+            self.check_bucket(b.bytes)?;
+        }
+        Ok(site
+            .with_framing(self.framing())
+            .with_slots(self.slots())
+            .with_bucket(bucket))
     }
 }
 

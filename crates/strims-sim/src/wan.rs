@@ -56,8 +56,10 @@
 //! - The access queues hold `uplink_queue` of transmission time, up and
 //!   down. An uplink queue takes the leading frames of a segment that
 //!   fit in what it has left and loses the rest, as a byte-limited FIFO
-//!   (Linux's tbf and bfifo) drops a packet, and frees each frame's room
-//!   once its last bit has left
+//!   (Linux's tbf and bfifo) drops a packet
+//!   ([`Network::up_admit`](strims_wan::Network::up_admit), the rule
+//!   `strims_wan::replay` replays a testbed node's offers by), and frees
+//!   each frame's room once its last bit has left
 //!   ([`Network::up_backlog`](strims_wan::Network::up_backlog)); a
 //!   downlink queue loses a segment that doesn't fit whole. A
 //!   datagram that doesn't fit is lost the same way, and forgotten. An
@@ -140,7 +142,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
-use strims_wan::network::RTO_MIN;
+use strims_wan::network::{RTO_MIN, overflows};
 use strims_wan::wire::{tcp_wire, tx_time, udp_wire};
 use strims_wan::{Carrier, Network, Options, Site};
 use turmoil::{Protocol, Segment, Sim};
@@ -1150,19 +1152,6 @@ struct Cross {
     /// flight.
     acks_lost: Vec<(u64, u32, Time)>,
     probe_at: Time,
-}
-
-/// Whether a segment taking `tx` to send overflows an access queue that
-/// holds `cap` of transmission time and has `wait` queued: when it doesn't
-/// fit in what's left, as a byte-limited FIFO drops a packet. A segment
-/// longer than the whole queue (a write the model keeps whole) is lost
-/// only when the queue is full.
-fn overflows(wait: Duration, tx: Duration, cap: Duration) -> bool {
-    if tx > cap {
-        wait >= cap
-    } else {
-        wait + tx > cap
-    }
 }
 
 /// A host pair as a set key.
@@ -2559,21 +2548,16 @@ impl Scheduler {
             self.traced_cross(at, i, if resent { "rtx" } else { "tx" }, seq, len);
             let id = self.next;
             self.next += 1;
-            let wait = self.net.up_backlog(host, at);
-            let rate = self.net.up_rate(host, at);
-            let framing = self.net.up_framing(host);
-            // The queue takes the leading frames that fit, a frame at a
-            // time, and drops the rest.
-            let mut took = 0;
-            while took < frames
-                && !overflows(
-                    wait,
-                    tx_time(framing.packet(CROSS_FRAME) * (took as usize + 1), rate),
-                    cap,
-                )
-            {
-                took += 1;
-            }
+            // The queue takes the segment whole where it fits, else its
+            // leading frames that fit, a frame at a time, and drops the
+            // rest. A segment longer than the whole queue (a queue under
+            // two frames' time) goes whole into a queue that isn't full,
+            // even one without a frame's room, as a connection's segment
+            // does ([`overflows`]).
+            let admitted = self
+                .net
+                .up_admit(host, at, cap, frames as usize * CROSS_FRAME, frames);
+            let (wait, mut took) = (admitted.wait, admitted.packets);
             if took < frames {
                 if let Some(d) = self.cross_drops.get_mut(host) {
                     *d += 1;
@@ -2867,24 +2851,11 @@ impl Scheduler {
         };
         let (wire, packets) = tcp_wire(len);
         self.traced(at, conn, if resent { "rtx" } else { "tx" }, seq, len);
-        let wait = self.net.up_backlog(from, at);
-        let rate = self.net.up_rate(from, at);
-        let charged = self.net.up_charge(from, wire, packets);
-        let (mut took, mut head_wire) = (packets, wire);
-        if overflows(wait, tx_time(charged, rate), cap) {
-            // The queue takes the leading frames that fit, a frame at a
-            // time, and drops the rest.
-            let framing = self.net.up_framing(from);
-            let mut charge = 0;
-            (took, head_wire) = (0, 0);
-            for ip in strims_wan::framing::frames(wire, packets) {
-                charge += framing.packet(ip);
-                if took + 1 >= packets || overflows(wait, tx_time(charge, rate), cap) {
-                    break;
-                }
-                took += 1;
-                head_wire += ip;
-            }
+        // The queue takes the leading frames that fit, a frame at a time,
+        // and drops the rest.
+        let admitted = self.net.up_admit(from, at, cap, wire, packets);
+        let (mut took, mut head_wire) = (admitted.packets, admitted.wire);
+        if took < packets {
             let head = (took as usize * MSS as usize).min(len);
             self.traced(at, conn, "drop", seq, len - head);
             if let Some(d) = self.drops.get_mut(from) {
@@ -3318,9 +3289,12 @@ impl Scheduler {
         if let (Some(cap), Carrier::Datagram) = (window, carrier) {
             // A full queue drops a datagram as it does a segment; the
             // datagram's sender learns of it only from what it carries.
-            let wait = self.net.up_backlog(r.from, at);
-            let charged = self.net.up_charge(r.from, r.wire, r.packets);
-            if overflows(wait, tx_time(charged, self.net.up_rate(r.from, at)), cap) {
+            if self
+                .net
+                .up_admit(r.from, at, cap, r.wire, r.packets)
+                .packets
+                < r.packets
+            {
                 if let Some(d) = self.drops.get_mut(r.from) {
                     *d += 1;
                 }

@@ -73,23 +73,7 @@ impl TestbedLink {
     /// ([`Spec::bucket`], which also drops cable's default peak at or
     /// under it).
     pub fn site(&self, site: Site, bucket: Option<Bucket>, top: u64) -> Result<Site, String> {
-        let up = site.profile.up;
-        let bucket = match self.spec.class {
-            Class::Tbf | Class::Fiber => {
-                bucket.map(|b| self.spec.bucket(up, top, b)).transpose()?
-            }
-            Class::Trace => bucket,
-            Class::Cable | Class::Dsl => Some(self.spec.bucket(up, top, Bucket::of(0))?),
-        };
-        if let Some(b) = bucket
-            && self.spec.class != Class::Trace
-        {
-            self.spec.check_bucket(b.bytes)?;
-        }
-        Ok(site
-            .with_framing(self.framing())
-            .with_slots(self.slots())
-            .with_bucket(bucket))
+        self.spec.shape(site, bucket, top)
     }
 
     /// A trace link's schedule, its time 0 (less `offset=`) at `start`,

@@ -102,9 +102,10 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use strims_base::time::{Duration, Time};
 use strims_wan::Carrier;
+use strims_wan::network::overflows;
 use strims_wan::wire::tx_time;
 
-use super::{Event, Scheduler, What, overflows};
+use super::{Event, Scheduler, What};
 use crate::net::ConnKey;
 
 /// The SCTP stack an association's rules follow.
@@ -912,10 +913,9 @@ impl Scheduler {
                 self.admits.insert((at, c.id), (conn, c.len));
             }
         }
-        let wait = self.net.up_backlog(from, at);
         let wire = link_wire(&self.net, from, wire);
         let charged = self.net.up_charge(from, wire, 1);
-        let t = if overflows(wait, tx_time(charged, self.net.up_rate(from, at)), cap) {
+        let t = if self.net.up_admit(from, at, cap, wire, 1).packets == 0 {
             if let Some(d) = self.drops.get_mut(from) {
                 *d += 1;
             }
@@ -1156,11 +1156,7 @@ impl Scheduler {
             p.packet_overhead + COMMON_HEADER + SctpProfile::sack_chunk(gap_blocks(&sack.above)),
         );
         if let Some(cap) = self.window()
-            && overflows(
-                self.net.up_backlog(to, t),
-                tx_time(self.net.up_charge(to, wire, 1), self.net.up_rate(to, t)),
-                cap,
-            )
+            && self.net.up_admit(to, t, cap, wire, 1).packets == 0
         {
             if let Some(d) = self.drops.get_mut(to) {
                 *d += 1;
