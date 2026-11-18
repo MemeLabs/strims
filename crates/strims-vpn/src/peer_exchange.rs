@@ -26,12 +26,15 @@
 //!   a peer: an answered exchange holds one of
 //!   `Config::max_incoming_exchanges` only while its link may still come.
 //!
-//! Two hosts that connect to each other at once would each dial the other's
-//! offer, and the second link would replace the first, possibly as it
-//! opens: the lower host id's offer wins. The lower host refuses the other
-//! offer ([`ERR_EXCHANGE_CROSSED`]); the higher one, offered while its own
-//! exchange still waits, closes it ([`ExchangeOutcome::Crossed`]) and
-//! answers.
+//! [`Host::connect`] starts no exchange with a host while one with it is
+//! open, on any network and whichever of them offered, an answer included:
+//! two exchanges make two links, and vnic keeps the one that completed
+//! last at each end, so the ends can keep different links and close both.
+//! Two hosts that connect to each other at once would each dial the
+//! other's offer: the lower host id's offer wins. The lower host refuses
+//! the other offer ([`ERR_EXCHANGE_CROSSED`]); the higher one, offered
+//! while its own exchange still waits, closes it
+//! ([`ExchangeOutcome::Crossed`]) and answers.
 //!
 //! Every exchange ends [`LINK_TIMEOUT`] after it started at the latest, so
 //! a lost answer can't block later connects to that host. Only an answer
@@ -132,7 +135,8 @@ pub(crate) struct PeerExchangeService {
 
 impl<H: Copy> Host<H> {
     /// Starts an exchange to link with `host_id`. Returns `None` when it is
-    /// this host, already a vnic peer, or has an exchange in progress, and
+    /// this host, already a vnic peer, or has an exchange open with this
+    /// host, on any network, offered or answered, and
     /// [`Error::PeerBudgetSpent`] when vnic's peers and the open exchanges
     /// fill its budget.
     pub fn connect<T: Copy>(
@@ -145,10 +149,7 @@ impl<H: Copy> Host<H> {
         if !self.networks.contains_key(net) {
             return Err(Error::NetworkNotFound);
         }
-        if vnic.has_peer(&host_id) || host_id == self.id {
-            return Ok(None);
-        }
-        if self.peer_exchange.outgoing.contains_key(&(net, host_id)) {
+        if vnic.has_peer(&host_id) || host_id == self.id || self.exchanging(&host_id) {
             return Ok(None);
         }
         if !self.peer_room(vnic) {
@@ -254,6 +255,15 @@ impl<H: Copy> Host<H> {
             .exchanges
             .iter()
             .map(|(k, x)| (k, x.network, x.host_id))
+    }
+
+    /// Whether an exchange with `host` is open, on any network, whether
+    /// this host offered it or answers it.
+    fn exchanging(&self, host: &ID) -> bool {
+        self.peer_exchange
+            .exchanges
+            .values()
+            .any(|x| x.host_id == *host)
     }
 
     fn set_state(&mut self, exchange: ExchangeId, state: State) {
@@ -370,7 +380,6 @@ impl<H: Copy> Host<H> {
         if x.wire_id != answer.exchange_id || x.state != State::AwaitAnswer {
             return;
         }
-        // A new connect may start while this one dials.
         self.peer_exchange.outgoing.remove(&(net, src));
         if answer.descriptions.is_empty() {
             let outcome = if answer.error_message.is_empty() {
@@ -413,7 +422,13 @@ impl<H: Copy> Host<H> {
             if !self.networks.contains_key(o.network) {
                 continue;
             }
-            if let Some(&ours) = self.peer_exchange.outgoing.get(&(o.network, o.src)) {
+            let ours = self
+                .peer_exchange
+                .outgoing
+                .iter()
+                .find(|((_, host), _)| *host == o.src)
+                .map(|(_, &x)| x);
+            if let Some(ours) = ours {
                 if self.id < o.src {
                     let e = Some(ERR_EXCHANGE_CROSSED);
                     let _ = self.send_answer(now, o.network, o.src, o.wire_id, vec![], e);

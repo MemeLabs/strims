@@ -45,6 +45,13 @@ fn has_closed(events: &[Event<AppTag>], want: &ExchangeOutcome) -> bool {
         .any(|e| matches!(e, Event::ExchangeClosed { outcome, .. } if outcome == want))
 }
 
+fn dials(events: &[Event<AppTag>]) -> usize {
+    events
+        .iter()
+        .filter(|e| matches!(e, Event::DialRemoteDescriptions { .. }))
+        .count()
+}
+
 #[test]
 fn unicast_and_broadcast_between_neighbours() {
     let mut w = world(2);
@@ -1004,11 +1011,6 @@ fn crossed_exchanges_make_one_link() {
     w.service(lo);
     w.service(hi);
     w.run_for(Duration::SECOND);
-    let dials = |ev: &[Event<AppTag>]| {
-        ev.iter()
-            .filter(|e| matches!(e, Event::DialRemoteDescriptions { .. }))
-            .count()
-    };
     let (ev_lo, ev_hi) = (w.take_events(lo), w.take_events(hi));
     assert_eq!(
         (dials(&ev_lo), dials(&ev_hi)),
@@ -1025,6 +1027,183 @@ fn crossed_exchanges_make_one_link() {
         "{ev_hi:?}"
     );
     assert!(w.nodes[lo].vpn.has_peer(w.nodes[lo].net, &w.id(hi)));
+}
+
+/// A host answering an offer starts no exchange with the offerer, on any
+/// network, while it dials the offer or waits for the offerer to dial its
+/// answer. An offer of its own would cross the one it answers: the
+/// offerer, if the higher host, would close its exchange as crossed and
+/// dial, and the two hosts would each dial the other. Whichever host
+/// offers, one host dials.
+#[test]
+fn an_answering_host_starts_no_exchange_of_its_own() {
+    for answerer_is_lower in [true, false] {
+        let mut w = world(3);
+        chain(&mut w);
+        let (lo, hi) = if w.id(0) < w.id(2) { (0, 2) } else { (2, 0) };
+        let (offerer, answerer) = if answerer_is_lower {
+            (hi, lo)
+        } else {
+            (lo, hi)
+        };
+        w.nodes[answerer].auto_exchange = false;
+        let (net, now, id) = (w.nodes[offerer].net, w.now, w.id(answerer));
+        let node = &mut w.nodes[offerer];
+        node.vpn.connect(&node.vnic, now, net, id).unwrap().unwrap();
+        w.service(offerer);
+        w.run_for(Duration::SECOND);
+        let ev = w.take_events(answerer);
+        let x = match &ev[..] {
+            [Event::DialRemoteDescriptions { exchange, .. }] => *exchange,
+            other => panic!("{other:?}"),
+        };
+        let key = key_from_seed(&[0x77; 32]).public;
+        let (net, id) = (w.nodes[answerer].net, w.id(offerer));
+        let node = &mut w.nodes[answerer];
+        let other = node.vpn.add_network(&mut node.vnic, &key).unwrap();
+        let connect = |w: &mut World, net| {
+            let now = w.now;
+            let node = &mut w.nodes[answerer];
+            node.vpn.connect(&node.vnic, now, net, id)
+        };
+        let mine = strims_vpn::LinkDescription {
+            interface: common::SIM_INTERFACE.into(),
+            description: answerer.to_string(),
+        };
+
+        // Dialing the offer. An exchange started here offers our
+        // descriptions.
+        let started = [connect(&mut w, net), connect(&mut w, other)];
+        let now = w.now;
+        for x in started.iter().flatten().flatten() {
+            let vpn = &mut w.nodes[answerer].vpn;
+            vpn.set_local_descriptions(now, *x, Ok(vec![mine.clone()]))
+                .unwrap();
+        }
+        w.service(answerer);
+        w.run_for(Duration::SECOND);
+        let ev = w.take_events(offerer);
+        assert_eq!(dials(&ev), 0, "{ev:?}");
+        assert!(!has_closed(&ev, &ExchangeOutcome::Crossed), "{ev:?}");
+        assert_eq!(started, [Ok(None), Ok(None)]);
+        let now = w.now;
+        w.nodes[answerer]
+            .vpn
+            .set_remote_descriptions_result(now, x, Ok(false))
+            .unwrap();
+        w.service(answerer);
+        assert!(matches!(
+            &w.take_events(answerer)[..],
+            [Event::GatherLocalDescriptions { exchange, .. }] if *exchange == x
+        ));
+        w.nodes[answerer]
+            .vpn
+            .set_local_descriptions(now, x, Ok(vec![mine]))
+            .unwrap();
+
+        // Answered, until the offerer has dialed.
+        assert_eq!(connect(&mut w, net), Ok(None));
+        w.service(answerer);
+        w.run_for(Duration::SECOND);
+        let ev = w.take_events(offerer);
+        assert_eq!(dials(&ev), 1, "{ev:?}");
+        assert!(has_closed(&ev, &ExchangeOutcome::Connected), "{ev:?}");
+        assert!(w.linked(lo, hi));
+        w.service(answerer);
+        let ev = w.take_events(answerer);
+        assert_eq!(dials(&ev), 0, "{ev:?}");
+        assert!(has_closed(&ev, &ExchangeOutcome::Answered), "{ev:?}");
+        assert_eq!(w.nodes[answerer].vpn.exchanges().count(), 0);
+        assert_eq!(w.nodes[offerer].vpn.exchanges().count(), 0);
+    }
+}
+
+/// Two hosts that share two networks and connect to each other at once,
+/// each on another network, make one link: the lower id's offer wins.
+#[test]
+fn crossed_exchanges_on_two_networks_make_one_link() {
+    for lo_on_first in [true, false] {
+        let mut w = world(3);
+        chain(&mut w);
+        let key = key_from_seed(&[0xab; 32]).public;
+        let mut second = Vec::new();
+        for node in &mut w.nodes {
+            let net = node.vpn.add_network(&mut node.vnic, &key).unwrap();
+            let peers: Vec<_> = node.vnic.peers().map(|(k, _)| k).collect();
+            for peer in peers {
+                node.vpn
+                    .add_peer(&mut node.vnic, net, peer, 10001, 10001, net)
+                    .unwrap();
+            }
+            second.push(net);
+        }
+        w.run_for(Duration::SECOND);
+        let (lo, hi) = if w.id(0) < w.id(2) { (0, 2) } else { (2, 0) };
+        let now = w.now;
+        for (i, j) in [(lo, hi), (hi, lo)] {
+            let net = if (i == lo) == lo_on_first {
+                w.nodes[i].net
+            } else {
+                second[i]
+            };
+            let id = w.id(j);
+            let node = &mut w.nodes[i];
+            node.vpn.connect(&node.vnic, now, net, id).unwrap().unwrap();
+        }
+        w.service(lo);
+        w.service(hi);
+        w.run_for(Duration::SECOND);
+        let (ev_lo, ev_hi) = (w.take_events(lo), w.take_events(hi));
+        assert_eq!(
+            (dials(&ev_lo), dials(&ev_hi)),
+            (0, 1),
+            "{ev_lo:?} {ev_hi:?}"
+        );
+        assert!(
+            has_closed(&ev_lo, &ExchangeOutcome::RemoteConnected),
+            "{ev_lo:?}"
+        );
+        let crossed =
+            ExchangeOutcome::Rejected(strims_vpn::peer_exchange::ERR_EXCHANGE_CROSSED.into());
+        assert!(
+            has_closed(&ev_hi, &ExchangeOutcome::Crossed) || has_closed(&ev_hi, &crossed),
+            "{ev_hi:?}"
+        );
+        assert!(w.linked(lo, hi));
+    }
+}
+
+/// An offerer dialing the answer's descriptions starts no second exchange
+/// with the answerer.
+#[test]
+fn an_offerer_dialing_the_answer_starts_no_second_exchange() {
+    let mut w = world(3);
+    chain(&mut w);
+    let (offerer, answerer) = (0, 2);
+    w.nodes[offerer].auto_exchange = false;
+    let (net, now, id) = (w.nodes[offerer].net, w.now, w.id(answerer));
+    let node = &mut w.nodes[offerer];
+    let x = node.vpn.connect(&node.vnic, now, net, id).unwrap().unwrap();
+    // A description the answerer can't dial, so it answers with its own.
+    let nowhere = strims_vpn::LinkDescription {
+        interface: common::SIM_INTERFACE.into(),
+        description: "nowhere".into(),
+    };
+    node.vpn
+        .set_local_descriptions(now, x, Ok(vec![nowhere]))
+        .unwrap();
+    w.service(offerer);
+    w.run_for(Duration::SECOND);
+    let ev = w.take_events(offerer);
+    assert!(
+        ev.iter()
+            .any(|e| matches!(e, Event::DialRemoteDescriptions { exchange, .. } if *exchange == x)),
+        "{ev:?}"
+    );
+    // Dialing the answer.
+    let now = w.now;
+    let node = &mut w.nodes[offerer];
+    assert_eq!(node.vpn.connect(&node.vnic, now, net, id), Ok(None));
 }
 
 /// An outgoing exchange whose answer never comes times out, and a later

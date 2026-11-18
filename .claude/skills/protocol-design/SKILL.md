@@ -32,8 +32,11 @@ between peers; the ppspp codec's format is pinned by
 ## Links and transports
 
 - **One link per neighbour.** vpn refuses an offer from a host that is
-  already a peer, and of two crossed exchanges the lower host id's wins
-  (`crates/strims-vpn/src/peer_exchange.rs`). Node-core gives an exchange
+  already a peer, starts no exchange with a host while one with it is
+  open, offered or answered, and of two crossed exchanges the lower host
+  id's wins (`crates/strims-vpn/src/peer_exchange.rs`).
+  vnic keeps a host's newest link at each end, so two links between a
+  pair can leave none. Node-core gives an exchange
   one candidate per interface its driver has, TCP, WebSocket, WebRTC
   (`State::exchange`), and vnic's `LinkCandidatePool` keeps the first
   that links, in that order. No fix may need a second association (most
