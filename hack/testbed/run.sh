@@ -90,10 +90,11 @@
 # Site::serve_isolated), so the worker's performance clock reads at the
 # browser's isolated grain; otherwise as a plain page. Either way the
 # browsers' prefs stay at their defaults. A node's deadlines go by
-# Date.now(), whole ms in either browser either way: Chromium's is the
-# same on both pages, and isolation likely changes whether Firefox's ms
-# is jittered, so a Firefox node's timers may run otherwise with the log
-# on (hack/sim-farm/matrices/testbed-timers-control.toml compares them).
+# Date.now(), whole ms in either browser either way. A Firefox node runs
+# otherwise on the isolated page: its line timer and writes run less late
+# and its seed's allocation checks slip less often than on a plain page,
+# where a native or Chromium node's don't move
+# (hack/sim-farm/matrices/testbed-timers-control.toml).
 # Natives link to natives over TCP; a browser links to a native over a
 # WebSocket (BROWSER_LINKS=ws) or WebRTC (webrtc), and to a browser over
 # WebRTC. The topology file's header (strims-testbed's topology module)

@@ -70,10 +70,12 @@ crates differ from those the page was built from builds its own page.
   is then served cross-origin isolated, so its worker's clock reads at
   the browser's isolated grain (Chromium's 5 µs, Firefox's 20 µs); the
   profiles' prefs stay at their defaults, as a user's are. Firefox's
-  `Date.now()`, the node's own clock, still returns whole ms, but
-  isolation likely changes whether that ms is jittered, so its timers
-  may run otherwise with the log on (the farm's
-  testbed-timers-control.toml compares them).
+  `Date.now()`, the node's own clock, still returns whole ms, but a
+  Firefox node runs otherwise with the log on: its line timer and
+  writes run less late and its seed's allocation checks slip less often
+  than on a plain page, so its timer shares are an isolated page's (the
+  farm's testbed-timers-control.toml; a native or Chromium node's runs
+  don't move).
 - `LINK_LOG=all` (or node indices) keeps those nodes' links' I/O as it
   happens, as the sim's `STRIMS_SIM_LINK_LOG` does: the tables'
   `link_writes`, `link_reads` and `link_samples`, its twin's for the same

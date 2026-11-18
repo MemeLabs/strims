@@ -564,13 +564,19 @@ and dropped are in `TRIED.md`.
     a host of its own doesn't) once a measure of users' machines says
     how often they come: host-wide stalls drawn per run across its hosts
     at once, a node's own per host.
-  - Before Firefox's shares are trusted, compare its runs with the timer
-    log off and on (the farm's `testbed-timers-control` matrix), judged
-    by the viewers' lag, the seed's drops and its allocation steps beside
-    its line timer and writes (`tick_late_ms`, `write_late_ms`, which read
-    through `Date.now()`, the clock under test): the log serves the page
-    cross-origin isolated, which likely changes whether the whole ms of
-    Firefox's `Date.now()`, the node's clock, is jittered.
+  - Fit Firefox's lateness to a plain page's timers: the timer log
+    serves the page cross-origin isolated, where a Firefox node's line
+    timer and writes run less late, through `Date.now()`, and its seed's
+    allocation checks slip less often than on a plain page, as a user's
+    is served (the farm's `testbed-timers-control` matrix; a native
+    node's and a Chromium node's don't move). Read a plain page's
+    timers by `Date.now()` alone, as its lines' `tick_late_ms` and
+    `write_late_ms` do, and its writers without the timer probe, or with
+    the probe outside the node's worker: the bench's runs keep the probe
+    on, and beside it a Firefox seed's writes run less late and a
+    Chromium seed's later than without it (the control's runs with the
+    log on). A probe on/off comparison at one SECS, a farm run, would say
+    whether the probe is the cause.
   - Find why the twin's seed's allocation checks slip a 100-ms tick more
     often than the testbed's native seed's and less often than its
     browser seeds' (`alloc_step_fit_of`), and fix the sim's side.

@@ -12,12 +12,11 @@
 //!   serves it cross-origin isolated, for a measurement of timers: the
 //!   browsers then read `performance.now()` at their isolated pages'
 //!   finer clamp. Firefox's `Date.now()`, a browser node's own clock
-//!   (strims-wasm's `clock::now`), returns whole ms on either page, but
-//!   isolation likely changes whether that ms is jittered (its 1-ms clamp
-//!   jitters a plain page's), so a Firefox node's deadlines may fall
-//!   otherwise than on a plain page; Chromium's `Date.now()` is the same
-//!   on either. The farm's testbed-timers-control.toml compares Firefox's
-//!   runs with the timer log off and on.
+//!   (strims-wasm's `clock::now`), returns whole ms on either page, but a
+//!   Firefox node runs otherwise on an isolated page: its timers read
+//!   through `Date.now()` run less late than a plain page's (the farm's
+//!   testbed-timers-control.toml, which compares runs with the timer log
+//!   off and on); a Chromium node's run alike on either.
 //! - **Firefox** runs `--headless --no-remote` on a profile with
 //!   [`FIREFOX_PREFS`] ([`firefox_profile`]), which leaves its timer
 //!   precision at its defaults.

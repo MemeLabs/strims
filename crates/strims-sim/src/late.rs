@@ -41,7 +41,12 @@
 //! competing upload, every node of the kind, each run weighed alike, its
 //! first two repeats). The bench (scoring.sql's `timer_fit_of`) holds a
 //! twin of those runs to the testbed's shares, mean and p99, kind by kind
-//! and source by source. A
+//! and source by source. A Firefox node's model is a page's served
+//! cross-origin isolated, as the testbed's timer log serves it, whose
+//! timers run less late than a plain page's (PLAN). The bench's runs keep
+//! the timer probe on, which runs in the node's own worker, and a
+//! browser's writer runs otherwise beside it: without the probe a Firefox
+//! seed's writes run later, a Chromium seed's less late (PLAN). A
 //! browser's timer for a deadline already due resolves at once, as
 //! strims-wasm's `Sleep` and `setTimeout`-free waits do, drawing nothing;
 //! a native node's fires on its next tick, as any. A testbed node's line
