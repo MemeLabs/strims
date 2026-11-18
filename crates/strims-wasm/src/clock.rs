@@ -21,7 +21,11 @@
 //!   timer log alone (`NodeConfig::timer_log`): it is as fine as the
 //!   browser lets a page read it (Chromium clamps it to 100 µs, 5 µs in a
 //!   cross-origin isolated page; Firefox to its `privacy.reduceTimerPrecision`
-//!   prefs' resolution).
+//!   prefs' resolution). The two clocks needn't agree to the millisecond,
+//!   so it adds the least offset at which every reading so far falls at
+//!   or past the millisecond `Date.now()` read just before it: a deadline
+//!   by [`now`]'s clock is then one by its own, and its readings' whole
+//!   milliseconds converge on `Date.now()`'s.
 //! - A [`Sleep`] waits on `setTimeout`. A timer can fire before [`now`]
 //!   reaches its deadline: delays are clamped to 2^31−1 ms, and browsers
 //!   round timers and the clock differently. A sleep woken early arms a
@@ -52,6 +56,10 @@ const MAX_TIMEOUT_MS: i64 = i32::MAX as i64;
 
 thread_local! {
     static YIELDER: Option<Yielder> = Yielder::new();
+
+    /// [`precise_now`]'s offset onto `Date.now()`'s milliseconds, in ms:
+    /// the most any reading so far needed.
+    static ALIGN: Cell<f64> = const { Cell::new(f64::NEG_INFINITY) };
 
     static TURN: Turn = Turn::new();
 }
@@ -88,14 +96,24 @@ pub fn now() -> Time {
     })
 }
 
-/// The current wall time by the high-resolution clock, read now (see the
-/// [module docs](self)); [`now`] where the scope has no `performance`.
+/// The current wall time by the high-resolution clock, read now, on
+/// `Date.now()`'s milliseconds (see the [module docs](self)); [`now`]
+/// where the scope has no `performance`.
 pub fn precise_now() -> Time {
-    match js::scope().performance() {
-        // `as` saturates, and NaN is 0.
-        Some(p) => Time::from_unix_nanos(((p.time_origin() + p.now()) * 1e6) as i64),
-        None => now(),
-    }
+    let Some(p) = js::scope().performance() else {
+        return now();
+    };
+    // `Date.now()` first: it floors a moment at or before the high-resolution
+    // reading, so their difference never overstates the offset.
+    let wall = js_sys::Date::now();
+    let high = p.time_origin() + p.now();
+    let offset = ALIGN.with(|a| {
+        let o = a.get().max(wall - high);
+        a.set(o);
+        o
+    });
+    // `as` saturates, and NaN is 0.
+    Time::from_unix_nanos(((high + offset) * 1e6) as i64)
 }
 
 /// A sleep that is already due: the driver loop's timer before its first
