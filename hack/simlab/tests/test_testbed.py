@@ -14,10 +14,15 @@ their shaper replays.
   Tier     the tier's cells are hostable, honest, of the robust and
            browsers tiers; hack/sim-farm/matrices/testbed-tier is what
            tier_matrices writes
+  Folds    an ingest folds a run's tables from a dir of its own and leaves
+           the run dirs as they were (a tables/ their maker wrote, a
+           read-only dir); tables() writes inside no run dir and into no
+           dir that is there already
   Replays  a run's two shaper replays (simlab.bench), of its every offer
            and of what its link carried, are jobs of its source's cell,
            numbered as an ingest numbers its runs, keyed by their code,
            their source and their offers, and never written over a source
+           or into the run dirs
   ShaperFit  scoring.sql's shaper_fit_of over a fixture: the drops' rules
            read the offered replay, the departures' the carried one, a
            link with slots its delays' distance; a source with two
@@ -216,6 +221,115 @@ class Tier(unittest.TestCase):
                     self.assertEqual(plain((committed / p.name).read_text()), plain(p.read_text()))
 
 
+def snapshot(root):
+    """Every dir and file under `root`: its mode and mtime, and a file's
+    bytes' digest."""
+    import hashlib
+
+    out = {}
+    for p in sorted(Path(root).rglob("*")):
+        st = p.lstat()
+        out[str(p.relative_to(root))] = (st.st_mode, st.st_mtime_ns,
+                                          hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else None)
+    return out
+
+
+def read_only(root):
+    """`root` and what it holds made read-only; undone by the returned
+    function."""
+    paths = [Path(root), *Path(root).rglob("*")]
+    modes = {p: p.stat().st_mode for p in paths}
+    for p in reversed(paths):
+        p.chmod(modes[p] & ~0o222)
+    return lambda: [p.chmod(m) for p, m in modes.items()]
+
+
+# A stand-in for strims-sim's testbed_tables: writes into its tables dir
+# (made where it isn't there, as the binary's create_dir_all does) a
+# `job.json`, its key `tb-` and the run dir's name, its env the knobs of
+# the run dir's `knobs.json` and its `--knob`s, and one packet.
+FAKE_TABLES = """\
+import json, sys
+from pathlib import Path
+run, out = Path(sys.argv[1]), Path(sys.argv[2])
+out.mkdir(parents=True, exist_ok=True)
+env = {**json.loads((run / "knobs.json").read_text()), **dict(a.split("=", 1) for a in sys.argv[4::2])}
+(out / "job.json").write_text(json.dumps({"k": "tb-" + run.name, "sim": "testbed", "test": "calibration_star",
+                                          "env": env, "row": {}}))
+(out / "packets.schema.json").write_text(json.dumps({"columns": [{"name": "node", "type": "BIGINT"},
+                                                                 {"name": "n", "type": "BIGINT"}]}))
+(out / "packets.csv").write_text("node,n\\n0,0\\n")
+"""
+
+
+class Folds(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.d = Path(tmp.name)
+        env = mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(self.d / "lake")})
+        env.start()
+        self.addCleanup(env.stop)
+        self.fake = self.d / "testbed_tables"
+        self.fake.write_text(f"#!{sys.executable}\n{FAKE_TABLES}")
+        self.fake.chmod(0o755)
+        # Two runs of one cell's knobs, as run.sh leaves them; the first
+        # holds tables its maker wrote (another session's build, say).
+        c = next(c for c in suite.TIERS["robust"] if c["name"] == "star-15-10")
+        knobs = {**c["env"], "STRIMS_SIM_HOSTILE": "off", "STRIMS_SIM_CLOCK_SKEW": "off",
+                 "STRIMS_SIM_CAL_SEED_BURST": "3028", "STRIMS_SIM_CAL_VIEWER_BURST": "3028",
+                 "TESTBED_QDISC": "clsact>ifb-netem>root-class"}
+        self.runs = []
+        for name in ("a", "b"):
+            run = self.d / "runs" / name
+            run.mkdir(parents=True)
+            (run / "knobs.json").write_text(json.dumps(knobs))
+            (run / "node-0.jsonl").write_text('{"rec": 1}\n')
+            self.runs.append(run)
+        theirs = self.runs[0] / "tables"
+        theirs.mkdir()
+        (theirs / "job.json").write_text('{"k": "tb-theirs"}\n')
+        (theirs / "seconds.csv").write_text("sec\n0\n")
+
+    def test_a_fold_leaves_its_run_dirs_as_they_were(self):
+        before = snapshot(self.d / "runs")
+        src, jobs = testbed.ingest(self.runs, "t", binary=self.fake, knobs={"STRIMS_SIM_ARRIVALS": "trickle"})
+        self.assertEqual(snapshot(self.d / "runs"), before)
+        self.assertEqual(src, "testbed/t")
+        # Each a job of its knobs' cell (the --knob's with them), numbered
+        # in it, `run` the dir it was read from.
+        self.assertEqual([(j["k"], j["run"], j["seed"]) for j in jobs],
+                         [("tb-a", str(self.runs[0]), 1), ("tb-b", str(self.runs[1]), 2)])
+        self.assertEqual(jobs[0]["cell"], jobs[1]["cell"])
+        self.assertTrue(all("dir" not in j and j["env"]["STRIMS_SIM_ARRIVALS"] == "trickle" for j in jobs))
+        manifest = json.loads((self.d / "lake" / "cache" / "testbed" / "t" / "manifest.json").read_text())
+        self.assertEqual((manifest["keys"], manifest["tables"]["packets"]["rows"]), (["tb-a", "tb-b"], 2))
+        # The fold's own dirs went with it.
+        self.assertEqual(list((self.d / "lake" / "tmp").iterdir()), [])
+
+    def test_a_fold_reads_a_read_only_run_dir(self):
+        self.addCleanup(read_only(self.d / "runs"))
+        before = snapshot(self.d / "runs")
+        _, jobs = testbed.ingest(self.runs, "t", binary=self.fake)
+        self.assertEqual([(j["k"], j["cell"]) for j in jobs], [("tb-a", "robust:star-15-10@root-class"),
+                                                               ("tb-b", "robust:star-15-10@root-class")])
+        self.assertEqual(snapshot(self.d / "runs"), before)
+
+    def test_tables_go_into_a_new_dir_outside_the_run(self):
+        run = self.runs[1]
+        before = snapshot(self.d / "runs")
+        # Inside the run dir, or a dir that is there (another run's, one
+        # holding the run).
+        for out, err in ((run / "tables", ValueError), (run / "x" / "tables", ValueError),
+                         (self.runs[0], FileExistsError), (self.d, FileExistsError)):
+            with self.subTest(out=out), self.assertRaises(err):
+                testbed.tables(run, out, binary=self.fake)
+        self.assertEqual(snapshot(self.d / "runs"), before)
+        out = testbed.tables(run, self.d / "out" / "b", binary=self.fake)
+        self.assertEqual(json.loads((out / "job.json").read_text())["k"], "tb-b")
+        self.assertEqual(snapshot(self.d / "runs"), before)
+
+
 # A stand-in for strims-sim's shaper_replay: writes `<tables dir>/job.json`
 # as it does, its env the knobs of the run dir's `knobs.json` and its key
 # the dir's name, and one packet a node of its `--node`s.
@@ -255,6 +369,10 @@ class Replays(unittest.TestCase):
                 (d / name).mkdir()
                 (d / name / "knobs.json").write_text(json.dumps(k))
                 runs.append(d / name)
+            # A replay its maker wrote into the run dir stays theirs.
+            (d / "tb-a" / "replay").mkdir()
+            (d / "tb-a" / "replay" / "job.json").write_text('{"k": "rp-theirs"}\n')
+            before = {r.name: snapshot(r) for r in runs}
             src, jobs = bench.replays(runs, "r", binary=fake, nodes=[0, 3])
             self.assertEqual(src, "testbed/r")
             self.assertEqual([(j["env"]["SOURCE_K"], j["env"]["REPLAY_OFFERS"]) for j in jobs],
@@ -270,9 +388,11 @@ class Replays(unittest.TestCase):
             self.assertTrue(jobs[4]["cell"].startswith("tb-") and jobs[4]["cell"] == jobs[5]["cell"])
             self.assertTrue(all(j["k"].startswith("rp-") and j["k"] != "rp-" + j["env"]["SOURCE_K"] for j in jobs))
             self.assertEqual(len({j["k"] for j in jobs}), 6)
-            self.assertTrue((d / "tb-a" / "replay" / "packets.csv").exists())
-            self.assertTrue((d / "tb-a" / "replay-carried" / "packets.csv").exists())
-            self.assertTrue((d / "cache" / "testbed" / "r").exists())
+            self.assertEqual({r.name: snapshot(r) for r in runs}, before)
+            self.assertEqual([j["run"] for j in jobs], [str(r) for r in runs for _ in bench.OFFERS])
+            manifest = json.loads((d / "cache" / "testbed" / "r" / "manifest.json").read_text())
+            self.assertEqual(manifest["tables"]["packets"]["rows"], 12)
+            self.assertEqual(list((d / "tmp").iterdir()), [])
             # Another binary keys apart, and the source isn't written over.
             fake.write_text(fake.read_text() + "\n# another build\n")
             with self.assertRaisesRegex(FileExistsError, "testbed/r exists"):

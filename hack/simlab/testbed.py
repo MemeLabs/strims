@@ -20,11 +20,17 @@ class, DEFAULT_LINK), `<cell>@<tree>` with the qdisc tree that shaped it
 of no tier cell, or with another TESTBED_ setting, takes a cell named for
 its knobs (`tb-<hash>`).
 
-  tables(run_dir, binary=None, knobs=None) -> Path
-                 the run's tables dir (<run_dir>/tables), written by the
+  tables(run_dir, out, binary=None, knobs=None) -> Path
+                 the run's tables, written into `out` (a dir not there
+                 yet, outside the run dir: fresh_out) by the
                  testbed_tables binary (BINARY's, by default this
                  checkout's release build, where cargo writes it:
                  $CARGO_TARGET_DIR, else target/), `knobs` added to its twin's
+  fresh_out(run_dir, out) -> Path
+                 `out`, refused inside the run dir or where it exists
+  work_dir() -> Path
+                 (a context) a dir of the fold's own under the cache's
+                 tmp/, removed after
   cells_of(envs) -> [str], cell_of(env) -> str
                  each env's cell (see above; cell_sql's keying)
   ingest(run_dirs, name, binary=None, arm="testbed", knobs=None,
@@ -33,7 +39,7 @@ its knobs (`tb-<hash>`).
                  testbed/<name>; each run a job of its knobs' cell
                  (cell_of's) and `arm`, its seed its place among
                  the runs of its cell (1, 2, ...), as a twin's seeds pair
-                 with it
+                 with it, `run` its run dir
   twins(src, binary, name, seeds=8, arm="twin", env=None, kind="one",
         side_arm="one", replace=False) -> (src, [job])
                  each cell's twin of the runs testbed_side(src, kind,
@@ -56,12 +62,19 @@ its knobs (`tb-<hash>`).
                  its cell, its arrivals' knob and each repeat's joins
                  (run_env: strims-sim's testbed::knobs_of the other way)
 
+A fold only reads a run dir: the dir is its maker's (a run.sh caller's,
+another session's, a farm run's local copy under target/sim-farm/*/runs),
+and a tables/ in it its maker's too. The fold writes each run's tables in
+a dir of its own under the cache's tmp/ (work_dir), folds them from
+there and removes it, so a run dir comes out of a fold as it went in.
+
 hack/sim-db/simdb.py testbed, twin and testbed-tier are its command line;
 `simdb.py index` then takes a source in. A testbed source is a local
 experiment (exp_id its source), its arm `arm`; a farm run of the tier's
 matrices puts its runs in the cache as farm sources (`simdb.py pull`).
 """
 
+import contextlib
 import hashlib
 import json
 import math
@@ -97,11 +110,36 @@ JOB_KNOBS = ("STRIMS_SIM_JOB", "STRIMS_SIM_SERIES", "STRIMS_SIM_SEED", "STRIMS_S
 MEASURED = ("STRIMS_SIM_CAL_COMPETE_MS",)
 
 
-def tables(run_dir, binary=None, knobs=None):
-    """The run's tables, written into <run_dir>/tables by testbed_tables."""
+def fresh_out(run_dir, out):
+    """`out` as a reader of `run_dir` may write it: refused inside the run
+    dir, which its maker owns, or where it is there already (the reader
+    writes into no dir it didn't make)."""
+    run_dir, out = Path(run_dir), Path(out)
+    if out.resolve().is_relative_to(run_dir.resolve()):
+        raise ValueError(f"{out}: inside the run dir {run_dir}, which a fold only reads")
+    if out.exists():
+        raise FileExistsError(f"{out} exists: a run's tables go into a dir of their own")
+    return out
+
+
+@contextlib.contextmanager
+def work_dir(prefix="testbed-"):
+    """A dir of the fold's own under the cache's tmp/, removed after: the
+    runs' tables and the store a fold writes on its way to the cache."""
+    tmp = store_host.cache_root() / "tmp"
+    tmp.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix=prefix, dir=tmp))
+    try:
+        yield work
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def tables(run_dir, out, binary=None, knobs=None):
+    """The run's tables, written into `out` (fresh_out's) by testbed_tables,
+    which only reads the run dir."""
     run_dir = Path(run_dir)
-    out = run_dir / "tables"
-    shutil.rmtree(out, ignore_errors=True)
+    out = fresh_out(run_dir, out)
     binary = Path(binary or BINARY)
     if not binary.exists():
         raise FileNotFoundError(f"no testbed_tables at {binary}: cargo build --release -p strims-sim "
@@ -204,19 +242,24 @@ def cell_of(env):
 def ingest(run_dirs, name, binary=None, arm="testbed", knobs=None, replace=False):
     """The runs folded into the cache as source testbed/<name> (see the
     module docs), each a job of its knobs' cell (cells_of, as the index
-    names it); returns the source and the jobs. An existing source is
-    refused unless `replace` (its runs and seeds would go)."""
+    names it), its tables written in the fold's work_dir; returns the
+    source and the jobs, each with `run`, its run dir. An existing source
+    is refused unless `replace` (its runs and seeds would go)."""
     src = f"testbed/{name}"
     refuse_existing(src, replace)
     jobs, seeds = [], {}
-    for d in run_dirs:
-        out = tables(d, binary, knobs)
-        job = json.loads((out / "job.json").read_text())
-        jobs.append({**job, "dir": str(out), "arm": arm, "at": None, "wall_s": None, "rss_mb": None})
-    for j, c in zip(jobs, cells_of(j["env"] for j in jobs)):
-        seeds[c] = seeds.get(c, 0) + 1
-        j.update(cell=c, seed=seeds[c])
-    export(src, jobs)
+    with work_dir() as work:
+        for i, d in enumerate(run_dirs):
+            out = tables(d, work / str(i), binary, knobs)
+            job = json.loads((out / "job.json").read_text())
+            jobs.append({**job, "dir": str(out), "run": str(d), "arm": arm, "at": None, "wall_s": None,
+                         "rss_mb": None})
+        for j, c in zip(jobs, cells_of(j["env"] for j in jobs)):
+            seeds[c] = seeds.get(c, 0) + 1
+            j.update(cell=c, seed=seeds[c])
+        export(src, jobs)
+    for j in jobs:
+        del j["dir"]
     return src, jobs
 
 
@@ -227,15 +270,12 @@ def refuse_existing(src, replace):
 
 
 def export(src, jobs):
-    """`jobs` folded into a store and exported to the cache as `src`."""
-    (store_host.cache_root() / "tmp").mkdir(parents=True, exist_ok=True)
-    work = Path(tempfile.mkdtemp(prefix="testbed-", dir=store_host.cache_root() / "tmp"))
-    try:
+    """`jobs` folded into a store in a work_dir and exported to the cache
+    as `src`."""
+    with work_dir() as work:
         db = work / "store.duckdb"
         store_host.fold(db, jobs, src)
         store_host.export(db, store_host.cache_root() / "cache" / src)
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
 
 
 def twin_cells(rows):

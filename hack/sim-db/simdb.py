@@ -519,7 +519,7 @@ def cmd_testbed(a):
     knobs = dict(kv.split("=", 1) for kv in a.knob or [])
     src, jobs = testbed.ingest(a.run_dirs, a.name, binary=a.bin, arm=a.arm, knobs=knobs, replace=a.replace)
     for j in jobs:
-        print(f"{src} {j['k']} {j['cell']} {j['arm']} seed {j['seed']}  {j['dir']}")
+        print(f"{src} {j['k']} {j['cell']} {j['arm']} seed {j['seed']}  {j['run']}")
     print("simdb.py index takes them in")
 
 
@@ -530,7 +530,7 @@ def cmd_replay(a):
     src, jobs = bench.replays(a.run_dirs, a.name, binary=a.bin, arm=a.arm, nodes=a.node, seed=a.seed,
                               knobs=knobs, replace=a.replace)
     for j in jobs:
-        print(f"{src} {j['k']} {j['cell']} {j['arm']} seed {j['seed']} of {j['env']['SOURCE_K']}  {j['dir']}")
+        print(f"{src} {j['k']} {j['cell']} {j['arm']} seed {j['seed']} of {j['env']['SOURCE_K']}  {j['run']}")
     print("simdb.py index takes them in; shaper_fit_of scores them against their sources")
 
 
@@ -660,7 +660,7 @@ def main():
     g.add_argument("--days", type=float, default=7)
     t = sub.add_parser("testbed", help="testbed runs (hack/testbed/run.sh's out dirs) into the cache as source "
                        "testbed/NAME, each a run of its twin's cell (simlab.testbed)")
-    t.add_argument("run_dirs", nargs="+")
+    t.add_argument("run_dirs", nargs="+", help="the runs' out dirs, which the fold only reads")
     t.add_argument("--name", required=True, help="the source's name: testbed/NAME")
     t.add_argument("--replace", action="store_true", help="write over an existing testbed/NAME (its runs go)")
     t.add_argument("--arm", default="testbed")
@@ -671,7 +671,7 @@ def main():
                        "model (the shaper bench: strims-sim's shaper_replay) into the cache as source testbed/NAME: "
                        "a run's every offer (arm replay) and what its link carried (replay:carried), each a job of "
                        "its source's cell, env SOURCE_K its source's key and REPLAY_OFFERS (simlab.bench)")
-    r.add_argument("run_dirs", nargs="+", help="the runs' out dirs, in the order their ingest took them")
+    r.add_argument("run_dirs", nargs="+", help="the runs' out dirs, in the order their ingest took them; only read")
     r.add_argument("--name", required=True, help="the source's name: testbed/NAME")
     r.add_argument("--replace", action="store_true", help="write over an existing testbed/NAME")
     r.add_argument("--arm", default="replay", help="replay, or replay:<variant> (the carried replays' arm it and "

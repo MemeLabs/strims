@@ -101,8 +101,10 @@ crates differ from those the page was built from builds its own page.
   `CARGO_PROFILE_RELEASE_WASM_STRIP=false`.
 - **Into the lake.** `simdb.py testbed OUT... --name NAME` writes each
   run's tables (strims-sim's `testbed_tables` example: `cargo build
-  --release -p strims-sim --example testbed_tables`) and folds them into
-  the cache as source testbed/NAME, each run a job of sim `testbed`.
+  --release -p strims-sim --example testbed_tables`) in a work dir of its
+  own and folds them into the cache as source testbed/NAME, each run a
+  job of sim `testbed`. It and `simdb.py replay` only read OUT, which
+  stays its maker's (another session's, a farm run's runs/ copy).
   `simdb.py index` then takes them in, naming each run's cell by its
   knobs (`<tier>:<cell>@<qdisc tree>`, else `tb-<hash>`), and the
   tables, the verdicts, the scoring macros and the views read a testbed
