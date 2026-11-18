@@ -109,17 +109,23 @@ pub struct HostSpec {
     /// software on the host, which share its uplink with the node's
     /// traffic (see the WAN scheduler).
     pub competing: Vec<Competing>,
-    /// From this time in the run, the host dials its WebRTC links one at a
-    /// time in link order, each once, as the testbed's harness makes a
-    /// browser's links at `--join-at` (each peer exchange awaited: a full
-    /// mesh of 16 takes it about 8 s); the links still down are then
-    /// redialed together. `None`: every link at once, from the host's
-    /// start.
-    pub serial_links: Option<Duration>,
-    /// When the host boots: its node starts, joins its swarms and dials its
-    /// links then ([`Scenario::arrivals`] sets it for the first swarm's
-    /// viewers). A viewer that arrives joins at the live edge, as a player
-    /// does: its swarms read from the newest chunk its peers have
+    /// The testbed harness's join (`--join-at`): from this time in the run,
+    /// or the host's arrival if later ([`HostSpec::arrive_at`]), the host
+    /// dials its links to its swarms' hosts, all at once in link order, as
+    /// the harness makes a node's links at its join (strims-testbed's
+    /// topology module); its links to hosts no swarm has (a signalling
+    /// relay) from its boot. Its node boots with the run (or at its
+    /// restart), ahead of its arrival, as the harness starts every node
+    /// before the stream, so a relay links it to its network before its
+    /// join; it joins its swarms at its arrival. A link still down after
+    /// its dial is redialed with the rest ([`Scenario::redial_every`]).
+    /// `None`: the host boots at its arrival and dials every link then.
+    pub links_at: Option<Duration>,
+    /// When the host arrives: its node starts (unless
+    /// [`HostSpec::links_at`] booted it already), joins its swarms and
+    /// dials its links then ([`Scenario::arrivals`] sets it for the first
+    /// swarm's viewers). A viewer that arrives joins at the live edge, as
+    /// a player does: its swarms read from the newest chunk its peers have
     /// (`DeliveryMode::LOW_LATENCY`), and a media swarm's reader moves back
     /// to its GOP's start within [`ARRIVAL_REWIND`], as egress joins, where
     /// reading from the stream's start would put the backlog of a live
@@ -899,6 +905,11 @@ impl Scenario {
             || self.hosts.iter().any(|h| h.arrive_at.is_some())
     }
 
+    /// Whether `h` takes part in any of the swarms.
+    pub fn in_swarms(&self, h: HostIx) -> bool {
+        self.swarms.iter().any(|s| s.member(h))
+    }
+
     /// Whether a run of the scenario reaches time `at`: a fault at its
     /// duration or past it is one the run never applies
     /// (Report::skipped_faults), on a testbed run's report as on a sim's.
@@ -937,7 +948,7 @@ impl Scenario {
             up_steps: Vec::new(),
             up_capacity: None,
             competing: Vec::new(),
-            serial_links: None,
+            links_at: None,
             arrive_at: None,
             link_spec: None,
         });
@@ -1043,10 +1054,16 @@ impl Scenario {
     /// on the relay's network and links to the hosts it finds there
     /// ([`Scenario::discovery`]). The scenario's other links go. Peer
     /// exchanges carry what a host can be reached by: WebRTC sessions, or
-    /// its listeners.
+    /// its listeners. A host boots at its arrival, as a deployed node
+    /// starts when its user opens it: the testbed harness's join
+    /// ([`HostSpec::links_at`]), which makes a fixed topology's links, goes
+    /// with them.
     pub fn organic(&mut self) {
         let relay = self.discovering();
         self.links.retain(|l| l.to == relay || l.from == relay);
+        for h in &mut self.hosts {
+            h.links_at = None;
+        }
     }
 
     /// [`Scenario::organic`]'s discovery beside the scenario's links, which

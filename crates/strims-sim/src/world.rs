@@ -624,12 +624,14 @@ impl World {
         })
     }
 
+    /// Registers `h`'s new incarnation: its node, networks and, unless it
+    /// joins them later ([`World::register_swarms`]), its swarms.
     pub fn register(
         &self,
         h: HostIx,
         node: &Node,
         nets: Vec<Option<NetworkId>>,
-        swarms: Vec<Option<SwarmKey>>,
+        swarms: Option<&[Option<SwarmKey>]>,
     ) {
         let id = node.host_id();
         let inc = self.record(|st| {
@@ -639,14 +641,28 @@ impl World {
             hs.host_id = Some(id);
             hs.nets = nets;
             hs.net_peers.clear();
-            hs.first_swarm
-                .push((hs.incarnation, swarms.first().copied().flatten()));
-            hs.swarms = swarms;
+            if let Some(swarms) = swarms {
+                hs.first_swarm
+                    .push((hs.incarnation, swarms.first().copied().flatten()));
+                hs.swarms = swarms.to_vec();
+            }
             Some(hs.incarnation)
         });
         if let Some(inc) = inc {
             self.log(self.name(h), format!("up incarnation {inc}"));
         }
+    }
+
+    /// Registers the swarms `h`'s incarnation joined after its node
+    /// ([`HostSpec::links_at`](crate::HostSpec::links_at)'s early boot).
+    pub fn register_swarms(&self, h: HostIx, swarms: &[Option<SwarmKey>]) {
+        self.record(|st| {
+            if let Some(hs) = st.hosts.get_mut(h) {
+                hs.first_swarm
+                    .push((hs.incarnation, swarms.first().copied().flatten()));
+                hs.swarms = swarms.to_vec();
+            }
+        });
     }
 
     /// Registers a host id as soon as the node exists.

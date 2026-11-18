@@ -10,10 +10,13 @@
 //! same networks and swarms with a new host key, its seed continues the
 //! stream from the current time, and its viewers rejoin at the live edge
 //! ([`joins_live`]) and keep accumulating into the same statistics. A host
-//! with [`HostSpec::arrive_at`] starts at its arrival, and one that departs
+//! with [`HostSpec::arrive_at`] starts at its arrival, or with the run
+//! and joins its swarms at its arrival where the testbed harness's join
+//! ([`HostSpec::links_at`]) boots it early, and one that departs
 //! gracefully leaves through [`depart`].
 //!
 //! [`HostSpec::arrive_at`]: crate::HostSpec::arrive_at
+//! [`HostSpec::links_at`]: crate::HostSpec::links_at
 //!
 //! Every node's stores keep each chunk of a stream as its frames' sequence
 //! number and write time ([`FrameCodec`]), or a media chunk's
@@ -94,7 +97,12 @@ fn joins_live(w: &World, h: HostIx, inc: u32, spec: &SwarmSpec) -> bool {
 }
 
 pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
-    if let Some(at) = w.spec.hosts.get(h).and_then(|s| s.arrive_at)
+    let arrive = w.spec.hosts.get(h).and_then(|s| s.arrive_at);
+    // A host with the harness's join boots with the run, or at its restart
+    // (HostSpec::links_at).
+    let boots_early = w.spec.hosts.get(h).is_some_and(|s| s.links_at.is_some());
+    if !boots_early
+        && let Some(at) = arrive
         && at > sim_now()
     {
         tokio::time::sleep(at - sim_now()).await;
@@ -199,15 +207,71 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         let transfers = transfers.clone();
         async move { transfers.run().await }
     });
+    // Booted ahead of its arrival: it links to its network now (the
+    // supervisor holds its swarms' links for its join), and joins its
+    // swarms at its arrival.
+    let ahead = boots_early && arrive.is_some_and(|at| at > sim_now());
+    if ahead {
+        w.register(h, &node, nets.clone(), None);
+        let services =
+            PeerServices::new(node.clone()).with(Rc::new(SimTransfers(transfers.clone())));
+        spawn_local(event_task(
+            w.clone(),
+            h,
+            node.clone(),
+            events,
+            nets.clone(),
+            services,
+            pool,
+        ));
+        spawn_tasks(&w, h, &node);
+        if let Some(at) = arrive {
+            tokio::time::sleep(at.saturating_sub(sim_now())).await;
+        }
+        let (held, swarms) = join_swarms(&w, h, inc, &node, index, &transfers).await?;
+        w.register_swarms(h, &swarms);
+        spawn_departure(&w, h, &node, &transfers, held);
+        std::future::pending::<()>().await;
+        return Ok(());
+    }
+    let (held, swarms) = join_swarms(&w, h, inc, &node, index, &transfers).await?;
+    w.register(h, &node, nets.clone(), Some(&swarms));
+    spawn_departure(&w, h, &node, &transfers, held);
+    let services = PeerServices::new(node.clone()).with(Rc::new(SimTransfers(transfers)));
+    spawn_local(event_task(
+        w.clone(),
+        h,
+        node.clone(),
+        events,
+        nets,
+        services,
+        pool,
+    ));
+    spawn_tasks(&w, h, &node);
+    std::future::pending::<()>().await;
+    Ok(())
+}
+
+/// Host `h`'s swarms, joined: each created (a writer task at its seed) or
+/// added (a reader task at a viewer), and its transfer published. Returns
+/// the transfers it holds and each scenario swarm's key at the host.
+async fn join_swarms(
+    w: &Rc<World>,
+    h: HostIx,
+    inc: u32,
+    node: &Node,
+    index: Option<NetworkId>,
+    transfers: &TransferControl<SimTransferHost, NodeTimer<SimClock>>,
+) -> Result<(Vec<(TransferId, SwarmKey)>, Vec<Option<SwarmKey>>), Box<dyn std::error::Error>> {
     let mut swarms: Vec<Option<SwarmKey>> = vec![None; w.spec.swarms.len()];
     let mut held: Vec<(TransferId, SwarmKey)> = Vec::new();
     for (s, spec) in w.spec.swarms.iter().enumerate() {
         let key = w.swarm_keys.get(s).ok_or("swarm key")?;
-        let live = joins_live(&w, h, inc, spec);
+        let live = joins_live(w, h, inc, spec);
         let swarm = if spec.seed == h {
             let (swarm, _, writer) = node
                 .create_swarm(WriterOptions {
-                    swarm_options: swarm_options(&w, s, spec, live),
+                    swarm_options: swarm_options(w, s, spec, live),
                     key: key.clone(),
                 })
                 .await?;
@@ -233,7 +297,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
             swarm
         } else if spec.member(h) {
             let swarm = node
-                .add_swarm(SwarmId::new(&key.public), swarm_options(&w, s, spec, live))
+                .add_swarm(SwarmId::new(&key.public), swarm_options(w, s, spec, live))
                 .await?;
             if spec.viewers.contains(&h) {
                 spawn_local(reader_task(w.clone(), h, s, node.clone(), swarm, live));
@@ -249,8 +313,17 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
             *slot = Some(swarm);
         }
     }
+    Ok((held, swarms))
+}
 
-    w.register(h, &node, nets.clone(), swarms);
+/// Host `h`'s graceful departure, if it has one ([`depart`]).
+fn spawn_departure(
+    w: &Rc<World>,
+    h: HostIx,
+    node: &Node,
+    transfers: &TransferControl<SimTransferHost, NodeTimer<SimClock>>,
+    held: Vec<(TransferId, SwarmKey)>,
+) {
     if let Some((at, Departure::Graceful)) = w.spec.departure(h) {
         spawn_local(depart(
             w.clone(),
@@ -261,25 +334,18 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
             at,
         ));
     }
-    let services = PeerServices::new(node.clone()).with(Rc::new(SimTransfers(transfers)));
-    spawn_local(event_task(
-        w.clone(),
-        h,
-        node.clone(),
-        events,
-        nets,
-        services,
-        pool,
-    ));
+}
+
+/// Host `h`'s fault control, if a fault needs it ([`control`]), and its
+/// link supervisor.
+fn spawn_tasks(w: &Rc<World>, h: HostIx, node: &Node) {
     if w.spec.faults.iter().any(|f| match f.fault {
         Fault::Uplink(x, _) | Fault::Connect { from: x, .. } => x == h,
         _ => false,
     }) {
         spawn_local(control(w.clone(), h, node.clone()));
     }
-    spawn_local(supervisor(w.clone(), h, node));
-    std::future::pending::<()>().await;
-    Ok(())
+    spawn_local(supervisor(w.clone(), h, node.clone()));
 }
 
 /// Publishes the host's hash table record and peer index entry at
@@ -525,9 +591,10 @@ async fn event_task(
 }
 
 /// Dials this host's links that are down, now and every
-/// `Scenario::redial_every`. It is a run's only reconnect: links heal
-/// after partitions and restarts through it. A host that departed dials
-/// nothing, and no host dials it.
+/// `Scenario::redial_every`, its links to its swarms' hosts from its join
+/// on where it has one ([`HostSpec::links_at`](crate::HostSpec), [`join_links`]).
+/// It is a run's only reconnect: links heal after partitions and restarts
+/// through it. A host that departed dials nothing, and no host dials it.
 async fn supervisor(w: Rc<World>, h: HostIx, node: Node) {
     let links: Vec<(usize, LinkSpec)> = w
         .spec
@@ -540,16 +607,20 @@ async fn supervisor(w: Rc<World>, h: HostIx, node: Node) {
     if links.is_empty() {
         return;
     }
-    let serial = w.spec.hosts.get(h).and_then(|s| s.serial_links);
-    let serial_done = Rc::new(Cell::new(serial.is_none()));
-    if let Some(at) = serial {
-        spawn_local(serial_links(
+    let at = w
+        .spec
+        .hosts
+        .get(h)
+        .and_then(|s| Some(s.links_at?.max(s.arrive_at.unwrap_or_default())));
+    let joined = Rc::new(Cell::new(at.is_none()));
+    if let Some(at) = at {
+        spawn_local(join_links(
             w.clone(),
             h,
             node.clone(),
             at,
             links.clone(),
-            serial_done.clone(),
+            joined.clone(),
         ));
     }
     loop {
@@ -560,7 +631,7 @@ async fn supervisor(w: Rc<World>, h: HostIx, node: Node) {
             return;
         };
         for &(l, spec) in &links {
-            if !serial_done.get() && matches!(spec.transport, Transport::WebRtc(_)) {
+            if !joined.get() && w.spec.in_swarms(spec.to) {
                 continue;
             }
             if w.departed(spec.to) {
@@ -631,10 +702,11 @@ async fn control(w: Rc<World>, h: HostIx, node: Node) {
     }
 }
 
-/// The serial pass of [`HostSpec::serial_links`](crate::HostSpec): from
-/// `at`, each WebRTC link in order, dialed once (a peer at its budget
-/// refuses the exchange); then the supervisor redials those still down.
-async fn serial_links(
+/// The join of [`HostSpec::links_at`](crate::HostSpec): at `at`, a dial
+/// of each of `links` to a swarm's host that is down, all at once in link
+/// order, none awaited, as the testbed's harness makes a node's links at
+/// its join; then the supervisor redials those still down.
+async fn join_links(
     w: Rc<World>,
     h: HostIx,
     node: Node,
@@ -642,22 +714,25 @@ async fn serial_links(
     links: Vec<(usize, LinkSpec)>,
     done: Rc<Cell<bool>>,
 ) {
-    let now = crate::world::sim_now();
+    let now = sim_now();
     if at > now {
         tokio::time::sleep(at - now).await;
     }
+    if w.departed(h) {
+        return;
+    }
+    let Ok(peers) = node.peers().await else {
+        return;
+    };
     for (l, spec) in links {
-        if !matches!(spec.transport, Transport::WebRtc(_)) {
+        if !w.spec.in_swarms(spec.to) || w.departed(spec.to) {
             continue;
         }
         let Some(key) = w.profile_key(spec.to) else {
             continue;
         };
-        let Ok(peers) = node.peers().await else {
-            return;
-        };
         if !peers.iter().any(|p| p.profile_key == key.public) && w.start_dial(h, l) {
-            dial(w.clone(), h, l, spec, node.clone()).await;
+            spawn_local(dial(w.clone(), h, l, spec, node.clone()));
         }
     }
     done.set(true);

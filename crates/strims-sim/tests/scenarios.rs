@@ -3600,7 +3600,7 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
         viewer_delay_ms: 10,
         secs,
         join_at_ms: None,
-        serial_links: false,
+        harness_links: false,
         slow_down_kbit: None,
         topology: Some(full_mesh(viewers)),
         seed_up_steps: Vec::new(),
@@ -3706,6 +3706,110 @@ fn a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry(
             }
             Ok(())
         },
+    );
+}
+
+/// The twin's viewers make their links as the testbed's harness does
+/// (`HostSpec::links_at`): their nodes boot with the run, a browser's link
+/// to the signalling relay comes up before its join, and each viewer links
+/// to every host of its swarm it dials (the seed and the viewers before
+/// it) at its own join, its `links_at` or its arrival if later, the dials
+/// all started at once. Every path takes one delay either way and is
+/// quiet before the stream starts, so dials started together link within
+/// half a dial's length (its first link's time from its join) of each
+/// other, where dials made one at a time link a dial's length apart; and a
+/// viewer that arrives organically (`Scenario::organic`) boots at its
+/// arrival, its relay link no sooner.
+#[test]
+fn the_twins_viewers_link_their_swarm_at_their_join() {
+    for browsers in [false, true] {
+        let mut c = collapse_case(3, 10, 3);
+        c.harness_links = true;
+        c.seed_delay_ms = c.viewer_delay_ms;
+        // Before the stream's start (5 s), each at its own time; a browser
+        // v2 arrives into the stream.
+        let joins: [u64; 3] = [2000, 3000, if browsers { 6500 } else { 4000 }];
+        let name = format!(
+            "harness_links_{}",
+            if browsers { "browsers" } else { "native" }
+        );
+        sweep_n(
+            &name,
+            1,
+            |seed| {
+                let mut s = calibration_star_scenario(seed, &c);
+                for (i, &ms) in joins.iter().enumerate() {
+                    let h = &mut s.hosts[i + 1];
+                    h.links_at = Some(Duration::from_millis(ms.min(4000)));
+                    if ms > 5000 {
+                        h.arrive_at = Some(Duration::from_millis(ms));
+                    }
+                }
+                // Chromium's data channels, as the twins' browsers run them:
+                // str0m over UDP doesn't replay under the window model.
+                if browsers {
+                    s.over_webrtc(&[Some(SctpProfile::CHROMIUM)]);
+                }
+                s
+            },
+            |r| {
+                for (i, &join) in joins.iter().enumerate() {
+                    let v = format!("v{i}");
+                    // Its links up, by peer: (ms, peer).
+                    let ups: Vec<(u64, &str)> = r
+                        .trace
+                        .iter()
+                        .filter_map(|l| {
+                            let (ms, rest) = l.split_once(' ')?;
+                            let rest = rest.strip_prefix(v.as_str())?.strip_prefix(" peer+ ")?;
+                            let peer = rest.split_whitespace().nth(1)?;
+                            Some((ms.parse().ok()?, peer))
+                        })
+                        .collect();
+                    let dialed: Vec<String> = std::iter::once("seed".to_owned())
+                        .chain((0..i).map(|j| format!("v{j}")))
+                        .collect();
+                    let swarm: Vec<u64> = ups
+                        .iter()
+                        .filter(|(_, p)| dialed.iter().any(|d| d == p))
+                        .map(|&(t, _)| t)
+                        .collect();
+                    if swarm.len() != dialed.len() || swarm.iter().any(|&t| t < join) {
+                        return Err(format!(
+                            "{v}'s links to {dialed:?} up at {swarm:?}, joining at {join}"
+                        ));
+                    }
+                    let (first, last) =
+                        (*swarm.iter().min().unwrap(), *swarm.iter().max().unwrap());
+                    let spread = last - first;
+                    if join < 5000 && 2 * spread >= first - join {
+                        return Err(format!(
+                            "{v}'s links to {dialed:?} up {spread} ms apart: dialed one at a time"
+                        ));
+                    }
+                    let relay = ups.iter().find(|&&(_, p)| p == "signal").map(|&(t, _)| t);
+                    if browsers && relay.is_none_or(|t| t >= join) {
+                        return Err(format!(
+                            "{v}'s relay link up at {relay:?}, joining at {join}"
+                        ));
+                    }
+                }
+                Ok(())
+            },
+        );
+    }
+    // Organically, a viewer boots at its arrival: the harness's join goes
+    // with the scenario's links.
+    let mut c = collapse_case(2, 10, 3);
+    c.harness_links = true;
+    c.join_at_ms = Some(1500);
+    let mut s = calibration_star_scenario(1, &c);
+    s.organic();
+    assert!(s.hosts.iter().all(|h| h.links_at.is_none()));
+    assert_eq!(
+        s.hosts[1].arrive_at,
+        Some(Duration::from_millis(6500)),
+        "the arrival stays"
     );
 }
 
