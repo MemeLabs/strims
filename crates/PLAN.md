@@ -622,6 +622,11 @@ and dropped are in `TRIED.md`.
     The same item takes the other peer services a deployed node's links
     carry from their start: replication, bootstrap's `GetPublishEnabled`
     (one call a link) and the transfers' discovery.
+  - Fit how fast the window model's dcSCTP releases a burst's chunks from
+    a channel's buffered amount (the SCTP bench's next step,
+    `sctp_fit_of` against quiet hosts' runs with the SCTP log off). Look
+    at the window's room past the flight, `max_burst` and the uplink's
+    admission, with the bench's offered captures.
   - Browser timing tables (`timers`, `channel_writes`,
     `channel_buffered`, `channel_reads`): build them only if the
     testbed–twin fit shows browser timing matters.
