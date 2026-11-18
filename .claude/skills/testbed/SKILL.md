@@ -114,6 +114,22 @@ crates differ from those the page was built from builds its own page.
   (`hack/testbed/bench.py`) reads a run's uplink queue and qdisc tree
   through a release testbed_tables (`--uplink`; `TABLES_BIN`, else `cargo
   build --release -p strims-sim --example testbed_tables`).
+- **The shaper bench.** A PCAP=1 run's tables hold each node's `packets`:
+  what it offered its link (its offered capture, GSO's buffers cut) and
+  each one's fate past the queue. `simdb.py replay OUT... --name NAME`
+  (the runs in their ingest's order) replays those offers through each
+  node's link in the model (strims-sim's `shaper_replay` example, `cargo
+  build --release -p strims-sim --example shaper_replay`) twice, every
+  offer (arm `replay`, the drops') and what the link carried
+  (`replay:carried`, the departures'), each a job of its run's cell with
+  env `SOURCE_K` its source's key, into the cache as source testbed/NAME;
+  `shaper_fit_of((SELECT list({'cell': stored_cell, 'seed': seed, 'k': k,
+  'src': src}) FROM jobs WHERE src = 'testbed/NAME'),
+  testbed_side(SRC_LIKE))` joins them packet by packet and applies the
+  shaper bench's pass rule per node (`simdb.py describe shaper_fit_of`;
+  it has no backlog rule, and a trace link no replay). `shaper_replay
+  --bench OUT TABLES` reads a bench run's captures alone and writes the
+  bench's `packets` and both replays'.
 - **On the farm.** A `kind = "testbed"` matrix runs run.sh as a black box
   on hosts of exactly `host_cores` cores. Its arms are paired on one host
   for each repeat. The sim-farm skill covers running one, and farm.py's

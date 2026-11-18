@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # Copyright 2026 Strims contributors
 # SPDX-License-Identifier: AGPL-3.0-only
-"""simlab.testbed: testbed runs as their twins' cells, and the tier.
+"""simlab.testbed: testbed runs as their twins' cells, and the tier; simlab.bench:
+their shaper replays.
 
   Cells    a run's knobs name its tier cell's testbed variant
            (`<cell>@<tree>`) but for what a testbed run always sets
@@ -13,6 +14,14 @@
   Tier     the tier's cells are hostable, honest, of the robust and
            browsers tiers; hack/sim-farm/matrices/testbed-tier is what
            tier_matrices writes
+  Replays  a run's two shaper replays (simlab.bench), of its every offer
+           and of what its link carried, are jobs of its source's cell,
+           numbered as an ingest numbers its runs, keyed by their code,
+           their source and their offers, and never written over a source
+  ShaperFit  scoring.sql's shaper_fit_of over a fixture: the drops' rules
+           read the offered replay, the departures' the carried one, a
+           link with slots its delays' distance; a source with two
+           replays of a kind fails
 
   python3 hack/simlab/tests/test_testbed.py
 """
@@ -20,6 +29,7 @@
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import tempfile
@@ -203,6 +213,164 @@ class Tier(unittest.TestCase):
                 with self.subTest(matrix=p.name):
                     self.assertEqual(plain((committed / p.name).read_text()), plain(p.read_text()))
 
+
+# A stand-in for strims-sim's shaper_replay: writes `<tables dir>/job.json`
+# as it does, its env the knobs of the run dir's `knobs.json` and its key
+# the dir's name, and one packet a node of its `--node`s.
+FAKE_REPLAY = """\
+import json, sys
+from pathlib import Path
+run, out = Path(sys.argv[1]), Path(sys.argv[2])
+out.mkdir(parents=True)
+args = sys.argv[3:]
+nodes = [args[i + 1] for i, a in enumerate(args) if a == "--node"] or ["0"]
+offers = args[args.index("--offers") + 1]
+env = {**json.loads((run / "knobs.json").read_text()), "SOURCE_K": run.name, "REPLAY_NODES": ",".join(nodes),
+       "REPLAY_OFFERS": offers}
+(out / "job.json").write_text(json.dumps({"k": "rp-" + run.name, "sim": "strims-sim", "test": "shaper_replay",
+                                          "env": env, "row": {}}))
+(out / "packets.schema.json").write_text(json.dumps({"columns": [{"name": "node", "type": "BIGINT"},
+                                                                 {"name": "n", "type": "BIGINT"}]}))
+(out / "packets.csv").write_text("node,n\\n" + "".join(f"{n},0\\n" for n in nodes))
+"""
+
+
+class Replays(unittest.TestCase):
+    def test_a_replay_is_a_job_of_its_sources_cell_keyed_by_its_code(self):
+        from simlab import bench
+
+        c = next(c for c in suite.TIERS["robust"] if c["name"] == "star-15-10")
+        knobs = {**c["env"], "STRIMS_SIM_HOSTILE": "off", "STRIMS_SIM_CLOCK_SKEW": "off",
+                 "STRIMS_SIM_CAL_SEED_BURST": "3028", "STRIMS_SIM_CAL_VIEWER_BURST": "3028",
+                 "TESTBED_QDISC": "clsact>ifb-netem>root-class"}
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"SIM_DB_ROOT": d}):
+            d = Path(d)
+            fake = d / "shaper_replay"
+            fake.write_text(f"#!{sys.executable}\n{FAKE_REPLAY}")
+            fake.chmod(0o755)
+            runs = []
+            for name, k in (("tb-a", knobs), ("tb-b", knobs), ("tb-c", {**knobs, "TESTBED_SEED_LOSS_PCT": "1"})):
+                (d / name).mkdir()
+                (d / name / "knobs.json").write_text(json.dumps(k))
+                runs.append(d / name)
+            src, jobs = bench.replays(runs, "r", binary=fake, nodes=[0, 3])
+            self.assertEqual(src, "testbed/r")
+            self.assertEqual([(j["env"]["SOURCE_K"], j["env"]["REPLAY_OFFERS"]) for j in jobs],
+                             [(r, o) for r in ("tb-a", "tb-b", "tb-c") for o in ("offered", "carried")])
+            # Its source's cell, numbered as an ingest numbers its runs; the
+            # arms replay and replay:carried; its key the code's, its
+            # source's and its offers'.
+            self.assertEqual([(j["cell"], j["seed"], j["arm"]) for j in jobs][:4],
+                             [("robust:star-15-10@root-class", 1, "replay"),
+                              ("robust:star-15-10@root-class", 1, "replay:carried"),
+                              ("robust:star-15-10@root-class", 2, "replay"),
+                              ("robust:star-15-10@root-class", 2, "replay:carried")])
+            self.assertTrue(jobs[4]["cell"].startswith("tb-") and jobs[4]["cell"] == jobs[5]["cell"])
+            self.assertTrue(all(j["k"].startswith("rp-") and j["k"] != "rp-" + j["env"]["SOURCE_K"] for j in jobs))
+            self.assertEqual(len({j["k"] for j in jobs}), 6)
+            self.assertTrue((d / "tb-a" / "replay" / "packets.csv").exists())
+            self.assertTrue((d / "tb-a" / "replay-carried" / "packets.csv").exists())
+            self.assertTrue((d / "cache" / "testbed" / "r").exists())
+            # Another binary keys apart, and the source isn't written over.
+            fake.write_text(fake.read_text() + "\n# another build\n")
+            with self.assertRaisesRegex(FileExistsError, "testbed/r exists"):
+                bench.replays(runs, "r", binary=fake)
+            _, again = bench.replays(runs[:1], "r", binary=fake, nodes=[0, 3], replace=True)
+            self.assertNotEqual(again[0]["k"], jobs[0]["k"])
+
+
+
+class ShaperFit(unittest.TestCase):
+    """shaper_fit_of over a fixture: a source run (k tb) and its two
+    replays, `ro` of every offer and `rc` of what the testbed carried.
+
+    Node 0 (tbf, 1.2 ms a frame): the testbed drops packet 2 and the
+    offered replay packet 5, so the offered replay's later departures
+    trail the testbed's by a frame, where the carried replay's, fed only
+    what both queues held, are within 100 µs. Node 1 (cable, slots): the
+    carried replay's delays the testbed's. Node 2 (tbf): the carried
+    replay didn't send a packet the testbed carried."""
+
+    PACKETS = [  # k, node, n, peer, t_us, sent_us, lost
+        ("tb", 0, 0, 1, 0, 1200, None), ("tb", 0, 1, 2, 0, 2400, None), ("tb", 0, 2, 1, 0, None, "queue"),
+        ("tb", 0, 3, 2, 0, 3600, None), ("tb", 0, 4, 1, 0, 4800, None), ("tb", 0, 5, 2, 0, 6000, None),
+        ("ro", 0, 0, 1, 0, 1200, None), ("ro", 0, 1, 2, 0, 2400, None), ("ro", 0, 2, 1, 0, 3600, None),
+        ("ro", 0, 3, 2, 0, 4800, None), ("ro", 0, 4, 1, 0, 6000, None), ("ro", 0, 5, 2, 0, None, "queue"),
+        ("rc", 0, 0, 1, 0, 1210, None), ("rc", 0, 1, 2, 0, 2420, None), ("rc", 0, 3, 2, 0, 3650, None),
+        ("rc", 0, 4, 1, 0, 4800, None), ("rc", 0, 5, 2, 0, 6000, None),
+        ("tb", 1, 0, 0, 0, 2000, None), ("tb", 1, 1, 0, 1000, 3000, None), ("tb", 1, 2, 0, 2000, 4000, None),
+        ("ro", 1, 0, 0, 0, 2000, None), ("ro", 1, 1, 0, 1000, 3000, None), ("ro", 1, 2, 0, 2000, 4000, None),
+        ("rc", 1, 0, 0, 0, 2000, None), ("rc", 1, 1, 0, 1000, 3000, None), ("rc", 1, 2, 0, 2000, 4000, None),
+        ("tb", 2, 0, 0, 0, 1200, None), ("tb", 2, 1, 0, 0, 2400, None),
+        ("ro", 2, 0, 0, 0, 1200, None), ("ro", 2, 1, 0, 0, 2400, None),
+        ("rc", 2, 0, 0, 0, 1200, None), ("rc", 2, 1, 0, 0, None, "queue"),
+    ]
+    HOSTS = [(0, "seed", "tbf"), (1, "viewer", "cable,slot=2"), (2, "viewer", "tbf")]
+    SOURCE = "[{'cell': 'c', 'seed': 1, 'k': 'tb', 'src': 'testbed/s'}]"
+
+    @classmethod
+    def setUpClass(cls):
+        import duckdb
+
+        from simlab import catalog
+
+        consts = catalog.scoring_consts()
+        text = catalog.CONST.sub(lambda m: str(consts[m.group(1)]), catalog.SCORING.read_text())
+        conn = duckdb.connect()
+        for m in re.finditer(r"^CREATE OR REPLACE MACRO sketch_\w+.*?;$", text, re.M | re.S):
+            conn.execute(m.group(0))
+        conn.execute("CREATE TABLE jobs (k VARCHAR, src VARCHAR, env MAP(VARCHAR, VARCHAR))")
+        for k, src, env in (("tb", "testbed/s", {}),
+                            ("ro", "testbed/r", {"SOURCE_K": "tb", "REPLAY_OFFERS": "offered"}),
+                            ("rc", "testbed/r", {"SOURCE_K": "tb", "REPLAY_OFFERS": "carried"}),
+                            ("ro2", "testbed/r2", {"SOURCE_K": "tb", "REPLAY_OFFERS": "offered"})):
+            conn.execute("INSERT INTO jobs VALUES (?, ?, MAP(?::VARCHAR[], ?::VARCHAR[]))",
+                         [k, src, list(env), list(env.values())])
+        srcs = {"tb": "testbed/s", "ro": "testbed/r", "rc": "testbed/r"}
+        conn.execute("CREATE TABLE hosts (k VARCHAR, src VARCHAR, node BIGINT, role VARCHAR, link_spec VARCHAR)")
+        conn.executemany("INSERT INTO hosts VALUES ('tb', 'testbed/s', ?, ?, ?)", cls.HOSTS)
+        conn.execute("CREATE TABLE packets (k VARCHAR, src VARCHAR, node BIGINT, n BIGINT, peer BIGINT, t_us BIGINT, "
+                     "sent_us BIGINT, lost VARCHAR)")
+        conn.executemany("INSERT INTO packets VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                         [(k, srcs[k], *rest) for k, *rest in cls.PACKETS]
+                         + [("ro2", "testbed/r2", *rest) for k, *rest in cls.PACKETS if k == "ro"])
+        (macro,) = catalog.scoring_statements(["shaper_fit_of"], {"packets", "hosts", "jobs.env"})
+        conn.execute(macro)
+        cls.conn = conn
+
+    def fit(self, replays, per="node"):
+        jobs = ", ".join(f"{{'cell': 'c', 'seed': 1, 'k': '{k}', 'src': NULL}}" for k in replays)
+        rows = self.conn.execute(f"SELECT node, peer, measure, value, bound, pass FROM shaper_fit_of([{jobs}], "
+                                 f"{self.SOURCE}, per := '{per}')").fetchall()
+        return {(node, peer, measure): (value, bound, ok) for node, peer, measure, value, bound, ok in rows}
+
+    def test_the_drops_read_the_offered_replay_and_the_departures_the_carried(self):
+        got = self.fit(["ro", "rc"])
+        want0 = {"packets": 6, "carried": 5, "carried_both": 5, "drops_testbed": 1, "drops_model": 1,
+                 "drops_both_count": 0, "residual_mean_us": 16, "within_100us": 1.0,
+                 "drops_diff": 0, "drops_both": 0}
+        self.assertEqual({m: got[(0, None, m)][0] for m in want0}, want0)
+        self.assertEqual([got[(0, None, m)][2] for m in ("within_100us", "drops_diff", "drops_both", "pass")],
+                         [True, True, False, False])
+        self.assertNotIn((0, None, "delay_ks"), got)
+        # Slots: the delays' distance, no departure or drops_both rule.
+        self.assertEqual(got[(1, None, "delay_ks")], (0.0, 0.1, True))
+        self.assertNotIn((1, None, "within_100us"), got)
+        self.assertEqual(got[(1, None, "pass")][2], True)
+        # A carried packet the carried replay didn't send counts against it.
+        self.assertEqual((got[(2, None, "within_100us")][0], got[(2, None, "carried_both")][0]), (0.5, 1))
+        # Per peer, a link's packets apart.
+        peers = self.fit(["ro", "rc"], per="peer")
+        self.assertEqual((peers[(0, 1, "packets")][0], peers[(0, 2, "packets")][0]), (3, 3))
+        self.assertEqual((peers[(0, 1, "drops_testbed")][0], peers[(0, 2, "drops_model")][0]), (1, 1))
+
+    def test_a_source_takes_one_replay_of_each_kind(self):
+        import duckdb
+
+        with self.assertRaisesRegex(duckdb.Error, "source tb has 2 offered and 1 carried replays"):
+            self.fit(["ro", "rc", "ro2"])
+        with self.assertRaisesRegex(duckdb.Error, "source tb has 1 offered and 0 carried replays"):
+            self.fit(["ro"])
 
 if __name__ == "__main__":
     unittest.main()

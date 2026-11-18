@@ -521,6 +521,17 @@ def cmd_testbed(a):
     print("simdb.py index takes them in")
 
 
+def cmd_replay(a):
+    from simlab import bench
+
+    knobs = dict(kv.split("=", 1) for kv in a.knob or [])
+    src, jobs = bench.replays(a.run_dirs, a.name, binary=a.bin, arm=a.arm, nodes=a.node, seed=a.seed,
+                              knobs=knobs, replace=a.replace)
+    for j in jobs:
+        print(f"{src} {j['k']} {j['cell']} {j['arm']} seed {j['seed']} of {j['env']['SOURCE_K']}  {j['dir']}")
+    print("simdb.py index takes them in; shaper_fit_of scores them against their sources")
+
+
 def cmd_testbed_tier(a):
     from simlab import testbed
 
@@ -654,6 +665,19 @@ def main():
     t.add_argument("--knob", action="append", help="a twin knob KEY=VALUE to add to the runs' (a trickle's "
                    "STRIMS_SIM_ARRIVALS, say)")
     t.add_argument("--bin", help="the testbed_tables binary (default: this checkout's release build)")
+    r = sub.add_parser("replay", help="testbed runs' offered packets replayed through each node's link in the "
+                       "model (the shaper bench: strims-sim's shaper_replay) into the cache as source testbed/NAME: "
+                       "a run's every offer (arm replay) and what its link carried (replay:carried), each a job of "
+                       "its source's cell, env SOURCE_K its source's key and REPLAY_OFFERS (simlab.bench)")
+    r.add_argument("run_dirs", nargs="+", help="the runs' out dirs, in the order their ingest took them")
+    r.add_argument("--name", required=True, help="the source's name: testbed/NAME")
+    r.add_argument("--replace", action="store_true", help="write over an existing testbed/NAME")
+    r.add_argument("--arm", default="replay", help="replay, or replay:<variant> (the carried replays' arm it and "
+                   ":carried)")
+    r.add_argument("--node", action="append", type=int, help="only these nodes (default: every node with packets)")
+    r.add_argument("--seed", type=int, default=1, help="the slots' draws")
+    r.add_argument("--knob", action="append", help="a knob KEY=VALUE the source's ingest added (its --knob)")
+    r.add_argument("--bin", help="the shaper_replay binary (default: this checkout's release build)")
     tt = sub.add_parser("testbed-tier", help="the testbed tier as farm testbed matrices in DIR, one a cell "
                         "(simlab.testbed.tier_matrices)")
     tt.add_argument("dir")
@@ -692,6 +716,8 @@ def main():
         cmd_twin(a)
     elif a.cmd == "testbed-tier":
         cmd_testbed_tier(a)
+    elif a.cmd == "replay":
+        cmd_replay(a)
     elif a.cmd in lake:
         lake[a.cmd](a)
     elif a.cmd == "forecast-report":

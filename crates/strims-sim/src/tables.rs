@@ -456,12 +456,34 @@ pub fn write_packets(
     start: strims_base::time::Duration,
     hosts: &[(HostIx, &[PacketRecord])],
 ) -> io::Result<()> {
+    let numbered: Vec<(HostIx, Vec<(u64, &PacketRecord)>)> = hosts
+        .iter()
+        .map(|&(h, rows)| {
+            let rows = rows.iter().enumerate();
+            (
+                h,
+                rows.map(|(n, p)| (u64::try_from(n).unwrap_or(u64::MAX), p))
+                    .collect(),
+            )
+        })
+        .collect();
+    write_numbered_packets(dir, start, &numbered)
+}
+
+/// [`write_packets`] with each row's `n` its own: a shaper replay of some
+/// of a node's packets keeps its source's numbers, so the two join on
+/// (node, n).
+pub fn write_numbered_packets(
+    dir: &Path,
+    start: strims_base::time::Duration,
+    hosts: &[(HostIx, Vec<(u64, &PacketRecord)>)],
+) -> io::Result<()> {
     std::fs::create_dir_all(dir)?;
     let mut t = Table::new(dir, &PACKET_COLS)?;
     let us = |d: strims_base::time::Duration| (d - start).as_micros().to_string();
     let opt = |v: Option<String>| v.unwrap_or_default();
-    for &(h, rows) in hosts {
-        for (n, p) in rows.iter().enumerate() {
+    for (h, rows) in hosts {
+        for &(n, p) in rows {
             t.fields(&[
                 h.to_string(),
                 n.to_string(),
@@ -1951,5 +1973,52 @@ mod tests {
         // 10 ms's; the one from 0 ends before 10 ms.
         let quiet = super::offer_bins(&offers[..4], start, ms(100), 1);
         assert_eq!(quiet, [[1000, 5, 900]]);
+    }
+
+    /// A node's rows keep the numbers they're given (a shaper replay of
+    /// some of its packets, its source's), where `write_packets` numbers
+    /// them in order; times count from the start.
+    #[test]
+    fn numbered_packets_keep_their_numbers() -> std::io::Result<()> {
+        use crate::report::{PacketKind, PacketProto, PacketRecord};
+        let ms = strims_base::time::Duration::from_millis;
+        let row = |at: i64| PacketRecord {
+            at: ms(at),
+            sent: Some(ms(at + 1)),
+            arrived: None,
+            lost: None,
+            peer: Some(1),
+            link: None,
+            proto: PacketProto::Tcp,
+            ip_bytes: 1500,
+            charged_bytes: Some(1514),
+            kind: PacketKind::Data,
+            range: None,
+            resent: None,
+            estimated: false,
+            backlog_bytes: None,
+        };
+        let (a, b) = (row(10), row(30));
+        let dir = std::env::temp_dir().join(format!("strims-numbered-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let col = |csv: &str, c: usize| -> Vec<String> {
+            csv.lines()
+                .skip(1)
+                .map(|l| l.split(',').nth(c).unwrap_or_default().to_owned())
+                .collect()
+        };
+        super::write_numbered_packets(&dir, ms(10), &[(0, vec![(0, &a), (2, &b)])])?;
+        let got = super::read_table(&dir, "packets")?;
+        assert_eq!(
+            (col(&got, 1), col(&got, 2)),
+            (
+                vec!["0".into(), "2".into()],
+                vec!["0".into(), "20000".into()]
+            )
+        );
+        super::write_packets(&dir, ms(10), &[(0, &[a, b][..])])?;
+        let got = super::read_table(&dir, "packets")?;
+        assert_eq!(col(&got, 1), ["0", "1"]);
+        std::fs::remove_dir_all(&dir)
     }
 }

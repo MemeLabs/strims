@@ -1661,3 +1661,154 @@ CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 10, hi_s := -1, full
                          []::STRUCT(cell VARCHAR, measure VARCHAR, k VARCHAR, value DOUBLE, basis VARCHAR)[])
          FROM twin_runs_of(b_jobs, lo_s := lo_s, hi_s := hi_s,
                            full_packet := full_packet, growth_x := growth_x)));
+
+-- The shaper bench: replays of testbed runs' packets through each node's
+-- link in the model (`a_jobs`, a side of shaper_replay jobs) against the
+-- runs they replay (`b_jobs`, testbed_side's), each replay paired with its
+-- source by its env's SOURCE_K and joined packet by packet on (node, n).
+-- A source takes two replays, by their env's REPLAY_OFFERS: `offered`,
+-- every packet the testbed's modem was offered, whose drops the drops'
+-- rules read, and `carried`, those alone that the modem carried, through
+-- a queue without a limit, whose departures the departures' rules read: a
+-- packet the model and the tbf disagree on dropping moves every later
+-- departure of its busy period by its frame, so the shaper's timing is
+-- read where both queues hold the same packets. A source with no replay of a kind, or two (two builds',
+-- say), fails. A row per cell, source run (k, seed), node (and with per :=
+-- 'peer' its peer: a link's packets apart), and measure, with the node's
+-- role and link spec, the measure's value, its bound and pass; and a row
+-- of measure `pass` per group, every rule's.
+--
+-- The rules, by the node's link class (hosts.link_spec):
+-- - every class: drops_diff, |the offered replay's queue drops - the
+--   testbed's|, at most max(2 % of the testbed's, 3 packets);
+-- - a link without slots (tbf, fiber, dsl, cable with slot=off):
+--   within_100us, the share of the packets the testbed carried that the
+--   carried replay sends within 100 µs of the testbed (its sent_us less
+--   the testbed's; tbf wakes some 25 µs late for each frame it paces; one
+--   it didn't send counts against), at least 0.99; drops_both, the share of the
+--   testbed's drops the offered replay dropped too, at least 0.95 (no
+--   bound without a testbed drop);
+-- - a link with slots (cable's grants, slot=): delay_ks, the
+--   Kolmogorov-Smirnov distance between the delays through the uplink
+--   (sent_us - t_us) of the packets the testbed carried and of those the
+--   carried replay sent, at most 0.1, as the slots' draws differ.
+-- No rule reads the backlog. The tbf's own counter at each tcsample
+-- instant is what one would hold the model's to, and the lake has a tc
+-- sample only as node_bins' up_backlog_bytes, the latest at or before a
+-- bin's end, not at its instant; tc-<i>.log stamps it to the ms, a full
+-- frame's time at 12 Mbit/s. The packets' backlog_bytes on the
+-- testbed's side is read from the captures the replays are fed, so it
+-- can't disagree with the model's where their departures agree.
+-- Beside the rules, unbounded: packets, carried (the testbed's),
+-- carried_both (of those, what the carried replay sent),
+-- residual_mean_us (signed), residual_p50_us and residual_p99_us (of the
+-- carried replay's departures' |difference|, sketch_quantiles'),
+-- drops_testbed, drops_model (the offered replay's) and drops_both_count.
+-- needs: packets hosts jobs.env
+CREATE OR REPLACE MACRO shaper_fit_of(a_jobs, b_jobs, per := 'node') AS TABLE
+    WITH a AS (SELECT unnest(a_jobs, recursive := true)),
+    b AS (SELECT unnest(b_jobs, recursive := true)),
+    reps AS (
+        SELECT b.cell, b.seed, b.k, coalesce(b.src, jb.src) AS src, a.k AS m_k, coalesce(a.src, ja.src) AS m_src,
+               ja.env['REPLAY_OFFERS'] AS offers
+        FROM a JOIN jobs ja ON ja.k = a.k
+        JOIN b ON b.k = ja.env['SOURCE_K']
+        JOIN jobs jb ON jb.k = b.k),
+    -- Each source with its two replays, one of each kind.
+    pairs AS (
+        SELECT cell, seed, k, any_value(src) AS src,
+               count(*) FILTER (WHERE offers = 'offered') AS n_offered,
+               count(*) FILTER (WHERE offers = 'carried') AS n_carried,
+               any_value(m_k) FILTER (WHERE offers = 'offered') AS o_k,
+               any_value(m_src) FILTER (WHERE offers = 'offered') AS o_src,
+               any_value(m_k) FILTER (WHERE offers = 'carried') AS c_k,
+               any_value(m_src) FILTER (WHERE offers = 'carried') AS c_src
+        FROM reps GROUP BY cell, seed, k),
+    checked AS (
+        SELECT * FROM pairs
+        WHERE CASE WHEN n_offered = 1 AND n_carried = 1 THEN true
+                   ELSE error('shaper_fit_of: source ' || k || ' has ' || n_offered || ' offered and '
+                              || n_carried || ' carried replays in a_jobs: it takes one of each') END),
+    link AS (
+        SELECT p.k, x.node, x.role, x.link_spec,
+               coalesce(x.link_spec LIKE '%slot=%' AND x.link_spec NOT LIKE '%slot=off%', false)
+                   OR coalesce(x.link_spec LIKE 'cable%' AND x.link_spec NOT LIKE '%slot=%', false) AS slots
+        FROM checked p JOIN hosts x ON x.k = p.k AND x.src = p.src),
+    -- Each job's packets, each read once.
+    tb AS MATERIALIZED (
+        SELECT p.cell, p.seed, p.k, t.node, t.n, t.peer, t.t_us, t.sent_us, t.lost
+        FROM packets t JOIN checked p ON t.k = p.k AND t.src = p.src),
+    mo AS MATERIALIZED (
+        SELECT p.k, m.node, m.n, m.lost
+        FROM packets m JOIN checked p ON m.k = p.o_k AND m.src = p.o_src),
+    mc AS MATERIALIZED (
+        SELECT p.k, m.node, m.n, m.sent_us
+        FROM packets m JOIN checked p ON m.k = p.c_k AND m.src = p.c_src),
+    pk AS MATERIALIZED (
+        SELECT t.cell, t.seed, t.k, t.node, CASE WHEN per = 'peer' THEN t.peer END AS peer,
+               t.sent_us IS NOT NULL AS tb_sent, c.sent_us - t.sent_us AS residual_us,
+               t.lost = 'queue' AS tb_drop, o.lost = 'queue' AS m_drop,
+               t.sent_us - t.t_us AS tb_delay, c.sent_us - t.t_us AS m_delay
+        FROM tb t JOIN mo o ON o.k = t.k AND o.node = t.node AND o.n = t.n
+        LEFT JOIN mc c ON c.k = t.k AND c.node = t.node AND c.n = t.n),
+    g AS (
+        SELECT cell, seed, k, node, peer, count(*) AS n_packets, count(*) FILTER (WHERE tb_sent) AS n_carried,
+               count(residual_us) AS n_carried_both,
+               avg(coalesce(abs(residual_us) <= 100, false)::INT) FILTER (WHERE tb_sent) AS within_100us,
+               avg(residual_us::DOUBLE) AS residual_mean_us,
+               sketch_quantiles(abs(residual_us), [50, 99]) AS rq,
+               count(*) FILTER (WHERE tb_drop) AS drops_testbed, count(*) FILTER (WHERE m_drop) AS drops_model,
+               count(*) FILTER (WHERE tb_drop AND m_drop) AS drops_both_count
+        FROM pk GROUP BY ALL),
+    -- On a link with slots, each side's delays through the uplink and their
+    -- distance: the largest gap between their empirical distributions.
+    slotted AS (SELECT pk.* FROM pk JOIN link l ON l.k = pk.k AND l.node = pk.node WHERE l.slots),
+    delays AS (
+        SELECT cell, seed, k, node, peer, 'b' AS side, tb_delay AS d FROM slotted WHERE tb_delay IS NOT NULL
+        UNION ALL
+        SELECT cell, seed, k, node, peer, 'a', m_delay FROM slotted WHERE m_delay IS NOT NULL),
+    steps AS (
+        SELECT cell, seed, k, node, peer, d, count(*) FILTER (WHERE side = 'a') AS na,
+               count(*) FILTER (WHERE side = 'b') AS nb
+        FROM delays GROUP BY ALL),
+    cum AS (
+        SELECT *, sum(na) OVER w / sum(na) OVER (PARTITION BY cell, seed, k, node, peer) AS fa,
+               sum(nb) OVER w / sum(nb) OVER (PARTITION BY cell, seed, k, node, peer) AS fb
+        FROM steps
+        WINDOW w AS (PARTITION BY cell, seed, k, node, peer ORDER BY d ROWS UNBOUNDED PRECEDING)),
+    ks AS (SELECT cell, seed, k, node, peer, max(abs(fa - fb)) AS delay_ks FROM cum GROUP BY ALL),
+    m AS (
+        SELECT g.cell, g.seed, g.k, g.node, g.peer, l.role, l.link_spec,
+               [{'measure': 'packets', 'value': g.n_packets::DOUBLE, 'bound': NULL::DOUBLE, 'dir': NULL::VARCHAR},
+                {'measure': 'carried', 'value': g.n_carried, 'bound': NULL, 'dir': NULL},
+                {'measure': 'carried_both', 'value': g.n_carried_both, 'bound': NULL, 'dir': NULL},
+                {'measure': 'residual_mean_us', 'value': g.residual_mean_us, 'bound': NULL, 'dir': NULL},
+                {'measure': 'residual_p50_us', 'value': g.rq[1], 'bound': NULL, 'dir': NULL},
+                {'measure': 'residual_p99_us', 'value': g.rq[2], 'bound': NULL, 'dir': NULL},
+                {'measure': 'drops_testbed', 'value': g.drops_testbed, 'bound': NULL, 'dir': NULL},
+                {'measure': 'drops_model', 'value': g.drops_model, 'bound': NULL, 'dir': NULL},
+                {'measure': 'drops_both_count', 'value': g.drops_both_count, 'bound': NULL, 'dir': NULL},
+                {'measure': 'drops_diff', 'value': abs(g.drops_model - g.drops_testbed),
+                 'bound': greatest(0.02 * g.drops_testbed, 3), 'dir': 'max'}]
+               || CASE WHEN l.slots THEN
+                      [{'measure': 'delay_ks', 'value': ks.delay_ks, 'bound': 0.1, 'dir': 'max'}]
+                  ELSE
+                      [{'measure': 'within_100us', 'value': g.within_100us, 'bound': 0.99, 'dir': 'min'},
+                       {'measure': 'drops_both',
+                        'value': CASE WHEN g.drops_testbed > 0 THEN g.drops_both_count / g.drops_testbed END,
+                        'bound': CASE WHEN g.drops_testbed > 0 THEN 0.95 END, 'dir': 'min'}] END
+                   AS ms
+        FROM g LEFT JOIN link l ON l.k = g.k AND l.node = g.node
+        LEFT JOIN ks ON ks.cell = g.cell AND ks.seed = g.seed AND ks.k = g.k AND ks.node = g.node
+                     AND ks.peer IS NOT DISTINCT FROM g.peer),
+    rs AS (
+        SELECT cell, seed, k, node, peer, role, link_spec, x.measure, x.value, x.bound,
+               CASE WHEN x.bound IS NULL OR x.dir IS NULL THEN NULL
+                    WHEN x.dir = 'max' THEN x.value <= x.bound
+                    ELSE x.value >= x.bound END AS pass
+        FROM m, unnest(ms) AS u(x))
+    SELECT * FROM rs
+    UNION ALL
+    SELECT cell, seed, k, node, peer, role, link_spec, 'pass', NULL, NULL, bool_and(pass)
+    FROM rs WHERE pass IS NOT NULL GROUP BY ALL
+    ORDER BY cell, seed, node, peer NULLS FIRST, measure;
