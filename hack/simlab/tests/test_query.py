@@ -571,6 +571,26 @@ class MeterSamples(unittest.TestCase):
         self.assertNotIn("nullif", catalog.view_sql(t, cols, t, {}))
 
 
+class ParentChecks(unittest.TestCase):
+    """The parent checks: kept as a table, not a sample (a few thousand
+    rows a run), written under its knob, with its keys and joins; its view
+    reads none as NULL, the sims writing none empty, so it nullifies
+    nothing."""
+
+    def test_the_table_is_kept_with_its_keys_and_knob(self):
+        t = "parent_checks"
+        self.assertIn(t, store_host.TABLES)
+        self.assertNotIn(t, store_host.SAMPLE_TABLES)
+        self.assertIn(t, catalog.NORMALIZED)
+        self.assertEqual(query.TABLE_KNOBS[t], ("PARENT_CHECKS",))
+        self.assertEqual(catalog.STANDARD_KEYS[t], "k, node, t_us, stream")
+        self.assertEqual(catalog.STANDARD_JOINS[t], "viewers USING (k, src, node)")
+        cols = {"k": "VARCHAR", "src": "VARCHAR", "t_us": "BIGINT", "chosen": "BIGINT", "action": "VARCHAR"}
+        self.assertNotIn("nullif", catalog.view_sql(t, cols, t, {}))
+        with self.assertRaisesRegex(query.Refused, r"parent_checks \(run with STRIMS_SIM_PARENT_CHECKS=1"):
+            query.need(set(), "parent_checks")
+
+
 class SeedLog(unittest.TestCase):
     """The seed log's tables: kept as tables, not samples (a few thousand
     rows a run), with their notes, keys, joins and knob; both views read an

@@ -204,12 +204,12 @@ class FoldExport(Scratch):
         """golden_cli's jobs, written as the sim writes them, with the
         meter samples', speculative requests', parks', arrivals', asks',
         haves', the seed log's, the peer samples', a testbed run's sockets',
-        the packets' and the hosts' tables golden_cli's don't write: the
-        suite's, then the farm's (whose reads, asks and haves are
-        zstd-compressed, `<table>.csv.zst`, as the sim writes its large
-        tables, and the seed log's, the peer samples', the sockets' and the
-        packets' too, so the fold takes the tables registered last in either
-        form), then a job folded again."""
+        the packets', the hosts' and the parent checks' tables golden_cli's
+        don't write: the suite's, then the farm's (whose reads, asks and
+        haves are zstd-compressed, `<table>.csv.zst`, as the sim writes its
+        large tables, and the seed log's, the peer samples', the sockets',
+        the packets' and the parent checks' too, so the fold takes the
+        tables registered last in either form), then a job folded again."""
         jobs = [golden_cli.job_dir(self.dir / "jobs" / f"{i:02d}", j) for i, j in enumerate(golden_cli.JOBS)]
         for n, j in enumerate(jobs):
             d = Path(j["dir"])
@@ -254,9 +254,14 @@ class FoldExport(Scratch):
                                                 ("link_spec", "VARCHAR")],
                                    # As the sim quotes a field with a comma.
                                    [(0, "seed", "seed", '"cable,aqm=fifo"'), (1, "v0", "viewer", None)])
+            # A viewer's graft onto the seed, and a check with no candidate.
+            golden_cli.write_table(d, "parent_checks", [("t_us", "BIGINT"), ("node", "BIGINT"), ("stream", "BIGINT"),
+                                                        ("action", "VARCHAR"), ("chosen", "BIGINT"),
+                                                        ("best_lag_us", "BIGINT")],
+                                   [(343_000 + n, 1, 0, "graft", 0, 12_000), (343_000 + n, 1, 1, "none", None, None)])
             if ":" in j["sim"]:
                 for t in ("reads", "asks", "haves", "seed_decisions", "seed_sends", "peer_samples", "sockets",
-                          "packets"):
+                          "packets", "parent_checks"):
                     csv = d / f"{t}.csv"
                     (d / f"{t}.csv.zst").write_bytes(zstd.compress(csv.read_bytes()))
                     csv.unlink()
@@ -316,6 +321,10 @@ class FoldExport(Scratch):
         cols, rows = parquet(self.dir / "module" / "hosts.parquet")
         self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(2 * list(runs["k"])))
         self.assertIn("cable,aqm=fifo", [r[[c for c, _ in cols].index("link_spec")] for r in rows])
+        # Two parent checks a job, a check that chose no one NULL.
+        cols, rows = parquet(self.dir / "module" / "parent_checks.parquet")
+        self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(2 * list(runs["k"])))
+        self.assertIn(None, [r[[c for c, _ in cols].index("chosen")] for r in rows])
 
     def test_an_empty_store_exports_nothing(self):
         sm = simdb()

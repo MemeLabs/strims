@@ -1411,6 +1411,15 @@ class Tables(Fixture):
             "t_ms", "node", "n", "peer", "peer_incarnation", "how", "seq", "fate", "cancel_ms")],
             [(1100, 0, 0, 1, 0, "push", 6, "written", None), (1120, 0, 1, 1, 0, "answer", 6, "written", None),
              (1160, 0, 2, 1, 0, "push", 7, "cancelled", 1150), (1170, 0, 3, -1, None, "push", 8, "closed", None)])
+        # Node 1's checks of streams 0 and 1 at 1 s: a graft onto the seed
+        # (node 0), a runner-up node 2 behind it; and none, no candidate.
+        # Then a vote of stream 0's parent, node 0, for node 2.
+        golden_cli.write_table(d, "parent_checks", [(c, "VARCHAR" if c == "action" else "BIGINT") for c in (
+            "t_us", "node", "stream", "action", "chosen", "best_peer", "best_lag_us", "runner_up_peer",
+            "runner_up_lag_us", "parent", "parent_have_us", "votes")],
+            [(1_000_000, 1, 0, "graft", 0, 0, 12_000, 2, 30_000, None, None, 0),
+             (1_000_000, 1, 1, "none", None, None, None, None, None, None, None, 0),
+             (1_250_000, 1, 0, "vote", None, 2, 4_000, None, None, 0, 40_000, 1)])
         db = self.root / "jobs-tables" / f"{src.replace('/', '~')}.duckdb"
         store_host.fold(db, [meta], src)
         store_host.export(db, store_host.cache_root() / "cache" / src)
@@ -1468,6 +1477,16 @@ class Tables(Fixture):
                                {"node": 1, "role": "honest", "capacity_bps": None, "avail_bps": 375_000, "viewer": 0}])
         got = catalog.lake("SELECT keys, joins FROM table_catalog WHERE name = 'meter_samples';")
         self.assertEqual(got, [{"keys": "k, node, t_ms", "joins": "viewers USING (k, src, node)"}])
+        # The parent checks: none NULL (a chosen peer only where the check
+        # asked, a parent only with one), each meeting its viewer by node.
+        got = catalog.lake("SELECT c.t_us, c.stream, c.action, c.chosen, c.best_peer, c.runner_up_peer, c.parent, "
+                           "v.viewer FROM parent_checks c LEFT JOIN viewers v USING (k, src, node) "
+                           f"WHERE c.k = {catalog.q(tail)} ORDER BY c.t_us, c.stream;")
+        self.assertEqual([tuple(r.values()) for r in got],
+                         [(1_000_000, 0, "graft", 0, 0, 2, None, 0), (1_000_000, 1, "none", None, None, None, None, 0),
+                          (1_250_000, 0, "vote", None, 2, None, 0, 0)])
+        got = catalog.lake("SELECT keys, joins FROM table_catalog WHERE name = 'parent_checks';")
+        self.assertEqual(got, [{"keys": "k, node, t_us, stream", "joins": "viewers USING (k, src, node)"}])
         # Parents: each node's changes in order, n, and n NULL where a
         # run's table has none.
         parents = catalog.lake("SELECT k, node, n, parent FROM parents WHERE k IN "
