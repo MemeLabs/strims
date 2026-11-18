@@ -481,31 +481,26 @@ async fn client_host(w: World) -> turmoil::Result {
     let mut reader = h.node.open_reader(h.swarm.unwrap()).await.unwrap();
     let b = h.node.dial(&w.uri("ws", WS_PORT)).await.unwrap();
     let a = w.id("a").await;
-    // b stops once a has the new link, which may be before c has it.
-    let (mut webrtc, mut b_gone) = (None, false);
-    while webrtc.is_none() || !b_gone {
+    // b stops once a has the new link, which may be before c has it, and a
+    // pings once it has seen b go, which may be before c has.
+    let (mut webrtc, mut b_gone, mut ping) = (None, false, None);
+    while webrtc.is_none() || !b_gone || ping.is_none() {
         match h
-            .wait("a over webrtc and b gone", |e| {
+            .wait("a over webrtc, b gone and ping", |e| {
                 matches!(e, NodeEvent::PeerAdded(p) if p.host_id == a)
                     || matches!(e, NodeEvent::PeerRemoved { host_id } if *host_id == b)
+                    || matches!(e, NodeEvent::Message(d) if d.body == b"ping c")
             })
             .await
         {
             NodeEvent::PeerAdded(p) => webrtc = Some(p),
+            NodeEvent::Message(d) => ping = Some(d),
             _ => b_gone = true,
         }
     }
     let p = webrtc.unwrap();
     assert_eq!((p.kind, p.dialed), (LinkKind::WebRtc, false));
-    let NodeEvent::Message(d) = h
-        .wait(
-            "ping",
-            |e| matches!(e, NodeEvent::Message(d) if d.body == b"ping c"),
-        )
-        .await
-    else {
-        unreachable!()
-    };
+    let d = ping.unwrap();
     assert_eq!((d.src, d.hops), (a, 1));
 
     let mut out = vec![0u8; STREAM_LEN];

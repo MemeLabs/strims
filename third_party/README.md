@@ -47,7 +47,10 @@ is given, by `handle_timeout`, `poll_transmit` or an inbound packet
 (`Association::arm_t1_init` in `src/association/mod.rs`), and closing it
 drops a timer it never started. str0m gives it that time as it inits SCTP
 at the SDP negotiation: its connection's last input or timeout, in the
-poll that follows. `Association::new` takes the time as an `Option`, and
-the tests' calls give it one.
+poll that follows. strims-webrtc brings the connection to the
+negotiation's time first (`sync_rtc` in
+`crates/strims-webrtc/src/endpoint.rs`), so the timer runs from the
+answer however long the offer waited. `Association::new` takes the time
+as an `Option`, and the tests' calls give it one.
 
 Its tests (`cargo test` in a copy outside this workspace) pass.

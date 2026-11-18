@@ -730,6 +730,53 @@ fn wall_time_moves_no_wake_up() {
     assert_eq!(t1, t2);
 }
 
+/// A link answered seconds after its offer was made sends what one
+/// answered at once sends, one DTLS flight each way and one SCTP INIT:
+/// their timers start at the answer, however long the offer waited.
+#[test]
+fn a_late_answer_sends_one_handshake() {
+    let run = |delay: Duration| {
+        let mut sim = Sim::new(3, LAN);
+        let a = sim.add_node(&["10.0.0.1:5000"], no_stun());
+        let b = sim.add_node(&["10.0.0.2:6000"], no_stun());
+        let ca = sim.nodes[a].ep.create_connection(sim.now).unwrap();
+        let offer = sim.local_description(a, ca);
+        let answer_at = sim.now + delay;
+        while sim.next_time().is_some_and(|t| t <= answer_at) {
+            assert!(sim.step());
+        }
+        sim.now = answer_at;
+        let cb = sim.nodes[b].ep.create_connection(answer_at).unwrap();
+        sim.nodes[b]
+            .ep
+            .set_remote_description(answer_at, cb, &offer)
+            .unwrap();
+        let answer = sim.local_description(b, cb);
+        let now = sim.now;
+        sim.nodes[a]
+            .ep
+            .set_remote_description(now, ca, &answer)
+            .unwrap();
+        sim.nodes[a].links.entry(ca).or_default();
+        sim.nodes[b].links.entry(cb).or_default();
+        sim.run_until(Duration::from_secs(30), |s| {
+            s.is_open(a, ca) && s.is_open(b, cb)
+        });
+        // Each datagram's sender, kind and size, but a DTLS handshake
+        // record's size (`same_seed_same_trace`).
+        sim.trace
+            .iter()
+            .filter_map(|t| match t {
+                Trace::Datagram {
+                    from, len, kind, ..
+                } => Some((*from, *kind, if *kind == 22 { 0 } else { *len })),
+                Trace::Event { .. } => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(run(Duration::from_secs(4)), run(Duration::ZERO));
+}
+
 #[test]
 fn a_vanished_peer_fails_the_connection() {
     let mut sim = Sim::new(6, LAN);

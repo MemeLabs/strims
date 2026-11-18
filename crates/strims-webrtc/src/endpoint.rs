@@ -255,6 +255,20 @@ fn ice_creds(rng: &mut DetRng) -> IceCreds {
     IceCreds { ufrag, pass }
 }
 
+/// Brings `c`'s `Rtc` to `now` before an SDP call: accepting an offer or
+/// an answer inits DTLS and SCTP at the `Rtc`'s last time, which starts
+/// their handshake timers (DTLS's flight, SCTP's T1-init), and an offerer's
+/// `Rtc` hears nothing between its connection's creation and the answer.
+fn sync_rtc(clock: &Clock, c: &mut Conn, now: Time) -> Result<(), Error> {
+    c.rtc
+        .handle_input(Input::Timeout(clock.instant(now)))
+        .map_err(|e| Error::Rtc(e.to_string()))
+}
+
+fn sdp_error(e: impl std::fmt::Display) -> Error {
+    Error::Sdp(e.to_string())
+}
+
 /// RFC 7983: a first byte in 0..=3 is STUN.
 fn is_stun(data: &[u8]) -> bool {
     data.first().is_some_and(|&b| b <= 3)
@@ -460,13 +474,12 @@ impl WebRtcEndpoint {
                 }
             }
             _ => match c.remote_offer.take() {
-                Some(offer) => match c.rtc.sdp_api().accept_offer(offer) {
-                    Ok(answer) => {
+                Some(offer) => sync_rtc(&self.clock, c, c.last_now)
+                    .and_then(|()| c.rtc.sdp_api().accept_offer(offer).map_err(sdp_error))
+                    .map(|answer| {
                         c.channel = Some(c.rtc.direct_api().create_data_channel(channel_config()));
-                        Ok(answer.to_sdp_string())
-                    }
-                    Err(e) => Err(Error::Sdp(e.to_string())),
-                },
+                        answer.to_sdp_string()
+                    }),
                 None => Err(Error::Rtc("no remote offer to answer".into())),
             },
         };
@@ -518,8 +531,13 @@ impl WebRtcEndpoint {
                 let answer =
                     SdpAnswer::from_sdp_string(&desc.sdp).map_err(|e| Error::Sdp(e.to_string()))?;
                 let pending = c.pending_offer.take().ok_or(Error::NoPendingOffer)?;
-                if let Err(e) = c.rtc.sdp_api().accept_answer(pending, answer) {
-                    let e = Error::Sdp(e.to_string());
+                let accepted = sync_rtc(&self.clock, c, now).and_then(|()| {
+                    c.rtc
+                        .sdp_api()
+                        .accept_answer(pending, answer)
+                        .map_err(sdp_error)
+                });
+                if let Err(e) = accepted {
                     self.fail(conn, CloseReason::Error(e.to_string()));
                     return Err(e);
                 }
