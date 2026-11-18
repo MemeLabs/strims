@@ -44,7 +44,7 @@
 //! | `message` | `from`, `bytes` | A vpn message arrived on `replyPort`. |
 //! | `stats` | `echoed`, `echoErrors`, `eventsDropped`, `linkQueueFull`, `deliveriesDropped`, `links: [{kind, mtu, readBytes, writeBytes}]` | Answers `stats`. |
 //! | `sample` | `line`, `postMs` | The testbed's line of a second, a JSON object in a string, with `cpu_ms` `null`; and `Date.now()` as it's posted. |
-//! | `error` | `command`, `message` | A command didn't parse or failed, an echo failed (`command` `echo`), or the testbed reported something (`command` `testbed`). |
+//! | `error` | `command`, `message`, and a failed dial's `uri` or `connectPeer`'s `hostId` | A command didn't parse or failed, an echo failed (`command` `echo`), or the testbed reported something (`command` `testbed`). |
 //! | `captureOpen` | `file`, `node` | The capture started file `file` of the node named `node`. |
 //!
 //! A capture's bytes come as binary messages that aren't JSON: `0x01`,
@@ -258,7 +258,12 @@ impl Control {
                             ("uri", uri.as_str().into()),
                             ("hostId", host_id(host)),
                         ]),
-                        Err(e) => out.error("dial", &e.to_string()),
+                        Err(e) => out.post(&[
+                            ("type", "error".into()),
+                            ("command", "dial".into()),
+                            ("uri", uri.as_str().into()),
+                            ("message", e.to_string().as_str().into()),
+                        ]),
                     }
                 }));
             }
@@ -272,7 +277,12 @@ impl Control {
                             ("hostId", host_id(host)),
                             ("started", started.into()),
                         ]),
-                        Err(e) => out.error("connectPeer", &e.to_string()),
+                        Err(e) => out.post(&[
+                            ("type", "error".into()),
+                            ("command", "connectPeer".into()),
+                            ("hostId", host_id(host)),
+                            ("message", e.to_string().as_str().into()),
+                        ]),
                     }
                 }));
             }

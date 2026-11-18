@@ -94,7 +94,13 @@ crates differ from those the page was built from builds its own page.
   (TESTBED_STAMPS=date: uutils' `date` stamps late), and so do a sampler's
   stamps that go back (back) and a step or competing upload off its
   schedule (TESTBED_SCHEDULE). run.sh writes STAMPS=clock; a run from
-  before it did has no twin.
+  before it did has no twin. Likewise a run whose settings don't say
+  JOIN_LINKS=together (its nodes made their links at their joins all at
+  once, as a deployed viewer does; before, one at a time, each awaited,
+  seed first) keys apart (TESTBED_JOIN_LINKS=serial), and has no twin,
+  whose viewers link as the harness now does. A run folded before the
+  testbed module knew the marker keeps its key until it is folded
+  again.
 - **The twin.** `simdb.py twin 'testbed/NAME' --name NAME-twin --bin
   SCENARIOS --seeds 8` runs strims-sim's `calibration_star` with each
   cell's knobs (a scenarios test binary from `cargo test --release -p

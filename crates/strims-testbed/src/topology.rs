@@ -28,6 +28,28 @@
 //! | browser–native, `browser-links ws` (the default) | the browser | a WebSocket dial of the native's listener, on its TCP port + 1 |
 //! | browser–native, `browser-links webrtc` | the browser | a peer exchange: the native runs WebRTC on UDP, its TCP port + 1, and no WebSocket listener, so the exchange can't settle on a WebSocket |
 //! | browser–browser | the higher index | a peer exchange |
+//!
+//! A node makes every link of its plan at once at its join, each retried
+//! until it links, as a deployed viewer links to the hosts its swarm's
+//! discovery finds (`strims_transfer`'s): it asks the node to link each
+//! one as its peer index search names it, one node call after another,
+//! none waiting for a link before the next, and the links come up as
+//! their handshakes complete. The order a deployed viewer starts them in
+//! is its discovery's at run time (the peers it links already first, then
+//! each search answer's holders, nearest the viewer's host id first),
+//! which a fixed topology can't give; the plan keeps the topology's
+//! order, and with no start waiting on another it decides only which of
+//! two links whose handshakes take as long starts a call sooner.
+//!
+//! The plan stands in for discovery in its concurrency alone. A deployed
+//! viewer's first connect waits for its search's answers (a round trip
+//! through its network), or `search_settle` (2 s) after its network's
+//! first peer when it had none; each answering host names at most five
+//! holders, and a search takes at most sixteen; and it links a found
+//! native host by peer exchange, where a native node here dials the
+//! peer's listener, the TCP link an exchange makes, without the offer's
+//! trip through a network, which a run of native nodes alone (no relay)
+//! doesn't have.
 
 use std::net::SocketAddr;
 

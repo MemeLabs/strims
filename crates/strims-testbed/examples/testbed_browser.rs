@@ -36,8 +36,9 @@
 //! 2. dials the relay over WebSocket, and once the network knows the link
 //!    (1 s), writes the node's host id into `--hosts`;
 //! 3. at `--join-at` seconds after the start, makes the node's links
-//!    ([`Topology::plan`]): WebSocket dials, and peer exchanges once the
-//!    other node's host id is in `--hosts`, each retried until it links.
+//!    ([`Topology::plan`]) all at once (the topology module's docs say
+//!    why): WebSocket dials, and peer exchanges once the other node's
+//!    host id is in `--hosts`, each retried until it links.
 //!
 //! The node's line per second goes to stdout as the page sends it, with
 //! `cpu_ms` the CPU time of the browser and every process below it,
@@ -397,15 +398,24 @@ struct Control {
 impl Control {
     /// Sends `cmd` and waits for the first event `f` accepts; `None` on a
     /// timeout or an `error` about the command.
+    /// Sends `cmd` and waits for the event `f` takes, or its error: one of
+    /// its kind naming its target (a dial's `uri`, an exchange's `hostId`),
+    /// so a failure answers its own command alone of those at once.
     async fn ask(&self, cmd: Value, f: impl Fn(&Value) -> bool) -> Option<Value> {
         let mut events = self.events.subscribe();
         let kind = cmd["type"].clone();
+        let target = ["uri", "hostId"].map(|k| (k, cmd[k].clone()));
+        let failed = |e: &Value| {
+            e["type"] == "error"
+                && e["command"] == kind
+                && target.iter().all(|(k, v)| v.is_null() || e[*k] == *v)
+        };
         let _ = self.commands.send(cmd);
         let deadline = tokio::time::Instant::now() + STEP;
         loop {
             match tokio::time::timeout_at(deadline, events.recv()).await {
                 Ok(Ok(e)) if f(&e) => return Some(e),
-                Ok(Ok(e)) if e["type"] == "error" && e["command"] == kind => return None,
+                Ok(Ok(e)) if failed(&e) => return None,
                 Ok(Ok(_) | Err(broadcast::error::RecvError::Lagged(_))) => {}
                 Ok(Err(broadcast::error::RecvError::Closed)) | Err(_) => return None,
             }
@@ -778,37 +788,44 @@ async fn run() -> Result<(), String> {
         }
         let join = start_ms + a.join_at_ms;
         tokio::time::sleep(Duration::from_millis(join.saturating_sub(now_ms()))).await;
-        // Each exchange once, in plan order; those that didn't link are
-        // tried again together, each second.
-        let mut unlinked = Vec::new();
+        // Every link of the plan at once (strims_testbed::topology): each
+        // dial until it links, and each exchange once, those that didn't
+        // link tried again together each second.
+        let (mut dials, mut exchanges) = (Vec::new(), Vec::new());
         for link in topo.plan(a.index) {
             match link {
-                Link::Dial(uri) => control.dial(&uri).await,
-                Link::Exchange(j) => {
-                    let Some(dir) = &a.hosts else {
-                        eprintln!("an exchange with node {j} needs --hosts");
-                        continue;
-                    };
-                    let host = loop {
-                        if let Some(h) = read_host(dir, j) {
-                            break h;
-                        }
-                        tokio::time::sleep(Duration::from_millis(200)).await;
-                    };
-                    let host = hex::encode(host.to_bytes());
-                    if !control.exchange(&host).await {
-                        unlinked.push(host);
-                    }
-                }
+                Link::Dial(uri) => dials.push(uri),
+                Link::Exchange(j) if a.hosts.is_some() => exchanges.push(j),
+                Link::Exchange(j) => eprintln!("an exchange with node {j} needs --hosts"),
             }
         }
-        while !unlinked.is_empty() {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            let tries = unlinked.iter().map(|h| control.exchange(h));
-            let linked = futures_util::future::join_all(tries).await;
-            let mut linked = linked.into_iter();
-            unlinked.retain(|_| !linked.next().unwrap_or(false));
-        }
+        let dialed = futures_util::future::join_all(dials.iter().map(|uri| control.dial(uri)));
+        let exchanged = async {
+            let Some(dir) = &a.hosts else {
+                return;
+            };
+            let host = |j: usize| async move {
+                loop {
+                    if let Some(h) = read_host(dir, j) {
+                        return hex::encode(h.to_bytes());
+                    }
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                }
+            };
+            let mut unlinked =
+                futures_util::future::join_all(exchanges.iter().map(|&j| host(j))).await;
+            loop {
+                let tries = unlinked.iter().map(|h| control.exchange(h));
+                let linked = futures_util::future::join_all(tries).await;
+                let mut linked = linked.into_iter();
+                unlinked.retain(|_| !linked.next().unwrap_or(false));
+                if unlinked.is_empty() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        };
+        tokio::join!(dialed, exchanged);
         std::future::pending::<()>().await;
     };
     let sample = async {

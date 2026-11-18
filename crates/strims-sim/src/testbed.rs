@@ -108,8 +108,10 @@ const DROP_WAIT_US: u64 = 1_000_000;
 pub const TEST: &str = "calibration_star";
 /// The sim name a testbed run's records go under.
 pub const SIM: &str = "testbed";
-/// The settings that only record or capture: no knob of the twin's.
-const RECORDING: [&str; 10] = [
+/// The settings that only record or capture, or say how run.sh ran
+/// (`STAMPS`, `JOIN_LINKS`, which [`knobs_of`] reads apart): no knob of
+/// the twin's.
+const RECORDING: [&str; 11] = [
     "STAMPS",
     "CAPTURE",
     "PCAP",
@@ -120,6 +122,7 @@ const RECORDING: [&str; 10] = [
     "NODE_BIN",
     "BROWSER_BIN",
     "WEB_BUNDLE",
+    "JOIN_LINKS",
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
@@ -153,6 +156,11 @@ const TWIN_SETTINGS: [&str; 28] = [
     "VIEWER_LINK",
     "LINKS",
 ];
+
+/// How a run's settings say its nodes made their links at their joins
+/// (`JOIN_LINKS`): all at once, as strims-testbed's topology module has a
+/// deployed viewer make them, and the twin's viewers make theirs.
+const JOIN_LINKS_TOGETHER: &str = "together";
 
 /// The clock a run's settings name (`STAMPS`) where run.sh stamps its logs
 /// and reckons its waits from bash's clock, which nothing makes late.
@@ -533,6 +541,15 @@ pub fn knobs_of(
         Some(STAMP_CLOCK) if late_stamps(dir) => put("TESTBED_STAMPS", "back".to_owned()),
         Some(STAMP_CLOCK) => {}
         other => put("TESTBED_STAMPS", other.unwrap_or("date").to_owned()),
+    }
+    // How the nodes made their links at their joins (JOIN_LINKS). A run
+    // whose settings don't say `together` made them one at a time, each
+    // awaited, in the topology's order, the seed first, where its twin's
+    // viewers make them all at once: it keys apart, TESTBED_JOIN_LINKS
+    // pairing it with no cell.
+    match get("JOIN_LINKS") {
+        Some(JOIN_LINKS_TOGETHER) => {}
+        other => put("TESTBED_JOIN_LINKS", other.unwrap_or("serial").to_owned()),
     }
     for (k, v) in settings {
         let twin = RECORDING.contains(&k.as_str())
@@ -2957,7 +2974,7 @@ mod tests {
         let w = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
         w(
             "settings",
-            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\n",
+            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\n",
         );
         w(
             "topology",
@@ -3052,7 +3069,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let star = "node 0 10.77.0.10:4000\nnode 1 10.77.0.11:4000\nnode 2 10.77.0.12:4000\nlink 0 1\nlink 0 2\n";
         let of = |text: &str, links: Option<&str>| knobs_of(&settings_of(text), star, links, &dir);
-        let base = "VIEWERS=2\nSECS=30\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\n";
+        let base = "VIEWERS=2\nSECS=30\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\n";
         let k = of(base, None).unwrap();
         assert_eq!(k["TESTBED_QDISC"], "clsact>ifb-netem>root-class");
         assert!(
@@ -3920,6 +3937,29 @@ mod tests {
                 .skip(1)
                 .all(|l| l.split(',').nth(col) == Some(""))
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run whose settings don't say its nodes made their links at their
+    /// joins all at once (JOIN_LINKS=together) made them one at a time, and
+    /// keys apart; one that says so doesn't.
+    #[test]
+    fn a_run_whose_nodes_linked_one_at_a_time_keys_apart() {
+        let dir = fixture("join-links");
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs.get("TESTBED_JOIN_LINKS"), None);
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        for (setting, key) in [("", "serial"), ("JOIN_LINKS=awaited\n", "awaited")] {
+            std::fs::write(
+                dir.join("settings"),
+                settings.replace("JOIN_LINKS=together\n", setting),
+            )
+            .unwrap();
+            assert_eq!(
+                Run::read(&dir, &BTreeMap::new()).unwrap().knobs["TESTBED_JOIN_LINKS"],
+                key
+            );
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

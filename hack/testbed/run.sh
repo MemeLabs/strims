@@ -313,7 +313,12 @@
 #                          it, stamped by uutils' `date +%s%3N`, which reads
 #                          up to 900 ms late in a second's first 100 ms,
 #                          names none, and strims-sim's testbed module keys
-#                          it apart)
+#                          it apart), and JOIN_LINKS, how a node made its
+#                          links at its join (`together`: all at once,
+#                          strims-testbed's topology module; a run before
+#                          run.sh named it made them one at a time, each
+#                          awaited, seed first, names none, and the testbed
+#                          module keys it apart)
 #   .ctl                   while the run lasts, its control files, which go
 #                          with it
 # A node's lines carry the records strims-sim's tables take (`rec`), which
@@ -671,6 +676,7 @@ env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST
   > "$out/settings" || true
 echo "QDISC=$SHAPER" >> "$out/settings"
 echo "STAMPS=clock" >> "$out/settings"
+echo "JOIN_LINKS=together" >> "$out/settings"
 
 # Milliseconds since the epoch, from bash's clock ($EPOCHREALTIME: seconds
 # and six digits of microseconds, no fork); the containers' samplers stamp

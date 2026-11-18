@@ -25,8 +25,10 @@
 //! there ([`strims_testbed::native`]) for the browsers that exchange with
 //! it. The seed starts writing at `--start` (all nodes share the clock)
 //! and writes for `--secs`; a viewer makes its links `--join-at` seconds
-//! after the start, and with `--arrive` it arrives into the running stream,
-//! reading from the live edge ([`Settings::arrives`]). `--chunk` and
+//! after the start, all at once, each dialed until it links (the
+//! topology module's docs say why), and with `--arrive` it arrives into
+//! the running stream, reading from the live edge
+//! ([`Settings::arrives`]). `--chunk` and
 //! `--munro` size the swarm's chunks and signatures
 //! ([`with_chunks`](strims_testbed::shape::LiveShape::with_chunks)); every
 //! node must take the same. With `--units`, the stream is media in the
@@ -315,12 +317,20 @@ async fn run() -> Result<(), String> {
                 .sleep_until_ms(start_ms + a.join_at_ms)
                 .await;
         }
-        for link in topo.plan(a.index) {
-            match link {
-                Link::Dial(uri) => dial(&node, &uri).await,
-                Link::Exchange(j) => eprintln!("native nodes don't exchange (with node {j})"),
-            }
-        }
+        // Every link of the plan at once (strims_testbed::topology).
+        let dials = topo
+            .plan(a.index)
+            .into_iter()
+            .filter_map(|link| match link {
+                Link::Dial(uri) => Some(uri),
+                Link::Exchange(j) => {
+                    eprintln!("native nodes don't exchange (with node {j})");
+                    None
+                }
+            });
+        let node = &node;
+        futures_util::future::join_all(dials.map(|uri| async move { dial(node, &uri).await }))
+            .await;
         std::future::pending::<()>().await;
     };
     let settings = Settings {
