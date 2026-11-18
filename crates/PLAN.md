@@ -492,6 +492,12 @@ and dropped are in `TRIED.md`.
   (256 KiB) in FIFO order below QoS, about 420 ms at 5 Mbit/s: the queue
   that ppspp's frame cap keeps short on TCP links. Measure what it costs
   on the testbed with browser viewers.
+- **A Chromium node's channel writer.** Decide what strims-wasm's
+  `DcSocket::send` waits for once its own cap refuses a write on
+  Chromium, whose page reads a channel's `bufferedAmount` as it counts it:
+  `bufferedamountlow` at the pacer's mark, a poll of the amount, or the
+  cap alone. Judge it on the testbed's thin stars by the seed's push waits
+  and its meter.
 - **Key material hygiene.** Private keys live in prost `Vec<u8>` fields and
   aren't zeroized.
 - **NAT traversal.** WebRTC has no ICE-TCP (RFC 4571) and no TURN, which str0m
