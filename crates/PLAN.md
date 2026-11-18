@@ -554,19 +554,16 @@ and dropped are in `TRIED.md`.
     native node's longer sleeps. Give a browser's host pacer polls their
     lateness. Draw it below the millisecond: the model draws whole ms and
     sits about half a ms below a real timer's lateness, which runs on
-    within its ms, so the node task fails the bench's mean alone.
+    within its ms, so the node task and the writer fail the bench's mean
+    alone.
   - Draw a timer's lateness by its host's load, where the timer bench's
     runs beside a competing upload read it later than its idle runs
     (`timer_fit_of` per condition).
-  - Find what makes the testbed's 3+ ms timers run tens to hundreds of
-    ms late (the host's other load, or the node's own work) and model it,
-    so the twin's mean and p99 lateness meet the testbed's
-    (`timer_fit_of`'s); measure it on dedicated hosts first (the farm's
-    `testbed-timers` matrix). The longest are stalls, where `late` draws
-    each timer's apart: most hold one node of a run, some several, a few
-    every node at once. Once the dedicated hosts measure them, model the
-    two kinds apart: host-wide stalls drawn per run across its hosts at
-    once, and a node's own stalls kept per host.
+  - Model a loaded machine's timer stalls (tens to hundreds of ms, one
+    node's or every node's at once, which a host's other load makes and
+    a host of its own doesn't) once a measure of users' machines says
+    how often they come: host-wide stalls drawn per run across its hosts
+    at once, a node's own per host.
   - Before Firefox's shares are trusted, compare its runs with the timer
     log off and on (the farm's `testbed-timers-control` matrix), judged
     by the viewers' lag, the seed's drops and its allocation steps beside

@@ -35,26 +35,25 @@
 //! wake-ups, and its harness's timers, the frame writer's waits and the
 //! timer probe's ([`model`]). Each model is the timer bench's: the shares
 //! of 0, 1 and 2 ms late, and the measured spread of those 3 ms or more
-//! late, that the `timers` table of thin-star testbed runs reads (a seed
-//! and three viewers of one kind, a 10 Mbit/s seed, 40 s, idle and beside a
-//! competing upload, every node of the kind, each run weighed alike). The
-//! bench (scoring.sql's `timer_fit_of`) holds a twin of those runs to the
-//! testbed's shares, mean and p99, kind by kind and source by source. A
+//! late, that the `timers` table of thin-star testbed runs reads (the
+//! farm's `testbed-timers` matrix: a seed and three viewers of one kind on
+//! a host of their own, a 10 Mbit/s seed, 90 s, idle and beside a
+//! competing upload, every node of the kind, each run weighed alike, its
+//! first two repeats). The bench (scoring.sql's `timer_fit_of`) holds a
+//! twin of those runs to the testbed's shares, mean and p99, kind by kind
+//! and source by source. A
 //! browser's timer for a deadline already due resolves at once, as
 //! strims-wasm's `Sleep` and `setTimeout`-free waits do, drawing nothing;
 //! a native node's fires on its next tick, as any. A testbed node's line
 //! timer and a browser's host pacer have no draw: the controller samples
 //! on time, and the model's host pacer polls on time.
 //!
-//! The tail's longest values are stalls, not a timer's own lateness: on
-//! the testbed, timers 100 ms or more late come in bursts, most of them
-//! on one node of a run's four, some on several, and a few on every node
-//! at once (one run's every node 744-771 ms late together; the 617 ms
-//! that sets [`MAX_LATE_MS`] comes from a stall), where the model draws
-//! each timer's apart, host by host. The runs shared their host with
-//! other load; PLAN's heavy-tail item has the dedicated hosts' runs
-//! measure them again and model the two kinds apart: host-wide stalls
-//! drawn per run across its hosts, a node's own kept per host.
+//! The model draws no stalls. In the bench's runs, each on a host of its
+//! own, no timer of the stream fires 10 ms late, on any kind, and no
+//! native node's 3 ms late, so its models have no tail; a browser's 3+ ms
+//! timers are its clamps' few ms. A host with other load stalls timers
+//! for tens to hundreds of ms, one node's or every node's at once, which
+//! the model leaves out (PLAN).
 //!
 //! Each host's lateness comes from its own stream (see the crate's
 //! determinism notes), which its incarnations' node clocks and its frame
@@ -195,7 +194,8 @@ impl LateClock {
 
 /// How late a timer fires ([`model`]): `shares`, in parts of [`PARTS`],
 /// of 0, 1 and 2 ms late, and the rest from `tail`, 3 ms or more: whole
-/// ms, ascending, each as likely as the others.
+/// ms, ascending, each as likely as the others; empty where the shares
+/// hold every part.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Model {
     pub(crate) shares: [u32; 3],
@@ -204,57 +204,44 @@ pub(crate) struct Model {
 
 /// The most a timer fires late, in ms: the largest of the tails
 /// ([`model`]).
-pub const MAX_LATE_MS: i64 = 617;
+pub const MAX_LATE_MS: i64 = 8;
 
 /// The parts [`Model::shares`] are in.
 const PARTS: u32 = 1000;
 
 /// How late `kind`'s timers of `source` fire. Each is the timer bench's
 /// testbed runs' (see the [module docs](self)): the shares of 0, 1 and 2
-/// ms late from the `timers` table, every node of the kind, each cell of
-/// runs weighed alike, and a step that undoes what the model's own
-/// passes leave out (a timer drawn late enough for input to pass first
-/// fires no row, so the sim's rows read less late than its draws); and
-/// the tail, the 3+ ms timers' 20 quantiles, whose longest values are
-/// stalls, some host-wide, drawn here as one timer's (see the module
-/// docs).
+/// ms late from the `timers` table, every node of the kind, each run
+/// weighed alike, and for the node task a step that undoes what the
+/// model's own passes leave out (a timer drawn late enough for input to
+/// pass first fires no row, so the sim's rows read less late than its
+/// draws); and the tail, the 3+ ms timers' 20 quantiles, none for a
+/// native node, whose timers there never fired 3 ms late.
 pub(crate) fn model(kind: HostKind, source: Source) -> Model {
     match (kind, source) {
         (HostKind::Native, Source::NodeTask) => Model {
-            shares: [79, 696, 205],
-            tail: &[
-                3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 8, 12, 30, 45, 61, 62, 63, 78, 164,
-            ],
+            shares: [107, 733, 160],
+            tail: &[],
         },
         (HostKind::Native, Source::Writer) => Model {
-            shares: [108, 593, 259],
-            tail: &[
-                3, 3, 3, 3, 3, 3, 3, 4, 5, 5, 14, 15, 24, 37, 39, 42, 48, 67, 114, 617,
-            ],
+            shares: [127, 686, 187],
+            tail: &[],
         },
         (HostKind::Chromium, Source::NodeTask) => Model {
-            shares: [584, 296, 50],
-            tail: &[
-                3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 5, 6, 29, 200,
-            ],
+            shares: [658, 233, 64],
+            tail: &[3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 7, 8],
         },
         (HostKind::Chromium, Source::Writer) => Model {
-            shares: [662, 207, 42],
-            tail: &[
-                3, 3, 3, 3, 4, 4, 5, 5, 6, 7, 7, 7, 8, 11, 23, 31, 37, 47, 79, 154,
-            ],
+            shares: [755, 105, 35],
+            tail: &[3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 8],
         },
         (HostKind::Firefox, Source::NodeTask) => Model {
-            shares: [502, 336, 74],
-            tail: &[
-                3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 5, 25, 202,
-            ],
+            shares: [593, 266, 85],
+            tail: &[3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 6],
         },
         (HostKind::Firefox, Source::Writer) => Model {
-            shares: [672, 244, 20],
-            tail: &[
-                3, 3, 3, 3, 4, 4, 5, 5, 5, 6, 6, 7, 9, 9, 14, 31, 39, 67, 104, 420,
-            ],
+            shares: [874, 103, 6],
+            tail: &[3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6],
         },
     }
 }
@@ -320,17 +307,20 @@ mod tests {
     }
 
     /// Each kind's and source's draws come at its model's shares, and its
-    /// 3+ ms draws are its tail's values, every one drawn; the most any
-    /// tail holds is MAX_LATE_MS.
+    /// 3+ ms draws are its tail's values, every one drawn; a model has a
+    /// tail exactly when its shares leave parts to it; the most any tail
+    /// holds is MAX_LATE_MS.
     #[test]
     fn a_timer_fires_at_its_kinds_and_sources_model() {
         let mut most = 0;
         for kind in KINDS {
             for source in SOURCES {
                 let m = model(kind, source);
-                assert!(m.shares.iter().sum::<u32>() <= PARTS, "{kind:?} {source:?}");
-                assert!(!m.tail.is_empty() && m.tail.is_sorted() && m.tail[0] >= 3);
-                most = most.max(i64::from(m.tail[m.tail.len() - 1]));
+                let held = m.shares.iter().sum::<u32>();
+                assert!(held <= PARTS, "{kind:?} {source:?}");
+                assert_eq!(m.tail.is_empty(), held == PARTS, "{kind:?} {source:?}");
+                assert!(m.tail.is_sorted() && m.tail.iter().all(|&ms| ms >= 3));
+                most = most.max(m.tail.last().map_or(0, |&ms| i64::from(ms)));
                 let mut rng = det_rng(7);
                 let mut seen = std::collections::BTreeSet::new();
                 let b = buckets(100_000, || {
