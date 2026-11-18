@@ -1350,6 +1350,14 @@ pub(crate) struct Scheduler {
     /// carries the channel's data. Bound: one per channel opened.
     assocs: FastMap<(SocketAddr, SocketAddr), sctp::Assoc>,
     rcvs: FastMap<(SocketAddr, SocketAddr), sctp::Rcv>,
+    /// Per host, when its network thread is done with what its
+    /// associations sent so far ([`sctp`]'s module docs).
+    threads: Vec<Time>,
+    /// The answers of the stacks whose page counts a channel's amount
+    /// ([`sctp::SctpProfile::amount_at_sends`]), by time and order: the
+    /// channel's connection. Bound: the channels' send opportunities in
+    /// flight on their threads.
+    answers: BTreeMap<(Time, u64), (SocketAddr, SocketAddr)>,
     /// Per host, whether its packet log is on ([`Scenario::packet_log`]),
     /// and the packets it offered its uplink so far
     /// ([`WanHostReport::packets`]). Bound: the run's packets of the hosts
@@ -1555,6 +1563,8 @@ impl Scheduler {
             ack_waits: vec![AckWaits::default(); spec.hosts.len()],
             assocs: FastMap::default(),
             rcvs: FastMap::default(),
+            threads: vec![Time::NIL; spec.hosts.len()],
+            answers: BTreeMap::new(),
             packet_log: (0..spec.hosts.len())
                 .map(|h| spec.packet_log.contains(&h))
                 .collect(),
@@ -1901,19 +1911,33 @@ impl Scheduler {
         self.room_moved = moved;
     }
 
-    /// Credits the segments admitted by `now` to their sockets and wakes
+    /// Credits the segments admitted by `now` to their sockets, and hands
+    /// the channels' pages the answers their stacks gave by then, in time
+    /// order (an answer after the segments admitted at its time), and wakes
     /// the writers they free.
     fn admit(&mut self, now: Time) {
         let Some(b) = &self.buffers else {
             return;
         };
-        while let Some(entry) = self.admits.first_entry() {
-            if entry.key().0 > now {
-                break;
-            }
-            let at = entry.key().0;
-            let (conn, len) = entry.remove();
-            if let Some(w) = b.admit(conn, len, at) {
+        loop {
+            let admit = self.admits.first_key_value().map(|(&(t, _), _)| t);
+            let answer = self.answers.first_key_value().map(|(&(t, _), _)| t);
+            let woke = match (admit, answer) {
+                (Some(t), a) if t <= now && a.is_none_or(|a| t <= a) => {
+                    let Some(((at, _), (conn, len))) = self.admits.pop_first() else {
+                        break;
+                    };
+                    b.admit(conn, len, at)
+                }
+                (_, Some(t)) if t <= now => {
+                    let Some(((at, _), conn)) = self.answers.pop_first() else {
+                        break;
+                    };
+                    b.answered(conn, at)
+                }
+                _ => break,
+            };
+            if let Some(w) = woke {
                 w.wake();
             }
         }
@@ -5429,6 +5453,161 @@ mod tests {
         assert_eq!(u64::from(1000 - got), report.hosts[1].queue_drops);
         assert_eq!(wan.net.stats(1).drops, 0);
         assert_eq!(wan.in_flight(), 0, "lost datagrams stay tracked");
+    }
+
+    /// A scheduler of hosts `a` and `b` with send buffers and the window
+    /// model, `a`'s packets logged, and `n` channels of `p` from `a` to `b`.
+    fn channels_of(p: SctpProfile, n: u16) -> (Sim<'static>, Scheduler, Vec<ConnKey>) {
+        let mut sim = build();
+        echo(&mut sim, "a");
+        echo(&mut sim, "b");
+        let sites = [
+            ("a", Site::new(City::Frankfurt, Access::Fiber)),
+            ("b", Site::new(City::Frankfurt, Access::Fiber)),
+        ];
+        let mut s = spec(&sites);
+        s.packet_log = BTreeSet::from([0]);
+        let buffers = SendBuffers::new(SendBuffer {
+            uplink_queue: StdDuration::from_millis(100),
+            window: true,
+        });
+        let mut wan = Scheduler::new(&sim, &s, QUIET, 1, Some(buffers)).unwrap();
+        let ip = |h: HostIx| *wan.ip_host.iter().find(|&(_, &x)| x == h).unwrap().0;
+        let conns: Vec<ConnKey> = (0..n)
+            .map(|i| {
+                (
+                    SocketAddr::new(ip(0), 1000 + i),
+                    SocketAddr::new(ip(1), 2000),
+                )
+            })
+            .collect();
+        for &c in &conns {
+            wan.open_channel(c, p);
+        }
+        (sim, wan, conns)
+    }
+
+    /// Writes `n` messages of `chunks` 1000-byte chunks on channel `c` at
+    /// `at`, a chunk a packet, numbering their records from `id` on.
+    fn write_chunks(wan: &mut Scheduler, id: &mut u64, at: Time, c: ConnKey, n: u64, chunks: u64) {
+        let p = wan.assocs[&c].profile();
+        for k in 0..chunks * n {
+            wan.records.insert(
+                *id,
+                Record {
+                    src: c.0,
+                    dst: c.1,
+                    from: 0,
+                    to: 1,
+                    what: What::Data {
+                        seq: *id,
+                        len: 1000,
+                    },
+                    wire: p.data_wire(1000),
+                    packets: 1,
+                    nominal: false,
+                    state: State::InFlight,
+                    link: 0,
+                },
+            );
+            wan.sctp_write(at, c, *id, k % chunks == chunks - 1);
+            *id += 1;
+        }
+    }
+
+    /// A Chromium host's channels send through its one thread: each send
+    /// opportunity once the thread is done with those before it, whatever
+    /// its channel, its packets a cost apart and each its cost after the
+    /// one before; and its page's answer as the opportunity that left the
+    /// channel's queue empty sent its last. A Firefox host's take no
+    /// thread: its packets go as their send opportunity comes.
+    #[test]
+    fn a_browsers_channels_send_through_its_one_thread() {
+        for p in [SctpProfile::CHROMIUM, SctpProfile::FIREFOX] {
+            let (_sim, mut wan, conns) = channels_of(p, 3);
+            // Messages of four chunks.
+            let mut id = 0;
+            let mut write = |wan: &mut Scheduler, at: Time, c: ConnKey, n: u64| {
+                write_chunks(wan, &mut id, at, c, n, 4);
+            };
+            let t0 = sim_time(StdDuration::from_secs(1));
+            let us = |n: i64| Duration::from_micros(n);
+            write(&mut wan, t0, conns[0], 2);
+            write(&mut wan, t0, conns[1], 2);
+            // A third channel's message comes as the thread sends the second's.
+            write(&mut wan, t0 + us(30), conns[2], 1);
+            // Once the thread is idle, a message goes at once ...
+            write(&mut wan, t0 + us(1000), conns[2], 1);
+            // ... and one the window holds back in part leaves the channel's
+            // queue waiting, unanswered.
+            write(&mut wan, t0 + us(2000), conns[0], 1);
+            let times: Vec<Duration> = wan.packets[0]
+                .iter()
+                .map(|r| r.at - (t0 - epoch()))
+                .collect();
+            let links: Vec<u32> = wan.packets[0].iter().map(|r| r.link.unwrap()).collect();
+            let answers: Vec<(Duration, ConnKey)> = wan
+                .answers
+                .iter()
+                .map(|(&(t, _), &c)| (t - t0, c))
+                .collect();
+            let Some(cost) = p.packet_cost else {
+                assert_eq!(times.len(), 27, "{p:?}");
+                assert!(times[..20].iter().all(|&t| t <= us(30)), "{times:?}");
+                assert!(answers.is_empty());
+                continue;
+            };
+            let at = |i: i64| cost * i;
+            let mut expected: Vec<Duration> = (1..=20).map(at).collect();
+            expected.extend((1..=4).map(|i| us(1000) + at(i)));
+            expected.extend((1..=3).map(|i| us(2000) + at(i)));
+            assert_eq!(times, expected);
+            assert_eq!(
+                links,
+                [vec![0; 8], vec![1; 8], vec![2; 8], vec![0; 3]].concat()
+            );
+            // A send opportunity's chunks go as of when the thread took it up.
+            let sent = |c: ConnKey, seq: u64| wan.assocs[&c].sent_at(seq).unwrap() - t0;
+            assert_eq!(
+                (sent(conns[0], 4), sent(conns[1], 8), sent(conns[2], 16)),
+                (at(4), at(8), at(16))
+            );
+            assert_eq!(
+                answers,
+                [
+                    (at(4), conns[0]),
+                    (at(8), conns[0]),
+                    (at(12), conns[1]),
+                    (at(16), conns[1]),
+                    (at(20), conns[2]),
+                    (us(1000) + at(4), conns[2])
+                ]
+            );
+        }
+    }
+
+    /// A Chromium stack whose channel's queue never empties answers its
+    /// page once it has sent more than 100 KiB of the channel since its
+    /// last answer, as that send opportunity's last packet goes.
+    #[test]
+    fn a_chromium_stack_answers_its_page_past_100_kib_its_queue_waiting() {
+        let p = SctpProfile::CHROMIUM;
+        let (_sim, mut wan, conns) = channels_of(p, 1);
+        if let Some(a) = wan.assocs.get_mut(&conns[0]) {
+            a.set_cwnd(1 << 20);
+        }
+        let t0 = sim_time(StdDuration::from_secs(1));
+        let mut id = 0;
+        // A message of eight chunks leaves four waiting: its send
+        // opportunity sends four packets. The 26th's take the stack's sends
+        // to 104 000 bytes since the start.
+        for i in 0..30 {
+            let at = t0 + Duration::from_millis(i);
+            write_chunks(&mut wan, &mut id, at, conns[0], 1, 8);
+        }
+        let answers: Vec<Duration> = wan.answers.keys().map(|&(t, _)| t - t0).collect();
+        let cost = p.packet_cost.unwrap();
+        assert_eq!(answers, [Duration::from_millis(25) + cost * 4]);
     }
 
     #[test]

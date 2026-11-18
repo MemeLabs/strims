@@ -349,7 +349,7 @@ fn a_run_with_tables_keeps_its_trace() {
             request_logs_say_what_they_are(&r, &d);
             timers_say_what_they_are(&r, &d);
             link_logs_say_what_they_are(&r, &d, name);
-            sctp_events_say_what_their_associations_did(&d, name);
+            sctp_events_say_what_their_associations_did(&r, &d, name);
             stalls_say_how_playout_went(&d);
             parents_say_how_the_trees_changed(&r, &d);
             packets_say_what_they_are(&r, &d, name);
@@ -1526,6 +1526,32 @@ fn packets_say_what_they_are(r: &strims_sim::Report, d: &Path, name: &str) {
             "{name}: host {node}"
         );
     }
+    // A host whose stack sends through its one network thread
+    // (`SctpProfile::packet_cost`) offers its associations' packets in
+    // turn, each at least the cost after the one before (whole µs).
+    let mut threads = 0;
+    for (h, hs) in r.scenario.hosts.iter().enumerate() {
+        let Some(cost) = hs.rtc_stack.and_then(|p| p.packet_cost) else {
+            continue;
+        };
+        threads += 1;
+        let t: Vec<i64> = rows
+            .iter()
+            .filter(|p| int(p, "node") == Some(h as i64) && p["proto"] == "udp")
+            .filter(|p| matches!(p["kind"].as_str(), "data" | "data_sack" | "sack"))
+            .map(|p| int(p, "t_us").unwrap())
+            .collect();
+        assert!(t.len() > 1, "{name}: host {h}");
+        for w in t.windows(2) {
+            assert!(
+                w[1] - w[0] >= cost.as_micros() - 1,
+                "{name}: host {h} offered at {} µs and {} µs",
+                w[0],
+                w[1]
+            );
+        }
+    }
+    assert_eq!(threads > 0, name != "tcp", "{name}");
     let kinds: BTreeSet<&str> = rows.iter().map(|r| r["kind"].as_str()).collect();
     assert!(
         kinds.contains("data") && kinds.contains("ack"),
@@ -1578,7 +1604,7 @@ fn packets_say_what_they_are(r: &strims_sim::Report, d: &Path, name: &str) {
 /// model's channel opens with its setup's flights, strims-node's
 /// model_rtc's DTLS flights, SCTP's association and the token or its
 /// answer, sent as data before the node writes on the link.)
-fn sctp_events_say_what_their_associations_did(d: &Path, run: &str) {
+fn sctp_events_say_what_their_associations_did(r: &strims_sim::Report, d: &Path, run: &str) {
     let rows = table_rows(d, "sctp_events");
     if run == "tcp" {
         assert!(rows.is_empty(), "{run}: a TCP run has no associations");
@@ -1587,6 +1613,46 @@ fn sctp_events_say_what_their_associations_did(d: &Path, run: &str) {
     assert!(!rows.is_empty(), "{run}");
     type Key = (i64, i64, i64);
     let i = |r: &BTreeMap<String, String>, c: &str| int(r, c);
+    // Each host's packets out, in time order: a host whose stack sends
+    // through one thread (`SctpProfile::packet_cost`) sends a packet a cost
+    // after the one before while it is busy.
+    let mut outs: BTreeMap<i64, Vec<i64>> = BTreeMap::new();
+    for e in rows.iter().filter(|e| e["dir"] == "out") {
+        outs.entry(i(e, "node").unwrap())
+            .or_default()
+            .push(i(e, "t_us").unwrap());
+    }
+    for t in outs.values_mut() {
+        t.sort_unstable();
+    }
+    // The end of the spell host `h`'s thread was busy with at `at`: its
+    // setup's last chunks can leave in it, after the node's first write.
+    let busy_until = |h: i64, at: i64| -> i64 {
+        let cost = r
+            .scenario
+            .hosts
+            .get(h as usize)
+            .and_then(|s| s.rtc_stack)
+            .and_then(|p| p.packet_cost)
+            .map(|c| c.as_micros() + 1);
+        let (Some(cost), Some(t)) = (cost, outs.get(&h)) else {
+            return at;
+        };
+        let Some(start) = t.iter().position(|&x| x + cost > at) else {
+            return at;
+        };
+        if t[start] > at + cost {
+            return at;
+        }
+        let mut end = t[start];
+        for &x in &t[start + 1..] {
+            if x > end + cost {
+                break;
+            }
+            end = x;
+        }
+        end.max(at)
+    };
     let mut by: BTreeMap<Key, Vec<&BTreeMap<String, String>>> = BTreeMap::new();
     for r in &rows {
         let k = (
@@ -1622,6 +1688,7 @@ fn sctp_events_say_what_their_associations_did(d: &Path, run: &str) {
     let mut sacks = 0;
     for (k, events) in &by {
         let wrote = written.get(k).copied().unwrap_or(0);
+        let setup_until = first_write.get(k).map(|&w| busy_until(k.0, w));
         let (mut t, mut sent_bytes) = (i64::MIN, 0);
         // The TSN ranges of its first sends, and of every packet of DATA.
         let (mut first, mut every) = (Vec::new(), Vec::new());
@@ -1643,8 +1710,9 @@ fn sctp_events_say_what_their_associations_did(d: &Path, run: &str) {
                 first.push(range);
                 // The chunks sent before the node's first write are its
                 // setup's, and so may be some sent with it: the setup's
-                // last flight can leave at the instant the link comes up.
-                if first_write.get(k).is_some_and(|&w| at > w) {
+                // last flight can leave at the instant the link comes up,
+                // or after it in its host's thread's busy spell then.
+                if setup_until.is_some_and(|w| at > w) {
                     sent_bytes += i(r, "data_bytes").unwrap();
                 }
             }

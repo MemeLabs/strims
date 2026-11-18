@@ -96,6 +96,34 @@
 //!   restarts from a packet. The timer backs off to
 //!   [`SctpProfile::max_backoff`].
 //!
+//! A browser host's associations whose stack has a
+//! [`SctpProfile::packet_cost`] send through its one network thread, as
+//! Chromium 156's do (Chrome for Testing 156.0.8078.47, its WebRTC
+//! branch-heads/8078). Its renderer runs every peer connection's network
+//! work on one thread (third_party/blink's
+//! peer_connection_dependency_factory.cc, `PeerConnectionStaticDeps`,
+//! :420-424, the `WebRTC_W_and_N` thread, the connections' worker thread
+//! too, :947-949). A data channel's `send` posts its message to that
+//! thread as a task of its own (blink's rtc_data_channel.cc:851;
+//! WebRTC's pc/sctp_data_channel.cc, `SendAsync`, :563-583), which hands
+//! it to dcSCTP (media/sctp/dcsctp_transport.cc:386;
+//! net/dcsctp/socket/dcsctp_socket.cc, `Send`, :544-557). Its send
+//! opportunity (transmission_control_block.cc, `SendBufferedPackets`,
+//! :218-275) seals each packet as a DTLS record of its own
+//! (p2p/dtls/dtls_transport.cc:663) and hands it through ICE to the
+//! renderer's socket, which sends it to the network service as a message
+//! of its own (blink's p2p/socket_client_impl.cc:124), whose `sendto` takes
+//! it (services/network/p2p/socket_udp.cc:485), before the next. A SACK
+//! comes in on the same thread (dcsctp_transport.cc:744-747), and so does
+//! its send opportunity (dcsctp_socket.cc:1591-1614). So a send
+//! opportunity starts once the thread is done with the ones before it, its
+//! chunks go out as of then, and its packets leave one after another, each
+//! a packet's cost after the one before; a receiver's SACK alone takes its
+//! turn the same way. An inbound packet takes nothing of the thread here.
+//! A walk's events go before the writes of the step before it, so within a
+//! walk their send opportunities go first, though the writes came earlier
+//! in the step.
+//!
 //! A SACK of its own takes its turn on the receiver's uplink and is lost at
 //! a full queue as any packet is. A chunk resent while its last copy is
 //! still on its way, or through, is a copy: it takes its turn on both
@@ -128,6 +156,7 @@ use strims_testbed::sctp::{Dir, SctpEvent, What as SctpWhat};
 use super::{Event, Offered, Scheduler, What};
 use crate::net::ConnKey;
 use crate::report::{PacketKind, PacketProto};
+use crate::spec::HostIx;
 use crate::world::epoch;
 
 /// The SCTP stack an association's rules follow.
@@ -172,13 +201,19 @@ pub struct SctpProfile {
     pub buffered_flight: bool,
     /// Whether a page reads a channel's buffered amount as its own count:
     /// its last reading and each message it sends since, set to the stack's
-    /// amount as the stack answers the page's last send on the channel
-    /// (after the sends it makes at once) and to 0 once the stack's queue
-    /// for it empties, but never falling as the stack sends between:
-    /// Chromium's page reads it so, its `bufferedamountlow` coming as it
-    /// reads the fall. A node's writer waiting for its mark then wakes on
-    /// the answer to its own last sends, or as its channel empties.
+    /// amount as the stack answers, never falling as the stack sends
+    /// between: Chromium's page reads it so, its `bufferedamountlow` coming
+    /// as it reads the fall. The stack answers at the end of a send
+    /// opportunity that leaves the channel's queue empty, or that brings
+    /// what it sent of the channel since its last answer past 100 KiB (the
+    /// one a message took, or a SACK's or a timer's that takes the queue to
+    /// the threshold it set). A node's writer waiting for its mark then
+    /// wakes on an answer.
     pub amount_at_sends: bool,
+    /// What each packet takes of its host's one network thread, which
+    /// every send opportunity of the host's associations waits for, if its
+    /// sends go through one (see the module docs).
+    pub packet_cost: Option<Duration>,
 }
 
 /// A DATA chunk's header, and a SACK chunk's with no gaps.
@@ -244,6 +279,7 @@ impl SctpProfile {
         max_burst: None,
         buffered_flight: true,
         amount_at_sends: false,
+        packet_cost: None,
     };
 
     /// dcSCTP's options as Chromium runs it: 1191-byte packets (a chunk of
@@ -251,7 +287,10 @@ impl SctpProfile {
     /// window of ten, a 5 MiB receive window, the timeout 500 ms at first
     /// and 400 ms-60 s with a variation of 27.5 ms at least (its 220 ms
     /// option over 8) and its timers backing off to 3 s at most, the
-    /// delayed SACK 200 ms at most, and four packets a send opportunity.
+    /// delayed SACK 200 ms at most, and four packets a send opportunity;
+    /// its packets 12 µs of its network thread each (the testbed's quiet
+    /// hosts' Chromium seeds, through their busy spells: 11.7-12.2 µs apart
+    /// on average, whatever their size or peer).
     /// Its misses are Chromium 156's (WebRTC's branch-heads/8078, see the
     /// module docs); WebRTC's main takes a resent chunk's misses only from
     /// SACKs that newly acknowledge a chunk sent after the resend
@@ -274,16 +313,19 @@ impl SctpProfile {
         max_burst: Some(4),
         buffered_flight: false,
         amount_at_sends: true,
+        packet_cost: Some(Duration::from_micros(12)),
     };
 
     /// dcSCTP as Firefox 158 runs it: Chromium's options but a 16 MiB
     /// receive window and a delayed SACK of 50 ms, the amount its page
-    /// reads taken as its stack's. (Between two Firefoxes its chunks are
-    /// I-DATA, 4 bytes longer.)
+    /// reads taken as its stack's, and no thread's cost (no testbed run
+    /// has captured a Firefox seed's packets). (Between two Firefoxes its
+    /// chunks are I-DATA, 4 bytes longer.)
     pub const FIREFOX: SctpProfile = SctpProfile {
         rwnd: 16 << 20,
         delayed_sack: Duration::from_millis(50),
         amount_at_sends: false,
+        packet_cost: None,
         ..SctpProfile::CHROMIUM
     };
 
@@ -562,7 +604,28 @@ pub(super) struct Assoc {
     /// The chunks that end a message and haven't reached the reader. Bound:
     /// the channel's cap.
     ends: BTreeSet<u64>,
+    /// For a page that counts the channel's amount
+    /// ([`SctpProfile::amount_at_sends`]): the payload sent first since the
+    /// stack last answered it; the queue's payload at which the stack
+    /// checks again ([`ANSWER_EVERY`] under the queue's at its last check,
+    /// or none); and whether a message ended since the last send
+    /// opportunity, after which the stack checks.
+    unanswered: usize,
+    low: usize,
+    wrote: bool,
 }
+
+/// How much of a channel a stack whose page counts the amount
+/// ([`SctpProfile::amount_at_sends`]) sends past its last answer before
+/// it answers again with the queue still waiting. Chromium's
+/// `SctpDataChannel::MaybeSendOnBufferedAmountChanged`
+/// (pc/sctp_data_channel.cc:872-916, `kMinBufferedAmountDiffToTriggerCallback`
+/// :889) checks after a message's send (:941) and as the channel's queue
+/// falls to the threshold it set at its last check, this much under the
+/// queue then, or empty (:910-914; `OnBufferedAmountLow`, :640), and
+/// answers once the queue is empty or the stack has sent more than this
+/// since the last answer (:899-904).
+const ANSWER_EVERY: usize = 100 * 1024;
 
 impl Assoc {
     pub(super) fn new(profile: SctpProfile) -> Assoc {
@@ -592,6 +655,9 @@ impl Assoc {
             ends: BTreeSet::new(),
             bundled: BTreeSet::new(),
             immediate: BTreeSet::new(),
+            unanswered: 0,
+            low: 0,
+            wrote: false,
         }
     }
 
@@ -624,6 +690,18 @@ impl Assoc {
 
     pub(super) fn pending(&self) -> impl Iterator<Item = u64> + '_ {
         self.pending.iter().map(|&(id, _)| id)
+    }
+
+    /// When chunk `seq` first went, while it is outstanding.
+    #[cfg(test)]
+    pub(super) fn sent_at(&self, seq: u64) -> Option<Time> {
+        self.out.get(&seq).map(|c| c.sent)
+    }
+
+    /// Its window is `cwnd` from now on.
+    #[cfg(test)]
+    pub(super) fn set_cwnd(&mut self, cwnd: usize) {
+        self.cwnd = cwnd;
     }
 
     fn stack(&self) -> Stack {
@@ -722,6 +800,7 @@ impl Assoc {
         let c = Chunk::new(id, len, at);
         self.in_flight += c.flight(self.stack());
         self.out.insert(seq, c);
+        self.unanswered = self.unanswered.saturating_add(len);
     }
 }
 
@@ -736,6 +815,38 @@ pub(super) struct Rcv {
 }
 
 impl Scheduler {
+    /// When host `h`'s network thread takes up a send opportunity of `p`'s
+    /// that came at `at`: once it is done with those before it, if `p`'s
+    /// sends go through one (see the module docs).
+    fn thread_start(&self, h: HostIx, at: Time, p: &SctpProfile) -> Time {
+        match (p.packet_cost, self.threads.get(h)) {
+            (Some(_), Some(&free)) => at.max(free),
+            _ => at,
+        }
+    }
+
+    /// When the next packet host `h`'s network thread sends from `at` on
+    /// leaves it: its cost after the thread is done with the one before;
+    /// at `at` where `p`'s sends take no thread.
+    fn thread_send(&mut self, h: HostIx, at: Time, p: &SctpProfile) -> Time {
+        let (Some(cost), Some(free)) = (p.packet_cost, self.threads.get_mut(h)) else {
+            return at;
+        };
+        *free = at.max(*free) + cost;
+        *free
+    }
+
+    /// `conn`'s stack answers its page at `at`: the page reads its
+    /// channel's amount as the stack's ([`SctpProfile::amount_at_sends`]),
+    /// once the walk reaches `at` ([`Scheduler::admit`]).
+    fn answer(&mut self, at: Time, conn: ConnKey) {
+        if self.buffers.is_some() {
+            let key = self.next;
+            self.next += 1;
+            self.answers.insert((at, key), conn);
+        }
+    }
+
     /// `conn` carries a data channel from now on, sent as `profile` sends.
     pub(crate) fn open_channel(&mut self, conn: ConnKey, profile: SctpProfile) {
         self.assocs.insert(conn, Assoc::new(profile));
@@ -760,6 +871,7 @@ impl Scheduler {
             a.ends.insert(seq);
         }
         a.pending.push_back((id, end));
+        a.wrote |= end;
         // dcSCTP sends as a message is written; sctp-proto as str0m polls.
         if end || a.stack() == Stack::SctpProto {
             self.sctp_pump(at, conn);
@@ -887,11 +999,20 @@ impl Scheduler {
         }
     }
 
-    /// A send opportunity of dcSCTP: a fast retransmission's packet past
-    /// the window, then up to `max_burst` packets each of the chunks marked
-    /// for retransmission and then new ones, of what the window has left.
+    /// A send opportunity of dcSCTP that came at `at`: a fast
+    /// retransmission's packet past the window, then up to `max_burst`
+    /// packets each of the chunks marked for retransmission and then new
+    /// ones, of what the window has left, as of when its host's thread
+    /// takes it up. As its last packet goes it answers a page that counts
+    /// the amount, as [`ANSWER_EVERY`]'s docs say.
     fn rfc_pump(&mut self, at: Time, conn: ConnKey) {
         let mut packets: Vec<Out> = Vec::new();
+        let Some(profile) = self.assocs.get(&conn).map(|a| a.profile) else {
+            return;
+        };
+        let from = self.ip_host.get(&conn.0.ip()).copied();
+        let at = from.map_or(at, |h| self.thread_start(h, at, &profile));
+        let queued = self.queued(conn);
         {
             let Some(a) = self.assocs.get_mut(&conn) else {
                 return;
@@ -1016,34 +1137,66 @@ impl Scheduler {
                 self.events.insert((due, key), Event::SctpTimeout { conn });
             }
         }
+        let mut done = at;
         for packet in packets {
-            self.sctp_transmit(at, conn, &packet);
+            done = self.sctp_transmit(at, conn, &packet);
+        }
+        if profile.amount_at_sends {
+            let left = self.queued(conn);
+            let answers = self.assocs.get_mut(&conn).is_some_and(|a| {
+                let checks = std::mem::take(&mut a.wrote) || (queued > a.low && left <= a.low);
+                if !checks {
+                    return false;
+                }
+                a.low = left.saturating_sub(ANSWER_EVERY);
+                let answers = (left == 0 && a.unanswered > 0) || a.unanswered > ANSWER_EVERY;
+                if answers {
+                    a.unanswered = 0;
+                }
+                answers
+            });
+            if answers {
+                self.answer(done, conn);
+            }
         }
     }
 
-    /// A packet of `conn`'s chunks goes out at `at`: each chunk credited to
-    /// its socket as it first goes; lost whole at a full uplink queue or on
+    /// The payload of `conn`'s chunks waiting for its window.
+    fn queued(&self, conn: ConnKey) -> usize {
+        self.assocs.get(&conn).map_or(0, |a| {
+            a.pending
+                .iter()
+                .filter_map(|&(id, _)| Assoc::chunk_of(&self.records, id))
+                .map(|(_, len)| len)
+                .sum()
+        })
+    }
+
+    /// A packet of `conn`'s chunks goes out from `at`, as its host's thread
+    /// sends it ([`Scheduler::thread_send`]): each chunk credited to its
+    /// socket as it first goes; lost whole at a full uplink queue or on
     /// its path; and a resent chunk whose last copy wasn't lost goes as a
     /// copy. Its chunks pass the receiver's downlink one after another,
     /// the first charged the packet's overhead. A dcSCTP packet carries the
     /// SACK its sender holds back for the reverse direction, and the I bit
     /// while the window is under ten packets. Each end whose log is on
     /// logs it: the sender as it goes, the receiver as it arrives (with a
-    /// SACK, as the receiver takes the SACK).
-    fn sctp_transmit(&mut self, at: Time, conn: ConnKey, out: &Out) {
+    /// SACK, as the receiver takes the SACK). Returns when it went.
+    fn sctp_transmit(&mut self, at: Time, conn: ConnKey, out: &Out) -> Time {
         let packet = &out.chunks[..];
         let (Some(cap), Some(_)) = (self.window(), packet.first()) else {
-            return;
+            return at;
         };
         let (Some(&from), Some(&to)) = (
             self.ip_host.get(&conn.0.ip()),
             self.ip_host.get(&conn.1.ip()),
         ) else {
-            return;
+            return at;
         };
         let Some((profile, cwnd)) = self.assocs.get(&conn).map(|a| (a.profile, a.cwnd)) else {
-            return;
+            return at;
         };
+        let at = self.thread_send(from, at, &profile);
         let back = (conn.1, conn.0);
         let ride = profile.stack != Stack::SctpProto
             && self.rcvs.get(&back).is_some_and(|r| r.due.is_some());
@@ -1152,7 +1305,7 @@ impl Scheduler {
                     self.sctp_lost(conn, c.seq);
                 }
             }
-            return;
+            return at;
         };
         if logs.1
             && !rode
@@ -1199,6 +1352,7 @@ impl Scheduler {
             }
             self.events.insert((t.arrival, c.id), Event::Arrive);
         }
+        at
     }
 
     /// Chunk `seq` of `conn` was lost: the sender learns so only from the
@@ -1343,9 +1497,10 @@ impl Scheduler {
         self.events.insert((at, key), Event::SctpSack { conn });
     }
 
-    /// `conn`'s receiver sends a SACK at `t`: a packet on its uplink that
-    /// reaches the sender a one-way trip after it leaves, or is lost to a
-    /// full uplink queue.
+    /// `conn`'s receiver sends a SACK from `t`, as its host's thread sends
+    /// it ([`Scheduler::thread_send`]): a packet on its uplink that reaches
+    /// the sender a one-way trip after it leaves, or is lost to a full
+    /// uplink queue.
     fn sctp_send_sack(&mut self, t: Time, conn: ConnKey) {
         let (Some(&from), Some(&to)) = (
             self.ip_host.get(&conn.0.ip()),
@@ -1359,6 +1514,7 @@ impl Scheduler {
         let Some(p) = self.receiver_profile(conn) else {
             return;
         };
+        let t = self.thread_send(to, t, &p);
         if self.sctp_logs(to) {
             let back = (conn.1, conn.0);
             let state = self.assocs.get(&back).map(|a| (a.cwnd, a.in_flight));
