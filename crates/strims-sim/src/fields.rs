@@ -290,7 +290,7 @@ pub(crate) trait Column: Key {
 }
 
 /// The tables strims-sim writes zstd-compressed, `<name>.csv.zst`.
-pub(crate) const ZSTD: [&str; 9] = [
+pub(crate) const ZSTD: [&str; 10] = [
     "reads",
     "events",
     "node_bins",
@@ -300,6 +300,7 @@ pub(crate) const ZSTD: [&str; 9] = [
     "haves",
     "peer_samples",
     "sockets",
+    "packets",
 ];
 
 /// The row's fields that hold an integer.
@@ -4105,6 +4106,43 @@ pub(crate) mod cols {
         ///
         /// Unit: bytes. None is written as an empty field.
         UpQueueBytes,
+        /// The IP bytes of the data the node offered its uplink's queue in the
+        /// bin, before the queue dropped any: its TCP segments with payload and
+        /// its datagrams to the swarm's nodes (its seed and viewers: the
+        /// signalling relay left out), resends included; its pure
+        /// acknowledgements, a data channel's SACKs alone and its competing
+        /// uploads left out. Each offer counts in the bin it entered the queue
+        /// in (`WanHostReport::offers`). Empty outside WAN mode and for a
+        /// testbed node without an offered capture.
+        ///
+        /// strims-sim: A twin counts the WAN scheduler's admissions
+        /// (`Scheduler::offered`: each segment, datagram and SCTP packet as its
+        /// sender hands it to the uplink, its IP bytes); a testbed run its
+        /// offered capture (`pcap-<i>-offered.pcap`, ahead of the egress delay
+        /// and the queue: each packet at its capture time plus the node's
+        /// delay, a GSO buffer cut into the link's packets), a datagram whose
+        /// length its stack reads as a SACK alone left out: its other datagrams
+        /// count, its DTLS handshake's and STUN's among them, which the model's
+        /// data channels don't send.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        OfferedBytes,
+        /// The packets of `offered_bytes`: what the node offered its uplink's
+        /// queue in the bin, before the queue dropped any, a segment's packets
+        /// each (a GSO buffer's as the link carries it). Empty outside WAN mode
+        /// and for a testbed node without an offered capture.
+        ///
+        /// None is written as an empty field.
+        OfferedPackets,
+        /// The most of `offered_bytes` the node offered in any 10 ms within the
+        /// bin: over each window that starts at one of its offers in the bin,
+        /// cut at the bin's end, the IP bytes offered in it. A sender's
+        /// burstiness at the queue, before its drops; 0 in a bin it offered
+        /// nothing in. Empty outside WAN mode and for a testbed node without an
+        /// offered capture.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        OfferedBurstBytes,
     }
 
     impl NodeBins {
@@ -4128,6 +4166,9 @@ pub(crate) mod cols {
                 NodeBins::Rtos => "rtos",
                 NodeBins::UpQueueMs => "up_queue_ms",
                 NodeBins::UpQueueBytes => "up_queue_bytes",
+                NodeBins::OfferedBytes => "offered_bytes",
+                NodeBins::OfferedPackets => "offered_packets",
+                NodeBins::OfferedBurstBytes => "offered_burst_bytes",
             }
         }
 
@@ -4167,7 +4208,10 @@ pub(crate) mod cols {
                 | NodeBins::WindowCuts
                 | NodeBins::Rtos
                 | NodeBins::UpQueueMs
-                | NodeBins::UpQueueBytes => Ty::Int,
+                | NodeBins::UpQueueBytes
+                | NodeBins::OfferedBytes
+                | NodeBins::OfferedPackets
+                | NodeBins::OfferedBurstBytes => Ty::Int,
             }
         }
     }
@@ -5227,6 +5271,290 @@ pub(crate) mod cols {
                 | Sockets::RetransSegments
                 | Sockets::DeliveryRateBps
                 | Sockets::PacingRateBps => Ty::Int,
+            }
+        }
+    }
+
+    /// The `packets` table's columns: a row per packet a node offered its
+    /// uplink.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum Packets {
+        /// The host that offered the packet, as `events` numbers hosts.
+        Node,
+        /// The packet's place among the node's offers, from 0, in the order its
+        /// uplink's queue took them: a message's or a GSO buffer's packets one
+        /// after another. A shaper replay's n is its source's.
+        N,
+        /// When the packet entered the node's uplink queue, in µs of true time
+        /// from the stream's start.
+        ///
+        /// strims-sim: The model's WAN scheduler's admission of the message
+        /// that holds it; on the testbed its offered capture's time plus the
+        /// node's egress delay (the netem ahead of the modem: its `links`
+        /// line's delay); a shaper replay's its source's.
+        ///
+        /// Unit: us.
+        TUs,
+        /// When the packet's last bit left the node's uplink, in µs from the
+        /// stream's start; empty for one the queue dropped.
+        ///
+        /// strims-sim: The model's shaper's departure of the packet, or its
+        /// slot's with slots (`Network::up_last_departures`); on the testbed
+        /// its capture past the modem (tcpdump on eth0, as the device took it).
+        ///
+        /// Unit: us. None is written as an empty field.
+        SentUs,
+        /// When the packet reached its receiver's access link, in µs from the
+        /// stream's start; empty for one lost, one to no node, and where no
+        /// reading of it exists (a shaper replay's, a testbed receiver's
+        /// capture without it).
+        ///
+        /// strims-sim: The model's path's arrival (`Transit::arrival`, ahead of
+        /// the receiver's downlink); on the testbed the receiver's own capture
+        /// of it on its eth0, inbound, matched by its source, flow, IP id and
+        /// length.
+        ///
+        /// Unit: us. None is written as an empty field.
+        ArrivedUs,
+        /// Where the packet was lost: `queue` (its uplink's queue had no room
+        /// for it), `path` (the path between the nodes lost it); empty for one
+        /// that went.
+        ///
+        /// strims-sim: The model's queue rule is `Network::up_admit`'s, its
+        /// path's loss the sites'. On the testbed a packet its offered capture
+        /// holds and its eth0 never carried within 1 s is the queue's; the
+        /// testbed's bridge loses nothing on its own, so it writes no `path`.
+        ///
+        /// None is written as an empty field.
+        Lost,
+        /// The host the packet went to, as `events` numbers hosts; empty for
+        /// one to no node (a competing upload's sink, a testbed relay's or
+        /// browser's own traffic).
+        ///
+        /// None is written as an empty field.
+        Peer,
+        /// The ordinal of the node's link to `peer` that carried the packet,
+        /// from 0, in the order the node first sent on each: a TCP connection,
+        /// or a data channel's datagrams (their ports); empty for one to no
+        /// node.
+        ///
+        /// None is written as an empty field.
+        Link,
+        /// The packet's transport: `tcp`, `udp`, or `other` for another IP
+        /// protocol.
+        Proto,
+        /// The packet's IP length: its headers and payload, no link framing.
+        ///
+        /// Unit: bytes.
+        IpBytes,
+        /// What the node's shaper charged the packet: its IP bytes and its link
+        /// class's framing (`Framing::packet`: Ethernet's 14 bytes under tbf,
+        /// the class's size table on the testbed).
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        ChargedBytes,
+        /// What the packet was: `data` (a TCP segment with payload, or a
+        /// datagram with data), `ack` (a pure TCP acknowledgement), `sack` (an
+        /// SCTP SACK alone), `data_sack` (an SCTP packet of DATA with a SACK
+        /// bundled), `control` (SYN, FIN or RST, a STUN or DTLS handshake
+        /// datagram), `competing` (a competing upload's, to its sink).
+        ///
+        /// strims-sim: DTLS hides a data channel's chunks on the testbed: there
+        /// a datagram whose length its stack reads as a SACK alone
+        /// (`SctpProfile::datagram_payload` of 0) is a `sack`, every other
+        /// `data` (`estimated`), and none is a `data_sack` or `control`.
+        Kind,
+        /// The first byte of its connection's stream the packet carried, as an
+        /// offset from the connection's first byte (TCP's sequence number less
+        /// its flow's first); empty for a datagram and a packet without
+        /// payload.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        LoOff,
+        /// The offset just past the last byte of its connection's stream the
+        /// packet carried: `lo_off` plus its payload; empty where `lo_off` is.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        HiOff,
+        /// Whether the packet carried bytes its connection had offered before
+        /// (a retransmission); empty for a datagram, whose resends DTLS hides
+        /// on the testbed.
+        ///
+        /// None is written as an empty field.
+        Resent,
+        /// Whether the packet's kind was read from its length, its payload
+        /// hidden (a data channel's datagram on the testbed, inside DTLS);
+        /// false where its headers or the model say it.
+        Estimated,
+        /// What the node's uplink held as the packet entered its queue, in the
+        /// bytes its link charges: the packets handed to it before whose last
+        /// bit hadn't left, the one it was sending included.
+        ///
+        /// strims-sim: The model's own (`Network::up_held`); on the testbed the
+        /// charges of the packets that entered before it and hadn't left by its
+        /// entry, from the two captures, those the queue dropped left out.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        BacklogBytes,
+    }
+
+    impl Packets {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                Packets::Node => "node",
+                Packets::N => "n",
+                Packets::TUs => "t_us",
+                Packets::SentUs => "sent_us",
+                Packets::ArrivedUs => "arrived_us",
+                Packets::Lost => "lost",
+                Packets::Peer => "peer",
+                Packets::Link => "link",
+                Packets::Proto => "proto",
+                Packets::IpBytes => "ip_bytes",
+                Packets::ChargedBytes => "charged_bytes",
+                Packets::Kind => "kind",
+                Packets::LoOff => "lo_off",
+                Packets::HiOff => "hi_off",
+                Packets::Resent => "resent",
+                Packets::Estimated => "estimated",
+                Packets::BacklogBytes => "backlog_bytes",
+            }
+        }
+    }
+
+    impl sealed::Sealed for Packets {}
+
+    impl Key for Packets {
+        fn name(self) -> &'static str {
+            Packets::name(self)
+        }
+    }
+
+    impl Column for Packets {
+        const TABLE: &'static str = "packets";
+
+        fn ty(self) -> Ty {
+            match self {
+                Packets::Node
+                | Packets::N
+                | Packets::TUs
+                | Packets::SentUs
+                | Packets::ArrivedUs
+                | Packets::Peer
+                | Packets::Link
+                | Packets::IpBytes
+                | Packets::ChargedBytes
+                | Packets::LoOff
+                | Packets::HiOff
+                | Packets::BacklogBytes => Ty::Int,
+                Packets::Lost | Packets::Proto | Packets::Kind => Ty::Text,
+                Packets::Resent | Packets::Estimated => Ty::Bool,
+            }
+        }
+    }
+
+    /// The `hosts` table's columns: a row per host of a run.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum Hosts {
+        /// The host, as `events` numbers hosts.
+        Node,
+        /// The host's name.
+        Name,
+        /// What the host is in the run: `seed` (a swarm's seed), `viewer` (one
+        /// of a swarm's viewers, honest or not), `relay` (the signalling relay,
+        /// in no swarm), `other` (a sim host in no swarm that isn't the relay).
+        /// A testbed run writes its nodes and its relay alone.
+        Role,
+        /// The node the host runs: `native` (strims-node), `chromium` or
+        /// `firefox` (strims-wasm's node in that browser), as the testbed's
+        /// `KINDS` names them; a sim host stands for the browser whose stack
+        /// its data channels model.
+        Kind,
+        /// The transport stack the host's links run on: `linux-tcp` (a testbed
+        /// native node's kernel TCP), `str0m` (str0m's data channels: a testbed
+        /// native node whose links are all data channels, or a sim host's
+        /// outside the window model, str0m's own code over the sim's UDP),
+        /// `dcsctp` (a browser's data channels), `model-tcp` (a sim host's TCP,
+        /// the window model's or turmoil's), `model-sctp-<profile>` (the window
+        /// model's data channels under a stack's profile: chromium, firefox or
+        /// str0m).
+        Stack,
+        /// The host's access link spec, `<class>[,<key>=<value>...]`
+        /// (`strims_wan::testbed::Spec`), where it has one: a testbed node's
+        /// (its `links` line), a sim host shaped as one (a twin's
+        /// `STRIMS_SIM_CAL_SEED_LINK`, `STRIMS_SIM_CAL_VIEWER_LINK` or
+        /// `STRIMS_SIM_CAL_LINKS`); empty for a sim host on a site of the WAN
+        /// model's own.
+        ///
+        /// None is written as an empty field.
+        LinkSpec,
+        /// The host's uplink rate at the start, in bytes per second (its steps
+        /// are `events`' `uplink_rate`); empty for a sim host without a site.
+        ///
+        /// Unit: bytes/s. None is written as an empty field.
+        UpBps,
+        /// The one-way delay the host's egress adds to what it sends, in µs: a
+        /// testbed node's netem (its `links` line's delay), a sim host's own
+        /// where its scenario gives it one at the start (every latency fault at
+        /// time 0 that times what it sends, `Fault::LatencyFrom` from it or
+        /// `Fault::Latency` of it, agreeing); empty where it has none of its
+        /// own.
+        ///
+        /// Unit: us. None is written as an empty field.
+        DelayUs,
+        /// The most the host's uplink queue holds, in µs of transmission time
+        /// at its rate: a testbed node's (its `links` line's queue), a sim
+        /// host's send buffers' `uplink_queue` under the window model; empty
+        /// where the queue has no bound.
+        ///
+        /// Unit: us. None is written as an empty field.
+        QueueUs,
+        /// The host's clock's offset from true time, in µs
+        /// (`HostReport::clock_offset`); 0 on the testbed, whose containers
+        /// share their host's clock.
+        ///
+        /// Unit: us.
+        ClockUs,
+    }
+
+    impl Hosts {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                Hosts::Node => "node",
+                Hosts::Name => "name",
+                Hosts::Role => "role",
+                Hosts::Kind => "kind",
+                Hosts::Stack => "stack",
+                Hosts::LinkSpec => "link_spec",
+                Hosts::UpBps => "up_bps",
+                Hosts::DelayUs => "delay_us",
+                Hosts::QueueUs => "queue_us",
+                Hosts::ClockUs => "clock_us",
+            }
+        }
+    }
+
+    impl sealed::Sealed for Hosts {}
+
+    impl Key for Hosts {
+        fn name(self) -> &'static str {
+            Hosts::name(self)
+        }
+    }
+
+    impl Column for Hosts {
+        const TABLE: &'static str = "hosts";
+
+        fn ty(self) -> Ty {
+            match self {
+                Hosts::Node | Hosts::UpBps | Hosts::DelayUs | Hosts::QueueUs | Hosts::ClockUs => {
+                    Ty::Int
+                }
+                Hosts::Name | Hosts::Role | Hosts::Kind | Hosts::Stack | Hosts::LinkSpec => {
+                    Ty::Text
+                }
             }
         }
     }

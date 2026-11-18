@@ -559,8 +559,8 @@ and dropped are in `TRIED.md`.
     str0m's receiver. The testbed's runs of a case vary: score against
     repeats.
   - Browser timing tables (`timers`, `channel_writes`,
-    `channel_buffered`, `channel_reads`, `packets`): build them only if
-    the testbed–twin fit shows browser timing matters.
+    `channel_buffered`, `channel_reads`): build them only if the
+    testbed–twin fit shows browser timing matters.
   - Every pair a sim links can reach each other. A model of peers that
     accept no inbound links (an untraversable NAT) would show what they
     cost the mesh and the seed's allocation, and whether either should

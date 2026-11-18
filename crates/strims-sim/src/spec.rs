@@ -127,6 +127,10 @@ pub struct HostSpec {
     /// rejoins the same way. `None`: with the run, reading as the swarm's
     /// options say until it restarts.
     pub arrive_at: Option<Duration>,
+    /// The testbed access link spec its site is shaped as
+    /// (`strims_wan::testbed::Spec`, a twin's link knobs), which the
+    /// tables' `hosts` name; `None` for a site of the WAN model's own.
+    pub link_spec: Option<String>,
 }
 
 /// How long the join of a media viewer that arrives or restarts waits for
@@ -567,6 +571,23 @@ pub struct Scenario {
     /// per neighbour per chunk announced, and per request and rival).
     /// Changes no trace.
     pub request_logs: bool,
+    /// WAN mode: the hosts whose every packet offered to their uplink the
+    /// WAN scheduler logs as its queue takes or drops it, for the tables'
+    /// `packets` (`STRIMS_SIM_PACKET_LOG`, [`WanHostReport::packets`]): a
+    /// row per packet, some 1.5 k a second at a busy 20 Mbit/s uplink,
+    /// each held to the run's end (every host of star-31-5's 30 s, 1.17 M
+    /// rows, took 180 MB more at the peak), so a long or wide cell logs
+    /// its seed or a few hosts. None by default. Changes no trace.
+    ///
+    /// [`WanHostReport::packets`]: crate::report::WanHostReport::packets
+    pub packet_log: BTreeSet<HostIx>,
+    /// WAN mode: the tables write each node's bins
+    /// (`STRIMS_SIM_BIN_NODES=1`), so the WAN scheduler keeps every host's
+    /// offers to its uplink for their `offered_*` columns
+    /// ([`WanHostReport::offers`]). Changes no trace.
+    ///
+    /// [`WanHostReport::offers`]: crate::report::WanHostReport::offers
+    pub node_bins: bool,
     /// TCP writes in pieces of at most this many bytes, as segments: the
     /// window model ([`SendBuffer::window`]) then fills a window segment by
     /// segment, as real TCP does, where a whole write of up to a GSO
@@ -850,6 +871,8 @@ impl Scenario {
             wire_bins: None,
             forecast_log: false,
             request_logs: false,
+            packet_log: BTreeSet::new(),
+            node_bins: false,
             tcp_segment: None,
             stored_chunks: false,
             discovery: None,
@@ -916,6 +939,7 @@ impl Scenario {
             competing: Vec::new(),
             serial_links: None,
             arrive_at: None,
+            link_spec: None,
         });
         self.hosts.len() - 1
     }

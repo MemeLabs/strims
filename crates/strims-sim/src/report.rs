@@ -197,6 +197,10 @@ pub struct HostReport {
     /// Where it seeds a hybrid swarm, its allocation at every stats sample,
     /// every incarnation: (time since the start, scenario swarm, sample).
     pub seed_allocs: Vec<(std::time::Duration, usize, crate::seed_alloc::AllocSample)>,
+    /// The host as a testbed run's settings and links give it (the
+    /// `hosts` table's row, [`crate::testbed`]); `None` for a sim run's,
+    /// which its scenario gives ([`Report::host_rows`]).
+    pub host_row: Option<HostRow>,
 }
 
 /// A decision of a seed's ([`HostReport::seed_decisions`]): when (true
@@ -604,6 +608,132 @@ pub struct WanHostReport {
     pub competing_drops: u64,
     pub competing_drop_packets: u64,
     pub competing_cwnd: Vec<(strims_base::time::Duration, u64)>,
+    /// With [`Scenario::packet_log`] naming it, every packet it offered
+    /// its uplink, in the order the uplink's queue took them (the
+    /// `packets` table): a testbed run's from its captures.
+    pub packets: Vec<PacketRecord>,
+    /// With [`Scenario::node_bins`], the data it offered its uplink's
+    /// queue, before the queue dropped any (the `node_bins` table's
+    /// `offered_*`): each offer's time (since the start), IP bytes and
+    /// packets, in the order offered; `None` unmeasured (a testbed node
+    /// without an offered capture, a run without node bins).
+    pub offers: Option<Vec<(strims_base::time::Duration, u64, u32)>>,
+}
+
+/// What a packet a host offered its uplink was ([`PacketRecord`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PacketKind {
+    /// A TCP segment with payload, or a datagram with data.
+    Data,
+    /// A pure TCP acknowledgement.
+    Ack,
+    /// An SCTP SACK alone.
+    Sack,
+    /// An SCTP packet of DATA with a SACK bundled.
+    DataSack,
+    /// A SYN, FIN or RST, a STUN or DTLS handshake datagram.
+    Control,
+    /// A competing upload's, to its sink.
+    Competing,
+}
+
+impl PacketKind {
+    /// Its name in the `packets` table.
+    pub const fn name(self) -> &'static str {
+        match self {
+            PacketKind::Data => "data",
+            PacketKind::Ack => "ack",
+            PacketKind::Sack => "sack",
+            PacketKind::DataSack => "data_sack",
+            PacketKind::Control => "control",
+            PacketKind::Competing => "competing",
+        }
+    }
+}
+
+/// A packet's transport ([`PacketRecord`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PacketProto {
+    Tcp,
+    Udp,
+    Other,
+}
+
+impl PacketProto {
+    /// Its name in the `packets` table.
+    pub const fn name(self) -> &'static str {
+        match self {
+            PacketProto::Tcp => "tcp",
+            PacketProto::Udp => "udp",
+            PacketProto::Other => "other",
+        }
+    }
+}
+
+/// Where a packet was lost ([`PacketRecord`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PacketLoss {
+    /// Its uplink's queue had no room for it.
+    Queue,
+    /// The path between the nodes lost it.
+    Path,
+}
+
+impl PacketLoss {
+    /// Its name in the `packets` table.
+    pub const fn name(self) -> &'static str {
+        match self {
+            PacketLoss::Queue => "queue",
+            PacketLoss::Path => "path",
+        }
+    }
+}
+
+/// A packet a host offered its uplink ([`WanHostReport::packets`]): a row
+/// of the `packets` table, whose columns' docs are fields.toml's. Times
+/// are true time from the run's start.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PacketRecord {
+    /// When it entered the uplink's queue, when its last bit left the
+    /// uplink, and when it reached its receiver's access link.
+    pub at: strims_base::time::Duration,
+    pub sent: Option<strims_base::time::Duration>,
+    pub arrived: Option<strims_base::time::Duration>,
+    pub lost: Option<PacketLoss>,
+    /// The host it went to, and the ordinal of the sender's link to it.
+    pub peer: Option<HostIx>,
+    pub link: Option<u32>,
+    pub proto: PacketProto,
+    pub ip_bytes: u32,
+    /// What the shaper charged it.
+    pub charged_bytes: Option<u32>,
+    pub kind: PacketKind,
+    /// The byte range of its connection's stream it carried, from the
+    /// connection's first byte.
+    pub range: Option<(u64, u64)>,
+    pub resent: Option<bool>,
+    /// Its kind read from its length, its payload hidden.
+    pub estimated: bool,
+    /// What the uplink held as it entered, in the bytes its link charges.
+    pub backlog_bytes: Option<u64>,
+}
+
+/// A host as the `hosts` table has it, beside its name and number
+/// ([`HostReport::host_row`], [`Report::host_rows`]); the columns' docs
+/// are fields.toml's.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HostRow {
+    pub role: &'static str,
+    pub kind: &'static str,
+    pub stack: String,
+    pub link_spec: Option<String>,
+    /// Its uplink's rate at the start, bytes per second.
+    pub up_bps: Option<u64>,
+    /// Its egress delay, its uplink queue's bound (in transmission time at
+    /// its rate) and its clock's offset, µs.
+    pub delay_us: Option<i64>,
+    pub queue_us: Option<i64>,
+    pub clock_us: i64,
 }
 
 /// The access links of a WAN run, in host order.
@@ -798,6 +928,79 @@ pub struct MediaLog {
 }
 
 impl Report {
+    /// Each host's row of the `hosts` table, in host order: the one a
+    /// testbed run's settings give it ([`HostReport::host_row`]), else its
+    /// scenario's ([`Report::scenario_host_row`]).
+    pub fn host_rows(&self) -> Vec<HostRow> {
+        (0..self.scenario.hosts.len())
+            .map(|h| {
+                self.hosts
+                    .get(h)
+                    .and_then(|x| x.host_row.clone())
+                    .unwrap_or_else(|| self.scenario_host_row(h))
+            })
+            .collect()
+    }
+
+    /// Host `h` as its scenario has it: its role (a swarm's seed or viewer,
+    /// the signalling relay), the browser whose data channels it models
+    /// (the window model's, under its stack's profile; str0m over UDP
+    /// without them), its testbed link spec, its site's uplink, the
+    /// egress delay its latency faults at time 0 agree on, the window
+    /// model's queue, and its clock's offset.
+    pub fn scenario_host_row(&self, h: HostIx) -> HostRow {
+        let s = &self.scenario;
+        let Some(hs) = s.hosts.get(h) else {
+            return HostRow::default();
+        };
+        let role = if s.swarms.iter().any(|w| w.seed == h) {
+            "seed"
+        } else if s.swarms.iter().any(|w| w.viewers.contains(&h)) {
+            "viewer"
+        } else if hs.class == crate::spec::HostClass::Infra {
+            "relay"
+        } else {
+            "other"
+        };
+        let window = s.send_buffer.is_some_and(|b| b.window);
+        let (kind, stack) = match hs.rtc_stack.filter(|_| window && hs.webrtc) {
+            Some(p) if p == crate::wan::SctpProfile::CHROMIUM => {
+                ("chromium", "model-sctp-chromium")
+            }
+            Some(p) if p == crate::wan::SctpProfile::FIREFOX => ("firefox", "model-sctp-firefox"),
+            Some(_) => ("native", "model-sctp-str0m"),
+            None if hs.webrtc => ("native", "str0m"),
+            None => ("native", "model-tcp"),
+        };
+        // What it sends is delayed by the latency faults at time 0 that
+        // time it, where they all agree.
+        let mut delays =
+            s.faults
+                .iter()
+                .filter(|f| f.at.is_zero())
+                .filter_map(|f| match &f.fault {
+                    crate::Fault::LatencyFrom(from, _, d) if from.contains(&h) => Some(*d),
+                    crate::Fault::Latency(a, b, d) if a.contains(&h) || b.contains(&h) => Some(*d),
+                    _ => None,
+                });
+        let first = delays.next();
+        let delay = first.filter(|&d| delays.all(|x| x == d));
+        let us = |d: Duration| i64::try_from(d.as_micros()).unwrap_or(i64::MAX);
+        HostRow {
+            role,
+            kind,
+            stack: stack.to_owned(),
+            link_spec: hs.link_spec.clone(),
+            up_bps: hs.site.map(|x| x.profile.up),
+            delay_us: delay.map(us),
+            queue_us: s
+                .send_buffer
+                .filter(|b| b.window && hs.site.is_some())
+                .map(|b| us(b.uplink_queue)),
+            clock_us: self.hosts.get(h).map_or(0, |x| x.clock_offset.as_micros()),
+        }
+    }
+
     /// When host `h` left for good and how: its applied
     /// [`Fault::Depart`](crate::Fault::Depart), if any.
     pub fn departure(&self, h: HostIx) -> Option<(Duration, crate::Departure)> {

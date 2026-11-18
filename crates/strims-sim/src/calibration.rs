@@ -369,6 +369,7 @@ pub fn calibration_star(c: &Calibration) -> Scenario {
         .chain(vs.iter().copied())
         .enumerate()
     {
+        s.hosts[h].link_spec = c.links.get(i).cloned().flatten();
         if let Some(l) = link(i) {
             s.hosts[h].up_capacity = l
                 .capacity(Duration::from_secs(5))

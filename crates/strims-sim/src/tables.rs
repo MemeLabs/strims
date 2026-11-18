@@ -62,7 +62,9 @@ use strims_wan::playout::{self, DELAYS_MS};
 use strims_wan::vocab::Kind;
 
 use crate::fields::{Column, JsonRow, MetaInt, MetaInts, MetaJson, MetaText, Ty, ZSTD, cols};
-use crate::report::{HostReport, NODE_BIN_COUNTERS, NodeBinRecord, Report, ViewerReport};
+use crate::report::{
+    HostReport, HostRow, NODE_BIN_COUNTERS, NodeBinRecord, PacketRecord, Report, ViewerReport,
+};
 use crate::spec::{Departure, Fault, HostClass, HostIx};
 use crate::stats::SeedSample;
 pub use crate::wan::UP_COUNTERS;
@@ -367,7 +369,169 @@ pub(crate) fn node_bin_cols() -> Vec<cols::NodeBins> {
     cols.extend(ACK_COLS.iter().map(cols::NodeBins::counter));
     cols.push(cols::NodeBins::UpQueueMs);
     cols.push(cols::NodeBins::UpQueueBytes);
+    cols.push(cols::NodeBins::OfferedBytes);
+    cols.push(cols::NodeBins::OfferedPackets);
+    cols.push(cols::NodeBins::OfferedBurstBytes);
     cols
+}
+
+/// The window `node_bins`' `offered_burst_bytes` takes its most over.
+pub const OFFER_BURST: strims_base::time::Duration = strims_base::time::Duration::from_millis(10);
+
+/// What `offers` ([`WanHostReport::offers`]: each offer's time since the
+/// run's start, IP bytes and packets) put in each of `bins` bins of
+/// `width` from `start`: the bytes and packets offered in it, and the most
+/// bytes offered in any [`OFFER_BURST`] within it (over each window that
+/// starts at one of its offers, cut at the bin's end).
+///
+/// [`WanHostReport::offers`]: crate::report::WanHostReport::offers
+pub fn offer_bins(
+    offers: &[(strims_base::time::Duration, u64, u32)],
+    start: strims_base::time::Duration,
+    width: strims_base::time::Duration,
+    bins: usize,
+) -> Vec<[u64; 3]> {
+    let mut out = vec![[0u64; 3]; bins];
+    let w = width.as_nanos().max(1);
+    let mut by_bin: Vec<Vec<(strims_base::time::Duration, u64, u32)>> = vec![Vec::new(); bins];
+    for &(t, bytes, packets) in offers {
+        let ns = (t - start).as_nanos();
+        if ns < 0 {
+            continue;
+        }
+        if let Some(b) = usize::try_from(ns / w).ok().and_then(|k| by_bin.get_mut(k)) {
+            b.push((t, bytes, packets));
+        }
+    }
+    for (o, b) in out.iter_mut().zip(by_bin.iter_mut()) {
+        b.sort_by_key(|&(t, _, _)| t);
+        let (mut end, mut sum, mut most) = (0, 0u64, 0u64);
+        for &(t, bytes, packets) in b.iter() {
+            o[0] += bytes;
+            o[1] += u64::from(packets);
+            // The window from this offer on, which holds it: what came in
+            // it, the offers before this one left out.
+            while let Some(&(u, x, _)) = b.get(end)
+                && u < t + OFFER_BURST
+            {
+                sum += x;
+                end += 1;
+            }
+            most = most.max(sum);
+            sum -= bytes;
+        }
+        o[2] = most;
+    }
+    out
+}
+
+/// The `packets` table's columns.
+const PACKET_COLS: [cols::Packets; 17] = [
+    cols::Packets::Node,
+    cols::Packets::N,
+    cols::Packets::TUs,
+    cols::Packets::SentUs,
+    cols::Packets::ArrivedUs,
+    cols::Packets::Lost,
+    cols::Packets::Peer,
+    cols::Packets::Link,
+    cols::Packets::Proto,
+    cols::Packets::IpBytes,
+    cols::Packets::ChargedBytes,
+    cols::Packets::Kind,
+    cols::Packets::LoOff,
+    cols::Packets::HiOff,
+    cols::Packets::Resent,
+    cols::Packets::Estimated,
+    cols::Packets::BacklogBytes,
+];
+
+/// Writes the `packets` table into `dir`: each of `hosts`' packets
+/// ([`PacketRecord`]), in host order and then in the order its uplink took
+/// them (`n`), times in µs from `start` (the stream's start, since the
+/// run's). A shaper replay's job writes its rows through it, as a run's
+/// tables do.
+pub fn write_packets(
+    dir: &Path,
+    start: strims_base::time::Duration,
+    hosts: &[(HostIx, &[PacketRecord])],
+) -> io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let mut t = Table::new(dir, &PACKET_COLS)?;
+    let us = |d: strims_base::time::Duration| (d - start).as_micros().to_string();
+    let opt = |v: Option<String>| v.unwrap_or_default();
+    for &(h, rows) in hosts {
+        for (n, p) in rows.iter().enumerate() {
+            t.fields(&[
+                h.to_string(),
+                n.to_string(),
+                us(p.at),
+                opt(p.sent.map(us)),
+                opt(p.arrived.map(us)),
+                opt(p.lost.map(|l| l.name().to_owned())),
+                opt(p.peer.map(|x| x.to_string())),
+                opt(p.link.map(|x| x.to_string())),
+                p.proto.name().to_owned(),
+                p.ip_bytes.to_string(),
+                opt(p.charged_bytes.map(|x| x.to_string())),
+                p.kind.name().to_owned(),
+                opt(p.range.map(|(lo, _)| lo.to_string())),
+                opt(p.range.map(|(_, hi)| hi.to_string())),
+                opt(p.resent.map(|x| x.to_string())),
+                p.estimated.to_string(),
+                opt(p.backlog_bytes.map(|x| x.to_string())),
+            ]);
+        }
+    }
+    t.finish()
+}
+
+/// A CSV field that holds `s` whole, quoted where it holds a comma or a
+/// quote (a link spec's keys).
+fn quoted(s: &str) -> String {
+    if s.contains([',', '"']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_owned()
+    }
+}
+
+/// Writes the `hosts` table into `dir`: each of `hosts`' rows, its host's
+/// number and name beside its [`HostRow`]. A shaper replay's job writes
+/// its node's through it, as a run's tables do.
+pub fn write_hosts(dir: &Path, hosts: &[(HostIx, &str, &HostRow)]) -> io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let mut t = Table::new(
+        dir,
+        &[
+            cols::Hosts::Node,
+            cols::Hosts::Name,
+            cols::Hosts::Role,
+            cols::Hosts::Kind,
+            cols::Hosts::Stack,
+            cols::Hosts::LinkSpec,
+            cols::Hosts::UpBps,
+            cols::Hosts::DelayUs,
+            cols::Hosts::QueueUs,
+            cols::Hosts::ClockUs,
+        ],
+    )?;
+    let opt = |v: Option<String>| v.unwrap_or_default();
+    for &(h, name, r) in hosts {
+        t.fields(&[
+            h.to_string(),
+            text(name),
+            r.role.to_owned(),
+            r.kind.to_owned(),
+            text(&r.stack),
+            opt(r.link_spec.as_deref().map(quoted)),
+            opt(r.up_bps.map(|x| x.to_string())),
+            opt(r.delay_us.map(|x| x.to_string())),
+            opt(r.queue_us.map(|x| x.to_string())),
+            r.clock_us.to_string(),
+        ]);
+    }
+    t.finish()
 }
 
 /// [`NODE_COLS`] the nodes count: all but the network's last two.
@@ -611,6 +775,25 @@ impl Report {
         if !self.sockets.is_empty() {
             self.sockets_table(dir, start)?.finish()?;
         }
+        let rows = self.host_rows();
+        let named: Vec<(HostIx, &str, &HostRow)> = rows
+            .iter()
+            .enumerate()
+            .map(|(h, r)| {
+                let name = self.scenario.hosts.get(h).map_or("", |x| x.name.as_str());
+                (h, name, r)
+            })
+            .collect();
+        write_hosts(dir, &named)?;
+        let packets: Vec<(HostIx, &[PacketRecord])> = (0..self.scenario.hosts.len())
+            .filter_map(|h| {
+                let w = self.wan_host(h)?;
+                (!w.packets.is_empty()).then_some((h, &w.packets[..]))
+            })
+            .collect();
+        if !packets.is_empty() || !self.scenario.packet_log.is_empty() {
+            write_packets(dir, start.into(), &packets)?;
+        }
         let mut t = Table::new(
             dir,
             &[
@@ -826,6 +1009,14 @@ impl Report {
             .map_or(Duration::ZERO, |s| s.start);
         let w = width.as_millis() as i64;
         let node_cols = node_cols();
+        // Each host's offers by bin, where its offers were measured.
+        let offered: BTreeMap<HostIx, Vec<[u64; 3]>> = hosts
+            .iter()
+            .filter_map(|&h| {
+                let o = self.wan_host(h)?.offers.as_ref()?;
+                Some((h, offer_bins(o, start.into(), width.into(), edges as usize)))
+            })
+            .collect();
         for k in 0..edges.saturating_sub(1) {
             let ku = k as usize;
             for &h in hosts {
@@ -856,10 +1047,18 @@ impl Report {
                 let edge = start + width * (k as u32 + 1);
                 let (ms, bytes) = self.up_queue_at(h, edge);
                 row.extend([ms, bytes]);
+                let o = offered.get(&h).and_then(|b| b.get(ku));
+                row.extend(o.map_or([None; 3], |x| x.map(|v| Some(v as i64))));
                 t.opt_ints(&row);
             }
         }
         Ok(t)
+    }
+
+    /// Host `h`'s access link, in WAN mode.
+    fn wan_host(&self, h: HostIx) -> Option<&crate::report::WanHostReport> {
+        let name = self.scenario.hosts.get(h).map(|x| x.name.as_str())?;
+        self.wan.as_ref()?.hosts.iter().find(|w| w.name == name)
     }
 
     /// The `meter_samples` table of `hosts`, `seed` the first swarm's:
@@ -1726,5 +1925,31 @@ mod tests {
     #[test]
     fn parent_reasons_are_the_vocabularys() {
         assert_eq!(ParentWhy::ALL.map(ParentWhy::name), vocab::REASONS);
+    }
+
+    /// A bin's offers are what came in it, whatever order they were logged
+    /// in, and its burst the most in any 10 ms window from an offer of it,
+    /// cut at its end; offers before the start count in none.
+    #[test]
+    fn offer_bins_count_each_bin_and_its_densest_10_ms() {
+        let ms = |m: i64| strims_base::time::Duration::from_millis(m);
+        let us = |u: i64| strims_base::time::Duration::from_micros(u);
+        let start = ms(1000);
+        let offers = [
+            (ms(1000) + us(9_999), 300, 1),
+            (ms(1000), 100, 1),
+            (ms(1000) + us(5_000), 200, 2),
+            (ms(1000) + ms(10), 400, 1),
+            // A window from 95 ms reaches past the bin: what's in the bin.
+            (ms(1000) + ms(95), 1000, 1),
+            (ms(1000) + ms(100), 50, 1),
+            (ms(500), 7, 1),
+        ];
+        let bins = super::offer_bins(&offers, start, ms(100), 3);
+        assert_eq!(bins, [[2000, 6, 1000], [50, 1, 50], [0, 0, 0]]);
+        // Without the 95 ms offer: the window from 5 ms holds 5, 9.999 and
+        // 10 ms's; the one from 0 ends before 10 ms.
+        let quiet = super::offer_bins(&offers[..4], start, ms(100), 1);
+        assert_eq!(quiet, [[1000, 5, 900]]);
     }
 }

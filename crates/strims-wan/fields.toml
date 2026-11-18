@@ -2832,6 +2832,27 @@ unit = "bytes"
 none = "empty"
 description = "The node's uplink queue at the bin's end, in bytes (`WanHostReport::up_backlog`, its latest sample at or before the edge): measured on the testbed (the tbf's backlog, in the bytes it counts: IP length and Ethernet header per packet, or its class's size table's figure), derived in the sim as its measured wait times its uplink's rate then. Empty outside WAN mode or before a sample."
 
+[columns.node_bins.offered_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The IP bytes of the data the node offered its uplink's queue in the bin, before the queue dropped any: its TCP segments with payload and its datagrams to the swarm's nodes (its seed and viewers: the signalling relay left out), resends included; its pure acknowledgements, a data channel's SACKs alone and its competing uploads left out. Each offer counts in the bin it entered the queue in (`WanHostReport::offers`). Empty outside WAN mode and for a testbed node without an offered capture."
+notes.strims-sim = "A twin counts the WAN scheduler's admissions (`Scheduler::offered`: each segment, datagram and SCTP packet as its sender hands it to the uplink, its IP bytes); a testbed run its offered capture (`pcap-<i>-offered.pcap`, ahead of the egress delay and the queue: each packet at its capture time plus the node's delay, a GSO buffer cut into the link's packets), a datagram whose length its stack reads as a SACK alone left out: its other datagrams count, its DTLS handshake's and STUN's among them, which the model's data channels don't send."
+
+[columns.node_bins.offered_packets]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The packets of `offered_bytes`: what the node offered its uplink's queue in the bin, before the queue dropped any, a segment's packets each (a GSO buffer's as the link carries it). Empty outside WAN mode and for a testbed node without an offered capture."
+
+[columns.node_bins.offered_burst_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The most of `offered_bytes` the node offered in any 10 ms within the bin: over each window that starts at one of its offers in the bin, cut at the bin's end, the IP bytes offered in it. A sender's burstiness at the queue, before its drops; 0 in a bin it offered nothing in. Empty outside WAN mode and for a testbed node without an offered capture."
+
 [tables.meter_samples]
 sims = ["strims-sim"]
 grain = "node and meter sample"
@@ -4329,3 +4350,193 @@ type = "int"
 unit = "bytes/s"
 none = "empty"
 description = "The rate the kernel paces the socket at (`ss`'s `pacing_rate`, in bits per second there), in bytes per second."
+
+[tables.packets]
+sims = ["strims-sim"]
+grain = "packet a node offered its uplink"
+keys = "k, node, n"
+joins = "hosts, viewers USING (k, src, node)"
+knobs = ["PACKET_LOG"]
+sample = true
+zstd = true
+normalized = "lost, peer, link, lo_off, hi_off, resent, sent_us, arrived_us, charged_bytes and backlog_bytes NULL where the run wrote none."
+description = "Each packet a node offered its access link's queue, in the order the queue took them: when it entered, when its last bit left (or that the queue dropped it), when it reached its receiver, what it was and carried, what the shaper charged it and what the uplink held as it came. One definition on every side: a testbed run's from its captures, a twin's from the model's WAN scheduler, a shaper replay's from the model's uplink fed the testbed's own offers, so the shaper benches join them packet by packet (`shaper_fit_of`)."
+notes.strims-sim = "A sim run writes the hosts `STRIMS_SIM_PACKET_LOG` names (`all` or `1`, `seed`, `viewers`, or host numbers, `0,3`; none without it), from its WAN scheduler as each message is admitted to the uplink (`Scheduler::offered`), each of the message's packets a row, held to the run's end (every host of star-31-5's 30 s, 1.17 M rows, took 180 MB more at the peak): `seed` or a few hosts for a long or wide cell. A testbed run writes every node with both captures (`PCAP=1`: `pcap-<i>-offered.pcap`, ahead of the egress delay and the queue, GSO's buffers cut into the link's packets, and `pcap-<i>.pcap`, past the queue), each offered packet matched to the carried one of its flow, IP id and length (`crate::testbed`'s packets), its rows ending twice its queue's time before its eth0 capture's last record (past it no capture tells a packet's fate). The shaper replay (strims-sim's `shaper_replay`) writes its source's node's offers with the model's fates."
+
+[columns.packets.node]
+sims = ["strims-sim"]
+type = "int"
+description = "The host that offered the packet, as `events` numbers hosts."
+
+[columns.packets.n]
+sims = ["strims-sim"]
+type = "int"
+description = "The packet's place among the node's offers, from 0, in the order its uplink's queue took them: a message's or a GSO buffer's packets one after another. A shaper replay's n is its source's."
+
+[columns.packets.t_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+description = "When the packet entered the node's uplink queue, in µs of true time from the stream's start."
+notes.strims-sim = "The model's WAN scheduler's admission of the message that holds it; on the testbed its offered capture's time plus the node's egress delay (the netem ahead of the modem: its `links` line's delay); a shaper replay's its source's."
+
+[columns.packets.sent_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "When the packet's last bit left the node's uplink, in µs from the stream's start; empty for one the queue dropped."
+notes.strims-sim = "The model's shaper's departure of the packet, or its slot's with slots (`Network::up_last_departures`); on the testbed its capture past the modem (tcpdump on eth0, as the device took it)."
+
+[columns.packets.arrived_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "When the packet reached its receiver's access link, in µs from the stream's start; empty for one lost, one to no node, and where no reading of it exists (a shaper replay's, a testbed receiver's capture without it)."
+notes.strims-sim = "The model's path's arrival (`Transit::arrival`, ahead of the receiver's downlink); on the testbed the receiver's own capture of it on its eth0, inbound, matched by its source, flow, IP id and length."
+
+[columns.packets.lost]
+sims = ["strims-sim"]
+type = "text"
+none = "empty"
+description = "Where the packet was lost: `queue` (its uplink's queue had no room for it), `path` (the path between the nodes lost it); empty for one that went."
+notes.strims-sim = "The model's queue rule is `Network::up_admit`'s, its path's loss the sites'. On the testbed a packet its offered capture holds and its eth0 never carried within 1 s is the queue's; the testbed's bridge loses nothing on its own, so it writes no `path`."
+
+[columns.packets.peer]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The host the packet went to, as `events` numbers hosts; empty for one to no node (a competing upload's sink, a testbed relay's or browser's own traffic)."
+
+[columns.packets.link]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The ordinal of the node's link to `peer` that carried the packet, from 0, in the order the node first sent on each: a TCP connection, or a data channel's datagrams (their ports); empty for one to no node."
+
+[columns.packets.proto]
+sims = ["strims-sim"]
+type = "text"
+description = "The packet's transport: `tcp`, `udp`, or `other` for another IP protocol."
+
+[columns.packets.ip_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "The packet's IP length: its headers and payload, no link framing."
+
+[columns.packets.charged_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "What the node's shaper charged the packet: its IP bytes and its link class's framing (`Framing::packet`: Ethernet's 14 bytes under tbf, the class's size table on the testbed)."
+
+[columns.packets.kind]
+sims = ["strims-sim"]
+type = "text"
+description = "What the packet was: `data` (a TCP segment with payload, or a datagram with data), `ack` (a pure TCP acknowledgement), `sack` (an SCTP SACK alone), `data_sack` (an SCTP packet of DATA with a SACK bundled), `control` (SYN, FIN or RST, a STUN or DTLS handshake datagram), `competing` (a competing upload's, to its sink)."
+notes.strims-sim = "DTLS hides a data channel's chunks on the testbed: there a datagram whose length its stack reads as a SACK alone (`SctpProfile::datagram_payload` of 0) is a `sack`, every other `data` (`estimated`), and none is a `data_sack` or `control`."
+
+[columns.packets.lo_off]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The first byte of its connection's stream the packet carried, as an offset from the connection's first byte (TCP's sequence number less its flow's first); empty for a datagram and a packet without payload."
+
+[columns.packets.hi_off]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The offset just past the last byte of its connection's stream the packet carried: `lo_off` plus its payload; empty where `lo_off` is."
+
+[columns.packets.resent]
+sims = ["strims-sim"]
+type = "bool"
+none = "empty"
+description = "Whether the packet carried bytes its connection had offered before (a retransmission); empty for a datagram, whose resends DTLS hides on the testbed."
+
+[columns.packets.estimated]
+sims = ["strims-sim"]
+type = "bool"
+description = "Whether the packet's kind was read from its length, its payload hidden (a data channel's datagram on the testbed, inside DTLS); false where its headers or the model say it."
+
+[columns.packets.backlog_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "What the node's uplink held as the packet entered its queue, in the bytes its link charges: the packets handed to it before whose last bit hadn't left, the one it was sending included."
+notes.strims-sim = "The model's own (`Network::up_held`); on the testbed the charges of the packets that entered before it and hadn't left by its entry, from the two captures, those the queue dropped left out."
+
+[tables.hosts]
+sims = ["strims-sim"]
+grain = "host of a run"
+keys = "k, node"
+joins = "viewers, node_bins, meter_samples, packets USING (k, src, node)"
+sample = false
+zstd = false
+normalized = "link_spec, up_bps, delay_us and queue_us NULL where the run wrote none."
+description = "Each host of the run: its role, its node's kind and the stack its links run on, its access link (its spec, rate, egress delay and queue) and its clock's offset, so the lab pairs and pools nodes across benches, swarm runs and tests (`component_side`)."
+notes.strims-sim = "Every run writes it, a row a host of its scenario. A sim run's come from its scenario (`HostSpec`); a testbed run's from its settings (`KINDS`, `BROWSER_LINKS`) and its `links` file (`crate::testbed`); a shaper replay's is its source node's."
+
+[columns.hosts.node]
+sims = ["strims-sim"]
+type = "int"
+description = "The host, as `events` numbers hosts."
+
+[columns.hosts.name]
+sims = ["strims-sim"]
+type = "text"
+description = "The host's name."
+
+[columns.hosts.role]
+sims = ["strims-sim"]
+type = "text"
+description = "What the host is in the run: `seed` (a swarm's seed), `viewer` (one of a swarm's viewers, honest or not), `relay` (the signalling relay, in no swarm), `other` (a sim host in no swarm that isn't the relay). A testbed run writes its nodes and its relay alone."
+
+[columns.hosts.kind]
+sims = ["strims-sim"]
+type = "text"
+description = "The node the host runs: `native` (strims-node), `chromium` or `firefox` (strims-wasm's node in that browser), as the testbed's `KINDS` names them; a sim host stands for the browser whose stack its data channels model."
+
+[columns.hosts.stack]
+sims = ["strims-sim"]
+type = "text"
+description = "The transport stack the host's links run on: `linux-tcp` (a testbed native node's kernel TCP), `str0m` (str0m's data channels: a testbed native node whose links are all data channels, or a sim host's outside the window model, str0m's own code over the sim's UDP), `dcsctp` (a browser's data channels), `model-tcp` (a sim host's TCP, the window model's or turmoil's), `model-sctp-<profile>` (the window model's data channels under a stack's profile: chromium, firefox or str0m)."
+
+[columns.hosts.link_spec]
+sims = ["strims-sim"]
+type = "text"
+none = "empty"
+description = "The host's access link spec, `<class>[,<key>=<value>...]` (`strims_wan::testbed::Spec`), where it has one: a testbed node's (its `links` line), a sim host shaped as one (a twin's `STRIMS_SIM_CAL_SEED_LINK`, `STRIMS_SIM_CAL_VIEWER_LINK` or `STRIMS_SIM_CAL_LINKS`); empty for a sim host on a site of the WAN model's own."
+
+[columns.hosts.up_bps]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes/s"
+none = "empty"
+description = "The host's uplink rate at the start, in bytes per second (its steps are `events`' `uplink_rate`); empty for a sim host without a site."
+
+[columns.hosts.delay_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "The one-way delay the host's egress adds to what it sends, in µs: a testbed node's netem (its `links` line's delay), a sim host's own where its scenario gives it one at the start (every latency fault at time 0 that times what it sends, `Fault::LatencyFrom` from it or `Fault::Latency` of it, agreeing); empty where it has none of its own."
+
+[columns.hosts.queue_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "The most the host's uplink queue holds, in µs of transmission time at its rate: a testbed node's (its `links` line's queue), a sim host's send buffers' `uplink_queue` under the window model; empty where the queue has no bound."
+
+[columns.hosts.clock_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+description = "The host's clock's offset from true time, in µs (`HostReport::clock_offset`); 0 on the testbed, whose containers share their host's clock."

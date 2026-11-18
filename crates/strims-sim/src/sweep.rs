@@ -156,8 +156,11 @@
 //!   channels with each peer (`peer_samples`), and
 //!   `STRIMS_SIM_FORECAST=1` the nodes' forecast logs (`forecast`, large:
 //!   [`Scenario::forecast_log`]), `STRIMS_SIM_SPEC=1` their request logs
-//!   (`arrivals`, `haves`, `asks`, large: [`Scenario::request_logs`]).
-//!   None of them changes the trace.
+//!   (`arrivals`, `haves`, `asks`, large: [`Scenario::request_logs`]), and
+//!   `STRIMS_SIM_PACKET_LOG=<hosts>` every packet those hosts offered their
+//!   uplinks (`packets`, large and held to the run's end:
+//!   [`Scenario::packet_log`]; `all` or `1`, `seed`, `viewers`, or host
+//!   numbers, [`packet_log_hosts`]). None of them changes the trace.
 //! - `STRIMS_SIM_ROWS=1` prints each run's measures as one line,
 //!   `ROW {json}`, on stdout ([`Report::row`]).
 //! - `STRIMS_SIM_JOB=1` runs the sweep as one sim farm job
@@ -177,6 +180,7 @@
 //! every run has ended, the reports are printed and checked in seed order,
 //! so a failing sweep reports its lowest failing seed.
 
+use std::collections::BTreeSet;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::thread;
 use std::time::Duration;
@@ -524,6 +528,39 @@ fn seed_pin_knob() -> Option<crate::seed_pin::SeedPin> {
     crate::seed_pin::SeedPin::parse(&v).unwrap_or_else(|e| panic!("STRIMS_SIM_SEED_PIN={v}: {e}"))
 }
 
+/// The hosts of `spec` `STRIMS_SIM_PACKET_LOG`'s value `v` names
+/// ([`Scenario::packet_log`]): `all` or `1` every host, `seed` every
+/// swarm's seed, `viewers` every swarm's viewers, or host numbers
+/// (`0,3`); `off` or blank none.
+pub fn packet_log_hosts(spec: &Scenario, v: &str) -> Result<BTreeSet<HostIx>, String> {
+    let all = 0..spec.hosts.len();
+    match v.trim() {
+        "" | "off" => Ok(BTreeSet::new()),
+        "all" | "1" => Ok(all.collect()),
+        "seed" => Ok(spec.swarms.iter().map(|s| s.seed).collect()),
+        "viewers" => Ok(spec
+            .swarms
+            .iter()
+            .flat_map(|s| s.viewers.iter().copied())
+            .collect()),
+        list => list
+            .split(',')
+            .map(|h| {
+                h.trim()
+                    .parse::<HostIx>()
+                    .ok()
+                    .filter(|h| all.contains(h))
+                    .ok_or_else(|| {
+                        format!(
+                            "STRIMS_SIM_PACKET_LOG={v}: all, seed, viewers, off or host numbers under {}",
+                            spec.hosts.len()
+                        )
+                    })
+            })
+            .collect(),
+    }
+}
+
 /// Whether `STRIMS_SIM_SEED_LINKS` is `all`; unset, blank or `off` is
 /// not.
 #[allow(clippy::panic)] // a mistyped setting fails its test
@@ -738,6 +775,7 @@ fn sweep_seeds(
     let bin_nodes = knob::<u32>("STRIMS_SIM_BIN_NODES") == Some(1);
     let forecast = knob::<u32>("STRIMS_SIM_FORECAST") == Some(1);
     let request_logs = knob::<u32>("STRIMS_SIM_SPEC") == Some(1);
+    let packet_log = env("STRIMS_SIM_PACKET_LOG");
     let chunk: Option<usize> = knob("STRIMS_SIM_CHUNK");
     let munro: Option<usize> = knob("STRIMS_SIM_MUNRO");
     let stream_secs: Option<u64> = knob("STRIMS_SIM_STREAM_SECS");
@@ -777,6 +815,7 @@ fn sweep_seeds(
             spec.wire_bins = Some(bin);
             spec.forecast_log = forecast;
             spec.request_logs = request_logs;
+            spec.node_bins = bin_nodes;
         }
         if segment.is_some() {
             spec.tcp_segment = segment;
@@ -928,6 +967,12 @@ fn sweep_seeds(
             let run = format!("seed-{seed}{replay}");
             spec.capture = Some(std::path::Path::new(dir).join(test).join(run));
         }
+        // Its hosts as the scenario has them once every knob has added
+        // its own (a signalling relay).
+        if let (Some(v), true) = (&packet_log, out.is_some()) {
+            spec.packet_log =
+                packet_log_hosts(&spec, v).unwrap_or_else(|e| fail(test, seed, &e, &[]));
+        }
         spec
     };
     let first = |seed: u64| with_capture(seed, "");
@@ -1030,6 +1075,24 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+
+    #[test]
+    fn packet_log_knob_names_hosts_by_role_or_number() {
+        let s = crate::calibration::calibration_star(&crate::calibration::Calibration::from_knobs(
+            |k| (k == "STRIMS_SIM_CAL_VIEWERS").then(|| "3".to_owned()),
+        ));
+        let set = |v: &str| packet_log_hosts(&s, v).map(|x| x.into_iter().collect::<Vec<_>>());
+        assert_eq!(set("all"), Ok(vec![0, 1, 2, 3]));
+        assert_eq!(set("1"), set("all"));
+        assert_eq!(set("seed"), Ok(vec![0]));
+        assert_eq!(set("viewers"), Ok(vec![1, 2, 3]));
+        assert_eq!(set(" 0,3 "), Ok(vec![0, 3]));
+        assert_eq!(set("off"), Ok(vec![]));
+        assert_eq!(set(""), Ok(vec![]));
+        for bad in ["4", "0,x", "seeds", "-1"] {
+            assert!(set(bad).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn push_mode_knob_takes_the_three_modes() {

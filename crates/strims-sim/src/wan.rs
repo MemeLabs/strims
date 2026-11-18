@@ -3621,6 +3621,8 @@ impl Scheduler {
                             .copied()
                             .unwrap_or(0),
                         competing_cwnd: self.cross_cwnd.get(h).cloned().unwrap_or_default(),
+                        packets: Vec::new(),
+                        offers: None,
                     })
                 })
                 .collect(),

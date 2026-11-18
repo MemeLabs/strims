@@ -2390,6 +2390,8 @@ impl Network {
                 competing_drops: 0,
                 competing_drop_packets: 0,
                 competing_cwnd: Vec::new(),
+                packets: Vec::new(),
+                offers: None,
             };
             if h >= run.nodes.len() {
                 wan.hosts.push(w);
