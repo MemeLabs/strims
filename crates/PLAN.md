@@ -459,8 +459,18 @@ and dropped are in `TRIED.md`.
   - lossy transports report loss, so direct vpn links can get a backup copy;
   - peer-exchange topology hints that suggest links to shorten long paths;
   - decide whether any app needs to stop a broadcast from being relayed;
-  - two nodes whose bootstrap clients dial each other at once need a
-    tie-break, as crossed peer exchanges have (the lower host id wins);
+  - two dials between a pair that cross leave it no link, as vnic keeps a
+    host's newest link at each end (bootstrap clients dialing each other,
+    an app's dial racing an exchange, a dial outliving its exchange): give
+    vnic each link's direction, which node-core knows (`dialed`), and of
+    two links the two ends made, keep the lower host id's dial;
+  - take peer exchange's `LinkOffer` and `LinkAnswer` only encrypted
+    (`M_ENCRYPT`), whose pair key names the sender, so a plaintext offer in
+    another host's name can't hold an exchange that blocks linking to it;
+  - an answerer sends its own descriptions only once its dial of the
+    offer fails, and a dial that hangs lasts `dial_timeout`, as long as
+    `LINK_TIMEOUT`: bound the answerer's dial well under it, so the other
+    direction gets its turn within the exchange;
   - `connect_peer` policy belongs to the app layer; the node never initiates
     it. Transfer discovery asks to link to every host a search finds, with
     no budget across transfers;
