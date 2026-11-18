@@ -141,9 +141,9 @@ def taught(source):
 
 
 def reference(rev):
-    """suite.py at `rev`, its t table the macros' (t975), and its medians,
-    its arm score's order of seeds and its farm runs' host numbers theirs
-    (taught)."""
+    """suite.py at `rev`, its verdicts simlab.verdict's (its analyze()),
+    its t table the macros' (t975), and its medians, its arm score's order
+    of seeds and its farm runs' host numbers theirs (taught)."""
     WORK.mkdir(parents=True, exist_ok=True)
     path = WORK / f"suite_{rev}.py"
     path.write_text(taught(subprocess.run(["git", "show", f"{rev}:hack/sim-suite/suite.py"], cwd=ROOT, check=True,
@@ -151,6 +151,7 @@ def reference(rev):
     ref = load(path, "suite_ref")
     ref._sketch = sketch
     ref._simdb = suite().simdb()
+    ref.analyze = lambda: verdict
     ref.T975 = {r["df"]: r["t"] for r in scoring.query(
         "SELECT df, t975_at(df) AS t FROM range(1, 1001) r(df) ORDER BY df;")}
     return ref
