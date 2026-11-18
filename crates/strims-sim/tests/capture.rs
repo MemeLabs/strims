@@ -477,7 +477,9 @@ fn departing_wan(how: &str) -> Scenario {
 /// ([`strims_sim::Report::parent_losses`]) is a `parent_departed` at its
 /// parent's `depart` (the streams it parented, how it left) and, once the
 /// viewer noticed, a `parent_noticed` (the ms since); `series_meta.json`
-/// names the seed and the stream count.
+/// names the seed and the stream count. At seed 3, whose runs lose
+/// parents both noticed and not: with the timer lateness on (the
+/// default), seeds 1 and 2 notice every loss, and seeds 5 to 7 lose none.
 #[test]
 fn a_runs_events_are_its_scenarios_and_losses() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
@@ -491,7 +493,7 @@ fn a_runs_events_are_its_scenarios_and_losses() {
         let mut spec = departing_wan(how);
         spec.transfer_samples = true;
         spec.wire_bins = Some(Duration::from_millis(1000));
-        let r = run(spec, 1).unwrap();
+        let r = run(spec, 3).unwrap();
         let d = dir.join(how);
         r.write_tables(&d, Duration::from_millis(1000), true)
             .unwrap();

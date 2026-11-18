@@ -143,7 +143,7 @@
 //!   the frame writers' writes as late as a real node's of the host's
 //!   kind are ([`Scenario::timer_lateness`]; [`crate::late`] says which
 //!   timers that covers, and how late); `off` keeps them at their
-//!   deadlines. Unset, a scenario keeps its own, off unless it says
+//!   deadlines. Unset, a scenario keeps its own, on unless it says
 //!   otherwise.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), which the run second by second

@@ -682,7 +682,7 @@ pub struct Scenario {
     pub clock_skew: ClockSkew,
     /// Whether each host's node task wakes and its frame writer writes as
     /// late as a real node's of its kind do ([`crate::late`] says which
-    /// timers that covers, and how late): off by default, when they run at
+    /// timers that covers, and how late): on by default; off, they run at
     /// their deadlines and nothing is drawn.
     pub timer_lateness: bool,
     /// With [`Scenario::wire_bins`], the hosts that keep their timers as
@@ -965,7 +965,7 @@ impl Scenario {
             discovery: None,
             exp: BTreeSet::new(),
             clock_skew: ClockSkew::Real,
-            timer_lateness: false,
+            timer_lateness: true,
             timer_log: None,
             timer_probe: false,
             link_log: None,

@@ -545,9 +545,8 @@ and dropped are in `TRIED.md`.
     compares their twins with them. Each switched model goes on by
     default once it improves the sim–real correlation (testbed, bench,
     twin): the access kinds' buckets (`STRIMS_SIM_UPLINK_BURST=profiles`),
-    framing (`STRIMS_SIM_FRAMING`), slots (`STRIMS_SIM_UPLINK_SLOTS`),
-    capacity traces, and the timer-lateness model
-    (`STRIMS_SIM_TIMER_LATENESS`).
+    framing (`STRIMS_SIM_FRAMING`), slots (`STRIMS_SIM_UPLINK_SLOTS`) and
+    capacity traces.
   - Draw a timer's lateness by the delay it was armed for, where the
     timer bench's probe reads it so (`timer_fit_of`'s `by_delay`): a
     browser's short timers armed from a timer's continuation, and a
