@@ -149,7 +149,9 @@ use turmoil::{Protocol, Segment, Sim};
 
 use crate::fast_map::FastMap;
 use crate::net::{ConnKey, SendBuffers};
-use crate::report::{ACK_WHYS, AckWaits, WanHostReport, WanReport};
+use crate::report::{
+    ACK_WHYS, AckWaits, PacketKind, PacketLoss, PacketProto, PacketRecord, WanHostReport, WanReport,
+};
 use crate::spec::{HostIx, Scenario};
 use crate::world::epoch;
 
@@ -542,16 +544,21 @@ struct Flow {
     /// it dropped, by sequence number ([`Tail`]). Bound: the segments in
     /// flight.
     tails: BTreeMap<u64, Tail>,
+    /// The bytes of the connection's stream its new segments have carried:
+    /// the next one's first byte, as an offset from the stream's first.
+    off_end: u64,
 }
 
 /// A segment the window model sent: its bytes, the records they are of
-/// (each record's id and its bytes in the segment, in order), and the bytes
-/// acknowledged so far.
+/// (each record's id and its bytes in the segment, in order), the bytes
+/// acknowledged so far, and its first byte's offset in its connection's
+/// stream (the packet log's).
 #[derive(Clone, Debug)]
 struct Wire {
     len: usize,
     parts: Vec<(u64, usize)>,
     acked: usize,
+    off: u64,
 }
 
 /// What is out of a segment whose leading frames the uplink queue took and
@@ -639,6 +646,7 @@ impl Default for Flow {
             loss_high: None,
             sacked: BTreeMap::new(),
             tails: BTreeMap::new(),
+            off_end: 0,
         }
     }
 }
@@ -1299,6 +1307,54 @@ pub(crate) struct Scheduler {
     /// carries the channel's data. Bound: one per channel opened.
     assocs: FastMap<(SocketAddr, SocketAddr), sctp::Assoc>,
     rcvs: FastMap<(SocketAddr, SocketAddr), sctp::Rcv>,
+    /// Per host, whether its packet log is on ([`Scenario::packet_log`]),
+    /// and the packets it offered its uplink so far
+    /// ([`WanHostReport::packets`]). Bound: the run's packets of the hosts
+    /// the log names.
+    packet_log: Vec<bool>,
+    packets: Vec<Vec<PacketRecord>>,
+    /// The logged hosts' links, the ordinal of each among its host's to
+    /// its peer in the order the host first sent on them, by (host, peer,
+    /// its addresses low first), and how many each host has to each peer.
+    /// Bound: the logged hosts' connections.
+    link_ords: BTreeMap<(HostIx, HostIx, (SocketAddr, SocketAddr)), u32>,
+    link_counts: BTreeMap<(HostIx, HostIx), u32>,
+    /// With [`Scenario::node_bins`], every host's offers of data to a
+    /// swarm's host ([`WanHostReport::offers`]), as a testbed run counts
+    /// its nodes': data to the signalling relay left out. Bound: the run's
+    /// data messages.
+    offers: Option<Vec<Vec<(Duration, u64, u32)>>>,
+    /// Per host, whether it is a swarm's (its seed or a viewer).
+    swarm_hosts: Vec<bool>,
+}
+
+/// A message handed to a host's uplink, as its packet log and offers take
+/// it ([`Scheduler::offered`]), right after the uplink took what it did.
+struct Offered {
+    at: Time,
+    from: HostIx,
+    to: Option<HostIx>,
+    conn: Option<(SocketAddr, SocketAddr)>,
+    proto: PacketProto,
+    kind: PacketKind,
+    /// Its IP bytes and packets ([`strims_wan::framing::frames`]), and the
+    /// leading packets the uplink's queue took: the rest it dropped.
+    wire: usize,
+    packets: u32,
+    took: u32,
+    /// The offset of its first byte in its connection's stream, and
+    /// whether it resent bytes its connection had sent; `None` for a
+    /// datagram.
+    off: Option<u64>,
+    resent: Option<bool>,
+    /// What the uplink held as it came ([`Network::up_held`]).
+    held: usize,
+    /// When what it took left the uplink and reached its receiver
+    /// ([`Transit`](strims_wan::Transit)'s `depart` and `arrival`), the path's delay after each
+    /// packet; `None` without a path the model times.
+    transit: Option<(Time, Time)>,
+    /// The first of its packets the path lost, the rest with it.
+    path_lost: Option<u32>,
 }
 
 /// How often the scheduler samples each host's uplink queue, by default,
@@ -1445,7 +1501,119 @@ impl Scheduler {
             ack_waits: vec![AckWaits::default(); spec.hosts.len()],
             assocs: FastMap::default(),
             rcvs: FastMap::default(),
+            packet_log: (0..spec.hosts.len())
+                .map(|h| spec.packet_log.contains(&h))
+                .collect(),
+            packets: vec![Vec::new(); spec.hosts.len()],
+            link_ords: BTreeMap::new(),
+            link_counts: BTreeMap::new(),
+            offers: spec.node_bins.then(|| vec![Vec::new(); spec.hosts.len()]),
+            swarm_hosts: (0..spec.hosts.len())
+                .map(|h| {
+                    spec.swarms
+                        .iter()
+                        .any(|w| w.seed == h || w.viewers.contains(&h))
+                })
+                .collect(),
         })
+    }
+
+    /// Whether host `h`'s packet log is on.
+    fn logs(&self, h: HostIx) -> bool {
+        self.packet_log.get(h).copied().unwrap_or(false)
+    }
+
+    /// What host `h`'s uplink holds at `at` where its packet log is on,
+    /// for an [`Offered`]; 0 otherwise, which nothing reads.
+    fn held(&self, h: HostIx, at: Time) -> usize {
+        if self.logs(h) {
+            self.net.up_held(h, at)
+        } else {
+            0
+        }
+    }
+
+    /// Message `o` handed to its host's uplink, called right after the
+    /// uplink took what it did (its packets' departures are the uplink's
+    /// last, [`Network::up_last_departures`]): its data to a swarm's host
+    /// among its host's offers, and with its host's packet log on, each of
+    /// its packets a row. Reads the model and moves nothing.
+    fn offered(&mut self, o: &Offered) {
+        let data = matches!(o.kind, PacketKind::Data | PacketKind::DataSack);
+        let to_swarm =
+            o.to.is_some_and(|to| self.swarm_hosts.get(to).copied().unwrap_or(false));
+        if data
+            && to_swarm
+            && let Some(v) = self.offers.as_mut().and_then(|x| x.get_mut(o.from))
+        {
+            v.push((o.at - epoch(), o.wire as u64, o.packets.max(1)));
+        }
+        if !self.logs(o.from) {
+            return;
+        }
+        let link = match (o.to, o.conn) {
+            (Some(to), Some((a, b))) => {
+                let key = (o.from, to, (a.min(b), a.max(b)));
+                let next = self.link_counts.get(&(o.from, to)).copied().unwrap_or(0);
+                let ord = *self.link_ords.entry(key).or_insert(next);
+                if ord == next {
+                    self.link_counts.insert((o.from, to), next + 1);
+                }
+                Some(ord)
+            }
+            _ => None,
+        };
+        let framing = self.net.up_framing(o.from);
+        let departs = self.net.up_last_departures(o.from);
+        let Some(rows) = self.packets.get_mut(o.from) else {
+            return;
+        };
+        let (mut held, mut off) = (o.held, o.off);
+        let at = o.at - epoch();
+        for (k, ip) in strims_wan::framing::frames(o.wire, o.packets).enumerate() {
+            let k = u32::try_from(k).unwrap_or(u32::MAX);
+            let charge = framing.packet(ip);
+            let sent = if k < o.took {
+                departs.get(k as usize).copied()
+            } else {
+                None
+            };
+            let lost = if k >= o.took {
+                Some(PacketLoss::Queue)
+            } else if o.path_lost.is_some_and(|f| k >= f) {
+                Some(PacketLoss::Path)
+            } else {
+                None
+            };
+            let arrived = match (sent, lost, o.transit) {
+                (Some(s), None, Some((depart, arrival))) => Some(s + (arrival - depart) - epoch()),
+                _ => None,
+            };
+            let payload = match o.proto {
+                PacketProto::Tcp => ip.saturating_sub(strims_wan::wire::TCP_HEADER),
+                _ => 0,
+            } as u64;
+            rows.push(PacketRecord {
+                at,
+                sent: sent.map(|s| s - epoch()),
+                arrived,
+                lost,
+                peer: o.to,
+                link,
+                proto: o.proto,
+                ip_bytes: u32::try_from(ip).unwrap_or(u32::MAX),
+                charged_bytes: Some(u32::try_from(charge).unwrap_or(u32::MAX)),
+                kind: o.kind,
+                range: off.filter(|_| payload > 0).map(|lo| (lo, lo + payload)),
+                resent: o.resent,
+                estimated: false,
+                backlog_bytes: Some(held as u64),
+            });
+            if sent.is_some_and(|s| s > o.at) {
+                held += charge;
+            }
+            off = off.map(|x| x + payload);
+        }
     }
 
     fn name(&self, h: HostIx) -> &str {
@@ -2298,9 +2466,27 @@ impl Scheduler {
         }
         self.ack_counted(to, a.why, a.wait);
         let ack = tcp_wire(0).0;
+        let held = self.held(to, t);
         let depart = self.net.occupy_up(t, to, ack, 1);
         self.ack_sent(to, self.net.up_charge(to, ack, 1));
-        if self.net.lost(depart, to, from, 1) {
+        let lost = self.net.lost(depart, to, from, 1);
+        self.offered(&Offered {
+            at: t,
+            from: to,
+            to: Some(from),
+            conn: Some(conn),
+            proto: PacketProto::Tcp,
+            kind: PacketKind::Ack,
+            wire: ack,
+            packets: 1,
+            took: 1,
+            off: None,
+            resent: None,
+            held,
+            transit: Some((depart, depart + self.net.one_way(to, from))),
+            path_lost: lost.then_some(0),
+        });
+        if lost {
             if let Some(&(_, seq, len)) = a.pieces.first() {
                 self.traced(depart, conn, "acklost", seq, len);
             }
@@ -2558,7 +2744,26 @@ impl Scheduler {
                 .net
                 .up_admit(host, at, cap, frames as usize * CROSS_FRAME, frames);
             let (wait, mut took) = (admitted.wait, admitted.packets);
+            let mut offer = Offered {
+                at,
+                from: host,
+                to: None,
+                conn: None,
+                proto: PacketProto::Tcp,
+                kind: PacketKind::Competing,
+                wire: frames as usize * CROSS_FRAME,
+                packets: frames,
+                took,
+                off: Some(seq * MSS as u64),
+                resent: Some(resent),
+                held: self.held(host, at),
+                transit: None,
+                path_lost: None,
+            };
             if took < frames {
+                if took == 0 {
+                    self.offered(&offer);
+                }
                 if let Some(d) = self.cross_drops.get_mut(host) {
                     *d += 1;
                 }
@@ -2590,7 +2795,10 @@ impl Scheduler {
             }
             let id = self.next;
             self.next += 1;
-            match self.net.first_lost_off_net(depart, host, took) {
+            let lost = self.net.first_lost_off_net(depart, host, took);
+            offer.path_lost = lost;
+            self.offered(&offer);
+            match lost {
                 Some(0) => {
                     self.events.insert(
                         (depart + rtt, id),
@@ -2754,8 +2962,10 @@ impl Scheduler {
                         len,
                         parts,
                         acked: 0,
+                        off: f.off_end,
                     },
                 );
+                f.off_end += len as u64;
                 f.recovery_sent(len);
                 f.sent(at, len, f.srtt.max(rtt));
                 f.arm(at, false, rtt);
@@ -2849,12 +3059,29 @@ impl Scheduler {
             Some(t) => (g.len - t.tail, t.tail),
             None => (0, g.len),
         };
+        let off = g.off + start as u64;
         let (wire, packets) = tcp_wire(len);
         self.traced(at, conn, if resent { "rtx" } else { "tx" }, seq, len);
         // The queue takes the leading frames that fit, a frame at a time,
         // and drops the rest.
         let admitted = self.net.up_admit(from, at, cap, wire, packets);
         let (mut took, mut head_wire) = (admitted.packets, admitted.wire);
+        let mut offer = Offered {
+            at,
+            from,
+            to: Some(to),
+            conn: Some(conn),
+            proto: PacketProto::Tcp,
+            kind: PacketKind::Data,
+            wire,
+            packets,
+            took,
+            off: Some(off),
+            resent: Some(resent),
+            held: self.held(from, at),
+            transit: None,
+            path_lost: None,
+        };
         if took < packets {
             let head = (took as usize * MSS as usize).min(len);
             self.traced(at, conn, "drop", seq, len - head);
@@ -2865,6 +3092,7 @@ impl Scheduler {
                 *d += u64::from(packets - took);
             }
             if took == 0 {
+                self.offered(&offer);
                 self.dropped(at, conn, seq);
                 return;
             }
@@ -2889,7 +3117,11 @@ impl Scheduler {
             let charge = self.net.up_charge(from, head_wire, took);
             self.resent(from, charge);
         }
-        match self.net.first_lost(t.depart, from, to, took) {
+        let lost = self.net.first_lost(t.depart, from, to, took);
+        offer.transit = Some((t.depart, t.arrival));
+        offer.path_lost = lost;
+        self.offered(&offer);
+        match lost {
             Some(0) => {
                 // Its first packet was lost on the path: its sender learns
                 // so as of a full queue's drop, and resends it whole, or a
@@ -3286,26 +3518,57 @@ impl Scheduler {
             What::Datagram(_) => Carrier::Datagram,
             _ => Carrier::Stream,
         };
+        let mut offer = Offered {
+            at,
+            from: r.from,
+            to: Some(r.to),
+            conn: Some((r.src, r.dst)),
+            proto: match r.what {
+                What::Datagram(_) => PacketProto::Udp,
+                _ => PacketProto::Tcp,
+            },
+            kind: match r.what {
+                What::Datagram(_) if r.nominal => PacketKind::Control,
+                What::Datagram(_) | What::Data { .. } => PacketKind::Data,
+                What::Syn | What::Fin(_) | What::Rst => PacketKind::Control,
+            },
+            wire: r.wire,
+            packets: r.packets,
+            took: r.packets,
+            off: None,
+            resent: None,
+            held: 0,
+            transit: None,
+            path_lost: None,
+        };
+        offer.held = self.held(offer.from, at);
         if let (Some(cap), Carrier::Datagram) = (window, carrier) {
             // A full queue drops a datagram as it does a segment; the
             // datagram's sender learns of it only from what it carries.
             if self
                 .net
-                .up_admit(r.from, at, cap, r.wire, r.packets)
+                .up_admit(offer.from, at, cap, offer.wire, offer.packets)
                 .packets
-                < r.packets
+                < offer.packets
             {
-                if let Some(d) = self.drops.get_mut(r.from) {
+                offer.took = 0;
+                self.offered(&offer);
+                if let Some(d) = self.drops.get_mut(offer.from) {
                     *d += 1;
                 }
-                if let Some(d) = self.drop_packets.get_mut(r.from) {
-                    *d += u64::from(r.packets);
+                if let Some(d) = self.drop_packets.get_mut(offer.from) {
+                    *d += u64::from(offer.packets);
                 }
-                r.state = State::Dropped;
+                if let Some(r) = self.records.get_mut(&id) {
+                    r.state = State::Dropped;
+                }
                 self.records.dropped += 1;
                 return;
             }
         }
+        let Some(r) = self.records.get_mut(&id) else {
+            return;
+        };
         if let (Some(b), What::Data { len, .. }) = (&self.buffers, r.what) {
             let q = b.model().uplink_queue;
             let admit = at.max(self.net.up_free(r.from) - Duration::from(q));
@@ -3318,6 +3581,9 @@ impl Scheduler {
         let from = r.from;
         let t = self.net.send(at, r.from, r.to, r.wire, r.packets, carrier);
         self.sent(from, app);
+        offer.transit = Some((t.depart, t.arrival + t.retransmit));
+        offer.path_lost = t.dropped.then_some(0);
+        self.offered(&offer);
         let Some(r) = self.records.get_mut(&id) else {
             return;
         };
@@ -3621,8 +3887,11 @@ impl Scheduler {
                             .copied()
                             .unwrap_or(0),
                         competing_cwnd: self.cross_cwnd.get(h).cloned().unwrap_or_default(),
-                        packets: Vec::new(),
-                        offers: None,
+                        packets: self.packets.get(h).cloned().unwrap_or_default(),
+                        offers: self
+                            .offers
+                            .as_ref()
+                            .map(|o| o.get(h).cloned().unwrap_or_default()),
                     })
                 })
                 .collect(),

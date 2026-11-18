@@ -211,6 +211,8 @@ fn a_run_with_tables_keeps_its_trace() {
             spec.wire_bins = Some(bin);
             spec.forecast_log = true;
             spec.request_logs = true;
+            spec.packet_log = (0..spec.hosts.len()).collect();
+            spec.node_bins = true;
             let r = run(spec, 1).unwrap();
             assert_eq!(
                 (&plain.trace_hash, plain.reads_hash()),
@@ -336,6 +338,7 @@ fn a_run_with_tables_keeps_its_trace() {
             request_logs_say_what_they_are(&r, &d);
             stalls_say_how_playout_went(&d);
             parents_say_how_the_trees_changed(&r, &d);
+            packets_say_what_they_are(&r, &d, name);
         }
     }
     // The departure path: a node that goes hands over its last snapshot
@@ -1386,6 +1389,111 @@ fn queues_say_what_they_are(r: &strims_sim::Report, d: &Path) {
         read += usize::from(got.0.is_some());
     }
     assert!(r.wan.is_some() && read > 0, "the seed's queue was read");
+}
+
+/// The `hosts` and `packets` tables against the run (`Scenario::packet_log`
+/// every host's): every host its row, its role its swarm's; every packet
+/// carried leaving no earlier than it entered and reaching its receiver
+/// no earlier than it left, every one the queue dropped doing neither, and
+/// those no more than the hosts' queues dropped (`queue_drop_packets`,
+/// their downlinks' too, and their competing uploads'); acknowledgements
+/// alone, TCP's pure ones or a data channel's SACKs, as the links carry
+/// them; and the seed's offers (`node_bins`' `offered_bytes`, bin by bin)
+/// the IP bytes of its data packets to the swarm's hosts that entered in
+/// the bins' span.
+fn packets_say_what_they_are(r: &strims_sim::Report, d: &Path, name: &str) {
+    let swarm = &r.scenario.swarms[0];
+    let hosts = table_rows(d, "hosts");
+    assert_eq!(hosts.len(), r.scenario.hosts.len(), "{name}");
+    for row in &hosts {
+        let h = int(row, "node").unwrap() as usize;
+        assert_eq!(row["name"], r.scenario.hosts[h].name, "{name}");
+        let role = if h == swarm.seed {
+            "seed"
+        } else if swarm.viewers.contains(&h) {
+            "viewer"
+        } else {
+            "relay"
+        };
+        assert_eq!(row["role"], role, "{name}: host {h}");
+    }
+    let rows = table_rows(d, "packets");
+    assert!(!rows.is_empty(), "{name}");
+    let wan = r.wan.as_ref().unwrap();
+    let mut next: BTreeMap<i64, i64> = BTreeMap::new();
+    let mut dropped: BTreeMap<i64, u64> = BTreeMap::new();
+    for row in &rows {
+        let node = int(row, "node").unwrap();
+        let n = next.entry(node).or_default();
+        assert_eq!(int(row, "n"), Some(*n), "{name}: {row:?}");
+        *n += 1;
+        let (t, sent, arrived) = (
+            int(row, "t_us").unwrap(),
+            int(row, "sent_us"),
+            int(row, "arrived_us"),
+        );
+        match row["lost"].as_str() {
+            "queue" => {
+                assert!(sent.is_none() && arrived.is_none(), "{name}: {row:?}");
+                *dropped.entry(node).or_default() += 1;
+            }
+            _ => {
+                assert!(sent.unwrap() >= t, "{name}: {row:?}");
+                assert!(
+                    arrived.is_none_or(|a| a >= sent.unwrap()),
+                    "{name}: {row:?}"
+                );
+            }
+        }
+        assert!(int(row, "charged_bytes").unwrap() >= int(row, "ip_bytes").unwrap());
+    }
+    for (&node, &n) in &dropped {
+        let w = &wan.hosts[node as usize];
+        assert!(
+            n <= w.queue_drop_packets + w.competing_drop_packets,
+            "{name}: host {node}"
+        );
+    }
+    let kinds: BTreeSet<&str> = rows.iter().map(|r| r["kind"].as_str()).collect();
+    assert!(
+        kinds.contains("data") && kinds.contains("ack"),
+        "{name}: {kinds:?}"
+    );
+    if name != "tcp" {
+        assert!(kinds.contains("sack"), "{name}: {kinds:?}");
+    }
+    let seed = swarm.seed as i64;
+    let bins: Vec<BTreeMap<String, String>> = table_rows(d, "node_bins")
+        .into_iter()
+        .filter(|b| int(b, "node") == Some(seed))
+        .collect();
+    let (lo, hi) = (
+        bins.iter().filter_map(|b| int(b, "bin")).min().unwrap(),
+        bins.iter().filter_map(|b| int(b, "bin")).max().unwrap(),
+    );
+    let width = (int(&bins[1], "t_ms").unwrap() - int(&bins[0], "t_ms").unwrap()) * 1000;
+    assert_eq!(
+        bins.len() as i64,
+        hi - lo + 1,
+        "{name}: the seed's bins are whole"
+    );
+    let offered: i64 = bins.iter().filter_map(|b| int(b, "offered_bytes")).sum();
+    let data: i64 = rows
+        .iter()
+        .filter(|p| {
+            int(p, "node") == Some(seed) && matches!(p["kind"].as_str(), "data" | "data_sack")
+        })
+        .filter(|p| {
+            int(p, "peer").is_some_and(|q| {
+                let q = q as usize;
+                q == swarm.seed || swarm.viewers.contains(&q)
+            })
+        })
+        .filter(|p| (lo * width..(hi + 1) * width).contains(&int(p, "t_us").unwrap()))
+        .map(|p| int(p, "ip_bytes").unwrap())
+        .sum();
+    assert!(offered > 0, "{name}");
+    assert_eq!(offered, data, "{name}: the seed's offers");
 }
 
 /// A table's rows, each by column name.

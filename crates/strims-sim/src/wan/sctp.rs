@@ -105,8 +105,9 @@ use strims_wan::Carrier;
 use strims_wan::network::overflows;
 use strims_wan::wire::tx_time;
 
-use super::{Event, Scheduler, What};
+use super::{Event, Offered, Scheduler, What};
 use crate::net::ConnKey;
+use crate::report::{PacketKind, PacketProto};
 
 /// The SCTP stack an association's rules follow.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -915,7 +916,29 @@ impl Scheduler {
         }
         let wire = link_wire(&self.net, from, wire);
         let charged = self.net.up_charge(from, wire, 1);
+        let mut offer = Offered {
+            at,
+            from,
+            to: Some(to),
+            conn: Some(conn),
+            proto: PacketProto::Udp,
+            kind: if sack.is_some() {
+                PacketKind::DataSack
+            } else {
+                PacketKind::Data
+            },
+            wire,
+            packets: 1,
+            took: 1,
+            off: None,
+            resent: None,
+            held: self.held(from, at),
+            transit: None,
+            path_lost: None,
+        };
         let t = if self.net.up_admit(from, at, cap, wire, 1).packets == 0 {
+            offer.took = 0;
+            self.offered(&offer);
             if let Some(d) = self.drops.get_mut(from) {
                 *d += 1;
             }
@@ -925,6 +948,9 @@ impl Scheduler {
             None
         } else {
             let t = self.net.send(at, from, to, wire, 1, Carrier::Datagram);
+            offer.transit = Some((t.depart, t.arrival));
+            offer.path_lost = t.dropped.then_some(0);
+            self.offered(&offer);
             let app: usize = packet.iter().filter(|c| !c.resend).map(|c| c.len).sum();
             self.sent(from, app);
             // The resent chunks' share of what the link charged the packet.
@@ -1155,9 +1181,27 @@ impl Scheduler {
             to,
             p.packet_overhead + COMMON_HEADER + SctpProfile::sack_chunk(gap_blocks(&sack.above)),
         );
+        let mut offer = Offered {
+            at: t,
+            from: to,
+            to: Some(from),
+            conn: Some(conn),
+            proto: PacketProto::Udp,
+            kind: PacketKind::Sack,
+            wire,
+            packets: 1,
+            took: 1,
+            off: None,
+            resent: None,
+            held: self.held(to, t),
+            transit: None,
+            path_lost: None,
+        };
         if let Some(cap) = self.window()
             && self.net.up_admit(to, t, cap, wire, 1).packets == 0
         {
+            offer.took = 0;
+            self.offered(&offer);
             if let Some(d) = self.drops.get_mut(to) {
                 *d += 1;
             }
@@ -1169,6 +1213,8 @@ impl Scheduler {
         let depart = self.net.occupy_up(t, to, wire, 1);
         self.sack_sent(to, self.net.up_charge(to, wire, 1));
         let at = depart + self.net.one_way(to, from);
+        offer.transit = Some((depart, at));
+        self.offered(&offer);
         self.sack_held(conn, sack, Some(at));
     }
 

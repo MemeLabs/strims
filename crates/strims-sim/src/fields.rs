@@ -5341,9 +5341,12 @@ pub(crate) mod cols {
         /// None is written as an empty field.
         Link,
         /// The packet's transport: `tcp`, `udp`, or `other` for another IP
-        /// protocol.
+        /// protocol and for a frame that isn't IPv4 (a testbed node's ARP and
+        /// IPv6 neighbour discovery, which its queue holds and its tbf charges
+        /// as it does a packet).
         Proto,
-        /// The packet's IP length: its headers and payload, no link framing.
+        /// The packet's IP length: its headers and payload, no link framing; a
+        /// frame that isn't IPv4 its bytes past the Ethernet header.
         ///
         /// Unit: bytes.
         IpBytes,
@@ -5357,7 +5360,8 @@ pub(crate) mod cols {
         /// datagram with data), `ack` (a pure TCP acknowledgement), `sack` (an
         /// SCTP SACK alone), `data_sack` (an SCTP packet of DATA with a SACK
         /// bundled), `control` (SYN, FIN or RST, a STUN or DTLS handshake
-        /// datagram), `competing` (a competing upload's, to its sink).
+        /// datagram, a testbed frame that isn't IPv4), `competing` (a competing
+        /// upload's, to its sink).
         ///
         /// strims-sim: DTLS hides a data channel's chunks on the testbed: there
         /// a datagram whose length its stack reads as a SACK alone

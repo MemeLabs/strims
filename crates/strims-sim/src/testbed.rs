@@ -90,6 +90,10 @@ use crate::spec::{Competing, Fault, HostIx, Scenario};
 use crate::stream::{SeqSet, ViewerStats};
 use crate::wan::{SctpProfile, UP_COUNTERS};
 
+mod packets;
+
+pub use packets::{NodeCapture, NodeLink, bench_captures, captures, node_link};
+
 /// The twin's stream starts this far into its run.
 const LEAD: Duration = Duration::from_secs(5);
 /// The testbed's network, node `i` at `.10 + i`, the competing upload's
@@ -897,7 +901,8 @@ impl Run {
                 written.insert(seq);
             }
         }
-        let net = Network::read(self, &scenario, seed);
+        let mut net = Network::read(self, &scenario, seed);
+        packets::fill(self, &scenario, &mut net.wan, &mut hosts);
         // The meter's truth's share at each sample, from the captures.
         let run0_us = self.start_ms.saturating_sub(LEAD.as_millis() as u64) * 1000;
         for (h, host) in hosts.iter_mut().enumerate() {
@@ -1514,9 +1519,9 @@ struct Packet {
     udp: Option<(u16, u16)>,
 }
 
-/// A libpcap file's IPv4 packets over Ethernet; `None` for another
-/// format.
-fn packets(bytes: &[u8]) -> Option<Vec<Packet>> {
+/// A libpcap file's frames over Ethernet, each its time (Unix µs), its
+/// length on the wire and the bytes captured; `None` for another format.
+fn frames(bytes: &[u8]) -> Option<Vec<(u64, u32, &[u8])>> {
     let word = |b: &[u8], at: usize, le: bool| -> Option<u32> {
         let w: [u8; 4] = b.get(at..at + 4)?.try_into().ok()?;
         Some(if le {
@@ -1538,14 +1543,25 @@ fn packets(bytes: &[u8]) -> Option<Vec<Packet>> {
     }
     let mut out = Vec::new();
     let mut at = 24;
-    while let (Some(sec), Some(frac), Some(len)) = (
+    while let (Some(sec), Some(frac), Some(len), Some(wire)) = (
         word(bytes, at, le),
         word(bytes, at + 4, le),
         word(bytes, at + 8, le),
+        word(bytes, at + 12, le),
     ) {
         let data = bytes.get(at + 16..at + 16 + len as usize)?;
         at += 16 + len as usize;
         let us = u64::from(sec) * 1_000_000 + u64::from(if nanos { frac / 1000 } else { frac });
+        out.push((us, wire, data));
+    }
+    Some(out)
+}
+
+/// A libpcap file's IPv4 packets over Ethernet; `None` for another
+/// format.
+fn packets(bytes: &[u8]) -> Option<Vec<Packet>> {
+    let mut out = Vec::new();
+    for (us, _, data) in frames(bytes)? {
         let (Some(&[0x08, 0x00]), Some(ip)) = (data.get(12..14), data.get(14..)) else {
             continue;
         };

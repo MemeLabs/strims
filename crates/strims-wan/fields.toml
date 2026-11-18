@@ -4361,7 +4361,7 @@ sample = true
 zstd = true
 normalized = "lost, peer, link, lo_off, hi_off, resent, sent_us, arrived_us, charged_bytes and backlog_bytes NULL where the run wrote none."
 description = "Each packet a node offered its access link's queue, in the order the queue took them: when it entered, when its last bit left (or that the queue dropped it), when it reached its receiver, what it was and carried, what the shaper charged it and what the uplink held as it came. One definition on every side: a testbed run's from its captures, a twin's from the model's WAN scheduler, a shaper replay's from the model's uplink fed the testbed's own offers, so the shaper benches join them packet by packet (`shaper_fit_of`)."
-notes.strims-sim = "A sim run writes the hosts `STRIMS_SIM_PACKET_LOG` names (`all` or `1`, `seed`, `viewers`, or host numbers, `0,3`; none without it), from its WAN scheduler as each message is admitted to the uplink (`Scheduler::offered`), each of the message's packets a row, held to the run's end (every host of star-31-5's 30 s, 1.17 M rows, took 180 MB more at the peak): `seed` or a few hosts for a long or wide cell. A testbed run writes every node with both captures (`PCAP=1`: `pcap-<i>-offered.pcap`, ahead of the egress delay and the queue, GSO's buffers cut into the link's packets, and `pcap-<i>.pcap`, past the queue), each offered packet matched to the carried one of its flow, IP id and length (`crate::testbed`'s packets), its rows ending twice its queue's time before its eth0 capture's last record (past it no capture tells a packet's fate). The shaper replay (strims-sim's `shaper_replay`) writes its source's node's offers with the model's fates."
+notes.strims-sim = "A sim run writes the hosts `STRIMS_SIM_PACKET_LOG` names (`all` or `1`, `seed`, `viewers`, or host numbers, `0,3`; none without it), from its WAN scheduler as each message is admitted to the uplink (`Scheduler::offered`), each of the message's packets a row, held to the run's end (every host of star-31-5's 30 s, 1.17 M rows, took 180 MB more at the peak): `seed` or a few hosts for a long or wide cell. A testbed run writes every node with both captures (`PCAP=1`: `pcap-<i>-offered.pcap`, ahead of the egress delay and the queue, GSO's buffers cut into the link's packets, and `pcap-<i>.pcap`, past the queue), each offered packet matched to the carried one of its flow, IP id and length (`crate::testbed`'s packets), the node's frames that aren't IPv4 (from its MAC) to the next of their length, its rows ending twice its queue's time before its eth0 capture's last record (past it no capture tells a packet's fate). The shaper replay (strims-sim's `shaper_replay`) writes its source's node's offers with the model's fates."
 
 [columns.packets.node]
 sims = ["strims-sim"]
@@ -4418,13 +4418,13 @@ description = "The ordinal of the node's link to `peer` that carried the packet,
 [columns.packets.proto]
 sims = ["strims-sim"]
 type = "text"
-description = "The packet's transport: `tcp`, `udp`, or `other` for another IP protocol."
+description = "The packet's transport: `tcp`, `udp`, or `other` for another IP protocol and for a frame that isn't IPv4 (a testbed node's ARP and IPv6 neighbour discovery, which its queue holds and its tbf charges as it does a packet)."
 
 [columns.packets.ip_bytes]
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
-description = "The packet's IP length: its headers and payload, no link framing."
+description = "The packet's IP length: its headers and payload, no link framing; a frame that isn't IPv4 its bytes past the Ethernet header."
 
 [columns.packets.charged_bytes]
 sims = ["strims-sim"]
@@ -4436,7 +4436,7 @@ description = "What the node's shaper charged the packet: its IP bytes and its l
 [columns.packets.kind]
 sims = ["strims-sim"]
 type = "text"
-description = "What the packet was: `data` (a TCP segment with payload, or a datagram with data), `ack` (a pure TCP acknowledgement), `sack` (an SCTP SACK alone), `data_sack` (an SCTP packet of DATA with a SACK bundled), `control` (SYN, FIN or RST, a STUN or DTLS handshake datagram), `competing` (a competing upload's, to its sink)."
+description = "What the packet was: `data` (a TCP segment with payload, or a datagram with data), `ack` (a pure TCP acknowledgement), `sack` (an SCTP SACK alone), `data_sack` (an SCTP packet of DATA with a SACK bundled), `control` (SYN, FIN or RST, a STUN or DTLS handshake datagram, a testbed frame that isn't IPv4), `competing` (a competing upload's, to its sink)."
 notes.strims-sim = "DTLS hides a data channel's chunks on the testbed: there a datagram whose length its stack reads as a SACK alone (`SctpProfile::datagram_payload` of 0) is a `sack`, every other `data` (`estimated`), and none is a `data_sack` or `control`."
 
 [columns.packets.lo_off]
