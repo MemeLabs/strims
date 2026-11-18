@@ -579,7 +579,8 @@ MEASURE_PEERS = ["mobile-uncapped"]
 # The logs a measurement keeps, by sim: the forecast log and its truth (the
 # chunks each node stored), and the scheduler's park and event logs. The
 # tables go to each job's output dir, as every job's do.
-MEASURE_LOGS = {SIM: {"STRIMS_SIM_FORECAST": "1", "STRIMS_SIM_SPEC": "1", "STRIMS_SIM_PARENT_CHECKS": "1"}}
+MEASURE_LOGS = {SIM: {"STRIMS_SIM_FORECAST": "1", "STRIMS_SIM_SPEC": "1", "STRIMS_SIM_PARENT_CHECKS": "1",
+                      "STRIMS_SIM_TIMER_LOG": "all"}}
 MEASURE_SEEDS = 8
 # The logs hold a row per neighbour per chunk: a run's memory grows with
 # its viewers and its stream's length.

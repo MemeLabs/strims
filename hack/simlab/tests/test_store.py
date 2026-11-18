@@ -204,12 +204,13 @@ class FoldExport(Scratch):
         """golden_cli's jobs, written as the sim writes them, with the
         meter samples', speculative requests', parks', arrivals', asks',
         haves', the seed log's, the peer samples', a testbed run's sockets',
-        the packets', the hosts' and the parent checks' tables golden_cli's
-        don't write: the suite's, then the farm's (whose reads, asks and
-        haves are zstd-compressed, `<table>.csv.zst`, as the sim writes its
-        large tables, and the seed log's, the peer samples', the sockets',
-        the packets' and the parent checks' too, so the fold takes the
-        tables registered last in either form), then a job folded again."""
+        the packets', the hosts', the parent checks' and the timers' tables
+        golden_cli's don't write: the suite's, then the farm's (whose reads,
+        asks and haves are zstd-compressed, `<table>.csv.zst`, as the sim
+        writes its large tables, and the seed log's, the peer samples', the
+        sockets', the packets', the parent checks' and the timers' too, so
+        the fold takes the tables registered last in either form), then a job
+        folded again."""
         jobs = [golden_cli.job_dir(self.dir / "jobs" / f"{i:02d}", j) for i, j in enumerate(golden_cli.JOBS)]
         for n, j in enumerate(jobs):
             d = Path(j["dir"])
@@ -259,9 +260,17 @@ class FoldExport(Scratch):
                                                         ("action", "VARCHAR"), ("chosen", "BIGINT"),
                                                         ("best_lag_us", "BIGINT")],
                                    [(343_000 + n, 1, 0, "graft", 0, 12_000), (343_000 + n, 1, 1, "none", None, None)])
+            # The seed's node task's timer and its writer's, a millisecond late.
+            golden_cli.write_table(d, "timers", [("t_us", "BIGINT"), ("node", "BIGINT"), ("n", "BIGINT"),
+                                                 ("source", "VARCHAR"), ("armed_us", "BIGINT"),
+                                                 ("deadline_us", "BIGINT"), ("late_us", "BIGINT"),
+                                                 ("requested_us", "BIGINT"), ("context", "VARCHAR")],
+                                   [(1_001_000 + n, 0, 0, "node_task", 990_000, 1_000_000 + n, 1000 - n, 10_000,
+                                     "task"),
+                                    (1_251_000, 0, 1, "writer", 1_000_000, 1_250_000, 1000, 250_000, "task")])
             if ":" in j["sim"]:
                 for t in ("reads", "asks", "haves", "seed_decisions", "seed_sends", "peer_samples", "sockets",
-                          "packets", "parent_checks"):
+                          "packets", "parent_checks", "timers"):
                     csv = d / f"{t}.csv"
                     (d / f"{t}.csv.zst").write_bytes(zstd.compress(csv.read_bytes()))
                     csv.unlink()
@@ -325,6 +334,12 @@ class FoldExport(Scratch):
         cols, rows = parquet(self.dir / "module" / "parent_checks.parquet")
         self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(2 * list(runs["k"])))
         self.assertIn(None, [r[[c for c, _ in cols].index("chosen")] for r in rows])
+        # Two timers a job, each its own (k, node, n).
+        cols, rows = parquet(self.dir / "module" / "timers.parquet")
+        names = [c for c, _ in cols]
+        self.assertEqual(sorted(r[names.index("k")] for r in rows), sorted(2 * list(runs["k"])))
+        self.assertEqual(len({(r[names.index("k")], r[names.index("node")], r[names.index("n")]) for r in rows}),
+                         len(rows))
 
     def test_an_empty_store_exports_nothing(self):
         sm = simdb()

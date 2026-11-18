@@ -649,6 +649,29 @@ class SeedLog(unittest.TestCase):
             query.need({"seed_sends", "reads"}, "seed_sends", "reads")
 
 
+class TimerLog(unittest.TestCase):
+    """The timer log's table: sampled (a row a timer that fired, many
+    thousand a run), with its notes, its key and its joins and knob, a
+    negative lateness kept as it was read."""
+
+    def test_the_table_is_sampled_with_its_notes(self):
+        self.assertIn("timers", store_host.TABLES)
+        self.assertIn("timers", store_host.SAMPLE_TABLES)
+        self.assertEqual(catalog.STANDARD_KEYS["timers"], "k, node, n")
+        self.assertEqual(catalog.STANDARD_JOINS["timers"], "hosts, viewers USING (k, src, node)")
+        self.assertEqual(query.TABLE_KNOBS["timers"], ("TIMER_LOG",))
+        with self.assertRaisesRegex(query.Refused, r"^the selection has no timers \(nor does S3: run with "
+                                                   r"STRIMS_SIM_TIMER_LOG=1\)"):
+            query.need({"reads"}, "timers")
+        query.need({"timers"}, "timers")
+
+    def test_the_view_keeps_each_column_as_read(self):
+        cols = {"k": "VARCHAR", "src": "VARCHAR", "t_us": "BIGINT", "node": "BIGINT", "n": "BIGINT",
+                "late_us": "BIGINT", "source": "VARCHAR"}
+        sql = catalog.view_sql("timers", cols, "timers", {})
+        self.assertIn('SELECT x.* FROM raw."timers" x', sql)
+
+
 # Testbed runs' knobs that key to three tier cells (simlab.testbed.cell_sql):
 # robust's star-31-5, and thin-15-10 in robust and in browsers.
 TESTBED_ENV = {"STRIMS_SIM_CAL_MESH": "full", "STRIMS_SIM_CAL_SECS": "60", "STRIMS_SIM_CAL_SEED_BURST": "3028",

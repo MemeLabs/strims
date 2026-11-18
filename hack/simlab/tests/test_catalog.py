@@ -1420,6 +1420,12 @@ class Tables(Fixture):
             [(1_000_000, 1, 0, "graft", 0, 0, 12_000, 2, 30_000, None, None, 0),
              (1_000_000, 1, 1, "none", None, None, None, None, None, None, None, 0),
              (1_250_000, 1, 0, "vote", None, 2, 4_000, None, None, 0, 40_000, 1)])
+        # The seed's node task's timer, 1.2 ms late, and viewer 0's host
+        # pacer's, read before its deadline (a browser's clock behind it).
+        golden_cli.write_table(d, "timers", [(c, "VARCHAR" if c in ("source", "context") else "BIGINT") for c in (
+            "t_us", "node", "n", "source", "armed_us", "deadline_us", "late_us", "requested_us", "context")],
+            [(1_001_200, 0, 0, "node_task", 990_000, 1_000_000, 1200, 10_000, "task"),
+             (1_249_900, 1, 0, "pacer", 1_245_000, 1_250_000, -100, 5000, "worker")])
         db = self.root / "jobs-tables" / f"{src.replace('/', '~')}.duckdb"
         store_host.fold(db, [meta], src)
         store_host.export(db, store_host.cache_root() / "cache" / src)
@@ -1487,6 +1493,14 @@ class Tables(Fixture):
                           (1_250_000, 0, "vote", None, 2, None, 0, 0)])
         got = catalog.lake("SELECT keys, joins FROM table_catalog WHERE name = 'parent_checks';")
         self.assertEqual(got, [{"keys": "k, node, t_us, stream", "joins": "viewers USING (k, src, node)"}])
+        # The timers: each node's from n 0, a negative lateness kept, as
+        # table_catalog keys them.
+        got = catalog.lake("SELECT node, n, source, late_us, context FROM timers "
+                           f"WHERE k = {catalog.q(tail)} ORDER BY node, n;")
+        self.assertEqual(got, [{"node": 0, "n": 0, "source": "node_task", "late_us": 1200, "context": "task"},
+                               {"node": 1, "n": 0, "source": "pacer", "late_us": -100, "context": "worker"}])
+        got = catalog.lake("SELECT keys, joins FROM table_catalog WHERE name = 'timers';")
+        self.assertEqual(got, [{"keys": "k, node, n", "joins": "hosts, viewers USING (k, src, node)"}])
         # Parents: each node's changes in order, n, and n NULL where a
         # run's table has none.
         parents = catalog.lake("SELECT k, node, n, parent FROM parents WHERE k IN "
