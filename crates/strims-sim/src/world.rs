@@ -387,25 +387,6 @@ impl World {
                 s.media.map(|m| m.encoder.trace(&mut rng, span))
             })
             .collect();
-        // The lateness streams come from an rng of their own, so turning
-        // them on moves no other draw.
-        let (lateness, probe_lateness) = if spec.timer_lateness {
-            let mut late = det_rng(seed ^ crate::late::RNG_SALT);
-            let mut streams = || -> Vec<crate::late::Lateness> {
-                (0..spec.hosts.len())
-                    .map(|_| crate::late::Lateness::new(strims_base::rng::fork(&mut late)))
-                    .collect()
-            };
-            let hosts = streams();
-            let probes = if spec.timer_probe {
-                streams()
-            } else {
-                Vec::new()
-            };
-            (hosts, probes)
-        } else {
-            (Vec::new(), Vec::new())
-        };
         let timer_logs = (0..spec.hosts.len())
             .map(|h| {
                 spec.timer_log
@@ -418,6 +399,30 @@ impl World {
         crate::arrivals::resolve(&mut spec, &mut rng);
         crate::hostile::draw_mix(&mut spec, &mut rng);
         crate::seed_pin::resolve(&mut spec, &mut rng);
+        // Last of the scenario's draws, before the controller's: each
+        // host's lateness stream forked from the run's rng, then with the
+        // probe one more a host for its probe's.
+        let (lateness, probe_lateness) = if spec.timer_lateness {
+            let streams = |rng: &mut DetRng| -> Vec<crate::late::Lateness> {
+                (0..spec.hosts.len())
+                    .map(|h| {
+                        crate::late::Lateness::new(
+                            strims_base::rng::fork(rng),
+                            crate::late::HostKind::of_host(&spec, h),
+                        )
+                    })
+                    .collect()
+            };
+            let hosts = streams(&mut rng);
+            let probes = if spec.timer_probe {
+                streams(&mut rng)
+            } else {
+                Vec::new()
+            };
+            (hosts, probes)
+        } else {
+            (Vec::new(), Vec::new())
+        };
         let st = WorldState {
             trace: Vec::new(),
             hosts: (0..spec.hosts.len())

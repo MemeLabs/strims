@@ -542,6 +542,35 @@ and dropped are in `TRIED.md`.
     framing (`STRIMS_SIM_FRAMING`), slots (`STRIMS_SIM_UPLINK_SLOTS`),
     capacity traces, and the timer-lateness model
     (`STRIMS_SIM_TIMER_LATENESS`).
+  - Draw a timer's lateness by the delay it was armed for, where the
+    timer bench's probe reads it so (`timer_fit_of`'s `by_delay`): a
+    browser's short timers armed from a timer's continuation, and a
+    native node's longer sleeps. Give a browser's host pacer polls their
+    lateness. Draw it below the millisecond: the model draws whole ms and
+    sits about half a ms below a real timer's lateness, which runs on
+    within its ms, so the node task fails the bench's mean alone.
+  - Draw a timer's lateness by its host's load, where the timer bench's
+    runs beside a competing upload read it later than its idle runs
+    (`timer_fit_of` per condition).
+  - Find what makes the testbed's 3+ ms timers run tens to hundreds of
+    ms late (the host's other load, or the node's own work) and model it,
+    so the twin's mean and p99 lateness meet the testbed's
+    (`timer_fit_of`'s); measure it on dedicated hosts first (the farm's
+    `testbed-timers` matrix). The longest are stalls, where `late` draws
+    each timer's apart: most hold one node of a run, some several, a few
+    every node at once. Once the dedicated hosts measure them, model the
+    two kinds apart: host-wide stalls drawn per run across its hosts at
+    once, and a node's own stalls kept per host.
+  - Before Firefox's shares are trusted, compare its runs with the timer
+    log off and on (the farm's `testbed-timers-control` matrix), judged
+    by the viewers' lag, the seed's drops and its allocation steps beside
+    its line timer and writes (`tick_late_ms`, `write_late_ms`, which read
+    through `Date.now()`, the clock under test): the log serves the page
+    cross-origin isolated, which likely changes whether the whole ms of
+    Firefox's `Date.now()`, the node's clock, is jittered.
+  - Find why the twin's seed's allocation checks slip a 100-ms tick more
+    often than the testbed's native seed's and less often than its
+    browser seeds' (`alloc_step_fit_of`), and fix the sim's side.
   - At 20 Mbit/s the twin's seed serves more children, keeps a larger
     budget and cuts its copies less often than the testbed's. Find the
     cause and model it; the seed's budget is one of the meter search's

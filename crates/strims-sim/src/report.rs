@@ -1065,14 +1065,13 @@ impl Report {
             "other"
         };
         let window = s.send_buffer.is_some_and(|b| b.window);
-        let (kind, stack) = match hs.rtc_stack.filter(|_| window && hs.webrtc) {
-            Some(p) if p == crate::wan::SctpProfile::CHROMIUM => {
-                ("chromium", "model-sctp-chromium")
-            }
-            Some(p) if p == crate::wan::SctpProfile::FIREFOX => ("firefox", "model-sctp-firefox"),
-            Some(_) => ("native", "model-sctp-str0m"),
-            None if hs.webrtc => ("native", "str0m"),
-            None => ("native", "model-tcp"),
+        let kind = crate::late::HostKind::of_host(s, h).name();
+        let stack = match hs.rtc_stack.filter(|_| window && hs.webrtc) {
+            Some(p) if p == crate::wan::SctpProfile::CHROMIUM => "model-sctp-chromium",
+            Some(p) if p == crate::wan::SctpProfile::FIREFOX => "model-sctp-firefox",
+            Some(_) => "model-sctp-str0m",
+            None if hs.webrtc => "str0m",
+            None => "model-tcp",
         };
         // What it sends is delayed by the latency faults at time 0 that
         // time it, where they all agree.

@@ -29,21 +29,34 @@
 //! lateness), the driver's own sleeps (its accept and receive backoffs)
 //! and the WAN model's transport timers.
 //!
-//! Every host draws the same shares (`lateness`): 0 ms one time in ten,
-//! 1 ms six, 2 ms three, rounded from what a native testbed seed's 1-s
-//! record timer read in three runs pooled (strims-testbed's
-//! `tick_late_ms`: 0 ms in 9 % of its seconds, 1 ms in 60 %, 2 ms in 28 %,
-//! 3 ms or more in 3 %). Larger pools read otherwise: 168 native seeds of
-//! the farm's testbed runs read 11.0, 68.2, 18.5 and 2.3 %, and the
-//! browser runs' Chromium seeds read 0 ms in 92.7 % of their seconds, yet
-//! a twin's browser hosts draw the native shares too. The frame writer
-//! draws them as well, which the testbed's writes don't follow: a native
-//! seed's `write_late_ms`, the latest of a second's writes past its due
-//! time, reads 1 ms in about half its seconds and 2 ms in the other half,
-//! where the latest of a second's four draws reads 1 ms in a quarter and
-//! 2 ms in three quarters.
+//! Each host draws from the model of its kind ([`HostKind`]: native,
+//! Chromium or Firefox, by the browser its data channels model, as the
+//! `hosts` table names it) for each source ([`Source`]): its node task's
+//! wake-ups, and its harness's timers, the frame writer's waits and the
+//! timer probe's ([`model`]). Each model is the timer bench's: the shares
+//! of 0, 1 and 2 ms late, and the measured spread of those 3 ms or more
+//! late, that the `timers` table of thin-star testbed runs reads (a seed
+//! and three viewers of one kind, a 10 Mbit/s seed, 40 s, idle and beside a
+//! competing upload, every node of the kind, each run weighed alike). The
+//! bench (scoring.sql's `timer_fit_of`) holds a twin of those runs to the
+//! testbed's shares, mean and p99, kind by kind and source by source. A
+//! browser's timer for a deadline already due resolves at once, as
+//! strims-wasm's `Sleep` and `setTimeout`-free waits do, drawing nothing;
+//! a native node's fires on its next tick, as any. A testbed node's line
+//! timer and a browser's host pacer have no draw: the controller samples
+//! on time, and the model's host pacer polls on time.
 //!
-//! Each host's lateness comes from its own rng (see the crate's
+//! The tail's longest values are stalls, not a timer's own lateness: on
+//! the testbed, timers 100 ms or more late come in bursts, most of them
+//! on one node of a run's four, some on several, and a few on every node
+//! at once (one run's every node 744-771 ms late together; the 617 ms
+//! that sets [`MAX_LATE_MS`] comes from a stall), where the model draws
+//! each timer's apart, host by host. The runs shared their host with
+//! other load; PLAN's heavy-tail item has the dedicated hosts' runs
+//! measure them again and model the two kinds apart: host-wide stalls
+//! drawn per run across its hosts, a node's own kept per host.
+//!
+//! Each host's lateness comes from its own stream (see the crate's
 //! determinism notes), which its incarnations' node clocks and its frame
 //! writer draw from in turn. A deadline's lateness is drawn once, so a node
 //! that resets its timer to the deadline it had keeps it, and passes that
@@ -61,22 +74,89 @@ use strims_base::time::{Duration, Time};
 use strims_node::{Clock, SimClock};
 use tokio::time::Instant;
 
-/// Mixed into the run's seed for the rng the hosts' lateness streams are
-/// forked from, apart from the run's own.
-pub(crate) const RNG_SALT: u64 = 0x1a7e_c10c;
+use crate::spec::{HostIx, Scenario};
+use crate::wan::SctpProfile;
+
+/// What a host is, as its timers' lateness goes ([`model`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostKind {
+    Native,
+    Chromium,
+    Firefox,
+}
+
+impl HostKind {
+    /// The kind of host `h` of `s`, the `hosts` table's (its row's `kind`,
+    /// `Report::scenario_host_row`): the browser whose data channels it
+    /// models (the window model's under Chromium's or Firefox's profile),
+    /// else native.
+    pub fn of_host(s: &Scenario, h: HostIx) -> HostKind {
+        let window = s.send_buffer.is_some_and(|b| b.window);
+        match s
+            .hosts
+            .get(h)
+            .and_then(|x| x.rtc_stack.filter(|_| window && x.webrtc))
+        {
+            Some(p) if p == SctpProfile::CHROMIUM => HostKind::Chromium,
+            Some(p) if p == SctpProfile::FIREFOX => HostKind::Firefox,
+            _ => HostKind::Native,
+        }
+    }
+
+    /// Its name in the tables: `native`, `chromium`, `firefox`.
+    pub fn name(self) -> &'static str {
+        match self {
+            HostKind::Native => "native",
+            HostKind::Chromium => "chromium",
+            HostKind::Firefox => "firefox",
+        }
+    }
+
+    /// Whether its timers resolve a deadline already due at once: a
+    /// browser's do (strims-wasm's `Sleep` checks its deadline before it
+    /// arms a timer), where a native node's tokio timer fires on a tick.
+    pub(crate) fn resolves_due_at_once(self) -> bool {
+        self != HostKind::Native
+    }
+}
+
+/// Whose timer a draw is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Source {
+    /// The node task's wake-up ([`LateClock`]).
+    NodeTask,
+    /// A harness's timer: the frame writer's wait for a write's time, and
+    /// the timer probe's.
+    Writer,
+}
 
 /// A host's lateness stream, shared by its incarnations' clocks.
 #[derive(Clone, Debug)]
-pub struct Lateness(Arc<Mutex<DetRng>>);
+pub struct Lateness(Arc<Mutex<DetRng>>, HostKind);
 
 impl Lateness {
-    pub(crate) fn new(rng: DetRng) -> Lateness {
-        Lateness(Arc::new(Mutex::new(rng)))
+    pub(crate) fn new(rng: DetRng, kind: HostKind) -> Lateness {
+        Lateness(Arc::new(Mutex::new(rng)), kind)
     }
 
-    /// How late the next timer fires ([`lateness`]).
-    pub(crate) fn draw(&self) -> Duration {
-        lateness(&mut self.0.lock().unwrap_or_else(PoisonError::into_inner))
+    /// How late the host's next timer of `source` fires, armed for a
+    /// deadline that was `due` already (at or before the arming code's
+    /// now): at once on a host whose timers resolve it so, drawing
+    /// nothing ([`HostKind`]), else as [`lateness`] draws.
+    pub(crate) fn draw(&self, source: Source, due: bool) -> Duration {
+        if due && self.1.resolves_due_at_once() {
+            return Duration::ZERO;
+        }
+        lateness(
+            &mut self.0.lock().unwrap_or_else(PoisonError::into_inner),
+            self.1,
+            source,
+        )
+    }
+
+    /// The host's kind.
+    pub(crate) fn kind(&self) -> HostKind {
+        self.1
     }
 }
 
@@ -105,7 +185,7 @@ impl LateClock {
         match *last {
             Some((at, d)) if at == t => d,
             _ => {
-                let d = self.stream.draw();
+                let d = self.stream.draw(Source::NodeTask, t <= self.inner.now());
                 *last = Some((t, d));
                 d
             }
@@ -113,17 +193,87 @@ impl LateClock {
     }
 }
 
-/// The most a timer fires late, in ms ([`lateness`]).
-pub const MAX_LATE_MS: i64 = 2;
+/// How late a timer fires ([`model`]): `shares`, in parts of [`PARTS`],
+/// of 0, 1 and 2 ms late, and the rest from `tail`, 3 ms or more: whole
+/// ms, ascending, each as likely as the others.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Model {
+    pub(crate) shares: [u32; 3],
+    pub(crate) tail: &'static [u32],
+}
 
-/// How late a timer fires: 0 ms one time in ten, 1 ms six in ten, 2 ms
-/// three in ten.
-pub(crate) fn lateness(rng: &mut DetRng) -> Duration {
-    Duration::from_millis(match rng.next_u32() % 10 {
-        0 => 0,
-        1..=6 => 1,
-        _ => 2,
-    })
+/// The most a timer fires late, in ms: the largest of the tails
+/// ([`model`]).
+pub const MAX_LATE_MS: i64 = 617;
+
+/// The parts [`Model::shares`] are in.
+const PARTS: u32 = 1000;
+
+/// How late `kind`'s timers of `source` fire. Each is the timer bench's
+/// testbed runs' (see the [module docs](self)): the shares of 0, 1 and 2
+/// ms late from the `timers` table, every node of the kind, each cell of
+/// runs weighed alike, and a step that undoes what the model's own
+/// passes leave out (a timer drawn late enough for input to pass first
+/// fires no row, so the sim's rows read less late than its draws); and
+/// the tail, the 3+ ms timers' 20 quantiles, whose longest values are
+/// stalls, some host-wide, drawn here as one timer's (see the module
+/// docs).
+pub(crate) fn model(kind: HostKind, source: Source) -> Model {
+    match (kind, source) {
+        (HostKind::Native, Source::NodeTask) => Model {
+            shares: [79, 696, 205],
+            tail: &[
+                3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 8, 12, 30, 45, 61, 62, 63, 78, 164,
+            ],
+        },
+        (HostKind::Native, Source::Writer) => Model {
+            shares: [108, 593, 259],
+            tail: &[
+                3, 3, 3, 3, 3, 3, 3, 4, 5, 5, 14, 15, 24, 37, 39, 42, 48, 67, 114, 617,
+            ],
+        },
+        (HostKind::Chromium, Source::NodeTask) => Model {
+            shares: [584, 296, 50],
+            tail: &[
+                3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 5, 6, 29, 200,
+            ],
+        },
+        (HostKind::Chromium, Source::Writer) => Model {
+            shares: [662, 207, 42],
+            tail: &[
+                3, 3, 3, 3, 4, 4, 5, 5, 6, 7, 7, 7, 8, 11, 23, 31, 37, 47, 79, 154,
+            ],
+        },
+        (HostKind::Firefox, Source::NodeTask) => Model {
+            shares: [502, 336, 74],
+            tail: &[
+                3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 5, 25, 202,
+            ],
+        },
+        (HostKind::Firefox, Source::Writer) => Model {
+            shares: [672, 244, 20],
+            tail: &[
+                3, 3, 3, 3, 4, 4, 5, 5, 5, 6, 6, 7, 9, 9, 14, 31, 39, 67, 104, 420,
+            ],
+        },
+    }
+}
+
+/// How late a timer of `source` fires on a host of `kind`: one draw of
+/// `rng`, whose remainder by [`PARTS`] picks the bucket at its
+/// [`Model::shares`], and whose quotient the tail's value.
+pub(crate) fn lateness(rng: &mut DetRng, kind: HostKind, source: Source) -> Duration {
+    let x = rng.next_u32();
+    let m = model(kind, source);
+    let mut b = x % PARTS;
+    for (ms, share) in (0..).zip(m.shares) {
+        if b < share {
+            return Duration::from_millis(ms);
+        }
+        b -= share;
+    }
+    let i = usize::try_from(x / PARTS).unwrap_or(0) % m.tail.len().max(1);
+    Duration::from_millis(i64::from(m.tail.get(i).copied().unwrap_or(3)))
 }
 
 impl Clock for LateClock {
@@ -146,60 +296,162 @@ mod tests {
     use super::*;
     use strims_base::rng::det_rng;
 
-    /// The draws' shares: 0 ms one in ten, 1 ms six, 2 ms three.
-    #[test]
-    fn a_timer_fires_up_to_two_milliseconds_late() {
-        let mut rng = det_rng(7);
-        let mut n = [0u32; 3];
-        for _ in 0..10_000 {
-            let d = lateness(&mut rng).as_millis();
-            assert!((0..=2).contains(&d), "{d} ms");
-            n[usize::try_from(d).unwrap_or(0)] += 1;
+    const KINDS: [HostKind; 3] = [HostKind::Native, HostKind::Chromium, HostKind::Firefox];
+    const SOURCES: [Source; 2] = [Source::NodeTask, Source::Writer];
+
+    /// The 0, 1, 2 and 3+ ms counts of `n` timers `draw` fires.
+    fn buckets(n: u32, mut draw: impl FnMut() -> Duration) -> [u32; 4] {
+        let mut b = [0u32; 4];
+        for _ in 0..n {
+            let ms = draw().as_millis();
+            assert!((0..=MAX_LATE_MS).contains(&ms), "{ms} ms");
+            b[usize::try_from(ms.min(3)).unwrap_or(3)] += 1;
         }
-        for (i, want) in [1_000, 6_000, 3_000].into_iter().enumerate() {
-            assert!(n[i].abs_diff(want) < 300, "{i} ms: {} of 10000", n[i]);
+        b
+    }
+
+    /// Whether counts out of 100000 come at `m`'s shares, within 0.5 %.
+    fn at_shares(b: [u32; 4], m: Model) -> bool {
+        let tail = PARTS - m.shares.iter().sum::<u32>();
+        let want = [m.shares[0], m.shares[1], m.shares[2], tail];
+        b.iter()
+            .zip(want)
+            .all(|(&got, w)| got.abs_diff(w * 100) < 500)
+    }
+
+    /// Each kind's and source's draws come at its model's shares, and its
+    /// 3+ ms draws are its tail's values, every one drawn; the most any
+    /// tail holds is MAX_LATE_MS.
+    #[test]
+    fn a_timer_fires_at_its_kinds_and_sources_model() {
+        let mut most = 0;
+        for kind in KINDS {
+            for source in SOURCES {
+                let m = model(kind, source);
+                assert!(m.shares.iter().sum::<u32>() <= PARTS, "{kind:?} {source:?}");
+                assert!(!m.tail.is_empty() && m.tail.is_sorted() && m.tail[0] >= 3);
+                most = most.max(i64::from(m.tail[m.tail.len() - 1]));
+                let mut rng = det_rng(7);
+                let mut seen = std::collections::BTreeSet::new();
+                let b = buckets(100_000, || {
+                    let d = lateness(&mut rng, kind, source);
+                    if d.as_millis() >= 3 {
+                        assert!(m.tail.contains(&(d.as_millis() as u32)));
+                        seen.insert(d.as_millis());
+                    }
+                    d
+                });
+                assert!(at_shares(b, m), "{kind:?} {source:?}: {b:?}");
+                let distinct: std::collections::BTreeSet<u32> = m.tail.iter().copied().collect();
+                assert_eq!(
+                    seen.len(),
+                    distinct.len(),
+                    "{kind:?} {source:?}: every tail value drawn"
+                );
+            }
+        }
+        assert_eq!(most, MAX_LATE_MS);
+    }
+
+    /// No two kinds and sources share a model: each is its own pool.
+    #[test]
+    fn every_kind_and_source_has_a_model_of_its_own() {
+        let all: Vec<(HostKind, Source)> = KINDS
+            .iter()
+            .flat_map(|&k| SOURCES.iter().map(move |&s| (k, s)))
+            .collect();
+        for (i, &(ka, sa)) in all.iter().enumerate() {
+            for &(kb, sb) in &all[i + 1..] {
+                let (a, b) = (model(ka, sa), model(kb, sb));
+                assert!(
+                    a.shares != b.shares || a.tail != b.tail,
+                    "{ka:?} {sa:?} and {kb:?} {sb:?}"
+                );
+            }
         }
     }
 
-    /// A deadline fires no earlier than it would on time and at most 2 ms
-    /// later, and keeps its lateness while the timer is reset to it; a
-    /// restart's clock goes on drawing where the host's stream was.
+    /// A browser's timer for a deadline already due fires at once and
+    /// draws nothing; a native node's draws as any.
+    #[test]
+    fn a_browsers_due_timer_fires_at_once() {
+        for kind in [HostKind::Chromium, HostKind::Firefox] {
+            let (stream, mut fresh) = (Lateness::new(det_rng(5), kind), det_rng(5));
+            for source in SOURCES {
+                assert_eq!(stream.draw(source, true), Duration::ZERO);
+            }
+            assert_eq!(
+                stream.draw(Source::Writer, false),
+                lateness(&mut fresh, kind, Source::Writer),
+                "{kind:?}: the due ones drew nothing"
+            );
+        }
+        let (stream, mut fresh) = (Lateness::new(det_rng(5), HostKind::Native), det_rng(5));
+        assert_eq!(
+            stream.draw(Source::NodeTask, true),
+            lateness(&mut fresh, HostKind::Native, Source::NodeTask)
+        );
+    }
+
+    /// A deadline fires no earlier than it would on time and at most
+    /// [`MAX_LATE_MS`] later, and keeps its lateness while the timer is
+    /// reset to it; a restart's clock goes on drawing where the host's
+    /// stream was; and the clock draws the node task's model, not the
+    /// writer's.
     #[test]
     fn a_deadline_keeps_its_lateness() {
         let epoch = Time::from_unix_millis(1_700_000_000_000);
         let inner = SimClock::with_base(epoch, Instant::now());
-        let stream = Lateness::new(det_rng(3));
+        let stream = Lateness::new(det_rng(3), HostKind::Native);
         let late = LateClock::new(inner, stream.clone());
         for k in 0..200 {
-            let t = epoch + Duration::from_millis(100 * k);
+            let t = epoch + Duration::from_secs(1000) + Duration::from_millis(100 * k);
             let at = late.deadline(t);
             assert!(at >= inner.deadline(t));
-            assert!(at <= inner.deadline(t + Duration::from_millis(2)));
+            assert!(at <= inner.deadline(t + Duration::from_millis(MAX_LATE_MS)));
             assert_eq!(late.deadline(t), at, "reset to the same deadline");
         }
         // The same stream from the start, and a clock of a second
         // incarnation sharing it after 200 draws, read alike.
         let mut fresh = det_rng(3);
+        let draw = |rng: &mut DetRng| lateness(rng, HostKind::Native, Source::NodeTask);
         for _ in 0..200 {
-            let _ = lateness(&mut fresh);
+            let _ = draw(&mut fresh);
         }
         let again = LateClock::new(inner, stream);
-        let t = epoch + Duration::from_secs(100);
-        assert_eq!(again.deadline(t), inner.deadline(t + lateness(&mut fresh)));
+        let t = epoch + Duration::from_secs(5000);
+        assert_eq!(again.deadline(t), inner.deadline(t + draw(&mut fresh)));
+        // Over many deadlines the clock's draws are the node task's.
+        let clock = LateClock::new(inner, Lateness::new(det_rng(9), HostKind::Native));
+        let mut k = 0;
+        let b = buckets(100_000, || {
+            k += 1;
+            let t = epoch + Duration::from_secs(10_000) + Duration::from_millis(10 * k);
+            let base = inner.deadline(t);
+            Duration::from(clock.deadline(t) - base)
+        });
+        assert!(
+            at_shares(b, model(HostKind::Native, Source::NodeTask)),
+            "{b:?}"
+        );
+        assert!(
+            !at_shares(b, model(HostKind::Native, Source::Writer)),
+            "{b:?}"
+        );
     }
 
-    /// Turning lateness on draws from no rng the run's other choices draw
-    /// from: a trickle's arrivals, the dishonest mix and the clock offsets
-    /// come out as they do without it, the run's rng is where it would be
-    /// for the controller's choices after them, and only the lateness
-    /// streams are added.
+    /// Lateness draws from the run's rng last of the scenario's draws: a
+    /// trickle's arrivals, the dishonest mix and the clock offsets come out
+    /// as they do without it, and then its streams (a host's each, and with
+    /// the probe a probe's each) fork the rng the controller's choices
+    /// take, which off it doesn't touch; every host's stream is its kind's.
     #[test]
-    fn lateness_moves_no_other_draw() {
+    fn lateness_forks_last_of_the_scenarios_draws() {
         use crate::Scenario;
         use crate::arrivals::Arrivals;
-        use crate::spec::{SwarmSpec, Transport};
+        use crate::spec::{SendBuffer, SwarmSpec, Transport};
         use crate::world::World;
-        let build = |late: bool| {
+        let build = |late: bool, probe: bool| {
             let mut s = Scenario::new("t");
             let seed = s.host("seed", None);
             let vs = s.hosts("v", 12, None);
@@ -215,10 +467,16 @@ mod tests {
             ));
             s.arrivals = Arrivals::Trickle { rate: None };
             s.mix = true;
+            s.send_buffer = Some(SendBuffer {
+                uplink_queue: std::time::Duration::from_millis(50),
+                window: true,
+            });
+            s.over_webrtc(&[Some(SctpProfile::CHROMIUM), Some(SctpProfile::FIREFOX)]);
             s.timer_lateness = late;
+            s.timer_probe = probe;
             World::new(s, 11, None, None)
         };
-        let (off, on) = (build(false), build(true));
+        let (off, on, probed) = (build(false, false), build(true, false), build(true, true));
         // Each of those choices drew something.
         assert!(!off.clock_offsets.is_empty());
         assert!(off.spec.hosts.iter().any(|h| h.arrive_at.is_some()));
@@ -237,9 +495,52 @@ mod tests {
         };
         assert_eq!(drawn(&off), drawn(&on));
         assert_eq!(off.clock_offsets, on.clock_offsets);
+        assert_eq!(drawn(&on), drawn(&probed));
         let next = |w: &World| w.with_rng(|r| r.next_u64());
-        assert_eq!(next(&off), next(&on), "the controller's choices");
-        assert!(off.lateness.is_empty());
+        assert_ne!(
+            next(&off),
+            next(&on),
+            "the streams fork the controller's rng"
+        );
+        assert_ne!(next(&on), next(&probed), "the probe's fork it again");
+        assert!(off.lateness.is_empty() && off.probe_lateness.is_empty());
         assert_eq!(on.lateness.len(), on.spec.hosts.len());
+        assert!(on.probe_lateness.is_empty());
+        assert_eq!(probed.probe_lateness.len(), probed.spec.hosts.len());
+        for (h, l) in on.lateness.iter().enumerate() {
+            assert_eq!(l.kind(), HostKind::of_host(&on.spec, h), "host {h}");
+        }
+        let kinds: std::collections::BTreeSet<&str> =
+            on.lateness.iter().map(|l| l.kind().name()).collect();
+        assert!(
+            kinds.contains("chromium") && kinds.contains("firefox"),
+            "{kinds:?}"
+        );
+    }
+
+    /// A host's kind is the browser its data channels model under the
+    /// window model, else native, as the `hosts` table has it.
+    #[test]
+    fn a_hosts_kind_is_its_modelled_browsers() {
+        use crate::Scenario;
+        use crate::spec::SendBuffer;
+        let mut s = Scenario::new("t");
+        s.hosts("v", 4, None);
+        s.over_webrtc(&[
+            Some(SctpProfile::CHROMIUM),
+            Some(SctpProfile::FIREFOX),
+            Some(SctpProfile::STR0M),
+            None,
+        ]);
+        let kinds = |s: &Scenario| -> Vec<&str> {
+            (0..4).map(|h| HostKind::of_host(s, h).name()).collect()
+        };
+        // Outside the window model, no host models a browser's channels.
+        assert_eq!(kinds(&s), ["native"; 4]);
+        s.send_buffer = Some(SendBuffer {
+            uplink_queue: std::time::Duration::from_millis(50),
+            window: true,
+        });
+        assert_eq!(kinds(&s), ["chromium", "firefox", "native", "native"]);
     }
 }

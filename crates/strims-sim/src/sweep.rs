@@ -140,10 +140,11 @@
 //!   the signs alone; `off` skews and draws nothing. Unset, a scenario
 //!   keeps its own, `real` unless it says otherwise.
 //! - `STRIMS_SIM_TIMER_LATENESS=on` makes every node task's wake-ups and
-//!   the frame writers' writes a millisecond or two late, as a real
-//!   node's are ([`Scenario::timer_lateness`]; [`crate::late`] says which
-//!   timers that covers); `off` keeps them at their deadlines. Unset, a
-//!   scenario keeps its own, off unless it says otherwise.
+//!   the frame writers' writes as late as a real node's of the host's
+//!   kind are ([`Scenario::timer_lateness`]; [`crate::late`] says which
+//!   timers that covers, and how late); `off` keeps them at their
+//!   deadlines. Unset, a scenario keeps its own, off unless it says
+//!   otherwise.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), which the run second by second
 //!   (`Report::series_data`) and the tables' `seconds` take.
@@ -167,8 +168,11 @@
 //!   (`timers`: [`Scenario::timer_log`]; `all` or `1`, `seed`, or `hosts:`
 //!   and host indices, `hosts:0,3`, [`HostSet::parse`]), with
 //!   `STRIMS_SIM_TIMER_PROBE=1` their timer probe's too
-//!   ([`Scenario::timer_probe`]). The logs change no trace; the probe
-//!   changes no decision, and runs a task of its own on each host.
+//!   ([`Scenario::timer_probe`]). The logs change no trace. The probe
+//!   runs a task of its own on each host; with lateness off it changes no
+//!   decision, and with it on its lateness streams fork the run's rng
+//!   ([`crate::late`]), so a run whose controller draws after them can
+//!   decide otherwise.
 //! - `STRIMS_SIM_ROWS=1` prints each run's measures as one line,
 //!   `ROW {json}`, on stdout ([`Report::row`]).
 //! - `STRIMS_SIM_JOB=1` runs the sweep as one sim farm job

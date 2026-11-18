@@ -388,6 +388,7 @@ fn a_timer_log_reads_the_lateness_drawn() {
         spec.timer_lateness = late;
         spec.wire_bins = Some(Duration::from_secs(1));
         spec.timer_log = Some(HostSet::All);
+        spec.forecast_log = true;
         let r = run(spec, 2).unwrap();
         assert_eq!(
             (&plain.trace_hash, plain.reads_hash()),
@@ -397,6 +398,8 @@ fn a_timer_log_reads_the_lateness_drawn() {
         let d = dir.join(format!("late-{late}"));
         r.write_tables(&d, Duration::from_secs(1), false).unwrap();
         timers_say_what_they_are(&r, &d);
+        // The seed stores each chunk at its write, late or on time.
+        held_truth_meets_the_reads(&r, &d);
         // And the probe's, on the same model.
         let mut spec = wan_mesh();
         spec.timer_lateness = late;
@@ -2066,7 +2069,7 @@ fn every_read_and_answer_has_its_hold(r: &strims_sim::Report, d: &Path) {
 
 /// Every viewer stored each chunk it read before it read a frame of it,
 /// the seed each chunk at its frames' write (when it was due, or at most
-/// 2 ms after with `Scenario::timer_lateness`), and the forecast's
+/// `late::MAX_LATE_MS` after with `Scenario::timer_lateness`), and the forecast's
 /// `held_ms` is the sampled peer's own first store, empty (never -1)
 /// without one.
 fn held_truth_meets_the_reads(r: &strims_sim::Report, d: &Path) {
@@ -2096,8 +2099,9 @@ fn held_truth_meets_the_reads(r: &strims_sim::Report, d: &Path) {
     for (&c, &at) in &seed {
         let written = r.written_at(0, c * per + per - 1);
         if r.scenario.timer_lateness {
+            let most = Duration::from_millis(strims_sim::late::MAX_LATE_MS.unsigned_abs());
             assert!(
-                (written..=written + Duration::from_millis(2)).contains(&at),
+                (written..=written + most).contains(&at),
                 "the seed's chunk {c}: due {written:?}, stored {at:?}"
             );
         } else {

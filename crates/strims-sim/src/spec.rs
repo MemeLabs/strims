@@ -679,10 +679,10 @@ pub struct Scenario {
     /// [`MAX_SKEW`](crate::skew::MAX_SKEW): as user machines' clocks are
     /// ([`ClockSkew::Real`]) by default.
     pub clock_skew: ClockSkew,
-    /// Whether each host's node task wakes and its frame writer writes a
-    /// millisecond or two late, as a real node's do ([`crate::late`] says
-    /// which timers that covers): off by default, when they run at their
-    /// deadlines and nothing is drawn.
+    /// Whether each host's node task wakes and its frame writer writes as
+    /// late as a real node's of its kind do ([`crate::late`] says which
+    /// timers that covers, and how late): off by default, when they run at
+    /// their deadlines and nothing is drawn.
     pub timer_lateness: bool,
     /// With [`Scenario::wire_bins`], the hosts that keep their timers as
     /// they fire for the tables' `timers` (`NodeConfig::timer_log`, and

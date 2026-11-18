@@ -109,9 +109,11 @@
 //!   from the same rng after the mix's, before the controller's choices
 //!   ([`seed_pin::resolve`]); no other pin, and no pin, draws anything;
 //! - with [`Scenario::timer_lateness`], each host's lateness (its node
-//!   task's wake-ups and its frame writer's writes, [`late`]) comes from an
-//!   rng forked per host from one of its own, seeded from the run's seed,
-//!   which no other choice draws from; without it nothing is drawn.
+//!   task's wake-ups and its frame writer's writes, [`late`]) comes from a
+//!   stream forked per host from the same rng after the seed pin's, before
+//!   the controller's choices, and with [`Scenario::timer_probe`] its
+//!   probe's from one more forked per host after them; without it nothing
+//!   is drawn.
 //!
 //! The schedule stays fixed because every host, the controller and every
 //! task run on the turmoil thread, shared state is `Rc<RefCell<…>>` over

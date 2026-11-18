@@ -388,10 +388,13 @@ impl strims_testbed::node::Runtime for ProbeClock {
         let at = (at - self.w.clock_epoch(self.h))
             .to_std()
             .unwrap_or_default();
-        let late = self
-            .late
-            .as_ref()
-            .map_or(Duration::ZERO, |l| l.draw().to_std().unwrap_or_default());
+        let due = at_ms <= self.now_ms();
+        let late = match &self.late {
+            // A browser's sleep for a deadline already due resolves at once.
+            Some(l) if due && l.kind().resolves_due_at_once() => return,
+            Some(l) => probe_lateness(l, due).to_std().unwrap_or_default(),
+            None => Duration::ZERO,
+        };
         tokio::time::sleep((at + late).saturating_sub(sim_now())).await;
     }
 
@@ -404,6 +407,12 @@ impl strims_testbed::node::Runtime for ProbeClock {
     fn error(&self, message: String) {
         self.w.log(self.w.name(self.h), message);
     }
+}
+
+/// How late a probe's timer fires, armed for a deadline `due` already or
+/// not: as a harness's timers do on the host ([`crate::late::Source::Writer`]).
+fn probe_lateness(l: &crate::late::Lateness, due: bool) -> strims_base::time::Duration {
+    l.draw(crate::late::Source::Writer, due)
 }
 
 /// Publishes the host's hash table record and peer index entry at
@@ -872,10 +881,12 @@ async fn writer_task(
         if at >= spec.stop {
             break;
         }
-        let late_by = late
-            .as_ref()
-            .map_or(Duration::ZERO, |l| l.draw().to_std().unwrap_or_default());
         let armed = sim_now();
+        let late_by = late.as_ref().map_or(Duration::ZERO, |l| {
+            l.draw(crate::late::Source::Writer, at <= armed)
+                .to_std()
+                .unwrap_or_default()
+        });
         tokio::time::sleep((at + late_by).saturating_sub(armed)).await;
         if let Some(log) = w.timer_log(h) {
             let clock = |t: Duration| w.clock_at(h, t);
@@ -1232,4 +1243,27 @@ async fn join_rewind(
             back,
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::late::{HostKind, Lateness, Source, lateness};
+    use strims_base::rng::det_rng;
+
+    /// The probe's timers draw a harness's model, the writer's, not the
+    /// node task's.
+    #[test]
+    fn a_probes_timer_is_a_harness_timer() {
+        for kind in [HostKind::Native, HostKind::Chromium, HostKind::Firefox] {
+            let (l, mut fresh) = (Lateness::new(det_rng(4), kind), det_rng(4));
+            for i in 0..1000 {
+                assert_eq!(
+                    probe_lateness(&l, false),
+                    lateness(&mut fresh, kind, Source::Writer),
+                    "{kind:?} draw {i}"
+                );
+            }
+        }
+    }
 }
