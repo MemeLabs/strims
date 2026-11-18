@@ -605,6 +605,15 @@ and dropped are in `TRIED.md`.
     at a holder's share of the uplink; and both browsers' resends to
     str0m's receiver. The testbed's runs of a case vary: score against
     repeats.
+  - Run the testbed's nodes' swarms through strims-transfer, as deployed
+    nodes and the sims' hosts do (`TransferControl`'s announce and its
+    answer): strims-testbed's node module runs its swarm with each peer
+    at the peer's `PeerAdded`, where the side whose link comes up first
+    announces and runs it at the other's answer, a round later, which the
+    link-setup bench's `peer_open_ms` reads apart.
+  - Find the round trip by which the twin's native links between
+    viewers open past the testbed's, which takes no ARP since its
+    neighbours are static (`link_open_fit_of`), and model it.
   - Browser timing tables (`timers`, `channel_writes`,
     `channel_buffered`, `channel_reads`): build them only if the
     testbed–twin fit shows browser timing matters.
