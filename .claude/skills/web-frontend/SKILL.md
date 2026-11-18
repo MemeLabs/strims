@@ -104,6 +104,9 @@ one mode (`--theme`, `--device`).
   - /run, /tmp and the other dirs that hold the host's sockets are
     empty, so a box's files (a harness script) must sit outside /tmp.
   - The snap's Chromium runs unwrapped and without its sandbox.
+  - The console server's venv and DuckDB extensions (~/.duckdb) are
+    readied outside: in the box, with no network and a read-only home,
+    it can only use what is there.
 - Where bwrap can't make the box, the run warns and shares the host's
   network. A failed load of a build's file then fails the story in the
   plain check, and a compare captures the story again in a fresh

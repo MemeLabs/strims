@@ -597,7 +597,9 @@ def find_chromium(name):
 # what the sandbox would: the filesystem read-only but for what the run writes
 # (box_writable), /run (/var/run with it) and /tmp empty, so no Docker socket,
 # session bus or other socket of the user's, no capabilities, and a session of
-# its own. The run goes on in the box as a child, ISOLATED set to its work dir
+# its own. What the console server needs from outside, its Python's venv and
+# DuckDB's extensions, the run outside readies first (server_python,
+# server_extensions). The run goes on in the box as a child, ISOLATED set to its work dir
 # (browser profiles, server logs), which the run outside holds (hold) and
 # removes once the box ends, ending the box at once when told to stop; the
 # kernel ends whatever runs in the box with its pid namespace.
@@ -690,12 +692,26 @@ def server_python():
     return res.stdout.strip() if res.returncode == 0 and res.stdout.strip() else sys.executable
 
 
+def server_extensions(python):
+    """Installs the console server's DuckDB extensions where missing and
+    checks their builds (simlab.catalog.extensions), with `python`. In the
+    box, with no network and ~/.duckdb read-only, the server can only load
+    what is there already."""
+    res = subprocess.run([python, "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
+                          "from simlab import catalog; catalog.extensions()", str(ROOT / "hack")],
+                         stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    if res.returncode:
+        sys.exit(f"check: the console server's DuckDB extensions: {res.stderr.strip()[-2000:]}")
+
+
 def run_boxed(argv, work, writable):
     """This check again (`argv`) in its box, as a child: its exit code. Told
     to stop (SIGTERM, SIGINT, SIGHUP), the run ends the box, all of it,
     before it exits, so its cleanup finds nothing running."""
+    python = server_python()
+    server_extensions(python)
     proc = subprocess.Popen([*bwrap(writable), sys.executable, str(Path(__file__).resolve()), *argv],
-                            env={**os.environ, ISOLATED: str(work), SERVER_PYTHON: server_python()})
+                            env={**os.environ, ISOLATED: str(work), SERVER_PYTHON: python})
     signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 
     def stop(n, _):
