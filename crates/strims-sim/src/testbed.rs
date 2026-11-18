@@ -117,9 +117,9 @@ pub const TEST: &str = "calibration_star";
 /// The sim name a testbed run's records go under.
 pub const SIM: &str = "testbed";
 /// The settings that only record or capture, or say how run.sh ran
-/// (`STAMPS`, `JOIN_LINKS`, `NEIGHBOURS`, which [`knobs_of`] reads apart):
-/// no knob of the twin's.
-const RECORDING: [&str; 12] = [
+/// (`STAMPS`, `JOIN_LINKS`, `NEIGHBOURS`, `SWARMS`, which [`knobs_of`]
+/// reads apart): no knob of the twin's.
+const RECORDING: [&str; 13] = [
     "STAMPS",
     "CAPTURE",
     "PCAP",
@@ -132,6 +132,7 @@ const RECORDING: [&str; 12] = [
     "WEB_BUNDLE",
     "JOIN_LINKS",
     "NEIGHBOURS",
+    "SWARMS",
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
@@ -180,6 +181,13 @@ const JOIN_LINKS_TOGETHER: &str = "together";
 /// as a deployed node reaches its peers through a router it has long
 /// resolved, and the twin's paths take no ARP.
 const NEIGHBOURS_STATIC: &str = "static";
+
+/// How a run's settings say its nodes ran their swarm with each peer
+/// (`SWARMS`): once strims-transfer's announce and answer had bound its
+/// channels, as the twin's hosts run theirs, and a deployed node after
+/// the network membership run that precedes them there (strims-testbed's
+/// peers module).
+const SWARMS_TRANSFERS: &str = "transfers";
 
 /// The clock a run's settings name (`STAMPS`) where run.sh stamps its logs
 /// and reckons its waits from bash's clock, which nothing makes late.
@@ -657,6 +665,16 @@ pub fn knobs_of(
     match get("NEIGHBOURS") {
         Some(NEIGHBOURS_STATIC) => {}
         other => put("TESTBED_NEIGHBOURS", other.unwrap_or("arp").to_owned()),
+    }
+    // How the nodes ran their swarm with each peer (SWARMS). A run whose
+    // settings don't say `transfers` ran it at each peer's link, on the
+    // node's channel for it, where its twin's hosts negotiate it through
+    // their transfers, and the side whose link came up first runs it a
+    // trip after the other's came up: it keys apart, TESTBED_SWARMS
+    // pairing it with no cell.
+    match get("SWARMS") {
+        Some(SWARMS_TRANSFERS) => {}
+        other => put("TESTBED_SWARMS", other.unwrap_or("direct").to_owned()),
     }
     for (k, v) in settings {
         let twin = RECORDING.contains(&k.as_str())
@@ -3178,7 +3196,7 @@ mod tests {
         let w = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
         w(
             "settings",
-            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\nNEIGHBOURS=static\n",
+            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\nNEIGHBOURS=static\nSWARMS=transfers\n",
         );
         w(
             "topology",
@@ -3273,7 +3291,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let star = "node 0 10.77.0.10:4000\nnode 1 10.77.0.11:4000\nnode 2 10.77.0.12:4000\nlink 0 1\nlink 0 2\n";
         let of = |text: &str, links: Option<&str>| knobs_of(&settings_of(text), star, links, &dir);
-        let base = "VIEWERS=2\nSECS=30\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\nNEIGHBOURS=static\n";
+        let base = "VIEWERS=2\nSECS=30\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\nNEIGHBOURS=static\nSWARMS=transfers\n";
         let k = of(base, None).unwrap();
         assert_eq!(k["TESTBED_QDISC"], "clsact>ifb-netem>root-class");
         assert!(
@@ -4205,6 +4223,29 @@ mod tests {
             .unwrap();
             assert_eq!(
                 Run::read(&dir, &BTreeMap::new()).unwrap().knobs["TESTBED_NEIGHBOURS"],
+                key
+            );
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run whose settings don't say its nodes ran their swarm through
+    /// their transfers (SWARMS=transfers) ran it at each peer's link, and
+    /// keys apart; one that says so doesn't.
+    #[test]
+    fn a_run_whose_nodes_ran_their_swarm_at_each_link_keys_apart() {
+        let dir = fixture("swarms");
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs.get("TESTBED_SWARMS"), None);
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        for (setting, key) in [("", "direct"), ("SWARMS=other\n", "other")] {
+            std::fs::write(
+                dir.join("settings"),
+                settings.replace("SWARMS=transfers\n", setting),
+            )
+            .unwrap();
+            assert_eq!(
+                Run::read(&dir, &BTreeMap::new()).unwrap().knobs["TESTBED_SWARMS"],
                 key
             );
         }

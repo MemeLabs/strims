@@ -109,6 +109,15 @@
 # lacks its MAC fails before its node starts. The relay, which needs
 # NET_ADMIN for its entries alone, drops it before its node starts.
 #
+# Every node runs the swarm with its peers through strims-transfer's
+# announce and answer as a deployed node does, but without the network
+# membership run that precedes them on a deployed node (strims-testbed's
+# peers module): each peer is on the swarm's network as it links, and
+# each side announces it as its link to a peer comes up, and runs it on the
+# peer's announce or on the answer to its own, whichever comes first, so
+# the side whose link came up first runs it a trip after the other's came
+# up. The relay serves the transfers and refuses each announce.
+#
 # Settings (environment):
 #   VIEWERS=<n>            viewers (default 3)
 #   SEED_UP_MBIT=<m>       the seed's uplink (default 10)
@@ -373,6 +382,11 @@
 #                          its neighbour table, set before its node starts;
 #                          a run before run.sh named it resolved each by
 #                          ARP at its first packet, names none, and the
+#                          testbed module keys it apart), and SWARMS, how
+#                          a node ran its swarm with a peer (`transfers`:
+#                          once their announce and answer bound its
+#                          channels; a run before run.sh named it ran it as
+#                          each peer's link came up, names none, and the
 #                          testbed module keys it apart)
 #   .ctl                   while the run lasts, its control files, which go
 #                          with it
@@ -774,6 +788,7 @@ echo "QDISC=$SHAPER" >> "$out/settings"
 echo "STAMPS=clock" >> "$out/settings"
 echo "JOIN_LINKS=together" >> "$out/settings"
 echo "NEIGHBOURS=static" >> "$out/settings"
+echo "SWARMS=transfers" >> "$out/settings"
 
 # Milliseconds since the epoch, from bash's clock ($EPOCHREALTIME: seconds
 # and six digits of microseconds, no fork); the containers' samplers stamp

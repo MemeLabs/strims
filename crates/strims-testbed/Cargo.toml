@@ -14,6 +14,9 @@ strims-crypto.workspace = true
 strims-node-core.workspace = true
 strims-ppspp.workspace = true
 strims-proto.workspace = true
+# The peers' RPC links and the transfers on them (peers).
+strims-rpc.workspace = true
+futures-util.workspace = true
 # The scheduler's logs in a line's records: their runner peer keys, and
 # reading them back (record::logs).
 serde_json.workspace = true

@@ -68,8 +68,9 @@
 //! strims-sim's `STRIMS_SIM_LINK_LOG` keeps a simulated node's.
 //!
 //! `--relay-only` runs the relay: it listens where the topology's `relay`
-//! line says, joins the testbed network, runs no swarm, and stops 5 s
-//! after the stream does.
+//! line says, joins the testbed network, serves its peers' transfers and
+//! runs no swarm ([`strims_testbed::peers`]), and stops 5 s after the
+//! stream does.
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -82,14 +83,16 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use strims_base::time::{Duration as Span, Time};
+use strims_node::app::{NodeTimer, TokioSpawn};
 use strims_node::config::StatsBins;
 use strims_node::{
-    CaptureConfig, Clock, NetworkOptions, Node, NodeConfig, NodeEvent, SystemClock, TokioNet,
-    WebRtcConfig,
+    CaptureConfig, Clock, NetworkOptions, Node, NodeConfig, NodeEvent, NodeEvents, SystemClock,
+    TokioNet, WebRtcConfig,
 };
 use strims_testbed::media::FlvFile;
 use strims_testbed::native::{now_ms, self_cpu_ms, write_host};
 use strims_testbed::node::{Runtime, Settings, Stream};
+use strims_testbed::peers::{self, Peers};
 use strims_testbed::record::links::LinkLog;
 use strims_testbed::record::{BIN_MS, DecisionLog, ParentLog, TimerContext, TimerLog};
 use strims_testbed::shape::RATE;
@@ -247,7 +250,9 @@ impl Runtime for Native {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    if let Err(e) = run().await {
+    // The peers' RPC connections run as local tasks (TokioSpawn).
+    let ran = tokio::task::LocalSet::new().run_until(run()).await;
+    if let Err(e) = ran {
         eprintln!("testbed_node: {e}");
         std::process::exit(1);
     }
@@ -336,18 +341,11 @@ async fn run() -> Result<(), String> {
         };
         config.ppspp_capture = Some(capture.node_capture());
     }
-    let (node, mut events) = Node::spawn(config, TokioNet, SystemClock)
+    let (node, events) = Node::spawn(config, TokioNet, SystemClock)
         .await
         .map_err(|e| format!("spawn: {e}"))?;
 
-    let (peers_tx, peers) = tokio::sync::mpsc::unbounded_channel();
-    let forward = async move {
-        while let Some(e) = events.recv().await {
-            if let NodeEvent::PeerAdded(p) = e {
-                let _ = peers_tx.send(p);
-            }
-        }
-    };
+    let (peers, forward) = serve(&node, events, |_| {});
     let links = async {
         if let Some(uri) = topo.relay_uri(a.index) {
             if let Err(e) = join_network(&node).await {
@@ -439,25 +437,50 @@ async fn relay(topo: &Topology, end_ms: u64) -> Result<(), String> {
     config.tcp_listen = Some(r.tcp.to_string());
     config.ws_listen = Some(r.ws.to_string());
     config.max_peers = 64;
-    let (node, mut events) = Node::spawn(config, TokioNet, SystemClock)
+    let (node, events) = Node::spawn(config, TokioNet, SystemClock)
         .await
         .map_err(|e| format!("spawn: {e}"))?;
     join_network(&node).await?;
     eprintln!("relay {} on {} and {}", node.host_id(), r.tcp, r.ws);
-    let log = async {
-        while let Some(e) = events.recv().await {
-            if let NodeEvent::PeerAdded(p) = e {
-                eprintln!("{} peer {} ({:?})", now_ms(), p.host_id, p.kind);
-            }
+    let (mut peers, forward) = serve(&node, events, |e| {
+        if let NodeEvent::PeerAdded(p) = e {
+            eprintln!("{} peer {} ({:?})", now_ms(), p.host_id, p.kind);
         }
-    };
+    });
     let rt = Native::default();
     tokio::select! {
+        biased;
         () = rt.sleep_until_ms(end_ms) => {}
-        () = log => {}
+        () = forward => {}
+        () = peers.serve(|_| {}) => {}
     }
     let _ = node.shutdown().await;
     Ok(())
+}
+
+/// The node's peers ([`Peers`]), and the task that hands them the node's
+/// events, each seen by `each` first.
+fn serve(
+    node: &Node,
+    mut events: NodeEvents,
+    mut each: impl FnMut(&NodeEvent),
+) -> (
+    Peers<NodeTimer<SystemClock>, TokioSpawn>,
+    impl std::future::Future<Output = ()>,
+) {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let forward = async move {
+        while let Some(e) = events.recv().await {
+            each(&e);
+            if peers::serves(&e) {
+                let _ = tx.send(e);
+            }
+        }
+    };
+    (
+        Peers::new(node, rx, NodeTimer(SystemClock), TokioSpawn),
+        forward,
+    )
 }
 
 /// A time in seconds (`2`, `0.5`) as whole ms.

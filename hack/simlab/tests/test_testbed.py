@@ -110,9 +110,10 @@ class Cells(unittest.TestCase):
         # variant where run.sh stamped them from its clock (STAMPS=clock);
         # its date's stamps (STAMPS=date, or none named), or a clock's that
         # go back, key the run apart. Each says its nodes made their links
-        # at their joins all at once (JOIN_LINKS=together), and its
+        # at their joins all at once (JOIN_LINKS=together), its
         # containers' neighbours were set before they started
-        # (NEIGHBOURS=static).
+        # (NEIGHBOURS=static), and its nodes ran their swarm through their
+        # transfers (SWARMS=transfers).
         if not testbed.BINARY.exists():
             self.skipTest(f"no {testbed.BINARY}: cargo build --release -p strims-sim --example testbed_tables")
         matrices = HACK / "sim-farm" / "matrices"
@@ -132,7 +133,7 @@ class Cells(unittest.TestCase):
                     out.mkdir()
                     (out / "settings").write_text("".join(f"{k}={v}\n" for k, v in settings.items())
                                                   + "QDISC=clsact>ifb-netem>root-class\nJOIN_LINKS=together\n"
-                                                  + "NEIGHBOURS=static\n"
+                                                  + "NEIGHBOURS=static\nSWARMS=transfers\n"
                                                   + stamps)
                     links = ((matrices / "topologies" / topology).read_text() if topology else
                              "".join(f"link 0 {v}\n" for v in range(1, viewers + 1)))

@@ -2519,6 +2519,7 @@ dependencies = [
  "strims-node-core",
  "strims-ppspp",
  "strims-proto",
+ "strims-rpc",
  "strims-transfer",
  "strims-video",
  "tokio",

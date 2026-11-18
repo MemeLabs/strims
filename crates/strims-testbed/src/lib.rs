@@ -7,7 +7,10 @@
 //! write and check the same stream ([`stream`]) and sample the same
 //! transfers ([`transfer`]), so a testbed run compares with a simulated
 //! one line for line. A run can stream real media instead ([`media`]),
-//! which browser viewers play.
+//! which browser viewers play. A node runs its swarm with its peers
+//! through the transfers' announce and answer as a deployed node does,
+//! but without the network membership run that precedes them on a
+//! deployed node ([`peers`]).
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod browser;
@@ -15,6 +18,7 @@ pub mod media;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;
 pub mod node;
+pub mod peers;
 pub mod record;
 pub mod shape;
 pub mod stream;

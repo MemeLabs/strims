@@ -3,8 +3,11 @@
 
 //! The testbed node's swarm, on a started node of either driver.
 //!
-//! [`run`] streams (node 0) or reads the testbed's swarm. It runs the swarm
-//! with every peer that has a testbed index, whoever made the link; the
+//! [`run`] streams (node 0) or reads the testbed's swarm, which it runs
+//! with its peers through the transfers' announce and answer as a
+//! deployed node does, but without the network membership run that
+//! precedes them on a deployed node ([`crate::peers`]). Its lines name
+//! each peer by its testbed index; the
 //! relay has none. The seed writes from [`Settings::start_ms`] for
 //! [`Settings::secs`], and a viewer measures the lag of what it reads
 //! against the wall clock when it reads it: the testbed's containers share
@@ -51,15 +54,17 @@ use std::cell::{Cell, RefCell};
 use std::future::Future;
 
 use strims_base::time::{Duration, Time};
+use strims_node_core::app::Spawn;
 use strims_node_core::{
-    DecisionInfo, HostId, LinkKind, Node, NodeMetrics, ParentLogEntry, PeerInfo, ReadError,
-    SwarmId, SwarmKey, SwarmReader, SwarmWriter, TimerRecord, TimerSource, WriterOptions,
+    DecisionInfo, HostId, LinkKind, Node, NodeMetrics, ParentLogEntry, ReadError, SwarmId,
+    SwarmKey, SwarmReader, SwarmWriter, TimerRecord, TimerSource, WriterOptions,
 };
 use strims_ppspp::{DeliveryMode, SwarmOptions, TapKind};
+use strims_rpc::Timer;
 use strims_transfer::SwarmRead;
-use tokio::sync::mpsc;
 
 use crate::media::{self, FlvFile, SeedStats, TagKind, ViewerStats};
+use crate::peers::Peers;
 use crate::record::links::{LinkLog, LinkOpen, LinkRows};
 use crate::record::logs::Logs;
 use crate::record::{self, DecisionLog, ParentLog, TimerContext, TimerLog};
@@ -160,12 +165,12 @@ pub struct NodeLogs<'a> {
     pub links: Option<&'a LinkLog>,
 }
 
-/// Runs the node's part (see the [module docs](self)), taking the node's
-/// peers from `peers` as they're added. The seed of a media stream writes
-/// `file`. `logs` are the logs the node's config hands its records to.
-pub async fn run<R: Runtime + Clone + 'static>(
+/// Runs the node's part (see the [module docs](self)), serving the node's
+/// peers through `peers`. The seed of a media stream writes `file`. `logs`
+/// are the logs the node's config hands its records to.
+pub async fn run<R: Runtime + Clone + 'static, T: Timer, S: Spawn>(
     node: &Node,
-    mut peers: mpsc::UnboundedReceiver<PeerInfo>,
+    mut peers: Peers<T, S>,
     s: Settings,
     file: Option<&FlvFile>,
     logs: NodeLogs<'_>,
@@ -227,19 +232,14 @@ pub async fn run<R: Runtime + Clone + 'static>(
             .map_err(|e| format!("add swarm: {e}"))?;
         (swarm, None)
     };
+    peers.publish(swarm, &SwarmId::new(&key.public));
 
     let ids = RefCell::new(Vec::<(HostId, usize)>::new());
-    let accept = async {
-        while let Some(p) = peers.recv().await {
-            let Some(i) = index_of(&p.profile_key, s.nodes) else {
-                continue;
-            };
+    let accept = peers.serve(|p| {
+        if let Some(i) = index_of(&p.profile_key, s.nodes) {
             ids.borrow_mut().push((p.host_id, i));
-            if let Err(e) = node.run_swarm(p.host_id, swarm, 1, 1).await {
-                rt.error(format!("run swarm: {e}"));
-            }
         }
-    };
+    });
 
     let end_ms = s.start_ms + s.secs * 1000;
     let lags = RefCell::new(Vec::<u64>::new());

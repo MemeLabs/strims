@@ -126,9 +126,17 @@ crates differ from those the page was built from builds its own page.
   entry for every other before its node starts, as a deployed node
   reaches its peers through a router it has long resolved; before, each
   container's first packet to a peer waited for ARP, a round trip through
-  both delays and queues ahead of a link's first check or SYN. A run
-  folded before the testbed module knew a marker keeps its key until it
-  is folded again.
+  both delays and queues ahead of a link's first check or SYN. So does a
+  run whose settings don't say SWARMS=transfers (TESTBED_SWARMS=direct):
+  its nodes now run their swarm with each peer as the twin's hosts do,
+  once strims-transfer's announce and answer bind its channels
+  (strims-testbed's peers module), as a deployed node does but without
+  the network membership run that precedes them on a deployed node (a
+  PLAN item), the relay serving the
+  transfers and refusing each announce; before, each node ran it as the
+  peer's link came up, where the side whose link comes up first now runs
+  it a trip after the other's came up. A run folded before the testbed
+  module knew a marker keeps its key until it is folded again.
 - **The twin.** `simdb.py twin 'testbed/NAME' --name NAME-twin --bin
   SCENARIOS --seeds 8` runs strims-sim's `calibration_star` with each
   cell's knobs (a scenarios test binary from `cargo test --release -p
@@ -182,8 +190,9 @@ crates differ from those the page was built from builds its own page.
   joins). Were run.sh to write STAMPS=date, each matrix's header would
   say its runs key apart. Each arm runs its own bundle's run.sh and
   TABLES_BIN, so in an A/B whose base predates a marker
-  (NEIGHBOURS=static, JOIN_LINKS=together) the base arm's runs resolve
-  their peers by ARP or link one at a time, and its TABLES_BIN, which
+  (SWARMS=transfers, NEIGHBOURS=static, JOIN_LINKS=together) the base
+  arm's runs run their swarms at each link, resolve their peers by ARP or
+  link one at a time, and its TABLES_BIN, which
   doesn't know the marker, keys them in the other arm's cells: such an
   A/B compares harnesses as well as its change.
 

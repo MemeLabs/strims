@@ -29,7 +29,7 @@
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
 //! | `stats` | | Reports `stats`. |
-//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, `arrives`, and optionally `rate`, `chunk` with `munro`, `units` and `timerProbe` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]) with every peer added since `start`, and reports `sample` each second. A viewer that `arrives` (a boolean) reads from the live edge ([`Settings::arrives`]): the harness makes its links into the running stream. With `units`, the stream is media in the unit format in a swarm of `units` chunks per signature ([`strims_testbed::media`]), which the node reads as a viewer and feeds the page's player (see below). With `timerProbe` (a boolean) and `start`'s `timerLog`, it runs the timer probe too ([`strims_testbed::node::probe`]). Only the first `testbed` runs. |
+//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, `arrives`, and optionally `rate`, `chunk` with `munro`, `units` and `timerProbe` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]), negotiating it with every peer linked since `start` through the transfers' announce and answer as a deployed node does, but without the network membership run that precedes them on a deployed node ([`strims_testbed::peers`]), and reports `sample` each second. A viewer that `arrives` (a boolean) reads from the live edge ([`Settings::arrives`]): the harness makes its links into the running stream. With `units`, the stream is media in the unit format in a swarm of `units` chunks per signature ([`strims_testbed::media`]), which the node reads as a viewer and feeds the page's player (see below). With `timerProbe` (a boolean) and `start`'s `timerLog`, it runs the timer probe too ([`strims_testbed::node::probe`]). Only the first `testbed` runs. |
 //!
 //! Events, from the node:
 //!
@@ -97,12 +97,12 @@ use futures_util::future::{Either, select};
 use js_sys::{Array, ArrayBuffer, JSON, Object, Reflect, Uint8Array};
 use strims_base::time::Time;
 use strims_node_core::{
-    HostId, NetworkId, NetworkOptions, Node, NodeEvent, NodeEvents, PeerInfo, PpsppCapture,
-    StatsBins,
+    HostId, NetworkId, NetworkOptions, Node, NodeEvent, NodeEvents, PpsppCapture, StatsBins,
 };
 use strims_proto::types::Key;
 use strims_testbed::media::Viewer;
 use strims_testbed::node::{Runtime, Settings, Stream, kind_name};
+use strims_testbed::peers::{self, Peers};
 use strims_testbed::record::links::LinkLog;
 use strims_testbed::record::{DecisionLog, ParentLog, TimerContext, TimerLog};
 use strims_testbed::shape::RATE;
@@ -113,6 +113,8 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{MessageEvent, MessagePort};
 
+use crate::clock::WasmClock;
+use crate::factory::WasmSpawn;
 use crate::feed::{FeedPort, Pieces, Stopped, pump};
 use crate::{clock, js, node, runtime};
 
@@ -140,7 +142,7 @@ pub fn start(frontend: MessagePort, signal: MessagePort, feeds: Option<MessagePo
         out: Out(frontend),
         signal: Some(signal),
         running: None,
-        peers: None,
+        events: None,
         feeds: feeds.map(Feeds::serve),
         _on_message: on_message,
     };
@@ -224,8 +226,9 @@ struct Control {
     /// Until `start` hands it to the node.
     signal: Option<MessagePort>,
     running: Option<Running>,
-    /// The peers added since `start`, until `testbed` takes them.
-    peers: Option<mpsc::UnboundedReceiver<PeerInfo>>,
+    /// The node's events since `start` that its testbed's peers take
+    /// ([`peers::serves`]), until `testbed` takes them.
+    events: Option<mpsc::UnboundedReceiver<NodeEvent>>,
     /// The feeds port, which feeds the page's player.
     feeds: Option<Rc<Feeds>>,
     _on_message: Closure<dyn FnMut(MessageEvent)>,
@@ -331,7 +334,7 @@ impl Control {
                 ]);
             }
             "testbed" => {
-                let peers = self.peers.take().ok_or("the testbed already runs")?;
+                let events = self.events.take().ok_or("the testbed already runs")?;
                 let rate = match property(cmd, "rate") {
                     v if v.is_undefined() => RATE,
                     _ => int(cmd, "rate")?,
@@ -369,6 +372,7 @@ impl Control {
                         out: out.clone(),
                         feeds,
                     };
+                    let peers = Peers::new(&r.node, events, WasmClock, WasmSpawn);
                     if let Err(e) = strims_testbed::node::run(
                         &r.node,
                         peers,
@@ -505,14 +509,14 @@ impl Control {
             timers,
             links,
         };
-        let (peers_tx, peers) = mpsc::unbounded_channel();
-        self.peers = Some(peers);
+        let (events_tx, testbed_events) = mpsc::unbounded_channel();
+        self.events = Some(testbed_events);
         // It runs once this task waits: after `started` is posted.
         drop(runtime::spawn(watch(
             running.clone(),
             events,
             self.out.clone(),
-            peers_tx,
+            events_tx,
         )));
         let id = running.node.host_id();
         tracing::info!(host_id = %id, "e2e node started");
@@ -595,16 +599,19 @@ pub const CAPTURE_BYTES: u8 = 0x01;
 /// The binary message that has the page open a feed for its player.
 pub const MEDIA_OPEN: u8 = 0x02;
 
-/// Reports the node's events, hands added peers to `peers` for the
-/// testbed, and echoes the messages on the echo port, until the node
-/// stops.
+/// Reports the node's events, hands those its testbed's peers take to
+/// `testbed` ([`peers::serves`]), and echoes the messages on the echo
+/// port, until the node stops.
 async fn watch(
     r: Running,
     mut events: NodeEvents,
     out: Out,
-    peers: mpsc::UnboundedSender<PeerInfo>,
+    testbed: mpsc::UnboundedSender<NodeEvent>,
 ) {
     while let Some(e) = events.recv().await {
+        if peers::serves(&e) {
+            let _ = testbed.send(e.clone());
+        }
         match e {
             NodeEvent::PeerAdded(p) => {
                 out.post(&[
@@ -613,7 +620,6 @@ async fn watch(
                     ("kind", kind_name(p.kind).into()),
                     ("dialed", p.dialed.into()),
                 ]);
-                let _ = peers.send(p);
             }
             NodeEvent::PeerRemoved { host_id: h } => {
                 out.post(&[("type", "peerRemoved".into()), ("hostId", host_id(h))])
