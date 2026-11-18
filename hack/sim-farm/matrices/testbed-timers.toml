@@ -1,0 +1,42 @@
+# The timer bench's testbed runs (target/component-benches C4): a thin
+# star, the seed and 3 viewers on a 10 Mbit/s seed, every node of one
+# kind (native, Chromium or Firefox, over WebRTC), idle and beside a CUBIC
+# upload for the whole stream (COMPETE), each node's timers logged
+# (TIMER_LOG), with the probe's scripted delays (TIMER_PROBE) and the
+# seed's log (SPEC, its allocation checks' steps): timer_fit_of and
+# alloc_step_fit_of score their twins against them. 90 s gives each run
+# about 80 steps past the window's 10 s, 480 a kind, so a share of 0.3
+# reads with a standard error near 0.02 and the steps' 5-point bound,
+# not their noise, judges a model.
+
+kind = "testbed"
+repeats = 3
+host_cores = 4
+paired = false
+
+[build]
+commands = ["cargo build --release --locked -p strims-sim --example testbed_node --example testbed_tables", "cargo build --release --locked -p strims-testbed --example testbed_browser", "export PATH=$HOME/.nvm/versions/node/v26.11.1/bin:$PATH && pnpm install --frozen-lockfile --offline && pnpm exec webpack --mode production --env TARGET=wasm-testbed"]
+
+[artifacts]
+NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
+TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"
+BROWSER_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_browser"
+WEB_BUNDLE = "dist/wasm-testbed"
+
+[arms]
+main = "main"
+
+[env]
+VIEWERS = "3"
+SEED_UP_MBIT = "10"
+SECS = "90"
+NODE_ARGS = "--chunk 4096 --munro 32768"
+BROWSER_LINKS = "webrtc"
+BROWSER_ARGS = "--chunk 4096 --munro 32768"
+TIMER_LOG = "all"
+TIMER_PROBE = "1"
+SPEC = "1"
+
+[axes]
+KINDS = ["", "chromium chromium chromium chromium", "firefox firefox firefox firefox"]
+COMPETE = ["", "0:90"]
