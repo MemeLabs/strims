@@ -1,0 +1,8 @@
+# The testbed's seed and 7 viewers, each linked to the seed alone (a thin star).
+link 0 1
+link 0 2
+link 0 3
+link 0 4
+link 0 5
+link 0 6
+link 0 7
