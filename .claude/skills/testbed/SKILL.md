@@ -81,6 +81,22 @@ crates differ from those the page was built from builds its own page.
   `link_writes`, `link_reads` and `link_samples`, its twin's for the same
   nodes, a browser's page served cross-origin isolated as with the timer
   log. A 20 Mbit/s browser seed's line grows by about 60 kB a second.
+- `TRACE_SCTP=all` (or node indices; Chromium nodes, which `LINK_LOG`
+  must name too) turns on dcSCTP's packet observer in those browsers:
+  every SCTP packet their data channels send and receive, decrypted, in
+  sctp-<i>.jsonl (strims-testbed's `sctp` module), the tables'
+  `sctp_events`, its twin's for the same nodes (`STRIMS_SIM_TRACE_SCTP`).
+  It costs: the observer formats each packet's bytes on the browser's
+  network thread, about 0.17 ms a full packet, and a 20 Mbit/s seed's
+  container took 0.45 core against 0.18 without it. It slows the stack's
+  sending, so it moves the run's timing and its counts alike: the seed's
+  unheld writes' buffered amount, its queue's drops, its packets' trains
+  on the wire. Take a bench's timing, drops and wire readings from runs
+  with it off (`sctp_fit_of`'s timing side), and from runs with it on
+  only what the log alone holds (its SACKs, resends per drop, resend
+  spacing), knowing the log moved those too.
+  Firefox's MOZ_LOG names packets but not their chunks, and neither
+  browser's getStats reports SCTP's window or flight.
 - `SEED_LINK`, `VIEWER_LINK` and `LINKS` give nodes access link
   classes: tbf, cable, dsl, fiber or trace (`hack/testbed/links.sh`
   documents each).

@@ -10,7 +10,9 @@
 //! forecast logs, its hosts' timers as they fired (`timers`, with
 //! [`Scenario::timer_log`](crate::Scenario::timer_log)), its hosts' links'
 //! writes, reads and readings (`link_writes`, `link_reads`, `link_samples`,
-//! with [`Scenario::link_log`](crate::Scenario::link_log)), and a testbed
+//! with [`Scenario::link_log`](crate::Scenario::link_log)), its hosts' data
+//! channels' SCTP packets and timers (`sctp_events`, with
+//! [`Scenario::sctp_log`](crate::Scenario::sctp_log)), and a testbed
 //! run's TCP sockets (`sockets`,
 //! [`Report::sockets`], which a sim run has none of), as CSV files
 //! each with a `<table>.schema.json` of its columns'
@@ -516,6 +518,67 @@ pub fn write_numbered_packets(
     t.finish()
 }
 
+/// Writes the `sctp_events` table into `dir`: each of `hosts`' data
+/// channels' associations' events ([`strims_testbed::sctp::SctpEvent`]),
+/// in host order, then by peer and link, numbered in each association's
+/// order, times in µs from `start` (the stream's start, since the run's).
+pub fn write_sctp_events(
+    dir: &Path,
+    start: strims_base::time::Duration,
+    hosts: &[(HostIx, &crate::report::SctpAssocs)],
+) -> io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let mut t = Table::new(
+        dir,
+        &[
+            cols::SctpEvents::Node,
+            cols::SctpEvents::Peer,
+            cols::SctpEvents::Link,
+            cols::SctpEvents::N,
+            cols::SctpEvents::TUs,
+            cols::SctpEvents::Dir,
+            cols::SctpEvents::What,
+            cols::SctpEvents::TsnLo,
+            cols::SctpEvents::TsnHi,
+            cols::SctpEvents::Chunks,
+            cols::SctpEvents::DataBytes,
+            cols::SctpEvents::PacketBytes,
+            cols::SctpEvents::CumTsn,
+            cols::SctpEvents::Gaps,
+            cols::SctpEvents::CwndBytes,
+            cols::SctpEvents::FlightBytes,
+            cols::SctpEvents::Estimated,
+        ],
+    )?;
+    let opt = |v: Option<String>| v.unwrap_or_default();
+    for (h, assocs) in hosts {
+        for ((peer, link), events) in assocs.iter() {
+            for (n, e) in events.iter().enumerate() {
+                t.fields(&[
+                    h.to_string(),
+                    peer.to_string(),
+                    link.to_string(),
+                    n.to_string(),
+                    (e.at - start).as_micros().to_string(),
+                    opt(e.dir.map(|d| d.name().to_owned())),
+                    e.what.name().to_owned(),
+                    opt(e.tsn.map(|(lo, _)| lo.to_string())),
+                    opt(e.tsn.map(|(_, hi)| hi.to_string())),
+                    e.chunks.to_string(),
+                    e.data_bytes.to_string(),
+                    e.packet_bytes.to_string(),
+                    opt(e.cum_tsn.map(|x| x.to_string())),
+                    opt(e.gaps.map(|x| x.to_string())),
+                    opt(e.cwnd_bytes.map(|x| x.to_string())),
+                    opt(e.flight_bytes.map(|x| x.to_string())),
+                    e.estimated.to_string(),
+                ]);
+            }
+        }
+    }
+    t.finish()
+}
+
 /// A CSV field that holds `s` whole, quoted where it holds a comma or a
 /// quote (a link spec's keys).
 fn quoted(s: &str) -> String {
@@ -826,6 +889,12 @@ impl Report {
             .collect();
         if !packets.is_empty() || !self.scenario.packet_log.is_empty() {
             write_packets(dir, start.into(), &packets)?;
+        }
+        if self.scenario.sctp_log.is_some() {
+            let assocs: Vec<_> = (0..self.scenario.hosts.len())
+                .filter_map(|h| Some((h, &self.wan_host(h)?.sctp)))
+                .collect();
+            write_sctp_events(dir, start.into(), &assocs)?;
         }
         if self.scenario.timer_log.is_some() {
             self.timers_table(dir, start)?.finish()?;

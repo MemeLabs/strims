@@ -84,6 +84,7 @@ use strims_testbed::record::logs::Logs;
 use strims_testbed::record::{
     BIN_MS, Gated, MeterSample, NODE_BIN_COUNTERS, SeedSample, timers_of,
 };
+use strims_testbed::sctp::{Packet as SctpPacket, Rows as SctpRows, name_assocs};
 use strims_testbed::stream::{FrameInfo, Parsed};
 use strims_testbed::transfer::{PeerTransfer, TransferSample};
 
@@ -136,13 +137,14 @@ const RECORDING: [&str; 13] = [
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
-const TWIN_SETTINGS: [&str; 32] = [
+const TWIN_SETTINGS: [&str; 33] = [
     "FORECAST",
     "SPEC",
     "PARENT_CHECKS",
     "TIMER_LOG",
     "TIMER_PROBE",
     "LINK_LOG",
+    "TRACE_SCTP",
     "VIEWERS",
     "SEED_UP_MBIT",
     "VIEWER_UP_MBIT",
@@ -296,7 +298,9 @@ fn num(x: f64) -> String {
 /// kept their timers (`TIMER_LOG`: `STRIMS_SIM_TIMER_LOG`, their numbers)
 /// with the probe they ran (`TIMER_PROBE=1`: `STRIMS_SIM_TIMER_PROBE=1`)
 /// and the nodes that kept their links' I/O (`LINK_LOG`:
-/// `STRIMS_SIM_LINK_LOG`, their numbers),
+/// `STRIMS_SIM_LINK_LOG`, their numbers) and logged their associations'
+/// packets (`TRACE_SCTP`: `STRIMS_SIM_TRACE_SCTP`, their numbers, `all`
+/// the Chromium nodes),
 /// so the twin writes the log tables the run does; the viewers, the seed's
 /// uplink and the stream's length always; the viewers' joins (`JOIN_AT`,
 /// and each of `JOINS`'s to the ms, `STRIMS_SIM_CAL_JOINS`: [`Run::read`]
@@ -414,6 +418,31 @@ pub fn knobs_of(
             hosts.insert(i);
         }
         put("STRIMS_SIM_LINK_LOG", HostSet::Only(hosts).knob());
+    }
+    // The Chromium nodes whose dcSCTP logged its packets (TRACE_SCTP: `all`
+    // of them, or node indices of the run's), whose hosts' associations the
+    // twin's log keeps.
+    if let Some(v) = get("TRACE_SCTP").map(str::trim).filter(|v| !v.is_empty()) {
+        let kinds: Vec<&str> = get("KINDS").unwrap_or("").split_whitespace().collect();
+        let mut hosts = std::collections::BTreeSet::new();
+        for w in v.split_whitespace() {
+            if w == "all" {
+                hosts.extend((0..=viewers).filter(|&i| kinds.get(i) == Some(&"chromium")));
+                continue;
+            }
+            let i = w
+                .parse::<usize>()
+                .ok()
+                .filter(|i| i.to_string() == w && *i <= viewers)
+                .ok_or_else(|| {
+                    format!("TRACE_SCTP={v}: all, or node indices of the run's 0 to {viewers}")
+                })?;
+            hosts.insert(i);
+        }
+        if hosts.is_empty() {
+            return Err(format!("TRACE_SCTP={v}: no Chromium node"));
+        }
+        put("STRIMS_SIM_TRACE_SCTP", HostSet::Only(hosts).knob());
     }
     match get("TIMER_PROBE").map(str::trim) {
         None | Some("" | "0") => {}
@@ -819,6 +848,54 @@ impl Run {
         std::fs::read_to_string(self.dir.join(name)).ok()
     }
 
+    /// Node `i`'s associations' events, from its dcSCTP's packet log
+    /// (run.sh's `TRACE_SCTP`: `sctp-<i>.jsonl`), each association named
+    /// by the link whose writes it carried among `host`'s link log rows
+    /// (strims-testbed's `sctp::name_assocs`), times from `epoch`; `None`
+    /// without the log.
+    fn sctp_of(
+        &self,
+        i: usize,
+        host: &HostReport,
+        epoch: Time,
+    ) -> Option<crate::report::SctpAssocs> {
+        let text = self.file(&format!("sctp-{i}.jsonl"))?;
+        let mut packets: BTreeMap<u32, Vec<SctpPacket>> = BTreeMap::new();
+        for p in text.lines().filter_map(SctpPacket::parse) {
+            packets.entry(p.assoc).or_default().push(p);
+        }
+        let mut writes: BTreeMap<(HostIx, u32), Vec<(u64, u64)>> = BTreeMap::new();
+        for (k, w) in &host.link_rows.writes {
+            if k.kind == strims_node::LinkKind::WebRtc {
+                writes
+                    .entry((k.peer, k.link))
+                    .or_default()
+                    .push((w.n, w.bytes));
+            }
+        }
+        let links: Vec<((HostIx, u32), Vec<u64>)> = writes
+            .into_iter()
+            .map(|(k, mut w)| {
+                w.sort_unstable();
+                (k, w.into_iter().map(|(_, b)| b).collect())
+            })
+            .collect();
+        let mut events = BTreeMap::new();
+        for (a, key) in name_assocs(&packets, &links) {
+            let mut rows = SctpRows::default();
+            let at = |us: u64| {
+                Time::from_unix_nanos(i64::try_from(us.saturating_mul(1000)).unwrap_or(i64::MAX))
+                    - epoch
+            };
+            let list = packets.get(&a).map(Vec::as_slice).unwrap_or_default();
+            events.insert(
+                key,
+                list.iter().map(|p| rows.event(p, at(p.t_us))).collect(),
+            );
+        }
+        Some(events)
+    }
+
     /// The twin's scenario, with the times the testbed measured.
     fn scenario(&self) -> Scenario {
         // A topology the knobs key by its links alone is the run's file.
@@ -889,6 +966,10 @@ impl Run {
         s.link_log = self
             .knobs
             .get("STRIMS_SIM_LINK_LOG")
+            .and_then(|v| HostSet::parse(v).ok().flatten());
+        s.sctp_log = self
+            .knobs
+            .get("STRIMS_SIM_TRACE_SCTP")
             .and_then(|v| HostSet::parse(v).ok().flatten());
         // The arrivals profile JOINS drew (a tier matrix's knob), as the
         // twin's row names it; the times are the run's.
@@ -1110,6 +1191,15 @@ impl Run {
         }
         let mut net = Network::read(self, &scenario, seed);
         packets::fill(self, &scenario, &mut net.wan, &mut hosts);
+        for (i, host) in hosts.iter().enumerate() {
+            let (Some(spec), Some(events)) = (scenario.hosts.get(i), self.sctp_of(i, host, epoch))
+            else {
+                continue;
+            };
+            if let Some(w) = net.wan.hosts.iter_mut().find(|w| w.name == spec.name) {
+                w.sctp = events;
+            }
+        }
         // The meter's truth's share at each sample, from the captures.
         let run0_us = self.start_ms.saturating_sub(LEAD.as_millis() as u64) * 1000;
         for (h, host) in hosts.iter_mut().enumerate() {
@@ -2646,6 +2736,7 @@ impl Network {
                 competing_drop_packets: 0,
                 competing_cwnd: Vec::new(),
                 packets: Vec::new(),
+                sctp: BTreeMap::new(),
                 offers: None,
             };
             if h >= run.nodes.len() {
@@ -5251,6 +5342,150 @@ mod tests {
                 "{e}"
             );
         }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run whose Chromium nodes logged their associations' packets
+    /// (TRACE_SCTP) writes them as the twin's `sctp_events`, each
+    /// association named by the writes it carried.
+    #[test]
+    fn a_runs_sctp_logs_are_its_twins_tables() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicI64, Ordering};
+
+        use strims_node::LinkKind;
+        use strims_node::event::LinkEvent;
+        use strims_testbed::record::links::{LinkLog, link_log_json};
+        use strims_testbed::sctp::{Chunk, Packet};
+        let dir = fixture("sctp");
+        let origin = Time::from_unix_millis(START as i64);
+        let now = Arc::new(AtomicI64::new(0));
+        let n = now.clone();
+        let log = LinkLog::new(Arc::new(move || {
+            origin + strims_base::time::Duration::from_micros(n.load(Ordering::Relaxed))
+        }));
+        let sink = log.sink();
+        let at = |us: i64| now.store(us, Ordering::Relaxed);
+        // Link 5 to node 1 writes 900 bytes and then 1200.
+        at(1_000);
+        sink.record(5, LinkEvent::Opened(LinkKind::WebRtc));
+        sink.record(5, LinkEvent::Peer(strims_node::HostId([1, 0, 0, 0])));
+        for (t, len) in [(1_500, 900), (2_500, 1200)] {
+            at(t);
+            sink.record(5, LinkEvent::Queued(len));
+            sink.record(5, LinkEvent::Began(len));
+            sink.record(5, LinkEvent::Done);
+        }
+        let rows = log.take();
+        let index = |p: &strims_node::HostId| (p.0[0] < 10).then_some(p.0[0] as usize);
+        let path = dir.join("node-0.jsonl");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut lines: Vec<Value> = text
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        lines[0]["rec"]["link_log"] =
+            serde_json::from_str(&link_log_json(&rows, index, origin)).unwrap();
+        let out: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        std::fs::write(&path, out).unwrap();
+        // Association 4 carries the link's writes: a message of one chunk,
+        // one of two, and a SACK of the first; association 9 sends a
+        // message no write fits.
+        let us = |t: u64| START * 1000 + t;
+        let data = |tsn: u32, len: u32, flags: u8| Chunk::Data {
+            tsn,
+            sid: 1,
+            ssn: 0,
+            len,
+            flags,
+            idata: false,
+        };
+        let packet = |t: u64, out: bool, assoc: u32, chunks: Vec<Chunk>| Packet {
+            t_us: us(t),
+            out,
+            assoc,
+            vtag: 7,
+            bytes: 12 + chunks.iter().map(|_| 16).sum::<u32>(),
+            chunks,
+        };
+        let sctp = [
+            packet(1_600, true, 4, vec![data(40, 900, 3)]),
+            packet(2_600, true, 9, vec![data(70, 25, 3)]),
+            packet(2_700, true, 4, vec![data(41, 1000, 2), data(42, 200, 1)]),
+            packet(
+                21_000,
+                false,
+                4,
+                vec![Chunk::Sack {
+                    cum: 40,
+                    rwnd: 1 << 20,
+                    gaps: vec![(2, 2)],
+                    dups: 0,
+                }],
+            ),
+        ];
+        let text: String = sctp.iter().map(|p| format!("{}\n", p.json())).collect();
+        std::fs::write(dir.join("sctp-0.jsonl"), text).unwrap();
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}LINK_LOG=0\nTRACE_SCTP=all\nKINDS=chromium firefox\nBROWSER_LINKS=webrtc\n"),
+        )
+        .unwrap();
+        // An `all` of no Chromium node is refused, not an empty set.
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}LINK_LOG=0\nTRACE_SCTP=all\nKINDS=firefox firefox\nBROWSER_LINKS=webrtc\n"),
+        )
+        .unwrap();
+        let e = Run::read(&dir, &BTreeMap::new()).err().unwrap();
+        assert!(e.contains("TRACE_SCTP=all: no Chromium node"), "{e}");
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}LINK_LOG=0\nTRACE_SCTP=all\nKINDS=chromium firefox\nBROWSER_LINKS=webrtc\n"),
+        )
+        .unwrap();
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        // `all` is the Chromium nodes.
+        assert_eq!(run.knobs["STRIMS_SIM_TRACE_SCTP"], "hosts:0");
+        let bin = Duration::from_millis(BIN_MS.unsigned_abs());
+        let on = dir.join("tables-on");
+        run.report().write_tables(&on, bin, true).unwrap();
+        let cols = [
+            "node",
+            "peer",
+            "link",
+            "n",
+            "t_us",
+            "dir",
+            "what",
+            "tsn_lo",
+            "tsn_hi",
+            "chunks",
+            "data_bytes",
+            "cum_tsn",
+            "gaps",
+            "flight_bytes",
+            "cwnd_bytes",
+        ];
+        let got: Vec<Vec<String>> = table_rows(&on, "sctp_events")
+            .iter()
+            .map(|r| cols.iter().map(|c| r[*c].clone()).collect())
+            .collect();
+        let want = [
+            [
+                "0", "1", "0", "0", "1600", "out", "data", "0", "0", "1", "900", "", "", "916", "",
+            ],
+            [
+                "0", "1", "0", "1", "2700", "out", "data", "1", "2", "2", "1200", "", "", "2148",
+                "",
+            ],
+            // TSN 40 acknowledged, 42 past a gap: 41's 1016 bytes fly.
+            [
+                "0", "1", "0", "2", "21000", "in", "sack", "", "", "0", "0", "0", "1", "1016", "",
+            ],
+        ];
+        assert_eq!(got, want.map(|r| r.map(str::to_owned)));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

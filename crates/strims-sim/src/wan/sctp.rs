@@ -93,6 +93,15 @@
 //! access links and counts toward its packet at the receiver, which has
 //! it.
 //!
+//! With a host's log on ([`Scenario::sctp_log`](crate::Scenario::sctp_log)),
+//! its associations keep each packet they send or receive and each timer
+//! they fire ([`SctpEvent`], the tables' `sctp_events`, as a testbed
+//! Chromium node's dcSCTP logs its own): a packet out as the association
+//! hands it to its uplink, with its window and flight as it left them; a
+//! SACK in as the sender takes it, with the window and flight as the SACK
+//! left them; DATA in as it reaches the receiver's access link. The log
+//! reads the model and moves nothing.
+//!
 //! On the testbed's 105 % link the str0m model's window falls every
 //! 3.4-4.2 s from about 37 KB, sometimes twice in a recovery, as
 //! sctp-proto's does (3.4-4.3 s, 37 KB), and it loses 76 packets to the
@@ -105,9 +114,12 @@ use strims_wan::Carrier;
 use strims_wan::network::overflows;
 use strims_wan::wire::tx_time;
 
+use strims_testbed::sctp::{Dir, SctpEvent, What as SctpWhat};
+
 use super::{Event, Offered, Scheduler, What};
 use crate::net::ConnKey;
 use crate::report::{PacketKind, PacketProto};
+use crate::world::epoch;
 
 /// The SCTP stack an association's rules follow.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -402,6 +414,65 @@ struct Send {
     resend: bool,
 }
 
+/// A packet a send opportunity sends: its chunks, whether it is a fast
+/// retransmission, and the association's flight once it went (for its
+/// log).
+#[derive(Debug)]
+struct Out {
+    chunks: Vec<Send>,
+    fast: bool,
+    flight: usize,
+}
+
+/// What a packet carried, for its log's events at either end
+/// ([`SctpEvent`]).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Carried {
+    what: SctpWhat,
+    tsn: Option<(i64, i64)>,
+    chunks: u32,
+    data_bytes: u64,
+    packet_bytes: u64,
+}
+
+impl Carried {
+    /// The event of a packet that carried this, at `at` in `dir`, with the
+    /// SACK it carried (`cum_tsn`, `gaps`) and the association's state.
+    fn event(
+        &self,
+        at: Time,
+        dir: Dir,
+        sack: Option<(i64, u32)>,
+        state: Option<(usize, usize)>,
+    ) -> SctpEvent {
+        SctpEvent {
+            at: at - epoch(),
+            dir: Some(dir),
+            what: self.what,
+            tsn: self.tsn,
+            chunks: self.chunks,
+            data_bytes: self.data_bytes,
+            packet_bytes: self.packet_bytes,
+            cum_tsn: sack.map(|(c, _)| c),
+            gaps: sack.map(|(_, g)| g),
+            cwnd_bytes: state.map(|(c, _)| c as u64),
+            flight_bytes: state.map(|(_, f)| f as u64),
+            estimated: false,
+        }
+    }
+}
+
+/// A SACK alone of `gaps` gap blocks, as its log takes it.
+fn sack_alone(gaps: usize) -> Carried {
+    Carried {
+        what: SctpWhat::Sack,
+        tsn: None,
+        chunks: 0,
+        data_bytes: 0,
+        packet_bytes: (COMMON_HEADER + SctpProfile::sack_chunk(gaps)) as u64,
+    }
+}
+
 /// `chunks` bundled into packets in order, as sctp-proto bundles them: a
 /// chunk starts a new packet when its payload would take the packet past
 /// the MTU.
@@ -427,6 +498,8 @@ fn bundle(chunks: Vec<Send>, mtu: usize) -> Vec<Vec<Send>> {
 pub(super) struct Sack {
     cum: u64,
     above: Vec<u64>,
+    /// For the log, what the packet it rode carried, or none alone.
+    rode: Option<Carried>,
 }
 
 /// One association's sender.
@@ -443,10 +516,12 @@ pub(super) struct Assoc {
     /// they put in the flight. Bound: the window.
     out: BTreeMap<u64, Chunk>,
     in_flight: usize,
-    /// The cumulative point, from the first chunk sent; the sequence
-    /// number past the furthest sent, and the least that samples a round
-    /// trip.
+    /// The cumulative point, from the first chunk sent, and that first
+    /// chunk's sequence number, which its log counts TSNs from; the
+    /// sequence number past the furthest sent, and the least that samples
+    /// a round trip.
     cum: Option<u64>,
+    base: Option<u64>,
     next_seq: u64,
     measure_from: u64,
     in_recovery: bool,
@@ -488,6 +563,7 @@ impl Assoc {
             out: BTreeMap::new(),
             in_flight: 0,
             cum: None,
+            base: None,
             next_seq: 0,
             measure_from: 0,
             in_recovery: false,
@@ -540,6 +616,12 @@ impl Assoc {
 
     fn stack(&self) -> Stack {
         self.profile.stack
+    }
+
+    /// Sequence number `seq` as its log counts TSNs: from its first chunk.
+    fn rel(&self, seq: u64) -> i64 {
+        let base = self.base.unwrap_or(seq);
+        i64::try_from(seq).unwrap_or(i64::MAX) - i64::try_from(base).unwrap_or(i64::MAX)
     }
 
     /// Chunk `seq`'s state changes by `f`, the flight with it.
@@ -621,6 +703,7 @@ impl Assoc {
     fn launch(&mut self, at: Time, id: u64, seq: u64, len: usize) {
         if self.cum.is_none() {
             self.cum = Some(seq.saturating_sub(1));
+            self.base = Some(seq);
             self.measure_from = seq;
         }
         self.next_seq = self.next_seq.max(seq + 1);
@@ -684,19 +767,30 @@ impl Scheduler {
     /// payload a poll), the new chunks the window takes, then a fast
     /// retransmission's packet, each group bundled into packets.
     fn sctp_proto_pump(&mut self, at: Time, conn: ConnKey) {
-        let mut packets: Vec<Vec<Send>> = Vec::new();
+        let mut packets: Vec<Out> = Vec::new();
         {
             let Some(a) = self.assocs.get_mut(&conn) else {
                 return;
             };
             let mtu = a.profile.mtu;
+            // sctp-proto's flight counts a chunk until it is acknowledged,
+            // so a resend leaves it as it was.
+            let resent = |chunks: Vec<Send>, flight: usize| Out {
+                chunks,
+                fast: false,
+                flight,
+            };
             let (mut poll, mut polled) = (Vec::new(), 0);
             for (&seq, c) in &mut a.out {
                 if !c.retransmit || c.acked {
                     continue;
                 }
                 if polled + c.len > a.cwnd && !poll.is_empty() {
-                    packets.extend(bundle(std::mem::take(&mut poll), mtu));
+                    packets.extend(
+                        bundle(std::mem::take(&mut poll), mtu)
+                            .into_iter()
+                            .map(|p| resent(p, a.in_flight)),
+                    );
                     polled = 0;
                 }
                 c.retransmit = false;
@@ -709,7 +803,12 @@ impl Scheduler {
                     resend: true,
                 });
             }
-            packets.extend(bundle(poll, mtu));
+            packets.extend(
+                bundle(poll, mtu)
+                    .into_iter()
+                    .map(|p| resent(p, a.in_flight)),
+            );
+            let mut flight = a.in_flight;
             let mut fresh = Vec::new();
             while let Some(&(id, _)) = a.pending.front() {
                 let Some((seq, len)) = Assoc::chunk_of(&self.records, id) else {
@@ -735,7 +834,14 @@ impl Scheduler {
                 self.next += 1;
                 self.events.insert((due, key), Event::SctpTimeout { conn });
             }
-            packets.extend(bundle(fresh, mtu));
+            packets.extend(bundle(fresh, mtu).into_iter().map(|chunks| {
+                flight += chunks.iter().map(|c| c.len).sum::<usize>();
+                Out {
+                    chunks,
+                    fast: false,
+                    flight,
+                }
+            }));
             if std::mem::take(&mut a.fast_resend) {
                 let mut bytes = COMMON_HEADER;
                 let mut packet = Vec::new();
@@ -756,7 +862,11 @@ impl Scheduler {
                     });
                 }
                 if !packet.is_empty() {
-                    packets.push(packet);
+                    packets.push(Out {
+                        chunks: packet,
+                        fast: true,
+                        flight: a.in_flight,
+                    });
                 }
             }
         }
@@ -769,7 +879,7 @@ impl Scheduler {
     /// the window, then up to `max_burst` packets each of the chunks marked
     /// for retransmission and then new ones, of what the window has left.
     fn rfc_pump(&mut self, at: Time, conn: ConnKey) {
-        let mut packets: Vec<Vec<Send>> = Vec::new();
+        let mut packets: Vec<Out> = Vec::new();
         {
             let Some(a) = self.assocs.get_mut(&conn) else {
                 return;
@@ -819,7 +929,11 @@ impl Scheduler {
                     a.t3 = None;
                 }
                 if !packet.is_empty() {
-                    packets.push(packet);
+                    packets.push(Out {
+                        chunks: packet,
+                        fast: true,
+                        flight: a.in_flight,
+                    });
                 }
             }
             for _ in 0..a.profile.max_burst.unwrap_or(usize::MAX) {
@@ -879,7 +993,11 @@ impl Scheduler {
                 if packet.is_empty() {
                     break;
                 }
-                packets.push(packet);
+                packets.push(Out {
+                    chunks: packet,
+                    fast: false,
+                    flight: a.in_flight,
+                });
             }
             let outstanding = a.out.values().any(|c| c.flight(stack) > 0 || c.retransmit);
             if outstanding && a.t3.is_none_or(|t| t < at) {
@@ -901,8 +1019,11 @@ impl Scheduler {
     /// copy. Its chunks pass the receiver's downlink one after another,
     /// the first charged the packet's overhead. A dcSCTP packet carries the
     /// SACK its sender holds back for the reverse direction, and the I bit
-    /// while the window is under ten packets.
-    fn sctp_transmit(&mut self, at: Time, conn: ConnKey, packet: &[Send]) {
+    /// while the window is under ten packets. Each end whose log is on
+    /// logs it: the sender as it goes, the receiver as it arrives (with a
+    /// SACK, as the receiver takes the SACK).
+    fn sctp_transmit(&mut self, at: Time, conn: ConnKey, out: &Out) {
+        let packet = &out.chunks[..];
         let (Some(cap), Some(_)) = (self.window(), packet.first()) else {
             return;
         };
@@ -922,6 +1043,17 @@ impl Scheduler {
         let sack_bytes = sack
             .as_ref()
             .map_or(0, |s| SctpProfile::sack_chunk(gap_blocks(&s.above)));
+        let logs = (self.sctp_logs(from), self.sctp_logs(to));
+        let carried = (logs.0 || logs.1)
+            .then(|| self.carried(conn, packet, out.fast, sack.is_some(), sack_bytes));
+        if logs.0
+            && let Some(c) = carried
+        {
+            let sack = sack.as_ref().map(|s| self.sack_tsns(back, s));
+            let e = c.event(at, Dir::Out, sack, Some((cwnd, out.flight)));
+            self.sctp_event(from, to, conn, e);
+        }
+        let rode = sack.is_some();
         let share = |i: usize, len: usize| {
             usize::from(i == 0) * (profile.packet_overhead + COMMON_HEADER + sack_bytes)
                 + chunk_size(len)
@@ -1000,7 +1132,10 @@ impl Scheduler {
             }
             Some(t)
         };
-        if let Some(sack) = sack {
+        if let Some(mut sack) = sack {
+            if logs.1 {
+                sack.rode = carried;
+            }
             self.sack_held(back, sack, t.filter(|t| !t.dropped).map(|t| t.arrival));
         }
         let Some(t) = t.filter(|t| !t.dropped) else {
@@ -1011,6 +1146,12 @@ impl Scheduler {
             }
             return;
         };
+        if logs.1
+            && !rode
+            && let Some(c) = carried
+        {
+            self.sctp_event(to, from, conn, c.event(t.arrival, Dir::In, None, None));
+        }
         let last = packet.len() - 1;
         let immediate = profile.stack == Stack::DcSctp && cwnd < 10 * profile.mtu;
         for (i, (c, &copy)) in packet.iter().zip(&copies).enumerate() {
@@ -1175,6 +1316,7 @@ impl Scheduler {
         Some(Sack {
             cum,
             above: r.above.iter().copied().collect(),
+            rode: None,
         })
     }
 
@@ -1209,6 +1351,13 @@ impl Scheduler {
         let Some(p) = self.receiver_profile(conn) else {
             return;
         };
+        if self.sctp_logs(to) {
+            let back = (conn.1, conn.0);
+            let state = self.assocs.get(&back).map(|a| (a.cwnd, a.in_flight));
+            let tsns = self.sack_tsns(conn, &sack);
+            let e = sack_alone(gap_blocks(&sack.above)).event(t, Dir::Out, Some(tsns), state);
+            self.sctp_event(to, from, conn, e);
+        }
         let wire = link_wire(
             &self.net,
             to,
@@ -1263,12 +1412,20 @@ impl Scheduler {
         let Some(cum0) = a.cum else {
             return;
         };
+        let acked = if sack.cum < cum0 {
+            0
+        } else {
+            match a.stack() {
+                Stack::SctpProto => sctp_proto_sacked(a, t, conn, &sack, cum0),
+                Stack::DcSctp => rfc_sacked(a, t, &sack, cum0),
+            }
+        };
+        self.sctp_took(t, conn, &sack);
         if sack.cum < cum0 {
             return;
         }
-        let acked = match a.stack() {
-            Stack::SctpProto => sctp_proto_sacked(a, t, conn, &sack, cum0),
-            Stack::DcSctp => rfc_sacked(a, t, &sack, cum0),
+        let Some(a) = self.assocs.get_mut(&conn) else {
+            return;
         };
         if !a.out.is_empty() && a.t3.is_none_or(|d| d < t) {
             let due = t + a.t3_period();
@@ -1313,10 +1470,102 @@ impl Scheduler {
         a.timeouts = a.timeouts.saturating_add(1);
         let due = t + a.t3_period();
         a.t3 = Some(due);
+        let state = (a.cwnd, a.in_flight);
         let key = self.next;
         self.next += 1;
         self.events.insert((due, key), Event::SctpTimeout { conn });
+        if let (Some(&from), Some(&to)) = (
+            self.ip_host.get(&conn.0.ip()),
+            self.ip_host.get(&conn.1.ip()),
+        ) && self.sctp_logs(from)
+        {
+            let e = SctpEvent {
+                at: t - epoch(),
+                dir: None,
+                what: SctpWhat::T3,
+                tsn: None,
+                chunks: 0,
+                data_bytes: 0,
+                packet_bytes: 0,
+                cum_tsn: None,
+                gaps: None,
+                cwnd_bytes: Some(state.0 as u64),
+                flight_bytes: Some(state.1 as u64),
+                estimated: false,
+            };
+            self.sctp_event(from, to, conn, e);
+        }
         self.sctp_pump(t, conn);
+    }
+
+    /// What packet `packet` of `conn`'s chunks carries, for its log: a
+    /// fast retransmission's if `fast`, with a SACK of `sack_bytes` if
+    /// `sack`.
+    fn carried(
+        &self,
+        conn: ConnKey,
+        packet: &[Send],
+        fast: bool,
+        sack: bool,
+        sack_bytes: usize,
+    ) -> Carried {
+        let a = self.assocs.get(&conn);
+        let tsn = packet
+            .iter()
+            .map(|c| a.map_or(0, |a| a.rel(c.seq)))
+            .fold(None, |r: Option<(i64, i64)>, x| {
+                Some(r.map_or((x, x), |(lo, hi)| (lo.min(x), hi.max(x))))
+            });
+        let what = if fast {
+            SctpWhat::FastRtx
+        } else if packet.iter().any(|c| c.resend) {
+            SctpWhat::Rtx
+        } else if sack {
+            SctpWhat::DataSack
+        } else {
+            SctpWhat::Data
+        };
+        Carried {
+            what,
+            tsn,
+            chunks: u32::try_from(packet.len()).unwrap_or(u32::MAX),
+            data_bytes: packet.iter().map(|c| c.len as u64).sum(),
+            packet_bytes: (COMMON_HEADER
+                + sack_bytes
+                + packet.iter().map(|c| chunk_size(c.len)).sum::<usize>())
+                as u64,
+        }
+    }
+
+    /// The cumulative TSN and gap blocks of `sack`, a SACK of `conn`'s
+    /// data, as the log counts them.
+    fn sack_tsns(&self, conn: ConnKey, sack: &Sack) -> (i64, u32) {
+        let cum = self.assocs.get(&conn).map_or(-1, |a| a.rel(sack.cum));
+        (
+            cum,
+            u32::try_from(gap_blocks(&sack.above)).unwrap_or(u32::MAX),
+        )
+    }
+
+    /// `conn`'s sender took `sack` at `t`: the packet that brought it, in
+    /// its log, with the window and flight it left.
+    fn sctp_took(&mut self, t: Time, conn: ConnKey, sack: &Sack) {
+        let (Some(&from), Some(&to)) = (
+            self.ip_host.get(&conn.0.ip()),
+            self.ip_host.get(&conn.1.ip()),
+        ) else {
+            return;
+        };
+        if !self.sctp_logs(from) {
+            return;
+        }
+        let state = self.assocs.get(&conn).map(|a| (a.cwnd, a.in_flight));
+        let tsns = self.sack_tsns(conn, sack);
+        let carried = sack
+            .rode
+            .unwrap_or_else(|| sack_alone(gap_blocks(&sack.above)));
+        let e = carried.event(t, Dir::In, Some(tsns), state);
+        self.sctp_event(from, to, conn, e);
     }
 }
 
@@ -1578,6 +1827,7 @@ mod tests {
             &Sack {
                 cum: 10,
                 above: Vec::new(),
+                rode: None,
             },
             9,
         );
@@ -1591,6 +1841,7 @@ mod tests {
             &Sack {
                 cum: 11,
                 above: Vec::new(),
+                rode: None,
             },
             10,
         );
@@ -1602,6 +1853,7 @@ mod tests {
             &Sack {
                 cum: 12,
                 above: Vec::new(),
+                rode: None,
             },
             11,
         );

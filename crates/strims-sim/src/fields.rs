@@ -290,7 +290,7 @@ pub(crate) trait Column: Key {
 }
 
 /// The tables strims-sim writes zstd-compressed, `<name>.csv.zst`.
-pub(crate) const ZSTD: [&str; 15] = [
+pub(crate) const ZSTD: [&str; 16] = [
     "reads",
     "events",
     "parent_checks",
@@ -306,6 +306,7 @@ pub(crate) const ZSTD: [&str; 15] = [
     "link_writes",
     "link_reads",
     "link_samples",
+    "sctp_events",
 ];
 
 /// The row's fields that hold an integer.
@@ -6279,6 +6280,177 @@ pub(crate) mod cols {
                 | LinkSamples::WriteHeld
                 | LinkSamples::QosBacklogBytes => Ty::Int,
                 LinkSamples::Source | LinkSamples::Cause => Ty::Text,
+            }
+        }
+    }
+
+    /// The `sctp_events` table's columns: a row per SCTP packet a node's data
+    /// channel association sent or received, or a retransmission timer it
+    /// fired.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum SctpEvents {
+        /// When the association sent or took the packet, or its timer fired, in
+        /// µs of true time from the stream's start.
+        ///
+        /// strims-sim: The model's: a packet out as it is offered to the
+        /// sender's uplink, one in as it reaches the node's access link (a SACK
+        /// as the sender takes it). The testbed's: the Chromium log's stamp of
+        /// the observer's message, on the browser's network thread, ahead of
+        /// DTLS (out) and past it (in).
+        ///
+        /// Unit: us.
+        TUs,
+        /// The node whose association it is, as `events` numbers hosts.
+        Node,
+        /// The node at the association's other end, as `events` numbers hosts.
+        Peer,
+        /// The ordinal of the node's link to the peer that the association
+        /// carries, from 0, as `link_writes` numbers links: a relink is the
+        /// next.
+        ///
+        /// strims-sim: The model numbers a node's links to a peer in the order
+        /// it first logged each (as `packets` does); a testbed run's are the
+        /// link whose writes the association carried.
+        Link,
+        /// The event's place among its association's, from 0, in time order:
+        /// packets out and in and timers alike.
+        N,
+        /// Which way the packet went: `out` (the association sent it), `in` (it
+        /// received it); empty for a timer.
+        ///
+        /// None is written as an empty field.
+        Dir,
+        /// What the event was: `data` (DATA its sender sent for the first
+        /// time), `sack` (a SACK alone), `data_sack` (first-sent DATA with a
+        /// SACK bundled), `rtx` (a packet that resent DATA), `fast_rtx` (a fast
+        /// retransmission: resent DATA alone, past the window, at the SACK that
+        /// found it missing), `t3` (the retransmission timer fired), `control`
+        /// (any other packet: the handshake's, a heartbeat, a stream reset).
+        ///
+        /// strims-sim: The model knows a fast retransmission's packet; a
+        /// testbed run's `fast_rtx` is a packet of resent DATA alone sent next
+        /// after a SACK with gap blocks, its other resends `rtx`. A testbed run
+        /// has no `t3` rows: its timers aren't in the log.
+        What,
+        /// The first TSN of the DATA the packet carried, counted from its
+        /// direction's initial TSN (0 its first chunk); empty for a packet
+        /// without DATA.
+        ///
+        /// strims-sim: A testbed run's count from the initial TSN the
+        /// direction's INIT or INIT ACK announced in the log, else from its
+        /// first DATA; the model's from its first chunk.
+        ///
+        /// None is written as an empty field.
+        TsnLo,
+        /// The last TSN of the DATA the packet carried, counted as `tsn_lo`;
+        /// empty where `tsn_lo` is.
+        ///
+        /// None is written as an empty field.
+        TsnHi,
+        /// The DATA chunks the packet carried; 0 for one without, and for a
+        /// timer.
+        Chunks,
+        /// The payload bytes of the packet's DATA chunks: the messages' bytes
+        /// they carried, no chunk headers.
+        ///
+        /// Unit: bytes.
+        DataBytes,
+        /// The packet's SCTP bytes: its common header and every chunk with its
+        /// padding, none of DTLS's, UDP's or IP's; 0 for a timer.
+        ///
+        /// Unit: bytes.
+        PacketBytes,
+        /// A SACK's cumulative TSN, counted as the TSNs it acknowledges are
+        /// (`tsn_lo`: -1 before any); empty for a packet without a SACK.
+        ///
+        /// None is written as an empty field.
+        CumTsn,
+        /// The gap blocks of the packet's SACK: the runs of chunks past its
+        /// cumulative TSN its sender holds; empty for a packet without a SACK.
+        ///
+        /// None is written as an empty field.
+        Gaps,
+        /// The association's congestion window as the event left it, on a
+        /// packet it sent, a SACK it took and a timer; empty on DATA it
+        /// received, and where the stack's window isn't known.
+        ///
+        /// strims-sim: The model's (`Assoc::cwnd`); a testbed run writes none:
+        /// dcSCTP's window is in no packet, and neither browser reports it.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        CwndBytes,
+        /// The association's bytes in flight as the event left it, each chunk
+        /// as its stack counts it (dcSCTP its header and padded payload,
+        /// sctp-proto its payload), on a packet it sent, a SACK it took and a
+        /// timer; empty on DATA it received.
+        ///
+        /// strims-sim: The model's (`Assoc::in_flight`, which leaves out chunks
+        /// marked lost); a testbed run's the chunks its log shows sent past its
+        /// SACKs' cumulative TSN and gap blocks, as dcSCTP counts them, chunks
+        /// it marked lost included.
+        ///
+        /// Unit: bytes. None is written as an empty field.
+        FlightBytes,
+        /// Whether the packet's chunks were read from its length, its contents
+        /// hidden (an association whose packets only a capture shows, inside
+        /// DTLS); false where the model or the stack's own log says them.
+        Estimated,
+    }
+
+    impl SctpEvents {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                SctpEvents::TUs => "t_us",
+                SctpEvents::Node => "node",
+                SctpEvents::Peer => "peer",
+                SctpEvents::Link => "link",
+                SctpEvents::N => "n",
+                SctpEvents::Dir => "dir",
+                SctpEvents::What => "what",
+                SctpEvents::TsnLo => "tsn_lo",
+                SctpEvents::TsnHi => "tsn_hi",
+                SctpEvents::Chunks => "chunks",
+                SctpEvents::DataBytes => "data_bytes",
+                SctpEvents::PacketBytes => "packet_bytes",
+                SctpEvents::CumTsn => "cum_tsn",
+                SctpEvents::Gaps => "gaps",
+                SctpEvents::CwndBytes => "cwnd_bytes",
+                SctpEvents::FlightBytes => "flight_bytes",
+                SctpEvents::Estimated => "estimated",
+            }
+        }
+    }
+
+    impl sealed::Sealed for SctpEvents {}
+
+    impl Key for SctpEvents {
+        fn name(self) -> &'static str {
+            SctpEvents::name(self)
+        }
+    }
+
+    impl Column for SctpEvents {
+        const TABLE: &'static str = "sctp_events";
+
+        fn ty(self) -> Ty {
+            match self {
+                SctpEvents::TUs
+                | SctpEvents::Node
+                | SctpEvents::Peer
+                | SctpEvents::Link
+                | SctpEvents::N
+                | SctpEvents::TsnLo
+                | SctpEvents::TsnHi
+                | SctpEvents::Chunks
+                | SctpEvents::DataBytes
+                | SctpEvents::PacketBytes
+                | SctpEvents::CumTsn
+                | SctpEvents::Gaps
+                | SctpEvents::CwndBytes
+                | SctpEvents::FlightBytes => Ty::Int,
+                SctpEvents::Dir | SctpEvents::What => Ty::Text,
+                SctpEvents::Estimated => Ty::Bool,
             }
         }
     }

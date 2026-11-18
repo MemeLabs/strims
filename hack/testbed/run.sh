@@ -265,6 +265,22 @@
 #                          link_samples. A browser's page is then served
 #                          cross-origin isolated, as with TIMER_LOG.
 #                          Unset, none
+#   TRACE_SCTP=<nodes>     these Chromium nodes' dcSCTP logs every packet
+#                          its data channels send and receive, decrypted
+#                          (testbed_browser's --trace-sctp), into
+#                          sctp-<i>.jsonl: `all` (every Chromium node of
+#                          0 to VIEWERS), or node indices of the run's, as
+#                          strims-sim's STRIMS_SIM_TRACE_SCTP keeps a
+#                          simulated node's associations: the tables'
+#                          sctp_events. Its associations are named by the
+#                          node's writes on each link, so LINK_LOG must
+#                          name each of them. The log costs the browser's
+#                          network thread about 0.17 ms a full packet
+#                          (strims-testbed's sctp module), which slows
+#                          its sending: it moves the run's timing and its
+#                          counts (the seed's queue drops among them), so
+#                          take a bench's timing, drops and wire readings
+#                          from runs with it off. Unset, none
 #   CAPTURE=1              ppspp captures in <out dir>/capture, one dump
 #                          per node (native and browser), named by host id
 #   PCAP=1                 each node's packets on its eth0, both ways, in
@@ -360,6 +376,9 @@
 #                          the device whose root is its modem, as the
 #                          parser gives it: `node <i> <spec> <up_mbit>
 #                          <delay_ms> <queue_ms> <modem_dev>`
+#   sctp-<i>.jsonl         with TRACE_SCTP, each packet node i's dcSCTP sent
+#                          or received, a JSON line each (strims-testbed's
+#                          sctp::Packet)
 #   link-<i>.log           a trace link's tracelink log: its queue,
 #                          packets, bytes and drops every 100 ms
 #   link-<i>.err           a trace link's tracelink stderr
@@ -514,6 +533,22 @@ link_args_of() {
     if [ "$t" = all ] || [ "$t" = "$1" ]; then echo "--link-log"; return; fi
   done
 }
+# The Chromium nodes whose dcSCTP logs its packets (TRACE_SCTP), as the
+# sim's knob of that name keeps a simulated node's.
+read -r -a sctp_nodes <<< "${TRACE_SCTP:-}"
+for t in "${sctp_nodes[@]}"; do
+  if ! [[ $t =~ ^(all|0|[1-9][0-9]*)$ ]] || { [ "$t" != all ] && [ "$t" -gt "$viewers" ]; }; then
+    echo "TRACE_SCTP=$TRACE_SCTP: all, or node indices of the run's 0 to $viewers" >&2; exit 1
+  fi
+done
+sctp_args_of() {
+  local t
+  for t in "${sctp_nodes[@]}"; do
+    if [ "$t" = "$1" ] || { [ "$t" = all ] && [ "$2" = chromium ]; }; then
+      echo "--trace-sctp /out/sctp-$1.jsonl"; return
+    fi
+  done
+}
 bin=${NODE_BIN:-$root/target/release/examples/testbed_node}
 browser_bin=${BROWSER_BIN:-$root/target/release/examples/testbed_browser}
 web=${WEB_BUNDLE:-$root/dist/wasm-testbed}
@@ -586,7 +621,15 @@ for i in $(seq 0 $((n - 1))); do
     firefox|chromium) browsers=1; nbrowsers=$((nbrowsers + 1)) ;;
     *) echo "node $i: unknown kind $(kind_of "$i")" >&2; exit 1 ;;
   esac
+  if [ -n "$(sctp_args_of "$i" "$(kind_of "$i")")" ]; then
+    [ "$(kind_of "$i")" = chromium ] || { echo "TRACE_SCTP: node $i is $(kind_of "$i"), not chromium" >&2; exit 1; }
+    [ -n "$(link_args_of "$i")" ] || { echo "TRACE_SCTP: node $i needs LINK_LOG, which names its links" >&2; exit 1; }
+    sctp_any=1
+  fi
 done
+if [ "${#sctp_nodes[@]}" -gt 0 ] && [ -z "${sctp_any:-}" ]; then
+  echo "TRACE_SCTP=$TRACE_SCTP names no Chromium node" >&2; exit 1
+fi
 case $browser_links in ws|webrtc) ;; *) echo "BROWSER_LINKS: ws or webrtc" >&2; exit 1 ;; esac
 [ -x "$bin" ] || { echo "no testbed_node at $bin" >&2; exit 1; }
 # The seed's steps, and the highest rate its link runs at, which a peak is
@@ -782,7 +825,7 @@ nov6=(--sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv6.conf.default.d
 # the tree changes it, so runs of two trees don't pool. Its root is the
 # node's access link class's (the `links` file names each node's).
 SHAPER="clsact>ifb-netem>root-class"
-env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD|FORECAST|SPEC|PARENT_CHECKS|TIMER_LOG|TIMER_PROBE|LINK_LOG)=' \
+env | command grep -E '^(VIEWERS|SEED_UP_MBIT|VIEWER_UP_MBIT|QUEUE_MS|SEED_BURST|VIEWER_BURST|SEED_PEAK_MBIT|VIEWER_PEAK_MBIT|SEED_LINK|VIEWER_LINK|LINKS|SEED_DELAY_MS|VIEWER_DELAY_MS|SECS|JOIN_AT|JOINS|SLOW_DOWN_KBIT|SEED_UP_STEPS|COMPETE|SS_EVERY|SEED_LOSS_PCT|RATE|NODE_ARGS|TOPOLOGY|CAPTURE|PCAP|PCAP_SNAPLEN|KINDS|BROWSER_LINKS|BROWSER_ARGS|RELAY|MEDIA|UNITS_CPS|RECORD|FORECAST|SPEC|PARENT_CHECKS|TIMER_LOG|TIMER_PROBE|LINK_LOG|TRACE_SCTP)=' \
   > "$out/settings" || true
 echo "QDISC=$SHAPER" >> "$out/settings"
 echo "STAMPS=clock" >> "$out/settings"
@@ -915,6 +958,7 @@ $(sampled sssample "$i" "-i $ss_ms" ss)"
   arrive_arg=$(arrive_of "$i")
   timer_args=$(timer_args_of "$i")
   link_args=$(link_args_of "$i")
+  sctp_args=$(sctp_args_of "$i" "$(kind_of "$i")")
   media_mount=()
   media_arg=""
   if [ -n "$media" ] && [ "$i" -eq 0 ]; then
@@ -981,7 +1025,7 @@ $sample
 $(cpu_log "$i")
 $wait_start
 $(link_attached "$i")
-exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $log_args $timer_args $link_args $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups --reset-env /testbed_browser --index $i --topology /out/topology --web /web --start \$start --secs $secs --join-at $join $arrive_arg $rate_arg $units_arg $hosts $capture $player_arg $profile_arg $log_args $timer_args $link_args $sctp_args $browser_args > /out/node-$i.jsonl 2> /out/node-$i.err" >/dev/null
   fi
 done
 

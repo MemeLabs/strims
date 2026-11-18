@@ -150,10 +150,12 @@ use turmoil::{Protocol, Segment, Sim};
 use crate::fast_map::FastMap;
 use crate::net::{ConnKey, SendBuffers};
 use crate::report::{
-    ACK_WHYS, AckWaits, PacketKind, PacketLoss, PacketProto, PacketRecord, WanHostReport, WanReport,
+    ACK_WHYS, AckWaits, PacketKind, PacketLoss, PacketProto, PacketRecord, SctpAssocs,
+    WanHostReport, WanReport,
 };
 use crate::spec::{HostIx, Scenario};
 use crate::world::epoch;
+use strims_testbed::sctp::SctpEvent;
 
 mod ack;
 mod sctp;
@@ -1360,6 +1362,13 @@ pub(crate) struct Scheduler {
     /// Bound: the logged hosts' connections.
     link_ords: BTreeMap<(HostIx, HostIx, (SocketAddr, SocketAddr)), u32>,
     link_counts: BTreeMap<(HostIx, HostIx), u32>,
+    /// Per host, whether its associations' log is on
+    /// ([`Scenario::sctp_log`]), and their events since the run last took
+    /// them ([`Scheduler::take_sctp`], at each bin edge), by peer and link
+    /// ([`WanHostReport::sctp`]). Bound: a bin's packets of the logged
+    /// hosts' associations.
+    sctp_log: Vec<bool>,
+    sctp_events: Vec<SctpAssocs>,
     /// With [`Scenario::node_bins`], every host's offers of data to a
     /// swarm's host ([`WanHostReport::offers`]), as a testbed run counts
     /// its nodes': data to the signalling relay left out. Bound: the run's
@@ -1552,6 +1561,10 @@ impl Scheduler {
             packets: vec![Vec::new(); spec.hosts.len()],
             link_ords: BTreeMap::new(),
             link_counts: BTreeMap::new(),
+            sctp_log: (0..spec.hosts.len())
+                .map(|h| spec.sctp_log.as_ref().is_some_and(|s| s.contains(spec, h)))
+                .collect(),
+            sctp_events: vec![BTreeMap::new(); spec.hosts.len()],
             offers: spec.node_bins.then(|| vec![Vec::new(); spec.hosts.len()]),
             swarm_hosts: (0..spec.hosts.len())
                 .map(|h| {
@@ -1566,6 +1579,39 @@ impl Scheduler {
     /// Whether host `h`'s packet log is on.
     fn logs(&self, h: HostIx) -> bool {
         self.packet_log.get(h).copied().unwrap_or(false)
+    }
+
+    /// Whether host `h`'s associations' log is on.
+    fn sctp_logs(&self, h: HostIx) -> bool {
+        self.sctp_log.get(h).copied().unwrap_or(false)
+    }
+
+    /// The associations' events logged since the last take, by host, in
+    /// the order logged (in-packets' at their arrival, so not in time
+    /// order).
+    pub(crate) fn take_sctp(&mut self) -> Vec<SctpAssocs> {
+        self.sctp_events.iter_mut().map(std::mem::take).collect()
+    }
+
+    /// Host `h`'s association with `peer` over `conn` (either way) logs
+    /// event `e`.
+    fn sctp_event(&mut self, h: HostIx, peer: HostIx, conn: ConnKey, e: SctpEvent) {
+        let link = self.link_ord(h, peer, conn);
+        if let Some(m) = self.sctp_events.get_mut(h) {
+            m.entry((peer, link)).or_default().push(e);
+        }
+    }
+
+    /// The ordinal of host `h`'s link to `peer` over `conn` (either way),
+    /// among its links to `peer` in the order its logs first met each.
+    fn link_ord(&mut self, h: HostIx, peer: HostIx, (a, b): ConnKey) -> u32 {
+        let key = (h, peer, (a.min(b), a.max(b)));
+        let next = self.link_counts.get(&(h, peer)).copied().unwrap_or(0);
+        let ord = *self.link_ords.entry(key).or_insert(next);
+        if ord == next {
+            self.link_counts.insert((h, peer), next + 1);
+        }
+        ord
     }
 
     /// What host `h`'s uplink holds at `at` where its packet log is on,
@@ -1597,15 +1643,7 @@ impl Scheduler {
             return;
         }
         let link = match (o.to, o.conn) {
-            (Some(to), Some((a, b))) => {
-                let key = (o.from, to, (a.min(b), a.max(b)));
-                let next = self.link_counts.get(&(o.from, to)).copied().unwrap_or(0);
-                let ord = *self.link_ords.entry(key).or_insert(next);
-                if ord == next {
-                    self.link_counts.insert((o.from, to), next + 1);
-                }
-                Some(ord)
-            }
+            (Some(to), Some(conn)) => Some(self.link_ord(o.from, to, conn)),
             _ => None,
         };
         let framing = self.net.up_framing(o.from);
@@ -4007,6 +4045,19 @@ impl Scheduler {
                             .unwrap_or(0),
                         competing_cwnd: self.cross_cwnd.get(h).cloned().unwrap_or_default(),
                         packets: self.packets.get(h).cloned().unwrap_or_default(),
+                        sctp: self
+                            .sctp_events
+                            .get(h)
+                            .map(|m| {
+                                m.iter()
+                                    .map(|(&k, v)| {
+                                        let mut v = v.clone();
+                                        v.sort_by_key(|e| e.at);
+                                        (k, v)
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
                         offers: self
                             .offers
                             .as_ref()

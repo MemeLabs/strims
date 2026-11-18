@@ -209,14 +209,19 @@ fn read_edges(
     let Some((width, next_edge)) = bins.as_mut() else {
         return;
     };
-    let wan = w.wan.lock();
-    let Some(s) = wan.as_ref() else {
+    let mut wan = w.wan.lock();
+    let Some(s) = wan.as_mut() else {
         return;
     };
+    let mut read = false;
     while due(*next_edge) {
         let edge = crate::wan::sim_time(*next_edge);
         w.record_wire_bin((0..hosts).map(|h| s.up_counters(h, edge)).collect());
         *next_edge += *width;
+        read = true;
+    }
+    if read {
+        w.record_sctp(s.take_sctp());
     }
 }
 
@@ -425,13 +430,30 @@ fn report(
     sim_secs: f64,
     wall_secs: f64,
     memory: Option<MemoryReport>,
-    wan: Option<WanReport>,
+    mut wan: Option<WanReport>,
 ) -> Report {
     // The nodes' last parent log entries and checks, their lost counts the
     // hosts'.
     w.take_parents();
     w.take_checks();
     let mut st = w.st.borrow_mut();
+    // The associations' events the run took, before those the scheduler
+    // still held, each association's in time order.
+    if let Some(wan) = wan.as_mut() {
+        for (hs, spec) in st.hosts.iter_mut().zip(&w.spec.hosts) {
+            let Some(r) = wan.hosts.iter_mut().find(|r| r.name == spec.name) else {
+                continue;
+            };
+            let mut events = std::mem::take(&mut hs.sctp);
+            for (k, mut v) in std::mem::take(&mut r.sctp) {
+                events.entry(k).or_default().append(&mut v);
+            }
+            for v in events.values_mut() {
+                v.sort_by_key(|e| e.at);
+            }
+            r.sctp = events;
+        }
+    }
     let mut vpn = st.vpn.clone();
     if w.spec.probes.is_some() {
         vpn.unicast_sent = st.probes.len() as u64;

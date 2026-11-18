@@ -223,6 +223,7 @@ fn a_run_with_tables_keeps_its_trace() {
             spec.parent_checks = true;
             spec.timer_log = Some(HostSet::All);
             spec.link_log = Some(HostSet::All);
+            spec.sctp_log = Some(HostSet::All);
             let r = run(spec, 1).unwrap();
             assert_eq!(
                 (&plain.trace_hash, plain.reads_hash()),
@@ -348,6 +349,7 @@ fn a_run_with_tables_keeps_its_trace() {
             request_logs_say_what_they_are(&r, &d);
             timers_say_what_they_are(&r, &d);
             link_logs_say_what_they_are(&r, &d, name);
+            sctp_events_say_what_their_associations_did(&d, name);
             stalls_say_how_playout_went(&d);
             parents_say_how_the_trees_changed(&r, &d);
             packets_say_what_they_are(&r, &d, name);
@@ -368,6 +370,7 @@ fn a_run_with_tables_keeps_its_trace() {
         spec.parent_checks = true;
         spec.timer_log = Some(HostSet::All);
         spec.link_log = Some(HostSet::All);
+        spec.sctp_log = Some(HostSet::All);
         let r = run(spec, 1).unwrap();
         assert_eq!(
             (&plain.trace_hash, plain.reads_hash()),
@@ -1563,6 +1566,161 @@ fn packets_say_what_they_are(r: &strims_sim::Report, d: &Path, name: &str) {
         .sum();
     assert!(offered > 0, "{name}");
     assert_eq!(offered, data, "{name}: the seed's offers");
+}
+
+/// The associations' events (`Scenario::sctp_log`, every host's) against
+/// each other and the link log: a TCP run has none; a browser run's
+/// associations number their events in time order, send each TSN first
+/// once and in order, every chunk of a message its node wrote on the
+/// link (no more bytes than it wrote); a packet its peer logged in it
+/// logged out first, with the same chunks; and a SACK it took acknowledges
+/// no TSN past the furthest it sent, and its peer sent it first. (The
+/// model's channel opens with its setup's flights, strims-node's
+/// model_rtc's DTLS flights, SCTP's association and the token or its
+/// answer, sent as data before the node writes on the link.)
+fn sctp_events_say_what_their_associations_did(d: &Path, run: &str) {
+    let rows = table_rows(d, "sctp_events");
+    if run == "tcp" {
+        assert!(rows.is_empty(), "{run}: a TCP run has no associations");
+        return;
+    }
+    assert!(!rows.is_empty(), "{run}");
+    type Key = (i64, i64, i64);
+    let i = |r: &BTreeMap<String, String>, c: &str| int(r, c);
+    let mut by: BTreeMap<Key, Vec<&BTreeMap<String, String>>> = BTreeMap::new();
+    for r in &rows {
+        let k = (
+            i(r, "node").unwrap(),
+            i(r, "peer").unwrap(),
+            i(r, "link").unwrap(),
+        );
+        by.entry(k).or_default().push(r);
+    }
+    let (mut written, mut first_write) = (BTreeMap::<Key, i64>::new(), BTreeMap::<Key, i64>::new());
+    for w in table_rows(d, "link_writes")
+        .iter()
+        .filter(|w| w["kind"] == "webrtc")
+    {
+        let k = (
+            i(w, "node").unwrap(),
+            i(w, "peer").unwrap(),
+            i(w, "link").unwrap(),
+        );
+        *written.entry(k).or_default() += i(w, "bytes").unwrap();
+        let at = i(w, "t_us").unwrap();
+        first_write
+            .entry(k)
+            .and_modify(|t| *t = (*t).min(at))
+            .or_insert(at);
+    }
+    let data = |r: &BTreeMap<String, String>| {
+        matches!(
+            r["what"].as_str(),
+            "data" | "data_sack" | "rtx" | "fast_rtx"
+        )
+    };
+    let mut sacks = 0;
+    for (k, events) in &by {
+        let wrote = written.get(k).copied().unwrap_or(0);
+        let (mut t, mut sent_bytes) = (i64::MIN, 0);
+        // The TSN ranges of its first sends, and of every packet of DATA.
+        let (mut first, mut every) = (Vec::new(), Vec::new());
+        for (n, r) in events.iter().enumerate() {
+            assert_eq!(i(r, "n"), Some(n as i64), "{run} {k:?}");
+            let at = i(r, "t_us").unwrap();
+            assert!(at >= t, "{run} {k:?}: in time order");
+            t = at;
+            if r["dir"] != "out" {
+                continue;
+            }
+            assert!(i(r, "cwnd_bytes").is_some() && i(r, "flight_bytes").is_some());
+            if !data(r) {
+                continue;
+            }
+            let range = (i(r, "tsn_lo").unwrap(), i(r, "tsn_hi").unwrap());
+            every.push(range);
+            if matches!(r["what"].as_str(), "data" | "data_sack") {
+                first.push(range);
+                // The chunks sent before the node's first write are its
+                // setup's, and so may be some sent with it: the setup's
+                // last flight can leave at the instant the link comes up.
+                if first_write.get(k).is_some_and(|&w| at > w) {
+                    sent_bytes += i(r, "data_bytes").unwrap();
+                }
+            }
+        }
+        // Each TSN went first once, and every one up to the furthest went:
+        // a resend's packet takes new chunks after the resent ones. (The
+        // scheduler stamps a write within its step, so a chunk can go a
+        // little before one cut ahead of it.)
+        first.sort_unstable();
+        assert!(
+            first.windows(2).all(|w| w[0].1 < w[1].0),
+            "{run} {k:?}: a TSN went first twice"
+        );
+        every.sort_unstable();
+        let mut top = -1;
+        for (lo, hi) in every {
+            assert!(
+                lo <= top + 1,
+                "{run} {k:?}: TSNs {} to {} never went",
+                top + 1,
+                lo - 1
+            );
+            top = top.max(hi);
+        }
+        assert!(
+            sent_bytes > 0 && sent_bytes <= wrote,
+            "{run} {k:?}: {sent_bytes} of {wrote}"
+        );
+        // The peer's view of the same association.
+        let Some(theirs) = by.get(&(k.1, k.0, k.2)) else {
+            panic!("{run} {k:?}: its peer logged nothing");
+        };
+        let sent_at = |r: &BTreeMap<String, String>, cols: &[&str]| {
+            let want: Vec<&str> = cols.iter().map(|c| r[*c].as_str()).collect();
+            theirs
+                .iter()
+                .filter(|x| x["dir"] == "out")
+                .filter(|x| cols.iter().map(|c| x[*c].as_str()).collect::<Vec<_>>() == want)
+                .map(|x| i(x, "t_us").unwrap())
+                .min()
+        };
+        let mut furthest = -1;
+        for r in events.iter() {
+            if r["dir"] == "out" {
+                if data(r) {
+                    furthest = furthest.max(i(r, "tsn_hi").unwrap());
+                }
+                continue;
+            }
+            if r["dir"] != "in" {
+                continue;
+            }
+            let at = i(r, "t_us").unwrap();
+            if data(r) {
+                let cols = ["what", "tsn_lo", "tsn_hi", "chunks", "data_bytes"];
+                let sent = sent_at(r, &cols);
+                assert!(
+                    sent.is_some_and(|s| s <= at),
+                    "{run} {k:?}: {r:?} came unsent"
+                );
+            }
+            if let Some(cum) = i(r, "cum_tsn") {
+                sacks += 1;
+                assert!(
+                    cum <= furthest,
+                    "{run} {k:?}: {cum} acknowledged past {furthest}"
+                );
+                let sent = sent_at(r, &["cum_tsn", "gaps"]);
+                assert!(
+                    sent.is_some_and(|s| s <= at),
+                    "{run} {k:?}: {r:?} came unsent"
+                );
+            }
+        }
+    }
+    assert!(sacks > 0, "{run}: the senders took SACKs");
 }
 
 /// A table's rows, each by column name.

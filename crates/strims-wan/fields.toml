@@ -5028,3 +5028,117 @@ type = "int"
 unit = "bytes"
 none = "empty"
 description = "The length of the next frame the link's ppspp writer's QoS session has, in bytes; empty with nothing to send, and but for the node's queues (`queues`)."
+
+[tables.sctp_events]
+sims = ["strims-sim"]
+grain = "SCTP packet a node's data channel association sent or received, or a retransmission timer it fired"
+keys = "k, node, peer, link, n"
+joins = "viewers USING (k, src, node); hosts USING (k, src, node) (the node's kind and stack); link_writes ON (k, src, node, peer, link) (the node's writes on the link the association carries)"
+knobs = ["TRACE_SCTP"]
+sample = true
+zstd = true
+description = "Each packet a node's data channel's SCTP association sent or received and each time its retransmission timer fired, in order: what the packet was, the DATA it carried by TSN, a SACK's cumulative TSN and gap blocks, its bytes, and the association's window and flight as the event left it, so a browser's SCTP sender and its model compare packet by packet (send opportunities, SACK pacing, resends, the flight)."
+notes.strims-sim = "Written with `STRIMS_SIM_TRACE_SCTP=<hosts>` (`Scenario::sctp_log`: `all` or `1`, `seed`, or `hosts:` and host indices, `hosts:0,3`), from the window model's associations (`crate::wan::sctp`: the data channels of hosts with a stack, and the bench's), taken into the run's records at each bin edge (`World::record_sctp`, so the log weighs on no node's heap and its heap bound) and held to the run's end, a node's channel's first DATA its setup's flights (strims-node's model_rtc: the DTLS flights, SCTP's association, the answer's token and the offer's reply), which a browser's stack sends as DTLS records and SCTP's control chunks: a packet out as the association hands it to its uplink, one in as it reaches the node (a SACK as the sender takes it, DATA at the receiver's access link). A testbed run's are its Chromium nodes' (run.sh's `TRACE_SCTP`, which needs `LINK_LOG`): dcSCTP's packet observer logs each packet, decrypted, as dcSCTP hands it to DTLS or takes it (strims-testbed's `sctp` module), stamped by Chromium's log to the µs; the harness writes them to `sctp-<i>.jsonl`, and each association is named by the node's writes it carried (`name_assocs`, against `link_writes`): an association none fits alone has no rows. The log costs the browser's network thread about 0.17 ms a full packet and slows its sending, so a run with it on is timed and counts (its uplink's drops, its packets' trains) otherwise than one with it off: take timing, drops and wire readings from runs with it off, and only what the log alone holds from runs with it on (`sctp_fit_of`'s sides). Firefox's MOZ_LOG names packets but not their chunks, and neither browser's getStats reports SCTP's state, so a Firefox node has no rows."
+
+[columns.sctp_events.t_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+description = "When the association sent or took the packet, or its timer fired, in µs of true time from the stream's start."
+notes.strims-sim = "The model's: a packet out as it is offered to the sender's uplink, one in as it reaches the node's access link (a SACK as the sender takes it). The testbed's: the Chromium log's stamp of the observer's message, on the browser's network thread, ahead of DTLS (out) and past it (in)."
+
+[columns.sctp_events.node]
+sims = ["strims-sim"]
+type = "int"
+description = "The node whose association it is, as `events` numbers hosts."
+
+[columns.sctp_events.peer]
+sims = ["strims-sim"]
+type = "int"
+description = "The node at the association's other end, as `events` numbers hosts."
+
+[columns.sctp_events.link]
+sims = ["strims-sim"]
+type = "int"
+description = "The ordinal of the node's link to the peer that the association carries, from 0, as `link_writes` numbers links: a relink is the next."
+notes.strims-sim = "The model numbers a node's links to a peer in the order it first logged each (as `packets` does); a testbed run's are the link whose writes the association carried."
+
+[columns.sctp_events.n]
+sims = ["strims-sim"]
+type = "int"
+description = "The event's place among its association's, from 0, in time order: packets out and in and timers alike."
+
+[columns.sctp_events.dir]
+sims = ["strims-sim"]
+type = "text"
+none = "empty"
+description = "Which way the packet went: `out` (the association sent it), `in` (it received it); empty for a timer."
+
+[columns.sctp_events.what]
+sims = ["strims-sim"]
+type = "text"
+description = "What the event was: `data` (DATA its sender sent for the first time), `sack` (a SACK alone), `data_sack` (first-sent DATA with a SACK bundled), `rtx` (a packet that resent DATA), `fast_rtx` (a fast retransmission: resent DATA alone, past the window, at the SACK that found it missing), `t3` (the retransmission timer fired), `control` (any other packet: the handshake's, a heartbeat, a stream reset)."
+notes.strims-sim = "The model knows a fast retransmission's packet; a testbed run's `fast_rtx` is a packet of resent DATA alone sent next after a SACK with gap blocks, its other resends `rtx`. A testbed run has no `t3` rows: its timers aren't in the log."
+
+[columns.sctp_events.tsn_lo]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The first TSN of the DATA the packet carried, counted from its direction's initial TSN (0 its first chunk); empty for a packet without DATA."
+notes.strims-sim = "A testbed run's count from the initial TSN the direction's INIT or INIT ACK announced in the log, else from its first DATA; the model's from its first chunk."
+
+[columns.sctp_events.tsn_hi]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The last TSN of the DATA the packet carried, counted as `tsn_lo`; empty where `tsn_lo` is."
+
+[columns.sctp_events.chunks]
+sims = ["strims-sim"]
+type = "int"
+description = "The DATA chunks the packet carried; 0 for one without, and for a timer."
+
+[columns.sctp_events.data_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "The payload bytes of the packet's DATA chunks: the messages' bytes they carried, no chunk headers."
+
+[columns.sctp_events.packet_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "The packet's SCTP bytes: its common header and every chunk with its padding, none of DTLS's, UDP's or IP's; 0 for a timer."
+
+[columns.sctp_events.cum_tsn]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "A SACK's cumulative TSN, counted as the TSNs it acknowledges are (`tsn_lo`: -1 before any); empty for a packet without a SACK."
+
+[columns.sctp_events.gaps]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The gap blocks of the packet's SACK: the runs of chunks past its cumulative TSN its sender holds; empty for a packet without a SACK."
+
+[columns.sctp_events.cwnd_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The association's congestion window as the event left it, on a packet it sent, a SACK it took and a timer; empty on DATA it received, and where the stack's window isn't known."
+notes.strims-sim = "The model's (`Assoc::cwnd`); a testbed run writes none: dcSCTP's window is in no packet, and neither browser reports it."
+
+[columns.sctp_events.flight_bytes]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+none = "empty"
+description = "The association's bytes in flight as the event left it, each chunk as its stack counts it (dcSCTP its header and padded payload, sctp-proto its payload), on a packet it sent, a SACK it took and a timer; empty on DATA it received."
+notes.strims-sim = "The model's (`Assoc::in_flight`, which leaves out chunks marked lost); a testbed run's the chunks its log shows sent past its SACKs' cumulative TSN and gap blocks, as dcSCTP counts them, chunks it marked lost included."
+
+[columns.sctp_events.estimated]
+sims = ["strims-sim"]
+type = "bool"
+description = "Whether the packet's chunks were read from its length, its contents hidden (an association whose packets only a capture shows, inside DTLS); false where the model or the stack's own log says them."

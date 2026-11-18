@@ -14,7 +14,7 @@
 //!                 [--cpu-profile <dir> [--cpu-profile-at <s>]
 //!                  [--cpu-profile-secs <s>] [--cpu-profile-us <us>]]
 //!                 [--forecast] [--spec] [--parent-checks] [--timer-log [--timer-probe]]
-//!                 [--link-log]
+//!                 [--link-log] [--trace-sctp <file>]
 //! ```
 //!
 //! The node's kind (`firefox` or `chromium`) comes from the topology
@@ -74,6 +74,16 @@
 //! [`CAPTURE_GRACE`] after the last line, so the capture's last flush
 //! arrives before the browser is killed.
 //!
+//! With `--trace-sctp` (Chromium only), Chromium's dcSCTP logs every
+//! packet its data channels send and receive
+//! ([`strims_testbed::sctp::CHROMIUM_FLAGS`]), and the harness writes each
+//! to `<file>` as a JSON line ([`strims_testbed::sctp::Packet::json`]) in
+//! place of its log message on stderr, which ends with the browser's
+//! output, the lines it couldn't read counted there. Chromium then runs
+//! with `TZ=UTC`, so its log's local time is the UTC the observer reads.
+//! The log costs Chromium's network thread about 0.17 ms a full packet and
+//! slows its sending (the sctp module's docs).
+//!
 //! With `--cpu-profile` (Chromium only), Chromium listens for the DevTools
 //! protocol on 127.0.0.1:[`CDP_PORT`], and from `--cpu-profile-at` seconds
 //! after the start (default 30) for `--cpu-profile-secs` (default 30) the
@@ -101,6 +111,7 @@ use serde_json::{Value, json};
 use strims_testbed::browser::{Bundle, Site, args as browser_args, firefox_profile};
 use strims_testbed::native::{now_ms, read_host, tree_cpu_ms, write_host};
 use strims_testbed::record::BIN_MS;
+use strims_testbed::sctp::{CHROMIUM_FLAGS as SCTP_FLAGS, Line as SctpLine, Observer};
 use strims_testbed::shape::RATE;
 use strims_testbed::topology::{BIND_PORT, Kind, Link, Topology, key_of, network_key};
 use tokio::sync::{broadcast, mpsc};
@@ -148,6 +159,7 @@ struct Args {
     timer_log: bool,
     timer_probe: bool,
     link_log: bool,
+    trace_sctp: Option<PathBuf>,
 }
 
 impl Args {
@@ -190,6 +202,7 @@ fn args() -> Result<Args, String> {
         timer_log: false,
         timer_probe: false,
         link_log: false,
+        trace_sctp: None,
     };
     while let Some(flag) = it.next() {
         let mut value = || it.next().ok_or(format!("{flag} needs a value"));
@@ -220,6 +233,7 @@ fn args() -> Result<Args, String> {
             "--timer-log" => a.timer_log = true,
             "--timer-probe" => a.timer_probe = true,
             "--link-log" => a.link_log = true,
+            "--trace-sctp" => a.trace_sctp = Some(value()?.into()),
             _ => return Err(format!("unknown flag {flag}")),
         }
     }
@@ -565,18 +579,68 @@ impl CaptureFiles {
     }
 }
 
-/// Copies `pipe`'s lines to stderr, on a thread.
-fn relay_output(pipe: impl Read + Send + 'static, tag: &'static str) {
+/// Copies `pipe`'s lines to stderr, on a thread, and with `sctp` the
+/// packets dcSCTP's observer logs among them to its file
+/// ([`strims_testbed::sctp::Observer`]) instead. The thread ends as the
+/// browser closes the pipe; [`Relay`] waits for it.
+fn relay_output(pipe: impl Read + Send + 'static, tag: &'static str, sctp: Option<File>) -> Relay {
+    let (done, wait) = std::sync::mpsc::sync_channel(1);
     // A blocking pipe, read until the browser closes it.
     #[allow(clippy::disallowed_methods)]
     std::thread::spawn(move || {
+        let mut sctp = sctp.map(|f| (Observer::default(), BufWriter::new(f), 0u64));
         for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+            if let Some((observer, out, packets)) = sctp.as_mut() {
+                match observer.take(&line, now_us()) {
+                    SctpLine::Packet(p) => {
+                        *packets += 1;
+                        if writeln!(out, "{}", p.json()).is_err() {
+                            eprintln!("{tag}: the sctp file took no more");
+                            sctp = None;
+                        }
+                        continue;
+                    }
+                    SctpLine::Part => continue,
+                    SctpLine::Other => {}
+                }
+            }
             if let Some(url) = line.strip_prefix("DevTools listening on ") {
                 let _ = DEVTOOLS.set(url.trim().to_owned());
             }
             eprintln!("{tag}: {line}");
         }
+        if let Some((observer, mut out, packets)) = sctp {
+            if let Err(e) = out.flush() {
+                eprintln!("{tag}: sctp file: {e}");
+            }
+            eprintln!(
+                "{tag}: sctp: {packets} packets, {} lines unread",
+                observer.unread
+            );
+        }
+        let _ = done.send(());
     });
+    Relay(wait)
+}
+
+/// A [`relay_output`] thread, waited for (a few seconds at most) as this
+/// drops, after the browser's own drop closed its pipes.
+struct Relay(std::sync::mpsc::Receiver<()>);
+
+impl Drop for Relay {
+    fn drop(&mut self) {
+        let _ = self.0.recv_timeout(Duration::from_secs(5));
+    }
+}
+
+/// The time, in µs of Unix time.
+fn now_us() -> u64 {
+    // The observer's log stamps a time of day, which the harness's clock
+    // dates.
+    #[allow(clippy::disallowed_methods)]
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_micros()).unwrap_or(u64::MAX))
 }
 
 /// The browser's DevTools socket, as Chromium prints it.
@@ -626,13 +690,28 @@ async fn run() -> Result<(), String> {
     });
     let url = format!("http://{}/e2e.html?count=1&logLevel=0", site.addr);
     let mut args = browser_args(me.kind, &profile, &url);
+    let sctp = match &a.trace_sctp {
+        Some(_) if me.kind != Kind::Chromium => {
+            return Err("--trace-sctp needs Chromium".to_owned());
+        }
+        Some(path) => {
+            args.splice(0..0, SCTP_FLAGS.iter().map(|f| (*f).into()));
+            Some(File::create(path).map_err(|e| format!("{}: {e}", path.display()))?)
+        }
+        None => None,
+    };
     if a.cpu_profile.is_some() {
         if me.kind != Kind::Chromium {
             return Err("--cpu-profile needs Chromium".to_owned());
         }
         args.insert(0, format!("--remote-debugging-port={CDP_PORT}").into());
     }
-    let mut child = Command::new(&bin)
+    let mut command = Command::new(&bin);
+    if sctp.is_some() {
+        // Chromium's log stamps local time; the observer reads it as UTC.
+        command.env("TZ", "UTC");
+    }
+    let mut child = command
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -640,12 +719,14 @@ async fn run() -> Result<(), String> {
         .spawn()
         .map_err(|e| format!("{}: {e}", bin.display()))?;
     let pid = child.id();
-    if let Some(out) = child.stdout.take() {
-        relay_output(out, "browser");
-    }
-    if let Some(err) = child.stderr.take() {
-        relay_output(err, "browser");
-    }
+    let _out = child
+        .stdout
+        .take()
+        .map(|out| relay_output(out, "browser", None));
+    let _err = child
+        .stderr
+        .take()
+        .map(|err| relay_output(err, "browser", sctp));
     let _browser = Browser(child);
     eprintln!("{} opened {url} at {}", bin.display(), now_ms());
 

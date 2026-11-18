@@ -20,6 +20,8 @@ pub mod native;
 pub mod node;
 pub mod peers;
 pub mod record;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod sctp;
 pub mod shape;
 pub mod stream;
 pub mod topology;

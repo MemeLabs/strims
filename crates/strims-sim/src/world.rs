@@ -157,6 +157,10 @@ pub(crate) struct HostState {
     pub link_rows: LinkHostRows,
     pub link_log_lost: u64,
     pub link_keys: BTreeMap<u64, LinkHostKey>,
+    /// Its associations' events the WAN scheduler handed over so far, by
+    /// peer and link ([`crate::report::WanHostReport::sctp`]), held in the
+    /// records' memory.
+    pub sctp: crate::report::SctpAssocs,
     /// When it left for good ([`crate::Fault::Depart`]), in ms.
     pub departed: Option<u64>,
     /// Crashed, and not restarted yet.
@@ -523,6 +527,22 @@ impl World {
     /// ([`crate::Report::wire_bins`]), in the records' group.
     pub(crate) fn record_wire_bin(&self, counters: Vec<[u64; crate::wan::UP_COUNTERS.len()]>) {
         self.record(|st| st.wire_bins.push(counters));
+    }
+
+    /// Takes the associations' events the WAN scheduler logged since its
+    /// last take ([`crate::wan::Scheduler::take_sctp`]), by host, into the
+    /// records' group, so the log weighs on no node's heap.
+    pub(crate) fn record_sctp(&self, taken: Vec<crate::report::SctpAssocs>) {
+        if taken.iter().all(BTreeMap::is_empty) {
+            return;
+        }
+        self.record(|st| {
+            for (hs, events) in st.hosts.iter_mut().zip(taken) {
+                for (k, mut v) in events {
+                    hs.sctp.entry(k).or_default().append(&mut v);
+                }
+            }
+        });
     }
 
     pub fn name(&self, h: HostIx) -> &str {

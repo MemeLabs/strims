@@ -703,6 +703,10 @@ impl AckWaits {
     }
 }
 
+/// A host's data channels' associations' events by peer and link
+/// (`strims_testbed::sctp`, the `sctp_events` table).
+pub type SctpAssocs = BTreeMap<(HostIx, u32), Vec<strims_testbed::sctp::SctpEvent>>;
+
 /// One host's access link in WAN mode.
 #[derive(Clone, Debug)]
 pub struct WanHostReport {
@@ -764,6 +768,11 @@ pub struct WanHostReport {
     /// its uplink, in the order the uplink's queue took them (the
     /// `packets` table): a testbed run's from its captures.
     pub packets: Vec<PacketRecord>,
+    /// With [`Scenario::sctp_log`] naming it, its data channels'
+    /// associations' events by peer and link, each association's in time
+    /// order (the `sctp_events` table): a testbed run's from its dcSCTP's
+    /// packet log.
+    pub sctp: SctpAssocs,
     /// With [`Scenario::node_bins`], the data it offered its uplink's
     /// queue, before the queue dropped any (the `node_bins` table's
     /// `offered_*`): each offer's time (since the start), IP bytes and

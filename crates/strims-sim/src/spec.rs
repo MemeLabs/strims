@@ -708,6 +708,12 @@ pub struct Scenario {
     /// connections' readings and holds under it): none by default.
     /// Changes no trace.
     pub link_log: Option<HostSet>,
+    /// With [`Scenario::wire_bins`], the hosts whose data channels' SCTP
+    /// associations log each packet they send or receive and each timer
+    /// they fire, for the tables' `sctp_events` (the window model's
+    /// associations, [`crate::wan::sctp`]): none by default. Changes no
+    /// trace.
+    pub sctp_log: Option<HostSet>,
     /// When the first swarm's viewers arrive ([`crate::arrivals`]): with
     /// the run by default ([`Arrivals::T0`]). The run resolves it into
     /// [`HostSpec::arrive_at`] and lays the links out in arrival order.
@@ -976,6 +982,7 @@ impl Scenario {
             timer_log: None,
             timer_probe: false,
             link_log: None,
+            sctp_log: None,
             arrivals: Arrivals::T0,
             departures: None,
             mix: false,
