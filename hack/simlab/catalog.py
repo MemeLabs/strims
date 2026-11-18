@@ -322,10 +322,14 @@ indexed), as simlab.scoring's sessions do always: a query scores by its
 checkout's scoring.sql over any lake, the main checkout's or one
 SIM_DB_ROOT names, with no index since scoring.sql changed. A
 scoring.sql that doesn't load fails the query (store_host.DuckError,
-saying so). The console's readers and ui.py's (pool) read the catalog as
-it serves every session, the rows behind what a console tab shows:
-served_note is the line they print where its scoring objects aren't this
-checkout's.
+saying so), as does one with a macro whose default is a list, a struct
+or a map, which DuckLake commits and then can't read back
+(nested_defaults): scoring_text refuses it before any statement runs,
+and an index that would make the scoring objects refuses to run, saying
+so, the catalog left as it was. The console's readers and ui.py's
+(pool) read the catalog as it serves every session, the rows behind
+what a console tab shows: served_note is the line they print where its
+scoring objects aren't this checkout's.
 
 An experiment's `tiers` are suite.py's TIERS (as they are now) its cells
 came from: each cell is matched by its name, test and env (a farm cell's
@@ -1229,8 +1233,12 @@ def state():
         current = not any(x[k] for k in ("gone", "changed", "new", "ins_changed", "need_verdicts"))
         current = current and (info.get("verdict_version") == x["version"] or not mine["verdicts"])
         if current and mine["scoring"]:
-            _, sv = lake_scoring(lake_columns())
-            current = not sv or info.get("scoring_version") == sv and not info.get("scoring_behind")
+            # Where an index would refuse (refused_scoring), not current.
+            if refused_scoring():
+                current = False
+            else:
+                _, sv = lake_scoring(lake_columns())
+                current = not sv or info.get("scoring_version") == sv and not info.get("scoring_behind")
         current = current and not docs_of(info)["moved"]
         if current and not mine["verdicts"]:
             current = private_current(x["cache"])
@@ -1445,6 +1453,17 @@ def index(workers=None, progress=None, wait=True):
             say("index", "another index holds lake/index.lock")
             return None
         extensions()
+        if why := refused_scoring():
+            # Before anything changes the catalog (a repair, a catalog of
+            # another CATALOG_VERSION wiped): refused where this checkout
+            # would make its scoring objects, as it would make those of a
+            # catalog it can't read or holds none of.
+            try:
+                held = recorded()
+            except store_host.DuckError:
+                held = None
+            if owns(held[0] if held else {})["scoring"]:
+                raise refusal(why)
         repaired, main_gone = repair(say) if catalog_path().exists() else ([], False)
         rec = recorded()
         fresh = rec is None
@@ -2463,14 +2482,19 @@ def lake_scoring(cols):
     """The catalog's scoring objects (scoring_sql, from this checkout's
     suite.py) over the raw tables' columns `cols`, and their
     scoring_version; none, with a warning, when suite.py doesn't load.
-    The views main_sql makes of them are the database's tables (have), so
-    a macro that needs one the catalog lacks fails saying so when called
-    (needed): DuckDB binds a table macro as it makes it, and one reading a
-    table that isn't there would fail the index."""
+    Where scoring_text refuses scoring.sql, which an index checks before it
+    changes anything (refused_scoring), the index's refusal, as there:
+    scoring.sql changed since. The views main_sql makes of them are the
+    database's tables (have), so a macro that needs one the catalog lacks
+    fails saying so when called (needed): DuckDB binds a table macro as it
+    makes it, and one reading a table that isn't there would fail the
+    index."""
     have = {name: set(cols[t]) for t, name in sim_tables(cols).items()} | {t: set(c) for t, c in cols.items()}
     try:
         sv = scoring_version()
         return [scoring_sql(scoring_cols({t: cols.get(t, {}) for t in ("rows", "verdicts")}, have=have))], sv
+    except store_host.DuckError as e:
+        raise refusal(str(e)) from None
     except Exception as e:
         print(f"index: no scoring macros: suite.py's METRICS don't load ({e})", file=sys.stderr)
         return [], None
@@ -3115,6 +3139,161 @@ ELSE_NONE = re.compile(r"else none: (.+)")
 # them: a need of one holds where `have` doesn't list it, as an index's
 # (the raw tables' columns) doesn't, and is checked where `have` does.
 MADE = {"jobs", "experiment_jobs"}
+# A name as SQL writes one: quoted, or bare.
+SQL_NAME = r'"(?:[^"]|"")*"|[a-z_][a-z0-9_]*'
+# A statement making a macro (DuckDB's MACRO or FUNCTION: TEMP or not, IF
+# NOT EXISTS or not, its name in a schema or not), up to its first
+# parameter list's `(`; its name, group 1.
+MACRO_DEF = re.compile(rf"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?(?:MACRO|FUNCTION)\s+"
+                       rf"(?:IF\s+NOT\s+EXISTS\s+)?(?:(?:{SQL_NAME})\s*\.\s*)*({SQL_NAME})\s*\(", re.I)
+# A string literal or a quoted name, and a comment: what nested_defaults
+# reads a statement's structure without (masked).
+SQL_OPAQUE = re.compile(r"'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|--[^\n]*|/\*.*?\*/", re.S)
+# What macro_params splits a statement at, and the depth each bracket
+# moves it by (a list's and a struct's commas are their own).
+SQL_PUNCT = re.compile(r"[()\[\]{},;]")
+DEPTH = {"(": 1, "[": 1, "{": 1, ")": -1, "]": -1, "}": -1}
+# A default's type (DuckDB's typeof) that DuckLake (ducklake ac7595b0 over
+# DuckDB 1.5.6) commits and then can't read back: a list, a struct or a
+# map, however written ([100, 400], NULL::INT[], string_split(...),
+# {'a': 1}). The session's next statement and every later ATTACH of the
+# catalog fail (INTERNAL Error: Attempting to dereference an optional
+# pointer that is not set) until the catalog is made again from the
+# cache. A scalar or string default reads back; a fixed-size array, a
+# union or a bare NULL fails the commit, which writes nothing.
+NESTED_TYPE = re.compile(r"\[\]$|^(?:STRUCT|MAP)\(")
+
+
+def masked(text):
+    """`text` with its comments blanked (plain), and with its string
+    literals' and quoted names' insides blanked too (code), offsets
+    kept."""
+    def blank(s):
+        return re.sub(r"[^\n]", " ", s)
+
+    def keep(m, inside):
+        s = m.group()
+        return (s[0] + inside(s[1:-1]) + s[-1]) if s[0] in "'\"" else blank(s)
+
+    return SQL_OPAQUE.sub(lambda m: keep(m, str), text), SQL_OPAQUE.sub(lambda m: keep(m, blank), text)
+
+
+def unquoted(name):
+    return name[1:-1].replace('""', '"') if name.startswith('"') else name
+
+
+def macro_params(code, at):
+    """The spans of the parameters of the macro statement in `code`
+    (masked's) whose first parameter list opens at `at`: those of that
+    list and of each overload's (a `(` at the statement's top level right
+    after a comma there), each split at its list's own commas, to the
+    statement's top-level `;`. A parameter list's `name := ...` sits at
+    its top level, so a call's named argument in a body isn't one."""
+    out, depth, start, opens, i = [], 0, None, True, at
+    for t in SQL_PUNCT.finditer(code, at):
+        c, gap = t.group(), code[i:t.start()].strip()
+        i = t.end()
+        if depth == 0:
+            if c == ";":
+                break
+            if c == "(" and opens and not gap:
+                start = t.end()
+            opens = c == ","
+        elif depth == 1 and start is not None and c in ",)":
+            out.append((start, t.start()))
+            start = t.end() if c == "," else None
+        depth += DEPTH.get(c, 0)
+    return out
+
+
+@functools.lru_cache(maxsize=16)
+def default_types(exprs):
+    """DuckDB's type (typeof) of each constant expression of the tuple
+    `exprs`, in memory (store_host.duck: the module's executor, or the
+    CLI), all in one query; where that fails, each alone, None for one
+    that doesn't evaluate (its macro's CREATE says why)."""
+    if not exprs:
+        return ()
+    try:
+        row = store_host.duck("SELECT " + ", ".join(f"typeof(({e})) AS t{i}" for i, e in enumerate(exprs)) + ";")[0]
+        return tuple(row[f"t{i}"] for i in range(len(exprs)))
+    except store_host.DuckError:
+        out = []
+        for e in exprs:
+            try:
+                out.append(store_host.duck(f"SELECT typeof(({e})) AS t;")[0]["t"])
+            except store_host.DuckError:
+                out.append(None)
+        return tuple(out)
+
+
+def macro_defaults(text):
+    """The defaults of the macros SQL `text` makes, as (macro, parameter,
+    its default's SQL) in order: of every parameter list of each macro
+    (macro_params), comments left out. A default's `:=` follows its
+    parameter's name with no call before it, so a group of a body that
+    macro_params takes for a list (`, (FROM f(x, g := 1)) AS b`) gives
+    none."""
+    plain, code = masked(text)
+    out = []
+    for m in MACRO_DEF.finditer(code):
+        for lo, hi in macro_params(code, m.end() - 1):
+            head, sep, _ = code[lo:hi].partition(":=")
+            if sep and "(" not in head:
+                name = re.match(rf"\s*({SQL_NAME})", plain[lo:hi], re.I)
+                out.append((unquoted(plain[m.start(1):m.end(1)]), unquoted(name.group(1)) if name else head.strip(),
+                            plain[lo + len(head) + 2:hi].strip()))
+    return out
+
+
+def nested_defaults(text):
+    """The parameters of the macros SQL `text` makes whose default's type
+    is a list, a struct or a map (NESTED_TYPE), however written, or can't
+    be told (None: the default doesn't evaluate alone, as a call of
+    another of the file's macros doesn't), as (macro, parameter, type) in
+    order (macro_defaults, default_types)."""
+    found = macro_defaults(text)
+    types = default_types(tuple(e for *_, e in found))
+    return [(m, p, t) for (m, p, _), t in zip(found, types) if t is None or NESTED_TYPE.search(t)]
+
+
+def scoring_text(consts):
+    """scoring.sql's text, its @{name} constants (`consts`) filled in;
+    refused (store_host.DuckError) where a default of one of its macros
+    is a list, a struct or a map, or one whose type can't be told
+    (nested_defaults), before any session or index makes it."""
+    text = CONST.sub(lambda m: str(consts[m.group(1)]), SCORING.read_text())
+    if bad := nested_defaults(text):
+        raise store_host.DuckError(
+            f"this checkout's scoring macros ({relative(SCORING)}) don't load: "
+            + ", ".join(f"{m}'s {p} has a default of type {t}" if t else
+                        f"{m}'s {p} has a default that doesn't evaluate alone, its type unknown" for m, p, t in bad)
+            + ": DuckLake commits a macro whose default is a list, a struct or a map and then can't read it "
+            "back, every later ATTACH of the catalog failing; take scalars or a delimited string")
+    return text
+
+
+def refused_scoring():
+    """scoring_text's refusal of this checkout's scoring.sql, its message;
+    None where it loads, or where suite.py doesn't (lake_scoring warns of
+    that)."""
+    try:
+        consts = scoring_consts()
+    except Exception:
+        return None
+    try:
+        scoring_text(consts)
+    except store_host.DuckError as e:
+        return str(e)
+    return None
+
+
+def refusal(why):
+    """The exit of an index that would make the scoring objects where
+    scoring_text refuses scoring.sql (`why`, refused_scoring's message):
+    non-zero, before it changes the catalog."""
+    return SystemExit(f"index: {why}\n(nothing indexed, the catalog left as it was: its scoring macros aren't "
+                      "this checkout's until its scoring.sql loads)")
 
 
 def comment_above(text, at):
@@ -3313,8 +3492,7 @@ SELECT k, src, metric, value FROM (UNPIVOT (
        {getters}
     FROM rows r LEFT JOIN verdicts v USING (k, src) LEFT JOIN job_runs j USING (k, src)
 ) ON COLUMNS(* EXCLUDE (k, src)) INTO NAME metric VALUE value);""")
-    consts = scoring_consts(s)
-    text = CONST.sub(lambda m: str(consts[m.group(1)]), SCORING.read_text())
+    text = scoring_text(scoring_consts(s))
     text = ROW_FIELD.sub(lambda m: f"r.{m.group(1)}" if cols.get("r") is None or m.group(1) in cols["r"]
                          else "NULL::DOUBLE", text)
     out.append(needed(text, cols.get("have")))
@@ -3327,8 +3505,7 @@ def scoring_statements(names, have):
     constants filled in, each one whose `-- needs:` tables are all in
     `have` (a set of table names): the macros simlab.query's views over
     the cache take from it, so a definition both read is one."""
-    consts = scoring_consts()
-    text = CONST.sub(lambda m: str(consts[m.group(1)]), SCORING.read_text())
+    text = scoring_text(scoring_consts())
     out = []
     for m in MACRO.finditer(text):
         needs = {n for line in comment_above(text, m.start()) if (x := NEEDS.match(line)) for n in x.group(1).split()}

@@ -139,8 +139,23 @@ simlab.verdict's derive pool:
                code made are read as they are, saying so once; the
                reports' readers (forecast.connected) take the edit's
                sketch macros; a scoring.sql that doesn't load fails a
-               query, saying so; served_note names the catalog's macros
-               while they aren't this checkout's
+               query, saying so, as does one whose macro has a list
+               default, and an index refuses it, exiting non-zero rather
+               than call the catalog up to date, the catalog then
+               attaching with its macros as they were, and one of another
+               CATALOG_VERSION left as it was, not wiped; served_note
+               names the catalog's macros while they aren't this
+               checkout's
+  NestedDefaults
+               no macro the catalog makes (scoring.sql's, each default
+               judged, simlab's other SQL files', testbed.cell_sql's) has
+               a list, struct or map default; one planted in any form of
+               macro (IF NOT EXISTS, quoted or in a schema, an overload,
+               comments within) and any spelling of default found,
+               scalars, strings, a call's list argument and a macro in a
+               comment or a string not, a default that doesn't evaluate
+               alone found as of no known type; each refused by
+               scoring_sql and scoring_statements
   MainDocs     main's doc files from git, for the main checkout's lake
                alone; this checkout's as git names their contents
   DocsVersion  docs_version hashes the code that loaded, and covers every
@@ -195,7 +210,7 @@ if __name__ == "__main__":
 import golden_cli  # noqa: E402
 import simlab  # noqa: E402
 from simlab import (ask, catalog, describe, engine, forecast, query, scoring, semantic, store,  # noqa: E402
-                    store_host, suite, verdict, views, vocab)
+                    store_host, suite, testbed, verdict, views, vocab)
 
 
 class Fixture(unittest.TestCase):
@@ -2370,6 +2385,62 @@ class Served(DocsFixture):
                 self.assertTrue(str(e.exception).startswith(f"this checkout's scoring macros ({broken}) don't load: "
                                                             "Parser Error: "), str(e.exception))
 
+    def planted(self):
+        """A copy of scoring.sql whose fisher_p has a list default, and the
+        start of the refusal of it."""
+        planted = self.changed("CREATE OR REPLACE MACRO fisher_p(k_, n_, m_, n2_, gaps := [100, 400]) AS 0.125;")
+        return planted, (f"this checkout's scoring macros ({planted}) don't load: fisher_p's gaps has a default of "
+                         "type INTEGER[]: DuckLake commits a macro whose default is a list")
+
+    def refused(self, planted, refused):
+        """An index over `planted`'s scoring.sql exits non-zero with the
+        refusal, printing nothing else."""
+        err = io.StringIO()
+        with mock.patch.object(catalog, "SCORING", planted), contextlib.redirect_stderr(err), \
+                self.assertRaises(SystemExit) as e:
+            self.index()
+        self.assertTrue(str(e.exception.code).startswith(f"index: {refused}"), e.exception.code)
+        self.assertTrue(str(e.exception.code).endswith(
+            "\n(nothing indexed, the catalog left as it was: its scoring macros aren't this checkout's until its "
+            "scoring.sql loads)"), e.exception.code)
+        self.assertEqual(err.getvalue(), "")
+
+    def test_a_macro_with_a_list_default_is_refused_and_the_catalog_still_attaches(self):
+        self.index()
+        made = self.info()["scoring_version"]
+        self.assertTrue(catalog.state()["current"])
+        planted, refused = self.planted()
+        with mock.patch.object(catalog, "SCORING", planted):
+            for read in (lambda: catalog.lake(self.P + ";"), lambda: catalog.Readers().query(self.P),
+                         lambda: scoring.query(self.P + ";")):
+                with self.assertRaises(store_host.DuckError) as e:
+                    read()
+                self.assertTrue(str(e.exception).startswith(refused), str(e.exception))
+            # An index with nothing else to do refuses rather than call the
+            # catalog up to date.
+            self.assertFalse(catalog.state()["current"])
+        self.refused(planted, refused)
+        # The index wrote no macro of it: a new reader attaches the catalog,
+        # whose scoring objects are as they were.
+        self.assertEqual(self.info()["scoring_version"], made)
+        with catalog.latest():
+            self.assertNotEqual(catalog.lake(self.P + ";")[0]["p"], 0.125)
+        self.assertTrue(catalog.state()["current"])
+
+    def test_a_refused_index_leaves_a_catalog_of_another_version_as_it_was(self):
+        # A catalog of another CATALOG_VERSION, which an index would wipe and
+        # make again: refused before that, it stays as it was.
+        self.index()
+        before = catalog.snapshot()
+        planted, refused = self.planted()
+        with mock.patch.object(catalog, "CATALOG_VERSION", catalog.CATALOG_VERSION + 1):
+            self.assertIsNone(catalog.recorded())
+            self.refused(planted, refused)
+        self.assertEqual(catalog.snapshot(), before)
+        self.assertEqual(self.info()["catalog_version"], str(catalog.CATALOG_VERSION))
+        with catalog.latest():
+            self.assertNotEqual(catalog.lake(self.P + ";")[0]["p"], 0.125)
+
     def test_verdicts_an_index_of_other_code_made_are_said_to_be(self):
         self.index()
         info = self.info()
@@ -2383,6 +2454,71 @@ class Served(DocsFixture):
             self.assertEqual(err.getvalue(), f"catalog: the catalog's verdicts (verdict_version {made}) aren't this "
                                              f"checkout's (derived_version {'c' * 12}): reading the catalog's until "
                                              "simdb.py index from this checkout makes them again\n")
+
+
+class NestedDefaults(unittest.TestCase):
+    """catalog.nested_defaults over macros of each form and defaults of
+    each spelling; scoring_sql and scoring_statements over a scoring.sql
+    holding one."""
+
+    # Each planted macro, and its default's type.
+    PLANTED = {"CREATE MACRO m(x, gaps := [100, 400]) AS TABLE SELECT x": "INTEGER[]",
+               "CREATE OR REPLACE MACRO m(x, gaps:=[100,400]) AS x": "INTEGER[]",
+               "CREATE OR REPLACE TEMP MACRO m(x,\n    gaps :=\n    [100, 400]) AS x": "INTEGER[]",
+               "CREATE MACRO IF NOT EXISTS m(x, gaps := [1]) AS x": "INTEGER[]",
+               'CREATE MACRO main."m"(x, "gaps" := [1]) AS x': "INTEGER[]",
+               "CREATE MACRO m(a) AS a, (b, gaps := [1, 2]) AS b": "INTEGER[]",
+               "CREATE MACRO m(x, -- the gaps\n  gaps := [1] /* a list */) AS x": "INTEGER[]",
+               "CREATE MACRO m(x, a := least(1, 2), gaps := ([100, 400])::INT[]) AS x": "INTEGER[]",
+               "CREATE MACRO m(x, gaps := ARRAY[100, 400]) AS x": "INTEGER[]",
+               "CREATE MACRO m(x, gaps := coalesce(NULL, [1])) AS x": "INTEGER[]",
+               "CREATE MACRO m(x, gaps := NULL::INT[]) AS x": "INTEGER[]",
+               "CREATE FUNCTION main.m(x, gaps := list_value(100, 400)) AS x": "INTEGER[]",
+               "CREATE MACRO m(x, gaps := string_split('1,2', ',')) AS x": "VARCHAR[]",
+               "CREATE MACRO m(x, gaps := {'a': 1, 'b': 2}) AS x": "STRUCT(a INTEGER, b INTEGER)",
+               "CREATE MACRO m(x, gaps := MAP {'a': 1}) AS x": "MAP(VARCHAR, INTEGER)"}
+    # Scalar and string defaults, a call's list argument in a body (in a
+    # subquery after a comma too), and a macro in a comment or a string.
+    FINE = ("CREATE MACRO m(x, gaps := '100,400', s := ')', d := 'inf'::DOUBLE, i := [1, 2][1]) AS x",
+            "CREATE MACRO m(x) AS TABLE FROM sctp_stages_of(x, gaps := [100, 400])",
+            "CREATE MACRO m(x) AS TABLE SELECT a, (FROM f(x, g := [1])) AS b FROM t",
+            "-- CREATE MACRO m(x, gaps := [1]) AS x\n/* CREATE MACRO m(x, gaps := [1]) */\n"
+            "SELECT 'CREATE MACRO m(x, gaps := [1])'")
+
+    def test_no_macro_the_catalog_makes_has_one(self):
+        filled = catalog.scoring_text(catalog.scoring_consts())
+        # Each of its defaults judged: none fails to evaluate.
+        self.assertEqual(catalog.nested_defaults(filled), [])
+        self.assertGreater(len(catalog.macro_defaults(filled)), 50)
+        # macros.sql's macros are made only in query.py's sessions over the
+        # cache, in memory, where a list default works: held to the rule
+        # here alone.
+        for p in sorted(set(catalog.SCORING.parent.glob("*.sql")) - {catalog.SCORING}):
+            self.assertEqual(catalog.nested_defaults(p.read_text()), [], p.name)
+        self.assertEqual(catalog.nested_defaults(testbed.cell_sql("raw.tier_cells")), [])
+
+    def test_a_planted_one_is_found_and_refused(self):
+        for sql, ty in self.PLANTED.items():
+            self.assertEqual(catalog.nested_defaults(sql), [("m", "gaps", ty)], sql)
+        for sql in self.FINE:
+            self.assertEqual(catalog.nested_defaults(sql), [], sql)
+        # A default that doesn't evaluate alone (a call of another of
+        # scoring.sql's macros) has a type that can't be told.
+        unknown = "CREATE MACRO m(x, g := sketch_floor(1.0), h := [1]) AS x"
+        self.assertEqual(catalog.nested_defaults(unknown), [("m", "g", None), ("m", "h", "INTEGER[]")])
+        d = Path(tempfile.mkdtemp(prefix="simlab-nested-default-"))
+        self.addCleanup(shutil.rmtree, d)
+        planted = d / "scoring.sql"
+        for sql, why in ((next(iter(self.PLANTED)), "don't load: m's gaps has a default of type INTEGER[]: "),
+                         (unknown, "don't load: m's g has a default that doesn't evaluate alone, its type unknown, "
+                                   "m's h has a default of type INTEGER[]: ")):
+            planted.write_text(catalog.SCORING.read_text() + "\n-- needs: rows\n" + sql + ";\n")
+            with mock.patch.object(catalog, "SCORING", planted):
+                for make in (lambda: catalog.scoring_sql(catalog.scoring_cols({})),
+                             lambda: catalog.scoring_statements({"m"}, {"rows"})):
+                    with self.assertRaises(store_host.DuckError) as e:
+                        make()
+                    self.assertIn(why, str(e.exception))
 
 
 class MainDocs(unittest.TestCase):

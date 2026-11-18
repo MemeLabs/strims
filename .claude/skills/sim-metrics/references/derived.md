@@ -46,7 +46,12 @@ verdict's phases from the runs' scenario events).
      (the `*_of(jobs)` form: `viewer_lag_of`, `effects_of`), so that
      neither copies it for jobs of its own;
    - vocabulary names from the vocabulary (as `@{...}` constants or the
-     vocabulary's tables), never literals.
+     vocabulary's tables), never literals;
+   - no list-valued default (`gaps := [100, 400]`, and a struct or map,
+     however written): take scalars or a delimited string, as DuckLake
+     commits such a macro and then can't read it back, every later
+     ATTACH of the catalog failing until it is made again from the cache
+     (`catalog.scoring_text` refuses one).
    `catalog.scoring_version` moves, and the catalog makes the scoring
    again at the next index. Before it, `simdb.py lake` and `view` from
    the changed checkout already run the change (`catalog.scoring_served`),
