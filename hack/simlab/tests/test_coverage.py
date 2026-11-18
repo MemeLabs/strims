@@ -65,6 +65,10 @@ publishes the same chunks: two streams, a chunk of each every 250 ms from
   Cli          simdb.py coverage-report's tables and JSON, as a caller
                runs it, the seed log's sections among them, and a section
                the catalog can't answer yet
+  Ties         apart from the fixture catalog, an in-memory run's rows
+               that tie on what the macros order them by (subscriptions'
+               ends at one ms, a node's rows at one ms, written pushes at
+               one ms): one answer however the tables' rows are ordered
 
   python3 hack/simlab/tests/test_coverage.py
 """
@@ -1232,6 +1236,126 @@ class Cli(Fixture):
         got = json.loads(self.cli(*args, "--json"))
         want = coverage.report(LOG_SEL, ["invariants", "attribution"], warn=[].append)
         self.assertEqual(got, {**{s: r.records() for s, r in want.items()}, "warnings": []})
+
+
+# The ties' run: two streams, chunk q of stream q mod 2, one every 250 ms
+# from 1 s, its seed SEED.
+TIE_RUN = {"k": "tie", "src": "suite/wt/cv-tie", "seed_node": SEED, "seed_from": "series_meta", "streams": 2,
+           "streams_from": "series_meta", "interval_ms": 250.0, "end_ms": 60000, "arrivals_rows": 0,
+           "parents_rows": 0, "seed_decisions_rows": 0, "seed_sends_rows": 1}
+TIE_MACROS = ("seed_subscriptions_in", "seed_children_in", "coverage_chunks_in", "seed_writes_in")
+TIE_HAVE = {"arrivals", "arrivals.released_ms", "arrivals.incarnation", "parents", "seed_decisions", "seed_sends"}
+
+
+class Ties(unittest.TestCase):
+    """Rows that tie on what a macro orders them by, in a run of the ties'
+    (TIE_RUN): each macro answers the same however the tables' rows are
+    ordered, and every time.
+
+      parents  hosts 1 and 2 the seed's children of stream 0 from the
+               start, ending at 10 s by a prune and a loss: chunk 44's
+               `after`, its stream without a seed child at its
+               publication (12 s) and the chunk never held, is the least
+               node's end; host 3 the seed's child of stream 1 from the
+               start, lost, opening to the seed and lost again at 20 s,
+               ends its subscription there and opens it again, as it had
+               a parent before that ms
+      sends    the seed's two written pushes of chunk 61 (stream 1, at
+               16.25 s) to host 3, at one ms: its first, the earlier in
+               the seed's log, waited 10 ms and host 3's incarnation then
+               held it 30 ms after its publication; the other waited 40
+               and its next incarnation held it 90 after"""
+
+    # (t_ms, node, stream, parent, reason)
+    PARENTS = [(0, 1, 0, SEED, "open"), (10000, 1, 0, None, "prune"), (0, 2, 0, SEED, "open"),
+               (10000, 2, 0, None, "lost"), (0, 3, 1, SEED, "open"), (20000, 3, 1, None, "lost"),
+               (20000, 3, 1, SEED, "open"), (20000, 3, 1, None, "lost")]
+    # Chunk 61, published at 16.25 s: host 3's holds of it (t_ms, node,
+    # seq, how, peer, incarnation) and the seed's pushes (t_ms, n, peer,
+    # peer_incarnation, seq, queued_ms).
+    PUSHED = 61
+    HOLDS = [(16280, 3, PUSHED, "push", SEED, 0), (16340, 3, PUSHED, "push", SEED, 1)]
+    SENDS = [(16270, 7, 3, 0, PUSHED, 16260), (16270, 8, 3, 1, PUSHED, 16230)]
+    # The row orders each table is made in.
+    ORDERS = {"as made": "i", "reversed": "i DESC", **{f"shuffle {s}": f"hash(i + {s})" for s in (1, 2, 3)}}
+    CROWD = 2000
+    maxDiff = None
+
+    @classmethod
+    def setUpClass(cls):
+        import duckdb
+
+        cls.conn = c = duckdb.connect()
+        c.execute("CREATE SCHEMA raw")
+        c.execute("CREATE TABLE viewers (k VARCHAR, src VARCHAR, viewer BIGINT, node BIGINT, hostile BOOLEAN)")
+        c.execute("INSERT INTO viewers VALUES " + ", ".join(f"('tie', '{TIE_RUN['src']}', {n - 1}, {n}, false)"
+                                                            for n in (1, 2, 3)))
+        c.execute("CREATE TABLE verdict_seconds (k VARCHAR, src VARCHAR, sec BIGINT, phase VARCHAR)")
+        c.execute("CREATE TABLE parents_src (i BIGINT, k VARCHAR, src VARCHAR, t_ms BIGINT, node BIGINT, "
+                  "stream BIGINT, parent BIGINT, reason VARCHAR)")
+        c.executemany("INSERT INTO parents_src VALUES (?, 'tie', ?, ?, ?, ?, ?, ?)",
+                      [(i, TIE_RUN["src"], *r) for i, r in enumerate(cls.PARENTS)])
+        c.execute("CREATE TABLE arrivals_src (i BIGINT, k VARCHAR, src VARCHAR, t_ms BIGINT, node BIGINT, seq BIGINT, "
+                  "how VARCHAR, peer BIGINT, released_ms BIGINT, incarnation BIGINT)")
+        own = [(1000 + 250 * q, SEED, q, "own", -1, 0) for q in range(200)]
+        c.executemany("INSERT INTO arrivals_src VALUES (?, 'tie', ?, ?, ?, ?, ?, ?, NULL, ?)",
+                      [(i, TIE_RUN["src"], *r) for i, r in enumerate(own + cls.HOLDS)])
+        c.execute("CREATE TABLE seed_sends_src (i BIGINT, k VARCHAR, src VARCHAR, t_ms BIGINT, node BIGINT, n BIGINT, "
+                  "peer BIGINT, peer_incarnation BIGINT, how VARCHAR, seq BIGINT, queued_ms BIGINT, fate VARCHAR, "
+                  "cancel_ms BIGINT)")
+        c.executemany("INSERT INTO seed_sends_src VALUES (?, 'tie', ?, ?, ?, ?, ?, ?, 'push', ?, ?, 'written', NULL)",
+                      [(i, TIE_RUN["src"], t, SEED, n, peer, inc, seq, queued)
+                       for i, (t, n, peer, inc, seq, queued) in enumerate(cls.SENDS)])
+        cls.ordered("i")
+        for s in catalog.scoring_statements(TIE_MACROS, TIE_HAVE):
+            c.execute(s)
+
+    @classmethod
+    def ordered(cls, order):
+        for t, made in (("parents", "parents"), ("arrivals", "arrivals"), ("seed_sends", "raw.seed_sends")):
+            cls.conn.execute(f"CREATE OR REPLACE TABLE {made} AS SELECT * EXCLUDE (i) FROM {t}_src ORDER BY {order}")
+
+    def each_order(self, sql):
+        """`sql`'s distinct answers, five queries in each of ORDERS, by
+        order."""
+        def frozen(x):
+            return tuple(map(frozen, x)) if isinstance(x, (list, tuple)) else x
+
+        runs = [{**TIE_RUN, "parents_rows": len(self.PARENTS)}]
+        got = {}
+        for name, order in self.ORDERS.items():
+            self.ordered(order)
+            got[name] = {frozen(self.conn.execute(sql, [runs]).fetchall()) for _ in range(5)}
+        return got
+
+    def test_a_streams_last_end_at_one_ms_is_the_least_nodes(self):
+        got = self.each_order("SELECT seq, class, after FROM coverage_chunks_in(?) WHERE seq = 44")
+        self.assertEqual(got, {name: {((44, "no_seed_child", "prune"),)} for name in self.ORDERS})
+
+    def test_an_open_between_two_ends_at_one_ms_follows_them(self):
+        # Host 3 and a crowd of CROWD hosts with its parents rows, many
+        # partitions to sort: each one's subscription ends at 20 s and
+        # opens again there.
+        self.conn.execute("BEGIN")
+        try:
+            self.conn.execute(
+                "INSERT INTO parents_src SELECT ? + 4 * r.range + x.j, 'tie', ?, x.t_ms, 100 + r.range, 1, x.parent, "
+                "x.reason FROM range(?) r, (VALUES (0, 0, ?, 'open'), (1, 20000, NULL, 'lost'), "
+                "(2, 20000, ?, 'open'), (3, 20000, NULL, 'lost')) x(j, t_ms, parent, reason)",
+                [len(self.PARENTS), TIE_RUN["src"], self.CROWD, SEED, SEED])
+            got = self.each_order("SELECT spans, count(*) FROM ("
+                                  "SELECT node, list((open_ms, close_ms, end_reason) ORDER BY open_ms) AS spans "
+                                  "FROM seed_subscriptions_in(?) WHERE stream = 1 GROUP BY node) GROUP BY spans "
+                                  "ORDER BY spans")
+        finally:
+            self.conn.execute("ROLLBACK")
+        want = ((((0, 20000, "lost"), (20000, 60000, None)), self.CROWD + 1),)
+        self.assertEqual(got, {name: {want} for name in self.ORDERS})
+
+    def test_the_first_written_push_at_one_ms_is_the_earlier_in_the_seed_log(self):
+        got = self.each_order("SELECT seq, push_ms, push_wait_ms, push_held_ms FROM seed_writes_in(?) "
+                              f"WHERE seq = {self.PUSHED}")
+        self.assertEqual(got, {name: {((self.PUSHED, 16270, 10, 16280),)} for name in self.ORDERS})
 
 
 if __name__ == "__main__":

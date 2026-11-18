@@ -765,11 +765,11 @@ CREATE OR REPLACE MACRO seed_subscriptions_in(runs) AS TABLE
         SELECT p.k, p.src, p.t_ms, p.node, p.stream, p.parent, p.reason,
                CASE WHEN p.reason = @{reason_switch} THEN 0 WHEN p.parent IS NULL THEN 1 ELSE 2 END AS pre
         FROM parents p SEMI JOIN cv_r USING (k, src)),
+    -- The node's parent before a ms: the lag of the ms's first row, both
+    -- over one window, so rows that tie in it can't take them apart.
     cv_before AS (
-        SELECT *, lag(parent) OVER (PARTITION BY k, src, node, stream ORDER BY t_ms, pre, reason, parent)
-                      AS lag_parent,
-               row_number() OVER (PARTITION BY k, src, node, stream, t_ms ORDER BY pre, reason, parent) AS i
-        FROM cv_p),
+        SELECT *, lag(parent) OVER w AS lag_parent, row_number() OVER w AS i
+        FROM cv_p WINDOW w AS (PARTITION BY k, src, node, stream ORDER BY t_ms, pre, reason, parent)),
     cv_tied AS (
         SELECT *, first_value(lag_parent) OVER (PARTITION BY k, src, node, stream, t_ms ORDER BY i) AS before
         FROM cv_before),
@@ -830,7 +830,8 @@ CREATE OR REPLACE MACRO seed_children_of(jobs) AS TABLE
 -- names a release to pull, arrivals' released_ms; pushed_late, a child
 -- holds it by the seed's push; child_never, no child ever held it;
 -- other) and after (for no_seed_child, how the stream's last seed child
--- before it ended, end_reason's; NULL for a stream that never had one).
+-- before it ended, end_reason's, the least node's of those ending at one
+-- ms; NULL for a stream that never had one).
 -- needs: arrivals arrivals.released_ms parents
 CREATE OR REPLACE MACRO coverage_chunks_in(runs) AS TABLE
     WITH cv_r AS (SELECT unnest(runs, recursive := true)),
@@ -883,8 +884,10 @@ CREATE OR REPLACE MACRO coverage_chunks_in(runs) AS TABLE
         JOIN cv_dishonest_subs s ON s.k = c.k AND s.src = c.src AND s.stream = c.stream AND s.open_ms <= c.pub_ms
                                  AND c.pub_ms < s.close_ms
         WHERE c.judged AND c.late IS TRUE GROUP BY ALL),
+    -- A stream's seed children's ends at one ms: the least node's.
     cv_ended AS (
-        SELECT k, src, stream, close_ms, end_reason FROM cv_subs WHERE end_reason IS NOT NULL)
+        SELECT k, src, stream, close_ms, arg_min(end_reason, node) AS end_reason FROM cv_subs
+        WHERE end_reason IS NOT NULL GROUP BY ALL)
     SELECT c.* EXCLUDE (parented, classed),
            CASE WHEN c.classed THEN coalesce(d.children, 0) END AS children,
            CASE WHEN c.classed THEN coalesce(b.n, 0) END AS dishonest_children,
@@ -968,7 +971,8 @@ CREATE OR REPLACE MACRO seed_cover_of(jobs) AS TABLE
 -- child's CANCEL), fates (each distinct how and fate, as 'push stale',
 -- sorted; empty where none was queued) and cancel_ms (the earliest
 -- cancel_ms of a cancelled one); of the first written push (the earliest
--- written, ties by peer; NULL without one), push_ms (its t_ms),
+-- written, ties by peer, then by the seed log's order, seed_sends.n; NULL
+-- without one), push_ms (its t_ms),
 -- push_wait_ms (its wait in the seed's queue, t_ms - queued_ms) and
 -- push_held_ms (its child's hold, the seed_sends view's held_ms: the
 -- child's earliest arrivals row of the chunk in the push's
@@ -997,7 +1001,7 @@ CREATE OR REPLACE MACRO seed_writes_in(runs) AS TABLE
     cv_kid_n AS (
         SELECT k, src, seq, count(*) AS children FROM cv_kids GROUP BY ALL),
     cv_sent AS (
-        SELECT d.k, d.src, d.seq, d.node, x.peer_incarnation, x.how, x.fate, x.t_ms, x.queued_ms, x.cancel_ms
+        SELECT d.k, d.src, d.seq, d.node, x.n, x.peer_incarnation, x.how, x.fate, x.t_ms, x.queued_ms, x.cancel_ms
         FROM cv_kids d JOIN cv_r r USING (k, src)
         JOIN raw.seed_sends x ON x.k = d.k AND x.src = d.src AND x.node = r.seed_node AND x.peer = d.node
                               AND x.seq = d.seq),
@@ -1007,7 +1011,7 @@ CREATE OR REPLACE MACRO seed_writes_in(runs) AS TABLE
                list_sort(list(DISTINCT how || ' ' || fate)) AS fates,
                min(cancel_ms) FILTER (WHERE fate = 'cancelled') AS cancel_ms,
                arg_min({'t_ms': t_ms, 'wait_ms': t_ms - queued_ms, 'node': node, 'incarnation': peer_incarnation},
-                       (t_ms, node)) FILTER (WHERE how = 'push' AND fate = 'written') AS p
+                       (t_ms, node, n)) FILTER (WHERE how = 'push' AND fate = 'written') AS p
         FROM cv_sent GROUP BY ALL),
     -- The first written push's delivery: its child's earliest hold of the
     -- chunk in its incarnation then, as the seed_sends view's held_ms.
@@ -2212,11 +2216,13 @@ CREATE OR REPLACE MACRO alloc_step_fit_of(a_side, b_side, lo_s := 10, hi_s := -1
 --   channel (unsent_before 0, kind 'webrtc') the next data packet to the
 --   peer the node's uplink was offered after the write was done, which
 --   carries its first bytes (a datagram's packets keep no offset of its
---   channel's stream): `7a empty: to first packet` (on the testbed a
---   packet's t_us is its capture's plus the node's egress delay,
---   hosts.delay_us, which comes off; the model's is its admission, the
---   delay after), `7b empty: packet to arrival`, `7c empty: arrival to
---   read`;
+--   channel's stream, so none is found by its bytes): the first at or
+--   after the done, and of those offered at that µs (a message's packets
+--   share theirs) the first its queue took, the least n: `7a empty: to
+--   first packet` (on the testbed a packet's t_us is its capture's plus
+--   the node's egress delay, hosts.delay_us, which comes off; the model's
+--   is its admission, the delay after), `7b empty: packet to arrival`,
+--   `7c empty: arrival to read`;
 -- - `8 read to take`: the peer's read's t_us to its node task's take of
 --   it (taken_us).
 -- needs: link_writes link_reads link_samples seed_sends packets hosts jobs.sim jobs.env
@@ -2244,7 +2250,8 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
         SELECT x.k, x.peer, x.t_us - CASE WHEN j.sim = 'testbed' THEN coalesce(h.delay_us, 0) ELSE 0 END AS t_us,
                x.arrived_us
         FROM packets x JOIN j USING (k, src) LEFT JOIN hosts h ON h.k = x.k AND h.src = x.src AND h.node = x.node
-        WHERE x.node = at_node AND x.kind IN ('data', 'data_sack') AND x.lost IS NULL),
+        WHERE x.node = at_node AND x.kind IN ('data', 'data_sack') AND x.lost IS NULL
+        QUALIFY row_number() OVER (PARTITION BY x.k, x.peer, x.t_us ORDER BY x.n) = 1),
     fp AS (
         SELECT a.k, a.done_us, a.read_us, pk.t_us AS pkt_us, pk.arrived_us
         FROM (SELECT * FROM arr WHERE unsent_before = 0 AND kind = 'webrtc') a
@@ -2574,11 +2581,12 @@ CREATE OR REPLACE MACRO sctp_logged_side(side, who, logged) AS (
 --   bound (b_tv none, one testbed run, counts as 0);
 -- - resends a drop: the model's median within the testbed's runs' range
 --   widened at each end by twice its ratio's counting noise,
---   r·√(1/resends + 1/drops), as write_fit_of widens a count by 2√n. That
---   treats resends and drops as independent counts; resends follow drops,
---   and given the drops the ratio's noise is r·√(1/resends), which the
---   bound's noise exceeds by √(1 + r), about 2.6 times at r ≈ 6: the
---   bound is conservative. The plan's rule is resends within ±10 %, a
+--   r·√(1/resends + 1/drops), as write_fit_of widens a count by 2√n (of
+--   the runs at one ratio at an end, the widest's: the range each of
+--   them would widen it to, together). That treats resends and drops as
+--   independent counts; resends follow drops, and given the drops the
+--   ratio's noise is r·√(1/resends), which the bound's noise exceeds by
+--   √(1 + r), about 2.6 times at r ≈ 6: the bound is conservative. The plan's rule is resends within ±10 %, a
 --   count; a run's resends follow its drops, which the log moves (431-479
 --   a run with it on against 761-878 off at 20 Mbit/s) and which a
 --   model's run need not share, so the bench judges resends a drop,
@@ -2622,9 +2630,8 @@ CREATE OR REPLACE MACRO sctp_fit_of(a_side, b_side, t_side, at_node := 0, lo_s :
         SELECT reading, any_value(source) AS source, any_value(against) AS against, count(*) AS runs,
                list(p50 ORDER BY k) AS p50s, list(p90 ORDER BY k) AS p90s, list(n ORDER BY k) AS ns,
                min(p50) AS lo50, max(p50) AS hi50, min(p90) AS lo90, max(p90) AS hi90,
-               min_by(p50 * sqrt(1.0 / nullif(n, 0) + p50 / nullif(n, 0)), p50) AS lo_noise,
-               max_by(p50 * sqrt(1.0 / nullif(n, 0) + p50 / nullif(n, 0)), p50) AS hi_noise
-        FROM b GROUP BY reading),
+               min_by(noise, (p50, -noise)) AS lo_noise, max_by(noise, (p50, noise)) AS hi_noise
+        FROM (SELECT *, p50 * sqrt(1.0 / nullif(n, 0) + p50 / nullif(n, 0)) AS noise FROM b) GROUP BY reading),
     sh AS (
         SELECT 'a' AS side, k, reading, x.v, x.share * n AS c FROM a, unnest(dist) AS u(x) WHERE dist IS NOT NULL
         UNION ALL

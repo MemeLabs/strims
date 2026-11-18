@@ -12,7 +12,8 @@ testbed run of the other kind refused there; and the pass: delays and
 buffered amounts within the log-off runs' range widened by their floors,
 both quantiles; the counts' and the send gaps' total variation within the
 plan's bound or the testbed's own, the larger; resends a drop within
-the logged runs' range widened by counting noise; the resend spacing
+the logged runs' range widened by counting noise, the widest of the runs
+at one ratio at an end, whichever run has it; the resend spacing
 unruled; a ruled reading either side lacks failing; and a side of no runs
 refused.
 
@@ -509,6 +510,33 @@ class SctpBench(unittest.TestCase):
             got = self.rolled_back(*statements)
             self.assertAlmostEqual(got["9 resends a drop"][2], twin, delta=0.02)
             self.assertIs(got["9 resends a drop"][-1], want, twin)
+
+    def test_resends_a_drop_at_a_tied_end_widen_by_its_widest_noise(self):
+        # The logged runs at one ratio, 2: 100 resends over 50 drops
+        # (noise 2·√(1/100 + 1/50) ≈ 0.346) and 50 over 25 (≈ 0.490), so
+        # both are each end and the wider noise widens it, from 1.02 to
+        # 2.98, whichever run has which counts and whatever the rows'
+        # order; the narrower's would fail the twin at 1.2 and at 2.8.
+        def counts(k, resends, drops):
+            return [("UPDATE bins SET seed_drops = ? WHERE t_ms = 30000 AND k = ?", drops, k),
+                    ("INSERT INTO sctp_events SELECT x.* REPLACE (x.n + 100 * (r.range + 1) AS n, x.t_us + 10 * "
+                     "(r.range + 1) AS t_us) FROM sctp_events x, range(?) r WHERE x.k = ? AND x.what = 'rtx' "
+                     "AND x.chunks = 1", resends - 2, k)]
+
+        reorder = [("CREATE OR REPLACE TABLE sctp_events AS FROM sctp_events ORDER BY hash(k, n) DESC",),
+                   ("CREATE OR REPLACE TABLE bins AS FROM bins ORDER BY k DESC",)]
+        got = {}
+        for twin in (1.2, 2.8):
+            tw = [s for k in ("tw1", "tw2") for s in counts(k, round(50 * twin), 50)]
+            for wide in ("tb1", "tb2"):
+                narrow = "tb2" if wide == "tb1" else "tb1"
+                tb = counts(wide, 50, 25) + counts(narrow, 100, 50)
+                for name, order in (("as made", []), ("reordered", reorder)):
+                    row = self.rolled_back(*tw, *tb, *order)["9 resends a drop"]
+                    got[twin, wide, name] = (round(row[2], 3), row[-1])
+        self.maxDiff = None
+        self.assertEqual(got, {(twin, wide, name): (twin, True) for twin in (1.2, 2.8) for wide in ("tb1", "tb2")
+                               for name in ("as made", "reordered")})
 
     def test_a_run_of_no_resends_reads_none(self):
         # The twin's runs resend nothing: 0 a drop, which fails against the

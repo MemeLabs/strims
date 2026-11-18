@@ -7,7 +7,9 @@ answers: each stage's p50 and p90 at the seed over each run's window, a
 write's read found by its bytes, the testbed's first packet less its
 egress delay, and the pass: within the testbed's runs' range widened by
 the floor, the holds' and lows' counts within it widened by counting
-noise, a stage one side lacks failing, and a side of no runs refused.
+noise, a stage one side lacks failing, and a side of no runs refused;
+and over a twin's packets that share their µs, a write's first packet
+the least n of them, whatever the packets table's row order.
 
   python3 hack/simlab/tests/test_write_path.py
 """
@@ -54,8 +56,8 @@ def connect():
                  "link BIGINT, source VARCHAR, cause VARCHAR, buffered_bytes BIGINT)")
     conn.execute("CREATE TABLE seed_sends (k VARCHAR, src VARCHAR, t_ms BIGINT, node BIGINT, peer BIGINT, "
                  "how VARCHAR, fate VARCHAR, queued_ms BIGINT)")
-    conn.execute("CREATE TABLE packets (k VARCHAR, src VARCHAR, node BIGINT, t_us BIGINT, arrived_us BIGINT, "
-                 "lost VARCHAR, peer BIGINT, kind VARCHAR)")
+    conn.execute("CREATE TABLE packets (k VARCHAR, src VARCHAR, node BIGINT, n BIGINT, t_us BIGINT, "
+                 "arrived_us BIGINT, lost VARCHAR, peer BIGINT, kind VARCHAR)")
     conn.execute("CREATE TABLE hosts (k VARCHAR, src VARCHAR, node BIGINT, delay_us BIGINT)")
     for k, src in (("tb1", "testbed/b"), ("tb2", "testbed/b"), ("tw", "testbed/b-twin")):
         tb = src == "testbed/b"
@@ -90,7 +92,7 @@ def connect():
         # +3 ms on the testbed (its t_us its capture's plus the 1 ms egress
         # delay), at +2 ms in the twin; it arrives 20 ms after.
         offered = T + 1000 + (3_000 if tb else 2_000)
-        conn.execute("INSERT INTO packets VALUES (?, ?, 0, ?, ?, NULL, 1, 'data')",
+        conn.execute("INSERT INTO packets VALUES (?, ?, 0, 0, ?, ?, NULL, 1, 'data')",
                      (k, src, offered + (1000 if tb else 0), offered + 20_000))
         conn.execute("INSERT INTO hosts VALUES (?, ?, 0, ?)", (k, src, 1000 if tb else 0))
     for s in catalog.scoring_statements(MACROS, HAVE):
@@ -275,6 +277,88 @@ class WritePath(unittest.TestCase):
 
         with self.assertRaisesRegex(duckdb.Error, "write_stages_of: a side of no runs"):
             self.q("SELECT * FROM write_fit_of([], ?)", TB)
+
+
+# A twin's tie: each write into the empty channel is followed, 2 ms after
+# its done, by TIED data packets to the viewer that its uplink took at one
+# µs, the first (the least n) arriving 20 ms after and the others at
+# TIED_AFTER_MS, out of n order.
+TIED = 8
+TIED_AFTER_MS = (20, 24, 21, 26, 22, 27, 23, 25)
+TIED_WRITES = 5
+
+
+def tied():
+    """An in-memory DuckDB with the macros and an empty packets table,
+    and a twin run `tie` of a 60 s stream: its seed (node 0) writes
+    TIED_WRITES times into an empty data channel to its viewer (node 1)
+    on link 0, each done 1 ms after it began and read 30 ms after that;
+    `packets_src` holds each write's TIED packets, which share their µs,
+    for a test to make `packets` of in an order of its own."""
+    import duckdb
+
+    conn = duckdb.connect()
+    conn.execute("CREATE TABLE jobs (k VARCHAR, src VARCHAR, sim VARCHAR, env MAP(VARCHAR, VARCHAR))")
+    conn.execute("INSERT INTO jobs VALUES ('tie', 'testbed/b-twin', 'strims-sim', MAP {'STRIMS_SIM_CAL_SECS': '60'})")
+    conn.execute("CREATE TABLE link_writes (k VARCHAR, src VARCHAR, t_us BIGINT, node BIGINT, peer BIGINT, "
+                 "link BIGINT, kind VARCHAR, off BIGINT, n BIGINT, bytes BIGINT, queued_us BIGINT, "
+                 "done_us BIGINT, unsent_before BIGINT, wait VARCHAR)")
+    conn.execute("CREATE TABLE link_reads (k VARCHAR, src VARCHAR, t_us BIGINT, node BIGINT, peer BIGINT, "
+                 "link BIGINT, kind VARCHAR, off BIGINT, n BIGINT, bytes BIGINT, taken_us BIGINT)")
+    conn.execute("CREATE TABLE link_samples (k VARCHAR, src VARCHAR, t_us BIGINT, node BIGINT, peer BIGINT, "
+                 "link BIGINT, source VARCHAR, cause VARCHAR, buffered_bytes BIGINT)")
+    conn.execute("CREATE TABLE seed_sends (k VARCHAR, src VARCHAR, t_ms BIGINT, node BIGINT, peer BIGINT, "
+                 "how VARCHAR, fate VARCHAR, queued_ms BIGINT)")
+    conn.execute("CREATE TABLE hosts (k VARCHAR, src VARCHAR, node BIGINT, delay_us BIGINT)")
+    conn.execute("INSERT INTO hosts VALUES ('tie', 'testbed/b-twin', 0, 0)")
+    conn.execute("CREATE TABLE packets_src (k VARCHAR, src VARCHAR, node BIGINT, n BIGINT, t_us BIGINT, "
+                 "arrived_us BIGINT, lost VARCHAR, peer BIGINT, kind VARCHAR)")
+    for w in range(TIED_WRITES):
+        t = T + 100_000 * w
+        conn.execute("INSERT INTO link_writes VALUES ('tie', 'testbed/b-twin', ?, 0, 1, 0, 'webrtc', ?, ?, 1000, ?, "
+                     "?, 0, 'none')", (t, 1000 * w, w, t, t + 1000))
+        conn.execute("INSERT INTO link_reads VALUES ('tie', 'testbed/b-twin', ?, 1, 0, 0, 'webrtc', ?, ?, 1000, ?)",
+                     (t + 31_000, 1000 * w, w, t + 32_000))
+        offered = t + 3000
+        for i, after in enumerate(TIED_AFTER_MS):
+            conn.execute("INSERT INTO packets_src VALUES ('tie', 'testbed/b-twin', 0, ?, ?, ?, NULL, 1, ?)",
+                         (TIED * w + i, offered, offered + 1000 * after, "data" if i else "data_sack"))
+    conn.execute("CREATE TABLE packets AS FROM packets_src LIMIT 0")
+    for s in catalog.scoring_statements(MACROS, HAVE):
+        conn.execute(s)
+    return conn
+
+
+class Ties(unittest.TestCase):
+    """Packets that share their µs: a write's first packet is the least n
+    of those at the first µs at or after its done, so the stages read the
+    same however the table's rows are ordered, and every time."""
+
+    # The row orders the packets table is made in.
+    ORDERS = {"n": "n", "n descending": "n DESC", "arrival": "arrived_us, n",
+              **{f"shuffle {s}": f"hash(n + {s})" for s in (1, 2, 3)}}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.conn = tied()
+
+    def stages(self):
+        return {s: (n, p50, p90) for s, n, p50, p90 in self.conn.execute(
+            "SELECT stage, n, p50, p90 FROM write_stages_of([{'k': 'tie'}]) WHERE stage LIKE '7%' ORDER BY stage")
+            .fetchall()}
+
+    def test_a_writes_first_packet_is_the_least_n_at_its_first_offer(self):
+        # Its 2 ms to the packets, the least n's 20 ms to arrive and 8 to
+        # the read (30 after the done): the one answer of five queries in
+        # each order.
+        want = {"7 done to read": (TIED_WRITES, 30, 30), "7a empty: to first packet": (TIED_WRITES, 2, 2),
+                "7b empty: packet to arrival": (TIED_WRITES, 20, 20),
+                "7c empty: arrival to read": (TIED_WRITES, 8, 8)}
+        got = {}
+        for name, order in self.ORDERS.items():
+            self.conn.execute(f"CREATE OR REPLACE TABLE packets AS FROM packets_src ORDER BY {order}")
+            got[name] = {tuple(sorted(self.stages().items())) for _ in range(5)}
+        self.assertEqual(got, {name: {tuple(sorted(want.items()))} for name in self.ORDERS})
 
 
 if __name__ == "__main__":
