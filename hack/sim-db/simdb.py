@@ -106,8 +106,10 @@ flushes the cache holds, a pull's reads are what its `--dry-run` lists,
 and after a `prune` the kept flushes' alone; a flush lacking its
 manifest (a sync stopped short) has its tables synced again first, and
 an unfiltered reads pull names the flushes the run's lines name that the
-cache lacks (a rerun's), with the `--commit` pull that takes them. `pull
---run` without `--reads` syncs the tables of every flush under the name.
+cache lacks of commits whose jobs ran as late as the cache's earliest (a
+rerun's, an A/B's other arm's; never an earlier run's), with the
+`--commit` pull that takes them. `pull --run` without `--reads` syncs
+the tables of every flush under the name.
 The queries that read them (pooled, aligned on a read lag, forecast, and
 sql with `--reads`) pull their selection's that way when the cache lacks
 them, noting the size, at most `--pull-mb`. `--dry-run` asks S3 nothing:

@@ -1389,7 +1389,8 @@ class Pulled:
     the picked flushes, each (src, whether the cache holds it), or for
     every flush the run's `lines` (store.run_lines), `cached` the run's
     flushes the cache holds. An unfiltered reads pull's `lacks` are the
-    flushes the run's lines name that the cache doesn't (store.lacking);
+    flushes the run's lines name that the cache doesn't, of no run earlier
+    than its (store.lacking);
     `bare` how many of its flushes lack a manifest (store.unmanifested)."""
     run: str
     dry_run: bool = False
@@ -1437,8 +1438,9 @@ def pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False, sa
     `cell`, `arm` and `seed` select there (store.sample_plan), which
     `dry_run` lists, asking S3 nothing: what the pull fetches of the
     flushes the cache holds. An unfiltered reads pull names the flushes
-    the run's lines name that the cache lacks (store.lacking: a rerun's,
-    say), with the pull that takes them. With
+    the run's lines name that the cache lacks of commits whose jobs ran as
+    late as its earliest (store.lacking: a rerun's, an A/B's other arm's,
+    never an earlier run's), with the pull that takes them. With
     `commits` or `since`, the flushes the run's matrices' lines name of
     jobs of those commits that ran since then (picked_flushes) alone, as
     the run's: the pull, the selection and the dry run take those, so one

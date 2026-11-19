@@ -184,7 +184,10 @@ the times two runs of one commit, and both pick the jobs one run ran.
   lacking(run, held, runs=None) -> {commit: (flushes, times)}
                  the flushes the run's lines name of jobs that ran in the
                  days S3 keeps, that the cache's `held` aren't, by commit
-                 (by_commit; commits_text and ran_text print them)
+                 (by_commit; commits_text and ran_text print them), of
+                 the commits whose jobs ran as late as the cache's
+                 earliest (a rerun's, an A/B's other arm; no earlier
+                 run's)
   unmanifested(srcs) -> [src]
                  the cache's sources lacking their manifest.json
   instant(text) -> datetime
@@ -830,14 +833,21 @@ def lacking(run, held, runs=None):
     """The flushes of farm run `run` that its matrices' lines (run_lines)
     name and the cache's sources `held` aren't, of jobs that ran in the
     days S3 keeps a run's data (s3_kept_days; older ones' are gone), by
-    commit (by_commit): {commit: (flushes, times)}; {} where the run's
-    lines can't all be read (run_lines' Refused). Asks S3 nothing."""
+    commit (by_commit): {commit: (flushes, times)}, a commit only where
+    its latest such job ran at or after the earliest job of the flushes
+    the cache holds (line_time): a rerun's, or an A/B's other arm, never
+    an earlier run's, which a prune left out or a --commit pull of the
+    latest never took. {} where the run's lines can't all be read
+    (run_lines' Refused). Asks S3 nothing."""
     try:
         lines = run_lines(run, runs)
     except Refused:
         return {}
     kept = datetime.datetime.fromtimestamp(now() - s3_kept_days() * 86400, datetime.UTC)
-    return by_commit([r for r in lines if r["src"] not in held and (line_time(r) or EPOCH) >= kept])
+    first = min((t for r in lines if r["src"] in held and (t := line_time(r)) is not None), default=EPOCH)
+    return {c: (srcs, times) for c, (srcs, times) in by_commit(
+        [r for r in lines if r["src"] not in held and (line_time(r) or EPOCH) >= kept]).items()
+        if max(times, default=EPOCH) >= first}
 
 
 def unmanifested(srcs):
