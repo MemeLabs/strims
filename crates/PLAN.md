@@ -607,9 +607,8 @@ and dropped are in `TRIED.md`.
     repeats.
   - Find why the testbed's native seed's uplink queue holds more than
     the twin's through the whole run, its joins among it (bins'
-    `seed_up_queue_ms`), and model it: its links' handshakes wait behind
-    it, so that they open a round past the twin's (`link_open_fit_of`'s
-    native seed rows). Read it with the 20 Mbit/s seed item above and
+    `seed_up_queue_ms`), and model it: its links' SYN-ACKs wait behind
+    it. Read it with the 20 Mbit/s seed item above and
     the bare bench's `seed-20` case (hack/testbed/bench/seed-20.sched).
   - Run or model network membership before transfers, on the testbed
     and in the twin, as a deployed node has it: its transfers learn a

@@ -13,6 +13,10 @@ pub const MSS: usize = 1448;
 /// across writes, which charges about what Ethernet's 14 bytes would (the
 /// SCTP model, whose messages are packets of their own, charges them).
 pub const TCP_HEADER: usize = 52;
+/// IPv4 and TCP header bytes of a SYN or a SYN-ACK: Linux's handshake
+/// options (MSS, SACK permitted, timestamps and window scale) take 20
+/// bytes, where an established connection's timestamps take 12.
+pub const TCP_SYN: usize = 60;
 /// IPv4 and UDP header bytes per datagram.
 pub const UDP_HEADER: usize = 28;
 /// Packets of at most this many wire bytes count as small: a short message

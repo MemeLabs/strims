@@ -258,6 +258,26 @@ async fn main() {
     }
 }
 
+/// Sleeps until the wall clock reads `at_ms`, a viewer's join, which its
+/// tables stamp at that time: a deployed viewer's dials go as it joins, its
+/// node reaching connect() in microseconds. tokio's timer wakes up to a ms
+/// past its deadline, and [`Runtime::sleep_until_ms`] reads the clock to
+/// the ms, which would put the dials up to 2 ms past the stamp, so the
+/// last 2 ms are yielded away.
+async fn join_at(at_ms: u64) {
+    let at = Time::from_unix_millis(i64::try_from(at_ms).unwrap_or(i64::MAX));
+    loop {
+        let left = at - SystemClock.precise_now();
+        if left <= Span::ZERO {
+            return;
+        }
+        match (left - Span::from_millis(2)).to_std() {
+            Some(d) if !d.is_zero() => tokio::time::sleep(d).await,
+            _ => tokio::task::yield_now().await,
+        }
+    }
+}
+
 /// Dials `uri` until it links.
 async fn dial(node: &Node, uri: &str) {
     loop {
@@ -362,9 +382,7 @@ async fn run() -> Result<(), String> {
             }
         }
         if a.start_ms.is_some() {
-            Native::default()
-                .sleep_until_ms(start_ms + a.join_at_ms)
-                .await;
+            join_at(start_ms + a.join_at_ms).await;
         }
         // Every link of the plan at once (strims_testbed::topology).
         let dials = topo

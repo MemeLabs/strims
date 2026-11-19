@@ -29,6 +29,18 @@
 //! - A TCP receiver orders segments by sequence number, so a segment that
 //!   arrives late (a retransmission) holds back the rest of its
 //!   connection, and only that connection.
+//! - A connect completes, and its listener accepts, when the SYN is
+//!   delivered.
+//!
+//! A connect's SYN crosses to its acceptor as any message does, and once
+//! through the acceptor's downlink is answered at once by a SYN-ACK on the
+//! acceptor's uplink, behind what the uplink holds, as Linux answers from
+//! the SYN's softirq: a busy seed's SYN-ACK waits out its bursts. The SYN
+//! is delivered when the SYN-ACK reaches the connector, which with the
+//! window model acknowledges it with a pure ACK ahead of its first data.
+//! The SYN and the SYN-ACK charge [`TCP_SYN`]'s bytes, and a full queue
+//! takes them as it takes pure ACKs, where a tbf would drop one and Linux
+//! resend it a second later.
 //!
 //! The controller's links carry nothing and stay with turmoil.
 //!
@@ -143,7 +155,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use strims_base::rng::det_rng;
 use strims_base::time::{Duration, Time};
 use strims_wan::network::{Carried, Departures, RTO_MIN, overflows};
-use strims_wan::wire::{tcp_wire, tx_time, udp_wire};
+use strims_wan::wire::{TCP_SYN, tcp_wire, tx_time, udp_wire};
 use strims_wan::{Carrier, Network, Options, Site};
 use turmoil::{Protocol, Segment, Sim};
 
@@ -224,6 +236,7 @@ fn wire(p: &Protocol) -> (usize, u32) {
     match p {
         _ if nominal(p) => (NOMINAL_DATAGRAM, 1),
         Protocol::Tcp(Segment::Data(_, b)) => tcp_wire(b.len()),
+        Protocol::Tcp(Segment::Syn(_)) => (TCP_SYN, 1),
         Protocol::Tcp(_) => tcp_wire(0),
         Protocol::Udp(d) => udp_wire(d.0.len()),
     }
@@ -297,6 +310,11 @@ enum Event {
     Arrive,
     /// The message is through the receiver's downlink.
     Deliver,
+    /// The SYN is through its acceptor's downlink, whose kernel answers it
+    /// at once with a SYN-ACK on its uplink.
+    SynAck,
+    /// The SYN-ACK reaches the connector: the connect completes.
+    SynAcked,
     /// The window model: `conn`'s sender learns its segment `seq` was
     /// lost, from later segments' acknowledgements or a tail-loss probe's,
     /// unless a later acknowledgement marked it first.
@@ -2142,6 +2160,14 @@ impl Scheduler {
                     self.sctp_copy_arrived(t, conn, seq, wire, (last, immediate));
                     continue;
                 }
+                Event::SynAck => {
+                    self.syn_ack(t, id);
+                    continue;
+                }
+                Event::SynAcked => {
+                    self.syn_acked(t, id);
+                    continue;
+                }
                 _ => {}
             }
             let window = self.window();
@@ -2206,7 +2232,9 @@ impl Scheduler {
                         continue;
                     }
                     let done = self.net.receive(t, r.to, r.wire);
-                    if done <= now {
+                    if r.what == What::Syn {
+                        self.events.insert((done.max(t), id), Event::SynAck);
+                    } else if done <= now {
                         r.state = State::Due;
                         if let Some(ls) = self.links.get_mut(r.link) {
                             ls.due = true;
@@ -2221,7 +2249,9 @@ impl Scheduler {
                         ls.due = true;
                     }
                 }
-                Event::Ack { .. }
+                Event::SynAck
+                | Event::SynAcked
+                | Event::Ack { .. }
                 | Event::Segment { .. }
                 | Event::Lost { .. }
                 | Event::Timeout { .. }
@@ -3717,13 +3747,83 @@ impl Scheduler {
             self.records.dropped += 1;
             return;
         }
-        let mut arrive = t.arrival + t.retransmit;
-        if r.what == What::Syn {
-            // The handshake's reply leg: a connect completes a round trip
-            // after the SYN leaves.
-            arrive += self.net.one_way(r.to, r.from);
+        self.events
+            .insert((t.arrival + t.retransmit, id), Event::Arrive);
+    }
+
+    /// SYN `id`'s acceptor answers it at `t`, as it comes through its
+    /// downlink: a SYN-ACK handed to its uplink, behind what the uplink
+    /// holds (Linux replies from the SYN's softirq), whose arrival at the
+    /// connector completes the connect.
+    fn syn_ack(&mut self, t: Time, id: u64) {
+        let Some(r) = self.records.get(&id) else {
+            return;
+        };
+        let (from, to, conn) = (r.to, r.from, (r.dst, r.src));
+        let held = self.held(from, t);
+        let back = self.net.send(t, from, to, TCP_SYN, 1, Carrier::Stream);
+        if back.retransmit > Duration::ZERO {
+            self.retransmitted(from, t, back.depart + back.retransmit);
         }
-        self.events.insert((arrive, id), Event::Arrive);
+        self.offered(&Offered {
+            at: t,
+            from,
+            to: Some(to),
+            conn: Some(conn),
+            proto: PacketProto::Tcp,
+            kind: PacketKind::Control,
+            wire: TCP_SYN,
+            packets: 1,
+            took: 1,
+            off: None,
+            resent: None,
+            held,
+            transit: Some((back.depart, back.arrival + back.retransmit)),
+            path_lost: None,
+        });
+        self.events
+            .insert((back.arrival + back.retransmit, id), Event::SynAcked);
+    }
+
+    /// SYN `id`'s SYN-ACK reaches the connector at `t`. Turmoil's connect
+    /// and accept complete as it delivers the SYN, at the next step. With
+    /// the window model, the connector acknowledges the SYN-ACK at once
+    /// with a pure ACK on its uplink, ahead of its first data. That ACK's
+    /// loss would change nothing, the first data acknowledging the SYN-ACK
+    /// in its place, so none is drawn: a counter of pure ACKs, a packet
+    /// log's row and the uplink's time are all it moves.
+    fn syn_acked(&mut self, t: Time, id: u64) {
+        let Some(r) = self.records.get_mut(&id) else {
+            return;
+        };
+        r.state = State::Due;
+        if let Some(ls) = self.links.get_mut(r.link) {
+            ls.due = true;
+        }
+        let (from, to, conn) = (r.from, r.to, (r.src, r.dst));
+        if self.window().is_none() {
+            return;
+        }
+        let ack = tcp_wire(0).0;
+        let held = self.held(from, t);
+        let depart = self.net.occupy_up(t, from, ack, 1);
+        self.ack_sent(from, self.net.up_charge(from, ack, 1), t, depart);
+        self.offered(&Offered {
+            at: t,
+            from,
+            to: Some(to),
+            conn: Some(conn),
+            proto: PacketProto::Tcp,
+            kind: PacketKind::Ack,
+            wire: ack,
+            packets: 1,
+            took: 1,
+            off: None,
+            resent: None,
+            held,
+            transit: Some((depart, depart + self.net.one_way(from, to))),
+            path_lost: None,
+        });
     }
 
     /// Clears the lost datagrams of every direction that holds nothing
@@ -4592,6 +4692,58 @@ mod tests {
     }
 
     #[test]
+    fn a_syn_ack_waits_behind_its_acceptors_uplink() {
+        let mut sim = build();
+        let up = 125_000; // 1 Mbit/s
+        let sites = [
+            ("a", Site::new(City::Frankfurt, Access::Fiber).with_up(up)),
+            ("b", Site::new(City::Frankfurt, Access::Fiber)),
+            ("c", Site::new(City::Frankfurt, Access::Fiber)),
+        ];
+        // a writes its first connection 125 000 bytes at once, a second
+        // of its uplink; its second connects in the middle of it.
+        sim.host("a", || async {
+            let l = TcpListener::bind("0.0.0.0:9000").await?;
+            let (mut s, _) = l.accept().await?;
+            s.write_all(&[1u8; 125_000]).await?;
+            let (_held, _) = l.accept().await?;
+            std::future::pending::<()>().await;
+            Ok(())
+        });
+        sim.client("c", async move {
+            let mut s = TcpStream::connect(("a", 9000)).await?;
+            let mut buf = vec![0u8; 125_000];
+            s.read_exact(&mut buf).await?;
+            Ok(())
+        });
+        let connect = Rc::new(Cell::new(0));
+        let got = connect.clone();
+        sim.client("b", async move {
+            tokio::time::sleep(StdDuration::from_millis(200)).await;
+            let t0 = turmoil::sim_elapsed().unwrap();
+            let _s = TcpStream::connect(("a", 9000)).await?;
+            got.set(ms(turmoil::sim_elapsed().unwrap() - t0));
+            Ok(())
+        });
+        let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1, None).unwrap();
+        let (rtt, ab) = (
+            wan.net.rtt(0, 2).as_millis(),
+            wan.net.one_way(0, 1).as_millis(),
+        );
+        drive(&mut sim, &mut wan);
+        // c's 87 segments, 129 524 bytes on the wire, leave a's uplink by
+        // 1036 ms after their write, a round trip from the start; b's
+        // SYN-ACK leaves after them.
+        let free = rtt + 1036;
+        let want = free + ab - 200;
+        let took = connect.get();
+        assert!(
+            (want..want + 5).contains(&took),
+            "connect {took} ms, want {want}"
+        );
+    }
+
+    #[test]
     fn uplinks_pace_streams() {
         let mut sim = build();
         let up = 125_000; // 1 Mbit/s
@@ -4620,12 +4772,13 @@ mod tests {
         let mut wan = Scheduler::new(&sim, &spec(&sites), QUIET, 1, None).unwrap();
         drive(&mut sim, &mut wan);
         // 144 800 bytes in 100 packets of 52 header bytes: 150 000 bytes
-        // on the wire, 1.2 s at 1 Mbit/s.
+        // on the wire, 1.2 s at 1 Mbit/s; and the acceptor's SYN-ACK and
+        // FIN.
         let took = got.get();
         assert!((1190..1215).contains(&took), "{took} ms");
         assert_eq!(
             wan.report(&spec(&sites)).hosts[0].stats.up_bytes,
-            150_000 + 52
+            150_000 + TCP_SYN as u64 + 52
         );
     }
 
