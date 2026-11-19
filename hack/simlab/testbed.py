@@ -395,10 +395,10 @@ def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8, kind="on
     with the cell's knobs (cells_in's, the packet log of those of
     `packet_hosts` whose packets the cell's runs hold among them; its
     TESTBED_QDISC left out), TWIN_TABLES and `env`'s, one farm job's way
-    each (STRIMS_SIM_JOB=1), their tables folded into the
-    cache as source testbed/<name> (refused over one, unless `replace`),
-    each a job of its cell, `arm` and seed. Returns the source and the
-    jobs."""
+    each (STRIMS_SIM_JOB=1) into a dir of work_dir's, their tables folded
+    into the cache as source testbed/<name> (refused over one, unless
+    `replace`), each a job of its cell, `arm` and seed. Returns the source
+    and the jobs."""
     import concurrent.futures
 
     binary = Path(binary)
@@ -408,7 +408,6 @@ def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8, kind="on
     cells = cells_in(src, kind, side_arm, packet_hosts)
     if not cells:
         raise ValueError(f"no testbed runs in {src} ({kind}, {side_arm}): simdb.py index takes a source in")
-    work = Path(tempfile.mkdtemp(prefix="twins-", dir=ROOT / "target"))
     todo = []
     for cell, knobs in cells.items():
         base = {k: v for k, v in knobs.items() if not k.startswith("TESTBED_")}
@@ -429,13 +428,11 @@ def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8, kind="on
         return {"k": k, "dir": str(out), "sim": "strims-sim", "test": "calibration_star", "cell": cell, "arm": arm,
                 "seed": seed, "env": e, "row": json.loads(rows[0]), "binary_sha256": digest}
 
-    try:
+    with work_dir("twins-") as work:
         with concurrent.futures.ThreadPoolExecutor(parallel) as ex:
             jobs = list(ex.map(one, todo))
         out = f"testbed/{name}"
         export(out, jobs)
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
     return out, jobs
 
 

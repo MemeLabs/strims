@@ -315,6 +315,22 @@ class Twins(unittest.TestCase):
         _, jobs = testbed.twins("testbed/x", self.fake, "x-twin", seeds=1, env={"STRIMS_SIM_PACKET_LOG": "seed"})
         self.assertEqual({j["cell"]: j["row"]["packet_log"] for j in jobs}, {"a": "seed", "b": "seed", "c": "seed"})
 
+    def test_a_checkout_without_target_twins_under_the_caches_tmp(self):
+        # A fresh worktree has no target/: the twins run in a dir of their
+        # own under the cache's tmp/ (work_dir), removed after, and make
+        # nothing in the checkout.
+        self.lake()
+        root = self.d / "checkout"
+        root.mkdir()
+        tmp = self.d / "sim-db" / "tmp"
+        with mock.patch.object(testbed, "ROOT", root):
+            src, jobs = testbed.twins("testbed/x", self.fake, "x-twin", seeds=1)
+        self.assertEqual(src, "testbed/x-twin")
+        self.assertEqual({(j["cell"], j["seed"]) for j in jobs}, {("a", 1), ("b", 1), ("c", 1)})
+        self.assertEqual({Path(j["dir"]).parent.parent for j in jobs}, {tmp})
+        self.assertEqual(list(root.iterdir()), [])
+        self.assertEqual(list(tmp.iterdir()), [])
+
     def test_the_packet_logs_value_names_the_hosts(self):
         self.assertEqual(testbed.packet_log([2, 0, 1, 0]), "0,1,2")
         self.assertEqual(testbed.packet_log([3]), "3")
