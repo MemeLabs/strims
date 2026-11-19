@@ -25,18 +25,24 @@ import hmac
 import http.client
 import json
 import os
+import socket
+import ssl
 import subprocess
+import time
+import urllib.parse
 import uuid
 from pathlib import Path
 
 # S3 takes a POST of up to 5 GB.
 MAX_BYTES = 5 * 1024**3
 CHUNK = 1 << 20
-# A POST's connection and TLS handshake take this long at most, apart from
-# its transfer's timeout, which can be all of a wind-down's or an
-# interruption's window: one that stalls fails while the worker's retries
-# (UPLOAD_RETRIES) still fit in it. Both take well under a second from the
-# farthest region.
+# A POST's TCP connect, over every address its host resolves to, and its
+# TLS handshake take this long at most together, apart from its transfer's
+# timeout, which can be all of a wind-down's or an interruption's window:
+# one that stalls fails while the worker's retries (UPLOAD_RETRIES) still
+# fit in it. Both take well under a second from the farthest region. The
+# name's lookup before them is the system resolver's, bounded by its own
+# timeouts (resolv.conf's: 5 s a try, 2 tries a server, by default).
 CONNECT_S = 20
 
 
@@ -115,11 +121,53 @@ def form_tail(boundary: str) -> bytes:
     return f"\r\n--{boundary}--\r\n".encode()
 
 
+def connect(scheme: str, netloc: str, within: float, timeout: float) -> socket.socket:
+    """A socket to `netloc` (host[:port]), connected, and for https its TLS
+    handshake done, within `within` seconds in all, over each address its
+    name resolves to in turn; then `timeout` for each read and write."""
+    deadline = time.monotonic() + within
+    parts = urllib.parse.urlsplit(f"{scheme}://{netloc}")
+    name, port = parts.hostname, parts.port or (443 if scheme == "https" else 80)
+
+    def left() -> float:
+        rest = deadline - time.monotonic()
+        if rest <= 0:
+            raise TimeoutError(f"{netloc}: not connected within {within:g} s")
+        return rest
+
+    sock, err = None, None
+    for family, kind, proto, _, addr in socket.getaddrinfo(name, port, type=socket.SOCK_STREAM):
+        s = socket.socket(family, kind, proto)
+        try:
+            s.settimeout(left())
+            s.connect(addr)
+        except TimeoutError:
+            s.close()
+            raise  # the deadline's
+        except OSError as e:
+            s.close()
+            err = e
+            continue
+        sock = s
+        break
+    if sock is None:
+        raise err or OSError(f"{netloc}: no address")
+    try:
+        if scheme == "https":
+            sock.settimeout(left())
+            sock = ssl.create_default_context().wrap_socket(sock, server_hostname=name)
+        sock.settimeout(timeout)
+    except BaseException:
+        sock.close()
+        raise
+    return sock
+
+
 def post(pol: dict, key: str, path: Path, timeout: float = 120) -> None:
     """Uploads the file `path` as `key` (under the policy's prefix) by the
-    policy `pol`, streamed, its connection and handshake within CONNECT_S
-    and each read and write of the transfer within `timeout`. Raises
-    RuntimeError on a refusal, TimeoutError on a timeout."""
+    policy `pol`, streamed: connected within CONNECT_S (connect), then each
+    read and write of the transfer within `timeout`. Raises RuntimeError on
+    a refusal, TimeoutError on a timeout."""
     if not key.startswith(pol["prefix"]):
         raise ValueError(f"{key} is outside the policy's prefix {pol['prefix']}")
     boundary = uuid.uuid4().hex
@@ -127,11 +175,10 @@ def post(pol: dict, key: str, path: Path, timeout: float = 120) -> None:
     size = os.path.getsize(path)
     scheme, _, rest = pol["url"].partition("://")
     host, _, base = rest.partition("/")
-    conn = (http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection)(
-        host, timeout=min(timeout, CONNECT_S))
+    # The request over the socket connect made, TLS's or not.
+    conn = http.client.HTTPConnection(host, timeout=timeout)
     try:
-        conn.connect()
-        conn.sock.settimeout(timeout)
+        conn.sock = connect(scheme, host, min(timeout, CONNECT_S), timeout)
         conn.putrequest("POST", "/" + base)
         conn.putheader("Content-Type", f"multipart/form-data; boundary={boundary}")
         conn.putheader("Content-Length", str(len(head) + size + len(tail)))

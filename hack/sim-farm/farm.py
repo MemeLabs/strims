@@ -173,10 +173,12 @@ speed. A run logs the speeds before its best pools.
   tick launches all it wants at once (up to 32), so a run's first fleet
   boots together.
 - An instance with nothing assigned is terminated once nothing is queued
-  or waiting: a booting one at once, and a ready one once its data has
-  landed (below; it's asked to flush first). A new instance takes only
-  queued jobs, so none is launched then either; a job queued again later
-  (its instance lost, or its data) is launched for as any queued one is.
+  or waiting: a booting one the run launched at once (an adopted one boots
+  to the jobs and data an earlier run left it, and stays), and a ready one
+  once its data has landed (below; it's asked to flush first). A new
+  instance takes only queued jobs, so none is launched then either; a job
+  queued again later (its instance lost, or its data) is launched for as
+  any queued one is.
   While jobs wait on rows, booting and idle ones go once nothing is
   queued, the busy instances should finish the run within RETIRE_WITHIN_S
   (the busiest's own jobs, and what waits on rows over them all) and the
@@ -227,14 +229,18 @@ speed. A run logs the speeds before its best pools.
   steps when it's ready: running with an address, SSH answering, its
   worker started, ready, each after its launch. One whose boot fails (not
   running or no SSH within 10 minutes, its setup failed, its canary's
-  sync kept failing) is terminated and its pool skipped for 10 minutes;
-  once boots have failed in two pools of a region since one last passed
-  there, every pool of the region is, and once a type's have in two
-  regions since one of it passed, the type is in every region. The run's
-  instances up meanwhile keep their jobs. Three boots failing in a row
-  with no instance up point at what fails every boot (the image, the
-  binaries, user-data, SSH): the run launches no more until one of those
-  still booting passes, and stops once none is left, its jobs undone.
+  sync kept failing) is terminated and its pool skipped for 10 minutes.
+  Failed boots of two types in a zone skip every pool of the zone for as
+  long, in two zones of a region every pool of the region, and of a type
+  in two regions the type in every region, each counting those of the
+  last 10 minutes since one last passed there; a boot that passes there
+  lifts those skips (its pool's own stays). The run's instances up keep
+  their jobs. Three of the run's boots failing in a row, none passing
+  between, point at what fails every boot (the image, the binaries,
+  user-data, SSH): the run launches no more until one still booting
+  passes, its instances up running what's left, and once none is up or
+  booting it stops, its jobs undone. An adopted instance's boot counts
+  towards none of this: an earlier run launched it.
 - Every 15 s the controller syncs each instance over SSH (worker.py
   sync), every instance at once over its master connection (opened at
   its boot), at once when an instance's boot ends, and again at once each
@@ -303,9 +309,12 @@ speed. A run logs the speeds before its best pools.
   cleanup short. With --keep an interrupted run leaves its instances; a
   rerun of the same matrices, in any order, finds them by tag in those
   regions and adopts their jobs. A run that ends with jobs left undone
-  logs how many, last, and exits nonzero: 130 interrupted, 1 stopped (its
-  reason on stderr) or crashed; one done exits 1 if a job failed or a row
-  mismatched, else 0.
+  logs how many, last. One interrupted (^C, SIGTERM, SIGHUP, `farm.py
+  stop`) exits 130; one that stops of its own (a canary that differs, SSH
+  refusing the key, boots that keep failing) exits 1, its reason on
+  stderr, and terminates its instances even with --keep; one that crashed
+  exits 1 too; one done exits 1 if a job failed or a row mismatched, else
+  0.
 
 A run's process holds the run's lock, an exclusive flock of
 target/sim-farm/live/<run>.pid, from before its builds until it exits, and
@@ -661,12 +670,13 @@ TICK = 15
 SSH_GRACE = 180
 POOL_BACKOFF = 600
 # A launched instance whose boot fails skips its pool for POOL_BACKOFF, as
-# one AWS takes back does. Boots failed in BOOT_SPREAD pools of a region
-# since one last passed there skip the region's pools, and in BOOT_SPREAD
-# regions of a type since one of it passed the type's. BOOT_FAILURES boots
-# failing in a row with no instance up point at what fails every boot (the
-# image, the binaries, user-data, SSH): the run launches no more, and stops
-# once none is left booting.
+# one AWS takes back does. Failed boots of BOOT_SPREAD types in a zone skip
+# the zone, in BOOT_SPREAD zones of a region the region, and of a type in
+# BOOT_SPREAD regions the type, each counting those of the last
+# POOL_BACKOFF since one last passed there. BOOT_FAILURES of the run's boots
+# failing in a row, none passing between, point at what fails every boot
+# (the image, the binaries, user-data, SSH): the run launches no more until
+# one still booting passes, and stops once none is up or booting.
 BOOT_SPREAD = 2
 BOOT_FAILURES = 3
 THROTTLE_BACKOFF = 60
@@ -2226,6 +2236,17 @@ def launch(run: str, pool: Pool, region: Region, user_data: Path) -> str:
 # --- hosts --------------------------------------------------------------
 
 
+@dataclasses.dataclass(frozen=True)
+class BootFail:
+    """A launched instance's failed boot (Run.boot_failed): when, and its
+    type, zone and region, named as a Host's are."""
+
+    at: float
+    type: str
+    zone: str
+    region: str
+
+
 @dataclasses.dataclass(eq=False)
 class Host:
     id: str
@@ -2754,14 +2775,17 @@ class Run:
         self.peak_slots = 0
         self.estimated: dict | None = None
         self.boot_prior = past_boot_s("testbed" if matrices[0].kind == "testbed" else "test")
-        # Boots failed in a row with no instance up, and the last one's why;
-        # the pools boots failed in since one last passed in their region,
-        # and the regions each type's failed in since one of it passed
-        # (boot_failed); whether launches wait for a boot to pass (scale).
+        # The run's instances' boots failed in a row since one last passed,
+        # and the last one's why; their failed boots of the last
+        # POOL_BACKOFF, when one last passed in each zone, region and type,
+        # and what failed boots skip until when (boot_failed): ("pool",
+        # type, zone), ("zone", zone), ("region", region), ("type", type);
+        # whether launches wait for a boot to pass (scale).
         self.boot_streak = 0
         self.boot_why = ""
-        self.failed_pools: dict[str, set[tuple[str, str]]] = collections.defaultdict(set)
-        self.failed_regions: dict[str, set[str]] = collections.defaultdict(set)
+        self.boot_fails: list[BootFail] = []
+        self.boot_passes: dict[tuple[str, str], float] = {}
+        self.boot_skips: dict[tuple[str, ...], float] = {}
         self.launches_held = False
         self.stopping = threading.Event()
         self.testbed: Testbed | None = None
@@ -3831,8 +3855,9 @@ class Run:
     def boots(self) -> None:
         """The instances whose boot has ended: ready (a new one of test jobs
         once its canary's trace is the one here), or lost, a launched one's
-        pool skipped (boot_failed). Those that passed come first: a boot
-        that fails as another passes fails with an instance up."""
+        pool skipped (boot_failed). An adopted one's boot counts for and
+        against nothing: an earlier run launched it, and it boots with no
+        setup. Those that passed come first, as having passed before."""
         ended = [h for h in self.hosts
                  if h.state in ("booting", "adopting") and h.boot is not None and h.boot.done()]
         for h in sorted(ended, key=lambda h: h.boot.exception() is not None):
@@ -3840,8 +3865,6 @@ class Run:
                 res = h.boot.result()
             except Exception as e:
                 why = f"bootstrap failed: {e}"
-                # An adopted one's says nothing of its pool's boots: an
-                # earlier run launched it.
                 self.lose(h, why if h.adopted else f"{why}; {self.boot_failed(h, str(e), time.time())}")
                 continue
             if res is not None:
@@ -3849,46 +3872,59 @@ class Run:
             else:
                 h.state = "ready"
                 log(f"{h.id} ({h.type} in {h.zone}) is ready; {h.steps()}")
-            self.boot_passed(h)
+            if not h.adopted:
+                self.boot_passed(h, time.time())
 
     def boot_failed(self, h: Host, why: str, now: float) -> str:
-        """A launched instance's boot failed (`why`): its pool is skipped for
-        POOL_BACKOFF, its region's pools too once boots have failed in
-        BOOT_SPREAD of them since one last passed there, and its type's in
-        every region once they have in BOOT_SPREAD regions since one of the
-        type passed. With no instance up it counts towards BOOT_FAILURES in
-        a row (scale); one up shows that boots can pass. Says what it
-        skips."""
-        if not any(x.state == "ready" for x in self.hosts):
-            self.boot_streak += 1
-            self.boot_why = why
-        pools = self.failed_pools[h.region]
-        pools.add((h.type, h.zone))
-        regions = self.failed_regions[h.type]
-        regions.add(h.region)
-        skip, where, because = {(h.type, h.zone)}, [], []
-        if len(pools) >= BOOT_SPREAD:
-            skip |= {p.key for p in self.pools if p.region == h.region}
-            where.append(f"every pool of {h.region}")
-            because.append(f"boots failed in {len(pools)} of its pools since one last passed there")
-        if len(regions) >= BOOT_SPREAD:
-            skip |= {p.key for p in self.pools if p.type == h.type}
-            where.append(f"{h.type} in every region")
-            because.append(f"{h.type}'s failed in {len(regions)} regions since one passed")
-        for key in skip:
-            self.backoff[key] = max(self.backoff.get(key, 0.0), now + POOL_BACKOFF)
-        return (f"skipping {' and '.join(where) or f'{h.type} in {h.zone}'} for {POOL_BACKOFF // 60} min"
-                + (f" ({'; '.join(because)})" if because else ""))
+        """A launched instance's boot failed (`why`): it counts towards
+        BOOT_FAILURES in a row (scale), and its pool is skipped for
+        POOL_BACKOFF; its zone too once boots of BOOT_SPREAD types failed
+        there, its region once they failed in BOOT_SPREAD of its zones, and
+        its type in every region once its failed in BOOT_SPREAD regions,
+        each counting the failures of the last POOL_BACKOFF since one last
+        passed there. Says what it skips."""
+        self.boot_streak += 1
+        self.boot_why = why
+        self.boot_fails = [f for f in self.boot_fails if f.at > now - POOL_BACKOFF]
+        self.boot_fails.append(BootFail(now, h.type, h.zone, h.region))
+        # Each scope's spread: the types failing in its zone, the zones in
+        # its region, the regions of its type.
+        spread = {}
+        for scope, of in (("zone", "type"), ("region", "zone"), ("type", "region")):
+            name = getattr(h, scope)
+            passed = self.boot_passes.get((scope, name), float("-inf"))
+            spread[scope] = {getattr(f, of) for f in self.boot_fails if getattr(f, scope) == name and f.at > passed}
+        wide = [s for s, got in spread.items() if len(got) >= BOOT_SPREAD]
+        until = now + POOL_BACKOFF
+        for key in [("pool", h.type, h.zone)] + [(s, getattr(h, s)) for s in wide]:
+            self.boot_skips[key] = max(self.boot_skips.get(key, 0.0), until)
+        where = {"zone": f"every pool of {h.zone}", "region": f"every pool of {h.region}",
+                 "type": f"{h.type} in every region"}
+        because = {"zone": f"boots of {len(spread['zone'])} types failed in {h.zone}",
+                   "region": f"boots failed in {len(spread['region'])} zones of {h.region}",
+                   "type": f"{h.type}'s failed in {len(spread['type'])} regions"}
+        shown = [s for s in wide if not (s == "zone" and "region" in wide)]
+        return (f"skipping {' and '.join(where[s] for s in shown) or f'{h.type} in {h.zone}'} for "
+                f"{POOL_BACKOFF / 60:g} min" + (f" ({'; '.join(because[s] for s in wide)} within "
+                                                f"{POOL_BACKOFF / 60:g} min, with none passing since)" if wide else ""))
 
-    def boot_passed(self, h: Host) -> None:
-        """An instance's boot passed: boots work, in its region and for its
-        type, and the launches go on."""
+    def boot_passed(self, h: Host, now: float) -> None:
+        """A launched instance's boot passed: boots work, in its zone, its
+        region and for its type, whose skips for failed boots go (its pool's
+        own stays), and the launches go on."""
         self.boot_streak = 0
-        self.failed_pools.pop(h.region, None)
-        self.failed_regions.pop(h.type, None)
+        for scope in (("zone", h.zone), ("region", h.region), ("type", h.type)):
+            self.boot_passes[scope] = now
+            self.boot_skips.pop(scope, None)
         if self.launches_held:
             self.launches_held = False
             log(f"{h.id} booted; launching again")
+
+    def boot_skipped(self, p: Pool, now: float) -> bool:
+        """Whether failed boots skip the pool: its own, its zone's, its
+        region's or its type's."""
+        return any(self.boot_skips.get(k, 0.0) > now
+                   for k in (("pool", p.type, p.zone), ("zone", p.zone), ("region", p.region), ("type", p.type)))
 
     def read_budgets(self, now: float) -> None:
         """The budgets of the regions whose reading is due: each region's
@@ -3951,7 +3987,7 @@ class Run:
             if h.state != "lost":
                 per_pool[(h.type, h.zone)] += h.spec.vcpus
         return cheapest(
-            [p for p in self.pools if self.backoff.get(p.key, 0) <= now],
+            [p for p in self.pools if self.backoff.get(p.key, 0) <= now and not self.boot_skipped(p, now)],
             {name: self.room(r) for name, r in self.regions.items()},
             {name: self.pool_cap(r) for name, r in self.regions.items()},
             per_pool, deficit, self.pinned,
@@ -4311,16 +4347,20 @@ class Run:
             demand = len(self.queue) + waiting + sum(len(h.assigned) for h in live)
             deficit = min(demand - sum(h.slots for h in live), self.wanted(now))
         if deficit > 0 and self.boot_streak >= BOOT_FAILURES:
-            # Boots keep failing with no instance up: none is launched while
-            # some still boot, one of which may pass, and the run stops once
-            # none is left.
+            # Boots keep failing, whatever pools they're in, with instances
+            # up or not: none is launched while some still boot, one of
+            # which may pass, and the instances up run what's left. With
+            # none left the run stops.
             if not live:
-                raise SystemExit(f"instances keep failing to bootstrap: {self.boot_streak} in a row with none up, "
-                                 f"the last: {self.boot_why}; stopping")
+                raise SystemExit(f"instances keep failing to bootstrap: {self.boot_streak} in a row since one last "
+                                 f"passed, and none is up; the last: {self.boot_why}; stopping")
             if not self.launches_held:
                 self.launches_held = True
-                log(f"{self.boot_streak} boots failed in a row with no instance up; launching none until one "
-                    f"of the {len(live)} booting passes")
+                booting = sum(1 for h in live if h.state == "booting")
+                up = sum(1 for h in live if h.state == "ready")
+                log(f"{self.boot_streak} boots failed in a row since one last passed; launching none"
+                    + (f" until one of the {booting} booting passes" if booting else "")
+                    + (f", the {up} instances up running what's left" if up else ""))
             return
         if deficit > 0:
             self.read_budgets(now)
@@ -4330,9 +4370,14 @@ class Run:
         while deficit > 0 and len(plan) < MAX_LAUNCHES:
             pool = self.pick(deficit, now)
             if pool is None:
-                if not live and not plan and now - self.last_stuck > 60:
+                # Said with instances up too when failed boots skip pools:
+                # the run then runs on fewer than it wants.
+                skipped = sum(1 for p in self.pools if self.boot_skipped(p, now))
+                if not plan and (not live or skipped) and now - self.last_stuck > 60:
                     self.last_stuck = now
-                    log("no pool fits the budget or has capacity; waiting")
+                    log("no pool fits the budget or has capacity"
+                        + (f", {skipped} of the {len(self.pools)} skipped for failed boots" if skipped else "")
+                        + "; waiting")
                 break
             # An instance of twice the capacity wanted or more waits, unless
             # the run has none.
