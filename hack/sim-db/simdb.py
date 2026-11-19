@@ -97,9 +97,14 @@ in the 7 days S3 keeps a run's data, if one alone was, else the run of
 its name, and the pull names the others; a pull that
 finds none of the run's flushes fails, saying where it looked and, for a
 name of no run, the names nearest it. Its sample tables (sim-samples/)
-come with `--reads`: the whole run's, or with `--cell`, `--arm` and
-`--seed` only the flushes holding those jobs (the manifests' keys; a job
-held twice, a verify copy, from the fewest flushes), and the queries
+come with `--reads`, a GET a file, for the run's flushes the cache holds
+(its tables pulled first where it holds none of them, the samples of a
+flush the cache lacks being of no use): each flush's, or with `--cell`,
+`--arm` and `--seed` only the flushes holding those jobs (the manifests'
+keys; a job held twice, a verify copy, from the fewest flushes). So a
+pull's reads are what its `--dry-run` lists, and after a `prune` the
+kept flushes' alone; `pull --run` without `--reads` syncs the tables of
+every flush under the name. The queries
 that read them (pooled, aligned on a read lag, forecast, and sql with
 `--reads`) pull their selection's that way when the cache lacks them,
 noting the size, at most `--pull-mb`. `--dry-run` lists what a pull
@@ -676,7 +681,8 @@ def main():
     p.add_argument("--run", required=True, help="the farm run, or a matrix or a suite farm run's id that one run "
                    "includes")
     p.add_argument("--reads", action="store_true",
-                   help=f"the sample tables too ({SAMPLES_TEXT}; sim-samples/)")
+                   help=f"the sample tables ({SAMPLES_TEXT}; sim-samples/) of the run's flushes the cache holds "
+                        "(its tables first where it holds none), as --dry-run lists them")
     p.add_argument("--cell", action="append", help="only these cells' reads, globs")
     p.add_argument("--arm", action="append", help="only these arms' reads, globs")
     p.add_argument("--seed", action="append", type=int, help="only these seeds' reads")

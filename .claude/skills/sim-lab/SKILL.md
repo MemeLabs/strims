@@ -98,7 +98,11 @@ their joins.
   git doesn't track. A refused pull lists the commits the lines record
   and when their jobs ran. `prune` takes the same options and removes the
   cache's other flushes of the run, with their derived tables. The next
-  `index` drops them from the catalog. The cut is made per flush: a rerun
+  `index` drops them from the catalog. `pull --reads` fetches only the
+  samples of the run's flushes already in the cache, exactly what its
+  `--dry-run` lists, so after a prune it takes only the kept flushes'
+  samples. A plain `pull --run RUN` syncs every flush under the name
+  again. The cut is made per flush: a rerun
   that ran only some jobs leaves the others in the earlier run's
   flushes, next to the jobs it replaced.
 - Put a query with `$name`s in single quotes: in double quotes the shell

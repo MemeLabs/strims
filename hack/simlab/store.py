@@ -92,13 +92,15 @@ matrices for its id (suite.py's write_matrices: <id>-NN):
                  under the run's sim-data/ (or none of `flushes`, a
                  Flushes, there), and the cache none of it (for an unknown
                  name, unknown's)
-  pull(run, reads=False, flushes=None) -> Pull
-                 `aws s3 sync` of the run's sim-data (and sim-samples with
-                 `reads`) into the cache's farm/<run>/, its LISTs, GETs
-                 and bytes a line of the farm's S3 ledger; a sync that
-                 wrote nothing leaves no directory; with `flushes`
-                 (sources, run_flushes') those flushes alone, a sync of
-                 each instance's that takes its seqs among them
+  pull(run, flushes=None) -> Pull
+                 `aws s3 sync` of the run's sim-data into the cache's
+                 farm/<run>/, its LISTs, GETs and bytes a line of the
+                 farm's S3 ledger; a sync that wrote nothing leaves no
+                 directory; with `flushes` (sources, run_flushes') those
+                 flushes alone, a sync of each instance's that takes its
+                 seqs among them. A flush's samples come a file at a
+                 time, for the flushes the cache holds (flushes_plan,
+                 sample_plan), so a pull's quote is what it fetches
   pull_sources(srcs) -> ([Pull], gone)
                  the pulls of the farm runs of the sources `srcs` the
                  cache lacks, less their samples, and the sources still
@@ -129,6 +131,15 @@ matrices for its id (suite.py's write_matrices: <id>-NN):
                  holds, its GETs and their bytes counted by run in `gets`
                  and `got` (Counters) for the caller's ledger line, however
                  it ends
+  flushes_plan(srcs) -> ({src: (tables, bytes, jobs)}, lost)
+                 what the cache's flushes `srcs` lack of the sample tables
+                 their manifests list, and the jobs of those whose samples
+                 never landed: a whole run's reads
+  fetch_plan(plan) -> set
+                 fetch_samples of `plan`, its GETs and bytes each run's
+                 ledger line (gets_ledger); the flushes S3 no longer holds
+  gets_ledger(gets, got)
+                 each run's ledger line of fetch_samples' Counters
   farm_ledger(run, use)
                  appends a pull's line to the farm's S3 ledger
                  (target/sim-farm/s3.jsonl, farm.py's S3_LEDGER) under its
@@ -645,10 +656,11 @@ def unpulled(named, flushes=None, runs=None):
 PULL_SYNCS = 8
 
 
-def pull(run, reads=False, flushes=None):
+def pull(run, flushes=None):
     """Copies farm run `run`'s flushes from S3 into the cache
-    (farm/<run>/<instance>/<seq>/), and with `reads` their samples too:
-    every flush under the run's name, or with `flushes` (sources,
+    (farm/<run>/<instance>/<seq>/), less their samples (sim-samples/,
+    which come a file at a time: sample_plan, fetch_plan): every flush
+    under the run's name, or with `flushes` (sources,
     farm/<run>/<instance>/<seq>) those alone, a sync of each instance's
     prefix taking its seqs among them (PULL_SYNCS at once). What it cost
     S3 goes to the run's line of the farm's S3 ledger: a LIST a thousand
@@ -668,31 +680,29 @@ def pull(run, reads=False, flushes=None):
                 raise ValueError(f"{s} isn't a flush of farm run {run} (farm/{run}/<instance>/<seq>)")
             parts[f"{inst}/"].append(seq)
 
-    def sync(prefix, part, seqs):
+    def sync(part, seqs):
         only = [] if seqs is None else ["--exclude", "*", *(x for n in seqs for x in ("--include", f"{n}/*"))]
-        p = aws(["s3", "sync", f"s3://{bucket}/{prefix}/{run}/{part}", str(dest / part), "--no-progress", *only],
+        p = aws(["s3", "sync", f"s3://{bucket}/sim-data/{run}/{part}", str(dest / part), "--no-progress", *only],
                 region, profile)
         p.check_returncode()
         return p.stdout
 
     lists = gets = got = 0
     pulled = set()
-    for prefix in ["sim-data"] + (["sim-samples"] if reads else []):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=PULL_SYNCS) as ex:
-            outs = list(ex.map(lambda kv: sync(prefix, *kv), parts.items()))
-        for line in (x for out in outs for x in out.splitlines()):
-            if line.startswith("download: ") and " to " in line:
-                # The CLI names the file relative to its working directory,
-                # this process's.
-                to = Path(os.path.abspath(line.rsplit(" to ", 1)[1]))
-                size = to.stat().st_size
-                gets += 1 if size < CLI_PART else math.ceil(size / CLI_PART)
-                got += size
-                pulled.add(to.parent.relative_to(os.path.abspath(cache)).as_posix())
-        for part in parts:
-            keys = sum(1 for f in (dest / part).glob("**/*")
-                       if f.is_file() and (f.stem in store_host.SAMPLE_TABLES) == (prefix == "sim-samples"))
-            lists += max(1, math.ceil(keys / 1000))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=PULL_SYNCS) as ex:
+        outs = list(ex.map(lambda kv: sync(*kv), parts.items()))
+    for line in (x for out in outs for x in out.splitlines()):
+        if line.startswith("download: ") and " to " in line:
+            # The CLI names the file relative to its working directory,
+            # this process's.
+            to = Path(os.path.abspath(line.rsplit(" to ", 1)[1]))
+            size = to.stat().st_size
+            gets += 1 if size < CLI_PART else math.ceil(size / CLI_PART)
+            got += size
+            pulled.add(to.parent.relative_to(os.path.abspath(cache)).as_posix())
+    for part in parts:
+        keys = sum(1 for f in (dest / part).glob("**/*") if f.is_file() and f.stem not in store_host.SAMPLE_TABLES)
+        lists += max(1, math.ceil(keys / 1000))
     # The CLI makes its destination for a prefix S3 holds nothing under.
     for d in [*(dest / part for part in parts if part), dest]:
         if d.is_dir() and not any(d.iterdir()):
@@ -1015,6 +1025,45 @@ def fetch_samples(plan, gets, got):
     return gone
 
 
+def gets_ledger(gets, got):
+    """Each run's line of the farm's S3 ledger for the GETs `gets` and their
+    bytes `got` (fetch_samples' Counters, by run)."""
+    region = farm_bucket()[1] if gets else None
+    for run in gets:
+        farm_ledger(run, {"region": region or "", "tier1": {}, "tier2": {"pull_get": gets[run]},
+                          "up": {}, "down": {"internet": got[run]}, "stored": 0})
+
+
+def flushes_plan(srcs):
+    """What the cache's farm flushes `srcs` lack of the sample tables their
+    manifests list, as sample_plan gives it ({src: (tables, bytes, jobs)}),
+    and how many jobs the flushes whose samples never landed (unlanded)
+    hold, which no flush in S3 gives: a whole run's reads (simdb.py pull
+    --reads), each of its flushes'."""
+    root, bad = store_host.cache_root() / "cache", unlanded(srcs)
+    plan, lost = {}, 0
+    for s in srcs:
+        m = manifest_of(s)
+        listed, jobs = m.get("tables") or {}, len(m.get("keys") or [])
+        lack = [t for t in store_host.SAMPLE_TABLES if t in listed and not (root / s / f"{t}.parquet").exists()]
+        if lack and s in bad:
+            lost += jobs
+        elif lack:
+            plan[s] = (lack, sum(listed[t].get("bytes", 0) for t in lack), jobs)
+    return plan, lost
+
+
+def fetch_plan(plan):
+    """Fetches sample_plan-shaped `plan` ({src: (tables, bytes, jobs)}),
+    each run's GETs and bytes a line of the farm's S3 ledger however it
+    ends; returns the flushes S3 no longer holds (fetch_samples)."""
+    gets, got = collections.Counter(), collections.Counter()
+    try:
+        return fetch_samples(plan, gets, got)
+    finally:
+        gets_ledger(gets, got)
+
+
 def pull_samples(views, tables, limit_mb=None, say=None):
     """Pulls what the jobs the views `views` select lack of the sample
     `tables` (sample_plan), noting its size (on stderr, or to `say`), and
@@ -1042,10 +1091,7 @@ def pull_samples(views, tables, limit_mb=None, say=None):
             gone |= fetch_samples(plan, gets, got)
             plan, lost = sample_plan(views, tables, gone, cands)
     finally:
-        region = farm_bucket()[1] if gets else None
-        for run in gets:
-            farm_ledger(run, {"region": region or "", "tier1": {}, "tier2": {"pull_get": gets[run]},
-                              "up": {}, "down": {"internet": got[run]}, "stored": 0})
+        gets_ledger(gets, got)
     if lost:
         say(f"S3 holds none of the {' or '.join(named)} of {lost} of the selection's jobs (expired, or never "
             "landed): left out")

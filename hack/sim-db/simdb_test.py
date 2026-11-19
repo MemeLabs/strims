@@ -1024,13 +1024,26 @@ class SamplesPull(unittest.TestCase):
                          {"internet": self.size("i-2", "reads", "forecast") + self.size("i-3", "reads")})
         self.assertEqual(self.served(C0), {"k1": ("i-3", 10), "k3": ("i-2", 30), "k4": ("i-2", 40)})
 
-    def test_a_whole_run_pull_still_syncs_every_flush(self):
-        self.cli("pull", "--run", RUN)
+    def test_a_whole_runs_reads_are_what_its_dry_run_lists(self):
+        # The cache holding none of the run, the reads pull its tables
+        # first (sim-data, every flush), then GETs each flush's samples.
+        out, _ = self.cli("pull", "--run", RUN, "--reads")
+        self.assertEqual([a[:3] for a in self.calls if a[1] == "sync"], [["s3", "sync", f"s3://bkt/sim-data/{RUN}/"]])
+        self.assertEqual(self.gets(), {self.key(i, "reads") for i in ("i-1", "i-2", "i-3")}
+                         | {self.key("i-2", "forecast")})
+        mb = (sum(self.size(i, "reads") for i in ("i-1", "i-2", "i-3")) + self.size("i-2", "forecast")) / 1e6
+        quote = (f"4 files, {mb:.1f} MB, for 7 jobs' reads and forecast; S3 holds none for 1 jobs (expired, or never "
+                 "landed)")
+        self.assertEqual(out, f"{RUN}: 4 sources in {simdb.cache_root() / 'cache' / 'farm' / RUN}; fetched {quote}\n")
+        # Its dry run listed what it fetched: the cache's flushes' samples.
+        for i, t in (("i-1", "reads"), ("i-2", "reads"), ("i-2", "forecast"), ("i-3", "reads")):
+            (simdb.cache_root() / "cache" / src_of(i) / f"{t}.parquet").unlink()
         out, _ = self.cli("pull", "--run", RUN, "--reads", "--dry-run")
-        self.assertIn("would GET 4 files", out)
-        self.calls.clear()
+        self.assertEqual(out.splitlines()[0], f"{RUN}: would GET {quote}")
+        self.assertEqual(self.calls, [])
         self.cli("pull", "--run", RUN, "--reads")
-        self.assertEqual([a[2] for a in self.calls], [f"s3://bkt/sim-data/{RUN}/", f"s3://bkt/sim-samples/{RUN}/"])
+        # no sync: the cache holds the run's tables
+        self.assertEqual([a[1] for a in self.calls], ["get-object"] * 4)
         cache = simdb.cache_root() / "cache"
         self.assertEqual({p.relative_to(cache).as_posix() for p in cache.glob("farm/**/*.parquet")
                           if p.stem in simdb.SAMPLE_TABLES},
@@ -1215,9 +1228,13 @@ class OneRun(unittest.TestCase):
         """The cache's flushes of RUN_T, as instance/seq."""
         return {s.split("/", 2)[2] for s in store.sources([f"farm/{RUN_T}"])}
 
+    def gets(self):
+        """The objects the stub fetched one at a time."""
+        return {a[a.index("--key") + 1] for a in self.calls if a[:2] == ["s3api", "get-object"]}
+
     def syncs(self):
         """The syncs the stub ran, each its source and the seqs its
-        filters take (None: all), and forgets them."""
+        filters take (None: all), and forgets every call."""
         out = set()
         for a in self.calls:
             if a[:2] == ["s3", "sync"]:
@@ -1342,15 +1359,54 @@ class OneRun(unittest.TestCase):
         self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--reads", "--cell", "tb-x")
         got = {a[a.index("--key") + 1] for a in self.calls if a[:2] == ["s3api", "get-object"]}
         self.assertEqual(got, {f"sim-samples/{RUN_T}/{f}/reads.parquet" for f in ("i-n1/0", "i-k/1")})
-        # The whole run's reads: a sync an instance, of sim-data and
-        # sim-samples.
+        # The whole run's reads: its tables first (a sync an instance, of
+        # sim-data), then a GET a flush's samples.
         shutil.rmtree(self.dest)
         self.calls.clear()
         self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--reads")
-        self.assertEqual(self.syncs(), {(f"{p}/{RUN_T}/{i}/", (s,)) for p in ("sim-data", "sim-samples")
-                                        for i, s in (("i-n1", "0"), ("i-k", "1"))})
+        self.assertEqual(self.gets(), {f"sim-samples/{RUN_T}/{f}/reads.parquet" for f in ("i-n1/0", "i-k/1")})
+        self.assertEqual(self.syncs(), {(f"sim-data/{RUN_T}/i-n1/", ("0",)), (f"sim-data/{RUN_T}/i-k/", ("1",))})
         self.assertEqual({p.relative_to(self.dest).as_posix() for p in self.dest.rglob("reads.parquet")},
                          {"i-n1/0/reads.parquet", "i-k/1/reads.parquet"})
+        # A dry run of those flushes, the cache lacking one: what it would
+        # GET of the other, and the one its pull copies first.
+        shutil.rmtree(self.dest / "i-k")
+        (self.dest / "i-n1" / "0" / "reads.parquet").unlink()
+        out, _ = self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--reads", "--dry-run")
+        self.assertEqual(out.splitlines()[1:], [
+            f"{RUN_T}: would GET 1 files, 0.0 MB, for 2 jobs' reads",
+            f"  s3://bkt/sim-samples/{RUN_T}/i-n1/0/reads.parquet  0.0 MB  2 jobs",
+            f"{RUN_T}: the cache lacks 1 of those flushes, whose samples a pull GETs once it has copied their tables"])
+        self.assertEqual(self.calls, [])
+
+    def test_after_a_prune_the_reads_are_the_kept_flushes(self):
+        # Every run of the name pulled, the other run's flushes pruned: the
+        # reads, and their dry run, are the kept flushes' alone, and the
+        # pruned ones stay out.
+        self.cli("pull", "--run", RUN_T)
+        self.cli("prune", "--run", RUN_T, "--commit", "abcd2")
+        self.calls.clear()
+        out, _ = self.cli("pull", "--run", RUN_T, "--reads", "--dry-run")
+        self.assertEqual({x.split()[0] for x in out.splitlines()[1:]},
+                         {f"s3://bkt/sim-samples/{RUN_T}/{f}/reads.parquet" for f in ("i-n1/0", "i-k/1")})
+        self.assertTrue(out.startswith(f"{RUN_T}: would GET 2 files, 0.0 MB, for 4 jobs' reads\n"), out)
+        out, _ = self.cli("pull", "--run", RUN_T, "--reads")
+        self.assertEqual(out, f"{RUN_T}: 2 sources in {self.dest}; fetched 2 files, 0.0 MB, for 4 jobs' reads\n")
+        self.assertEqual(self.gets(), {f"sim-samples/{RUN_T}/{f}/reads.parquet" for f in ("i-n1/0", "i-k/1")})
+        self.assertEqual(self.syncs(), set())
+        self.assertEqual(self.held(), {"i-n1/0", "i-k/1"})
+        line = self.ledger()[-1]
+        self.assertEqual((line["tier1"], line["tier2"]), ({}, {"pull_get": 2}))
+        self.assertEqual(line["down"]["internet"], sum(f.stat().st_size for f in self.dest.rglob("reads.parquet")))
+        # Pulled again: nothing to fetch, and no ledger line.
+        n = len(self.ledger())
+        out, _ = self.cli("pull", "--run", RUN_T, "--reads")
+        self.assertEqual(out, f"{RUN_T}: 2 sources in {self.dest}; the cache holds what S3 has of their samples\n")
+        self.assertEqual((self.calls, len(self.ledger())), ([], n))
+        # The tables of every flush under the name come back only with a
+        # pull without --reads.
+        self.cli("pull", "--run", RUN_T)
+        self.assertEqual(self.held(), {"i-o1/0", "i-k/0", "i-n1/0", "i-k/1"})
 
     def test_a_lines_time_is_its_jobs_start_else_when_it_was_written(self):
         # A testbed line's started, a test line's at (it has no started),
