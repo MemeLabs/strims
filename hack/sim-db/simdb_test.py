@@ -9,8 +9,9 @@ name a suite farm run's jobs by, alike, and the index suite.py's `farm`
 writes (ArmLabels); which copy of a key the views take (Canon); its
 queries and joins over a scratch cache of both sims' tables (Queries);
 its pulls of a farm run's samples from a scratch S3, the aws CLI stubbed
-(SamplesPull); the derived tables' columns and versions (Derived);
-the events load_series gives the phase rule, retired ids read as
+(SamplesPull), and of one run of a name S3 holds two runs of, by commit
+and time, with the prune of the other's flushes (OneRun); the derived
+tables' columns and versions (Derived); the events load_series gives the phase rule, retired ids read as
 current ones and a source without events implying them (RuleEvents);
 macros.sql's playback() against the sims' own stalls (Playback); and
 catalog.py's index of a scratch cache and farm state (Catalog):
@@ -21,6 +22,8 @@ Needs the pinned DuckDB CLI (simdb.py duckdb fetches it); runs under
 hack/'s uv venv (the catalog's in the duckdb module)."""
 
 import argparse
+import datetime
+import fnmatch
 import importlib.util
 import io
 import json
@@ -902,11 +905,18 @@ class SamplesPull(unittest.TestCase):
         self.calls.append(args)
         if args[:2] == ["s3", "sync"]:
             prefix, dest, out = self.s3 / args[2].removeprefix("s3://bkt/"), Path(args[3]), []
+            # The filters, the last that matches a file's path below the
+            # prefix deciding, as the CLI's do.
+            filters = [(a, args[i + 1]) for i, a in enumerate(args) if a in ("--exclude", "--include")]
+
+            def taken(rel):
+                return ([a == "--include" for a, pat in filters if fnmatch.fnmatchcase(rel, pat)] or [True])[-1]
+
             # As the CLI does, for a prefix holding nothing too.
             dest.mkdir(parents=True, exist_ok=True)
             for f in sorted(prefix.rglob("*")):
                 to = dest / f.relative_to(prefix)
-                if f.is_file() and not to.exists():
+                if f.is_file() and not to.exists() and taken(f.relative_to(prefix).as_posix()):
                     to.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(f, to)
                     # As the CLI does: relative to its working directory.
@@ -1127,6 +1137,266 @@ class SamplesPull(unittest.TestCase):
         self.assertEqual(self.refused("--run", RUN),
                          f"{RUN}: S3 holds nothing under sim-data/{RUN}/ (expired, or never landed), and the cache "
                          "none of its flushes")
+
+
+# Two runs of one name, a testbed run of matrices tb-x and tb-y and its
+# rerun at another commit, each a job a matrix and repeat (key, matrix,
+# seed) in its flushes: the rerun's jobs key into the same cells and seeds.
+# An instance the rerun adopted (i-k) holds a flush of each.
+RUN_T = "tb-x+tb-y"
+OLD, NEW = "abcd1" + "0" * 35, "abcd2" + "1" * 35
+FIRST = (OLD, "2026-11-16T10:00:00+00:00", {"i-o1/0": [("o1", "tb-x", 1), ("o2", "tb-y", 1)],
+                                            "i-k/0": [("o3", "tb-x", 2), ("o4", "tb-y", 2)]})
+RERUN = (NEW, "2026-11-18T10:00:00+00:00", {"i-n1/0": [("n1", "tb-x", 1), ("n2", "tb-y", 1)],
+                                            "i-k/1": [("n3", "tb-x", 2), ("n4", "tb-y", 2)]})
+# A third run, at the rerun's commit, of tb-x alone (a setting of its
+# changed, in matrices git doesn't hold): new jobs of tb-x's cells and
+# seeds, tb-y's lines kept.
+THIRD = (NEW, "2026-11-18T12:00:00+00:00", {"i-m1/0": [("m1", "tb-x", 1), ("m2", "tb-x", 2)]})
+
+
+class OneRun(unittest.TestCase):
+    """`pull --commit/--since` and `prune` over a scratch S3 holding two
+    runs of one name, the aws CLI stubbed as SamplesPull's."""
+    aws, cli, ledger, refused = SamplesPull.aws, SamplesPull.cli, SamplesPull.ledger, SamplesPull.refused
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        self.s3, self.calls = root / "s3", []
+        for p in (*checkout(root),
+                  mock.patch.object(query, "derive", lambda srcs: None),
+                  mock.patch.object(store, "aws", self.aws),
+                  mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
+            p.start()
+            self.addCleanup(p.stop)
+        (root / "hack" / "sim-farm").mkdir(parents=True)
+        (root / "hack" / "sim-farm" / "config.toml").write_text('s3_bucket = "bkt"\ns3_region = "us-west-1"\n')
+        self.farm = root / "target" / "sim-farm"
+        (self.farm / RUN_T).mkdir(parents=True)
+        (self.farm / RUN_T / "matrices").write_text("tb-x\ntb-y\n")
+        self.dest = simdb.cache_root() / "cache" / "farm" / RUN_T
+        self.run_of(*FIRST)
+        self.run_of(*RERUN)
+
+    def run_of(self, commit, started, flushes):
+        """A run of RUN_T at `commit`, its jobs started at `started`: its
+        `flushes` in S3 (a runs and a reads table each, and the manifest)
+        and a line a job in its matrix's rows.jsonl."""
+        q = simdb.q
+        # written once the flush landed
+        at = (datetime.datetime.fromisoformat(started) + datetime.timedelta(minutes=2)).isoformat()
+        for flush, jobs in flushes.items():
+            src = f"farm/{RUN_T}/{flush}"
+            data, samples = self.s3 / "sim-data" / RUN_T / flush, self.s3 / "sim-samples" / RUN_T / flush
+            data.mkdir(parents=True)
+            samples.mkdir(parents=True)
+            runs = ", ".join(f"({q(k)}, {q(src)}, {q(m)}, 'main', {seed}, '{{}}')" for k, m, seed in jobs)
+            reads = ", ".join(f"({q(k)}, {q(src)}, 0, {t}, {t // 100}, 10)" for k, _, _ in jobs for t in (0, 100))
+            tables = {"runs": (data, f"SELECT * FROM (VALUES {runs}) t(k, src, cell, arm, seed, env)", len(jobs)),
+                      "reads": (samples, f"SELECT * FROM (VALUES {reads}) t(k, src, viewer, t_ms, seq, lag_ms)",
+                                2 * len(jobs))}
+            manifest = {"keys": sorted(k for k, _, _ in jobs), "tables": {}}
+            for t, (d, sql, n) in tables.items():
+                simdb.duck(f"COPY ({sql}) TO {q(d / f'{t}.parquet')} (FORMAT parquet);", out=None)
+                manifest["tables"][t] = {"rows": n, "bytes": (d / f"{t}.parquet").stat().st_size,
+                                         "sha256": simdb.sha256(d / f"{t}.parquet")}
+            (data / "manifest.json").write_text(json.dumps(manifest))
+            for k, m, seed in jobs:
+                (self.farm / m).mkdir(exist_ok=True)
+                with open(self.farm / m / "rows.jsonl", "a") as f:
+                    f.write(json.dumps({"id": k, "kind": "testbed", "arm": "main", "commit": commit, "repeat": seed,
+                                        "host": flush.split("/")[0], "started": started, "at": at, "key": k,
+                                        "src": src, "data": f"s3://bkt/sim-data/{RUN_T}/{flush}/", "reads": True,
+                                        "row": {}}) + "\n")
+
+    def held(self):
+        """The cache's flushes of RUN_T, as instance/seq."""
+        return {s.split("/", 2)[2] for s in store.sources([f"farm/{RUN_T}"])}
+
+    def syncs(self):
+        """The syncs the stub ran, each its source and the seqs its
+        filters take (None: all), and forgets them."""
+        out = set()
+        for a in self.calls:
+            if a[:2] == ["s3", "sync"]:
+                seqs = tuple(a[i + 1].removesuffix("/*") for i, x in enumerate(a) if x == "--include")
+                out.add((a[2].removeprefix("s3://bkt/"), seqs if "--exclude" in a else None))
+        self.calls.clear()
+        return out
+
+    def cells(self):
+        """{(cell, seed): keys} of the views over the cache's flushes of
+        RUN_T: a run of the name a key each."""
+        v, _ = views(argparse.Namespace(src=[f"farm/{RUN_T}"], cell=None, arm=None, seed=None, bin=1000, since=None,
+                                        until=None))
+        got = {}
+        for r in simdb.duck(v + "\nSELECT cell, seed, k FROM runs ORDER BY k;"):
+            got.setdefault((r["cell"], r["seed"]), []).append(r["k"])
+        return got
+
+    def test_a_pull_by_commit_takes_one_run_of_the_name(self):
+        out, _ = self.cli("pull", "--run", RUN_T, "--commit", "abcd2")
+        self.assertEqual(out, f"{RUN_T}: 2 of the 4 flushes its matrices' lines name, those of its jobs of commit "
+                              f"{NEW[:12]}\n{RUN_T}: 2 sources in {self.dest}\n")
+        # A sync an instance, of its seqs the run's: the adopted i-k's 1
+        # alone.
+        self.assertEqual(self.syncs(), {(f"sim-data/{RUN_T}/i-n1/", ("0",)), (f"sim-data/{RUN_T}/i-k/", ("1",))})
+        self.assertEqual(self.held(), {"i-n1/0", "i-k/1"})
+        self.assertEqual(self.cells(), {("tb-x", 1): ["n1"], ("tb-y", 1): ["n2"], ("tb-x", 2): ["n3"],
+                                        ("tb-y", 2): ["n4"]})
+        # a LIST an instance's prefix, a GET a file (each flush's runs and
+        # manifest)
+        line = self.ledger()[-1]
+        self.assertEqual((line["run"], line["tier1"], line["tier2"]), (RUN_T, {"pull_list": 2}, {"pull_get": 4}))
+        self.assertEqual(line["down"]["internet"], sum(f.stat().st_size for f in self.dest.rglob("*") if f.is_file()))
+        # Pulled again, nothing new comes; the other run's pull says the
+        # cache holds this one's, which prune removes.
+        self.cli("pull", "--run", RUN_T, "--commit", "abcd2")
+        self.assertEqual(self.ledger()[-1]["tier2"], {"pull_get": 0})
+        self.calls.clear()
+        out, _ = self.cli("pull", "--run", RUN_T, "--commit", OLD)
+        self.assertEqual(out.splitlines()[1:], [
+            f"{RUN_T}: 2 sources in {self.dest}",
+            f"{RUN_T}: the cache also holds 2 flushes of the run that those lines don't name (an earlier run's of its "
+            f"name, say): simdb.py prune --run {RUN_T} --commit {OLD[:12]} removes them"])
+        self.assertEqual(self.syncs(), {(f"sim-data/{RUN_T}/i-o1/", ("0",)), (f"sim-data/{RUN_T}/i-k/", ("0",))})
+
+    def test_an_unfiltered_pull_takes_every_run_of_the_name(self):
+        # As before: the whole prefix in one sync, both runs' jobs keyed
+        # into the same cells and seeds.
+        out, _ = self.cli("pull", "--run", RUN_T)
+        self.assertEqual(out, f"{RUN_T}: 4 sources in {self.dest}\n")
+        self.assertEqual(self.syncs(), {(f"sim-data/{RUN_T}/", None)})
+        self.assertEqual(self.held(), {"i-o1/0", "i-k/0", "i-n1/0", "i-k/1"})
+        self.assertEqual(self.cells(), {("tb-x", 1): ["n1", "o1"], ("tb-y", 1): ["n2", "o2"],
+                                        ("tb-x", 2): ["n3", "o3"], ("tb-y", 2): ["n4", "o4"]})
+        self.assertEqual(self.ledger()[-1]["tier1"], {"pull_list": 1})
+
+    def test_prune_keeps_one_run_of_the_name(self):
+        self.cli("pull", "--run", RUN_T)
+        self.calls.clear()
+        derived = simdb.cache_root() / "derived" / "verdicts" / "v=1"
+        derived.mkdir(parents=True)
+        for flush in ("i-o1/0", "i-n1/0"):
+            (derived / f"farm~{RUN_T}~{flush.replace('/', '~')}.parquet").write_text("")
+        out, _ = self.cli("prune", "--run", RUN_T, "--commit", "abcd2", "--dry-run")
+        self.assertEqual(out, f"{RUN_T}: 2 of the 4 flushes its matrices' lines name, those of its jobs of commit "
+                              f"{NEW[:12]}\n{RUN_T}: kept 2 of its flushes in the cache, would remove 2\n"
+                              f"  farm/{RUN_T}/i-k/0\n  farm/{RUN_T}/i-o1/0\n")
+        self.assertEqual(len(self.held()), 4)
+        out, _ = self.cli("prune", "--run", RUN_T, "--commit", "abcd2")
+        self.assertEqual(out.splitlines()[1], f"{RUN_T}: kept 2 of its flushes in the cache, removed 2: simdb.py "
+                                              "index drops them from the catalog")
+        self.assertEqual(self.held(), {"i-n1/0", "i-k/1"})
+        self.assertEqual({p.name for p in derived.iterdir()}, {f"farm~{RUN_T}~i-n1~0.parquet"})
+        # the instance it emptied goes; the adopted one stays
+        self.assertEqual({p.name for p in self.dest.iterdir()}, {"i-n1", "i-k"})
+        self.assertEqual(self.cells(), {("tb-x", 1): ["n1"], ("tb-y", 1): ["n2"], ("tb-x", 2): ["n3"],
+                                        ("tb-y", 2): ["n4"]})
+        self.assertEqual(self.calls, [])
+        # A run the cache lacks part of: the pull that copies it.
+        shutil.rmtree(self.dest / "i-n1")
+        out, _ = self.cli("prune", "--run", RUN_T, "--commit", "abcd2")
+        self.assertEqual(out.splitlines()[1:], [
+            f"{RUN_T}: kept 1 of its flushes in the cache, removed 0",
+            f"{RUN_T}: the cache lacks 1 of the flushes it keeps: simdb.py pull --run {RUN_T} --commit {NEW[:12]} "
+            "copies them"])
+
+    def test_the_time_parts_two_runs_of_one_commit(self):
+        self.run_of(*THIRD)
+        self.cli("pull", "--run", RUN_T, "--commit", "abcd2")
+        self.assertEqual(self.held(), {"i-n1/0", "i-k/1", "i-m1/0"})
+        self.assertEqual(self.cells()[("tb-x", 1)], ["m1", "n1"])
+        out, _ = self.cli("prune", "--run", RUN_T, "--commit", "abcd2", "--since", "2026-11-18T11:00")
+        self.assertEqual(out.splitlines()[0], f"{RUN_T}: 1 of the 5 flushes its matrices' lines name, those of its "
+                                              f"jobs of commit {NEW[:12]} that ran since 2026-11-18 11:00:00 UTC")
+        self.assertEqual(self.held(), {"i-m1/0"})
+        # The time alone, in another zone: the same instant.
+        shutil.rmtree(self.dest)
+        self.calls.clear()
+        self.cli("pull", "--run", RUN_T, "--since", "2026-11-18T12:00:00+01:00")
+        self.assertEqual(self.syncs(), {(f"sim-data/{RUN_T}/i-m1/", ("0",))})
+        self.assertEqual(self.cells(), {("tb-x", 1): ["m1"], ("tb-x", 2): ["m2"]})
+        # The prune a pull names gives the time as the lines compare it.
+        self.cli("pull", "--run", RUN_T, "--commit", "abcd2")
+        out, _ = self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--since", "2026-11-18T11:00Z")
+        self.assertEqual(out.splitlines()[-1], f"{RUN_T}: the cache also holds 2 flushes of the run that those lines "
+                                               f"don't name (an earlier run's of its name, say): simdb.py prune --run "
+                                               f"{RUN_T} --commit {NEW[:12]} --since 2026-11-18T11:00:00Z removes them")
+
+    def test_reads_and_dry_runs_take_the_runs_flushes(self):
+        # A dry run asks S3 nothing, and names the pull the cache lacks.
+        self.assertEqual(self.refused("--run", RUN_T, "--commit", "abcd2", "--reads", "--dry-run"),
+                         f"the cache lacks those flushes of farm/{RUN_T}: pull --run {RUN_T} --commit {NEW[:12]} "
+                         "copies the tables that name its jobs")
+        self.assertEqual(self.calls, [])
+        self.cli("pull", "--run", RUN_T)
+        out, _ = self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--reads", "--dry-run")
+        self.assertEqual(out.splitlines()[1], f"{RUN_T}: would GET 2 files, 0.0 MB, for 4 jobs' reads")
+        self.assertEqual({x.split()[0] for x in out.splitlines()[2:4]},
+                         {f"s3://bkt/sim-samples/{RUN_T}/{f}/reads.parquet" for f in ("i-n1/0", "i-k/1")})
+        # A cell's reads: of the run's flushes alone.
+        self.calls.clear()
+        self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--reads", "--cell", "tb-x")
+        got = {a[a.index("--key") + 1] for a in self.calls if a[:2] == ["s3api", "get-object"]}
+        self.assertEqual(got, {f"sim-samples/{RUN_T}/{f}/reads.parquet" for f in ("i-n1/0", "i-k/1")})
+        # The whole run's reads: a sync an instance, of sim-data and
+        # sim-samples.
+        shutil.rmtree(self.dest)
+        self.calls.clear()
+        self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--reads")
+        self.assertEqual(self.syncs(), {(f"{p}/{RUN_T}/{i}/", (s,)) for p in ("sim-data", "sim-samples")
+                                        for i, s in (("i-n1", "0"), ("i-k", "1"))})
+        self.assertEqual({p.relative_to(self.dest).as_posix() for p in self.dest.rglob("reads.parquet")},
+                         {"i-n1/0/reads.parquet", "i-k/1/reads.parquet"})
+
+    def test_a_lines_time_is_its_jobs_start_else_when_it_was_written(self):
+        # A testbed line's started, a test line's at (it has no started),
+        # UTC where it names no zone.
+        at = datetime.datetime(2026, 11, 18, 10, 2, tzinfo=datetime.UTC)
+        self.assertEqual(store.line_time({"started": "2026-11-18T10:00:00+00:00", "at": at.isoformat()}),
+                         at - datetime.timedelta(minutes=2))
+        self.assertEqual(store.line_time({"at": "2026-11-18T10:02:00"}), at)
+        self.assertEqual(store.line_time({"started": None, "at": "2026-11-18T11:02:00+01:00"}), at)
+        self.assertIsNone(store.line_time({}))
+        # A test matrix's index.jsonl names flushes as a testbed matrix's
+        # rows.jsonl does.
+        line = {"key": "t1", "commit": NEW, "at": "2026-11-18T13:00:00+00:00", "src": f"farm/{RUN_T}/i-t/0"}
+        (self.farm / "tb-x" / "index.jsonl").write_text(json.dumps(line) + "\n")
+        self.assertEqual(store.run_flushes(RUN_T, ["abcd2"], store.instant("2026-11-18T12:30")).srcs,
+                         [f"farm/{RUN_T}/i-t/0"])
+
+    def test_what_names_no_run_is_refused(self):
+        self.assertEqual(self.refused("--run", RUN_T, "--commit", "abcd"),
+                         f"--commit abcd: 2 of the commits {RUN_T}'s lines record start with it: {OLD[:12]}, "
+                         f"{NEW[:12]}")
+        self.assertEqual(self.refused("--run", RUN_T, "--commit", "abc"),
+                         "--commit abc: not a commit's sha or a prefix of one, 4 to 40 lowercase hex digits")
+        listed = (f"  {NEW[:12]}: 2 flushes, their jobs ran at 2026-11-18 10:00:00 UTC\n"
+                  f"  {OLD[:12]}: 2 flushes, their jobs ran at 2026-11-16 10:00:00 UTC")
+        self.assertEqual(self.refused("--run", RUN_T, "--commit", "cafe"),
+                         f"{RUN_T}: none of its matrices' lines is of commit cafe; the commits they record:\n{listed}")
+        self.assertEqual(self.refused("--run", RUN_T, "--commit", "abcd2", "--since", "2026-11-19"),
+                         f"{RUN_T}: none of its matrices' lines is of a job of commit {NEW[:12]} that ran since "
+                         f"2026-11-19 00:00:00 UTC; the commits they record:\n{listed}")
+        self.assertEqual(self.refused("--run", RUN_T, "--commit", "AB34"),
+                         "--commit AB34: not a commit's sha or a prefix of one, 4 to 40 lowercase hex digits")
+        self.assertEqual(self.refused("--run", RUN_T, "--since", "yesterday"),
+                         "yesterday: not an ISO 8601 time (2026-11-18T16:32, UTC where it names no zone)")
+        with self.assertRaises(SystemExit) as cm:
+            self.cli("prune", "--run", RUN_T)
+        self.assertEqual(cm.exception.code, "prune: give --commit or --since, the jobs whose flushes the cache keeps")
+        # A name of no run: unknown's line.
+        self.assertTrue(self.refused("--run", "tb-z", "--commit", "abcd2").startswith(
+            "tb-z: no farm run is or includes it: neither "), self.refused("--run", "tb-z", "--commit", "abcd2"))
+        # A run no line names a flush of (its matrices' state gone).
+        for m in ("tb-x", "tb-y"):
+            (self.farm / m / "rows.jsonl").unlink()
+        self.assertTrue(self.refused("--run", RUN_T, "--commit", "abcd2").startswith(
+            f"{RUN_T}: no line of its matrices' rows.jsonl or index.jsonl in {self.farm} names a flush of it"))
+        self.assertEqual(self.calls, [])
 
 
 def audience(secs, stays, sim="ppspp", tree_secs=3, stay_info=True):

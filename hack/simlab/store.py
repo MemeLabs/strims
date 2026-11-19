@@ -87,15 +87,18 @@ matrices for its id (suite.py's write_matrices: <id>-NN):
                  that no run the state or the cache knows is or includes
                  `name` (nor, with `s3`, does S3 hold one of that name),
                  with the names nearest it
-  unpulled(named, runs=None) -> str
+  unpulled(named, flushes=None, runs=None) -> str
                  why a pull of `named` found nothing: S3 holds nothing
-                 under the run's sim-data/, and the cache none of it (for
-                 an unknown name, unknown's)
-  pull(run, reads=False) -> Pull
+                 under the run's sim-data/ (or none of `flushes`, a
+                 Flushes, there), and the cache none of it (for an unknown
+                 name, unknown's)
+  pull(run, reads=False, flushes=None) -> Pull
                  `aws s3 sync` of the run's sim-data (and sim-samples with
                  `reads`) into the cache's farm/<run>/, its LISTs, GETs
                  and bytes a line of the farm's S3 ledger; a sync that
-                 wrote nothing leaves no directory
+                 wrote nothing leaves no directory; with `flushes`
+                 (sources, run_flushes') those flushes alone, a sync of
+                 each instance's that takes its seqs among them
   pull_sources(srcs) -> ([Pull], gone)
                  the pulls of the farm runs of the sources `srcs` the
                  cache lacks, less their samples, and the sources still
@@ -135,6 +138,43 @@ matrices for its id (suite.py's write_matrices: <id>-NN):
                  the aws CLI's `args` in the bucket's region, as its
                  profile
 
+A run's name is its matrices', so a rerun of them is a run of the same
+name, and S3 keeps each run's flushes under it for a week: the flushes of
+one run of a name are those its jobs' lines in the matrices' state name
+(a testbed matrix's rows.jsonl, a test matrix's index.jsonl: each line's
+`src`, farm/<run>/<instance>/<seq>). Each line records the commit its
+arm's ref was at when its job ran, and when it ran. A job's id hashes its
+arm's source (the tree of the paths its binary builds from) and its
+settings, so a rerun runs again the jobs whose source or settings
+changed and keeps the lines of the others, their commit and times the
+run's that ran them (a line copied from another matrix, or from another
+arm whose binary is the same bytes, takes its own job's commit and keeps
+the `at` of the job that ran): the commits part runs at other commits,
+the times two runs of one commit, and both pick the jobs one run ran.
+
+  line_time(line) -> datetime | None
+                 when a line's job ran: a testbed line's `started`, else
+                 its `at` (written as its flush landed)
+  run_lines(run, runs=None) -> [line]
+                 the lines of the run's matrices (farm_runs') naming a
+                 flush of it
+  run_flushes(run, commits=(), since=None, runs=None) -> Flushes
+                 the run's flushes the lines name of any of `commits`
+                 (hex prefixes) that ran at or after `since` (a datetime),
+                 Refused where no line names a flush of the run, a prefix
+                 matches two of their commits or none, or no flush is
+                 left, naming the commits the lines hold; a Flushes holds
+                 them sorted (`srcs`), the commits' shas, `since`, how
+                 many flushes the run's lines name, its line (text()) and
+                 the pull's and prune's options picking them (args())
+  instant(text) -> datetime
+                 an ISO 8601 time, UTC where it names no zone; Refused
+                 where it isn't one
+  prune(run, keep, dry_run=False) -> (kept, removed)
+                 the cache's flushes of the run but `keep` (sources)
+                 removed with their derived tables, or with `dry_run`
+                 listed
+
 Refused is an operation refused, its message why: uncaught, it ends a
 script as sys.exit(message) does, and a caller that serves several (the
 console's server) catches it.
@@ -142,8 +182,10 @@ console's server) catches it.
 
 import ast
 import collections
+import concurrent.futures
 import contextlib
 import dataclasses
+import datetime
 import difflib
 import functools
 import fcntl
@@ -583,33 +625,62 @@ def unknown(name, s3=False, runs=None):
             "suite farm run" + (f"; the nearest: {near}" if near else ""))
 
 
-def unpulled(named, runs=None):
+def unpulled(named, flushes=None, runs=None):
     """Why a pull of `named` (farm_run's) found nothing: S3 holds nothing
-    under its run's sim-data/<run>/ (it expired, or never landed), and the
-    cache none of it; for a name of no run the farm's state or the cache
-    knows, unknown's."""
+    under its run's sim-data/<run>/ (it expired, or never landed), or none
+    of `flushes` (a Flushes, the pull's) there, and the cache none of it;
+    for a name of no run the farm's state or the cache knows, unknown's."""
     if not named.known:
         return unknown(named.asked, True, runs)
     head = f"{named.text()}; " if named.text() else f"{named.run}: "
+    if flushes is not None:
+        return (head + f"S3 holds none of the {len(flushes.srcs)} flushes under sim-data/{named.run}/ that its "
+                f"matrices' lines name of jobs {flushes.what()} (expired, or never landed), and the cache none of "
+                "them")
     return (head + f"S3 holds nothing under sim-data/{named.run}/ (expired, or never landed), and the cache none of "
             "its flushes")
 
 
-def pull(run, reads=False):
+# The syncs a pull of some flushes runs at once, an instance's each.
+PULL_SYNCS = 8
+
+
+def pull(run, reads=False, flushes=None):
     """Copies farm run `run`'s flushes from S3 into the cache
-    (farm/<run>/<instance>/<seq>/), and with `reads` their samples too.
-    What it cost S3 goes to the run's line of the farm's S3 ledger: a LIST
-    a thousand of a prefix's keys, a GET a file it downloaded (a part each
-    past CLI_PART), and the bytes, out to the internet."""
+    (farm/<run>/<instance>/<seq>/), and with `reads` their samples too:
+    every flush under the run's name, or with `flushes` (sources,
+    farm/<run>/<instance>/<seq>) those alone, a sync of each instance's
+    prefix taking its seqs among them (PULL_SYNCS at once). What it cost
+    S3 goes to the run's line of the farm's S3 ledger: a LIST a thousand
+    of a synced prefix's keys, a GET a file it downloaded (a part each past
+    CLI_PART), and the bytes, out to the internet."""
     bucket, region, profile = farm_bucket()
     cache = store_host.cache_root() / "cache"
     dest = cache / "farm" / run
+    # Each sync's part of the run's prefix, and the seqs it takes there
+    # (None: all).
+    parts = {"": None}
+    if flushes is not None:
+        parts = collections.defaultdict(list)
+        for s in sorted(flushes):
+            farm, r, inst, seq = (s.split("/") + [""] * 4)[:4]
+            if (farm, r) != ("farm", run) or not inst or not seq or s.count("/") != 3:
+                raise ValueError(f"{s} isn't a flush of farm run {run} (farm/{run}/<instance>/<seq>)")
+            parts[f"{inst}/"].append(seq)
+
+    def sync(prefix, part, seqs):
+        only = [] if seqs is None else ["--exclude", "*", *(x for n in seqs for x in ("--include", f"{n}/*"))]
+        p = aws(["s3", "sync", f"s3://{bucket}/{prefix}/{run}/{part}", str(dest / part), "--no-progress", *only],
+                region, profile)
+        p.check_returncode()
+        return p.stdout
+
     lists = gets = got = 0
     pulled = set()
     for prefix in ["sim-data"] + (["sim-samples"] if reads else []):
-        p = aws(["s3", "sync", f"s3://{bucket}/{prefix}/{run}/", str(dest), "--no-progress"], region, profile)
-        p.check_returncode()
-        for line in p.stdout.splitlines():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=PULL_SYNCS) as ex:
+            outs = list(ex.map(lambda kv: sync(prefix, *kv), parts.items()))
+        for line in (x for out in outs for x in out.splitlines()):
             if line.startswith("download: ") and " to " in line:
                 # The CLI names the file relative to its working directory,
                 # this process's.
@@ -618,16 +689,184 @@ def pull(run, reads=False):
                 gets += 1 if size < CLI_PART else math.ceil(size / CLI_PART)
                 got += size
                 pulled.add(to.parent.relative_to(os.path.abspath(cache)).as_posix())
-        keys = sum(1 for f in dest.glob("**/*")
-                   if f.is_file() and (f.stem in store_host.SAMPLE_TABLES) == (prefix == "sim-samples"))
-        lists += max(1, math.ceil(keys / 1000))
-    # The CLI makes `dest` for a prefix S3 holds nothing under.
-    if dest.is_dir() and not any(dest.iterdir()):
-        dest.rmdir()
+        for part in parts:
+            keys = sum(1 for f in (dest / part).glob("**/*")
+                       if f.is_file() and (f.stem in store_host.SAMPLE_TABLES) == (prefix == "sim-samples"))
+            lists += max(1, math.ceil(keys / 1000))
+    # The CLI makes its destination for a prefix S3 holds nothing under.
+    for d in [*(dest / part for part in parts if part), dest]:
+        if d.is_dir() and not any(d.iterdir()):
+            d.rmdir()
     use = {"region": region or "", "tier1": {"pull_list": lists}, "tier2": {"pull_get": gets}, "up": {},
            "down": {"internet": got}, "stored": 0}
     farm_ledger(run, use)
     return Pull(run, dest, sorted(pulled), use)
+
+
+# --- one run of a name ----------------------------------------------------------------
+
+# The files of a matrix's state whose lines name its jobs' flushes: a
+# testbed matrix's rows.jsonl, a test matrix's index.jsonl (farm.py's
+# INDEX).
+LINES = ("rows.jsonl", "index.jsonl")
+# A commit as --commit names it: a prefix of its sha, as git abbreviates
+# one.
+COMMIT_PREFIX = re.compile(r"[0-9a-f]{4,40}")
+EPOCH = datetime.datetime.fromtimestamp(0, datetime.UTC)
+
+
+def line_time(line):
+    """When matrix line `line`'s job ran, an aware datetime: a testbed
+    line's `started`, else its `at` (written once its flush landed; a
+    copied line keeps the `at` of the job that ran); None for neither."""
+    for field in ("started", "at"):
+        with contextlib.suppress(TypeError, ValueError):
+            t = datetime.datetime.fromisoformat(line.get(field))
+            return t if t.tzinfo else t.replace(tzinfo=datetime.UTC)
+    return None
+
+
+def instant(text):
+    """`text`, an ISO 8601 time (2026-11-18T16:32, a zone or a Z beside),
+    as an aware datetime, UTC where it names no zone; Refused where it
+    isn't one."""
+    try:
+        t = datetime.datetime.fromisoformat(text)
+    except (TypeError, ValueError):
+        raise Refused(f"{text}: not an ISO 8601 time (2026-11-18T16:32, UTC where it names no zone)") from None
+    return t if t.tzinfo else t.replace(tzinfo=datetime.UTC)
+
+
+def utc(t):
+    """Aware datetime `t` as the lines print it: UTC to the second."""
+    return f"{t.astimezone(datetime.UTC):%Y-%m-%d %H:%M:%S} UTC"
+
+
+def run_lines(run, runs=None):
+    """The lines of farm run `run`'s matrices (`runs`, farm_runs' by
+    default: its state's list, else those its name joins), each a dict,
+    that name a flush of the run (`src` farm/<run>/<instance>/<seq>):
+    their rows.jsonl's and index.jsonl's in the farm's state. Refused for
+    a run whose name stands for matrices past EC2's tag limit
+    ("+<n>more-") that its state doesn't list, whose lines it can't all
+    read."""
+    if MORE.search(run) and not (farm_state() / run / "matrices").exists():
+        raise Refused(f"{run}: its name stands for more matrices than it names, and {farm_state() / run}/matrices, "
+                      "which lists them, is gone: their lines, which name its flushes, can't all be read")
+    runs = farm_runs() if runs is None else runs
+    out = []
+    for m in runs.get(run, ()):
+        for name in LINES:
+            with contextlib.suppress(OSError):
+                for text in (farm_state() / m / name).read_text().splitlines():
+                    with contextlib.suppress(ValueError):
+                        r = json.loads(text)
+                        if isinstance(r, dict) and str(r.get("src") or "").startswith(f"farm/{run}/"):
+                            out.append(r)
+    return out
+
+
+def commits_text(lines):
+    """The commits matrix lines `lines` record, a line each, the latest
+    run first: how many flushes their jobs' lines name, and when those
+    jobs ran (line_time)."""
+    by = collections.defaultdict(lambda: (set(), []))
+    for r in lines:
+        srcs, times = by[r.get("commit") or "(none)"]
+        srcs.add(r["src"])
+        if (t := line_time(r)) is not None:
+            times.append(t)
+    out = []
+    for c, (srcs, times) in sorted(by.items(), key=lambda kv: max(kv[1][1], default=EPOCH), reverse=True):
+        ran = ("" if not times else f", their jobs ran at {utc(min(times))}" if min(times) == max(times) else
+               f", their jobs ran from {utc(min(times))} to {utc(max(times))}")
+        out.append(f"  {c[:12]}: {len(srcs)} flushes{ran}")
+    return "\n".join(out)
+
+
+@dataclasses.dataclass
+class Flushes:
+    """Farm run `run`'s flushes (`srcs`, sorted) that the lines of its
+    matrices name of jobs of `commits` (the shas the prefixes asked name)
+    that ran at or after `since`, of the `named` flushes the run's lines
+    name in all (run_flushes)."""
+    run: str
+    srcs: list
+    commits: list = dataclasses.field(default_factory=list)
+    since: datetime.datetime = None
+    named: int = 0
+
+    def what(self):
+        """Which jobs' flushes they are, as the lines say."""
+        return " ".join([*([f"of commit {' or '.join(c[:12] for c in self.commits)}"] if self.commits else []),
+                         *([f"that ran since {utc(self.since)}"] if self.since else [])])
+
+    def text(self):
+        return (f"{self.run}: {len(self.srcs)} of the {self.named} flushes its matrices' lines name, those of its "
+                f"jobs {self.what()}")
+
+    def args(self):
+        """The options of simdb.py's pull and prune that pick them."""
+        since = [f"--since {self.since.astimezone(datetime.UTC):%Y-%m-%dT%H:%M:%SZ}"] if self.since else []
+        return " ".join([*(f"--commit {c[:12]}" for c in self.commits), *since])
+
+
+def run_flushes(run, commits=(), since=None, runs=None):
+    """The flushes of farm run `run` (Flushes) that its matrices' lines
+    (run_lines) of jobs of any of `commits` (prefixes of their shas; any
+    commit for none) that ran (line_time) at or after `since` (an aware
+    datetime; None for any time) name. Refused where no line names a flush
+    of the run, a prefix isn't one or matches two of the commits its lines
+    record or none, or no line is left; the refusals list the commits the
+    lines record (commits_text)."""
+    lines = run_lines(run, runs)
+    if not lines:
+        raise Refused(f"{run}: no line of its matrices' {' or '.join(LINES)} in {farm_state()} names a flush of it, "
+                      "so its jobs' commits and times are unknown: pull --run without --commit and --since")
+    held = sorted({r.get("commit") or "" for r in lines} - {""})
+    full = []
+    for c in commits:
+        if not COMMIT_PREFIX.fullmatch(c):
+            raise Refused(f"--commit {c}: not a commit's sha or a prefix of one, 4 to 40 lowercase hex digits")
+        hits = [h for h in held if h.startswith(c)]
+        if len(hits) > 1:
+            raise Refused(f"--commit {c}: {len(hits)} of the commits {run}'s lines record start with it: "
+                          + ", ".join(h[:12] for h in hits))
+        if not hits:
+            raise Refused(f"{run}: none of its matrices' lines is of commit {c}; the commits they record:\n"
+                          + commits_text(lines))
+        full.append(hits[0])
+    full = list(dict.fromkeys(full))
+    picked = {r["src"] for r in lines if (not full or r.get("commit") in full)
+              and (since is None or (line_time(r) or EPOCH) >= since)}
+    out = Flushes(run, sorted(picked), full, since, len({r["src"] for r in lines}))
+    if not picked:
+        raise Refused(f"{run}: none of its matrices' lines is of a job {out.what()}; the commits they record:\n"
+                      + commits_text(lines))
+    return out
+
+
+def prune(run, keep, dry_run=False):
+    """Removes the cache's flushes of farm run `run` (farm/<run>/<instance>/
+    <seq>/) that aren't among the sources `keep`, with their derived
+    tables (every derived_version's), and the instance and run dirs they
+    leave empty; with `dry_run` removes nothing. Returns the run's flushes
+    in the cache it kept and those it removed (or would), each sorted. An
+    index (simdb.py index) then drops them from the catalog."""
+    root = store_host.cache_root()
+    have = sources([f"farm/{run}"])
+    keep = set(keep)
+    removed = [s for s in have if s not in keep]
+    if not dry_run:
+        for s in removed:
+            shutil.rmtree(root / "cache" / s)
+            name = s.replace("/", "~") + ".parquet"
+            for d in (root / "derived").glob("*/v=*"):
+                (d / name).unlink(missing_ok=True)
+            for d in ((root / "cache" / s).parent, (root / "cache" / s).parents[1]):
+                with contextlib.suppress(OSError):
+                    d.rmdir()
+    return [s for s in have if s in keep], removed
 
 
 def pull_sources(srcs):

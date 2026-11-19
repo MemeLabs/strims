@@ -69,6 +69,7 @@ both, so take a name's meaning from it, not from a guess at the name.
 | A study over the catalog's logs: the arrival forecast (is time the right predictor of when a neighbour holds a chunk?), seed coverage (how soon each chunk reaches a node but the seed and the dishonest viewers, by which route; the seed's children of each stream, dishonest viewers left out; the seed's invariants I1-I3; why late chunks were late, each one's cause from the seed log) | `simdb.py forecast-report`, `simdb.py coverage-report` (its definitions are the macros `coverage_runs_of`, `seed_children_of`, `coverage_chunks_of`, `seed_cover_of`, `seed_writes_of`, `seed_declines_of` and `coverage_causes_of`: `simdb.py describe macros`); `simdb.py --help` gives each `*-report` command's sections and what it reads |
 | Comparing arms | `python3 hack/sim-suite/suite.py score RUN:ARM RUN:ARM` (farm runs, the base first: a base the farm holds isn't run again); `suite.py race --flags A,B,...` races a knob's flags in local runs |
 | Data the catalog lacks that S3 still holds (`farm.S3_KEPT_DAYS` days) | `simdb.py fetch --exp EXP [--tables reads]`, which prints what S3 charged |
+| A farm run's flushes into the cache (a testbed run's tables, before `twin`) | `simdb.py pull --run RUN --commit SHA` takes one run of the name (below); `simdb.py prune --run RUN --commit SHA` removes another run's flushes from the cache, then `simdb.py index` |
 | After new local runs | `simdb.py index` |
 | Local runs | `suite.py run [--base REF] [--tier T] [--seeds N]`; `--tree-env KEY=VALUE` sets a knob for the working tree alone, `--env KEY=VALUE` for every arm, as part of each cell; `suite.py calibrate`, the base against itself at other seeds, gives the seed noise a tie band must clear |
 | New farm runs (procedure: the sim-farm skill) | `suite.py farm ... --no-run` writes the matrices (target/sim-suite/farm/RUN-NN.toml); the main checkout's `python3 hack/sim-farm/farm.py estimate MATRICES...` quotes them; nothing runs without the user's explicit approval |
@@ -79,6 +80,27 @@ both, so take a name's meaning from it, not from a guess at the name.
 (`describe TABLE` gives a table's columns), and `simdb.py sql --help`
 their joins.
 
+- **One run of a name.** A farm run is named for its matrices, so a
+  rerun of them has the same name, and S3 keeps every run's flushes
+  under it for a week. A bare `pull --run RUN` copies them all. Their
+  jobs key into the same cells and seeds, so `testbed_side` and
+  `simdb.py twin` fail with "runs share a cell, arm and seed".
+  `pull --commit SHA` (a sha or a prefix of 4+ digits, repeatable) takes
+  only the flushes that the run's matrices' lines name for jobs of that
+  commit. Those lines are target/sim-farm/MATRIX/rows.jsonl and
+  index.jsonl, each with a `src`, `commit`, `started` and `at`. `--since
+  TIME` keeps the jobs that ran at or after TIME (ISO 8601, UTC when no
+  zone is given). The commit is the reliable cut. A job's id hashes its
+  arm's source tree and settings, so a rerun after a source change runs
+  every job again under the new commit. A rerun that changed neither
+  keeps the earlier lines, with their commit and times. Add `--since`
+  for two runs at one commit, such as a setting changed in matrices that
+  git doesn't track. A refused pull lists the commits the lines record
+  and when their jobs ran. `prune` takes the same options and removes the
+  cache's other flushes of the run, with their derived tables. The next
+  `index` drops them from the catalog. The cut is made per flush: a rerun
+  that ran only some jobs leaves the others in the earlier run's
+  flushes, next to the jobs it replaced.
 - Put a query with `$name`s in single quotes: in double quotes the shell
   expands `$exp` to nothing.
 - A `lake --param` value binds as JSON where it parses (`7`, `true`,

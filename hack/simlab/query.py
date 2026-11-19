@@ -22,11 +22,12 @@ engine.Result (its values the CLI's JSON values by `records()`), and its
   forecast(sel) -> Forecast(have, prediction)
   spec(sel, by="phase") -> Spec(requests, parks)
   selected_rows(sel, fields=None) -> [dict]
-  pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False)
-          -> Pulled
+  pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False,
+           commits=(), since=None) -> Pulled
+  prune_run(run, commits=(), since=None, dry_run=False) -> Pruned
   pooled_text(rows, by), aligned_text(rows, ...), events_text(rows),
   osc_text(rows), forecast_text(rows), spec_text(requests, parks),
-  pull_text(pulled)
+  pull_text(pulled), prune_text(pruned)
 
 The forecast log comes in two schemas, told apart by their columns: the
 HAVE samples' (first_sight, lazy) and the arrival models' predictions'
@@ -1377,7 +1378,11 @@ class Pulled:
     would GET ((url, bytes, jobs)) for `jobs` jobs; `lost` jobs S3 holds
     none for; `tables` the sample tables the run's flushes hold, which its
     lines name (store.listed_samples); `named` the run the name given
-    names (store.farm_run), whose line says so where it named matrices."""
+    names (store.farm_run), whose line says so where it named matrices;
+    `only` the run's flushes the pull took, where it took some
+    (store.run_flushes), `missing` how many of those the cache lacks after
+    it (S3 held none of them), and `others` how many other flushes of the
+    run the cache holds."""
     run: str
     dry_run: bool = False
     named: store.Named = None
@@ -1388,44 +1393,78 @@ class Pulled:
     jobs: int = 0
     lost: int = 0
     tables: tuple = SAMPLE_TABLES
+    only: store.Flushes = None
+    missing: int = 0
+    others: int = 0
 
 
-def pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False, say=None):
+def picked_flushes(named, commits=(), since=None):
+    """The flushes of `named`'s run (store.farm_run's) that its matrices'
+    lines name of jobs of any of `commits` (prefixes of shas) that ran at
+    or after `since` (an ISO 8601 time, store.instant's), a store.Flushes
+    (store.run_flushes); None for neither (every flush the run's name
+    holds)."""
+    if not commits and since is None:
+        return None
+    if not named.known:
+        raise Refused(store.unknown(named.asked))
+    return store.run_flushes(named.run, commits, None if since is None else store.instant(since))
+
+
+def pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False, say=None, commits=(), since=None):
     """simdb.py pull: the flushes of the farm run that `run` names
     (store.farm_run: the run, or a matrix or a suite farm run's id that one
     run includes) copied into the cache, with `reads` their samples (the
     whole run's, or the jobs `cell`, `arm` and `seed` select), or with
-    `dry_run` the samples' files a pull would GET, asking S3 nothing.
-    Refused where the pull finds none of its flushes, saying where it
-    looked (store.unpulled)."""
+    `dry_run` the samples' files a pull would GET, asking S3 nothing. With
+    `commits` or `since`, the flushes the run's matrices' lines name of
+    jobs of those commits that ran since then (picked_flushes) alone, as
+    the run's: the pull, the selection and the dry run take those, so one
+    run of a name comes in where S3 holds several. Refused where the pull
+    finds none of its flushes, saying where it looked (store.unpulled)."""
     picked = cell or arm or seed
     if (picked or dry_run) and not reads:
         raise Refused("--cell, --arm, --seed and --dry-run are of a pull's reads: give --reads")
     named = store.farm_run(run)
     run = named.run
-    out = Pulled(run, dry_run, named=named)
+    out = Pulled(run, dry_run, named=named, only=picked_flushes(named, commits, since))
+    only = None if out.only is None else set(out.only.srcs)
+
+    def held():
+        """The run's flushes in the cache that the pull takes."""
+        return [s for s in sources([f"farm/{run}"]) if only is None or s in only]
+
+    def counted(srcs):
+        if only is not None:
+            out.missing, out.others = len(only) - len(srcs), len(sources([f"farm/{run}"])) - len(srcs)
+        return srcs
+
     if not dry_run and not picked:
-        out.dest = store.pull(run, reads).dest
-        out.sources = len(sources([f"farm/{run}"]))
+        out.dest = store.pull(run, reads, out.only and out.only.srcs).dest
+        out.sources = len(counted(held()))
         if not out.sources:
-            raise Refused(store.unpulled(named))
+            raise Refused(store.unpulled(named, out.only))
         return out
-    srcs = sources([f"farm/{run}"])
-    if not srcs:
-        if dry_run and not named.known:
+    srcs = held()
+    if not srcs and dry_run:
+        if not named.known:
             raise Refused(store.unknown(run))
-        if dry_run:
-            raise Refused((f"{named.text()}; " if named.text() else "")
-                          + f"the cache lacks farm/{run}: pull --run {run} copies the tables that name its jobs")
-        store.pull(run)
-        if not sources([f"farm/{run}"]):
-            raise Refused(store.unpulled(named))
+        raise Refused((f"{named.text()}; " if named.text() else "")
+                      + (f"the cache lacks those flushes of farm/{run}: pull --run {run} {out.only.args()}" if only
+                         else f"the cache lacks farm/{run}: pull --run {run}")
+                      + " copies the tables that name its jobs")
+    if not dry_run and (not srcs or only is not None and len(srcs) < len(only)):
+        store.pull(run, flushes=None if only is None else sorted(only - set(srcs)))
+        srcs = held()
+        if not srcs:
+            raise Refused(store.unpulled(named, out.only))
+    counted(srcs)
     if picked:
-        sel = Selection(src=[f"farm/{run}"], cell=cell, arm=arm, seed=seed)
+        sel = Selection(src=[f"farm/{run}"] if only is None else srcs, cell=cell, arm=arm, seed=seed)
         v = views(sel, derived=False, fetch=not dry_run, say=say)
         if not dry_run:
             out.fetched = store.pull_samples(v.sql, SAMPLE_TABLES, say=say)
-            out.tables = tuple(store.listed_samples(sources([f"farm/{run}"])))
+            out.tables = tuple(store.listed_samples(held()))
             return out
         plan, out.lost = store.sample_plan(v.sql, SAMPLE_TABLES)
     else:
@@ -1450,9 +1489,13 @@ def pull_run(run, reads=False, cell=None, arm=None, seed=None, dry_run=False, sa
 
 def pull_text(p):
     lines = [p.named.text()] if p.named and p.named.text() else []
+    if p.only is not None:
+        lines.append(p.only.text())
     gone = f"; S3 holds none for {p.lost} jobs (expired, or never landed)" if p.lost else ""
     if not p.dry_run and p.dest is not None:
-        lines.append(f"{p.run}: {p.sources} sources in {p.dest}")
+        lines.append(f"{p.run}: {p.sources} sources in {p.dest}"
+                     + (f"; S3 holds none of {p.missing} of those flushes (expired, or never landed)"
+                        if p.missing else ""))
     elif not p.dry_run:
         lines.append(f"{p.run}: the selection's {' and '.join(p.tables)} in "
                      f"{store_host.cache_root() / 'cache' / 'farm'}")
@@ -1462,4 +1505,49 @@ def pull_text(p):
         lines.append(f"{p.run}: would GET {len(p.files)} files, {sum(b for _, b, _ in p.files) / 1e6:.1f} MB, for "
                      f"{p.jobs} jobs' {' and '.join(p.tables)}{gone}")
         lines += [f"  {url}  {b / 1e6:.1f} MB  {n} jobs" for url, b, n in p.files]
+    if p.others:
+        lines.append(f"{p.run}: the cache also holds {p.others} flushes of the run that those lines don't name (an "
+                     f"earlier run's of its name, say): simdb.py prune --run {p.run} {p.only.args()} removes them")
+    return "\n".join(lines)
+
+
+@dataclasses.dataclass
+class Pruned:
+    """What prune_run did, or with `dry_run` would do: of the flushes of
+    farm run `run` that `only` (store.Flushes) names, those the cache
+    holds (`kept`), and the cache's other flushes of the run, removed
+    (`removed`); `named` as Pulled's."""
+    run: str
+    only: store.Flushes
+    kept: list
+    removed: list
+    dry_run: bool = False
+    named: store.Named = None
+
+
+def prune_run(run, commits=(), since=None, dry_run=False):
+    """simdb.py prune: the cache's flushes of the farm run `run` names
+    (store.farm_run) removed with their derived tables but those its
+    matrices' lines name of jobs of `commits` that ran at or after `since`
+    (picked_flushes), or with `dry_run` listed (store.prune). Refused for
+    neither `commits` nor `since`."""
+    if not commits and since is None:
+        raise Refused("prune: give --commit or --since, the jobs whose flushes the cache keeps")
+    named = store.farm_run(run)
+    only = picked_flushes(named, commits, since)
+    kept, removed = store.prune(named.run, only.srcs, dry_run)
+    return Pruned(named.run, only, kept, removed, dry_run, named)
+
+
+def prune_text(p):
+    lines = [p.named.text()] if p.named and p.named.text() else []
+    lines.append(p.only.text())
+    lines.append(f"{p.run}: kept {len(p.kept)} of its flushes in the cache, "
+                 f"{'would remove' if p.dry_run else 'removed'} {len(p.removed)}"
+                 + (": simdb.py index drops them from the catalog" if p.removed and not p.dry_run else ""))
+    if p.dry_run:
+        lines += [f"  {s}" for s in p.removed]
+    if lacks := len(p.only.srcs) - len(p.kept):
+        lines.append(f"{p.run}: the cache lacks {lacks} of the flushes it keeps: simdb.py pull --run {p.run} "
+                     f"{p.only.args()} copies them")
     return "\n".join(lines)

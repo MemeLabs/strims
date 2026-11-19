@@ -210,7 +210,9 @@ crates differ from those the page was built from builds its own page.
   (strims-sim's testbed_tables) has each run's tables folded on its host
   and flushed to S3 as a sim job's are (the farm's S3 bucket and
   permissions, as sim matrices' flushes take), so `simdb.py pull --run
-  MATRIX` brings a farm run into the cache, an experiment `farm/RUN`,
+  MATRIX --commit SHA` brings a farm run into the cache (`--commit` takes
+  that run's flushes alone, where S3 holds a rerun's under its name too:
+  sim-lab), an experiment `farm/RUN`,
   its rows with the host's steal, load and node line counts
   (`_steal_share`, `_load_max`, ...). Its results are the lake's alone:
   target/sim-farm/MATRIX/rows.jsonl is the farm's bookkeeping and runs/

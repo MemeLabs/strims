@@ -125,7 +125,9 @@ With `--keep`, a stopped run leaves its instances for a rerun to adopt.
   and sim-samples/ (`hack/sim-farm/s3sign.py`), and a job's index line
   waits for its flush to land. A run pulls nothing; `simdb.py pull` or
   suite.py copies the data into the cache. Data expires after a week,
-  and a job's line is reused for 6 days (`RETAIN_S`).
+  and a job's line is reused for 6 days (`RETAIN_S`). A rerun of the
+  same matrices flushes under the same run name, so `simdb.py pull
+  --run RUN --commit SHA` is the pull of one run (sim-lab).
 - **Spot interruptions.** At a notice, the instance gives back its jobs
   that won't end within 20 s, flushes within 90 s, and is left for AWS
   to reclaim (unbilled in its first hour). Its pool is skipped for 10

@@ -24,7 +24,9 @@
   hack/sim-db/simdb.py duckdb
   hack/sim-db/simdb.py fold DB JOB_DIR... [--src SRC]
   hack/sim-db/simdb.py export DB DEST
-  hack/sim-db/simdb.py pull --run RUN [--reads [--cell C] [--arm A] [--seed N]] [--dry-run]
+  hack/sim-db/simdb.py pull --run RUN [--commit SHA ...] [--since TIME] [--reads [--cell C] [--arm A] [--seed N]]
+                       [--dry-run]
+  hack/sim-db/simdb.py prune --run RUN [--commit SHA ...] [--since TIME] [--dry-run]
   hack/sim-db/simdb.py gc [--days N]
   hack/sim-db/simdb.py testbed RUN_DIR... --name NAME [--arm A] [--knob KEY=VALUE ...] [--bin PATH]
                        [--replace]
@@ -102,9 +104,25 @@ that read them (pooled, aligned on a read lag, forecast, and sql with
 `--reads`) pull their selection's that way when the cache lacks them,
 noting the size, at most `--pull-mb`. `--dry-run` lists what a pull
 would fetch, asking S3 nothing. What a pull costs S3 goes to the farm's
-S3 ledger (pull). Nothing in the cache is kept for long: a run is
-reproduced when it's wanted again, and `gc` deletes what's older than
-`--days` (7).
+S3 ledger (pull). A run's name is its matrices', so S3 holds a rerun's
+flushes under the earlier runs' name, whose jobs key into the same cells
+and seeds: `--commit` (a sha or its prefix; again for another) and
+`--since` (an ISO 8601 time, UTC where it names no zone) take only the
+flushes that the lines of the run's matrices (their rows.jsonl and
+index.jsonl in the farm's state: each line's `src`, its job's `commit`
+and `started`, else `at`) name of jobs of those commits that ran since
+then, and the pull's reads, selection and dry run those alone. A job's
+id hashes its arm's source (the tree of the paths its binary builds
+from) and its settings, so a rerun runs again the jobs whose source or
+settings changed, their lines recording the commit it ran at, and keeps
+the lines of the others, with the commit and times of the run that ran
+them: `--commit` parts runs of other commits, `--since` two runs of one
+commit (a setting changed between them in matrices git doesn't hold),
+and both pick the jobs one run ran. `prune` removes the cache's other
+flushes of the run (an unfiltered pull's earlier runs) with their
+derived tables, which the next `index` drops from the catalog. Nothing
+in the cache is kept for long: a run is reproduced when it's wanted
+again, and `gc` deletes what's older than `--days` (7).
 
 The queries read the cache's tables and, made from them and kept under
 derived/<table>/v=<derived_version>/ (a hash of hack/simlab/verdict.py's
@@ -507,7 +525,12 @@ def cmd_coverage_report(a):
 
 
 def cmd_pull(a):
-    print(query.pull_text(query.pull_run(a.run, a.reads, a.cell, a.arm, a.seed, a.dry_run)))
+    print(query.pull_text(query.pull_run(a.run, a.reads, a.cell, a.arm, a.seed, a.dry_run, commits=a.commit or (),
+                                         since=a.since)))
+
+
+def cmd_prune(a):
+    print(query.prune_text(query.prune_run(a.run, a.commit or (), a.since, a.dry_run)))
 
 
 def cmd_gc(a):
@@ -658,6 +681,20 @@ def main():
     p.add_argument("--arm", action="append", help="only these arms' reads, globs")
     p.add_argument("--seed", action="append", type=int, help="only these seeds' reads")
     p.add_argument("--dry-run", action="store_true", help="list the reads' files a pull would fetch, asking S3 nothing")
+    one = ("the flushes the run's matrices' lines (target/sim-farm/<matrix>/rows.jsonl, index.jsonl) name of jobs of "
+           "these commits")
+    since = ("only the flushes of jobs that ran at or after this time (a line's started, else its at): ISO 8601, UTC "
+             "where it names no zone")
+    p.add_argument("--commit", action="append", metavar="SHA", help=f"only {one} (a sha or a prefix of one): one run "
+                   "of a name S3 holds several of")
+    p.add_argument("--since", metavar="TIME", help=since)
+    pr = sub.add_parser("prune", help="remove the cache's flushes of a farm run but those of one run of its name "
+                        "(--commit, --since), with their derived tables; index after")
+    pr.add_argument("--run", required=True, help="the farm run, or a matrix or a suite farm run's id that one run "
+                    "includes")
+    pr.add_argument("--commit", action="append", metavar="SHA", help=f"keep {one} (a sha or a prefix of one)")
+    pr.add_argument("--since", metavar="TIME", help=since.replace("only the", "keep the"))
+    pr.add_argument("--dry-run", action="store_true", help="list what it would remove, removing nothing")
     g = sub.add_parser("gc")
     g.add_argument("--days", type=float, default=7)
     t = sub.add_parser("testbed", help="testbed runs (hack/testbed/run.sh's out dirs) into the cache as source "
@@ -715,6 +752,8 @@ def main():
         print(json.dumps(export(a.db, a.dest)))
     elif a.cmd == "pull":
         cmd_pull(a)
+    elif a.cmd == "prune":
+        cmd_prune(a)
     elif a.cmd == "gc":
         cmd_gc(a)
     elif a.cmd == "testbed":
