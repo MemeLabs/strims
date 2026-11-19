@@ -32,6 +32,12 @@ from pathlib import Path
 # S3 takes a POST of up to 5 GB.
 MAX_BYTES = 5 * 1024**3
 CHUNK = 1 << 20
+# A POST's connection and TLS handshake take this long at most, apart from
+# its transfer's timeout, which can be all of a wind-down's or an
+# interruption's window: one that stalls fails while the worker's retries
+# (UPLOAD_RETRIES) still fit in it. Both take well under a second from the
+# farthest region.
+CONNECT_S = 20
 
 
 def credentials(profile: str | None = None) -> dict:
@@ -111,7 +117,9 @@ def form_tail(boundary: str) -> bytes:
 
 def post(pol: dict, key: str, path: Path, timeout: float = 120) -> None:
     """Uploads the file `path` as `key` (under the policy's prefix) by the
-    policy `pol`, streamed. Raises RuntimeError on a refusal."""
+    policy `pol`, streamed, its connection and handshake within CONNECT_S
+    and each read and write of the transfer within `timeout`. Raises
+    RuntimeError on a refusal, TimeoutError on a timeout."""
     if not key.startswith(pol["prefix"]):
         raise ValueError(f"{key} is outside the policy's prefix {pol['prefix']}")
     boundary = uuid.uuid4().hex
@@ -119,8 +127,11 @@ def post(pol: dict, key: str, path: Path, timeout: float = 120) -> None:
     size = os.path.getsize(path)
     scheme, _, rest = pol["url"].partition("://")
     host, _, base = rest.partition("/")
-    conn = (http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection)(host, timeout=timeout)
+    conn = (http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection)(
+        host, timeout=min(timeout, CONNECT_S))
     try:
+        conn.connect()
+        conn.sock.settimeout(timeout)
         conn.putrequest("POST", "/" + base)
         conn.putheader("Content-Type", f"multipart/form-data; boundary={boundary}")
         conn.putheader("Content-Length", str(len(head) + size + len(tail)))

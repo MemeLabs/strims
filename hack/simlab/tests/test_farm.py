@@ -43,11 +43,23 @@ and source, and an unstored one's at once; report names the farm run
 that holds a testbed matrix's stored runs and counts the unstored ones. A testbed run's estimate
 prices a host per group of the cheapest type, its jobs timed by their
 matrix's earlier runs or by run.sh's timing, and a set of two host_cores
-is refused. Stdlib alone:
+is refused.
+
+Boot failures, Run.run's loop over a stand-in fleet (AWS's calls, the
+boots, the workers' syncs): a pool whose boots fail as the run's other
+hosts run its jobs, with jobs queued or on its last ones, is skipped while
+those hosts finish the run, which ends as one whose boots passed; a
+failure skips its pool, its region's once two of its pools failed, its
+type's once two regions did, until a boot there passes; boots failing
+three in a row with none up stop the launches, and the run once none is
+left booting, exiting with its undone jobs said. A POST's stalled TLS
+handshake times out within s3sign's CONNECT_S, and the worker tries again
+within its window. Stdlib alone:
 
   python3 hack/simlab/tests/test_farm.py
 """
 
+import argparse
 import collections
 import contextlib
 import datetime
@@ -57,9 +69,11 @@ import json
 import os
 import re
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -1758,6 +1772,311 @@ class TestbedTables(unittest.TestCase):
         with self.assertRaises(SystemExit) as e, contextlib.redirect_stdout(io.StringIO()):
             fp.Run([m, f], args)
         self.assertIn("want one host_cores", str(e.exception))
+
+
+class Fleet:
+    """The instances a Run launches, as AWS and their workers have them: a
+    boot in a zone of `failing` fails, as one with no SSH does, once
+    `fail_when(run, fleet)` holds (else `fail_s` after its launch); any
+    other is up at once, and its worker runs each testbed job it's given for
+    `job_s`, one at a time, then gives back its row in a flush of its own,
+    which has landed by then. Each launch is kept with its zone, time and the
+    run's boot_streak then; each failed boot with its time and how many jobs
+    the run had queued then."""
+
+    def __init__(self, failing, job_s, fail_when=None, fail_s=0.1):
+        self.failing, self.job_s, self.fail_when, self.fail_s = set(failing), job_s, fail_when, fail_s
+        self.run = None
+        self.lock = threading.Lock()
+        self.launched: list[tuple[str, str, float, int]] = []
+        self.failed: list[tuple[float, int]] = []
+        self.region_of: dict[str, str] = {}
+        self.gone: set[str] = set()
+        self.workers: dict[str, dict] = {}
+
+    def running(self) -> bool:
+        with self.lock:
+            return any(w["running"] for w in self.workers.values())
+
+    def launch(self, name, pool, region, user_data):
+        with self.lock:
+            hid = f"i-{len(self.launched)}"
+            self.launched.append((hid, pool.zone, time.monotonic(), self.run.boot_streak))
+            self.region_of[hid] = region.name
+        return hid
+
+    def terminate(self, region, ids):
+        with self.lock:
+            self.gone.update(ids)
+
+    def instances(self, region, run):
+        with self.lock:
+            return [{"InstanceId": i, "State": {"Name": "running"}} for i, r in self.region_of.items()
+                    if r == region and i not in self.gone]
+
+    def bootstrap(self, run, host):
+        if host.zone in self.failing:
+            t0 = time.monotonic()
+            while not run.stopping.is_set() and time.monotonic() - t0 < 30:
+                if self.fail_when(run, self) if self.fail_when else time.monotonic() - t0 >= self.fail_s:
+                    break
+                time.sleep(0.01)
+            with self.lock:
+                self.failed.append((time.monotonic(), len(run.queue)))
+            raise RuntimeError("no SSH after 10 minutes: ")
+        host.ip = "192.0.2.1"
+        host.running_at = host.ssh_at = host.up_at = host.ready_at = time.time()
+        return None
+
+    def sync(self, run, host, jobs, acks, flush_acks=(), flush=False, wind_down=None):
+        drop = list(host.drop)
+        now = time.monotonic()
+        with self.lock:
+            w = self.workers.setdefault(host.id, {"queued": [], "running": {}, "done": {}, "flushes": set(), "seq": 0})
+            for wid in acks:
+                w["done"].pop(wid, None)
+            w["flushes"] -= set(flush_acks)
+            w["queued"] = [j for j in w["queued"] if j not in drop] + [i.wid for i in jobs]
+            for wid, t0 in list(w["running"].items()):
+                if now - t0 >= self.job_s:
+                    del w["running"][wid]
+                    w["done"][wid] = {"id": wid, "row": {"node_lines": 1}, "wall_s": self.job_s, "exit": 0,
+                                      "flush": w["seq"]}
+                    w["flushes"].add(w["seq"])
+                    w["seq"] += 1
+            if w["queued"] and not w["running"]:
+                w["running"][w["queued"].pop(0)] = now
+            reply = {"done": list(w["done"].values()), "running": list(w["running"]), "queued": list(w["queued"]),
+                     "folding": [], "started": {}, "flushes": [{"seq": s, "reads": False} for s in w["flushes"]],
+                     "store": None, "serving": True, "interrupting": None, "ending": None, "note": None}
+        host.drop = [x for x in host.drop if x not in drop]
+        return reply
+
+
+class BootFailures(unittest.TestCase):
+    """A run whose instances' boots fail: a launched one's pool is skipped,
+    and its region's or type's once boots have failed in two of its pools
+    or regions since one passed; the instances up keep their jobs, and the
+    run ends once they're done. Boots that fail three in a row with none up
+    stop the launches, and the run once none is left booting, its jobs left
+    undone and said so. Run.run's loop over a Fleet of stand-ins: AWS's
+    calls, the boots and the workers' syncs."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="simlab-farm-boots-")
+        self.addCleanup(tmp.cleanup)
+        self.dir = d = Path(tmp.name)
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            self.addCleanup(signal.signal, sig, signal.getsignal(sig))
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        env |= {"GIT_DIR": str(d / ".git"), "GIT_WORK_TREE": str(d), "GIT_CONFIG_NOSYSTEM": "1",
+                "HOME": str(d), "SIM_DB_ROOT": str(d / "sim-db")}
+        p = mock.patch.dict(os.environ, env, clear=True)
+        p.start()
+        self.addCleanup(p.stop)
+        subprocess.run(["git", "init", "-q"], cwd=d, check=True)
+        (d / "crates").mkdir()
+        (d / "crates" / "x").write_text("x")
+        for cmd in (["add", "crates"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x"]):
+            subprocess.run(["git", *cmd], cwd=d, check=True)
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, check=True, capture_output=True,
+                                text=True).stdout.strip()
+        self.fp = fp = farm_of(d)
+        # Six testbed jobs, a group each, as the incident's tier had.
+        (d / "tb.toml").write_text(TESTBED_MATRIX.format(commit=commit) + '[axes]\nVIEWERS = ["3", "5", "7"]\n')
+        self.m = fp.Matrix(str(d / "tb.toml"))
+        self.m.resolve()
+        spec = fp.Spec(4, 4, 32, 1)
+        # r2c is the cheapest, and takes three hosts (half r2's budget); r1c
+        # two (half r1's); r2a, dearer, of another type, is r2's spare.
+        self.pools = [fp.Pool("r7a.xlarge", "r2c", "s", spec, 0.030, "r2"),
+                      fp.Pool("r7a.xlarge", "r1c", "s", spec, 0.032, "r1"),
+                      fp.Pool("c7a.xlarge", "r2a", "s", spec, 0.036, "r2")]
+
+    def run_with(self, fleet):
+        """Run.run of the matrix over `fleet`: the run, its result (or the
+        SystemExit it raised) and its log."""
+        fp, pools = self.fp, self.pools
+
+        def setup_aws(run):
+            run.ssh, run.sweep = None, ["r1", "r2"]
+            run.regions = {r: fp.Region(r, "", {}, "", ("", ""), [p for p in pools if p.region == r], budget=b,
+                                        next_budget=float("inf")) for r, b in (("r1", 16), ("r2", 24))}
+            run.pools = sorted(pools, key=fp.pool_order)
+            run.priced = time.time() + 3600
+            run.backoff, run.last_stuck = {}, 0.0
+            run.user_data = run.state / "user-data.sh"
+
+        args = argparse.Namespace(local=False, s3_region="r1", s3_bucket="b", verify=0, max_vcpus=None,
+                                  max_region_vcpus=None, work_per_boot=2, keep=False, hours=6, job_timeout=60,
+                                  idle_minutes=15, rotate_mb=512, imds_url=None, slots=None)
+        patches = [(fp, "TICK", 0.05), (fp, "DRAIN_TICK", 0.05), (fp, "launch", fleet.launch),
+                   (fp, "terminate", fleet.terminate), (fp, "farm_instances", fleet.instances),
+                   (fp.Run, "setup_aws", setup_aws), (fp.Run, "bootstrap", lambda run, h: fleet.bootstrap(run, h)),
+                   (fp.Run, "sync", lambda run, *a, **k: fleet.sync(run, *a, **k)),
+                   (fp.Run, "fetch", lambda run, host, res: True)]
+        with contextlib.ExitStack() as stack:
+            for obj, name, value in patches:
+                stack.enter_context(mock.patch.object(obj, name, value))
+            stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+            run = fleet.run = fp.Run([self.m], args)
+            try:
+                got = run.run()
+            except SystemExit as e:
+                got = e
+        return run, got, (self.m.state / "farm.log").read_text()
+
+    def finished_alike(self, run, code, log, fleet):
+        """The run ended as one whose boots all passed would: 0, every job's
+        line written once its flush landed, from a host that booted, no stop
+        or wind-down, and r2c skipped after its three boots failed, with the
+        instances up then, so counted towards no streak."""
+        self.assertEqual(code, 0, log)
+        for said in ("keep failing", "stopping", "flush what they hold", "left undone"):
+            self.assertNotIn(said, log)
+        lost = "bootstrap failed: no SSH after 10 minutes: ; skipping r7a.xlarge in r2c for 10 min;"
+        self.assertEqual(log.count(lost), 3, log)
+        self.assertEqual(len(fleet.failed), 3)
+        # r2c took its three in the first wave, and none after its boots
+        # failed.
+        zones = collections.Counter(z for _, z, _, _ in fleet.launched)
+        self.assertEqual((zones["r2c"], zones["r1c"]), (3, 2), fleet.launched)
+        self.assertTrue(all(t < min(fleet.failed)[0] for _, z, t, _ in fleet.launched if z == "r2c"))
+        self.assertTrue(all(streak == 0 for *_, streak in fleet.launched))
+        self.assertEqual(run.boot_streak, 0)
+        self.assertGreater(run.backoff[("r7a.xlarge", "r2c")], time.time())
+        self.assertNotIn(("c7a.xlarge", "r2a"), run.backoff)
+        rows = self.fp.read_jsonl(self.m.state / "rows.jsonl")
+        bad = {hid for hid, z, _, _ in fleet.launched if z == "r2c"}
+        self.assertEqual(len({r["id"] for r in rows}), 6)
+        self.assertFalse({r["host"] for r in rows} & bad)
+        self.assertTrue(all(r["src"].startswith(f"farm/{run.name}/i-") for r in rows))
+        self.assertFalse(self.fp.read_jsonl(self.fp.COSTS)[-1]["interrupted"])
+
+    def test_a_pools_failing_boots_skip_it_while_the_instances_up_run_the_queue(self):
+        # browsers-4: r2c's three boots fail as the run's other hosts run
+        # their first jobs, with jobs still queued.
+        fleet = Fleet({"r2c"}, job_s=1.0, fail_when=lambda run, fleet: fleet.running())
+        run, code, log = self.run_with(fleet)
+        self.finished_alike(run, code, log, fleet)
+        self.assertTrue(all(queued > 0 for _, queued in fleet.failed), fleet.failed)
+        # The queued jobs went to r2a, the next pool with room.
+        first = min(fleet.failed)[0]
+        self.assertTrue(any(z == "r2a" and t > first for _, z, t, _ in fleet.launched), fleet.launched)
+
+    def test_a_pools_failing_boots_leave_a_run_that_ends_on_its_last_jobs_done(self):
+        # browsers-16: r2c's boots fail once nothing is queued, as the other
+        # hosts run the last jobs, which all land: nothing more launches.
+        fleet = Fleet({"r2c"}, job_s=1.0, fail_when=lambda run, fleet: fleet.running() and not run.queue)
+        run, code, log = self.run_with(fleet)
+        self.finished_alike(run, code, log, fleet)
+        self.assertTrue(all(queued == 0 for _, queued in fleet.failed), fleet.failed)
+        first = min(fleet.failed)[0]
+        self.assertFalse([launch for launch in fleet.launched if launch[2] > first])
+
+    def test_boots_that_fail_with_none_up_stop_the_launches_then_the_run(self):
+        fleet = Fleet({"r2c", "r1c", "r2a"}, job_s=1.0)
+        run, got, log = self.run_with(fleet)
+        self.assertIsInstance(got, SystemExit)
+        self.assertRegex(str(got.code), r"^instances keep failing to bootstrap: \d+ in a row with none up, the last: "
+                                        r"no SSH after 10 minutes: ; stopping$")
+        # Nothing launched once three had failed in a row, and the run
+        # stopped once every boot had ended.
+        self.assertTrue(all(streak < self.fp.BOOT_FAILURES for *_, streak in fleet.launched), fleet.launched)
+        self.assertLessEqual(len(fleet.launched), 6 + self.fp.BOOT_FAILURES - 1)
+        self.assertEqual(len(fleet.failed), len(fleet.launched))
+        self.assertIn("] stopping: instances keep failing to bootstrap", log)
+        self.assertTrue(log.rstrip().endswith("] 6 of 6 jobs left undone"), log[-500:])
+        self.assertTrue(self.fp.read_jsonl(self.fp.COSTS)[-1]["interrupted"])
+
+    def test_failures_skip_a_pool_then_its_region_or_its_type_until_one_passes(self):
+        fp = self.fp
+        pools = [fp.Pool(t, z, "s", fp.Spec(4, 4, 32, 1), 0.03, r)
+                 for t, z, r in (("t1", "r1a", "r1"), ("t2", "r1b", "r1"), ("t3", "r1c", "r1"),
+                                 ("t1", "r2a", "r2"), ("t2", "r2b", "r2"), ("t1", "r3a", "r3"))]
+        run = mock.Mock(hosts=[], pools=pools, backoff={}, boot_streak=0, boot_why="", launches_held=False,
+                        failed_pools=collections.defaultdict(set), failed_regions=collections.defaultdict(set))
+
+        def host(t, z, r, state="booting"):
+            return fp.Host(f"i-{z}-{t}", t, z, fp.Spec(4, 4, 32, 1), 0.03, 0.0, state=state, region=r)
+
+        def fail(t, z, r):
+            return fp.Run.boot_failed(run, host(t, z, r), "no SSH", 1000.0)
+
+        until = 1000.0 + fp.POOL_BACKOFF
+        self.assertEqual(fail("t1", "r1a", "r1"), "skipping t1 in r1a for 10 min")
+        self.assertEqual((run.backoff, run.boot_streak), ({("t1", "r1a"): until}, 1))
+        # A second pool of r1: every pool of it, t3's untried one too.
+        self.assertEqual(fail("t2", "r1b", "r1"), "skipping every pool of r1 for 10 min (boots failed in 2 of its "
+                                                  "pools since one last passed there)")
+        self.assertEqual(set(run.backoff), {("t1", "r1a"), ("t2", "r1b"), ("t3", "r1c")})
+        # t1 in a second region: t1 everywhere, r3's too, but not r2's t2.
+        self.assertEqual(fail("t1", "r2a", "r2"), "skipping t1 in every region for 10 min (t1's failed in 2 "
+                                                  "regions since one passed)")
+        self.assertEqual(set(run.backoff) - {("t1", "r1a"), ("t2", "r1b"), ("t3", "r1c")},
+                         {("t1", "r2a"), ("t1", "r3a")})
+        self.assertEqual(run.boot_streak, 3)
+        # A boot that passes in r2 clears what r2 and its type held against
+        # them, and the streak.
+        fp.Run.boot_passed(run, host("t2", "r2b", "r2"))
+        self.assertEqual((run.boot_streak, set(run.failed_pools), set(run.failed_regions)), (0, {"r1"}, {"t1"}))
+        run.backoff.clear()
+        self.assertEqual(fail("t2", "r2b", "r2"), "skipping t2 in r2b for 10 min")
+        self.assertEqual(set(run.backoff), {("t2", "r2b")})
+        # With an instance up, a failure counts towards no streak.
+        run.hosts = [host("t3", "r3x", "r3", state="ready")]
+        fail("t3", "r3y", "r3")
+        self.assertEqual(run.boot_streak, 1)
+
+
+class Uploads(unittest.TestCase):
+    """A POST's connection and TLS handshake time out within s3sign's
+    CONNECT_S, whatever its transfer's timeout, and the worker tries the
+    upload again within its window."""
+
+    def test_a_handshake_that_stalls_times_out_within_connect_s(self):
+        if str(FARM_PY.parent) not in sys.path:
+            sys.path.insert(0, str(FARM_PY.parent))
+        spec = importlib.util.spec_from_file_location("sim_farm_s3sign", FARM_PY.parent / "s3sign.py")
+        s3sign = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(s3sign)
+        # A listener that takes the connection and never answers its hello.
+        srv = socket.create_server(("127.0.0.1", 0))
+        self.addCleanup(srv.close)
+        held = []
+        threading.Thread(target=lambda: held.append(srv.accept()), daemon=True).start()
+        self.addCleanup(lambda: [c.close() for c, _ in held])
+        f = Path(tempfile.mkdtemp(prefix="simlab-farm-post-")) / "t.parquet"
+        self.addCleanup(lambda: (f.unlink(), f.parent.rmdir()))
+        f.write_bytes(b"x")
+        pol = {"url": f"https://127.0.0.1:{srv.getsockname()[1]}/", "prefix": "p/", "fields": {}}
+        t0 = time.monotonic()
+        with mock.patch.object(s3sign, "CONNECT_S", 0.3), self.assertRaises(TimeoutError):
+            s3sign.post(pol, "p/t.parquet", f, timeout=60)
+        self.assertLess(time.monotonic() - t0, 5)
+
+    def test_an_upload_that_times_out_is_tried_again_within_its_window(self):
+        spec = importlib.util.spec_from_file_location("sim_farm_worker_up", FARM_PY.parent / "worker.py")
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+        tries = []
+
+        def post(pol, key, path, timeout):
+            tries.append(timeout)
+            if len(tries) == 1:
+                raise TimeoutError("_ssl.c:1063: The handshake operation timed out")
+
+        stub = mock.Mock(post=post, body_size=lambda pol, key, path: 10)
+        counted = []
+        sink = worker.Sink({"data": {"prefix": "d/"}}, "r", "i", lambda *a: counted.append(a))
+        f = Path(tempfile.mkdtemp(prefix="simlab-farm-post-")) / "t.parquet"
+        self.addCleanup(lambda: (f.unlink(), f.parent.rmdir()))
+        f.write_bytes(b"x")
+        with mock.patch.object(worker, "s3sign", lambda: stub), mock.patch.object(worker, "UPLOAD_RETRIES", (0.01,)):
+            sink.post(0, {"prefix": "d/"}, "d/0/t.parquet", f, time.time() + 30)
+        self.assertEqual(len(tries), 2)
+        self.assertTrue(all(t <= 30 for t in tries))
+        self.assertEqual(counted, [(0, 1, 10, 0), (0, 1, 10, 0), (0, 0, 0, 1)])
 
 
 if __name__ == "__main__":

@@ -203,8 +203,8 @@ speed. A run logs the speeds before its best pools.
   budget is read again every 2 minutes while the run wants more
   instances; a quota error there holds it at what the run has in it until
   then, and the run launches in the others meanwhile. A pool out of
-  capacity, or that took an instance back (a spot interruption), is
-  skipped for 10 minutes.
+  capacity, that took an instance back (a spot interruption) or whose
+  instance's boot failed (below) is skipped for 10 minutes.
 - Instances are one-time spot instances, tagged strims-sim-farm=<run>,
   that terminate when they shut down. Each shuts itself down after
   --hours (6), and its worker powers it off after --idle-minutes (15) with
@@ -221,7 +221,16 @@ speed. A run logs the speeds before its best pools.
   overrides, also run here. A different trace means the binaries don't
   reproduce across hosts, and the run stops. The instance logs its boot's
   steps when it's ready: running with an address, SSH answering, its
-  worker started, ready, each after its launch.
+  worker started, ready, each after its launch. One whose boot fails (not
+  running or no SSH within 10 minutes, its setup failed, its canary's
+  sync kept failing) is terminated and its pool skipped for 10 minutes;
+  once boots have failed in two pools of a region since one last passed
+  there, every pool of the region is, and once a type's have in two
+  regions since one of it passed, the type is in every region. The run's
+  instances up meanwhile keep their jobs. Three boots failing in a row
+  with no instance up point at what fails every boot (the image, the
+  binaries, user-data, SSH): the run launches no more until one of those
+  still booting passes, and stops once none is left, its jobs undone.
 - Every 15 s the controller syncs each instance over SSH (worker.py
   sync), every instance at once over its master connection (opened at
   its boot), at once when an instance's boot ends, and again at once each
@@ -235,7 +244,8 @@ speed. A run logs the speeds before its best pools.
   rows that came back (one fsync'd append a file at each tick's end), and
   acks them on the next sync.
 - A controller that stops short (an exception, ^C, a SIGTERM such as a
-  timeout's) winds down before it terminates anything: its instances
+  timeout's, or a stop of its own: a canary that differs, boots that keep
+  failing) winds down before it terminates anything: its instances
   that hold data or run jobs take no more, kill the running jobs that
   can't end within 20 s, and flush what they hold as on an interruption
   notice, and it syncs them (every 5 s) until their flushes land, 2
@@ -288,7 +298,10 @@ speed. A run logs the speeds before its best pools.
   answer, so its instance is tracked, and a second signal doesn't cut the
   cleanup short. With --keep an interrupted run leaves its instances; a
   rerun of the same matrices, in any order, finds them by tag in those
-  regions and adopts their jobs.
+  regions and adopts their jobs. A run that ends with jobs left undone
+  logs how many, last, and exits nonzero: 130 interrupted, 1 stopped (its
+  reason on stderr) or crashed; one done exits 1 if a job failed or a row
+  mismatched, else 0.
 
 A run's process holds the run's lock, an exclusive flock of
 target/sim-farm/live/<run>.pid, from before its builds until it exits, and
@@ -643,6 +656,15 @@ FAMILIES = "c6a,c7a,c8a,m6a,m7a,m8a,r6a,r7a,r8a,c6i,c7i,c8i,m6i,m7i,m8i,r6i,r7i,
 TICK = 15
 SSH_GRACE = 180
 POOL_BACKOFF = 600
+# A launched instance whose boot fails skips its pool for POOL_BACKOFF, as
+# one AWS takes back does. Boots failed in BOOT_SPREAD pools of a region
+# since one last passed there skip the region's pools, and in BOOT_SPREAD
+# regions of a type since one of it passed the type's. BOOT_FAILURES boots
+# failing in a row with no instance up point at what fails every boot (the
+# image, the binaries, user-data, SSH): the run launches no more, and stops
+# once none is left booting.
+BOOT_SPREAD = 2
+BOOT_FAILURES = 3
 THROTTLE_BACKOFF = 60
 PRICE_REFRESH = 600
 BUDGET_REFRESH = 120
@@ -2728,7 +2750,15 @@ class Run:
         self.peak_slots = 0
         self.estimated: dict | None = None
         self.boot_prior = past_boot_s("testbed" if matrices[0].kind == "testbed" else "test")
-        self.boot_failures = 0
+        # Boots failed in a row with no instance up, and the last one's why;
+        # the pools boots failed in since one last passed in their region,
+        # and the regions each type's failed in since one of it passed
+        # (boot_failed); whether launches wait for a boot to pass (scale).
+        self.boot_streak = 0
+        self.boot_why = ""
+        self.failed_pools: dict[str, set[tuple[str, str]]] = collections.defaultdict(set)
+        self.failed_regions: dict[str, set[str]] = collections.defaultdict(set)
+        self.launches_held = False
         self.stopping = threading.Event()
         self.testbed: Testbed | None = None
         if kinds == {"testbed"}:
@@ -3796,23 +3826,65 @@ class Run:
 
     def boots(self) -> None:
         """The instances whose boot has ended: ready (a new one of test jobs
-        once its canary's trace is the one here), or lost."""
-        for h in self.hosts:
-            if h.state not in ("booting", "adopting") or h.boot is None or not h.boot.done():
-                continue
+        once its canary's trace is the one here), or lost, a launched one's
+        pool skipped (boot_failed). Those that passed come first: a boot
+        that fails as another passes fails with an instance up."""
+        ended = [h for h in self.hosts
+                 if h.state in ("booting", "adopting") and h.boot is not None and h.boot.done()]
+        for h in sorted(ended, key=lambda h: h.boot.exception() is not None):
             try:
                 res = h.boot.result()
             except Exception as e:
-                self.lose(h, f"bootstrap failed: {e}")
-                self.boot_failures += 1
-                if self.boot_failures >= 3:
-                    raise SystemExit("instances keep failing to bootstrap; stopping")
+                why = f"bootstrap failed: {e}"
+                # An adopted one's says nothing of its pool's boots: an
+                # earlier run launched it.
+                self.lose(h, why if h.adopted else f"{why}; {self.boot_failed(h, str(e), time.time())}")
                 continue
             if res is not None:
                 self.check_canary(h, res)
-                continue
-            h.state = "ready"
-            log(f"{h.id} ({h.type} in {h.zone}) is ready; {h.steps()}")
+            else:
+                h.state = "ready"
+                log(f"{h.id} ({h.type} in {h.zone}) is ready; {h.steps()}")
+            self.boot_passed(h)
+
+    def boot_failed(self, h: Host, why: str, now: float) -> str:
+        """A launched instance's boot failed (`why`): its pool is skipped for
+        POOL_BACKOFF, its region's pools too once boots have failed in
+        BOOT_SPREAD of them since one last passed there, and its type's in
+        every region once they have in BOOT_SPREAD regions since one of the
+        type passed. With no instance up it counts towards BOOT_FAILURES in
+        a row (scale); one up shows that boots can pass. Says what it
+        skips."""
+        if not any(x.state == "ready" for x in self.hosts):
+            self.boot_streak += 1
+            self.boot_why = why
+        pools = self.failed_pools[h.region]
+        pools.add((h.type, h.zone))
+        regions = self.failed_regions[h.type]
+        regions.add(h.region)
+        skip, where, because = {(h.type, h.zone)}, [], []
+        if len(pools) >= BOOT_SPREAD:
+            skip |= {p.key for p in self.pools if p.region == h.region}
+            where.append(f"every pool of {h.region}")
+            because.append(f"boots failed in {len(pools)} of its pools since one last passed there")
+        if len(regions) >= BOOT_SPREAD:
+            skip |= {p.key for p in self.pools if p.type == h.type}
+            where.append(f"{h.type} in every region")
+            because.append(f"{h.type}'s failed in {len(regions)} regions since one passed")
+        for key in skip:
+            self.backoff[key] = max(self.backoff.get(key, 0.0), now + POOL_BACKOFF)
+        return (f"skipping {' and '.join(where) or f'{h.type} in {h.zone}'} for {POOL_BACKOFF // 60} min"
+                + (f" ({'; '.join(because)})" if because else ""))
+
+    def boot_passed(self, h: Host) -> None:
+        """An instance's boot passed: boots work, in its region and for its
+        type, and the launches go on."""
+        self.boot_streak = 0
+        self.failed_pools.pop(h.region, None)
+        self.failed_regions.pop(h.type, None)
+        if self.launches_held:
+            self.launches_held = False
+            log(f"{h.id} booted; launching again")
 
     def read_budgets(self, now: float) -> None:
         """The budgets of the regions whose reading is due: each region's
@@ -4230,6 +4302,18 @@ class Run:
             waiting = sum(len(w) for w in self.waiting.values())
             demand = len(self.queue) + waiting + sum(len(h.assigned) for h in live)
             deficit = min(demand - sum(h.slots for h in live), self.wanted(now))
+        if deficit > 0 and self.boot_streak >= BOOT_FAILURES:
+            # Boots keep failing with no instance up: none is launched while
+            # some still boot, one of which may pass, and the run stops once
+            # none is left.
+            if not live:
+                raise SystemExit(f"instances keep failing to bootstrap: {self.boot_streak} in a row with none up, "
+                                 f"the last: {self.boot_why}; stopping")
+            if not self.launches_held:
+                self.launches_held = True
+                log(f"{self.boot_streak} boots failed in a row with no instance up; launching none until one "
+                    f"of the {len(live)} booting passes")
+            return
         if deficit > 0:
             self.read_budgets(now)
         # The tick's launches, planned first: each counts against the
@@ -4739,6 +4823,11 @@ class Run:
             self.release(jid)
         interrupted = False
         crashed: Exception | None = None
+        # A stop the run decides on (a SystemExit: the canary's trace
+        # differs, SSH refuses the key, boots keep failing with none up): it
+        # winds down and cleans up as an interrupted run does, --keep or
+        # not, and exits with its reason.
+        stopped: SystemExit | None = None
         last_progress = 0.0
 
         # No log() here: the handler runs on the main thread, which may hold
@@ -4800,6 +4889,9 @@ class Run:
         except KeyboardInterrupt:
             interrupted = True
             log("interrupted")
+        except SystemExit as e:
+            stopped = e
+            log(f"stopping: {e.code}")
         except Exception as e:
             crashed, interrupted = e, True
             log(f"CRASHED: {e!r}\n{traceback.format_exc().rstrip()}")
@@ -4812,7 +4904,7 @@ class Run:
             if not (interrupted and self.args.keep):
                 try:
                     self.wind_down("the controller crashed" if crashed else "interrupted" if interrupted
-                                   else "the run ends")
+                                   else "the run stops" if stopped else "the run ends")
                 except Exception as e:
                     log(f"winding down: {e!r}")
             if self.local:
@@ -4844,16 +4936,23 @@ class Run:
             self.flush_s3()  # the terminations' manifest checks
             if not (interrupted and self.args.keep):
                 self.close_journals()
-            self.account(time.time(), interrupted)
+            # A run that stopped short times no estimate (past_ratios).
+            self.account(time.time(), interrupted or stopped is not None)
+            undone = sum(1 for w, i in self.items.items() if i.copy != "canary" and w not in self.done)
+            if undone:
+                total = sum(1 for i in self.items.values() if i.copy != "canary")
+                log(f"{undone} of {total} jobs left undone")
         if crashed is not None:
             raise crashed
+        if stopped is not None:
+            raise stopped
         if interrupted:
             return 130
         for m in self.ms:
             if len(self.ms) > 1:
                 print(f"\n{m.name}:\n")
             report(m, [], None)
-        return 1 if self.mismatches or self.failed else 0
+        return 1 if self.mismatches or self.failed or undone else 0
 
 
 # --- report -------------------------------------------------------------

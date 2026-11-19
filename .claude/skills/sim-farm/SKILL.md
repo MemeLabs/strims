@@ -132,6 +132,12 @@ With `--keep`, a stopped run leaves its instances for a rerun to adopt.
   that won't end within 20 s, flushes within 90 s, and is left for AWS
   to reclaim (unbilled in its first hour). Its pool is skipped for 10
   minutes. Each run's costs.jsonl line lists its `interruptions`.
+- **Boot failures.** A boot that fails (no SSH in 10 minutes, a failed
+  setup) skips its pool for 10 minutes; failures in two pools of a region,
+  or in two regions of a type, skip the region or the type. Instances up
+  keep their jobs. Three failures in a row with none up mean every boot
+  fails (image, binaries, user-data, SSH): the run launches no more and
+  stops once nothing boots, exiting 1 with its undone jobs logged.
 
 ## Permissions and approval
 
