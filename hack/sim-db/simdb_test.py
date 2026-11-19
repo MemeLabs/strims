@@ -1166,6 +1166,12 @@ RERUN = (NEW, "2026-11-18T10:00:00+00:00", {"i-n1/0": [("n1", "tb-x", 1), ("n2",
 # changed, in matrices git doesn't hold): new jobs of tb-x's cells and
 # seeds, tb-y's lines kept.
 THIRD = (NEW, "2026-11-18T12:00:00+00:00", {"i-m1/0": [("m1", "tb-x", 1), ("m2", "tb-x", 2)]})
+# The rerun's other arm, an A/B's: its jobs ran with the rerun's, on
+# instances of their own.
+ARM_B = "abcd3" + "2" * 35
+OTHER_ARM = (ARM_B, "2026-11-18T10:00:00+00:00", {"i-b1/0": [("b1", "tb-x", 1), ("b2", "tb-y", 1)]})
+# When the tests run: a day after the rerun, within the week S3 keeps.
+NOW_T = datetime.datetime(2026, 11, 19, tzinfo=datetime.UTC).timestamp()
 
 
 class OneRun(unittest.TestCase):
@@ -1181,6 +1187,8 @@ class OneRun(unittest.TestCase):
         for p in (*checkout(root),
                   mock.patch.object(query, "derive", lambda srcs: None),
                   mock.patch.object(store, "aws", self.aws),
+                  # the runs' jobs within the week S3 keeps
+                  mock.patch.object(store, "now", lambda: NOW_T),
                   mock.patch.dict(os.environ, {"SIM_DB_ROOT": str(root / "target" / "sim-db")})):
             p.start()
             self.addCleanup(p.stop)
@@ -1344,10 +1352,15 @@ class OneRun(unittest.TestCase):
                                                f"{RUN_T} --commit {NEW[:12]} --since 2026-11-18T11:00:00Z removes them")
 
     def test_reads_and_dry_runs_take_the_runs_flushes(self):
-        # A dry run asks S3 nothing, and names the pull the cache lacks.
+        # A dry run asks S3 nothing, and names the pull the cache lacks,
+        # with how many flushes it copies.
         self.assertEqual(self.refused("--run", RUN_T, "--commit", "abcd2", "--reads", "--dry-run"),
-                         f"the cache lacks those flushes of farm/{RUN_T}: pull --run {RUN_T} --commit {NEW[:12]} "
-                         "copies the tables that name its jobs")
+                         f"{RUN_T}: the cache holds none of the 2 flushes those lines name: simdb.py pull --run "
+                         f"{RUN_T} --commit {NEW[:12]} copies their tables, whose samples a dry run then lists")
+        self.assertEqual(self.refused("--run", RUN_T, "--reads", "--dry-run"),
+                         f"{RUN_T}: the cache holds none of its flushes (its matrices' lines name 4): simdb.py pull "
+                         f"--run {RUN_T} copies their tables, every flush under its name (--commit takes one run's), "
+                         "whose samples a dry run then lists")
         self.assertEqual(self.calls, [])
         self.cli("pull", "--run", RUN_T)
         out, _ = self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--reads", "--dry-run")
@@ -1386,12 +1399,16 @@ class OneRun(unittest.TestCase):
         self.cli("pull", "--run", RUN_T)
         self.cli("prune", "--run", RUN_T, "--commit", "abcd2")
         self.calls.clear()
+        # Each names the pruned run's flushes, which its lines name.
+        pruned = (f"{RUN_T}: the run's lines name 2 flushes the cache lacks (commit {OLD[:12]}, their jobs ran at "
+                  f"2026-11-16 10:00:00 UTC): simdb.py pull --run {RUN_T} --commit {OLD[:12]}")
         out, _ = self.cli("pull", "--run", RUN_T, "--reads", "--dry-run")
-        self.assertEqual({x.split()[0] for x in out.splitlines()[1:]},
+        self.assertEqual({x.split()[0] for x in out.splitlines()[1:3]},
                          {f"s3://bkt/sim-samples/{RUN_T}/{f}/reads.parquet" for f in ("i-n1/0", "i-k/1")})
-        self.assertTrue(out.startswith(f"{RUN_T}: would GET 2 files, 0.0 MB, for 4 jobs' reads\n"), out)
+        self.assertEqual(out.splitlines()[::3], [f"{RUN_T}: would GET 2 files, 0.0 MB, for 4 jobs' reads", pruned])
         out, _ = self.cli("pull", "--run", RUN_T, "--reads")
-        self.assertEqual(out, f"{RUN_T}: 2 sources in {self.dest}; fetched 2 files, 0.0 MB, for 4 jobs' reads\n")
+        self.assertEqual(out, f"{RUN_T}: 2 sources in {self.dest}; fetched 2 files, 0.0 MB, for 4 jobs' reads\n"
+                              f"{pruned}\n")
         self.assertEqual(self.gets(), {f"sim-samples/{RUN_T}/{f}/reads.parquet" for f in ("i-n1/0", "i-k/1")})
         self.assertEqual(self.syncs(), set())
         self.assertEqual(self.held(), {"i-n1/0", "i-k/1"})
@@ -1401,12 +1418,112 @@ class OneRun(unittest.TestCase):
         # Pulled again: nothing to fetch, and no ledger line.
         n = len(self.ledger())
         out, _ = self.cli("pull", "--run", RUN_T, "--reads")
-        self.assertEqual(out, f"{RUN_T}: 2 sources in {self.dest}; the cache holds what S3 has of their samples\n")
+        self.assertEqual(out, f"{RUN_T}: 2 sources in {self.dest}; the cache holds what S3 has of their samples\n"
+                              f"{pruned}\n")
         self.assertEqual((self.calls, len(self.ledger())), ([], n))
         # The tables of every flush under the name come back only with a
         # pull without --reads.
         self.cli("pull", "--run", RUN_T)
         self.assertEqual(self.held(), {"i-o1/0", "i-k/0", "i-n1/0", "i-k/1"})
+
+    def test_a_dry_run_without_reads_previews_the_pull(self):
+        # The picked flushes, those the cache holds marked, asking S3
+        # nothing.
+        self.cli("pull", "--run", RUN_T, "--commit", "abcd2")
+        shutil.rmtree(self.dest / "i-k")
+        self.calls.clear()
+        out, _ = self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--dry-run")
+        self.assertEqual(out.splitlines(), [
+            f"{RUN_T}: 2 of the 4 flushes its matrices' lines name, those of its jobs of commit {NEW[:12]}",
+            f"{RUN_T}: a pull would sync the tables of the 1 of them the cache lacks; it holds 1",
+            f"  farm/{RUN_T}/i-k/1",
+            f"  farm/{RUN_T}/i-n1/0  (in the cache)"])
+        # Unfiltered: every flush under the name, the lines' by commit.
+        out, _ = self.cli("pull", "--run", RUN_T, "--dry-run")
+        self.assertEqual(out.splitlines(), [
+            f"{RUN_T}: a pull would sync sim-data/{RUN_T}/, every flush S3 holds under its name; the cache holds 1 of "
+            "the run's flushes, its matrices' lines naming 4 by commit:",
+            f"  {NEW[:12]}: 2 flushes, 1 in the cache, their jobs ran at 2026-11-18 10:00:00 UTC",
+            f"  {OLD[:12]}: 2 flushes, none in the cache, their jobs ran at 2026-11-16 10:00:00 UTC"])
+        self.assertEqual((self.calls, self.held()), ([], {"i-n1/0"}))
+        self.assertEqual(self.refused("--run", RUN_T, "--cell", "tb-x"),
+                         "--cell, --arm and --seed are of a pull's reads: give --reads")
+
+    def test_a_reads_pull_names_a_rerun_the_cache_lacks(self):
+        # The cache holding the first run alone, a reads pull fetches its
+        # samples and names the rerun's flushes, which the lines name.
+        self.cli("pull", "--run", RUN_T, "--commit", OLD[:5])
+        hint = (f"{RUN_T}: the run's lines name 2 flushes the cache lacks (commit {NEW[:12]}, their jobs ran at "
+                f"2026-11-18 10:00:00 UTC): simdb.py pull --run {RUN_T} --commit {NEW[:12]}")
+        out, _ = self.cli("pull", "--run", RUN_T, "--reads", "--dry-run")
+        self.assertEqual(out.splitlines()[-1], hint)
+        self.calls.clear()
+        out, _ = self.cli("pull", "--run", RUN_T, "--reads")
+        self.assertEqual(out.splitlines(), [f"{RUN_T}: 2 sources in {self.dest}; fetched 2 files, 0.0 MB, for 4 jobs' "
+                                            "reads", hint])
+        self.assertEqual(self.syncs(), set())
+        # Jobs older than the week S3 keeps aren't named: their flushes are
+        # gone.
+        with mock.patch.object(store, "now", lambda: NOW_T + 7 * 86400):
+            out, _ = self.cli("pull", "--run", RUN_T, "--reads")
+        self.assertEqual(out, f"{RUN_T}: 2 sources in {self.dest}; the cache holds what S3 has of their samples\n")
+
+    def test_a_flush_without_its_manifest_has_its_tables_synced_again(self):
+        # A sync stopped before the manifest came: the reads pull syncs that
+        # flush's tables again, then GETs its samples; its dry run says so.
+        self.cli("pull", "--run", RUN_T, "--commit", "abcd2")
+        (self.dest / "i-k" / "1" / "manifest.json").unlink()
+        out, _ = self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--reads", "--dry-run")
+        self.assertEqual(out.splitlines()[1:], [
+            f"{RUN_T}: would GET 1 files, 0.0 MB, for 2 jobs' reads",
+            f"  s3://bkt/sim-samples/{RUN_T}/i-n1/0/reads.parquet  0.0 MB  2 jobs",
+            f"{RUN_T}: 1 of the flushes lack their manifest.json, which lists their samples (a sync stopped short): a "
+            "pull syncs their tables again first"])
+        self.calls.clear()
+        out, _ = self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--reads")
+        self.assertEqual(out.splitlines()[1], f"{RUN_T}: 2 sources in {self.dest}; fetched 2 files, 0.0 MB, for 4 "
+                                              "jobs' reads")
+        self.assertEqual(self.gets(), {f"sim-samples/{RUN_T}/{f}/reads.parquet" for f in ("i-n1/0", "i-k/1")})
+        self.assertEqual(self.syncs(), {(f"sim-data/{RUN_T}/i-k/", ("1",))})
+        # One S3 no longer holds the manifest of: its samples left out.
+        (self.dest / "i-k" / "1" / "manifest.json").unlink()
+        (self.s3 / "sim-data" / RUN_T / "i-k" / "1" / "manifest.json").unlink()
+        out, _ = self.cli("pull", "--run", RUN_T, "--commit", "abcd2", "--reads")
+        self.assertEqual(out.splitlines()[2], f"{RUN_T}: 1 of the flushes lack their manifest.json, which lists their "
+                                              "samples (a sync stopped short), and syncing their tables again didn't "
+                                              "bring it: their samples are left out")
+
+    def test_an_ab_s_other_arm_is_named_beside_the_commit(self):
+        # The rerun an A/B, its other arm's jobs on instances of their own:
+        # the hint to prune, and the prune, name that arm's commit.
+        self.run_of(*OTHER_ARM)
+        self.cli("pull", "--run", RUN_T)
+        out, _ = self.cli("pull", "--run", RUN_T, "--commit", "abcd2")
+        beside = (f"; jobs of commit {ARM_B[:12]} (1 flushes) ran within those (an A/B's other arm?): --commit "
+                  f"{ARM_B[:12]} takes them too")
+        self.assertEqual(out.splitlines()[-1], f"{RUN_T}: the cache also holds 3 flushes of the run that those lines "
+                                               "don't name (an earlier run's of its name, say): simdb.py prune --run "
+                                               f"{RUN_T} --commit {NEW[:12]} removes them{beside}")
+        out, _ = self.cli("prune", "--run", RUN_T, "--commit", "abcd2", "--dry-run")
+        self.assertEqual(out.splitlines()[1], f"{RUN_T}: kept 2 of its flushes in the cache, would remove 3{beside}")
+        # Both arms' commits: both arms' flushes, nothing beside.
+        out, _ = self.cli("prune", "--run", RUN_T, "--commit", "abcd2", "--commit", "abcd3")
+        self.assertEqual(out.splitlines()[1], f"{RUN_T}: kept 3 of its flushes in the cache, removed 2: simdb.py "
+                                              "index drops them from the catalog")
+        self.assertEqual(self.held(), {"i-n1/0", "i-k/1", "i-b1/0"})
+
+    def test_a_selections_reused_flushes_come_alone(self):
+        # pull_sources (a view's reused rows, a catalog fetch, suite.py's
+        # farm jobs) pulls the flushes it's given, never the other flushes
+        # under their run's name: a prune stays.
+        pulls, gone = store.pull_sources([f"farm/{RUN_T}/i-n1/0", f"farm/{RUN_T}/i-k/1", f"farm/{RUN_T}/i-z/0"])
+        self.assertEqual(self.syncs(), {(f"sim-data/{RUN_T}/i-n1/", ("0",)), (f"sim-data/{RUN_T}/i-k/", ("1",)),
+                                        (f"sim-data/{RUN_T}/i-z/", ("0",))})
+        self.assertEqual((self.held(), gone), ({"i-n1/0", "i-k/1"}, [f"farm/{RUN_T}/i-z/0"]))
+        self.assertEqual([p.run for p in pulls], [RUN_T])
+        # What the cache holds isn't pulled again.
+        self.assertEqual(store.pull_sources([f"farm/{RUN_T}/i-n1/0"]), ([], []))
+        self.assertEqual(self.calls, [])
 
     def test_a_lines_time_is_its_jobs_start_else_when_it_was_written(self):
         # A testbed line's started, a test line's at (it has no started),

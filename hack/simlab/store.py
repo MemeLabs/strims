@@ -102,9 +102,10 @@ matrices for its id (suite.py's write_matrices: <id>-NN):
                  time, for the flushes the cache holds (flushes_plan,
                  sample_plan), so a pull's quote is what it fetches
   pull_sources(srcs) -> ([Pull], gone)
-                 the pulls of the farm runs of the sources `srcs` the
-                 cache lacks, less their samples, and the sources still
-                 missing after them (expired from S3, or never uploaded)
+                 the pulls of the farm flushes among the sources `srcs`
+                 the cache lacks, those alone (a run's pull of `flushes`),
+                 less their samples, and the sources still missing after
+                 them (expired from S3, or never uploaded)
   unlanded(srcs) -> set
                  the farm flushes among `srcs` whose samples never landed
                  in S3, as their matrices' indexes say
@@ -165,7 +166,7 @@ the times two runs of one commit, and both pick the jobs one run ran.
 
   line_time(line) -> datetime | None
                  when a line's job ran: a testbed line's `started`, else
-                 its `at` (written as its flush landed)
+                 its `at` (stamped as the job's result came back)
   run_lines(run, runs=None) -> [line]
                  the lines of the run's matrices (farm_runs') naming a
                  flush of it
@@ -176,8 +177,16 @@ the times two runs of one commit, and both pick the jobs one run ran.
                  matches two of their commits or none, or no flush is
                  left, naming the commits the lines hold; a Flushes holds
                  them sorted (`srcs`), the commits' shas, `since`, how
-                 many flushes the run's lines name, its line (text()) and
-                 the pull's and prune's options picking them (args())
+                 many flushes the run's lines name, its line (text()),
+                 the pull's and prune's options picking them (args()),
+                 and the other commits whose jobs ran within theirs in
+                 other flushes (`beside`: an A/B's other arm)
+  lacking(run, held, runs=None) -> {commit: (flushes, times)}
+                 the flushes the run's lines name of jobs that ran in the
+                 days S3 keeps, that the cache's `held` aren't, by commit
+                 (by_commit; commits_text and ran_text print them)
+  unmanifested(srcs) -> [src]
+                 the cache's sources lacking their manifest.json
   instant(text) -> datetime
                  an ISO 8601 time, UTC where it names no zone; Refused
                  where it isn't one
@@ -727,8 +736,9 @@ EPOCH = datetime.datetime.fromtimestamp(0, datetime.UTC)
 
 def line_time(line):
     """When matrix line `line`'s job ran, an aware datetime: a testbed
-    line's `started`, else its `at` (written once its flush landed; a
-    copied line keeps the `at` of the job that ran); None for neither."""
+    line's `started`, else its `at` (farm.py stamps it as the job's result
+    reaches the controller; a copied line keeps the `at` of the job that
+    ran); None for neither."""
     for field in ("started", "at"):
         with contextlib.suppress(TypeError, ValueError):
             t = datetime.datetime.fromisoformat(line.get(field))
@@ -776,22 +786,66 @@ def run_lines(run, runs=None):
     return out
 
 
-def commits_text(lines):
-    """The commits matrix lines `lines` record, a line each, the latest
-    run first: how many flushes their jobs' lines name, and when those
-    jobs ran (line_time)."""
+def ran_text(times):
+    """When jobs ran at `times` (line_time's): ", their jobs ran at T" or
+    ", ... from T to T'"; "" for none."""
+    if not times:
+        return ""
+    if min(times) == max(times):
+        return f", their jobs ran at {utc(min(times))}"
+    return f", their jobs ran from {utc(min(times))} to {utc(max(times))}"
+
+
+def by_commit(lines):
+    """{commit: (flushes, times)} of matrix lines `lines`: the flushes each
+    commit's jobs' lines name and when those jobs ran (line_time), the
+    latest run first; a line of no commit's under "(none)"."""
     by = collections.defaultdict(lambda: (set(), []))
     for r in lines:
         srcs, times = by[r.get("commit") or "(none)"]
         srcs.add(r["src"])
         if (t := line_time(r)) is not None:
             times.append(t)
+    return dict(sorted(by.items(), key=lambda kv: max(kv[1][1], default=EPOCH), reverse=True))
+
+
+def commits_text(lines, held=None):
+    """The commits matrix lines `lines` record, a line each, the latest
+    run first: how many flushes their jobs' lines name (with `held`, a set
+    of sources, how many of those the cache holds), and when those jobs
+    ran (line_time)."""
     out = []
-    for c, (srcs, times) in sorted(by.items(), key=lambda kv: max(kv[1][1], default=EPOCH), reverse=True):
-        ran = ("" if not times else f", their jobs ran at {utc(min(times))}" if min(times) == max(times) else
-               f", their jobs ran from {utc(min(times))} to {utc(max(times))}")
-        out.append(f"  {c[:12]}: {len(srcs)} flushes{ran}")
+    for c, (srcs, times) in by_commit(lines).items():
+        cached = "" if held is None else f", {len(srcs & held) or 'none'} in the cache"
+        out.append(f"  {c[:12]}: {len(srcs)} flushes{cached}{ran_text(times)}")
     return "\n".join(out)
+
+
+def now():
+    """The time, in seconds since the epoch (time.time; the tests set it)."""
+    return time.time()
+
+
+def lacking(run, held, runs=None):
+    """The flushes of farm run `run` that its matrices' lines (run_lines)
+    name and the cache's sources `held` aren't, of jobs that ran in the
+    days S3 keeps a run's data (s3_kept_days; older ones' are gone), by
+    commit (by_commit): {commit: (flushes, times)}; {} where the run's
+    lines can't all be read (run_lines' Refused). Asks S3 nothing."""
+    try:
+        lines = run_lines(run, runs)
+    except Refused:
+        return {}
+    kept = datetime.datetime.fromtimestamp(now() - s3_kept_days() * 86400, datetime.UTC)
+    return by_commit([r for r in lines if r["src"] not in held and (line_time(r) or EPOCH) >= kept])
+
+
+def unmanifested(srcs):
+    """Those of the cache's sources `srcs` that lack their manifest.json (a
+    sync interrupted before it came), whose samples the manifest would
+    list."""
+    root = store_host.cache_root() / "cache"
+    return [s for s in srcs if not (root / s / "manifest.json").exists()]
 
 
 @dataclasses.dataclass
@@ -799,12 +853,25 @@ class Flushes:
     """Farm run `run`'s flushes (`srcs`, sorted) that the lines of its
     matrices name of jobs of `commits` (the shas the prefixes asked name)
     that ran at or after `since`, of the `named` flushes the run's lines
-    name in all (run_flushes)."""
+    name in all (run_flushes); `beside` {commit: flushes} the other
+    commits whose jobs ran within theirs (the first to the last's start)
+    in flushes not among them: an A/B's other arm, say, which takes a
+    --commit of its own."""
     run: str
     srcs: list
     commits: list = dataclasses.field(default_factory=list)
     since: datetime.datetime = None
     named: int = 0
+    beside: dict = dataclasses.field(default_factory=dict)
+
+    def beside_text(self):
+        """The commits beside them, as a clause: "; jobs of commit C (N
+        flushes) ran within those: --commit C takes them too", or ""."""
+        if not self.beside:
+            return ""
+        what = ", ".join(f"{c[:12]} ({n} flushes)" for c, n in self.beside.items())
+        return (f"; jobs of {'commits' if len(self.beside) > 1 else 'commit'} {what} ran within those (an A/B's other "
+                f"arm?): {' '.join(f'--commit {c[:12]}' for c in self.beside)} takes them too")
 
     def what(self):
         """Which jobs' flushes they are, as the lines say."""
@@ -847,12 +914,18 @@ def run_flushes(run, commits=(), since=None, runs=None):
                           + commits_text(lines))
         full.append(hits[0])
     full = list(dict.fromkeys(full))
-    picked = {r["src"] for r in lines if (not full or r.get("commit") in full)
-              and (since is None or (line_time(r) or EPOCH) >= since)}
+    mine = [r for r in lines if (not full or r.get("commit") in full)
+            and (since is None or (line_time(r) or EPOCH) >= since)]
+    picked = {r["src"] for r in mine}
     out = Flushes(run, sorted(picked), full, since, len({r["src"] for r in lines}))
     if not picked:
         raise Refused(f"{run}: none of its matrices' lines is of a job {out.what()}; the commits they record:\n"
                       + commits_text(lines))
+    if times := [t for r in mine if (t := line_time(r)) is not None]:
+        lo, hi = min(times), max(times)
+        out.beside = {c: len(srcs - picked) for c, (srcs, ts) in by_commit(
+            [r for r in lines if r.get("commit") not in full and lo <= (line_time(r) or EPOCH) <= hi]).items()
+            if srcs - picked}
     return out
 
 
@@ -880,12 +953,17 @@ def prune(run, keep, dry_run=False):
 
 
 def pull_sources(srcs):
-    """Pulls the farm runs of the sources `srcs` (farm/<run>/...) that the
-    cache lacks, a run at a time, less their samples (pull_samples);
-    returns their Pulls and the sources still missing (expired from S3,
-    or never uploaded)."""
-    want = sorted({s for s in srcs if s.startswith("farm/") and not have_src(s)})
-    pulls = [pull(run) for run in sorted({s.split("/")[1] for s in want})]
+    """Pulls the farm flushes among the sources `srcs` (farm/<run>/
+    <instance>/<seq>) that the cache lacks, those alone (pull's `flushes`:
+    a sync of each instance's, a run at a time, so the other flushes under
+    a run's name, a pruned earlier run's, stay out), less their samples
+    (pull_samples); returns their Pulls and the sources still missing
+    (expired from S3, or never uploaded)."""
+    want = sorted({s for s in srcs if s.startswith("farm/") and s.count("/") == 3 and not have_src(s)})
+    runs = collections.defaultdict(list)
+    for s in want:
+        runs[s.split("/")[1]].append(s)
+    pulls = [pull(run, flushes) for run, flushes in sorted(runs.items())]
     return pulls, [s for s in want if not have_src(s)]
 
 

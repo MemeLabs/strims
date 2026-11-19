@@ -1065,7 +1065,7 @@ class Fetch(Fixture):
         self.assertEqual((got.exp, got.pulled, got.gone, got.ledger_lines), ("sf0001", [lost], [], 1))
         self.assertAlmostEqual(got.s3_usd, 1000 * 0.0044 / 10000 + 0.09, places=9)
         self.assertEqual(events[0], catalog.Progress(
-            "pull", "sf0001: pulling the farm runs of 1 flushes the cache lacks", 0, 1))
+            "pull", "sf0001: pulling the 1 flushes the cache lacks", 0, 1))
         lines = [json.loads(line) for line in ledger.read_text().splitlines()]
         self.assertEqual([r["tier2"] for r in lines if r["source"] == "pull" and r["run"] == run][-1],
                          {"pull_get": 1000})

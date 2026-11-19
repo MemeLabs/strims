@@ -101,17 +101,23 @@ come with `--reads`, a GET a file, for the run's flushes the cache holds
 (its tables pulled first where it holds none of them, the samples of a
 flush the cache lacks being of no use): each flush's, or with `--cell`,
 `--arm` and `--seed` only the flushes holding those jobs (the manifests'
-keys; a job held twice, a verify copy, from the fewest flushes). So a
-pull's reads are what its `--dry-run` lists, and after a `prune` the
-kept flushes' alone; `pull --run` without `--reads` syncs the tables of
-every flush under the name. The queries
-that read them (pooled, aligned on a read lag, forecast, and sql with
-`--reads`) pull their selection's that way when the cache lacks them,
-noting the size, at most `--pull-mb`. `--dry-run` lists what a pull
-would fetch, asking S3 nothing. What a pull costs S3 goes to the farm's
-S3 ledger (pull). A run's name is its matrices', so S3 holds a rerun's
-flushes under the earlier runs' name, whose jobs key into the same cells
-and seeds: `--commit` (a sha or its prefix; again for another) and
+keys; a job held twice, a verify copy, from the fewest flushes). Of the
+flushes the cache holds, a pull's reads are what its `--dry-run` lists,
+and after a `prune` the kept flushes' alone; a flush lacking its
+manifest (a sync stopped short) has its tables synced again first, and
+an unfiltered reads pull names the flushes the run's lines name that the
+cache lacks (a rerun's), with the `--commit` pull that takes them. `pull
+--run` without `--reads` syncs the tables of every flush under the name.
+The queries that read them (pooled, aligned on a read lag, forecast, and
+sql with `--reads`) pull their selection's that way when the cache lacks
+them, noting the size, at most `--pull-mb`. `--dry-run` asks S3 nothing:
+with `--reads` it lists the files a pull would fetch, without it the
+flushes the pull would sync (the selected ones, or every one the run's
+lines name, by commit) and which the cache holds. What a pull costs S3
+goes to the farm's S3 ledger (pull). A run's name is its matrices', so
+S3 holds a rerun's flushes under the earlier runs' name, whose jobs key
+into the same cells and seeds: `--commit` (a sha or its prefix; again
+for another, as an A/B's two arms need) and
 `--since` (an ISO 8601 time, UTC where it names no zone) take only the
 flushes that the lines of the run's matrices (their rows.jsonl and
 index.jsonl in the farm's state: each line's `src`, its job's `commit`
@@ -682,11 +688,12 @@ def main():
                    "includes")
     p.add_argument("--reads", action="store_true",
                    help=f"the sample tables ({SAMPLES_TEXT}; sim-samples/) of the run's flushes the cache holds "
-                        "(its tables first where it holds none), as --dry-run lists them")
+                        "(its tables first where it holds none)")
     p.add_argument("--cell", action="append", help="only these cells' reads, globs")
     p.add_argument("--arm", action="append", help="only these arms' reads, globs")
     p.add_argument("--seed", action="append", type=int, help="only these seeds' reads")
-    p.add_argument("--dry-run", action="store_true", help="list the reads' files a pull would fetch, asking S3 nothing")
+    p.add_argument("--dry-run", action="store_true", help="what a pull would fetch, asking S3 nothing: the reads' "
+                   "files, or without --reads the flushes it would sync and which the cache holds")
     one = ("the flushes the run's matrices' lines (target/sim-farm/<matrix>/rows.jsonl, index.jsonl) name of jobs of "
            "these commits")
     since = ("only the flushes of jobs that ran at or after this time (a line's started, else its at): ISO 8601, UTC "

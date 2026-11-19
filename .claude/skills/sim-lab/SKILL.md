@@ -80,31 +80,19 @@ both, so take a name's meaning from it, not from a guess at the name.
 (`describe TABLE` gives a table's columns), and `simdb.py sql --help`
 their joins.
 
-- **One run of a name.** A farm run is named for its matrices, so a
-  rerun of them has the same name, and S3 keeps every run's flushes
-  under it for a week. A bare `pull --run RUN` copies them all. Their
-  jobs key into the same cells and seeds, so `testbed_side` and
-  `simdb.py twin` fail with "runs share a cell, arm and seed".
-  `pull --commit SHA` (a sha or a prefix of 4+ digits, repeatable) takes
-  only the flushes that the run's matrices' lines name for jobs of that
-  commit. Those lines are target/sim-farm/MATRIX/rows.jsonl and
-  index.jsonl, each with a `src`, `commit`, `started` and `at`. `--since
-  TIME` keeps the jobs that ran at or after TIME (ISO 8601, UTC when no
-  zone is given). The commit is the reliable cut. A job's id hashes its
-  arm's source tree and settings, so a rerun after a source change runs
-  every job again under the new commit. A rerun that changed neither
-  keeps the earlier lines, with their commit and times. Add `--since`
-  for two runs at one commit, such as a setting changed in matrices that
-  git doesn't track. A refused pull lists the commits the lines record
-  and when their jobs ran. `prune` takes the same options and removes the
-  cache's other flushes of the run, with their derived tables. The next
-  `index` drops them from the catalog. `pull --reads` fetches only the
-  samples of the run's flushes already in the cache, exactly what its
-  `--dry-run` lists, so after a prune it takes only the kept flushes'
-  samples. A plain `pull --run RUN` syncs every flush under the name
-  again. The cut is made per flush: a rerun
-  that ran only some jobs leaves the others in the earlier run's
-  flushes, next to the jobs it replaced.
+- **One run of a name.** A rerun of the same matrices has the same run
+  name, and S3 keeps every run's flushes under it for a week. After a
+  bare `pull --run RUN`, both runs' jobs key into the same cells and
+  seeds, so `testbed_side` and `simdb.py twin` fail with "runs share a
+  cell, arm and seed". Pull one run with `pull --run RUN --commit SHA`
+  (a sha or a prefix of 4 or more hex digits). An A/B's two commits need
+  a `--commit` each. Add `--since TIME` when two runs share a commit,
+  such as a setting changed in matrices git doesn't track. For a cache
+  that already holds both runs, use `prune` with the same options, then
+  `simdb.py index`. The cut is made per flush: a rerun that ran only
+  some jobs leaves the others in the earlier run's flushes, next to the
+  jobs it replaced. Rerun the whole set when you need one run's flushes
+  alone.
 - Put a query with `$name`s in single quotes: in double quotes the shell
   expands `$exp` to nothing.
 - A `lake --param` value binds as JSON where it parses (`7`, `true`,

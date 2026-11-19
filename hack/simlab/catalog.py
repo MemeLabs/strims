@@ -4123,8 +4123,8 @@ def ledger_size():
 def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, progress=None):
     """Copies what S3 holds of experiment `exp`'s jobs (`cells`, `arms`) into
     the cache, then indexes (`workers`, `progress` index's): the flushes
-    holding their tables (store.pull of each farm run the cache lacks one
-    of), and with `tables` (of SAMPLE_TABLES) the fewest flushes giving the
+    holding their tables that the cache lacks (store.pull_sources: those
+    alone), and with `tables` (of SAMPLE_TABLES) the fewest flushes giving the
     jobs those, and the tables their truth comes from (store's
     sample_plan and pull_samples, which refuses past `limit_mb`; asks,
     haves and seed_sends bring arrivals: seed_sends comes with sim-data,
@@ -4157,7 +4157,7 @@ def fetch(exp, cells=None, arms=None, tables=(), workers=None, limit_mb=None, pr
         runs = {r["src"].split("/")[1] for r in holders}
         lack = [r["src"] for r in holders if not store.have_src(r["src"])]
         if lack:
-            say("pull", f"{exp}: pulling the farm runs of {len(lack)} flushes the cache lacks", 0, len(lack))
+            say("pull", f"{exp}: pulling the {len(lack)} flushes the cache lacks", 0, len(lack))
             pulls, out.gone = store.pull_sources(lack)
             out.pulled = sorted({s for p in pulls for s in p.pulled})
             if out.gone:

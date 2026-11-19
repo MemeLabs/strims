@@ -197,8 +197,12 @@ class Commands(Fixture):
         self.assertEqual((p.jobs, p.lost, [n for *_, n in p.files]), (2, 0, [2]))
         self.assertTrue(p.files[0][0].endswith("/i-2/3/reads.parquet"))
         self.assertTrue(query.pull_text(p).startswith(f"{run}: would GET 1 files, 0.0 MB, for 2 jobs' "))
+        # Without the reads, the tables' pull previewed; a cell is a reads
+        # pull's.
+        self.assertTrue(query.pull_text(query.pull_run(run, dry_run=True)).startswith(
+            f"{run}: a pull would sync sim-data/{run}/, every flush S3 holds under its name; the cache holds "))
         with self.assertRaises(query.Refused):
-            query.pull_run(run, dry_run=True)
+            query.pull_run(run, cell=["star-5*"])
         # The suite farm run's id, the run including its matrices.
         p = query.pull_run("sf0001", reads=True, dry_run=True)
         self.assertEqual((p.run, p.jobs), (run, 2))
