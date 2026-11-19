@@ -29,29 +29,36 @@
 //! lateness), the driver's own sleeps (its accept and receive backoffs)
 //! and the WAN model's transport timers.
 //!
+//! With [`Scenario::pacer_timers`] a browser's host pacer runs late too:
+//! each data channel's writer the host's pacer holds sleeps on a timer of
+//! its own, `HOST_POLL` and its lateness from its hold or its last poll,
+//! as strims-wasm's `DcSocket::send` does (`crate::net` says how the
+//! writers due at one instant take their turns).
+//!
 //! Each host draws from the model of its kind ([`HostKind`]: native,
 //! Chromium or Firefox, by the browser its data channels model, as the
 //! `hosts` table names it) for each source ([`Source`]): its node task's
-//! wake-ups, and its harness's timers, the frame writer's waits and the
-//! timer probe's ([`model`]). Each model is the timer bench's: the shares
-//! of 0, 1 and 2 ms late, and the measured spread of those 3 ms or more
-//! late, that the `timers` table of thin-star testbed runs reads (the
-//! farm's `testbed-timers` matrix: a seed and three viewers of one kind on
-//! a host of their own, a 10 Mbit/s seed, 90 s, idle and beside a
-//! competing upload, every node of the kind, each run weighed alike, its
-//! first two repeats). The bench (scoring.sql's `timer_fit_of`) holds a
-//! twin of those runs to the testbed's shares, mean and p99, kind by kind
-//! and source by source. A Firefox node's model is a page's served
-//! cross-origin isolated, as the testbed's timer log serves it, whose
-//! timers run less late than a plain page's (PLAN). The bench's runs keep
+//! wake-ups, its harness's timers (the frame writer's waits and the timer
+//! probe's), and its host pacer's polls ([`model`]). Each model is the
+//! timer bench's: the shares of 0, 1 and 2 ms late, and the measured
+//! spread of those 3 ms or more late, that the `timers` table of
+//! thin-star testbed runs reads (the farm's `testbed-timers` matrix: a
+//! seed and three viewers of one kind on a host of their own, a 10 Mbit/s
+//! seed, 90 s, idle and beside a competing upload, every node of the kind,
+//! each run weighed alike, its first two repeats). The bench (scoring.sql's
+//! `timer_fit_of`) holds a twin of those runs to the testbed's shares,
+//! mean and p99, kind by kind and source by source. A Firefox node's model
+//! is a page's served cross-origin isolated, as the testbed's timer log
+//! serves it, whose timers run less late than a plain page's (PLAN). The bench's runs keep
 //! the timer probe on, which runs in the node's own worker, and a
 //! browser's writer runs otherwise beside it: without the probe a Firefox
 //! seed's writes run later, a Chromium seed's less late (PLAN). A
 //! browser's timer for a deadline already due resolves at once, as
 //! strims-wasm's `Sleep` and `setTimeout`-free waits do, drawing nothing;
 //! a native node's fires on its next tick, as any. A testbed node's line
-//! timer and a browser's host pacer have no draw: the controller samples
-//! on time, and the model's host pacer polls on time.
+//! timer has no draw: the controller samples on time. Without
+//! [`Scenario::pacer_timers`] a browser's host pacer polls on time and
+//! draws nothing.
 //!
 //! The model draws no stalls. In the bench's runs, each on a host of its
 //! own, no timer of the stream fires 10 ms late, on any kind, and no
@@ -61,10 +68,11 @@
 //! the model leaves out (PLAN).
 //!
 //! Each host's lateness comes from its own stream (see the crate's
-//! determinism notes), which its incarnations' node clocks and its frame
-//! writer draw from in turn. A deadline's lateness is drawn once, so a node
-//! that resets its timer to the deadline it had keeps it, and passes that
-//! change no deadline (a sample's query) draw nothing.
+//! determinism notes), which its incarnations' node clocks, its frame
+//! writer and its host pacer's polls draw from in turn. A deadline's
+//! lateness is drawn once, so a node that resets its timer to the deadline
+//! it had keeps it, and passes that change no deadline (a sample's query)
+//! draw nothing.
 
 // The node task's clock must be `Send + Sync`; everything runs on turmoil's
 // thread, so the lock is never contended.
@@ -132,6 +140,10 @@ pub enum Source {
     /// A harness's timer: the frame writer's wait for a write's time, and
     /// the timer probe's.
     Writer,
+    /// A browser's host pacer's poll: the sleep of a data channel's writer
+    /// that the host's pacer holds, until it reads the host's load again
+    /// (strims-wasm's `DcSocket::send`, `crate::net`).
+    Pacer,
 }
 
 /// A host's lateness stream, shared by its incarnations' clocks.
@@ -221,7 +233,12 @@ const PARTS: u32 = 1000;
 /// model's own passes leave out (a timer drawn late enough for input to
 /// pass first fires no row, so the sim's rows read less late than its
 /// draws); and the tail, the 3+ ms timers' 20 quantiles, none for a
-/// native node, whose timers there never fired 3 ms late.
+/// native node, whose timers there never fired 3 ms late. A host pacer's
+/// polls are its seed's, the one node whose writes the bench's hosts held:
+/// every poll fires a row, so its shares are the testbed's as they are. A
+/// Chromium seed's polls never fired 2 ms late; 7 of a Firefox seed's 4555
+/// fired 3 ms late, none 4. A native node has no host pacer, and its
+/// model, on time, is never drawn (`crate::net`).
 pub(crate) fn model(kind: HostKind, source: Source) -> Model {
     match (kind, source) {
         (HostKind::Native, Source::NodeTask) => Model {
@@ -247,6 +264,18 @@ pub(crate) fn model(kind: HostKind, source: Source) -> Model {
         (HostKind::Firefox, Source::Writer) => Model {
             shares: [874, 103, 6],
             tail: &[3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6],
+        },
+        (HostKind::Native, Source::Pacer) => Model {
+            shares: [1000, 0, 0],
+            tail: &[],
+        },
+        (HostKind::Chromium, Source::Pacer) => Model {
+            shares: [905, 95, 0],
+            tail: &[],
+        },
+        (HostKind::Firefox, Source::Pacer) => Model {
+            shares: [859, 139, 1],
+            tail: &[3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
         },
     }
 }
@@ -289,7 +318,7 @@ mod tests {
     use strims_base::rng::det_rng;
 
     const KINDS: [HostKind; 3] = [HostKind::Native, HostKind::Chromium, HostKind::Firefox];
-    const SOURCES: [Source; 2] = [Source::NodeTask, Source::Writer];
+    const SOURCES: [Source; 3] = [Source::NodeTask, Source::Writer, Source::Pacer];
 
     /// The 0, 1, 2 and 3+ ms counts of `n` timers `draw` fires.
     fn buckets(n: u32, mut draw: impl FnMut() -> Duration) -> [u32; 4] {

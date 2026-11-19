@@ -691,6 +691,14 @@ pub struct Scenario {
     /// timers that covers, and how late): on by default; off, they run at
     /// their deadlines and nothing is drawn.
     pub timer_lateness: bool,
+    /// Whether a browser host's pacer holds its channels' writers as the
+    /// browser's does (`crate::net`): each held writer asleep on a timer
+    /// of its own, as late as its kind's host pacer polls are with
+    /// [`Scenario::timer_lateness`] ([`crate::late`]), and the writers due
+    /// at one instant resuming in turn, each once the work of the one
+    /// before it is done: on by default. Off, a held writer polls every
+    /// `HOST_POLL` on time, and those due at one instant resume together.
+    pub pacer_timers: bool,
     /// With [`Scenario::wire_bins`], the hosts that keep their timers as
     /// they fire for the tables' `timers` (`NodeConfig::timer_log`, and
     /// their frame writers' and probes' waits): none by default. Changes
@@ -979,6 +987,7 @@ impl Scenario {
             exp: BTreeSet::new(),
             clock_skew: ClockSkew::Real,
             timer_lateness: true,
+            pacer_timers: true,
             timer_log: None,
             timer_probe: false,
             link_log: None,

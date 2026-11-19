@@ -45,14 +45,16 @@ def connect():
     (k `tb`) of a Chromium seed (node 0) and a native viewer (node 1), its
     repeat (`tb3`, the same cell), a testbed run (`tb2`) of a Firefox seed,
     and a twin (`tw`) of the first; and for the steps a testbed run and a
-    twin of 40 steps each (`tb4`, `tw2`); every stream 60 s."""
+    twin of 40 steps each (`tb4`, `tw2`); and for the host pacer a testbed
+    run and a twin of a Chromium seed's polls (`tb5`, `tw4`); every stream
+    60 s."""
     import duckdb
 
     conn = duckdb.connect()
     conn.execute("CREATE TABLE jobs (k VARCHAR, src VARCHAR, env MAP(VARCHAR, VARCHAR), stored_cell VARCHAR)")
     for k, src, cell in [("tb", "testbed/b", "cA"), ("tb3", "testbed/b", "cA"), ("tb2", "testbed/c", "cB"),
                          ("tw", "testbed/a", "tA"), ("tb4", "testbed/d", "cD"), ("tw2", "testbed/e", "tD"),
-                         ("tw3", "testbed/f", "tD")]:
+                         ("tw3", "testbed/f", "tD"), ("tb5", "testbed/p", "cP"), ("tw4", "testbed/q", "tP")]:
         conn.execute("INSERT INTO jobs VALUES (?, ?, MAP {'STRIMS_SIM_CAL_SECS': '60'}, ?)", [k, src, cell])
     conn.execute("CREATE TABLE hosts (k VARCHAR, src VARCHAR, node BIGINT, kind VARCHAR)")
     conn.executemany("INSERT INTO hosts VALUES (?, ?, ?, ?)", [
@@ -60,7 +62,8 @@ def connect():
         ("tb2", "testbed/c", 0, "firefox"), ("tb2", "testbed/c", 1, "native"),
         ("tw", "testbed/a", 0, "chromium"), ("tw", "testbed/a", 1, "native"), ("tw", "testbed/a", 2, "native"),
         ("tb3", "testbed/b", 0, "chromium"), ("tb3", "testbed/b", 1, "native"),
-        ("tb4", "testbed/d", 0, "chromium"), ("tw2", "testbed/e", 0, "chromium"), ("tw3", "testbed/f", 0, "chromium")])
+        ("tb4", "testbed/d", 0, "chromium"), ("tw2", "testbed/e", 0, "chromium"), ("tw3", "testbed/f", 0, "chromium"),
+        ("tb5", "testbed/p", 0, "chromium"), ("tw4", "testbed/q", 0, "chromium")])
     conn.execute("CREATE TABLE timers (k VARCHAR, src VARCHAR, t_us BIGINT, node BIGINT, n BIGINT, "
                  "source VARCHAR, armed_us BIGINT, deadline_us BIGINT, late_us BIGINT, requested_us BIGINT, "
                  "context VARCHAR)")
@@ -98,6 +101,11 @@ def connect():
     # its viewer 2 ms twice.
     add("tb3", "testbed/b", 0, "node_task", [0, 1000, 1000, 2000])
     add("tb3", "testbed/b", 1, "node_task", [2000, 2000])
+    # A Chromium seed's host pacer polls, 5 ms each: the testbed's 0, 0, 1
+    # and 0 ms late (mean 0.65 ms), the twin's whole ms at the same shares
+    # (mean 0.25).
+    add("tb5", "testbed/p", 0, "pacer", [400, 700, 1300, 200], requested=5000)
+    add("tw4", "testbed/q", 0, "pacer", [0, 0, 1000, 0], requested=5000)
     conn.executemany("INSERT INTO timers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
     conn.execute("CREATE TABLE seed_decisions (k VARCHAR, src VARCHAR, t_ms BIGINT, node BIGINT, n BIGINT, "
                  "kind VARCHAR, why VARCHAR, stream BIGINT)")
@@ -239,6 +247,18 @@ class Timers(unittest.TestCase):
         got = self.q("SELECT source, pass FROM timer_fit_of([{'k': 'tw'}], [{'k': 'tb'}], unmodelled := 'pacer') "
                      "WHERE b_runs IS NULL OR a_runs IS NULL ORDER BY source")
         self.assertEqual(got, [("record", False), ("writer", False)])
+
+    def test_the_host_pacer_is_judged(self):
+        # The twin's polls at the testbed's shares, its mean 0.4 ms below:
+        # judged by the pass rule as any source, failing the mean's floor
+        # and passing a wider one.
+        fit = ("SELECT kind, source, a_runs, b_runs, tv, round(mean_diff_ms, 6), pass "
+               "FROM timer_fit_of([{'k': 'tw4'}], [{'k': 'tb5'}], mean_floor := ?)")
+        self.assertEqual(self.q(fit, 0.1), [("chromium", "pacer", 1, 1, 0.0, 0.4, False)])
+        self.assertEqual(self.q(fit, 0.5), [("chromium", "pacer", 1, 1, 0.0, 0.4, True)])
+        # A twin without the polls fails them.
+        got = self.q("SELECT a_runs, pass FROM timer_fit_of([{'k': 'tw'}], [{'k': 'tb5'}]) WHERE source = 'pacer'")
+        self.assertEqual(got, [(None, False)])
 
     def test_delays_pair_by_delay(self):
         got = self.q("SELECT delay_ms, a_timers, b_timers FROM timer_fit_of([{'k': 'tb2'}], [{'k': 'tb2'}], "

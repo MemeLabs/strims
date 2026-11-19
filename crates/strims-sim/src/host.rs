@@ -112,10 +112,20 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
     let inc = w.begin_incarnation(h);
     let config = w.node_config(h, inc).ok_or("unknown host")?;
     let rtc_stack = w.spec.hosts.get(h).and_then(|s| s.rtc_stack);
+    // A browser's held channel writers poll its pacer as the browser's
+    // (`Scenario::pacer_timers`), each poll in its timer log.
+    let browser = crate::late::HostKind::of_host(&w.spec, h) != crate::late::HostKind::Native;
+    let pacer = crate::net::PacerTimers::new(
+        browser && w.spec.pacer_timers,
+        w.lateness.get(h).cloned(),
+        w.timer_log(h).filter(|_| browser).map(|l| l.sink()),
+        w.clock_offset(h),
+    );
     let net = SimNet::new(w.send_buffers.clone())
         .with_wan(w.wan.clone())
         .with_segment(w.spec.segment())
-        .with_rtc_stack(rtc_stack.filter(|_| w.spec.window_model()));
+        .with_rtc_stack(rtc_stack.filter(|_| w.spec.window_model()))
+        .with_pacer(pacer);
     // The node's clock, off true time by the host's offset
     // (`Scenario::clock_skew`), as is the transfers' timer below.
     let clock = SimClock::turmoil(w.clock_epoch(h));

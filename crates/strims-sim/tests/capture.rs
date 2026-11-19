@@ -349,6 +349,7 @@ fn a_run_with_tables_keeps_its_trace() {
             request_logs_say_what_they_are(&r, &d);
             timers_say_what_they_are(&r, &d);
             link_logs_say_what_they_are(&r, &d, name);
+            pacer_polls_free_the_hosts_holds(&r, &d);
             sctp_events_say_what_their_associations_did(&r, &d, name);
             stalls_say_how_playout_went(&d);
             parents_say_how_the_trees_changed(&r, &d);
@@ -1811,13 +1812,53 @@ fn int(r: &BTreeMap<String, String>, c: &str) -> Option<i64> {
     r[c].parse().ok()
 }
 
+/// Whether host `node` of the run models a browser's data channels (the
+/// window model's under Chromium's or Firefox's profile).
+fn browser(r: &strims_sim::Report, node: i64) -> bool {
+    strims_sim::late::HostKind::of_host(&r.scenario, node as usize)
+        != strims_sim::late::HostKind::Native
+}
+
+/// The host pacer's polls (`timers` of source `pacer`) against the writes
+/// they freed (`link_writes`): a write its host's pacer held last went at
+/// a poll of its node's, as nothing else frees it, and only a browser's
+/// writes and polls are the host's.
+fn pacer_polls_free_the_hosts_holds(r: &strims_sim::Report, d: &Path) {
+    let mut polls: BTreeMap<i64, BTreeSet<i64>> = BTreeMap::new();
+    for t in table_rows(d, "timers")
+        .iter()
+        .filter(|t| t["source"] == "pacer")
+    {
+        let node = int(t, "node").unwrap();
+        assert!(browser(r, node), "{t:?}");
+        polls
+            .entry(node)
+            .or_default()
+            .insert(int(t, "t_us").unwrap());
+    }
+    for w in table_rows(d, "link_writes")
+        .iter()
+        .filter(|w| w["wait"] == "host")
+    {
+        let node = int(w, "node").unwrap();
+        assert!(browser(r, node), "{w:?}");
+        let done = int(w, "done_us").unwrap();
+        assert!(
+            polls.get(&node).is_some_and(|p| p.contains(&done)),
+            "{w:?}: no poll of its node at its done"
+        );
+    }
+}
+
 /// The timer log's table (`Scenario::timer_log`, every host's) against the
 /// run: each host's node task fired timers and the seed's writer waited;
 /// a timer fired at its deadline plus the lateness the run draws (none
 /// without `Scenario::timer_lateness`, else whole milliseconds within
-/// `strims_sim::late`'s draws), after it was armed; its delay is its
-/// deadline less the whole ms it was armed at; and a node's timers of a
-/// source fire in order, its node task's a millisecond apart at least.
+/// `strims_sim::late`'s draws; a host pacer's none without
+/// `Scenario::pacer_timers` either), after it was armed; its delay is its
+/// deadline less the whole ms it was armed at, a host pacer's poll's
+/// `HOST_POLL`, on a browser host alone; and a node's timers of a source
+/// fire in order, its node task's a millisecond apart at least.
 fn timers_say_what_they_are(r: &strims_sim::Report, d: &Path) {
     let rows = table_rows(d, "timers");
     let meta: serde_json::Value =
@@ -1847,6 +1888,13 @@ fn timers_say_what_they_are(r: &strims_sim::Report, d: &Path) {
         } else {
             assert_eq!(x("deadline_us") % 1000, 0, "{row:?}");
             assert!(late % 1000 == 0 && (0..=most).contains(&late), "{row:?}");
+        }
+        if row["source"] == "pacer" {
+            assert!(browser(r, node), "{row:?}");
+            assert_eq!(x("requested_us"), 5_000, "{row:?}");
+            if !r.scenario.pacer_timers {
+                assert_eq!(late, 0, "{row:?}");
+            }
         }
         assert!(x("armed_us") <= t, "{row:?}");
         let floor = x("armed_us").div_euclid(1000) * 1000;

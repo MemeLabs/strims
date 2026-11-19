@@ -550,14 +550,16 @@ and dropped are in `TRIED.md`.
   - Draw a timer's lateness by the delay it was armed for, where the
     timer bench's probe reads it so (`timer_fit_of`'s `by_delay`): a
     browser's short timers armed from a timer's continuation, and a
-    native node's longer sleeps. Give a browser's host pacer polls their
-    lateness. Draw it below the millisecond: the model draws whole ms and
-    sits about half a ms below a real timer's lateness, which runs on
-    within its ms, so the node task and the writer fail the bench's mean
-    alone.
+    native node's longer sleeps. Draw it below the millisecond: the model
+    draws whole ms and sits about half a ms below a real timer's lateness,
+    which runs on within its ms, so the node task, the writer and the host
+    pacer fail the bench's mean alone.
   - Draw a timer's lateness by its host's load, where the timer bench's
     runs beside a competing upload read it later than its idle runs
-    (`timer_fit_of` per condition).
+    (`timer_fit_of` per condition), and by its node's own work, where a
+    busy browser seed's host pacer polls run later than the bench's
+    (seed_sends' release delays of held pushes on the testbed's SPEC=1
+    halve-15 runs).
   - Model a loaded machine's timer stalls (tens to hundreds of ms, one
     node's or every node's at once, which a host's other load makes and
     a host of its own doesn't) once a measure of users' machines says

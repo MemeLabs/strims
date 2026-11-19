@@ -2097,16 +2097,16 @@ CREATE OR REPLACE MACRO timer_shares_of(side, lo_s := 10, hi_s := -1, by_delay :
 -- as 0) plus a floor, mean_floor 0.1 ms (a tenth of the ms the
 -- deadlines' clocks count) and p99_floor 1 ms (one such ms); and pass,
 -- all three within their bounds. A source the model keeps no rows of
--- (`unmodelled`, joined by commas: the testbed's record timer, a
--- browser's host pacer) has the testbed's numbers alone, its checks and
--- pass NULL; any other kind and source one side lacks fails. A held-out
+-- (`unmodelled`, joined by commas: the testbed's record timer) has the
+-- testbed's numbers alone, its checks and pass NULL; any other kind and
+-- source one side lacks fails. A held-out
 -- score names as spread_side the testbed runs whose repeats measure it,
 -- its b_side holding one repeat of each cell; timer_fit_of takes
 -- b_side's own.
 -- needs: timers hosts jobs.env jobs.stored_cell
 CREATE OR REPLACE MACRO timer_fit_spread_of(a_side, b_side, spread_side, lo_s := 10, hi_s := -1,
                                             by_delay := false, bound := 0.05, mean_floor := 0.1,
-                                            p99_floor := 1.0, unmodelled := 'record,pacer') AS TABLE
+                                            p99_floor := 1.0, unmodelled := 'record') AS TABLE
     WITH a AS (FROM timer_shares_of(a_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
     b AS (FROM timer_shares_of(b_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
     sp AS (FROM timer_shares_of(spread_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
@@ -2139,7 +2139,7 @@ CREATE OR REPLACE MACRO timer_fit_spread_of(a_side, b_side, spread_side, lo_s :=
 -- needs: timers hosts jobs.env jobs.stored_cell
 CREATE OR REPLACE MACRO timer_fit_of(a_side, b_side, lo_s := 10, hi_s := -1, by_delay := false,
                                      bound := 0.05, mean_floor := 0.1, p99_floor := 1.0,
-                                     unmodelled := 'record,pacer') AS TABLE
+                                     unmodelled := 'record') AS TABLE
     FROM timer_fit_spread_of(a_side, b_side, b_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay,
                              bound := bound, mean_floor := mean_floor, p99_floor := p99_floor,
                              unmodelled := unmodelled);

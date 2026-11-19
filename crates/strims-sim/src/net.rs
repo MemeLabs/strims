@@ -55,6 +55,38 @@
 //! write goes to turmoil as segments of a DATA chunk's payload at most,
 //! which the window model's association sends as packets.
 //!
+//! # The host's polls
+//!
+//! A writer its host's pacer holds sleeps on a timer of its own, as the
+//! browser's does (strims-wasm's `DcSocket::send`: `Sleep::until(now +
+//! HOST_POLL)` from its hold, and again from each poll that finds the load
+//! over its mark). With [`Scenario::pacer_timers`](crate::Scenario::pacer_timers)
+//! a browser host's polls run as the browser's ([`PacerTimers`]):
+//!
+//! - each timer fires as late as its kind's host pacer's do, drawn as it
+//!   is armed ([`crate::late`]);
+//! - the writers whose polls come at one instant read the host's load in
+//!   turn, in the order their polls were armed, each once the work of the
+//!   one before it is done. A browser runs each timer's callback as a task
+//!   of its own, and the writer it frees writes in its microtasks, the node
+//!   task's hand-offs between included, until the host or its channel
+//!   refuses it or it has nothing more to write, before the next callback
+//!   reads the load: the first to go takes the host's room, and those after
+//!   it are held for another poll. Under turmoil a host's tasks take turns
+//!   within an instant, and every timer due at it fires at once, so a
+//!   writer whose poll came waits ([`SendBuffers::turn`]) until it is the
+//!   first of its host's due polls and none of its host's channels was
+//!   checked or written over [`QUIET`] of its rounds through the host's
+//!   runnable tasks, yielding to them between.
+//!
+//! Off, and on a native host, a held writer polls every [`HOST_POLL`] on
+//! time, and the writers whose polls come at one instant read the load as
+//! their tasks run, their writes interleaving. With the host's timer log, a
+//! browser host's writer hands it each poll as it reads the load, as the
+//! browser's records its sleep's end: a timer of source `pacer`, armed at
+//! the hold or the poll before, its deadline [`HOST_POLL`] past that
+//! millisecond.
+//!
 //! With the node's link log (`NodeConfig::link_log`, [`Net::log_link`]), a
 //! connection hands it what the browser's writer would read: its buffered
 //! amount (a TCP socket's unsent bytes) at each write it decides, with the
@@ -78,9 +110,9 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll, Waker};
 
-use strims_base::time::Time;
-use strims_node::config::LinkSink;
-use strims_node::event::{LinkEvent, SampleSource, WriteWait};
+use strims_base::time::{Duration, Time};
+use strims_node::config::{LinkSink, TimerSink};
+use strims_node::event::{LinkEvent, SampleSource, TimerRecord, TimerSource, WriteWait};
 use strims_node::{
     CaptureSample, ChannelPacer, HOST_POLL, HostPacer, HostSum, LinkProbe, LinkSetup, Net,
     TcpOptions, TcpSocketConfig, TurmoilNet,
@@ -88,6 +120,7 @@ use strims_node::{
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::fast_map::FastMap;
+use crate::late::{Lateness, Source};
 use crate::spec::SendBuffer;
 use crate::wan::{Chunking, SctpProfile, SharedWan, sim_time};
 
@@ -203,7 +236,39 @@ struct HostChannels {
     pacer: HostPacer,
     /// Bound: the host's open paced channels.
     channels: Vec<ConnKey>,
+    /// With [`PacerTimers::turns`], the next poll's place among the host's
+    /// in the order they were armed ...
+    polls: u64,
+    /// ... the checks and writes of the host's channels so far, and the
+    /// looks of its due writers ...
+    moves: u64,
+    looks: u64,
+    /// ... and the writers whose polls came and that wait for their turn
+    /// ([`SendBuffers::turn`]), by their polls' places. Bound: the host's
+    /// paced channels.
+    due: Vec<Due>,
 }
+
+/// A writer whose poll came, waiting for its turn ([`SendBuffers::turn`]).
+#[derive(Debug)]
+struct Due {
+    conn: ConnKey,
+    /// Its poll's place among the host's, and the instant it came.
+    poll: u64,
+    at: Time,
+    /// The host's moves at its last look, its looks since they last moved,
+    /// and the host's looks at its last.
+    seen: u64,
+    quiet: u32,
+    last: u64,
+}
+
+/// The rounds through its host's runnable tasks a writer whose poll came
+/// waits with its host's channels still ([`SendBuffers::turn`]) before it
+/// takes its turn: the writer freed before it hands its node task its
+/// write's done in one, and the node task hands it its next write in the
+/// next; the third lets the node task's pass yield once between.
+pub(crate) const QUIET: u32 = 3;
 
 impl HostChannels {
     /// The channels now.
@@ -360,6 +425,123 @@ impl SendBuffers {
             c.channel.map(|_| c.amount())
         })
     }
+
+    /// The place among its host's of the poll `conn`'s writer arms now.
+    fn arm_poll(&self, conn: &ConnKey) -> u64 {
+        self.with(|x| {
+            let h = x.hosts.entry(conn.0.ip()).or_default();
+            let poll = h.polls;
+            h.polls += 1;
+            poll
+        })
+    }
+
+    /// Whether `conn`'s writer, whose poll `poll` came, takes its turn at
+    /// `now` to read its host's load (see the module docs): once it is the
+    /// first of its host's due polls and the host's channels were neither
+    /// checked nor written over its last [`QUIET`] looks. Its first look
+    /// puts it among the due; one that takes its turn leaves them. A writer
+    /// that doesn't yields to the host's other tasks and looks again, so
+    /// every due writer looks once a round: one that stopped looking (its
+    /// task gone) leaves them once the others looked [`QUIET`] and two
+    /// rounds past its last, and none waits past its instant.
+    fn turn(&self, conn: &ConnKey, poll: u64, now: Time) -> bool {
+        self.with(|x| {
+            let Some(h) = x.hosts.get_mut(&conn.0.ip()) else {
+                return true;
+            };
+            h.looks += 1;
+            let (looks, moves) = (h.looks, h.moves);
+            let rounds = u64::from(QUIET + 2) * h.due.len() as u64;
+            h.due
+                .retain(|d| d.conn == *conn || (d.at == now && looks - d.last <= rounds));
+            let Some(i) = h.due.iter().position(|d| d.conn == *conn) else {
+                let at = h.due.partition_point(|d| d.poll < poll);
+                h.due.insert(
+                    at,
+                    Due {
+                        conn: *conn,
+                        poll,
+                        at: now,
+                        seen: moves,
+                        quiet: 0,
+                        last: looks,
+                    },
+                );
+                return false;
+            };
+            let Some(d) = h.due.get_mut(i) else {
+                return true;
+            };
+            d.last = looks;
+            if d.seen != moves {
+                d.seen = moves;
+                d.quiet = 0;
+                return false;
+            }
+            d.quiet += 1;
+            if i > 0 || d.quiet < QUIET {
+                return false;
+            }
+            h.due.remove(i);
+            true
+        })
+    }
+}
+
+/// How a host's held channel writers poll its pacer (see the module docs).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PacerTimers {
+    /// The host's lateness stream, whose host pacer model each poll's
+    /// timer draws from as it is armed; `None`: on time.
+    late: Option<Lateness>,
+    /// The writers whose polls come at one instant take turns.
+    turns: bool,
+    /// The host's timer log, and how far its node's clock reads ahead of
+    /// true time.
+    log: Option<(TimerSink, Duration)>,
+}
+
+impl PacerTimers {
+    /// A browser host's polls as the browser's run, `late` as its stream
+    /// draws them (`None`: on time), or with `browser` false, every
+    /// writer's on time and none in turn; and with `log`, each poll a
+    /// timer of the host's log, by its node's clock, `offset` ahead of
+    /// true time.
+    pub(crate) fn new(
+        browser: bool,
+        late: Option<Lateness>,
+        log: Option<TimerSink>,
+        offset: Duration,
+    ) -> PacerTimers {
+        PacerTimers {
+            late: late.filter(|_| browser),
+            turns: browser,
+            log: log.map(|l| (l, offset)),
+        }
+    }
+
+    /// How late a poll armed now fires.
+    fn draw(&self) -> Duration {
+        self.late
+            .as_ref()
+            .map_or(Duration::ZERO, |l| l.draw(Source::Pacer, false))
+    }
+
+    /// Hands the timer log a poll armed at `armed` that reads the load at
+    /// `fired`, both true time.
+    fn record(&self, armed: Time, fired: Time) {
+        if let Some((sink, offset)) = &self.log {
+            let armed = armed + *offset;
+            (sink.0)(TimerRecord {
+                source: TimerSource::Pacer,
+                armed,
+                deadline: armed.truncate(Time::PRECISION) + HOST_POLL,
+                fired: fired + *offset,
+                requested: HOST_POLL,
+            });
+        }
+    }
 }
 
 /// turmoil's sockets, with send buffers when `buffers` is set.
@@ -373,6 +555,8 @@ pub(crate) struct SimNet {
     /// [`HostSpec::rtc_stack`](crate::HostSpec::rtc_stack), under the
     /// window model.
     rtc_stack: Option<crate::wan::SctpProfile>,
+    /// How the host's held channel writers poll its pacer.
+    pacer: PacerTimers,
 }
 
 impl SimNet {
@@ -382,7 +566,13 @@ impl SimNet {
             wan: None,
             segment: None,
             rtc_stack: None,
+            pacer: PacerTimers::default(),
         }
+    }
+
+    /// The host's held channel writers poll its pacer as `pacer` has it.
+    pub fn with_pacer(self, pacer: PacerTimers) -> SimNet {
+        SimNet { pacer, ..self }
     }
 
     /// The node's WebRTC connections are data channels sent as `stack`
@@ -446,6 +636,9 @@ impl SimNet {
             conn,
             segment: self.segment,
             host_poll: None,
+            pacer: self.pacer.clone(),
+            armed: None,
+            due: false,
         }
     }
 }
@@ -542,6 +735,11 @@ fn check(x: &mut Buffers, key: &ConnKey, now: Time, waker: &Waker) -> ChannelWri
     };
     c.waker = None;
     let buffered = c.amount();
+    if c.pacer.is_some()
+        && let Some(h) = hosts.get_mut(&key.0.ip())
+    {
+        h.moves += 1;
+    }
     let may = match &mut c.pacer {
         Some(p) => {
             p.observe(now, buffered as usize);
@@ -615,8 +813,16 @@ pub(crate) struct SimTcpStream {
     conn: Option<(ConnKey, SendBuffers)>,
     segment: Option<usize>,
     /// While the host's pacer holds a channel's writer: when it reads the
-    /// host's load again ([`HOST_POLL`]).
+    /// host's load again ([`HOST_POLL`] on, and its lateness) ...
     host_poll: Option<Pin<Box<tokio::time::Sleep>>>,
+    /// ... how the host's writers poll ...
+    pacer: PacerTimers,
+    /// ... the poll's arming, in true time, and its place among the host's
+    /// ([`SendBuffers::arm_poll`]) ...
+    armed: Option<(Time, u64)>,
+    /// ... and whether it came, the writer waiting for its turn to read the
+    /// load ([`SendBuffers::turn`]).
+    due: bool,
 }
 
 /// What a channel's writer does now ([`SendBuffers::channel_write`]).
@@ -639,6 +845,7 @@ impl Drop for SimTcpStream {
                     && let Some(h) = x.hosts.get_mut(&key.0.ip())
                 {
                     h.channels.retain(|k| k != key);
+                    h.due.retain(|d| d.conn != *key);
                 }
             });
         }
@@ -708,6 +915,7 @@ impl SendBuffers {
                     p.wrote(now, n);
                     if let Some(h) = x.hosts.get_mut(&key.0.ip()) {
                         h.pacer.wrote(now, n);
+                        h.moves += 1;
                     }
                 }
             }
@@ -725,6 +933,43 @@ impl SimTcpStream {
             b.host_poll(key, sim_now(), cx.waker())
         } else {
             b.channel_write(key, sim_now(), cx.waker())
+        }
+    }
+
+    /// Whether the writer, whose host poll came, reads the host's load now:
+    /// at once, but with [`PacerTimers::turns`] at its turn
+    /// ([`SendBuffers::turn`]), which it otherwise yields to the host's
+    /// other tasks for. One that reads it hands the timer log its poll.
+    fn poll_due(&mut self, cx: &Context<'_>) -> bool {
+        if let (true, Some((key, b)), Some((_, poll))) = (self.pacer.turns, &self.conn, self.armed)
+            && !b.turn(key, poll, sim_now())
+        {
+            cx.waker().wake_by_ref();
+            return false;
+        }
+        self.due = false;
+        if let Some((armed, _)) = self.armed.take() {
+            self.pacer.record(armed, sim_now());
+        }
+        true
+    }
+
+    /// Arms the held writer's host poll, unless it has one armed:
+    /// [`HOST_POLL`] from now, and as late as the host's pacer timers draw
+    /// it.
+    fn arm_poll(&mut self, cx: &mut Context<'_>) {
+        if self.host_poll.is_none() {
+            let late = self.pacer.draw();
+            let poll = match (&self.conn, self.pacer.turns) {
+                (Some((key, b)), true) => b.arm_poll(key),
+                _ => 0,
+            };
+            self.armed = Some((sim_now(), poll));
+            let wait = (HOST_POLL + late).to_std().unwrap_or_default();
+            self.host_poll = Some(Box::pin(tokio::time::sleep(wait)));
+        }
+        if let Some(poll) = &mut self.host_poll {
+            let _ = poll.as_mut().poll(cx);
         }
     }
 
@@ -772,31 +1017,33 @@ impl AsyncWrite for SimTcpStream {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         let this = &mut *self;
-        let polled = this
+        if this
             .host_poll
             .as_mut()
-            .is_some_and(|poll| poll.as_mut().poll(cx).is_ready());
-        if polled {
+            .is_some_and(|poll| poll.as_mut().poll(cx).is_ready())
+        {
             this.host_poll = None;
+            this.due = true;
+        }
+        let polled = this.due;
+        if polled && !this.poll_due(cx) {
+            return Poll::Pending;
         }
         if let Some(write) = this.channel_write(cx, polled) {
             return match write {
                 ChannelWrite::Go => {
                     this.host_poll = None;
+                    this.armed = None;
                     this.write_message(cx, buf)
                 }
                 // Its own cap's wait: no poll.
                 ChannelWrite::Wait => {
                     this.host_poll = None;
+                    this.armed = None;
                     Poll::Pending
                 }
                 ChannelWrite::Held => {
-                    let poll = this.host_poll.get_or_insert_with(|| {
-                        Box::pin(tokio::time::sleep(std::time::Duration::from_nanos(
-                            HOST_POLL.as_nanos() as u64,
-                        )))
-                    });
-                    let _ = poll.as_mut().poll(cx);
+                    this.arm_poll(cx);
                     Poll::Pending
                 }
             };
@@ -1305,6 +1552,78 @@ mod tests {
         assert_eq!(b.host_poll(&k[1], ms(8), &w1), Some(ChannelWrite::Held));
         assert_eq!(holds(&log, 0), [WriteWait::Host]);
         assert_eq!(holds(&log, 1), [WriteWait::Host]);
+    }
+
+    /// The writers whose polls come at one instant take turns in the order
+    /// their polls were armed: each once its host's channels were still
+    /// over its last [`QUIET`] looks and the polls before it took theirs,
+    /// so the first one's writes, and the second's poll, come before the
+    /// next takes its turn.
+    #[test]
+    fn writers_due_at_one_instant_take_turns() {
+        let (b, k, _) = channels(&SctpProfile::CHROMIUM, 3);
+        let (_, w) = waker();
+        let polls: Vec<u64> = k.iter().map(|c| b.arm_poll(c)).collect();
+        assert_eq!(polls, [0, 1, 2]);
+        let now = ms(5);
+        // Their timers fire at once, the last armed polled first; none
+        // takes its turn at its first look, nor before QUIET still looks.
+        for i in [2, 1, 0] {
+            assert!(!b.turn(&k[i], polls[i], now), "{i}: its first look");
+        }
+        for _ in 1..QUIET {
+            for i in [2, 1, 0] {
+                assert!(!b.turn(&k[i], polls[i], now));
+            }
+        }
+        // At the QUIET-th still look, the first poll goes, though the others
+        // looked first.
+        assert!(!b.turn(&k[2], polls[2], now));
+        assert!(!b.turn(&k[1], polls[1], now));
+        assert!(b.turn(&k[0], polls[0], now));
+        // It reads the load and writes: the others start counting again.
+        assert_eq!(b.host_poll(&k[0], now, &w), Some(ChannelWrite::Go));
+        b.wrote(&k[0], 4000, true, now);
+        for _ in 0..QUIET {
+            assert!(!b.turn(&k[2], polls[2], now));
+            assert!(!b.turn(&k[1], polls[1], now));
+        }
+        assert!(!b.turn(&k[2], polls[2], now));
+        assert!(b.turn(&k[1], polls[1], now));
+        // Its check moves the host too.
+        let _ = b.host_poll(&k[1], now, &w);
+        for _ in 0..QUIET {
+            assert!(!b.turn(&k[2], polls[2], now));
+        }
+        assert!(b.turn(&k[2], polls[2], now));
+        b.with(|x| assert!(x.hosts[&k[0].0.ip()].due.is_empty()));
+    }
+
+    /// A due writer that stops looking holds the others back only a few
+    /// rounds, and none past its instant: the next instant's writers find
+    /// it gone.
+    #[test]
+    fn a_due_writer_gone_holds_no_turns() {
+        let (b, k, _) = channels(&SctpProfile::FIREFOX, 2);
+        let polls: Vec<u64> = k.iter().map(|c| b.arm_poll(c)).collect();
+        assert!(!b.turn(&k[0], polls[0], ms(5)));
+        // Its task goes; the other's looks pass it after a few rounds.
+        let looks = (0..100)
+            .position(|_| b.turn(&k[1], polls[1], ms(5)))
+            .expect("past the gone writer");
+        assert!(looks < 4 * QUIET as usize, "{looks}");
+        // One that came at an instant before holds none at the next, though
+        // its poll came first.
+        assert!(!b.turn(&k[0], polls[0], ms(9)));
+        let poll = b.arm_poll(&k[1]);
+        for _ in 0..QUIET {
+            assert!(!b.turn(&k[1], poll, ms(10)));
+        }
+        b.with(|x| {
+            let due = &x.hosts[&k[0].0.ip()].due;
+            assert!(due.iter().all(|d| d.at == ms(10)), "{due:?}");
+        });
+        assert!(b.turn(&k[1], poll, ms(10)));
     }
 
     /// A Chromium page counts its channel's amount itself: each message on
