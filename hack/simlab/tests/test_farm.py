@@ -47,12 +47,15 @@ is refused.
 
 Boot failures, Run.run's loop over a stand-in fleet (AWS's calls, the
 boots, the workers' syncs): a pool whose boots fail as the run's other
-hosts run its jobs, with jobs queued or on its last ones, is skipped while
-those hosts finish the run, which ends as one whose boots passed; a
-failure skips its pool, its region's once two of its pools failed, its
-type's once two regions did, until a boot there passes; boots failing
-three in a row with none up stop the launches, and the run once none is
-left booting, exiting with its undone jobs said. A POST's stalled TLS
+hosts run its jobs, with jobs queued, which keep it booting, is skipped
+while those hosts finish the run, which ends as one whose boots passed;
+once nothing is queued, instances still booting are retired as the last
+jobs run, counting as no failed boot and skipping no pool, and nothing is
+launched with nothing queued or waiting; a failure skips its pool, its
+region's once two of its pools failed, its type's once two regions did,
+until a boot there passes; boots failing three in a row with none up stop
+the launches, and the run once none is left booting, exiting with its
+undone jobs said. A POST's stalled TLS
 handshake times out within s3sign's CONNECT_S, and the worker tries again
 within its window. Stdlib alone:
 
@@ -1777,12 +1780,14 @@ class TestbedTables(unittest.TestCase):
 class Fleet:
     """The instances a Run launches, as AWS and their workers have them: a
     boot in a zone of `failing` fails, as one with no SSH does, once
-    `fail_when(run, fleet)` holds (else `fail_s` after its launch); any
-    other is up at once, and its worker runs each testbed job it's given for
-    `job_s`, one at a time, then gives back its row in a flush of its own,
-    which has landed by then. Each launch is kept with its zone, time and the
-    run's boot_streak then; each failed boot with its time and how many jobs
-    the run had queued then."""
+    `fail_when(run, fleet)` holds (else `fail_s` after its launch), and
+    until then waits as bootstrap does (Run.booting: a host lost or a run
+    stopping ends it); any other is up at once, and its worker runs each
+    testbed job it's given for `job_s`, one at a time, then gives back its
+    row in a flush of its own, which has landed by then. Each launch is kept
+    with its zone, time and the run's boot_streak then; each failed boot
+    with its time and how many jobs the run had queued then; each
+    termination's time, and each job's end."""
 
     def __init__(self, failing, job_s, fail_when=None, fail_s=0.1):
         self.failing, self.job_s, self.fail_when, self.fail_s = set(failing), job_s, fail_when, fail_s
@@ -1791,7 +1796,8 @@ class Fleet:
         self.launched: list[tuple[str, str, float, int]] = []
         self.failed: list[tuple[float, int]] = []
         self.region_of: dict[str, str] = {}
-        self.gone: set[str] = set()
+        self.gone: dict[str, float] = {}
+        self.ended: list[float] = []
         self.workers: dict[str, dict] = {}
 
     def running(self) -> bool:
@@ -1807,7 +1813,8 @@ class Fleet:
 
     def terminate(self, region, ids):
         with self.lock:
-            self.gone.update(ids)
+            for i in ids:
+                self.gone.setdefault(i, time.monotonic())
 
     def instances(self, region, run):
         with self.lock:
@@ -1817,7 +1824,8 @@ class Fleet:
     def bootstrap(self, run, host):
         if host.zone in self.failing:
             t0 = time.monotonic()
-            while not run.stopping.is_set() and time.monotonic() - t0 < 30:
+            while time.monotonic() - t0 < 30:
+                run.booting(host)
                 if self.fail_when(run, self) if self.fail_when else time.monotonic() - t0 >= self.fail_s:
                     break
                 time.sleep(0.01)
@@ -1840,6 +1848,7 @@ class Fleet:
             for wid, t0 in list(w["running"].items()):
                 if now - t0 >= self.job_s:
                     del w["running"][wid]
+                    self.ended.append(now)
                     w["done"][wid] = {"id": wid, "row": {"node_lines": 1}, "wall_s": self.job_s, "exit": 0,
                                       "flush": w["seq"]}
                     w["flushes"].add(w["seq"])
@@ -1857,10 +1866,11 @@ class BootFailures(unittest.TestCase):
     """A run whose instances' boots fail: a launched one's pool is skipped,
     and its region's or type's once boots have failed in two of its pools
     or regions since one passed; the instances up keep their jobs, and the
-    run ends once they're done. Boots that fail three in a row with none up
-    stop the launches, and the run once none is left booting, its jobs left
-    undone and said so. Run.run's loop over a Fleet of stand-ins: AWS's
-    calls, the boots and the workers' syncs."""
+    run ends once they're done. Booting ones nothing needs (nothing queued
+    or waiting) are retired, which is no failed boot. Boots that fail three
+    in a row with none up stop the launches, and the run once none is left
+    booting, its jobs left undone and said so. Run.run's loop over a Fleet
+    of stand-ins: AWS's calls, the boots and the workers' syncs."""
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix="simlab-farm-boots-")
@@ -1928,23 +1938,16 @@ class BootFailures(unittest.TestCase):
 
     def finished_alike(self, run, code, log, fleet):
         """The run ended as one whose boots all passed would: 0, every job's
-        line written once its flush landed, from a host that booted, no stop
-        or wind-down, and r2c skipped after its three boots failed, with the
-        instances up then, so counted towards no streak."""
+        line written once its flush landed, from a host that booted, r2c
+        having taken its three in the first wave, no stop or wind-down, and
+        no streak."""
         self.assertEqual(code, 0, log)
         for said in ("keep failing", "stopping", "flush what they hold", "left undone"):
             self.assertNotIn(said, log)
-        lost = "bootstrap failed: no SSH after 10 minutes: ; skipping r7a.xlarge in r2c for 10 min;"
-        self.assertEqual(log.count(lost), 3, log)
-        self.assertEqual(len(fleet.failed), 3)
-        # r2c took its three in the first wave, and none after its boots
-        # failed.
         zones = collections.Counter(z for _, z, _, _ in fleet.launched)
         self.assertEqual((zones["r2c"], zones["r1c"]), (3, 2), fleet.launched)
-        self.assertTrue(all(t < min(fleet.failed)[0] for _, z, t, _ in fleet.launched if z == "r2c"))
         self.assertTrue(all(streak == 0 for *_, streak in fleet.launched))
         self.assertEqual(run.boot_streak, 0)
-        self.assertGreater(run.backoff[("r7a.xlarge", "r2c")], time.time())
         self.assertNotIn(("c7a.xlarge", "r2a"), run.backoff)
         rows = self.fp.read_jsonl(self.m.state / "rows.jsonl")
         bad = {hid for hid, z, _, _ in fleet.launched if z == "r2c"}
@@ -1955,24 +1958,59 @@ class BootFailures(unittest.TestCase):
 
     def test_a_pools_failing_boots_skip_it_while_the_instances_up_run_the_queue(self):
         # browsers-4: r2c's three boots fail as the run's other hosts run
-        # their first jobs, with jobs still queued.
+        # their first jobs, with jobs still queued, which keep them booting.
         fleet = Fleet({"r2c"}, job_s=1.0, fail_when=lambda run, fleet: fleet.running())
         run, code, log = self.run_with(fleet)
         self.finished_alike(run, code, log, fleet)
+        lost = "bootstrap failed: no SSH after 10 minutes: ; skipping r7a.xlarge in r2c for 10 min;"
+        self.assertEqual(log.count(lost), 3, log)
+        self.assertNotIn("nothing left to boot for", log)
+        self.assertEqual(len(fleet.failed), 3)
         self.assertTrue(all(queued > 0 for _, queued in fleet.failed), fleet.failed)
-        # The queued jobs went to r2a, the next pool with room.
+        self.assertGreater(run.backoff[("r7a.xlarge", "r2c")], time.time())
+        # r2c launched nothing after its boots failed, and the queued jobs
+        # went to r2a, the next pool with room.
         first = min(fleet.failed)[0]
+        self.assertTrue(all(t < first for _, z, t, _ in fleet.launched if z == "r2c"))
         self.assertTrue(any(z == "r2a" and t > first for _, z, t, _ in fleet.launched), fleet.launched)
 
-    def test_a_pools_failing_boots_leave_a_run_that_ends_on_its_last_jobs_done(self):
-        # browsers-16: r2c's boots fail once nothing is queued, as the other
-        # hosts run the last jobs, which all land: nothing more launches.
-        fleet = Fleet({"r2c"}, job_s=1.0, fail_when=lambda run, fleet: fleet.running() and not run.queue)
+    def test_booting_instances_nothing_needs_are_retired_and_skip_no_pool(self):
+        # browsers-16: r2c's boots hang (no SSH for minutes) as the other
+        # hosts take the last jobs. Once nothing is queued, they're retired:
+        # terminated as those jobs run, nothing launched after, no boot
+        # failed and no pool skipped, and the run ends on those jobs, 0.
+        fleet = Fleet({"r2c"}, job_s=1.0, fail_when=lambda run, fleet: False)
         run, code, log = self.run_with(fleet)
         self.finished_alike(run, code, log, fleet)
-        self.assertTrue(all(queued == 0 for _, queued in fleet.failed), fleet.failed)
-        first = min(fleet.failed)[0]
-        self.assertFalse([launch for launch in fleet.launched if launch[2] > first])
+        bad = sorted(hid for hid, z, _, _ in fleet.launched if z == "r2c")
+        for hid in bad:
+            self.assertIn(f"] terminating {hid}: nothing left to boot for\n", log)
+        retired = max(fleet.gone[hid] for hid in bad)
+        self.assertLess(retired, max(fleet.ended))
+        self.assertFalse([launch for launch in fleet.launched if launch[2] > min(fleet.gone[h] for h in bad)])
+        self.assertEqual(fleet.failed, [])
+        self.assertNotIn("bootstrap failed", log)
+        self.assertEqual(run.backoff, {})
+        self.assertEqual((dict(run.failed_pools), dict(run.failed_regions)), ({}, {}))
+
+    def test_nothing_is_launched_with_nothing_queued_or_waiting(self):
+        # A test run whose instance holds more jobs than its slots, wanting
+        # capacity for them: a new instance could take none of them.
+        fp = self.fp
+        busy = fp.Host("i-1", "c7a.8xlarge", "r1a", fp.Spec(32, 16, 64, 1), 1.0, 0.0, state="ready", region="r1")
+        busy.assigned = {f"j{k}": fp.Item(mock.Mock(id=f"j{k}")) for k in range(3)}
+        run = mock.Mock(hosts=[busy], testbed=None, queue=collections.deque(), waiting={}, done=set(),
+                        boot_streak=0)
+        run.wanted.return_value = 5.0
+        run.pick.return_value = None
+        with contextlib.redirect_stdout(io.StringIO()):
+            fp.Run.scale(run, time.time())
+            run.read_budgets.assert_not_called()
+            run.pick.assert_not_called()
+            # A job queued again: the same instance's needs launch.
+            run.queue.append(fp.Item(mock.Mock(id="j9")))
+            fp.Run.scale(run, time.time())
+        run.pick.assert_called()
 
     def test_boots_that_fail_with_none_up_stop_the_launches_then_the_run(self):
         fleet = Fleet({"r2c", "r1c", "r2a"}, job_s=1.0)

@@ -173,12 +173,16 @@ speed. A run logs the speeds before its best pools.
   tick launches all it wants at once (up to 32), so a run's first fleet
   boots together.
 - An instance with nothing assigned is terminated once nothing is queued
-  or waiting, and once its data has landed (below): it's asked to flush
-  first; and also, booting ones too, once nothing is queued, the busy
-  instances should finish the run within RETIRE_WITHIN_S (the busiest's
-  own jobs, and what waits on rows over them all) and the run wants no
-  more capacity: a spot interruption gives about that much notice to an
-  instance's jobs, so no spare need stay for them.
+  or waiting: a booting one at once, and a ready one once its data has
+  landed (below; it's asked to flush first). A new instance takes only
+  queued jobs, so none is launched then either; a job queued again later
+  (its instance lost, or its data) is launched for as any queued one is.
+  While jobs wait on rows, booting and idle ones go once nothing is
+  queued, the busy instances should finish the run within RETIRE_WITHIN_S
+  (the busiest's own jobs, and what waits on rows over them all) and the
+  run wants no more capacity: a spot interruption gives about that much
+  notice to an instance's jobs, so no spare need stay for them. An
+  instance terminated as it boots counts as no failed boot.
 - An instance keeps its test jobs' tables (worker.py's store) and uploads
   them in rolling flushes as it goes, each a few large zstd Parquet files
   under S3 prefixes it alone can write: one presigned POST policy each for
@@ -4292,6 +4296,10 @@ class Run:
 
     def scale(self, now: float) -> None:
         live = [h for h in self.hosts if h.state != "lost"]
+        # A new instance takes only queued jobs (take): with none queued or
+        # waiting it would boot to nothing, and retire_idle terminates it.
+        if not (self.queue or self.waiting):
+            return
         if self.testbed is not None:
             # A host per group, and a host with nothing assigned takes one.
             groups = {i.job.group for i in self.queue if i.wid not in self.done}
@@ -4413,8 +4421,13 @@ class Run:
 
     def retire_idle(self, now: float) -> None:
         """Terminates the instances with nothing to do: once nothing is
-        queued or waiting, and once the run ends soon (ends_soon), booting
-        ones too."""
+        queued or waiting, a booting one this run launched (nothing would
+        give it a job, and scale launches none back) and a ready one whose
+        data has landed; while jobs wait on rows, booting and idle ones once
+        the run ends soon (ends_soon). A job queued, or queued again (its
+        instance lost, its data lost), keeps the booting ones. One retired
+        as it boots is the run's choice, not a failed boot: lost before its
+        boot ends, it skips no pool (boots)."""
         if self.queue or self.waiting:
             if not self.ends_soon(now):
                 return
@@ -4425,8 +4438,10 @@ class Run:
                 f"the run ends within {RETIRE_WITHIN_S} s without it",
             )
             return
-        # One whose data hasn't all landed is asked to flush (tick), and
-        # waits.
+        # An adopted one boots to the jobs and data an earlier run left it,
+        # which it tells once synced, and stays. One whose data hasn't all
+        # landed is asked to flush (tick), and waits.
+        booting = [h for h in self.hosts if h.state == "booting" and not h.assigned and h.id]
         idle = []
         for h in self.hosts:
             if h.state != "ready" or h.assigned or h.stored:
@@ -4438,6 +4453,7 @@ class Run:
                 self.lose(h, f"its store is broken ({h.broken}) and it holds nothing")
             else:
                 idle.append(h)
+        self.terminate_now(booting, "nothing left to boot for")
         self.terminate_now(idle, "nothing left for it")
 
     def terminate_now(self, hosts: list[Host], why: str) -> None:
