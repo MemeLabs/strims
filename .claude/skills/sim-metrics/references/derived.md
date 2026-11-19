@@ -90,13 +90,20 @@ fold strays in the last bits, so a mean that falls on a tie at the
 printed places would print differently from the Python scoring's.
 
 - These sums use `compensated_sum`: effects_of's means and sums of
-  squares, arm_score_of's geometric means and fisher_p's sum.
+  squares, arm_score_of's geometric means and fisher_p's sum; and
+  sctp_fit_of's shares and total variation distances, each of a list in
+  an order of its own.
 - These sums of floats add plainly, as no golden compares them with a
   reference to the bit: dynamics' means (DuckDB's avg) and a metric's own
   SQL in metrics.toml (depth_mean's terms).
-- The other macros' sums are of integers.
+- Most other macros' sums are of integers.
 
-A new sum of floats that a scorecard prints takes `compensated_sum`.
+A new sum of floats that a scorecard prints takes `compensated_sum`. So
+does one that a rule's pass or bound reads, over a list ordered by a key
+(`compensated_sum(list(x ORDER BY k))`): an aggregate's sum adds in the
+order its threads meet the rows, so its last bits move from one query to
+the next, and a value at its bound passes in one and fails in the next
+(sctp_fit_of's distances did, test_sctp_bench's `Repeats`).
 
 ## Checks
 

@@ -90,9 +90,13 @@ CREATE OR REPLACE MACRO t975_at(df_) AS
 -- means and fisher_p's sum, so those are the Python scoring's bit for bit
 -- (hack/sim-suite/golden.py's reference): a left fold strays from it by
 -- last bits, which a value on a tie at the places a scorecard prints shows.
--- No other sum is: dynamics' means of the rows' playback fields are
--- DuckDB's avg, the other macros' sums are of integers, and a metric's own
--- SQL (metrics.toml's: depth_mean's six terms) adds as written, as the
+-- sctp_fit_of's shares and total variation distances are this too, of
+-- lists in an order of their own, so that a query's bits are the same
+-- every time: an aggregate's sum adds in the order its threads meet the
+-- rows, and a distance at its bound would pass or fail by it. No other
+-- sum is: dynamics' means of the rows' playback fields are DuckDB's avg,
+-- most other macros' sums are of integers, and a metric's own SQL
+-- (metrics.toml's: depth_mean's six terms) adds as written, as the
 -- reference restates it. 0 for an empty list, NULL for NULL or a NULL
 -- among xs.
 CREATE OR REPLACE MACRO compensated_sum(xs) AS
@@ -2772,16 +2776,28 @@ CREATE OR REPLACE MACRO sctp_fit_of(a_side, b_side, t_side, at_node := 0, lo_s :
         SELECT 'a' AS side, k, reading, x.v, x.share * n AS c FROM a, unnest(dist) AS u(x) WHERE dist IS NOT NULL
         UNION ALL
         SELECT 'b', k, reading, x.v, x.share * n FROM b, unnest(dist) AS u(x) WHERE dist IS NOT NULL),
+    -- Each side's counts at each value pooled over its runs, as shares of
+    -- its reading's, and the testbed's runs' each alone. These sums of
+    -- floats, and the distances' below, each add in an order of their own
+    -- (the runs', the values': compensated_sum's of an ordered list), so a
+    -- query gives the same bits every time: an aggregate's sum adds in the
+    -- order its threads meet the rows, and a tv at its bound would pass in
+    -- one query and fail in the next.
+    pc AS (SELECT side, reading, v, compensated_sum(list(c ORDER BY k)) AS c FROM sh GROUP BY side, reading, v),
     pooled AS (
-        SELECT side, reading, v, sum(c) / sum(sum(c)) OVER (PARTITION BY side, reading) AS share
-        FROM sh GROUP BY side, reading, v),
+        SELECT pc.side, pc.reading, pc.v, pc.c / t.c AS share
+        FROM pc JOIN (SELECT side, reading, compensated_sum(list(c ORDER BY v)) AS c FROM pc GROUP BY side, reading) t
+            USING (side, reading)),
     tv AS (
-        SELECT reading, 0.5 * sum(abs(coalesce(x.share, 0) - coalesce(y.share, 0))) AS tv
+        SELECT reading, 0.5 * compensated_sum(list(abs(coalesce(x.share, 0) - coalesce(y.share, 0)) ORDER BY v)) AS tv
         FROM (FROM pooled WHERE side = 'a') x FULL JOIN (FROM pooled WHERE side = 'b') y USING (reading, v)
         GROUP BY reading
         HAVING count(x.share) > 0 AND count(y.share) > 0),
     runs AS (
-        SELECT k, reading, v, c / sum(c) OVER (PARTITION BY k, reading) AS share FROM sh WHERE side = 'b'),
+        SELECT sh.k, sh.reading, sh.v, sh.c / t.c AS share
+        FROM sh JOIN (SELECT k, reading, compensated_sum(list(c ORDER BY v)) AS c FROM sh WHERE side = 'b'
+                      GROUP BY k, reading) t USING (k, reading)
+        WHERE sh.side = 'b'),
     pairs AS (
         SELECT x.k AS k1, y.k AS k2, reading
         FROM (SELECT DISTINCT k, reading FROM runs) x JOIN (SELECT DISTINCT k, reading FROM runs) y
@@ -2789,11 +2805,12 @@ CREATE OR REPLACE MACRO sctp_fit_of(a_side, b_side, t_side, at_node := 0, lo_s :
     grid AS (SELECT p.reading, p.k1, p.k2, x.v FROM pairs p JOIN (SELECT DISTINCT reading, v FROM runs) x USING (reading)),
     spread AS (
         SELECT reading, max(d) AS tv
-        FROM (SELECT g.reading, g.k1, g.k2, 0.5 * sum(abs(coalesce(r1.share, 0) - coalesce(r2.share, 0))) AS d
+        FROM (SELECT g.reading, g.k1, g.k2,
+                     0.5 * compensated_sum(list(abs(coalesce(r1.share, 0) - coalesce(r2.share, 0)) ORDER BY g.v)) AS d
               FROM grid g
               LEFT JOIN runs r1 ON r1.k = g.k1 AND r1.reading = g.reading AND r1.v = g.v
               LEFT JOIN runs r2 ON r2.k = g.k2 AND r2.reading = g.reading AND r2.v = g.v
-              GROUP BY ALL)
+              GROUP BY g.reading, g.k1, g.k2)
         GROUP BY reading),
     f AS (
         SELECT coalesce(am.reading, bm.reading) AS reading, coalesce(am.source, bm.source) AS source,

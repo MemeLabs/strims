@@ -17,7 +17,9 @@ at one ratio at an end, whichever run has it; the resend spacing
 unruled; a ruled reading either side lacks failing; and a side of no runs
 refused. Over the fixture as a catalog without the SCTP log and the
 writes, and without the packets too (Lacking), the readings of what it
-holds score as over every table, the others unscored with a caveat.
+holds score as over every table, the others unscored with a caveat. Over
+runs whose scans and aggregates run on threads (Repeats), 20 queries of
+the fit give the same bits.
 
   python3 hack/simlab/tests/test_sctp_bench.py
 """
@@ -37,8 +39,8 @@ if __name__ == "__main__":
 
 from simlab import catalog  # noqa: E402
 
-MACROS = ("sketch_exp", "sketch_lo", "sketch_floor", "sketch_quantile", "twin_window_of", "side_window_of",
-          "bench_lacking", "bench_logs", "packets_or_none", "link_writes_or_none", "sctp_events_or_none",
+MACROS = ("sketch_exp", "sketch_lo", "sketch_floor", "sketch_quantile", "compensated_sum", "twin_window_of",
+          "side_window_of", "bench_lacking", "bench_logs", "packets_or_none", "link_writes_or_none", "sctp_events_or_none",
           "sctp_stages_of", "sctp_logged_side", "sctp_fit_of")
 HAVE = {"packets", "hosts", "bins", "sctp_events", "link_writes", "jobs.sim", "jobs.env"}
 T = 20_000_000
@@ -672,6 +674,63 @@ class Lacking(unittest.TestCase):
             self.conn.execute("ROLLBACK")
         with self.assertRaisesRegex(duckdb.Error, "sctp_stages_of: a side of no runs"):
             self.bare.execute("FROM sctp_fit_of([], ?, ?)", (TB, TC)).fetchall()
+
+
+class Repeats(unittest.TestCase):
+    """The fit over three testbed runs and three twin runs of 50,000
+    packets each, more than a row group's (122,880) in all, so its scans
+    and aggregates run on threads: each reading's every column the same
+    bits in each of 20 queries, the total variation distances and their
+    bounds too, whose sums of floats once added in the order the threads
+    met their rows (three or five distinct tv of 20 at a train's gaps)."""
+
+    PACKETS = 50_000
+
+    @classmethod
+    def setUpClass(cls):
+        import duckdb
+
+        conn = cls.conn = duckdb.connect()
+        conn.execute("CREATE TABLE jobs (k VARCHAR, src VARCHAR, sim VARCHAR, env MAP(VARCHAR, VARCHAR))")
+        for i in range(1, 4):
+            for k, src, sim in ((f"tc{i}", "testbed/off", "testbed"), (f"tw{i}", "testbed/on-twin", "strims-sim")):
+                conn.execute("INSERT INTO jobs VALUES (?, ?, ?, MAP {'STRIMS_SIM_CAL_SECS': '60'})", (k, src, sim))
+        conn.execute("CREATE TABLE hosts AS SELECT k, src, 0::BIGINT AS node, 0::BIGINT AS delay_us FROM jobs")
+        conn.execute("CREATE TABLE bins AS SELECT k, src, 30000::BIGINT AS t_ms, 3::BIGINT AS seed_drops FROM jobs")
+        conn.execute("CREATE TABLE link_writes (k VARCHAR, src VARCHAR, t_us BIGINT, node BIGINT, peer BIGINT, "
+                     "link BIGINT, kind VARCHAR, off BIGINT, n BIGINT, bytes BIGINT, queued_us BIGINT, "
+                     "done_us BIGINT, unsent_before BIGINT, wait VARCHAR)")
+        conn.execute(f"CREATE TABLE sctp_events ({', '.join(c + (' VARCHAR' if c in ('k', 'src', 'dir', 'what') else ' BOOLEAN' if c == 'estimated' else ' BIGINT') for c in EVENT)})")
+        # Each run's packets of DATA to the viewer from 20 s, their gaps a
+        # hash of the run and the packet's: mostly 20-169 µs, one in seven
+        # 2-5 ms, so the trains and the send gaps take many values, of
+        # shares no power of two's.
+        conn.execute(f"""
+            CREATE TABLE packets AS
+            WITH g AS (
+                SELECT j.k, j.src, r.i,
+                       CASE WHEN hash(j.k, r.i) % 7 = 0 THEN 2000 + hash(j.k, r.i, 1) % 3000
+                            ELSE 20 + hash(j.k, r.i, 2) % 150 END AS gap
+                FROM jobs j, range({cls.PACKETS}) r(i))
+            SELECT k, src, 0::BIGINT AS node, i::BIGINT AS n,
+                   (20000000 + sum(gap) OVER (PARTITION BY k ORDER BY i))::BIGINT AS t_us,
+                   NULL::BIGINT AS arrived_us, NULL::VARCHAR AS lost, 1::BIGINT AS peer, 'data' AS kind,
+                   1200::BIGINT AS ip_bytes
+            FROM g""")
+        conn.execute("UPDATE packets SET arrived_us = t_us + 20000 + hash(k, n, 3) % 1000")
+        for s in catalog.scoring_statements(MACROS, HAVE):
+            conn.execute(s)
+
+    def test_every_query_gives_the_same_bits(self):
+        tw = [{"k": f"tw{i}"} for i in range(1, 4)]
+        tc = [{"k": f"tc{i}"} for i in range(1, 4)]
+        # repr: a float's every bit.
+        got = {repr(dicts(self.conn, "FROM sctp_fit_of(?, ?, ?)", tw, tw, tc)) for _ in range(20)}
+        self.assertEqual(len(got), 1)
+        rows = {r["reading"]: r for r in dicts(self.conn, "FROM sctp_fit_of(?, ?, ?)", tw, tw, tc)}
+        for r in (G100, G400, GAPS):
+            self.assertGreater(rows[r]["tv"], 0, r)
+            self.assertGreater(rows[r]["b_tv"], 0, r)
 
 
 if __name__ == "__main__":
