@@ -487,7 +487,7 @@ def joins_of(arrivals, viewers, secs, rng):
     --join-at takes them (rounding up could put a warm join on its
     burst's start). A join falls anywhere in the runner's 100 ms tick
     (strims-ppspp's TICK_INTERVAL), as a deployed viewer's does: to the
-    tenth of a second every join would sit at one phase of it, and each
+    tenth of a second every join would sit on its grid, and each
     node's tick, set from its first channel, would land at one place in
     every later joiner's link-up (strims-sim's testbed module keys such
     a run apart, TESTBED_JOINS)."""

@@ -287,16 +287,18 @@ fn num(x: f64) -> String {
 }
 
 /// Whether `joins` (`STRIMS_SIM_CAL_JOINS`'s `<i>:<s> ...`, to the ms)
-/// are two or more at one phase of the runner's tick
-/// ([`TICK_INTERVAL`]): every two a whole number of ticks apart.
-fn at_one_tick_phase(joins: &str) -> bool {
+/// are two or more on the runner's tick grid ([`TICK_INTERVAL`]), each a
+/// whole number of ticks from the stream's start: a draw to the tenth of
+/// a second or in whole seconds always is, one to the ms by chance once
+/// in 100^n for n joins.
+fn on_tick_grid(joins: &str) -> bool {
     let tick = TICK_INTERVAL.as_millis();
     let phases: Vec<i64> = joins
         .split_whitespace()
         .filter_map(|pair| pair.split_once(':')?.1.parse::<f64>().ok())
         .map(|s| ((s * 1000.0).round() as i64).rem_euclid(tick))
         .collect();
-    phases.len() > 1 && phases.windows(2).all(|w| w.first() == w.last())
+    phases.len() > 1 && phases.iter().all(|&p| p == 0)
 }
 
 /// The knobs of a testbed run's twin, from its `settings` and its
@@ -318,7 +320,7 @@ fn at_one_tick_phase(joins: &str) -> bool {
 /// uplink and the stream's length always; the viewers' joins (`JOIN_AT`,
 /// and each of `JOINS`'s to the ms, `STRIMS_SIM_CAL_JOINS`: [`Run::read`]
 /// leaves the latter out where its caller names the arrivals profile they
-/// drew, and keys apart a draw at one phase of the runner's tick,
+/// drew, and keys apart a draw on the runner's tick grid,
 /// `TESTBED_JOINS=tick`);
 /// the other links' settings where they aren't the twin's defaults; the
 /// seed's steps as factors of its uplink (`STRIMS_SIM_CAL_SEED_UP_SCALE`);
@@ -744,14 +746,14 @@ impl Run {
         // the caller names it (STRIMS_SIM_ARRIVALS, as a tier matrix's
         // knobs do), which the twin draws its own of; else the joins
         // themselves, the twin's STRIMS_SIM_CAL_JOINS. A draw whose joins
-        // all fall at one phase of the runner's tick keys apart,
-        // TESTBED_JOINS pairing it with no cell: each node's tick, set
-        // from its first channel, then lands at one place in every later
-        // joiner's link-up, where a deployed viewer's join and the twin's
-        // draws fall anywhere in it.
+        // all sit on the runner's tick grid keys apart, TESTBED_JOINS
+        // pairing it with no cell: each node's tick, set from its first
+        // channel, then lands at one place in every later joiner's
+        // link-up, where a deployed viewer's join and the twin's draws
+        // fall anywhere in it.
         if knobs.contains_key("STRIMS_SIM_ARRIVALS")
             && let Some(joins) = knobs.remove("STRIMS_SIM_CAL_JOINS")
-            && at_one_tick_phase(&joins)
+            && on_tick_grid(&joins)
         {
             knobs.insert("TESTBED_JOINS".to_owned(), "tick".to_owned());
         }
@@ -3550,20 +3552,105 @@ mod tests {
         std::fs::remove_dir_all(&other).unwrap();
     }
 
-    /// Joins at one phase of the runner's tick are two or more, each two a
-    /// whole number of ticks apart, whatever that phase.
+    /// Joins on the runner's tick grid are two or more, each a whole number
+    /// of ticks from the stream's start.
     #[test]
-    fn joins_at_one_tick_phase_are_whole_ticks_apart() {
-        for (joins, one) in [
+    fn joins_on_the_tick_grid_are_whole_ticks_from_the_start() {
+        for (joins, on) in [
             ("1:1.6 2:2.2 3:17.9", true),
-            ("1:0.537 2:3.037 3:9.137", true),
+            ("1:3 2:9 3:14", true),
             ("1:0 2:0", true),
+            ("1:0.537 2:3.037 3:9.137", false),
             ("1:1.6 2:2.2 3:17.901", false),
             ("1:1.637 2:2.204 3:17.958", false),
             ("1:4", false),
             ("", false),
         ] {
-            assert_eq!(at_one_tick_phase(joins), one, "{joins}");
+            assert_eq!(on_tick_grid(joins), on, "{joins}");
+        }
+    }
+
+    /// `dir`'s fixture ([`fixture`]'s) as a star of `n` viewers on tbf
+    /// links, each viewer's lines viewer 1's; returns the fixture's
+    /// `settings` with `VIEWERS=n`, which it leaves to the caller to write.
+    fn star_of(dir: &Path, settings: &str, n: usize) -> String {
+        let nodes: String = (0..=n)
+            .map(|i| format!("node {i} 10.77.0.{}:4000\n", 10 + i))
+            .collect();
+        let links: String = (1..=n).map(|i| format!("link 0 {i}\n")).collect();
+        std::fs::write(dir.join("topology"), nodes + &links).unwrap();
+        let classes: String = (1..=n)
+            .map(|i| format!("node {i} tbf 20 10 100\n"))
+            .collect();
+        std::fs::write(
+            dir.join("links"),
+            format!("node 0 tbf 10 20 100\n{classes}"),
+        )
+        .unwrap();
+        for i in 2..=n {
+            std::fs::copy(
+                dir.join("node-1.jsonl"),
+                dir.join(format!("node-{i}.jsonl")),
+            )
+            .unwrap();
+        }
+        settings.replace("VIEWERS=1\n", &format!("VIEWERS={n}\n"))
+    }
+
+    /// The committed tier's draws, a 3-viewer cell's and a 15-viewer
+    /// cell's, are off the tick grid, so Run::read keys none of their runs
+    /// apart; the same joins floored to the tenth of a second are on it.
+    #[test]
+    fn the_tiers_drawn_joins_key_no_run_apart() {
+        let drawn = BTreeMap::from([("STRIMS_SIM_ARRIVALS".to_owned(), "trickle".to_owned())]);
+        for (name, matrix) in [
+            (
+                "tier-joins-3",
+                include_str!(
+                    "../../../hack/sim-farm/matrices/testbed-tier/testbed-native-star-3-10.toml"
+                ),
+            ),
+            (
+                "tier-joins-15",
+                include_str!(
+                    "../../../hack/sim-farm/matrices/testbed-tier/testbed-native-star-15-10.toml"
+                ),
+            ),
+        ] {
+            let draws: Vec<&str> = matrix
+                .lines()
+                .find_map(|l| l.strip_prefix("JOINS = ["))
+                .unwrap()
+                .split('"')
+                .skip(1)
+                .step_by(2)
+                .collect();
+            assert_eq!(draws.len(), 2, "{name}");
+            let dir = fixture(name);
+            let base = std::fs::read_to_string(dir.join("settings")).unwrap();
+            let viewers = draws.first().unwrap().split_whitespace().count();
+            let settings = star_of(&dir, &base, viewers);
+            for joins in draws {
+                let tenths: Vec<String> = joins
+                    .split_whitespace()
+                    .map(|pair| {
+                        let (i, s) = pair.split_once(':').unwrap();
+                        let ms = (s.parse::<f64>().unwrap() * 1000.0).round() as u64;
+                        format!("{i}:{}", num((ms / 100) as f64 / 10.0))
+                    })
+                    .collect();
+                for (j, key) in [(joins.to_owned(), None), (tenths.join(" "), Some("tick"))] {
+                    std::fs::write(dir.join("settings"), format!("{settings}JOINS={j}\n")).unwrap();
+                    let run = Run::read(&dir, &drawn).unwrap();
+                    assert_eq!(run.knobs.get("STRIMS_SIM_CAL_JOINS"), None);
+                    assert_eq!(
+                        run.knobs.get("TESTBED_JOINS").map(String::as_str),
+                        key,
+                        "{name}: JOINS={j}"
+                    );
+                }
+            }
+            std::fs::remove_dir_all(&dir).unwrap();
         }
     }
 
@@ -3599,26 +3686,16 @@ mod tests {
             joins(bad);
             assert!(Run::read(&dir, &BTreeMap::new()).is_err(), "JOINS={bad}");
         }
-        // Two viewers: a draw at one phase of the tick keys apart, one
-        // anywhere in it doesn't, and joins that are the twin's own knob
-        // never do (it runs them as they are).
-        let two = settings.replace("VIEWERS=1\n", "VIEWERS=2\n");
-        let w = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
-        w(
-            "topology",
-            "node 0 10.77.0.10:4000\nnode 1 10.77.0.11:4000\nnode 2 10.77.0.12:4000\nlink 0 1\nlink 0 2\n",
-        );
-        w(
-            "links",
-            "node 0 tbf 10 20 100\nnode 1 tbf 20 10 100\nnode 2 tbf 20 10 100\n",
-        );
-        std::fs::copy(dir.join("node-1.jsonl"), dir.join("node-2.jsonl")).unwrap();
+        // Two viewers: a draw on the tick grid keys apart, one off it
+        // doesn't, and joins that are the twin's own knob never do (it
+        // runs them as they are).
+        let two = star_of(&dir, &settings, 2);
         for (j, knobs, key) in [
             ("1:1.6 2:2.2", &drawn, Some("tick")),
             ("1:1.637 2:2.204", &drawn, None),
             ("1:1.6 2:2.2", &BTreeMap::new(), None),
         ] {
-            w("settings", &format!("{two}JOINS={j}\n"));
+            std::fs::write(dir.join("settings"), format!("{two}JOINS={j}\n")).unwrap();
             let run = Run::read(&dir, knobs).unwrap();
             assert_eq!(
                 run.knobs.get("TESTBED_JOINS").map(String::as_str),

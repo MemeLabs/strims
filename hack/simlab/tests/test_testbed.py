@@ -11,8 +11,8 @@ their shaper replays.
            through knobs_of, name that cell
   Joins    an arrivals profile's joins hold its bounds and the twin's
            arrival order (soonest first), to the ms, anywhere in the
-           runner's tick, one seed's alike; the committed tier's spread
-           over the tick
+           runner's tick, one seed's alike; the committed tier's off the
+           tick grid
   Tier     the tier's cells are hostable, honest, of the robust and
            browsers tiers; hack/sim-farm/matrices/testbed-tier is what
            tier_matrices writes
@@ -185,17 +185,16 @@ class Joins(unittest.TestCase):
                 phases = {round(float(t) * 1000) % 100 for t in times}
                 self.assertGreater(len(phases), 20, sorted(phases))
 
-    def test_the_committed_tiers_joins_spread_over_the_tick(self):
-        # Every repeat's JOINS has joins at two phases of the tick at
-        # least, so strims-sim's testbed module keys none of its runs
-        # apart (TESTBED_JOINS).
+    def test_the_committed_tiers_joins_are_off_the_tick_grid(self):
+        # Every repeat's JOINS has a join off the runner's 100 ms tick grid
+        # (a whole number of ticks from the start), so strims-sim's
+        # testbed::on_tick_grid keys none of its runs apart (TESTBED_JOINS).
         draws = [json.loads(line.split("=", 1)[1])
                  for p in (HACK / "sim-farm" / "matrices" / "testbed-tier").glob("*.toml")
                  for line in p.read_text().splitlines() if line.startswith("JOINS = ")]
         self.assertTrue(draws)
         for joins in (j for d in draws for j in d):
-            phases = {round(float(p.split(":")[1]) * 1000) % 100 for p in joins.split()}
-            self.assertGreater(len(phases), 1, joins)
+            self.assertTrue(any(round(float(p.split(":")[1]) * 1000) % 100 for p in joins.split()), joins)
 
     def test_another_profile_is_refused(self):
         with self.assertRaises(ValueError):
