@@ -134,14 +134,18 @@ With `--keep`, a stopped run leaves its instances for a rerun to adopt.
   minutes. Each run's costs.jsonl line lists its `interruptions`.
 - **Boot failures.** A boot that fails (no SSH in 10 minutes, a failed
   setup) skips its pool for 10 minutes. Failures of two types in a zone,
-  in two zones of a region, or of a type in two regions, within 10 minutes
-  and since one last passed there, skip the zone, the region or the type;
-  a boot that passes there lifts that. Instances up keep their jobs. Three
-  failures in a row since one last passed mean every boot may fail (image,
-  binaries, user-data, SSH): the run launches no more until one still
-  booting passes, its instances up running what's left. With none up or
-  booting it stops: exit 1, its undone jobs logged, its instances
-  terminated even with `--keep` (`farm.py stop` exits 130).
+  in two zones of a region, or of a type in two regions, within 20
+  minutes and since one last passed there, skip the zone, the region or
+  the type; a boot that passes there lifts that. A scope failing again
+  after its skip lapsed, none passing between, is skipped twice as long
+  (10, 20, 40 min...). Instances up keep their jobs, and queued jobs go
+  to the other pools. Only failures since the run's last passing boot
+  that span two regions and two types (three at least), or that skip
+  every pool, mean every boot may fail (image, binaries, user-data,
+  SSH): the run launches no more until one still booting passes, its
+  instances up running what's left. With none up or booting it stops:
+  exit 1, its undone jobs logged, its instances terminated even with
+  `--keep` (`farm.py stop` exits 130).
 
 ## Permissions and approval
 

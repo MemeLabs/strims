@@ -230,17 +230,23 @@ speed. A run logs the speeds before its best pools.
   worker started, ready, each after its launch. One whose boot fails (not
   running or no SSH within 10 minutes, its setup failed, its canary's
   sync kept failing) is terminated and its pool skipped for 10 minutes.
-  Failed boots of two types in a zone skip every pool of the zone for as
-  long, in two zones of a region every pool of the region, and of a type
-  in two regions the type in every region, each counting those of the
-  last 10 minutes since one last passed there; a boot that passes there
-  lifts those skips (its pool's own stays). The run's instances up keep
-  their jobs. Three of the run's boots failing in a row, none passing
-  between, point at what fails every boot (the image, the binaries,
-  user-data, SSH): the run launches no more until one still booting
-  passes, its instances up running what's left, and once none is up or
-  booting it stops, its jobs undone. An adopted instance's boot counts
-  towards none of this: an earlier run launched it.
+  Failed boots of two types in a zone skip every pool of the zone, in two
+  zones of a region every pool of the region, and of a type in two
+  regions the type in every region, each counting those of the last 20
+  minutes (a boot's 10 and a skip's) since one last passed there; a boot
+  that passes there lifts those skips (its pool's own stays). A pool,
+  zone, region or type that fails again once its skip lapsed, none
+  passing there between, is skipped twice as long as it last was (10,
+  20, 40 minutes...). The run's instances up keep their jobs, and the
+  queued ones go to the pools not skipped. Launches wait only for what
+  no one scope explains: three or more failures since one of the run's
+  boots last passed, in two regions and of two types, or failed boots
+  since then skipping every pool (a run of one region or one type): what
+  fails every boot (the image, the binaries, user-data, SSH). The run
+  then launches no more until one still booting passes (or, the second
+  way, the skips lapse), its instances up running what's left, and with
+  none up or booting it stops, its jobs undone. An adopted instance's
+  boot counts towards none of this: an earlier run launched it.
 - Every 15 s the controller syncs each instance over SSH (worker.py
   sync), every instance at once over its master connection (opened at
   its boot), at once when an instance's boot ends, and again at once each
@@ -669,14 +675,22 @@ FAMILIES = "c6a,c7a,c8a,m6a,m7a,m8a,r6a,r7a,r8a,c6i,c7i,c8i,m6i,m7i,m8i,r6i,r7i,
 TICK = 15
 SSH_GRACE = 180
 POOL_BACKOFF = 600
+# An instance not running, or not answering SSH, this long after its launch
+# has failed its boot (bootstrap).
+BOOT_TIMEOUT_S = 600
 # A launched instance whose boot fails skips its pool for POOL_BACKOFF, as
 # one AWS takes back does. Failed boots of BOOT_SPREAD types in a zone skip
 # the zone, in BOOT_SPREAD zones of a region the region, and of a type in
 # BOOT_SPREAD regions the type, each counting those of the last
-# POOL_BACKOFF since one last passed there. BOOT_FAILURES of the run's boots
-# failing in a row, none passing between, point at what fails every boot
-# (the image, the binaries, user-data, SSH): the run launches no more until
-# one still booting passes, and stops once none is up or booting.
+# BOOT_TIMEOUT_S + POOL_BACKOFF since one last passed there (a second wave
+# fails a boot timeout after the first's skip lapsed). A scope that fails
+# again once its skip lapsed, with none passing there between, is skipped
+# twice as long as it last was. Launches wait while the failures since the
+# run's last passing boot number BOOT_FAILURES across BOOT_SPREAD regions
+# and BOOT_SPREAD types, which no one scope's skip explains, or while
+# failed boots since then skip every pool: what fails every boot (the
+# image, the binaries, user-data, SSH). With none up or booting then, the
+# run stops.
 BOOT_SPREAD = 2
 BOOT_FAILURES = 3
 THROTTLE_BACKOFF = 60
@@ -2247,6 +2261,21 @@ class BootFail:
     region: str
 
 
+@dataclasses.dataclass(frozen=True)
+class BootSkip:
+    """A scope failed boots skip (Run.boot_failed): until when, when it was
+    last set, and for how long."""
+
+    until: float
+    at: float
+    length: float
+
+
+def span(s: float) -> str:
+    """A skip's or a window's length as the log says it."""
+    return f"{s / 60:g} min" if s >= 60 else f"{s:g} s"
+
+
 @dataclasses.dataclass(eq=False)
 class Host:
     id: str
@@ -2775,17 +2804,18 @@ class Run:
         self.peak_slots = 0
         self.estimated: dict | None = None
         self.boot_prior = past_boot_s("testbed" if matrices[0].kind == "testbed" else "test")
-        # The run's instances' boots failed in a row since one last passed,
-        # and the last one's why; their failed boots of the last
-        # POOL_BACKOFF, when one last passed in each zone, region and type,
-        # and what failed boots skip until when (boot_failed): ("pool",
-        # type, zone), ("zone", zone), ("region", region), ("type", type);
-        # whether launches wait for a boot to pass (scale).
-        self.boot_streak = 0
+        # The run's instances' failed boots since one of them last passed,
+        # and when that was, and the last failure's why (boots_held); their
+        # failed boots of the last BOOT_TIMEOUT_S + POOL_BACKOFF, when one
+        # last passed in each scope, and what failed boots skip, by scope
+        # (boot_failed): ("pool", type, zone), ("zone", zone), ("region",
+        # region), ("type", type); whether launches wait (scale).
+        self.boot_since_pass: list[BootFail] = []
+        self.last_pass = float("-inf")
         self.boot_why = ""
         self.boot_fails: list[BootFail] = []
-        self.boot_passes: dict[tuple[str, str], float] = {}
-        self.boot_skips: dict[tuple[str, ...], float] = {}
+        self.boot_passes: dict[tuple[str, ...], float] = {}
+        self.boot_skips: dict[tuple[str, ...], BootSkip] = {}
         self.launches_held = False
         self.stopping = threading.Event()
         self.testbed: Testbed | None = None
@@ -3682,8 +3712,8 @@ class Run:
             except AwsError as e:
                 if e.code != "InvalidInstanceID.NotFound":  # not listed yet
                     raise
-            if time.time() - start > 600:
-                raise RuntimeError("not running after 10 minutes")
+            if time.time() - start > BOOT_TIMEOUT_S:
+                raise RuntimeError(f"not running after {BOOT_TIMEOUT_S / 60:g} minutes")
             time.sleep(2)
         denied = None
         while True:
@@ -3711,8 +3741,8 @@ class Run:
                     )
             else:
                 denied = None
-            if time.time() - start > 600:
-                raise RuntimeError(f"no SSH after 10 minutes: {why}")
+            if time.time() - start > BOOT_TIMEOUT_S:
+                raise RuntimeError(f"no SSH after {BOOT_TIMEOUT_S / 60:g} minutes: {why}")
             time.sleep(2)
         host.ssh_at = time.time()
         self.ssh.master(host)
@@ -3877,15 +3907,18 @@ class Run:
 
     def boot_failed(self, h: Host, why: str, now: float) -> str:
         """A launched instance's boot failed (`why`): it counts towards
-        BOOT_FAILURES in a row (scale), and its pool is skipped for
-        POOL_BACKOFF; its zone too once boots of BOOT_SPREAD types failed
-        there, its region once they failed in BOOT_SPREAD of its zones, and
-        its type in every region once its failed in BOOT_SPREAD regions,
-        each counting the failures of the last POOL_BACKOFF since one last
-        passed there. Says what it skips."""
-        self.boot_streak += 1
+        boots_held's failures since the last pass, and its pool is skipped,
+        POOL_BACKOFF first; its zone too once boots of BOOT_SPREAD types
+        failed there, its region once they failed in BOOT_SPREAD of its
+        zones, and its type in every region once its failed in BOOT_SPREAD
+        regions, each counting the failures of the last BOOT_TIMEOUT_S +
+        POOL_BACKOFF since one last passed there. A scope that fails again
+        once its skip lapsed, none passing there between, is skipped twice
+        as long as it last was; one failing while skipped, as it was. Says
+        what it skips."""
+        self.boot_since_pass.append(BootFail(now, h.type, h.zone, h.region))
         self.boot_why = why
-        self.boot_fails = [f for f in self.boot_fails if f.at > now - POOL_BACKOFF]
+        self.boot_fails = [f for f in self.boot_fails if f.at > now - BOOT_TIMEOUT_S - POOL_BACKOFF]
         self.boot_fails.append(BootFail(now, h.type, h.zone, h.region))
         # Each scope's spread: the types failing in its zone, the zones in
         # its region, the regions of its type.
@@ -3895,36 +3928,59 @@ class Run:
             passed = self.boot_passes.get((scope, name), float("-inf"))
             spread[scope] = {getattr(f, of) for f in self.boot_fails if getattr(f, scope) == name and f.at > passed}
         wide = [s for s, got in spread.items() if len(got) >= BOOT_SPREAD]
-        until = now + POOL_BACKOFF
+        lengths = {}
         for key in [("pool", h.type, h.zone)] + [(s, getattr(h, s)) for s in wide]:
-            self.boot_skips[key] = max(self.boot_skips.get(key, 0.0), until)
-        where = {"zone": f"every pool of {h.zone}", "region": f"every pool of {h.region}",
-                 "type": f"{h.type} in every region"}
+            prev = self.boot_skips.get(key)
+            if prev is None or prev.at <= self.boot_passes.get(key, float("-inf")):
+                prev, length = None, POOL_BACKOFF
+            else:
+                length = prev.length * 2 if prev.until <= now else prev.length
+            self.boot_skips[key] = BootSkip(max(now + length, prev.until if prev else 0.0), now, length)
+            lengths[key[0]] = length
+        where = {"pool": f"{h.type} in {h.zone}", "zone": f"every pool of {h.zone}",
+                 "region": f"every pool of {h.region}", "type": f"{h.type} in every region"}
         because = {"zone": f"boots of {len(spread['zone'])} types failed in {h.zone}",
                    "region": f"boots failed in {len(spread['region'])} zones of {h.region}",
                    "type": f"{h.type}'s failed in {len(spread['type'])} regions"}
-        shown = [s for s in wide if not (s == "zone" and "region" in wide)]
-        return (f"skipping {' and '.join(where[s] for s in shown) or f'{h.type} in {h.zone}'} for "
-                f"{POOL_BACKOFF / 60:g} min" + (f" ({'; '.join(because[s] for s in wide)} within "
-                                                f"{POOL_BACKOFF / 60:g} min, with none passing since)" if wide else ""))
+        shown = [s for s in wide if not (s == "zone" and "region" in wide)] or ["pool"]
+        return ("skipping " + " and ".join(f"{where[s]} for {span(lengths[s])}" for s in shown)
+                + (f" ({'; '.join(because[s] for s in wide)} within {span(BOOT_TIMEOUT_S + POOL_BACKOFF)}, "
+                   "with none passing since)" if wide else ""))
 
     def boot_passed(self, h: Host, now: float) -> None:
-        """A launched instance's boot passed: boots work, in its zone, its
-        region and for its type, whose skips for failed boots go (its pool's
-        own stays), and the launches go on."""
-        self.boot_streak = 0
-        for scope in (("zone", h.zone), ("region", h.region), ("type", h.type)):
-            self.boot_passes[scope] = now
-            self.boot_skips.pop(scope, None)
-        if self.launches_held:
-            self.launches_held = False
-            log(f"{h.id} booted; launching again")
+        """A launched instance's boot passed: boots work, in its pool, its
+        zone, its region and for its type. The failures since the last pass
+        hold nothing more (boots_held), its zone's, region's and type's skips
+        for failed boots go (its pool's own stays), and each of those scopes
+        skips for POOL_BACKOFF first when its boots fail again."""
+        self.boot_since_pass = []
+        self.last_pass = now
+        for key in (("pool", h.type, h.zone), ("zone", h.zone), ("region", h.region), ("type", h.type)):
+            self.boot_passes[key] = now
+            if key[0] != "pool":
+                self.boot_skips.pop(key, None)
 
-    def boot_skipped(self, p: Pool, now: float) -> bool:
+    def boot_skipped(self, p: Pool, now: float, since: float = float("-inf")) -> bool:
         """Whether failed boots skip the pool: its own, its zone's, its
-        region's or its type's."""
-        return any(self.boot_skips.get(k, 0.0) > now
-                   for k in (("pool", p.type, p.zone), ("zone", p.zone), ("region", p.region), ("type", p.type)))
+        region's or its type's skip, set after `since`."""
+        return any(
+            (s := self.boot_skips.get(k)) is not None and s.until > now and s.at > since
+            for k in (("pool", p.type, p.zone), ("zone", p.zone), ("region", p.region), ("type", p.type))
+        )
+
+    def boots_held(self, now: float) -> str | None:
+        """Why launches wait (scale), or None: the failures since one of the
+        run's boots last passed number BOOT_FAILURES or more, in BOOT_SPREAD
+        regions and of BOOT_SPREAD types, which a bad pool, zone, region or
+        type doesn't explain (their skips handle those); or failed boots since
+        then skip every pool, as they do a run of one region or one type."""
+        fails = self.boot_since_pass
+        regions, types = {f.region for f in fails}, {f.type for f in fails}
+        if len(fails) >= BOOT_FAILURES and len(regions) >= BOOT_SPREAD and len(types) >= BOOT_SPREAD:
+            return f"{len(fails)} boots failed since one last passed, in {len(regions)} regions and {len(types)} types"
+        if self.pools and all(self.boot_skipped(p, now, self.last_pass) for p in self.pools):
+            return f"failed boots since one last passed skip all {len(self.pools)} pools"
+        return None
 
     def read_budgets(self, now: float) -> None:
         """The budgets of the regions whose reading is due: each region's
@@ -4346,19 +4402,23 @@ class Run:
             waiting = sum(len(w) for w in self.waiting.values())
             demand = len(self.queue) + waiting + sum(len(h.assigned) for h in live)
             deficit = min(demand - sum(h.slots for h in live), self.wanted(now))
-        if deficit > 0 and self.boot_streak >= BOOT_FAILURES:
-            # Boots keep failing, whatever pools they're in, with instances
-            # up or not: none is launched while some still boot, one of
-            # which may pass, and the instances up run what's left. With
-            # none left the run stops.
+        # Boots failing as no one scope explains (boots_held), with instances
+        # up or not: none is launched while some still boot, one of which
+        # may pass, and the instances up run what's left. With none left the
+        # run stops.
+        held = self.boots_held(now)
+        if held is None and self.launches_held:
+            self.launches_held = False
+            log("launching again: " + ("a boot passed" if not self.boot_since_pass else "the pools' skips lapsed"))
+        if deficit > 0 and held is not None:
             if not live:
-                raise SystemExit(f"instances keep failing to bootstrap: {self.boot_streak} in a row since one last "
-                                 f"passed, and none is up; the last: {self.boot_why}; stopping")
+                raise SystemExit(f"instances keep failing to bootstrap: {held}, and none is up; "
+                                 f"the last: {self.boot_why}; stopping")
             if not self.launches_held:
                 self.launches_held = True
                 booting = sum(1 for h in live if h.state == "booting")
                 up = sum(1 for h in live if h.state == "ready")
-                log(f"{self.boot_streak} boots failed in a row since one last passed; launching none"
+                log(f"{held}; launching none"
                     + (f" until one of the {booting} booting passes" if booting else "")
                     + (f", the {up} instances up running what's left" if up else ""))
             return
