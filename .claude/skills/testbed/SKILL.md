@@ -151,7 +151,13 @@ crates differ from those the page was built from builds its own page.
   PLAN item), the relay serving the
   transfers and refusing each announce; before, each node ran it as the
   peer's link came up, where the side whose link comes up first now runs
-  it a trip after the other's came up. A run folded before the testbed
+  it a trip after the other's came up. So does a run whose JOINS draw
+  the arrivals profile its matrix's knobs name and fall at one phase of
+  the runner's 100 ms tick, each two a whole number of ticks apart
+  (TESTBED_JOINS=tick): each node's tick, set from its first channel,
+  then lands at one place in every later joiner's link-up, where the
+  twin's draws and a deployed viewer's joins fall anywhere in it
+  (`testbed-tier` draws them to the ms). A run folded before the testbed
   module knew a marker keeps its key until it is folded again.
 - **The twin.** `simdb.py twin 'testbed/NAME' --name NAME-twin --bin
   SCENARIOS --seeds 8` runs strims-sim's `calibration_star` with each
@@ -220,8 +226,8 @@ crates differ from those the page was built from builds its own page.
   that hold its runs' tables. `simdb.py testbed-tier DIR` writes the
   testbed tier's matrices (hack/sim-farm/matrices/testbed-tier: the
   tiers' cells the testbed hosts, one a matrix, each repeat its own
-  joins). Were run.sh to write STAMPS=date, each matrix's header would
-  say its runs key apart. Each arm runs its own bundle's run.sh and
+  joins, to the ms). Were run.sh to write STAMPS=date, each matrix's
+  header would say its runs key apart. Each arm runs its own bundle's run.sh and
   TABLES_BIN, so in an A/B whose base predates a marker
   (SWARMS=transfers, NEIGHBOURS=static, JOIN_LINKS=together) the base
   arm's runs run their swarms at each link, resolve their peers by ARP or

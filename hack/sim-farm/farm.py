@@ -424,7 +424,7 @@ containers in real time. Its jobs are its arms by its axes by `repeats`:
   paired = true                 # the default (below)
   cell = "star-15-10"           # the suite cell its runs stand for (below)
   knobs = {STRIMS_SIM_ARRIVALS = "trickle"}  # more twin knobs (below)
-  [repeat_env] JOINS = ["1:3 2:9 3:14", "1:5 2:6 3:18"]  # repeat r's, the r-th
+  [repeat_env] JOINS = ["1:3.172 2:9.604 3:14.051", "1:5.338 2:6.917 3:18.26"]  # repeat r's, the r-th
   [build]     commands = ["cargo build --release ..."]
   [artifacts] NODE_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_node"
               TABLES_BIN = "$CARGO_TARGET_DIR/release/examples/testbed_tables"

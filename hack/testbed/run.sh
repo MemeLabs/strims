@@ -163,7 +163,12 @@
 #   JOINS="<i>:<s> ..."    node i dials in <s> seconds after the start, in
 #                          place of JOIN_AT. A viewer of JOINS arrives, and
 #                          reads from the live edge, whatever its time (0
-#                          too), as its twin's viewers do
+#                          too), as its twin's viewers do. Give <s> to the
+#                          ms: joins a whole number of 100 ms apart (the
+#                          runner's tick, which each node sets from its
+#                          first channel) lock every node's tick phase to
+#                          every later join, where a deployed viewer's
+#                          join falls anywhere in it
 #   SLOW_DOWN_KBIT=<k>     viewer 1's downlink, if set
 #   SEED_UP_STEPS="<s>:<m> ..."  the seed's uplink becomes <m> Mbit/s <s>
 #                          seconds after the stream starts, by a tc qdisc

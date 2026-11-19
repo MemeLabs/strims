@@ -483,9 +483,14 @@ def joins_of(arrivals, viewers, secs, rng):
     third; event:<warm %>:<at>:<window>: the warm share uniform before
     `at`, the rest uniform within `window` from it), the k-th soonest
     viewer k's, so the topology's order is the arrivals' as the twin lays
-    its links out, to the tenth of a second below (a node's --join-at
-    takes seconds to the ms; rounding up could put a warm join on its
-    burst's start)."""
+    its links out, to the ms below, as the twin's draws are and a node's
+    --join-at takes them (rounding up could put a warm join on its
+    burst's start). A join falls anywhere in the runner's 100 ms tick
+    (strims-ppspp's TICK_INTERVAL), as a deployed viewer's does: to the
+    tenth of a second every join would sit at one phase of it, and each
+    node's tick, set from its first channel, would land at one place in
+    every later joiner's link-up (strims-sim's testbed module keys such
+    a run apart, TESTBED_JOINS)."""
     parts = arrivals.split(":")
     if parts == ["trickle"]:
         times = [rng.uniform(0, secs / 3) for _ in range(viewers)]
@@ -495,7 +500,7 @@ def joins_of(arrivals, viewers, secs, rng):
         times = [rng.uniform(0, at) for _ in range(m)] + [at + rng.uniform(0, window) for _ in range(viewers - m)]
     else:
         raise ValueError(f"arrivals {arrivals}: the tier takes trickle and event profiles")
-    return " ".join(f"{i}:{math.floor(t * 10) / 10:.1f}" for i, t in enumerate(sorted(times), start=1))
+    return " ".join(f"{i}:{math.floor(t * 1000) / 1000:.3f}" for i, t in enumerate(sorted(times), start=1))
 
 
 def num(x):
