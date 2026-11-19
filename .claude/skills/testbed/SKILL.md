@@ -172,9 +172,13 @@ crates differ from those the page was built from builds its own page.
   logs more of the hosts the runs hold, a log held to the run's end. A
   fit none of whose model runs holds a row of a table a reading takes (a
   twin without that log) fails the query, naming the table and its knob,
-  rather than score the reading a fail. sctp_fit_of's model side is the
-  twin of the testbed's logged cell (TRACE_SCTP), whose wire is the
-  log-off cell's twin's (the sim's SCTP log moves nothing).
+  rather than score the reading a fail. A table no run of the catalog
+  holds (a tier's lake, its runs PCAP=1 without TRACE_SCTP or LINK_LOG)
+  leaves its readings unscored, the rest scoring: a row each of pass
+  NULL whose `caveat` names the table and its settings (`bench_logs`).
+  sctp_fit_of's model side is the twin of the testbed's logged cell
+  (TRACE_SCTP), whose wire is the log-off cell's twin's (the sim's SCTP
+  log moves nothing).
   The macros `twin_runs_of` and
   `twin_fit_of` compare the two over the same tables (`simdb.py describe
   twin_fit_of`): a side is `testbed_side(SRC_LIKE, kind := ..., arm :=

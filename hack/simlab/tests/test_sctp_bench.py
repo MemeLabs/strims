@@ -15,7 +15,9 @@ plan's bound or the testbed's own, the larger; resends a drop within
 the logged runs' range widened by counting noise, the widest of the runs
 at one ratio at an end, whichever run has it; the resend spacing
 unruled; a ruled reading either side lacks failing; and a side of no runs
-refused.
+refused. Over the fixture as a catalog without the SCTP log and the
+writes, and without the packets too (Lacking), the readings of what it
+holds score as over every table, the others unscored with a caveat.
 
   python3 hack/simlab/tests/test_sctp_bench.py
 """
@@ -36,6 +38,7 @@ if __name__ == "__main__":
 from simlab import catalog  # noqa: E402
 
 MACROS = ("sketch_exp", "sketch_lo", "sketch_floor", "sketch_quantile", "twin_window_of", "side_window_of",
+          "bench_lacking", "bench_logs", "packets_or_none", "link_writes_or_none", "sctp_events_or_none",
           "sctp_stages_of", "sctp_logged_side", "sctp_fit_of")
 HAVE = {"packets", "hosts", "bins", "sctp_events", "link_writes", "jobs.sim", "jobs.env"}
 T = 20_000_000
@@ -50,9 +53,11 @@ EVENT = ("k", "src", "node", "peer", "link", "n", "t_us", "dir", "what", "tsn_lo
          "data_bytes", "packet_bytes", "cum_tsn", "gaps", "cwnd_bytes", "flight_bytes", "estimated")
 
 
-def connect():
+def connect(lacking=()):
     """An in-memory DuckDB with the macros, and the fixture of 60 s streams,
-    a seed (node 0) sending to one viewer (node 1) on link 0.
+    a seed (node 0) sending to one viewer (node 1) on link 0; without the
+    tables `lacking`, its macros then made as a reader of a catalog of the
+    others makes them (made).
 
     - The wire (log-off testbed runs and the twin's): from 20 s, three
       packets of DATA 50 µs apart (the twin's four), a SACK alone 20 µs
@@ -131,9 +136,27 @@ def connect():
                                  (k, src, node, other, 0, 10 * n, t, d, what, lo, hi, chunks, 1000 * chunks,
                                   28 + 1016 * chunks, cum, 0 if cum is not None else None, 60_000,
                                   1016 * chunks if d == "out" or cum is not None else None, False))
+    for t in lacking:
+        conn.execute(f"DROP TABLE {t}")
+    if lacking:
+        made(conn)
+        return conn
     for s in catalog.scoring_statements(MACROS, HAVE):
         conn.execute(s)
     return conn
+
+
+def made(conn):
+    """MACROS made over `conn`'s tables as a reader of a catalog of them
+    makes them: catalog.needed's, its fallback for each one needing a table
+    they lack."""
+    have = {}
+    for t, c in conn.execute("SELECT table_name, column_name FROM duckdb_columns()").fetchall():
+        have.setdefault(t, set()).add(c)
+    text = catalog.needed(catalog.scoring_text(catalog.scoring_consts()), have)
+    for m in catalog.MACRO.finditer(text):
+        if m.group(2) in MACROS:
+            conn.execute(text[m.start():catalog.STATEMENT_END.search(text, m.end()).end()])
 
 
 class SctpBench(unittest.TestCase):
@@ -170,7 +193,7 @@ class SctpBench(unittest.TestCase):
     def test_the_macros_load(self):
         names = {r[0] for r in self.q("SELECT DISTINCT function_name FROM duckdb_functions() "
                                        "WHERE function_name LIKE 'sctp_%'")}
-        self.assertEqual(names, {"sctp_stages_of", "sctp_logged_side", "sctp_fit_of"})
+        self.assertEqual(names, {"sctp_stages_of", "sctp_logged_side", "sctp_fit_of", "sctp_events_or_none"})
 
     def test_a_log_off_runs_readings(self):
         got = self.readings("tc1")
@@ -559,6 +582,96 @@ class SctpBench(unittest.TestCase):
             self.q("SELECT * FROM sctp_fit_of([], ?, ?)", TB, TC)
         with self.assertRaisesRegex(duckdb.Error, "sctp_stages_of: a side of no runs"):
             self.q("SELECT * FROM sctp_fit_of(?, ?, [])", TW, TB)
+
+
+# The readings of each table a catalog can lack, and their caveat there.
+WIRE = ("1 one-way delay", G100, G400, "4 drain", "5 drain rate", GAPS)
+LOG = ("7 packets a SACK", "8 SACK delay", "9 resends a drop", "10 resend spacing", "11 flight at sends")
+NO_PACKETS = "this catalog holds no packets (a testbed run's PCAP=1, a sim's STRIMS_SIM_PACKET_LOG)"
+NO_WRITES = "this catalog holds no link_writes (a testbed run's LINK_LOG, a sim's STRIMS_SIM_LINK_LOG)"
+NO_LOG = "this catalog holds no sctp_events (a testbed run's TRACE_SCTP, a sim's STRIMS_SIM_TRACE_SCTP)"
+
+
+def dicts(conn, sql, *args):
+    cur = conn.execute(sql, args)
+    names = [d[0] for d in cur.description]
+    return [dict(zip(names, r)) for r in cur.fetchall()]
+
+
+class Lacking(unittest.TestCase):
+    """The fixture as a catalog without the SCTP log and the writes
+    (sctp_events and link_writes: a testbed tier's, its runs PCAP=1 but
+    neither TRACE_SCTP nor LINK_LOG), and without the wire's packets too,
+    its macros made as a reader of it makes them: the readings of the
+    tables it holds score as over every table, and the others come out
+    unscored, a row of no values whose caveat names the table and its
+    settings; a model side holding none of a table the catalog holds is
+    still refused."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.full = connect()
+        cls.conn = connect(lacking=("sctp_events", "link_writes"))
+        cls.bare = connect(lacking=("sctp_events", "link_writes", "packets"))
+
+    def fit(self, conn):
+        return dicts(conn, "FROM sctp_fit_of(?, ?, ?)", TW, TB, TC)
+
+    def test_the_fit_scores_what_the_catalog_holds(self):
+        full = {r["reading"]: r for r in self.fit(self.full)}
+        named = {"reading", "source", "against", "perturbed", "caveat"}
+        for conn, lacks in ((self.conn, {"2 buffered at write": NO_WRITES, **dict.fromkeys(LOG, NO_LOG)}),
+                            (self.bare, {"2 buffered at write": NO_WRITES, **dict.fromkeys(LOG, NO_LOG),
+                                         **dict.fromkeys(WIRE, NO_PACKETS)})):
+            got = self.fit(conn)
+            # Every reading, in the readings' order.
+            self.assertEqual([r["reading"] for r in got], list(full))
+            for r in got:
+                if r["reading"] not in lacks:
+                    self.assertEqual(r, full[r["reading"]], r["reading"])
+                    continue
+                want = full[r["reading"]]
+                self.assertEqual({c: r[c] for c in named},
+                                 {**{c: want[c] for c in named}, "caveat": lacks[r["reading"]]}, r["reading"])
+                # No values, and no pass.
+                self.assertEqual({c: v for c, v in r.items() if c not in named and v is not None}, {}, r["reading"])
+        # The ruled ones it scores have a pass, and none a caveat.
+        got = {r["reading"]: (r["pass"], r["caveat"]) for r in self.fit(self.conn)}
+        self.assertEqual((got["1 one-way delay"], got[G100], got["6 queue drops"]),
+                         ((False, None), (False, None), (None, None)))
+
+    def test_each_run_has_a_row_of_each_reading_it_cant_score(self):
+        lacks = {"2 buffered at write": ("writes", NO_WRITES), **dict.fromkeys(LOG, ("log", NO_LOG))}
+        for k in ("tc1", "tb1", "tw1"):
+            full = {r["reading"]: r for r in dicts(self.full, "FROM sctp_stages_of([{'k': ?}])", k)}
+            got = {r["reading"]: r for r in dicts(self.conn, "FROM sctp_stages_of([{'k': ?}])", k)}
+            self.assertEqual(set(got), set(full) | set(lacks), k)
+            for reading, r in got.items():
+                if reading not in lacks:
+                    self.assertEqual(r, full[reading], (k, reading))
+                    continue
+                self.assertEqual((r["k"], r["source"], r["caveat"]), (k, *lacks[reading]), reading)
+                self.assertEqual((r["n"], r["p50"], r["p90"], r["dist"]), (None,) * 4, reading)
+        # The trains at gaps of a call's own, scored or not.
+        sql = ("SELECT reading, caveat FROM sctp_stages_of([{'k': 'tc1'}], short_gap_us := 300, long_gap_us := 300) "
+               "WHERE reading LIKE '3 %'")
+        self.assertEqual(self.conn.execute(sql).fetchall(), [("3 packets a send opportunity, 300 µs", None)])
+        self.assertEqual(self.bare.execute(sql).fetchall(), [("3 packets a send opportunity, 300 µs", NO_PACKETS)])
+
+    def test_a_model_side_without_a_table_the_catalog_holds_is_refused(self):
+        import duckdb
+
+        self.conn.execute("BEGIN")
+        try:
+            self.conn.execute("DELETE FROM packets WHERE k LIKE 'tw%'")
+            with self.assertRaisesRegex(duckdb.Error, r"sctp_fit_of: a_side's runs tw1, tw2 hold no packets rows at "
+                                                      r"node 0 \(STRIMS_SIM_PACKET_LOG\), which 1 one-way delay, .*, "
+                                                      r"12 send gaps read: their model side is missing, not failed$"):
+                self.fit(self.conn)
+        finally:
+            self.conn.execute("ROLLBACK")
+        with self.assertRaisesRegex(duckdb.Error, "sctp_stages_of: a side of no runs"):
+            self.bare.execute("FROM sctp_fit_of([], ?, ?)", (TB, TC)).fetchall()
 
 
 if __name__ == "__main__":

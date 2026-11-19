@@ -173,6 +173,13 @@ simlab.verdict's derive pool:
                their defaults or params, an unknown one refused; describe's
                every topic and name (event kinds too), none naming the
                Ask panel's tools
+  Needed       a macro needing what a catalog lacks: one stub, ending
+               where its statement does; a fallback, `-- else lacking:`'s
+               row per need lacking and `-- else none:`'s columns, as
+               needed and scoring_statements make it (the bench's log
+               gates over packets alone), and a macro without one left
+               out of scoring_statements, which takes a statement whose
+               string holds a `;` whole
 
   python3 hack/simlab/tests/test_catalog.py
 """
@@ -2787,6 +2794,63 @@ class Needed(unittest.TestCase):
         self.assertIn("m reads t, which this catalog lacks", got)
         self.assertNotIn("a; b", got)
         self.assertIn("CREATE OR REPLACE MACRO n(x) AS x + 1;", got)
+
+    def test_a_fallback_names_the_needs_the_catalog_lacks(self):
+        # `-- else lacking:` gives a row naming each need the catalog
+        # lacks, in the needs' order (a column's too), and the macro's own
+        # body where it lacks none; `-- else none:` its columns and no rows.
+        import duckdb
+
+        text = ("-- needs: t u v.c\n-- else lacking: tbl\n"
+                "CREATE OR REPLACE MACRO m() AS TABLE SELECT 'none' AS tbl WHERE false;\n\n"
+                "-- needs: t\n-- else none: k VARCHAR\n-- else none: n BIGINT\n"
+                "CREATE OR REPLACE MACRO e() AS TABLE FROM t;\n")
+        conn = duckdb.connect()
+        for have, want in (({"u": set()}, ["t", "v.c"]), ({"t": set(), "u": set(), "v": set()}, ["v.c"]),
+                           ({"t": set(), "u": set(), "v": {"c"}}, [])):
+            conn.execute("CREATE OR REPLACE TABLE t (k VARCHAR, n BIGINT)" if "t" in have else "DROP TABLE IF EXISTS t")
+            conn.execute(catalog.needed(text, have))
+            self.assertEqual([r[0] for r in conn.execute("FROM m()").fetchall()], want, have)
+            cur = conn.execute("FROM e()")
+            self.assertEqual(([d[0] for d in cur.description], cur.fetchall()), (["k", "n"], []), have)
+
+    def test_scoring_statements_make_a_fallback_where_have_lacks_a_need(self):
+        # The bench's gates over a database of packets alone: bench_lacking
+        # names the other log tables, packets_or_none reads packets,
+        # sctp_events_or_none has its columns and no rows, and a macro
+        # without a fallback that needs what it lacks is left out.
+        import duckdb
+
+        conn = duckdb.connect()
+        conn.execute("CREATE TABLE packets AS SELECT 'j' AS k, 7 AS n")
+        names = {"bench_lacking", "bench_logs", "packets_or_none", "sctp_events_or_none", "write_stages_of"}
+        made = catalog.scoring_statements(names, {"packets"})
+        self.assertEqual([catalog.MACRO.match(s).group(2) for s in made],
+                         ["bench_lacking", "bench_logs", "packets_or_none", "sctp_events_or_none"])
+        for s in made:
+            conn.execute(s)
+        self.assertEqual([r[0] for r in conn.execute("FROM bench_lacking()").fetchall()],
+                         ["seed_sends", "link_writes", "link_reads", "link_samples", "sctp_events"])
+        self.assertEqual(conn.execute("SELECT tbl FROM bench_logs() WHERE held").fetchall(), [("packets",)])
+        self.assertEqual(conn.execute("SELECT k, n FROM packets_or_none()").fetchall(), [("j", 7)])
+        cur = conn.execute("FROM sctp_events_or_none()")
+        self.assertEqual((cur.fetchall(), "cum_tsn" in [d[0] for d in cur.description]), ([], True))
+        # With every table, no fallback, and bench_lacking names none.
+        made = catalog.scoring_statements({"bench_lacking"}, {"packets", "seed_sends", "link_writes", "link_reads",
+                                                              "link_samples", "sctp_events"})
+        conn.execute(made[0])
+        self.assertEqual(conn.execute("FROM bench_lacking()").fetchall(), [])
+
+    def test_scoring_statements_take_a_statement_whole(self):
+        # A `;` in a string ends no statement there either.
+        d = Path(tempfile.mkdtemp(prefix="simlab-statement-end-"))
+        self.addCleanup(shutil.rmtree, d)
+        planted = d / "scoring.sql"
+        planted.write_text(catalog.SCORING.read_text() + "\n-- needs: rows\nCREATE OR REPLACE MACRO m(x) AS "
+                           "x || '; ' || x;\n")
+        with mock.patch.object(catalog, "SCORING", planted):
+            self.assertEqual(catalog.scoring_statements({"m"}, {"rows"}),
+                             ["CREATE OR REPLACE MACRO m(x) AS x || '; ' || x;"])
 
 
 if __name__ == "__main__":

@@ -3146,6 +3146,9 @@ STATEMENT_END = re.compile(r";[ \t]*$", re.M)
 # A table macro's columns where its needs are missing: no rows of them,
 # its `-- else none:` lines' columns in order.
 ELSE_NONE = re.compile(r"else none: (.+)")
+# A table macro's one column where its needs are missing: a row naming
+# each need missing (`-- else lacking: name`), a VARCHAR.
+ELSE_LACKING = re.compile(r"else lacking: ([a-z_][a-z0-9_]*)\s*$")
 # The main tables an index makes by its own SQL whatever the raw tables
 # hold (JOBS_SQL's jobs, experiment_jobs), with the columns that SQL gives
 # them: a need of one holds where `have` doesn't list it, as an index's
@@ -3322,9 +3325,7 @@ def needed(text, have):
     or column that `have` ({table: its columns}) lacks made one that fails
     saying so when called, so the others still score over a catalog its
     index made with older code, or a catalog without that table; or, for a
-    table macro whose comment has `-- else none:` lines of its columns
-    (`name TYPE, ...`, the lines' in order), one of those columns and no
-    rows, a fallback its callers read as giving nothing. `text` as it is
+    table macro with a fallback (fallback's), its fallback. `text` as it is
     for `have` None (every one there)."""
     if have is None:
         return text
@@ -3343,16 +3344,33 @@ def needed(text, have):
             continue
         end = STATEMENT_END.search(text, m.end()).start()
         why = q(f"{m.group(2)} reads {', '.join(missing)}, which this catalog lacks: index it with this checkout")
-        table = " AS TABLE" in text[m.end():m.end() + 20]
-        none = ", ".join(x.group(1) for line in comment_above(text, m.start()) if (x := ELSE_NONE.match(line)))
-        if table and none:
-            cols = [c.strip().split(None, 1) for c in none.split(",")]
-            body = "TABLE SELECT " + ", ".join(f"NULL::{ty} AS {name}" for name, ty in cols) + " WHERE false"
-        else:
-            body = f"TABLE SELECT error({why}) AS error" if table else f"error({why})"
+        body = fallback(text, m, missing) or (
+            f"TABLE SELECT error({why}) AS error" if " AS TABLE" in text[m.end():m.end() + 20] else f"error({why})")
         out.append(f"{text[at:m.start()]}CREATE OR REPLACE MACRO {m.group(2)}{m.group(3) or '()'} AS {body}")
         at = end
     return "".join(out) + text[at:]
+
+
+def fallback(text, m, missing):
+    """The body of the table macro made at `m` (MACRO's match in `text`)
+    over a catalog lacking its needs `missing`, where it has a fallback:
+    with `-- else none:` lines of its columns (`name TYPE, ...`, the lines'
+    in order), those columns and no rows, which its callers read as giving
+    nothing; with an `-- else lacking: name` line, a row naming each of
+    `missing`, in order, in that VARCHAR column, which its callers read as
+    what the catalog lacks. None for a macro with neither, or a scalar
+    one."""
+    if " AS TABLE" not in text[m.end():m.end() + 20]:
+        return None
+    above = comment_above(text, m.start())
+    lacking = [x.group(1) for line in above if (x := ELSE_LACKING.match(line))]
+    if lacking:
+        return f"TABLE SELECT unnest([{', '.join(q(n) for n in missing)}]::VARCHAR[]) AS {lacking[0]}"
+    none = ", ".join(x.group(1) for line in above if (x := ELSE_NONE.match(line)))
+    if not none:
+        return None
+    cols = [c.strip().split(None, 1) for c in none.split(",")]
+    return "TABLE SELECT " + ", ".join(f"NULL::{ty} AS {name}" for name, ty in cols) + " WHERE false"
 
 
 def scoring_consts(suite=None):
@@ -3515,14 +3533,21 @@ SELECT k, src, metric, value FROM (UNPIVOT (
 def scoring_statements(names, have):
     """scoring.sql's statements making the objects `names`, their @{...}
     constants filled in, each one whose `-- needs:` tables are all in
-    `have` (a set of table names): the macros simlab.query's views over
-    the cache take from it, so a definition both read is one."""
+    `have` (a set of table names), and of a table macro with a fallback
+    (fallback's) its fallback where they aren't, as needed makes it: the
+    macros simlab.query's views over the cache take from it, so a
+    definition both read is one."""
     text = scoring_text(scoring_consts())
     out = []
     for m in MACRO.finditer(text):
-        needs = {n for line in comment_above(text, m.start()) if (x := NEEDS.match(line)) for n in x.group(1).split()}
-        if m.group(2) in names and needs <= set(have):
-            out.append(text[m.start():text.find(";", m.end()) + 1])
+        needs = [n for line in comment_above(text, m.start()) if (x := NEEDS.match(line)) for n in x.group(1).split()]
+        missing = [n for n in needs if n not in set(have)]
+        if m.group(2) not in names:
+            continue
+        if not missing:
+            out.append(text[m.start():STATEMENT_END.search(text, m.end()).start() + 1])
+        elif m.group(1) == "MACRO" and (body := fallback(text, m, missing)):
+            out.append(f"CREATE OR REPLACE MACRO {m.group(2)}{m.group(3) or '()'} AS {body};")
     return out
 
 
@@ -3588,7 +3613,8 @@ def scoring_docs():
         header.append(line[2:].strip())
     for m in MACRO.finditer(text):
         kind, name, params = m.groups()
-        comment = [c for c in comment_above(text, m.start()) if not NEEDS.match(c) and not ELSE_NONE.match(c)]
+        comment = [c for c in comment_above(text, m.start())
+                   if not NEEDS.match(c) and not ELSE_NONE.match(c) and not ELSE_LACKING.match(c)]
         body = text[m.end():text.find(";", m.end())]
         kind = ("table macro" if " AS TABLE" in body[:200] else "macro") if kind == "MACRO" else kind.lower()
         desc = " ".join(c for c in comment if c) or None

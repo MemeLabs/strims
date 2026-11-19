@@ -37,7 +37,11 @@ verdict's phases from the runs' scenario events).
 4. **A scoring macro** in `hack/simlab/sql/scoring.sql`:
    - a `-- needs:` line naming the tables or columns it reads that an
      older catalog may lack (`catalog.needed` makes it fail, saying so,
-     where they're missing);
+     where they're missing); a table macro's `-- else none:` or `-- else
+     lacking:` line gives it a fallback there instead (`catalog.fallback`),
+     so that a macro reading a table only some runs log (a log knob's) can
+     read it through a gate (scoring.sql's `packets_or_none`) and score
+     what the catalog holds;
    - a comment right above each `CREATE`, which `catalog.scoring_docs`
      makes its description;
    - `@{name}` for a constant of suite.py's (`catalog.scoring_consts`),

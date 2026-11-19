@@ -12,7 +12,8 @@
 -- code may lack: a session's own objects over such a catalog make it one
 -- that fails saying so (catalog.needed). A table macro read as a fallback
 -- gives instead, with `-- else none:` lines of its columns, those columns
--- and no rows.
+-- and no rows, and with an `-- else lacking:` line of a column, a row in
+-- it naming each need the catalog lacks.
 --
 -- A side is one arm's runs, a list of {'cell', 'seed', 'k', 'src'}
 -- structs: the job k is that arm's run of the cell at the seed, and src
@@ -2192,6 +2193,71 @@ CREATE OR REPLACE MACRO alloc_step_fit_of(a_side, b_side, lo_s := 10, hi_s := -1
            coalesce(abs(diff) <= greatest(bound, 2 * se), false) AS pass
     FROM f ORDER BY kind;
 
+-- The bench's log tables (bench_logs') this catalog lacks, a row each
+-- (tbl), none where it holds them all (catalog.needed's fallback, a row
+-- naming each of the needs below the catalog lacks).
+-- needs: packets seed_sends link_writes link_reads link_samples sctp_events
+-- else lacking: tbl
+CREATE OR REPLACE MACRO bench_lacking() AS TABLE SELECT NULL::VARCHAR AS tbl WHERE false;
+
+-- The log tables the bench macros read (write_stages_of's, sctp_stages_of's
+-- and their fits'), which a run holds only with its log on, a row each:
+-- tbl, knob (the sim's setting that keeps it), setting (run.sh's, a testbed
+-- run's), held (this catalog holds the table: bench_lacking doesn't name
+-- it) and kept_by, the two settings as a caveat names them. A reading of
+-- a table the catalog lacks has no run's log to read on any side, rather
+-- than a side holding none of it, and its caveat says so: 'this catalog
+-- holds no ' and those of its tables, each kept_by's joined by ' or ' and
+-- followed by it in brackets, joined by ' or '.
+CREATE OR REPLACE MACRO bench_logs() AS TABLE
+    SELECT t.tbl, t.knob, t.setting, t.tbl NOT IN (SELECT tbl FROM bench_lacking()) AS held,
+           'a testbed run''s ' || t.setting || ', a sim''s ' || t.knob AS kept_by
+    FROM (VALUES ('packets', 'STRIMS_SIM_PACKET_LOG', 'PCAP=1'), ('seed_sends', 'STRIMS_SIM_SPEC', 'SPEC=1'),
+                 ('link_writes', 'STRIMS_SIM_LINK_LOG', 'LINK_LOG'), ('link_reads', 'STRIMS_SIM_LINK_LOG', 'LINK_LOG'),
+                 ('link_samples', 'STRIMS_SIM_LINK_LOG', 'LINK_LOG'),
+                 ('sctp_events', 'STRIMS_SIM_TRACE_SCTP', 'TRACE_SCTP')) AS t(tbl, knob, setting);
+
+-- The bench macros' packets: the table's rows, or in a catalog without it
+-- none, of the columns they read (bench_logs).
+-- needs: packets
+-- else none: k VARCHAR, src VARCHAR, node BIGINT, n BIGINT, peer BIGINT, t_us BIGINT, arrived_us BIGINT
+-- else none: lost VARCHAR, kind VARCHAR, ip_bytes BIGINT
+CREATE OR REPLACE MACRO packets_or_none() AS TABLE FROM packets;
+
+-- The bench macros' seed_sends: the table's rows, or in a catalog without
+-- it none, of the columns they read (bench_logs).
+-- needs: seed_sends
+-- else none: k VARCHAR, src VARCHAR, node BIGINT, how VARCHAR, fate VARCHAR, t_ms BIGINT, queued_ms BIGINT
+CREATE OR REPLACE MACRO seed_sends_or_none() AS TABLE FROM seed_sends;
+
+-- The bench macros' link_writes: the table's rows, or in a catalog without
+-- it none, of the columns they read (bench_logs).
+-- needs: link_writes
+-- else none: k VARCHAR, src VARCHAR, node BIGINT, peer BIGINT, link BIGINT, off BIGINT, bytes BIGINT
+-- else none: t_us BIGINT, queued_us BIGINT, done_us BIGINT, unsent_before BIGINT, wait VARCHAR, kind VARCHAR
+CREATE OR REPLACE MACRO link_writes_or_none() AS TABLE FROM link_writes;
+
+-- The bench macros' link_reads: the table's rows, or in a catalog without
+-- it none, of the columns they read (bench_logs).
+-- needs: link_reads
+-- else none: k VARCHAR, src VARCHAR, node BIGINT, peer BIGINT, link BIGINT, off BIGINT, bytes BIGINT
+-- else none: t_us BIGINT, taken_us BIGINT
+CREATE OR REPLACE MACRO link_reads_or_none() AS TABLE FROM link_reads;
+
+-- The bench macros' link_samples: the table's rows, or in a catalog
+-- without it none, of the columns they read (bench_logs).
+-- needs: link_samples
+-- else none: k VARCHAR, src VARCHAR, node BIGINT, t_us BIGINT, cause VARCHAR, buffered_bytes BIGINT
+CREATE OR REPLACE MACRO link_samples_or_none() AS TABLE FROM link_samples;
+
+-- The bench macros' sctp_events: the table's rows, or in a catalog without
+-- it none, of the columns they read (bench_logs).
+-- needs: sctp_events
+-- else none: k VARCHAR, src VARCHAR, node BIGINT, peer BIGINT, link BIGINT, n BIGINT, t_us BIGINT
+-- else none: dir VARCHAR, what VARCHAR, chunks BIGINT, tsn_lo BIGINT, tsn_hi BIGINT, flight_bytes BIGINT
+-- else none: cum_tsn BIGINT
+CREATE OR REPLACE MACRO sctp_events_or_none() AS TABLE FROM sctp_events;
+
 -- The write path bench's stages (C4) of a side's runs (`side`, as
 -- side_window_of takes it: testbed_side's, or a twin's jobs) at node
 -- `at_node` (the seed by default), each run over its window
@@ -2225,31 +2291,37 @@ CREATE OR REPLACE MACRO alloc_step_fit_of(a_side, b_side, lo_s := 10, hi_s := -1
 --   `7c empty: arrival to read`;
 -- - `8 read to take`: the peer's read's t_us to its node task's take of
 --   it (taken_us).
--- needs: link_writes link_reads link_samples seed_sends packets hosts jobs.sim jobs.env
+-- A stage of a table this catalog lacks (bench_logs': seed_sends, without
+-- SPEC=1 runs or STRIMS_SIM_SPEC twins; link_*, LINK_LOG; packets for
+-- 7a-c, PCAP=1) has a row a run of no values (n, p50 and p90 NULL) whose
+-- `caveat` names the tables and their settings; the others' caveat is
+-- NULL, and they score from the tables the catalog holds.
+-- needs: hosts jobs.sim jobs.env
 CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := -1) AS TABLE
     WITH j AS (
         SELECT DISTINCT w.k, w.src, w.lo * 1000000 AS lo_us, w.hi * 1000000 AS hi_us, b.sim
         FROM side_window_of(side, 'write_stages_of', lo_s := lo_s, hi_s := hi_s) w JOIN jobs b USING (k, src)),
     w AS (
-        SELECT x.* FROM link_writes x JOIN j USING (k, src)
+        SELECT x.* FROM link_writes_or_none() x JOIN j USING (k, src)
         WHERE x.node = at_node AND x.t_us >= j.lo_us AND x.t_us < j.hi_us),
-    r AS (SELECT x.* FROM link_reads x JOIN j USING (k, src) WHERE x.peer = at_node),
+    r AS (SELECT x.* FROM link_reads_or_none() x JOIN j USING (k, src) WHERE x.peer = at_node),
     arr AS (
         SELECT w.k, w.peer, w.link, w.off, w.done_us, w.unsent_before, w.kind, r.t_us AS read_us, r.taken_us
         FROM w ASOF JOIN r ON w.k = r.k AND r.node = w.peer AND r.link = w.link
             AND r.off + r.bytes >= w.off + w.bytes),
     p AS (
         SELECT x.k, (x.t_ms - x.queued_ms)::DOUBLE AS v
-        FROM seed_sends x JOIN j USING (k, src)
+        FROM seed_sends_or_none() x JOIN j USING (k, src)
         WHERE x.node = at_node AND x.how = 'push' AND x.fate = 'written'
           AND x.t_ms * 1000 >= j.lo_us AND x.t_ms * 1000 < j.hi_us),
     lw AS (
-        SELECT x.k, x.buffered_bytes FROM link_samples x JOIN j USING (k, src)
+        SELECT x.k, x.buffered_bytes FROM link_samples_or_none() x JOIN j USING (k, src)
         WHERE x.node = at_node AND x.cause = 'low' AND x.t_us >= j.lo_us AND x.t_us < j.hi_us),
     pk AS (
         SELECT x.k, x.peer, x.t_us - CASE WHEN j.sim = 'testbed' THEN coalesce(h.delay_us, 0) ELSE 0 END AS t_us,
                x.arrived_us
-        FROM packets x JOIN j USING (k, src) LEFT JOIN hosts h ON h.k = x.k AND h.src = x.src AND h.node = x.node
+        FROM packets_or_none() x JOIN j USING (k, src)
+        LEFT JOIN hosts h ON h.k = x.k AND h.src = x.src AND h.node = x.node
         WHERE x.node = at_node AND x.kind IN ('data', 'data_sack') AND x.lost IS NULL
         QUALIFY row_number() OVER (PARTITION BY x.k, x.peer, x.t_us ORDER BY x.n) = 1),
     fp AS (
@@ -2269,9 +2341,32 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
             WHERE arrived_us IS NOT NULL
         UNION ALL SELECT k, '7c empty: arrival to read', (read_us - arrived_us) / 1000.0 FROM fp
             WHERE arrived_us IS NOT NULL
-        UNION ALL SELECT k, '8 read to take', (taken_us - read_us) / 1000.0 FROM arr WHERE taken_us IS NOT NULL)
-    SELECT st.k, j.sim, st.stage, count(*) AS n, sketch_quantile(v, 50) AS p50, sketch_quantile(v, 90) AS p90
-    FROM st JOIN (SELECT DISTINCT k, sim FROM j) j USING (k) GROUP BY ALL;
+        UNION ALL SELECT k, '8 read to take', (taken_us - read_us) / 1000.0 FROM arr WHERE taken_us IS NOT NULL),
+    -- Each stage with the tables it reads, and the stages of a table the
+    -- catalog lacks, with their caveats.
+    sd AS (
+        SELECT t.stage, u.tbl
+        FROM (VALUES ('1 push: runner', ['seed_sends']), ('2 driver queue', ['link_writes']),
+                     ('3 held: channel', ['link_writes']), ('4 held: host', ['link_writes']),
+                     ('5 notsent', ['link_writes']), ('5 unheld', ['link_writes']),
+                     ('6 low reading', ['link_samples']), ('7 done to read', ['link_writes', 'link_reads']),
+                     ('7a empty: to first packet', ['link_writes', 'link_reads', 'packets']),
+                     ('7b empty: packet to arrival', ['link_writes', 'link_reads', 'packets']),
+                     ('7c empty: arrival to read', ['link_writes', 'link_reads', 'packets']),
+                     ('8 read to take', ['link_writes', 'link_reads'])) AS t(stage, tbls),
+             unnest(t.tbls) AS u(tbl)),
+    gone AS (
+        SELECT stage, 'this catalog holds no ' || string_agg(tbls || ' (' || kept_by || ')', ' or ' ORDER BY tbls)
+                   AS caveat
+        FROM (SELECT sd.stage, l.kept_by, string_agg(l.tbl, ' or ' ORDER BY l.tbl) AS tbls
+              FROM sd JOIN bench_logs() l USING (tbl) WHERE NOT l.held GROUP BY sd.stage, l.kept_by)
+        GROUP BY stage),
+    jk AS (SELECT DISTINCT k, sim FROM j)
+    SELECT st.k, jk.sim, st.stage, count(*) AS n, sketch_quantile(v, 50) AS p50, sketch_quantile(v, 90) AS p90,
+           NULL::VARCHAR AS caveat
+    FROM st JOIN jk USING (k) GROUP BY st.k, jk.sim, st.stage
+    UNION ALL
+    SELECT jk.k, jk.sim, gone.stage, NULL, NULL, NULL, gone.caveat FROM jk, gone;
 
 -- The write path bench's pass (C4): a model's stages (`a_side`, a twin's
 -- runs) against the testbed's (`b_side`), write_stages_of's over the same
@@ -2293,19 +2388,27 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
 -- fails the query, naming the table, the runs, the stages and the knob
 -- (run.sh's setting where the runs are a testbed's), rather than score a
 -- model side that is missing as a fail; a side of runs with the log and
--- without it reads the former's.
--- needs: link_writes link_reads link_samples seed_sends packets hosts jobs.sim jobs.env
+-- without it reads the former's. A stage of a table this catalog lacks
+-- altogether (write_stages_of's caveat: no run's log is there, on either
+-- side) has a row of no values and no pass (pass NULL), its `caveat`
+-- naming the tables and their settings; the others score from the tables
+-- the catalog holds, their caveat NULL.
+-- needs: hosts jobs.sim jobs.env
 CREATE OR REPLACE MACRO write_fit_of(a_side, b_side, at_node := 0, lo_s := 20, hi_s := -1, floor_ms := 0.2,
                                      floor_bytes := 0) AS TABLE
-    WITH a AS (
+    WITH sa AS MATERIALIZED (FROM write_stages_of(a_side, at_node := at_node, lo_s := lo_s, hi_s := hi_s)),
+    a AS (
         SELECT stage, count(*) AS runs, quantile_cont(p50, 0.5) AS p50, quantile_cont(p90, 0.5) AS p90,
                quantile_cont(n, 0.5) AS n
-        FROM write_stages_of(a_side, at_node := at_node, lo_s := lo_s, hi_s := hi_s) GROUP BY stage),
+        FROM sa WHERE caveat IS NULL GROUP BY stage),
     b AS (
         SELECT stage, count(*) AS runs, list(p50 ORDER BY k) AS p50s, list(p90 ORDER BY k) AS p90s,
                list(n ORDER BY k) AS ns, min(p50) AS lo50, max(p50) AS hi50, min(p90) AS lo90, max(p90) AS hi90,
                min(n) AS lo_n, max(n) AS hi_n
-        FROM write_stages_of(b_side, at_node := at_node, lo_s := lo_s, hi_s := hi_s) GROUP BY stage),
+        FROM write_stages_of(b_side, at_node := at_node, lo_s := lo_s, hi_s := hi_s) WHERE caveat IS NULL
+        GROUP BY stage),
+    -- The stages of a table the catalog lacks, which neither side scores.
+    cav AS (SELECT stage, any_value(caveat) AS caveat FROM sa WHERE caveat IS NOT NULL GROUP BY stage),
     f AS (
         SELECT coalesce(a.stage, b.stage) AS stage, a.runs AS a_runs, b.runs AS b_runs,
                b.p50s AS b_p50s, a.p50 AS a_p50, b.p90s AS b_p90s, a.p90 AS a_p90, b.ns AS b_ns, a.n AS a_n,
@@ -2327,25 +2430,21 @@ CREATE OR REPLACE MACRO write_fit_of(a_side, b_side, at_node := 0, lo_s := 20, h
         FROM twin_window_of(from_json(to_json(a_side), '[{"k": "VARCHAR"}]')) w
         JOIN jobs j ON j.k = w.k AND j.src = w.src),
     held AS (
-        SELECT 'seed_sends' AS tbl FROM seed_sends x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        SELECT 'seed_sends' AS tbl FROM seed_sends_or_none() x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
         WHERE x.node = at_node
-        UNION SELECT 'link_writes' FROM link_writes x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        UNION SELECT 'link_writes' FROM link_writes_or_none() x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
         WHERE x.node = at_node
-        UNION SELECT 'link_reads' FROM link_reads x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        UNION SELECT 'link_reads' FROM link_reads_or_none() x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
         WHERE x.peer = at_node
-        UNION SELECT 'link_samples' FROM link_samples x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        UNION SELECT 'link_samples' FROM link_samples_or_none() x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
         WHERE x.node = at_node
-        UNION SELECT 'packets' FROM packets x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        UNION SELECT 'packets' FROM packets_or_none() x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
         WHERE x.node = at_node),
     lack AS (
         SELECT t.tbl, string_agg(aw.k, ', ' ORDER BY aw.k) AS runs,
                CASE WHEN bool_and(aw.sim <> 'testbed') THEN t.knob WHEN bool_and(aw.sim = 'testbed') THEN t.setting
                     ELSE t.knob || ' or ' || t.setting END AS how
-        FROM aw CROSS JOIN (VALUES ('seed_sends', 'STRIMS_SIM_SPEC', 'SPEC=1'),
-                                   ('link_writes', 'STRIMS_SIM_LINK_LOG', 'LINK_LOG'),
-                                   ('link_reads', 'STRIMS_SIM_LINK_LOG', 'LINK_LOG'),
-                                   ('link_samples', 'STRIMS_SIM_LINK_LOG', 'LINK_LOG'),
-                                   ('packets', 'STRIMS_SIM_PACKET_LOG', 'PCAP=1')) AS t(tbl, knob, setting)
+        FROM aw CROSS JOIN bench_logs() t
         WHERE t.tbl NOT IN (SELECT tbl FROM held)
         GROUP BY t.tbl, t.knob, t.setting),
     -- Each such table with the stages of it the testbed's runs have: those
@@ -2362,11 +2461,13 @@ CREATE OR REPLACE MACRO write_fit_of(a_side, b_side, at_node := 0, lo_s := 20, h
         FROM lack l JOIN (SELECT tbl, string_agg(stage, ', ' ORDER BY stage) AS stages FROM need GROUP BY tbl) n
             USING (tbl))
     SELECT stage, a_runs, b_runs, b_p50s, a_p50, pass50, b_p90s, a_p90, pass90, b_ns, a_n, pass_n,
-           coalesce(pass50 AND pass90 AND (pass_n OR NOT counted), false) AS pass
+           coalesce(pass50 AND pass90 AND (pass_n OR NOT counted), false) AS pass, NULL::VARCHAR AS caveat
     FROM g, missing
     WHERE CASE WHEN missing.what IS NULL THEN true
                ELSE error('write_fit_of: a_side''s runs ' || missing.what
                           || ': their model side is missing, not failed') END
+    UNION ALL
+    SELECT stage, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, caveat FROM cav
     ORDER BY stage;
 
 -- The SCTP bench's readings (C3) of a side's runs (`side`, as
@@ -2420,7 +2521,13 @@ CREATE OR REPLACE MACRO write_fit_of(a_side, b_side, at_node := 0, lo_s := 20, h
 -- at 20 Mbit/s), and puts a full packet's time at 20 Mbit/s and at 10
 -- inside a bin (400-800 µs, 800-1600), not at an edge; `idle_us`, 20 ms,
 -- a tenth of a burst's 250 ms period.
--- needs: packets hosts bins sctp_events link_writes jobs.sim jobs.env
+-- A reading of a table this catalog lacks (bench_logs': the wire's
+-- packets, without PCAP=1 runs or STRIMS_SIM_PACKET_LOG twins; the writes'
+-- link_writes, LINK_LOG; the log's sctp_events, TRACE_SCTP) has a row a
+-- run of no values (n, p50, p90 and dist NULL) whose `caveat` names the
+-- table and its settings; the others' caveat is NULL, and they score from
+-- the tables the catalog holds.
+-- needs: hosts bins jobs.sim jobs.env
 CREATE OR REPLACE MACRO sctp_stages_of(side, at_node := 0, lo_s := 20, hi_s := -1, short_gap_us := 100,
                                        long_gap_us := 400, gap_floor_us := 50, idle_us := 20000) AS TABLE
     WITH j AS (
@@ -2429,7 +2536,8 @@ CREATE OR REPLACE MACRO sctp_stages_of(side, at_node := 0, lo_s := 20, hi_s := -
     pk AS (
         SELECT x.k, x.peer, x.n, x.t_us, x.arrived_us, x.lost, x.ip_bytes, x.kind IN ('data', 'data_sack') AS dat,
                x.t_us - CASE WHEN j.sim = 'testbed' THEN coalesce(h.delay_us, 0) ELSE 0 END AS offered_us
-        FROM packets x JOIN j USING (k, src) LEFT JOIN hosts h ON h.k = x.k AND h.src = x.src AND h.node = x.node
+        FROM packets_or_none() x JOIN j USING (k, src)
+        LEFT JOIN hosts h ON h.k = x.k AND h.src = x.src AND h.node = x.node
         WHERE x.node = at_node AND x.peer IS NOT NULL AND x.t_us >= j.lo_us AND x.t_us < j.hi_us),
     owd AS (
         SELECT k, (arrived_us - offered_us) / 1000.0 AS v FROM pk WHERE dat AND lost IS NULL AND arrived_us IS NOT NULL),
@@ -2459,11 +2567,11 @@ CREATE OR REPLACE MACRO sctp_stages_of(side, at_node := 0, lo_s := 20, hi_s := -
         GROUP BY j.k),
     buf AS (
         SELECT w.k, w.unsent_before::DOUBLE AS v
-        FROM link_writes w JOIN j USING (k, src)
+        FROM link_writes_or_none() w JOIN j USING (k, src)
         WHERE w.node = at_node AND w.kind = 'webrtc' AND coalesce(w.wait, 'none') = 'none'
           AND w.unsent_before IS NOT NULL AND w.t_us >= j.lo_us AND w.t_us < j.hi_us),
     e AS (
-        SELECT x.*, j.lo_us, j.hi_us FROM sctp_events x JOIN j USING (k, src)
+        SELECT x.*, j.lo_us, j.hi_us FROM sctp_events_or_none() x JOIN j USING (k, src)
         WHERE x.node = at_node OR x.peer = at_node),
     theirs AS (
         SELECT k, node, link, n, t_us, dir = 'in' AND chunks > 0 AS got, dir = 'out' AND cum_tsn IS NOT NULL AS ack
@@ -2527,10 +2635,27 @@ CREATE OR REPLACE MACRO sctp_stages_of(side, at_node := 0, lo_s := 20, hi_s := -
     d AS (
         SELECT k, reading, list({'v': v, 'share': share} ORDER BY v) AS dist
         FROM (SELECT k, reading, v, c / sum(c) OVER (PARTITION BY k, reading) AS share FROM h)
-        GROUP BY k, reading)
-    SELECT q.k, j.sim, q.reading, q.source, q.n, q.p50, q.p90, d.dist
-    FROM q JOIN (SELECT DISTINCT k, sim FROM j) j USING (k) LEFT JOIN d USING (k, reading)
-    ORDER BY q.k, q.reading;
+        GROUP BY k, reading),
+    -- Each reading of a log table (bench_logs'; the bins' drops read
+    -- none), with its source and that table, and those whose table the
+    -- catalog lacks, with their caveats.
+    rd AS (
+        SELECT * FROM (VALUES ('1 one-way delay', 'wire', 'packets'), ('2 buffered at write', 'writes', 'link_writes'),
+                              ('4 drain', 'wire', 'packets'), ('5 drain rate', 'wire', 'packets'),
+                              ('7 packets a SACK', 'log', 'sctp_events'), ('8 SACK delay', 'log', 'sctp_events'),
+                              ('9 resends a drop', 'log', 'sctp_events'), ('10 resend spacing', 'log', 'sctp_events'),
+                              ('11 flight at sends', 'log', 'sctp_events'), ('12 send gaps', 'wire', 'packets'))
+            AS t(reading, source, tbl)
+        UNION ALL SELECT '3 packets a send opportunity, ' || gap::VARCHAR || ' µs', 'wire', 'packets' FROM gp),
+    gone AS (
+        SELECT rd.reading, rd.source, 'this catalog holds no ' || rd.tbl || ' (' || l.kept_by || ')' AS caveat
+        FROM rd JOIN bench_logs() l USING (tbl) WHERE NOT l.held),
+    jk AS (SELECT DISTINCT k, sim FROM j)
+    SELECT q.k, jk.sim, q.reading, q.source, q.n, q.p50, q.p90, d.dist, NULL::VARCHAR AS caveat
+    FROM q JOIN jk USING (k) LEFT JOIN d USING (k, reading)
+    UNION ALL
+    SELECT jk.k, jk.sim, gone.reading, gone.source, NULL, NULL, NULL, NULL, gone.caveat FROM jk, gone
+    ORDER BY k, reading;
 
 -- A side for sctp_fit_of (`side`, as side_window_of takes it) whose
 -- testbed runs all have the SCTP log on (`logged`: jobs.env's
@@ -2606,21 +2731,32 @@ CREATE OR REPLACE MACRO sctp_logged_side(side, who, logged) AS (
 -- alone: the sim's SCTP log moves nothing, so its wire and writes are the
 -- log-off cell's twin's; a side of both twins (one source's, the SCTP
 -- matrices' log axis twinned together) reads the log from the logged
--- twin's runs and weighs each wire reading twice.
--- needs: packets hosts bins sctp_events link_writes jobs.sim jobs.env
+-- twin's runs and weighs each wire reading twice. A reading of a table
+-- this catalog lacks altogether (sctp_stages_of's caveat: no run's log is
+-- there, on any side) has a row of no values and no pass (pass NULL), its
+-- `caveat` naming the table and its settings: a testbed tier's catalog,
+-- whose runs had PCAP=1 but neither TRACE_SCTP nor LINK_LOG, scores the
+-- wire's readings and the drops alone. The others' caveat is NULL.
+-- needs: hosts bins jobs.sim jobs.env
 CREATE OR REPLACE MACRO sctp_fit_of(a_side, b_side, t_side, at_node := 0, lo_s := 20, hi_s := -1,
                                     short_gap_us := 100, long_gap_us := 400, gap_floor_us := 50, floor_ms := 1,
                                     floor_bytes := 4096, max_tv := 0.1) AS TABLE
-    WITH a AS (FROM sctp_stages_of(a_side, at_node := at_node, lo_s := lo_s, hi_s := hi_s, short_gap_us := short_gap_us,
-                                   long_gap_us := long_gap_us, gap_floor_us := gap_floor_us)),
+    WITH sa AS MATERIALIZED (
+        FROM sctp_stages_of(a_side, at_node := at_node, lo_s := lo_s, hi_s := hi_s, short_gap_us := short_gap_us,
+                            long_gap_us := long_gap_us, gap_floor_us := gap_floor_us)),
+    a AS (FROM sa WHERE caveat IS NULL),
     lb AS (FROM sctp_stages_of(sctp_logged_side(b_side, 'b_side', true), at_node := at_node, lo_s := lo_s,
                                hi_s := hi_s, short_gap_us := short_gap_us, long_gap_us := long_gap_us,
                                gap_floor_us := gap_floor_us)
-           WHERE source = 'log'),
+           WHERE source = 'log' AND caveat IS NULL),
     tb AS (FROM sctp_stages_of(sctp_logged_side(t_side, 't_side', false), at_node := at_node, lo_s := lo_s,
                                hi_s := hi_s, short_gap_us := short_gap_us, long_gap_us := long_gap_us,
                                gap_floor_us := gap_floor_us)
-           WHERE source <> 'log'),
+           WHERE source <> 'log' AND caveat IS NULL),
+    -- The readings of a table the catalog lacks, which no side scores.
+    cav AS (
+        SELECT reading, any_value(source) AS source, any_value(caveat) AS caveat
+        FROM sa WHERE caveat IS NOT NULL GROUP BY reading),
     b AS (SELECT *, 'log on' AS against FROM lb UNION ALL SELECT *, 'log off' FROM tb),
     am AS (
         SELECT reading, any_value(source) AS source, count(*) AS runs, quantile_cont(p50, 0.5) AS p50,
@@ -2685,19 +2821,17 @@ CREATE OR REPLACE MACRO sctp_fit_of(a_side, b_side, t_side, at_node := 0, lo_s :
         FROM twin_window_of(from_json(to_json(a_side), '[{"k": "VARCHAR"}]')) w
         JOIN jobs j ON j.k = w.k AND j.src = w.src),
     held AS (
-        SELECT 'packets' AS tbl FROM packets x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        SELECT 'packets' AS tbl FROM packets_or_none() x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
         WHERE x.node = at_node
-        UNION SELECT 'link_writes' FROM link_writes x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        UNION SELECT 'link_writes' FROM link_writes_or_none() x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
         WHERE x.node = at_node
-        UNION SELECT 'sctp_events' FROM sctp_events x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
+        UNION SELECT 'sctp_events' FROM sctp_events_or_none() x SEMI JOIN aw ON aw.k = x.k AND aw.src = x.src
         WHERE x.node = at_node OR x.peer = at_node),
     lack AS (
         SELECT t.tbl, string_agg(aw.k, ', ' ORDER BY aw.k) AS runs,
                CASE WHEN bool_and(aw.sim <> 'testbed') THEN t.knob WHEN bool_and(aw.sim = 'testbed') THEN t.setting
                     ELSE t.knob || ' or ' || t.setting END AS how
-        FROM aw CROSS JOIN (VALUES ('packets', 'STRIMS_SIM_PACKET_LOG', 'PCAP=1'),
-                                   ('link_writes', 'STRIMS_SIM_LINK_LOG', 'LINK_LOG'),
-                                   ('sctp_events', 'STRIMS_SIM_TRACE_SCTP', 'TRACE_SCTP')) AS t(tbl, knob, setting)
+        FROM aw CROSS JOIN bench_logs() t
         WHERE t.tbl NOT IN (SELECT tbl FROM held)
         GROUP BY t.tbl, t.knob, t.setting),
     -- Each such table with the readings of it the testbed's runs have:
@@ -2708,15 +2842,21 @@ CREATE OR REPLACE MACRO sctp_fit_of(a_side, b_side, t_side, at_node := 0, lo_s :
         FROM lack l
         JOIN (SELECT tbl, string_agg(reading, ', ' ORDER BY num::INT, reading) AS readings
               FROM g WHERE b_runs IS NOT NULL GROUP BY tbl) r USING (tbl))
-    SELECT reading, source, against, against = 'log on' AS perturbed, a_runs, b_runs, b_p50s, a_p50, b_p90s, a_p90,
-           b_ns, a_n, tv, tv_bound, b_tv,
-           CASE WHEN num IN ('1', '2')
-                    THEN coalesce(a_p50 BETWEEN lo50 - fl AND hi50 + fl AND a_p90 BETWEEN lo90 - fl AND hi90 + fl, false)
-                WHEN num IN ('3', '7', '12') THEN coalesce(tv <= tv_bound, false)
-                WHEN num = '9' THEN coalesce(a_p50 BETWEEN lo50 - 2 * lo_noise AND hi50 + 2 * hi_noise, false)
-           END AS pass
-    FROM g, missing
-    WHERE CASE WHEN missing.what IS NULL THEN true
-               ELSE error('sctp_fit_of: a_side''s runs ' || missing.what
-                          || ': their model side is missing, not failed') END
-    ORDER BY num::INT, reading;
+    SELECT * FROM (
+        SELECT reading, source, against, against = 'log on' AS perturbed, a_runs, b_runs, b_p50s, a_p50, b_p90s, a_p90,
+               b_ns, a_n, tv, tv_bound, b_tv,
+               CASE WHEN num IN ('1', '2')
+                        THEN coalesce(a_p50 BETWEEN lo50 - fl AND hi50 + fl AND a_p90 BETWEEN lo90 - fl AND hi90 + fl,
+                                      false)
+                    WHEN num IN ('3', '7', '12') THEN coalesce(tv <= tv_bound, false)
+                    WHEN num = '9' THEN coalesce(a_p50 BETWEEN lo50 - 2 * lo_noise AND hi50 + 2 * hi_noise, false)
+               END AS pass, NULL::VARCHAR AS caveat
+        FROM g, missing
+        WHERE CASE WHEN missing.what IS NULL THEN true
+                   ELSE error('sctp_fit_of: a_side''s runs ' || missing.what
+                              || ': their model side is missing, not failed') END
+        UNION ALL
+        SELECT reading, source, CASE WHEN source = 'log' THEN 'log on' ELSE 'log off' END, source = 'log', NULL, NULL,
+               NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, caveat
+        FROM cav)
+    ORDER BY split_part(reading, ' ', 1)::INT, reading;

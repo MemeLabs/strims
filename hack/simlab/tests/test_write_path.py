@@ -8,8 +8,11 @@ write's read found by its bytes, the testbed's first packet less its
 egress delay, and the pass: within the testbed's runs' range widened by
 the floor, the holds' and lows' counts within it widened by counting
 noise, a stage one side lacks failing, and a side of no runs refused;
-and over a twin's packets that share their µs, a write's first packet
-the least n of them, whatever the packets table's row order.
+over the fixture as a catalog without the link log, the packets or
+either (Lacking), the stages of what it holds scoring as over every
+table, the others unscored with a caveat naming the tables it lacks; and
+over a twin's packets that share their µs, a write's first packet the
+least n of them, whatever the packets table's row order.
 
   python3 hack/simlab/tests/test_write_path.py
 """
@@ -30,16 +33,19 @@ if __name__ == "__main__":
 from simlab import catalog  # noqa: E402
 
 MACROS = ("sketch_exp", "sketch_lo", "sketch_floor", "sketch_quantile", "twin_window_of", "side_window_of",
-          "write_stages_of", "write_fit_of")
+          "bench_lacking", "bench_logs", "packets_or_none", "seed_sends_or_none", "link_writes_or_none",
+          "link_reads_or_none", "link_samples_or_none", "write_stages_of", "write_fit_of")
 HAVE = {"link_writes", "link_reads", "link_samples", "seed_sends", "packets", "hosts", "jobs.sim", "jobs.env"}
 T = 20_000_000
 TB, TW = [{"k": "tb1"}, {"k": "tb2"}], [{"k": "tw"}]
 
 
-def connect():
+def connect(lacking=()):
     """An in-memory DuckDB with the macros, and the fixture: testbed runs
     `tb1` and `tb2` and a twin `tw` of 60 s streams, each a seed (node 0)
-    writing to one viewer (node 1) on link 0."""
+    writing to one viewer (node 1) on link 0; without the tables
+    `lacking`, its macros then made as a reader of a catalog of the others
+    makes them (made)."""
     import duckdb
 
     conn = duckdb.connect()
@@ -95,9 +101,27 @@ def connect():
         conn.execute("INSERT INTO packets VALUES (?, ?, 0, 0, ?, ?, NULL, 1, 'data')",
                      (k, src, offered + (1000 if tb else 0), offered + 20_000))
         conn.execute("INSERT INTO hosts VALUES (?, ?, 0, ?)", (k, src, 1000 if tb else 0))
+    for t in lacking:
+        conn.execute(f"DROP TABLE {t}")
+    if lacking:
+        made(conn)
+        return conn
     for s in catalog.scoring_statements(MACROS, HAVE):
         conn.execute(s)
     return conn
+
+
+def made(conn):
+    """MACROS made over `conn`'s tables as a reader of a catalog of them
+    makes them: catalog.needed's, its fallback for each one needing a table
+    they lack."""
+    have = {}
+    for t, c in conn.execute("SELECT table_name, column_name FROM duckdb_columns()").fetchall():
+        have.setdefault(t, set()).add(c)
+    text = catalog.needed(catalog.scoring_text(catalog.scoring_consts()), have)
+    for m in catalog.MACRO.finditer(text):
+        if m.group(2) in MACROS:
+            conn.execute(text[m.start():catalog.STATEMENT_END.search(text, m.end()).end()])
 
 
 class WritePath(unittest.TestCase):
@@ -277,6 +301,94 @@ class WritePath(unittest.TestCase):
 
         with self.assertRaisesRegex(duckdb.Error, "write_stages_of: a side of no runs"):
             self.q("SELECT * FROM write_fit_of([], ?)", TB)
+
+
+# The link log's tables, and the caveats of the stages of a catalog
+# without them, without packets, or without either.
+LINK_LOG = ("link_writes", "link_reads", "link_samples")
+KEPT = {"link": "(a testbed run's LINK_LOG, a sim's STRIMS_SIM_LINK_LOG)",
+        "packets": "(a testbed run's PCAP=1, a sim's STRIMS_SIM_PACKET_LOG)"}
+NO_LINK = {**{s: f"this catalog holds no link_writes {KEPT['link']}"
+              for s in ("2 driver queue", "3 held: channel", "4 held: host", "5 notsent", "5 unheld")},
+           "6 low reading": f"this catalog holds no link_samples {KEPT['link']}",
+           **{s: f"this catalog holds no link_reads or link_writes {KEPT['link']}"
+              for s in ("7 done to read", "7a empty: to first packet", "7b empty: packet to arrival",
+                        "7c empty: arrival to read", "8 read to take")}}
+NO_PACKETS = {s: f"this catalog holds no packets {KEPT['packets']}"
+              for s in ("7a empty: to first packet", "7b empty: packet to arrival", "7c empty: arrival to read")}
+NO_EITHER = {**NO_LINK, **{s: f"this catalog holds no link_reads or link_writes {KEPT['link']} or packets "
+                              f"{KEPT['packets']}" for s in NO_PACKETS}}
+
+
+def dicts(conn, sql, *args):
+    cur = conn.execute(sql, args)
+    names = [d[0] for d in cur.description]
+    return [dict(zip(names, r)) for r in cur.fetchall()]
+
+
+class Lacking(unittest.TestCase):
+    """The fixture as a catalog without the link log (LINK_LOG's
+    link_writes, link_reads and link_samples: a testbed tier's, its runs
+    PCAP=1 and SPEC=1 but no LINK_LOG), without packets, or without either,
+    its macros made as a reader of it makes them: the stages of the tables
+    it holds score as over every table, and each other stage comes out
+    unscored, a row of no values whose caveat names its tables the catalog
+    lacks and their settings; a model side holding none of a table the
+    catalog holds is still refused."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.full = connect()
+        cls.lacking = {"link": (connect(lacking=LINK_LOG), NO_LINK),
+                       "packets": (connect(lacking=("packets",)), NO_PACKETS),
+                       "either": (connect(lacking=(*LINK_LOG, "packets")), NO_EITHER)}
+
+    def test_each_run_has_a_row_of_each_stage_it_cant_score(self):
+        for name, (conn, lacks) in self.lacking.items():
+            for k in ("tb1", "tb2", "tw"):
+                full = {r["stage"]: r for r in dicts(self.full, "FROM write_stages_of([{'k': ?}])", k)}
+                got = {r["stage"]: r for r in dicts(conn, "FROM write_stages_of([{'k': ?}])", k)}
+                self.assertEqual(set(got), set(full) | set(lacks), (name, k))
+                for stage, r in got.items():
+                    if stage in lacks:
+                        self.assertEqual((r["k"], r["n"], r["p50"], r["p90"], r["caveat"]),
+                                         (k, None, None, None, lacks[stage]), (name, stage))
+                    else:
+                        self.assertEqual(r, full[stage], (name, k, stage))
+        # Without the link log, the seed's pushes alone.
+        conn, _ = self.lacking["link"]
+        self.assertEqual(conn.execute("SELECT stage, n, p50 FROM write_stages_of([{'k': 'tb1'}]) "
+                                      "WHERE caveat IS NULL").fetchall(), [("1 push: runner", 1, 10)])
+
+    def test_the_fit_scores_what_the_catalog_holds(self):
+        full = {r["stage"]: r for r in dicts(self.full, "FROM write_fit_of(?, ?)", TW, TB)}
+        for name, (conn, lacks) in self.lacking.items():
+            got = dicts(conn, "FROM write_fit_of(?, ?)", TW, TB)
+            # In the stages' order.
+            self.assertEqual([r["stage"] for r in got], sorted(set(full) | set(lacks)), name)
+            for r in got:
+                if r["stage"] in lacks:
+                    self.assertEqual({c: v for c, v in r.items() if v is not None},
+                                     {"stage": r["stage"], "caveat": lacks[r["stage"]]}, (name, r["stage"]))
+                else:
+                    self.assertEqual(r, full[r["stage"]], (name, r["stage"]))
+        conn, _ = self.lacking["link"]
+        self.assertEqual(conn.execute("SELECT a_p50, pass, caveat FROM write_fit_of(?, ?) WHERE stage = "
+                                      "'1 push: runner'", (TW, TB)).fetchall(), [(10, True, None)])
+
+    def test_a_model_side_without_a_table_the_catalog_holds_is_refused(self):
+        import duckdb
+
+        conn, _ = self.lacking["link"]
+        conn.execute("BEGIN")
+        try:
+            conn.execute("DELETE FROM seed_sends WHERE k = 'tw'")
+            with self.assertRaisesRegex(duckdb.Error, r"write_fit_of: a_side's runs tw hold no seed_sends rows at node "
+                                                      r"0 \(STRIMS_SIM_SPEC\), which 1 push: runner read: their model "
+                                                      r"side is missing, not failed$"):
+                conn.execute("FROM write_fit_of(?, ?)", (TW, TB)).fetchall()
+        finally:
+            conn.execute("ROLLBACK")
 
 
 # A twin's tie: each write into the empty channel is followed, 2 ms after
