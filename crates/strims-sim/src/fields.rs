@@ -3423,34 +3423,37 @@ pub(crate) mod cols {
         /// swarm node that its capture (`PCAP=1`) saw resend bytes its link had
         /// carried before, at its capture time: a segment lost past its queue,
         /// as the window model's are its path's losses, a resend of what its
-        /// own queue dropped counting in drops (its tc log's) alone. A testbed
-        /// run's drops are its own queue's (its tc log's) and those of its
-        /// packets a receiver's downlink queue dropped (SLOW_DOWN_KBIT's viewer
-        /// 1, its ifb's tbf), each its resend of carried bytes to that
-        /// receiver, which isn't a retransmit, as the window model counts a
-        /// full downlink queue's loss as the sender's drop (with SEED_LOSS_PCT
-        /// too, the seed's resends to it are that loss's as well: its drops and
-        /// retransmits are empty; and a data channel's to it can't be told: its
-        /// sender's drops are empty); a spurious resend (a tail-loss probe's or
-        /// an early timeout's of a segment that had arrived) counts there and
-        /// not in the sim; a browser's, its data channels' resends inside DTLS,
-        /// are empty, as are a native node's with a data channel to a browser
-        /// (WebRTC). What a bin's waits give: pushes written and answers sent
-        /// in it, and the p50 and p99 of their waits, of the node's
-        /// WaitHistogram, quarter-octave buckets read at their lower bound
-        /// (never above the wait, at most a sixth under it below 46 s; empty
-        /// without any). The window model's acknowledgements alone through a
-        /// host's uplink, as `UP_COUNTERS` names them (TCP's pure ACKs and the
-        /// data channels' SACKs): of each, the packets and the bytes their
-        /// links charge for them (their IP bytes, plus their framing at a site
-        /// that charges it), each in the bin its last bit left the uplink's
-        /// queue in (`Network::up_carried`'s count). The row's `packets_ack`
-        /// and `up_acks` count both kinds, over the whole run and every host. A
-        /// testbed run writes IP bytes there: each pure TCP ACK's IP length
-        /// from its node's capture past the queue, at its capture time, and no
-        /// SACKs (a data channel's, inside DTLS, count with its data: the
-        /// up_sack columns are empty); the queries add its class's overhead
-        /// (scoring.sql's link_overhead).
+        /// own queue dropped counting in drops alone. A testbed run's drops are
+        /// its own queue's, each in the bin it came to the queue in as the sim
+        /// counts its: with its captures (`PCAP=1`), each of its packets its
+        /// queue had no room for, and past their end, or without them, its tc
+        /// log's count, whose samples fall at their sampler's own phase, up to
+        /// an interval before an edge; and those of its packets a receiver's
+        /// downlink queue dropped (SLOW_DOWN_KBIT's viewer 1, its ifb's tbf),
+        /// each its resend of carried bytes to that receiver, which isn't a
+        /// retransmit, as the window model counts a full downlink queue's loss
+        /// as the sender's drop (with SEED_LOSS_PCT too, the seed's resends to
+        /// it are that loss's as well: its drops and retransmits are empty; and
+        /// a data channel's to it can't be told: its sender's drops are empty);
+        /// a spurious resend (a tail-loss probe's or an early timeout's of a
+        /// segment that had arrived) counts there and not in the sim; a
+        /// browser's, its data channels' resends inside DTLS, are empty, as are
+        /// a native node's with a data channel to a browser (WebRTC). What a
+        /// bin's waits give: pushes written and answers sent in it, and the p50
+        /// and p99 of their waits, of the node's WaitHistogram, quarter-octave
+        /// buckets read at their lower bound (never above the wait, at most a
+        /// sixth under it below 46 s; empty without any). The window model's
+        /// acknowledgements alone through a host's uplink, as `UP_COUNTERS`
+        /// names them (TCP's pure ACKs and the data channels' SACKs): of each,
+        /// the packets and the bytes their links charge for them (their IP
+        /// bytes, plus their framing at a site that charges it), each in the
+        /// bin its last bit left the uplink's queue in (`Network::up_carried`'s
+        /// count). The row's `packets_ack` and `up_acks` count both kinds, over
+        /// the whole run and every host. A testbed run writes IP bytes there:
+        /// each pure TCP ACK's IP length from its node's capture past the
+        /// queue, at its capture time, and no SACKs (a data channel's, inside
+        /// DTLS, count with its data: the up_sack columns are empty); the
+        /// queries add its class's overhead (scoring.sql's link_overhead).
         ///
         /// None is written as -1.
         WhoCounter(u16),
@@ -3467,7 +3470,9 @@ pub(crate) mod cols {
         /// connections. In a run with browsers the twin's swarm links are all
         /// data channels (`Scenario::over_webrtc`), where a native node's links
         /// to native nodes are TCP on the testbed: their cuts have none in the
-        /// twin. A timeout's cut is in rtos alone. Empty for a browser (data
+        /// twin. A timeout's cut is in rtos alone. Its netstat samples land at
+        /// their sampler's own phase, not on the bins' edges, so a bin holds a
+        /// count up to one interval (100 ms) late. Empty for a browser (data
         /// channels), and for the seed of a run with competing uploads, whose
         /// flows its namespace counts too.
         ///
@@ -3482,8 +3487,10 @@ pub(crate) mod cols {
         /// which the window model never fires, over every TCP flow of the
         /// node's network namespace (in a run with browsers, the twin's links
         /// being data channels, a native node's TCP links to native nodes have
-        /// none in the twin). Empty for a browser, and for the seed of a run
-        /// with competing uploads.
+        /// none in the twin). Its netstat samples land at their sampler's own
+        /// phase, not on the bins' edges, so a bin holds a count up to one
+        /// interval (100 ms) late. Empty for a browser, and for the seed of a
+        /// run with competing uploads.
         ///
         /// None is written as -1.
         WhoRtos(u16),
@@ -4219,34 +4226,37 @@ pub(crate) mod cols {
         /// swarm node that its capture (`PCAP=1`) saw resend bytes its link had
         /// carried before, at its capture time: a segment lost past its queue,
         /// as the window model's are its path's losses, a resend of what its
-        /// own queue dropped counting in drops (its tc log's) alone. A testbed
-        /// run's drops are its own queue's (its tc log's) and those of its
-        /// packets a receiver's downlink queue dropped (SLOW_DOWN_KBIT's viewer
-        /// 1, its ifb's tbf), each its resend of carried bytes to that
-        /// receiver, which isn't a retransmit, as the window model counts a
-        /// full downlink queue's loss as the sender's drop (with SEED_LOSS_PCT
-        /// too, the seed's resends to it are that loss's as well: its drops and
-        /// retransmits are empty; and a data channel's to it can't be told: its
-        /// sender's drops are empty); a spurious resend (a tail-loss probe's or
-        /// an early timeout's of a segment that had arrived) counts there and
-        /// not in the sim; a browser's, its data channels' resends inside DTLS,
-        /// are empty, as are a native node's with a data channel to a browser
-        /// (WebRTC). What a bin's waits give: pushes written and answers sent
-        /// in it, and the p50 and p99 of their waits, of the node's
-        /// WaitHistogram, quarter-octave buckets read at their lower bound
-        /// (never above the wait, at most a sixth under it below 46 s; empty
-        /// without any). The window model's acknowledgements alone through a
-        /// host's uplink, as `UP_COUNTERS` names them (TCP's pure ACKs and the
-        /// data channels' SACKs): of each, the packets and the bytes their
-        /// links charge for them (their IP bytes, plus their framing at a site
-        /// that charges it), each in the bin its last bit left the uplink's
-        /// queue in (`Network::up_carried`'s count). The row's `packets_ack`
-        /// and `up_acks` count both kinds, over the whole run and every host. A
-        /// testbed run writes IP bytes there: each pure TCP ACK's IP length
-        /// from its node's capture past the queue, at its capture time, and no
-        /// SACKs (a data channel's, inside DTLS, count with its data: the
-        /// up_sack columns are empty); the queries add its class's overhead
-        /// (scoring.sql's link_overhead).
+        /// own queue dropped counting in drops alone. A testbed run's drops are
+        /// its own queue's, each in the bin it came to the queue in as the sim
+        /// counts its: with its captures (`PCAP=1`), each of its packets its
+        /// queue had no room for, and past their end, or without them, its tc
+        /// log's count, whose samples fall at their sampler's own phase, up to
+        /// an interval before an edge; and those of its packets a receiver's
+        /// downlink queue dropped (SLOW_DOWN_KBIT's viewer 1, its ifb's tbf),
+        /// each its resend of carried bytes to that receiver, which isn't a
+        /// retransmit, as the window model counts a full downlink queue's loss
+        /// as the sender's drop (with SEED_LOSS_PCT too, the seed's resends to
+        /// it are that loss's as well: its drops and retransmits are empty; and
+        /// a data channel's to it can't be told: its sender's drops are empty);
+        /// a spurious resend (a tail-loss probe's or an early timeout's of a
+        /// segment that had arrived) counts there and not in the sim; a
+        /// browser's, its data channels' resends inside DTLS, are empty, as are
+        /// a native node's with a data channel to a browser (WebRTC). What a
+        /// bin's waits give: pushes written and answers sent in it, and the p50
+        /// and p99 of their waits, of the node's WaitHistogram, quarter-octave
+        /// buckets read at their lower bound (never above the wait, at most a
+        /// sixth under it below 46 s; empty without any). The window model's
+        /// acknowledgements alone through a host's uplink, as `UP_COUNTERS`
+        /// names them (TCP's pure ACKs and the data channels' SACKs): of each,
+        /// the packets and the bytes their links charge for them (their IP
+        /// bytes, plus their framing at a site that charges it), each in the
+        /// bin its last bit left the uplink's queue in (`Network::up_carried`'s
+        /// count). The row's `packets_ack` and `up_acks` count both kinds, over
+        /// the whole run and every host. A testbed run writes IP bytes there:
+        /// each pure TCP ACK's IP length from its node's capture past the
+        /// queue, at its capture time, and no SACKs (a data channel's, inside
+        /// DTLS, count with its data: the up_sack columns are empty); the
+        /// queries add its class's overhead (scoring.sql's link_overhead).
         ///
         /// None is written as an empty field.
         Counter(u16),
@@ -4316,15 +4326,18 @@ pub(crate) mod cols {
         /// which): the recoveries Linux entered and the cuts of losses a
         /// tail-loss probe repaired, over every TCP flow of its network
         /// namespace (in a run with browsers, a native node's TCP links to
-        /// native nodes have none in the twin, whose links are data channels);
-        /// empty for a browser and for the seed of a run with competing
-        /// uploads.
+        /// native nodes have none in the twin, whose links are data channels),
+        /// its netstat samples landing at their sampler's own phase, so a bin
+        /// holds a count up to one interval (100 ms) late; empty for a browser
+        /// and for the seed of a run with competing uploads.
         WindowCuts,
         /// The window model's retransmission timeouts on the node's links in
         /// the bin. A testbed run's are a native node's TCP counters'
         /// TCPTimeouts (bins' `{who}_rtos`), a spurious timeout's too, over
-        /// every TCP flow of its network namespace; empty for a browser and for
-        /// the seed of a run with competing uploads.
+        /// every TCP flow of its network namespace, its netstat samples landing
+        /// at their sampler's own phase, so a bin holds a count up to one
+        /// interval (100 ms) late; empty for a browser and for the seed of a
+        /// run with competing uploads.
         Rtos,
         /// The node's uplink queue at the bin's end, as the wait a byte joining
         /// it would have (`WanHostReport::up_queue`, its latest sample at or

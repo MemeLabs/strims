@@ -45,7 +45,7 @@ use crate::report::{
     HostReport, HostRow, PacketKind, PacketLoss, PacketProto, PacketRecord, WanReport,
 };
 use crate::spec::{HostIx, Scenario};
-use crate::wan::{QUEUE_SAMPLE_EVERY, SctpProfile};
+use crate::wan::{QUEUE_SAMPLE_EVERY, SctpProfile, UP_COUNTERS};
 
 /// The testbed's MTU: its bridge's and its containers' eth0, whose ifbs cut
 /// a GSO buffer into packets of at most this many IP bytes.
@@ -569,6 +569,105 @@ pub(super) fn queues(s: &Scenario, wan: &mut WanReport, rates: &[Vec<(SimDuratio
         let after = w.up_backlog.partition_point(|&(t, _)| t <= last);
         let tail: Vec<_> = w.up_backlog.drain(after..).collect();
         w.up_backlog = held.into_iter().chain(tail).collect();
+    }
+}
+
+/// A node's tbf drops at each of its tc samples (time since the start,
+/// the counter), and the last of the bins' edges they tell.
+pub(super) type TcDrops = (Vec<(SimDuration, u64)>, Option<usize>);
+
+/// Each node's drops in the bins (`bins`: [`UP_COUNTERS`] at each of their
+/// edges, every `bin` from the run's start; `ends` as `Report::wire_ends`
+/// has them) where its captures tell them, as the sim counts its drops: at
+/// each edge to its last packet's entry, the packets its queue had dropped
+/// before it, each as it came to the queue, beside what its receivers'
+/// downlinks dropped. Past that edge its tc samples' count (`tc`, from
+/// `Network::read`: each sample's, and the last edge they tell; at an edge,
+/// the latest sample's before it) goes on from their latest sample the
+/// captures also cover (at or before their last packet's entry, else their
+/// first) and the captures' count before it: a drop between that sample
+/// and the edge is in both, and an anchor at the edge's own latest sample
+/// would count it twice. The tc samples fall at their sampler's own phase,
+/// up to an interval before an edge. Where its tc log stopped before that
+/// edge, its drops are told to it. A node without a tc log keeps its drops
+/// unmeasured, as its queue ([`queues`]).
+pub(super) fn drops(
+    s: &Scenario,
+    wan: &WanReport,
+    bins: &mut [Vec<[u64; UP_COUNTERS.len()]>],
+    ends: &mut BTreeMap<(HostIx, usize), usize>,
+    tc: &[TcDrops],
+    bin: SimDuration,
+) {
+    let Some(col) = UP_COUNTERS.iter().position(|&c| c == "drops") else {
+        return;
+    };
+    for (h, spec) in s.hosts.iter().enumerate() {
+        let (Some(w), Some((tc, tc_end))) =
+            (wan.hosts.iter().find(|w| w.name == spec.name), tc.get(h))
+        else {
+            continue;
+        };
+        let Some(last) = w.packets.iter().map(|p| p.at).max() else {
+            continue;
+        };
+        let (Some(&first), true) = (tc.first(), bin > SimDuration::ZERO) else {
+            continue;
+        };
+        let mut lost: Vec<SimDuration> = w
+            .packets
+            .iter()
+            .filter(|p| p.lost == Some(PacketLoss::Queue))
+            .map(|p| p.at)
+            .collect();
+        lost.sort_unstable();
+        let lost_before = |t: SimDuration| lost.partition_point(|&x| x < t) as u64;
+        // The tc count at an edge, as `Network::read` took it.
+        let tc_at = |e: SimDuration| {
+            let i = tc.partition_point(|&(t, _)| t < e);
+            i.checked_sub(1)
+                .and_then(|i| tc.get(i))
+                .map_or(first.1, |&(_, d)| d)
+        };
+        // The edges the captures tell: those to the last packet's entry,
+        // before which every packet's fate is told.
+        let edges: Vec<SimDuration> = (0..bins.len())
+            .scan(SimDuration::from(LEAD), |e, _| {
+                let at = *e;
+                *e += bin;
+                Some(at)
+            })
+            .take_while(|&e| e <= last)
+            .collect();
+        let Some(told) = edges.len().checked_sub(1) else {
+            continue;
+        };
+        let (anchor, at_anchor) = tc
+            .iter()
+            .rfind(|&&(t, _)| t <= last)
+            .copied()
+            .unwrap_or(first);
+        // Each edge's count is the tc samples' and the downlinks': the
+        // captures' takes the former's place to `told`, and past it the tc
+        // samples' growth since `anchor` goes on from the captures' count
+        // there.
+        for (k, edge) in bins.iter_mut().enumerate() {
+            let (queue, at_tc) = edges.get(k).map_or_else(
+                || (lost_before(anchor), at_anchor),
+                |&e| (lost_before(e), tc_at(e)),
+            );
+            if let Some(x) = edge.get_mut(h).and_then(|c| c.get_mut(col)) {
+                *x = (*x + queue).saturating_sub(at_tc);
+            }
+        }
+        // A tc log that stopped before `told` ends the column there; an end
+        // set lower for what a receiver's downlink dropped stays.
+        if let Some(end) = *tc_end
+            && end < told
+            && ends.get(&(h, col)) == Some(&end)
+        {
+            ends.insert((h, col), told);
+        }
     }
 }
 

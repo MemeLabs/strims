@@ -34,14 +34,16 @@
 //!   class, each packet's IP length and an Ethernet header). A testbed run
 //!   counts each packet's IP length from its node's capture of its egress
 //!   to the swarm's nodes (`PCAP=1`: `pcap-<i>.pcap`, after the queue), and
-//!   its queue drops from its tbf (`tc-<i>.log`), whose rate, as each
-//!   sample shows it, is the uplink's; the queries convert between the two
-//!   by the link class (scoring.sql's link_overhead). Its queue is sampled
-//!   where the sim samples its uplinks, every 100 ms from the run's start
-//!   (the bins' edges), from its captures (`packets::queues`: what had
-//!   entered and not left), and past them, or without them, at its tc
-//!   samples, which fall at their sampler's own phase; a node without a tc
-//!   log has no tbf, and no queue. What a
+//!   its queue's rate from its tbf (`tc-<i>.log`), as each sample shows
+//!   it; the queries convert between the two by the link class
+//!   (scoring.sql's link_overhead). Its queue is sampled where the sim
+//!   samples its uplinks, every 100 ms from the run's start (the bins'
+//!   edges), and its drops counted in the bin they came to the queue in,
+//!   as the sim counts its, from its captures (`packets::queues`: what had
+//!   entered and not left; `packets::drops`: what had no room), and past
+//!   them, or without them, at its tc samples, which fall at their
+//!   sampler's own phase; a node without a tc log has no tbf, and no queue
+//!   or drops. What a
 //!   capture can't tell (a data channel's SACKs inside DTLS, which it
 //!   counts with the data) is left empty, and a sampler that stopped before
 //!   the run's end leaves its columns empty past it (`Report::wire_ends`,
@@ -1251,6 +1253,14 @@ impl Run {
         let mut net = Network::read(self, &scenario, seed);
         packets::fill(self, &scenario, &mut net.wan, &mut hosts);
         packets::queues(&scenario, &mut net.wan, &net.up_rates);
+        packets::drops(
+            &scenario,
+            &net.wan,
+            &mut net.bins,
+            &mut net.ends,
+            &net.tc_drops,
+            strims_base::time::Duration::from_millis(BIN_MS.unsigned_abs().max(1) as i64),
+        );
         for (i, host) in hosts.iter().enumerate() {
             let (Some(spec), Some(events)) = (scenario.hosts.get(i), self.sctp_of(i, host, epoch))
             else {
@@ -2513,6 +2523,10 @@ struct Network {
     /// its tbf's as the sample shows it, else the scenario's (none without
     /// a tc log). What its queue's wait divides by (`packets::queues`).
     up_rates: Vec<Vec<(strims_base::time::Duration, u64)>>,
+    /// Each host's tbf drops at each of its tc samples, (time since the
+    /// start, the counter: none without a tc log), and the last edge they
+    /// tell (`ends`'): what `packets::drops` takes past its captures.
+    tc_drops: Vec<packets::TcDrops>,
 }
 
 /// What a node's capture says it sent: its segments and datagrams to the
@@ -2716,6 +2730,7 @@ impl Network {
         // columns are unmeasured alone, where another node's are measured.
         let (mut no_pcap, mut no_tc, mut no_tcp) = (Vec::new(), Vec::new(), Vec::new());
         let mut up_rates = vec![Vec::new(); s.hosts.len()];
+        let mut tc_drops = vec![(Vec::new(), None); s.hosts.len()];
         let kinds: Vec<&str> = run
             .settings
             .get("KINDS")
@@ -2995,6 +3010,14 @@ impl Network {
                             *x = last + lost;
                         }
                     }
+                    if let Some(d) = tc_drops.get_mut(h) {
+                        // A sample before the run's start is before every
+                        // edge, as one at the start is.
+                        d.0 = samples
+                            .iter()
+                            .map(|x| (run.at(x.ms).unwrap_or_default().into(), x.drops))
+                            .collect();
+                    }
                     // A sampler that stopped before the run's end leaves its
                     // columns unmeasured past its last sample, not flat: the
                     // drops past the first edge after it, the queue past it
@@ -3004,6 +3027,9 @@ impl Network {
                             (0..bins.len()).find(|&k| edge_us(k as u64) > t_last * 1000)
                         {
                             ends.insert((h, up("drops")), end);
+                            if let Some(d) = tc_drops.get_mut(h) {
+                                d.1 = Some(end);
+                            }
                         }
                         let mut gaps: Vec<u64> = samples
                             .iter()
@@ -3160,6 +3186,7 @@ impl Network {
             ends,
             sends,
             up_rates,
+            tc_drops,
         }
     }
 }
@@ -3913,20 +3940,24 @@ mod tests {
         // on (its delay) and leave 2 ms apart; 2 at 375 ms, 10 ms apart,
         // after a step to 5 Mbit/s logged at 380 ms that the tc samples show
         // from 450 ms; 7 at 570 ms, 3 ms apart; one at 860 ms, and one at
-        // 1180 ms past what the captures tell.
+        // 1180 ms past what the captures tell. Its queue drops 3 more at
+        // 270 ms, which its tc samples count by 450 ms, and one more at
+        // 570 ms, past their last.
         let (mut offered, mut carried) = (Vec::new(), Vec::new());
-        let mut add = |at: u64, n: u16, gap: u64| {
-            for k in 0..n {
+        let mut add = |at: u64, n: u16, gap: u64, lost: u16| {
+            for k in 0..n + lost {
                 let i = offered.len() as u16;
                 offered.push((us(at), seg(i)));
-                carried.push((us(at + 20 + gap * (u64::from(k) + 1)), seg(i)));
+                if k < n {
+                    carried.push((us(at + 20 + gap * (u64::from(k) + 1)), seg(i)));
+                }
             }
         };
-        add(270, 15, 2);
-        add(375, 2, 10);
-        add(570, 7, 3);
-        add(860, 1, 1);
-        add(1180, 1, 1);
+        add(270, 15, 2, 3);
+        add(375, 2, 10, 0);
+        add(570, 7, 3, 1);
+        add(860, 1, 1, 0);
+        add(1180, 1, 1, 0);
         std::fs::write(dir.join("pcap-0-offered.pcap"), pcap(&offered)).unwrap();
         std::fs::write(dir.join("pcap-0.pcap"), pcap(&carried)).unwrap();
         std::fs::write(dir.join("steps.log"), format!("{} 5\n", START + 380)).unwrap();
@@ -3994,6 +4025,149 @@ mod tests {
             n += 1;
         }
         assert!(n >= 8, "{n}");
+        // Its drops in each bin are those its packets came to a full queue
+        // in, as the sim counts its, not where its tc samples counted them
+        // (the 3 at 290 ms in the bin to 500 ms); told past the tc log's
+        // last sample to the captures' last edge (800 ms), and empty past.
+        let d = col("seed_drops");
+        let drops: Vec<(i64, String)> = text
+            .lines()
+            .skip(1)
+            .map(|l| {
+                let f: Vec<&str> = l.split(',').collect();
+                (f[t].parse().unwrap(), f[d].to_owned())
+            })
+            .collect();
+        let want = ["0", "0", "3", "0", "0", "1", "0", "0", ""];
+        for (k, w) in want.iter().enumerate() {
+            assert_eq!(
+                drops.get(k).map(|x| x.1.as_str()),
+                Some(*w),
+                "{:?}",
+                &drops[..10]
+            );
+        }
+        for (t, x) in drops.iter().take(8) {
+            let from = strims_base::time::Duration::from(LEAD)
+                + strims_base::time::Duration::from_millis(*t);
+            let to = from + strims_base::time::Duration::from_millis(100);
+            let lost = w
+                .packets
+                .iter()
+                .filter(|p| {
+                    p.lost == Some(crate::report::PacketLoss::Queue) && from <= p.at && p.at < to
+                })
+                .count();
+            assert_eq!(*x, lost.to_string(), "{t}");
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Past its captures, a run's drops go on from a tc sample they also
+    /// cover, not the latest before their last told edge: a drop between
+    /// that sample and the edge is in the captures' count and in the tc
+    /// samples' growth past it, and counts once. Its queue past them is its
+    /// tc samples' where they go on to the next edge.
+    #[test]
+    fn a_testbed_runs_drops_past_its_captures_count_each_drop_once() {
+        let dir = fixture("drops-tail");
+        let us = |ms: u64| (START + ms) * 1000;
+        let seg = |i: u16| {
+            let mut p = tcp_seq(10, 11, 1448, u32::from(i) * 1448);
+            p[4..6].copy_from_slice(&i.to_be_bytes());
+            p
+        };
+        // The seed offers 3 segments at 470 ms; 2 at 770 ms, which enter its
+        // tbf at 790 ms, the second dropped; one at 800 ms, the captures'
+        // last told entry (820 ms); and one at 1180 ms past it. Its tc
+        // samples, every 100 ms from 50 ms to 1150 ms, count the drop at
+        // 850 ms and 2 more at 950 ms, past the captures.
+        let (mut offered, mut carried) = (Vec::new(), Vec::new());
+        let mut add = |at: u64, n: u16, lost: u16| {
+            for k in 0..n + lost {
+                let i = offered.len() as u16;
+                offered.push((us(at), seg(i)));
+                if k < n {
+                    carried.push((us(at + 22 + 2 * u64::from(k)), seg(i)));
+                }
+            }
+        };
+        add(470, 3, 0);
+        add(770, 1, 1);
+        add(800, 1, 0);
+        add(1180, 1, 0);
+        std::fs::write(dir.join("pcap-0-offered.pcap"), pcap(&offered)).unwrap();
+        std::fs::write(dir.join("pcap-0.pcap"), pcap(&carried)).unwrap();
+        let tc: String = (0..12u64)
+            .map(|j| {
+                let ms = 50 + 100 * j;
+                let drops = match ms {
+                    ..850 => 4,
+                    850 => 5,
+                    _ => 7,
+                };
+                format!(
+                    "{} qdisc tbf 10: root refcnt 2 rate 10Mbit burst 3028b lat 99ms  Sent 3000 bytes 2 pkt (dropped {drops}, overlimits 0 requeues 0)  backlog 1514b 1p requeues 0  qdisc clsact ffff: parent ffff:fff1 Sent 0 bytes 0 pkt (dropped 9, overlimits 0 requeues 0)\n",
+                    START + ms
+                )
+            })
+            .collect();
+        std::fs::write(dir.join("tc-0.log"), tc).unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        let w = &r.wan.as_ref().unwrap().hosts[0];
+        let last = w.packets.iter().map(|p| p.at).max().unwrap();
+        assert_eq!(
+            last,
+            (LEAD + Duration::from_millis(820)).into(),
+            "{:?}",
+            w.packets
+        );
+        let out = dir.join("tables");
+        r.write_tables(&out, Duration::from_millis(100), true)
+            .unwrap();
+        let text = crate::tables::read_table(&out, "bins").unwrap();
+        let head: Vec<&str> = text.lines().next().unwrap().split(',').collect();
+        let col = |name: &str| head.iter().position(|c| *c == name).unwrap();
+        let (t, d, ms, bytes) = (
+            col("t_ms"),
+            col("seed_drops"),
+            col("seed_up_queue_ms"),
+            col("seed_up_queue_bytes"),
+        );
+        let rows: Vec<Vec<String>> = text
+            .lines()
+            .skip(1)
+            .map(|l| l.split(',').map(str::to_owned).collect())
+            .collect();
+        let at = |ms: i64| rows.iter().find(|r| r[t] == ms.to_string()).unwrap();
+        // The bin to 800 ms, the captures' last told edge, holds the drop at
+        // 790 ms; the bin past it none, though the tc sample at 850 ms is
+        // the first to count it; the 2 the tc samples count by 950 ms are
+        // in the bin to 1 s, at their phase.
+        let drops: Vec<&str> = (0..11).map(|k| at(k * 100)[d].as_str()).collect();
+        assert_eq!(
+            drops,
+            ["0", "0", "0", "0", "0", "0", "0", "1", "0", "2", "0"],
+            "{rows:?}"
+        );
+        for k in 0..8 {
+            let from = strims_base::time::Duration::from(LEAD)
+                + strims_base::time::Duration::from_millis(k * 100);
+            let to = from + strims_base::time::Duration::from_millis(100);
+            let lost = w
+                .packets
+                .iter()
+                .filter(|p| {
+                    p.lost == Some(crate::report::PacketLoss::Queue) && from <= p.at && p.at < to
+                })
+                .count();
+            assert_eq!(at(k * 100)[d], lost.to_string(), "{k}");
+        }
+        // The queue at the captures' last sample (800 ms) is theirs, empty;
+        // at the next edge, the tc sample at 850 ms's backlog.
+        let queue = |r: &Vec<String>| format!("{},{}", r[ms], r[bytes]);
+        assert_eq!(queue(at(700)), "0,0");
+        assert_eq!(queue(at(800)), format!("{},1514", 1514 * 1000 / 1_250_000));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
