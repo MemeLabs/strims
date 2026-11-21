@@ -2167,6 +2167,11 @@ fn webrtc_upgrade(seed: u64, push: PushMode) -> Scenario {
 fn check_webrtc_upgrade(r: &Report) -> Result<(), String> {
     sound(r)?;
     whole_stream(r)?;
+    seed_webrtc_links(r)
+}
+
+/// The seed linked to each of the 4 viewers over WebRTC.
+fn seed_webrtc_links(r: &Report) -> Result<(), String> {
     let webrtc = r
         .trace
         .iter()
@@ -2262,16 +2267,56 @@ fn wan_webrtc_channels(seed: u64) -> Scenario {
     s
 }
 
-/// Seeds 1-7: its LTE viewer's one association falls behind the stream at
-/// 19 of seeds 1-64 (16 with 8 KiB messages cut by bytes), the WAN gap of
-/// PLAN's browser item, and seed 8 is one of them.
+/// The access kinds whose links lose packets in bursts (`Access::profile`):
+/// LTE's fades and Starlink's satellite reassignments.
+const BURSTY: [Access; 2] = [Access::Lte, Access::Starlink];
+
+/// The share of [`wan_webrtc_channels`]' stream that each viewer on a
+/// [`BURSTY`] link reads at least.
+const BURSTY_SHARE: f64 = 1.0 / 8.0;
+
+fn check_wan_webrtc_channels(r: &Report) -> Result<(), String> {
+    sound(r)?;
+    seed_webrtc_links(r)?;
+    let spec = &r.scenario.swarms[0];
+    let bursty = on_access(r, &BURSTY);
+    let steady: Vec<HostIx> = all_viewers(r)
+        .into_iter()
+        .filter(|h| !bursty.contains(h))
+        .collect();
+    complete(r, &steady, spec.start, spec.stop)?;
+    for &h in &bursty {
+        if matches!(r.scenario.hosts[h].class, HostClass::Hostile(_)) {
+            continue;
+        }
+        let share = r.delivery_of(0, &[h]);
+        if share < BURSTY_SHARE {
+            return Err(format!(
+                "{} on {} read {:.1} % of the stream, under {:.1} %",
+                r.scenario.name_of(h),
+                r.scenario.hosts[h].site.map_or("?", |s| s.access.name()),
+                share * 100.0,
+                BURSTY_SHARE * 100.0
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Sound, the seed linked to all 4 viewers over WebRTC, every frame at each
+/// viewer on a steady link, and at least an eighth of them at each on LTE or
+/// Starlink ([`BURSTY`]). Behind its one association, the seed's, a viewer
+/// whose link loses packets in bursts can fall behind the stream and miss
+/// frames, the WAN gap of PLAN's browser item: over 256 seeds the least such a
+/// viewer read was a quarter of the stream. An eighth is half that, and
+/// fails a viewer whose association stops within the stream's first 4 s,
+/// an LTE fade's period.
 #[test]
 fn wan_webrtc_channels_hybrid() {
-    sweep_n(
+    sweep(
         "wan_webrtc_channels_hybrid",
-        7,
         wan_webrtc_channels,
-        check_webrtc_upgrade,
+        check_wan_webrtc_channels,
     );
 }
 
@@ -3106,6 +3151,18 @@ fn in_region(r: &Report, region: Region) -> Vec<HostIx> {
             r.scenario.hosts[h]
                 .site
                 .is_some_and(|s| s.city.region() == region)
+        })
+        .collect()
+}
+
+/// The viewers of swarm 0 whose site's access is one of `kinds`.
+fn on_access(r: &Report, kinds: &[Access]) -> Vec<HostIx> {
+    all_viewers(r)
+        .into_iter()
+        .filter(|&h| {
+            r.scenario.hosts[h]
+                .site
+                .is_some_and(|s| kinds.contains(&s.access))
         })
         .collect()
 }
@@ -4662,15 +4719,7 @@ fn check_wan_mobile_viewers(r: &Report) -> Result<(), String> {
     sound(r)?;
     let spec = &r.scenario.swarms[0];
     complete(r, &all_viewers(r), secs(10), spec.stop)?;
-    let lte: Vec<HostIx> = all_viewers(r)
-        .into_iter()
-        .filter(|&h| {
-            r.scenario.hosts[h]
-                .site
-                .is_some_and(|s| s.access == Access::Lte)
-        })
-        .collect();
-    let lag = r.lag_of(0, &lte);
+    let lag = r.lag_of(0, &on_access(r, &[Access::Lte]));
     if lag.p99 > 3500 {
         return Err(format!("LTE viewers' lag {lag}"));
     }
