@@ -605,11 +605,12 @@ and dropped are in `TRIED.md`.
     at a holder's share of the uplink; and both browsers' resends to
     str0m's receiver. The testbed's runs of a case vary: score against
     repeats.
-  - Find why the testbed's native seed's uplink queue holds more than
-    the twin's through the whole run, its joins among it (bins'
-    `seed_up_queue_ms`), and model it: its links' SYN-ACKs wait behind
-    it. Read it with the 20 Mbit/s seed item above and
-    the bare bench's `seed-20` case (hack/testbed/bench/seed-20.sched).
+  - Find why the testbed's native and browser seeds' uplink queues hold
+    more than the twin's through the whole run, its joins among it (bins'
+    `seed_up_queue_ms`), and model it: a native seed's SYN-ACKs and a
+    browser seed's STUN binding responses wait behind it. Read it with
+    the 20 Mbit/s seed item above and the bare bench's `seed-20` case
+    (hack/testbed/bench/seed-20.sched).
   - Seed a window-model flow's srtt and min_rtt from its handshake, as
     Linux's `tcp_synack_rtt_meas` does.
   - Run or model network membership before transfers, on the testbed
