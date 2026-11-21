@@ -22,9 +22,14 @@
 //! runner's peer key its FFI form. A field list is the struct's own,
 //! matched whole on writing and on reading, so a field the records gain
 //! fails the build until it is written here.
+//!
+//! Each record also goes as bytes ([`Field::wire`]), as [`super::wire`]
+//! puts its values: an enum of unit variants its variant's name, an enum
+//! with data its name and then its fields, times absolute.
 
 use std::fmt::Write as _;
 
+use super::wire::{Wire, put_len, put_name, take_len, take_name};
 use serde_json::Value;
 use slotmap::{Key as _, KeyData};
 use strims_base::time::{Duration, Time};
@@ -42,6 +47,10 @@ use strims_ppspp::{
 pub trait Field: Sized {
     fn put(&self, out: &mut String, origin: Time);
     fn get(v: &Value, origin: Time) -> Option<Self>;
+    /// Appends the value's bytes (see the [module docs](self)).
+    fn wire(&self, out: &mut Vec<u8>);
+    /// The value [`Field::wire`] put at the front of `r`, taken.
+    fn unwire(r: &mut &[u8]) -> Option<Self>;
 }
 
 /// A JSON array being written: its items, comma-separated.
@@ -110,10 +119,28 @@ macro_rules! unsigned {
             fn get(v: &Value, _: Time) -> Option<Self> {
                 <$t>::try_from(v.as_u64()?).ok()
             }
+            fn wire(&self, out: &mut Vec<u8>) {
+                Wire::to_wire(self, out);
+            }
+            fn unwire(r: &mut &[u8]) -> Option<Self> {
+                <$t as Wire>::from_wire(r)
+            }
         }
     )*};
 }
 unsigned!(u8, u16, u32, u64, usize);
+
+/// [`Field`]'s bytes for a type that [`Wire`] puts.
+macro_rules! wired {
+    () => {
+        fn wire(&self, out: &mut Vec<u8>) {
+            Wire::to_wire(self, out);
+        }
+        fn unwire(r: &mut &[u8]) -> Option<Self> {
+            Wire::from_wire(r)
+        }
+    };
+}
 
 impl Field for bool {
     fn put(&self, out: &mut String, _: Time) {
@@ -122,6 +149,7 @@ impl Field for bool {
     fn get(v: &Value, _: Time) -> Option<Self> {
         v.as_bool()
     }
+    wired!();
 }
 
 impl Field for Time {
@@ -131,6 +159,7 @@ impl Field for Time {
     fn get(v: &Value, origin: Time) -> Option<Self> {
         Some(origin + Duration::from_nanos(v.as_i64()?))
     }
+    wired!();
 }
 
 impl Field for Duration {
@@ -140,23 +169,36 @@ impl Field for Duration {
     fn get(v: &Value, _: Time) -> Option<Self> {
         Some(Duration::from_nanos(v.as_i64()?))
     }
+    wired!();
 }
 
 impl Field for Bin {
     fn put(&self, out: &mut String, o: Time) {
-        self.0.put(out, o);
+        Field::put(&self.0, out, o);
     }
     fn get(v: &Value, o: Time) -> Option<Self> {
         Some(Bin(u64::get(v, o)?))
+    }
+    fn wire(&self, out: &mut Vec<u8>) {
+        Wire::to_wire(&self.0, out);
+    }
+    fn unwire(r: &mut &[u8]) -> Option<Self> {
+        Some(Bin(u64::from_wire(r)?))
     }
 }
 
 impl Field for PeerKey {
     fn put(&self, out: &mut String, o: Time) {
-        self.data().as_ffi().put(out, o);
+        Field::put(&self.data().as_ffi(), out, o);
     }
     fn get(v: &Value, o: Time) -> Option<Self> {
         Some(KeyData::from_ffi(u64::get(v, o)?).into())
+    }
+    fn wire(&self, out: &mut Vec<u8>) {
+        Wire::to_wire(&self.data().as_ffi(), out);
+    }
+    fn unwire(r: &mut &[u8]) -> Option<Self> {
+        Some(KeyData::from_ffi(u64::from_wire(r)?).into())
     }
 }
 
@@ -173,6 +215,22 @@ impl<T: Field> Field for Option<T> {
         }
         T::get(v, o).map(Some)
     }
+    fn wire(&self, out: &mut Vec<u8>) {
+        match self {
+            None => out.push(0),
+            Some(x) => {
+                out.push(1);
+                x.wire(out);
+            }
+        }
+    }
+    fn unwire(r: &mut &[u8]) -> Option<Self> {
+        match u8::from_wire(r)? {
+            0 => Some(None),
+            1 => Some(Some(T::unwire(r)?)),
+            _ => None,
+        }
+    }
 }
 
 impl<T: Field> Field for Vec<T> {
@@ -185,6 +243,16 @@ impl<T: Field> Field for Vec<T> {
     }
     fn get(v: &Value, o: Time) -> Option<Self> {
         v.as_array()?.iter().map(|x| T::get(x, o)).collect()
+    }
+    fn wire(&self, out: &mut Vec<u8>) {
+        put_len(self.len(), out);
+        for x in self {
+            x.wire(out);
+        }
+    }
+    fn unwire(r: &mut &[u8]) -> Option<Self> {
+        let n = take_len(r)?;
+        (0..n).map(|_| T::unwire(r)).collect()
     }
 }
 
@@ -200,6 +268,13 @@ macro_rules! tuple {
             fn get(v: &Value, o: Time) -> Option<Self> {
                 let mut r = Items::of(v, o)?;
                 Some(($(r.next::<$t>()?,)*))
+            }
+            fn wire(&self, out: &mut Vec<u8>) {
+                let ($($x,)*) = self;
+                $($x.wire(out);)*
+            }
+            fn unwire(r: &mut &[u8]) -> Option<Self> {
+                Some(($($t::unwire(r)?,)*))
             }
         }
     };
@@ -222,6 +297,13 @@ macro_rules! fields {
                 let mut r = Items::of(v, o)?;
                 Some($t { $($f: r.next()?),* })
             }
+            fn wire(&self, out: &mut Vec<u8>) {
+                let $t { $($f),* } = self;
+                $($f.wire(out);)*
+            }
+            fn unwire(r: &mut &[u8]) -> Option<Self> {
+                Some($t { $($f: Field::unwire(r)?),* })
+            }
         }
     };
 }
@@ -238,6 +320,18 @@ macro_rules! units {
             }
             fn get(v: &Value, _: Time) -> Option<Self> {
                 match v.as_str()? {
+                    $(stringify!($v) => Some($t::$v),)*
+                    _ => None,
+                }
+            }
+            fn wire(&self, out: &mut Vec<u8>) {
+                let name = match self {
+                    $($t::$v => stringify!($v),)*
+                };
+                put_name(name, out);
+            }
+            fn unwire(r: &mut &[u8]) -> Option<Self> {
+                match take_name(r)? {
                     $(stringify!($v) => Some($t::$v),)*
                     _ => None,
                 }
@@ -447,6 +541,34 @@ impl Field for SeedClose {
         (r.name()? == "Left").then_some(())?;
         Some(SeedClose::Left(r.next()?))
     }
+    fn wire(&self, out: &mut Vec<u8>) {
+        let name = match self {
+            SeedClose::Left(why) => {
+                put_name("Left", out);
+                why.wire(out);
+                return;
+            }
+            SeedClose::Silent => "Silent",
+            SeedClose::Spill => "Spill",
+            SeedClose::Pin => "Pin",
+            SeedClose::Saturated => "Saturated",
+            SeedClose::Declined => "Declined",
+            SeedClose::Channel => "Channel",
+        };
+        put_name(name, out);
+    }
+    fn unwire(r: &mut &[u8]) -> Option<Self> {
+        Some(match take_name(r)? {
+            "Left" => SeedClose::Left(Field::unwire(r)?),
+            "Silent" => SeedClose::Silent,
+            "Spill" => SeedClose::Spill,
+            "Pin" => SeedClose::Pin,
+            "Saturated" => SeedClose::Saturated,
+            "Declined" => SeedClose::Declined,
+            "Channel" => SeedClose::Channel,
+            _ => return None,
+        })
+    }
 }
 
 /// A decision's kind as `[name, fields...]`, its name its table's
@@ -578,6 +700,131 @@ impl Field for SeedDecisionKind {
             _ => return None,
         })
     }
+    fn wire(&self, out: &mut Vec<u8>) {
+        use SeedDecisionKind as K;
+        put_name(self.name(), out);
+        match self {
+            K::Request(q) => q.wire(out),
+            K::Deferred { stream } => stream.wire(out),
+            K::Released {
+                stream,
+                subscribers,
+                kept,
+            } => {
+                stream.wire(out);
+                subscribers.wire(out);
+                kept.wire(out);
+            }
+            K::Closed {
+                stream,
+                why,
+                subscribers,
+            } => {
+                stream.wire(out);
+                why.wire(out);
+                subscribers.wire(out);
+            }
+            K::HolderJoined {
+                satellite,
+                rtt,
+                holders,
+                copies,
+            } => {
+                satellite.wire(out);
+                rtt.wire(out);
+                holders.wire(out);
+                copies.wire(out);
+            }
+            K::HolderLeft {
+                why,
+                rtt,
+                holders,
+                copies,
+            } => {
+                why.wire(out);
+                rtt.wire(out);
+                holders.wire(out);
+                copies.wire(out);
+            }
+            K::Barred {
+                why,
+                until,
+                bars,
+                reporters,
+            } => {
+                why.wire(out);
+                until.wire(out);
+                bars.wire(out);
+                reporters.wire(out);
+            }
+            K::Check(c) => c.wire(out),
+            K::Cancel { stream, bin, open } => {
+                stream.wire(out);
+                bin.wire(out);
+                open.wire(out);
+            }
+            K::Window(w) => w.wire(out),
+            K::AnswerRate {
+                rate,
+                reading,
+                engaged,
+            } => {
+                rate.wire(out);
+                reading.wire(out);
+                engaged.wire(out);
+            }
+        }
+    }
+    fn unwire(r: &mut &[u8]) -> Option<Self> {
+        use SeedDecisionKind as K;
+        Some(match take_name(r)? {
+            "request" => K::Request(Field::unwire(r)?),
+            "deferred" => K::Deferred {
+                stream: Field::unwire(r)?,
+            },
+            "released" => K::Released {
+                stream: Field::unwire(r)?,
+                subscribers: Field::unwire(r)?,
+                kept: Field::unwire(r)?,
+            },
+            "closed" => K::Closed {
+                stream: Field::unwire(r)?,
+                why: Field::unwire(r)?,
+                subscribers: Field::unwire(r)?,
+            },
+            "holder_joined" => K::HolderJoined {
+                satellite: Field::unwire(r)?,
+                rtt: Field::unwire(r)?,
+                holders: Field::unwire(r)?,
+                copies: Field::unwire(r)?,
+            },
+            "holder_left" => K::HolderLeft {
+                why: Field::unwire(r)?,
+                rtt: Field::unwire(r)?,
+                holders: Field::unwire(r)?,
+                copies: Field::unwire(r)?,
+            },
+            "barred" => K::Barred {
+                why: Field::unwire(r)?,
+                until: Field::unwire(r)?,
+                bars: Field::unwire(r)?,
+                reporters: Field::unwire(r)?,
+            },
+            "check" => K::Check(Field::unwire(r)?),
+            "cancel" => K::Cancel {
+                stream: Field::unwire(r)?,
+                bin: Field::unwire(r)?,
+                open: Field::unwire(r)?,
+            },
+            "window" => K::Window(Field::unwire(r)?),
+            "answer_rate" => K::AnswerRate {
+                rate: Field::unwire(r)?,
+                reading: Field::unwire(r)?,
+                engaged: Field::unwire(r)?,
+            },
+            _ => return None,
+        })
+    }
 }
 
 /// A chunk the node first held ([`Logs::held`]): the hosts of its source,
@@ -634,6 +881,15 @@ fields!(Logs {
     seed_sends,
     lost,
 });
+
+impl Wire for Logs {
+    fn to_wire(&self, out: &mut Vec<u8>) {
+        self.wire(out);
+    }
+    fn from_wire(r: &mut &[u8]) -> Option<Self> {
+        Logs::unwire(r)
+    }
+}
 
 impl Logs {
     /// Snapshot `m`'s logs of `swarm`, its hosts by `index`.
@@ -698,7 +954,7 @@ impl Logs {
     /// The logs as a line's records write them, times from `origin`.
     pub fn json(&self, origin: Time) -> String {
         let mut out = String::new();
-        self.put(&mut out, origin);
+        Field::put(self, &mut out, origin);
         out
     }
 
@@ -710,7 +966,7 @@ impl Logs {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
     use super::*;
@@ -722,7 +978,7 @@ mod tests {
     /// Logs that hold every kind of record, every decision kind and every
     /// variant of the enums they carry, with times before and after the
     /// origin.
-    fn every(o: Time) -> Logs {
+    pub(crate) fn every(o: Time) -> Logs {
         let at = |ms: i64| o + Duration::from_millis(ms);
         let d = Duration::from_micros;
         let snap = LagSnapshot {

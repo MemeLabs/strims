@@ -49,10 +49,25 @@
 //!
 //! `tick_late_ms` and `write_late_ms` show a throttled timer or an
 //! overloaded host.
+//!
+//! A line holds what its node had about its second: its metrics, which the
+//! node takes in the pass after the one that took the work the second's
+//! timers queued (its push period's writes), and its logs' records up to
+//! then. The node's thread only takes them ([`LineParts`]), once what that
+//! pass handed the links has gone, and hands them to its driver
+//! ([`Runtime::line`]), whose [`LineWriter`] writes the line elsewhere: a
+//! native node's on a thread of its own, a browser's in a worker of its
+//! own. A deployed node writes no lines, so the line keeps out of the
+//! node's way: metrics taken in the period's own pass would hold its
+//! links' first writes behind them, and a line of the scheduler's and link
+//! logs written on the node's thread would hold it for a millisecond or
+//! more in the period after them.
 
 use std::cell::{Cell, RefCell};
+use std::fmt::Write as _;
 use std::future::Future;
 
+use strims_base::stats::WaitHistogram;
 use strims_base::time::{Duration, Time};
 use strims_node_core::app::Spawn;
 use strims_node_core::{
@@ -65,9 +80,10 @@ use strims_transfer::SwarmRead;
 
 use crate::media::{self, FlvFile, SeedStats, TagKind, ViewerStats};
 use crate::peers::Peers;
-use crate::record::links::{LinkLog, LinkOpen, LinkRows};
-use crate::record::logs::Logs;
-use crate::record::{self, DecisionLog, ParentLog, TimerContext, TimerLog};
+use crate::record::links::{LinkLog, LinkOpen, LinkRowsMaker, LinkTake};
+use crate::record::logs::{Field, Logs};
+use crate::record::wire::Wire;
+use crate::record::{self, DecisionLog, NODE_BIN_COUNTERS, ParentLog, TimerContext, TimerLog};
 use crate::shape::LiveShape;
 use crate::stream::{FRAME_LEN, FrameParser, Parsed, encode_frame};
 use crate::topology::{index_of, swarm_key};
@@ -87,10 +103,19 @@ pub trait Runtime {
     }
     /// Resolves once the wall clock reaches `at_ms`.
     fn sleep_until_ms(&self, at_ms: u64) -> impl Future<Output = ()>;
+    /// Resolves once the work the driver queued meanwhile has run, between
+    /// the steps of a line's ask for the node's metrics, its take and its
+    /// hand-over (see the [module docs](self)). By default at once.
+    fn yield_now(&self) -> impl Future<Output = ()> {
+        std::future::ready(())
+    }
     /// The driver's CPU time so far in milliseconds, if it can tell.
     fn cpu_ms(&self) -> Option<u64>;
-    /// Writes one line of output.
-    fn emit(&self, line: String);
+    /// Takes one line's parts, which a [`LineWriter`] the driver keeps
+    /// makes its line of output, in the order they come, off the node's
+    /// thread where the driver has another; what hands them over may
+    /// yield ([`Runtime::yield_now`]) between its steps.
+    fn line(&self, parts: LineParts) -> impl Future<Output = ()>;
     /// Reports something that went wrong; the node runs on.
     fn error(&self, message: String);
     /// Takes a viewer's Data message of a media stream (see
@@ -318,9 +343,7 @@ pub async fn run<R: Runtime + Clone + 'static, T: Timer, S: Spawn>(
     let sample = async {
         let mut next = s.start_ms.saturating_sub(5000);
         let mut loops = None;
-        // Links the log named before the node's peer events named their
-        // peers, and the lines they have waited.
-        let mut unnamed: Vec<(LinkOpen, u32)> = Vec::new();
+        let origin = Time::from_unix_millis(i64::try_from(s.start_ms).unwrap_or(i64::MAX));
         loop {
             let armed = timers.map(|_| (rt.precise_now(), rt.now_ms()));
             rt.sleep_until_ms(next).await;
@@ -334,9 +357,17 @@ pub async fn run<R: Runtime + Clone + 'static, T: Timer, S: Spawn>(
             while next <= t {
                 next += 1000;
             }
+            // The work the second's timers queued goes first (its push
+            // period's writes): the node answers the query after its next
+            // pass, and takes its metrics then, ahead of what that pass
+            // handed its links.
+            rt.yield_now().await;
             let Ok(m) = node.metrics().await else {
                 continue;
             };
+            // The line's moment: its metrics' readings are of now, and it
+            // takes its logs' records up to now.
+            let read_ms = rt.now_ms();
             let mut lag = std::mem::take(&mut *lags.borrow_mut());
             lag.sort_unstable();
             let wakeups = loops.map(|l| m.driver.loop_iterations.saturating_sub(l));
@@ -346,60 +377,43 @@ pub async fn run<R: Runtime + Clone + 'static, T: Timer, S: Spawn>(
                 Stream::Units { .. } if seed => Some(seed_stats.get().json()),
                 Stream::Units { .. } => Some(viewer_stats.borrow().json()),
             };
-            let now = Time::from_unix_millis(i64::try_from(t).unwrap_or(i64::MAX));
-            let link_log = links.map(|log| {
-                let mut rows = log.take();
-                let ids = ids.borrow();
-                let known = |l: &LinkOpen| ids.iter().any(|(id, _)| *id == l.peer);
-                let waiting: Vec<_> = unnamed
-                    .drain(..)
-                    .chain(rows.links.drain(..).map(|l| (l, 0)))
-                    .collect();
-                let (named, later): (Vec<_>, Vec<_>) =
-                    waiting.into_iter().partition(|(l, _)| known(l));
-                rows.links = named.into_iter().map(|(l, _)| l).collect();
-                // A peer the swarm never names (the relay) waits a minute.
-                unnamed = later
-                    .into_iter()
-                    .filter(|&(_, w)| w < 60)
-                    .map(|(l, w)| (l, w + 1))
-                    .collect();
-                rows
+            let link_take = links.map(LinkLog::take_raw);
+            let taken_parents = parents.map(ParentLog::take).unwrap_or_default();
+            let taken_checks = checks.map(DecisionLog::take);
+            let taken_reads = std::mem::take(&mut *reads.borrow_mut());
+            let taken_timers = timers.map(|log| {
+                let (rows, lost) = log.take();
+                (rows, lost, log.context())
             });
-            let rec = Records {
+            let cpu_ms = rt.cpu_ms();
+            let late = write_late.take();
+            // The work the node queued by now goes first: what the pass
+            // that answered the query handed its links.
+            rt.yield_now().await;
+            let moment = Moment {
                 t_ms: t,
-                swarm,
-                m: &m,
-                ids: &ids.borrow(),
-                parents: parents.map(ParentLog::take).unwrap_or_default(),
-                checks: checks.map(DecisionLog::take),
-                reads: std::mem::take(&mut *reads.borrow_mut()),
-                timers: timers.map(|log| {
-                    let (rows, lost) = log.take();
-                    (rows, lost, log.context())
-                }),
-                link_log,
-                now,
-                origin: Time::from_unix_millis(i64::try_from(s.start_ms).unwrap_or(i64::MAX)),
-            }
-            .json();
-            let line = Line {
-                t_ms: t,
+                read_ms,
                 s: &s,
                 seed,
                 swarm,
                 m: &m,
                 lag: &lag,
-                cpu_ms: rt.cpu_ms(),
-                ids: &ids.borrow(),
+                cpu_ms,
+                ids: ids.borrow().clone(),
                 tick_late,
-                write_late: write_late.take(),
+                write_late: late,
                 wakeups,
                 media,
-                rec,
-                now,
+                parents: taken_parents,
+                checks: taken_checks,
+                reads: taken_reads,
+                timers: taken_timers,
+                links: link_take,
+                origin,
             };
-            rt.emit(line.json());
+            let parts = moment.parts();
+            rt.yield_now().await;
+            rt.line(parts).await;
             if t >= end_ms + 5000 {
                 return;
             }
@@ -562,8 +576,9 @@ async fn read_frames(
 /// "parents": [[t_ms, stream, peer, why], ...], "parents_lost": n,
 /// "reads": [[seq, stamp_ms, read_ms], ...]}`, times Unix ms, peers by
 /// index (`null`: none, or one without), waits as
-/// [`record::waits_json`]. With the node's decision log
-/// ([`DecisionLog`]), its parent checks since the last line too,
+/// [`record::waits_json`]. The meter sample's `t_ms` is when the node's
+/// metrics were read, which its readings are of. With the node's decision
+/// log ([`DecisionLog`]), its parent checks since the last line too,
 /// `"checks": [[t_us, stream, action, best, best_lag_us, runner_up,
 /// runner_up_lag_us, parent, parent_have_us, parent_push_us, unready,
 /// subscriber, backed_off, stale, behind, votes], ...], "checks_lost": n`:
@@ -577,143 +592,15 @@ async fn read_frames(
 /// one writes none. With its link log, its links' I/O since, `"link_log":
 /// {...}` ([`record::links::link_log_json`], times in µs from `origin`); a
 /// node without one writes none.
-struct Records<'a> {
+///
+/// A line's moment holds what the node had then, borrowed where its
+/// metrics hold it; [`Moment::parts`] takes it, and a [`LineWriter`]
+/// writes the line.
+struct Moment<'a> {
+    /// The line's second, as its timer fired.
     t_ms: u64,
-    swarm: SwarmKey,
-    m: &'a NodeMetrics,
-    ids: &'a [(HostId, usize)],
-    parents: (Vec<ParentLogEntry>, u64),
-    checks: Option<(Vec<DecisionInfo>, u64)>,
-    reads: Vec<[u64; 3]>,
-    /// The timer log's take, and where its timers run.
-    timers: Option<(Vec<TimerRecord>, u64, TimerContext)>,
-    /// The link log's take.
-    link_log: Option<LinkRows>,
-    now: Time,
-    origin: Time,
-}
-
-impl Records<'_> {
-    fn json(&self) -> String {
-        let index = |id: &HostId| self.ids.iter().find(|(x, _)| x == id).map(|&(_, i)| i);
-        let swarm = self.swarm;
-        let (meter, seeds) = record::meter_sample(
-            self.m,
-            |k| (k == swarm).then_some(0),
-            std::time::Duration::from_millis(self.t_ms),
-            self.now,
-        );
-        let seed = seeds
-            .iter()
-            .find(|(s, _)| *s == 0)
-            .map_or("null".to_owned(), |(_, x)| x.json());
-        let bins: Vec<String> = self
-            .m
-            .bins
-            .iter()
-            .filter_map(|b| {
-                let sw = b.swarms.iter().find(|s| s.swarm == swarm)?;
-                let c: Vec<String> = record::bin_counters(b, sw)
-                    .iter()
-                    .map(u64::to_string)
-                    .collect();
-                let [p, a] = record::bin_waits(sw);
-                Some(format!(
-                    "[{},[{}],{},{}]",
-                    b.at.unix_millis(),
-                    c.join(","),
-                    record::waits_json(&p),
-                    record::waits_json(&a)
-                ))
-            })
-            .collect();
-        let (changes, lost) = &self.parents;
-        let parents: Vec<String> = changes
-            .iter()
-            .filter_map(|e| match e {
-                ParentLogEntry::Change(p) if p.swarm == swarm => Some(format!(
-                    "[{},{},{},\"{}\"]",
-                    p.at.unix_millis(),
-                    p.stream,
-                    opt(p.parent.as_ref().and_then(index)),
-                    p.why.name()
-                )),
-                _ => None,
-            })
-            .collect();
-        let reads: Vec<String> = self
-            .reads
-            .iter()
-            .map(|[q, s, r]| format!("[{q},{s},{r}]"))
-            .collect();
-        let checks = self
-            .checks
-            .as_ref()
-            .map_or(String::new(), |(checks, lost)| {
-                let us = |d: Option<Duration>| opt(d.map(|d| d.as_micros()));
-                let rows: Vec<String> = checks
-                    .iter()
-                    .filter(|d| d.swarm == Some(swarm))
-                    .filter_map(|d| {
-                        let TapKind::ParentChoice { stream, choice: c } = d.kind else {
-                            return None;
-                        };
-                        Some(format!(
-                            "[{},{stream},\"{}\",{},{},{},{},{},{},{},{},{},{},{},{},{}]",
-                            d.at.unix_nanos() / 1000,
-                            c.action.name(),
-                            opt(d.peer.as_ref().and_then(index)),
-                            us(c.best.map(|b| b.1)),
-                            opt(d.runner_up.as_ref().and_then(index)),
-                            us(c.runner_up.map(|r| r.1)),
-                            opt(d.parent.as_ref().and_then(index)),
-                            us(c.parent_have),
-                            us(c.parent_push),
-                            c.unready,
-                            c.subscriber,
-                            c.backed_off,
-                            c.stale,
-                            c.behind,
-                            c.votes,
-                        ))
-                    })
-                    .collect();
-                format!(",\"checks\":[{}],\"checks_lost\":{lost}", rows.join(","))
-            });
-        let logs = Logs::of(self.m, swarm, index);
-        let logs = if logs.is_empty() {
-            String::new()
-        } else {
-            format!(",\"logs\":{}", logs.json(self.origin))
-        };
-        let timers = self
-            .timers
-            .as_ref()
-            .map_or(String::new(), |(rows, lost, context)| {
-                format!(
-                    ",\"timers\":{}",
-                    record::timers_json(rows, *lost, *context, self.origin)
-                )
-            });
-        let link_log = self.link_log.as_ref().map_or(String::new(), |rows| {
-            format!(
-                ",\"link_log\":{}",
-                record::links::link_log_json(rows, index, self.origin)
-            )
-        });
-        format!(
-            "{{\"meter\":{},\"seed\":{seed},\"bins\":[{}],\"parents\":[{}],\"parents_lost\":{lost},\"reads\":[{}]{checks}{logs}{timers}{link_log}}}",
-            meter.map_or("null".to_owned(), |m| m.json()),
-            bins.join(","),
-            parents.join(","),
-            reads.join(","),
-        )
-    }
-}
-
-/// One second's line.
-struct Line<'a> {
-    t_ms: u64,
+    /// When the node's metrics were read.
+    read_ms: u64,
     s: &'a Settings,
     seed: bool,
     swarm: SwarmKey,
@@ -721,22 +608,169 @@ struct Line<'a> {
     /// The lags read in the second, sorted.
     lag: &'a [u64],
     cpu_ms: Option<u64>,
-    ids: &'a [(HostId, usize)],
+    ids: Vec<(HostId, usize)>,
     tick_late: u64,
     write_late: Option<u64>,
     wakeups: Option<u64>,
     /// The media stream's stats, as JSON.
     media: Option<String>,
-    /// The line's records ([`Records`]), as JSON.
-    rec: String,
-    /// When the metrics were read.
-    now: Time,
+    parents: (Vec<ParentLogEntry>, u64),
+    checks: Option<(Vec<DecisionInfo>, u64)>,
+    reads: Vec<[u64; 3]>,
+    /// The timer log's take, and where its timers run.
+    timers: Option<(Vec<TimerRecord>, u64, TimerContext)>,
+    /// The link log's raw take.
+    links: Option<LinkTake>,
+    origin: Time,
 }
 
-impl Line<'_> {
-    fn json(&self) -> String {
+/// A line's parts ([`Moment::parts`]): what the node had at the line's
+/// moment, the line's head, its meter and seed samples written (a few
+/// hundred bytes), and the rest as records, which a [`LineWriter`] writes
+/// into the line. A browser's parts cross to the worker that writes its
+/// lines as bytes ([`Wire`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LineParts {
+    /// The line up to its records: `{"t_ms":...,"rec":`.
+    head: String,
+    meter: String,
+    seed: String,
+    /// Each bin edge of the line's swarm: its time (Unix ms), counters
+    /// ([`record::NODE_BIN_COUNTERS`]) and waits ([`record::bin_waits`]).
+    bins: Vec<(i64, [u64; NODE_BIN_COUNTERS.len()], [WaitHistogram; 2])>,
+    /// Each parent change of the line's swarm: when (Unix ms), the stream,
+    /// its parent by index, and why.
+    parents: Vec<(i64, u64, Option<usize>, String)>,
+    parents_lost: u64,
+    reads: Vec<[u64; 3]>,
+    checks: Option<(Vec<Check>, u64)>,
+    logs: Logs,
+    timers: Option<(Vec<TimerRecord>, u64, TimerContext)>,
+    links: Option<LinkTake>,
+    /// The nodes the line names, by host.
+    ids: Vec<(HostId, usize)>,
+    origin: Time,
+}
+
+/// A parent check's row ([`Moment`]'s doc gives its columns), its peers by
+/// index, its times in µs.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Check {
+    t_us: i64,
+    stream: u64,
+    action: String,
+    best: (Option<usize>, Option<i64>),
+    runner_up: (Option<usize>, Option<i64>),
+    parent: Option<usize>,
+    parent_lag: (Option<i64>, Option<i64>),
+    /// unready, subscriber, backed_off, stale, behind, votes.
+    counts: [u64; 6],
+}
+
+impl Moment<'_> {
+    fn index(&self, id: &HostId) -> Option<usize> {
+        self.ids.iter().find(|(x, _)| x == id).map(|&(_, i)| i)
+    }
+
+    /// The moment's parts: the head and the samples written, the rest
+    /// taken as records.
+    fn parts(self) -> LineParts {
+        let index = |id: &HostId| self.index(id);
+        let swarm = self.swarm;
         let m = self.m;
-        let index = |id: &HostId| self.ids.iter().find(|(x, _)| x == id).map(|&(_, i)| i);
+        let read = Time::from_unix_millis(i64::try_from(self.read_ms).unwrap_or(i64::MAX));
+        let (meter, seeds) = record::meter_sample(
+            m,
+            |k| (k == swarm).then_some(0),
+            std::time::Duration::from_millis(self.read_ms),
+            read,
+        );
+        let seed = seeds
+            .iter()
+            .find(|(s, _)| *s == 0)
+            .map_or("null".to_owned(), |(_, x)| x.json());
+        let bins = m
+            .bins
+            .iter()
+            .filter_map(|b| {
+                let sw = b.swarms.iter().find(|s| s.swarm == swarm)?;
+                Some((
+                    b.at.unix_millis(),
+                    record::bin_counters(b, sw),
+                    record::bin_waits(sw),
+                ))
+            })
+            .collect();
+        let (changes, parents_lost) = &self.parents;
+        let parents = changes
+            .iter()
+            .filter_map(|e| match e {
+                ParentLogEntry::Change(p) if p.swarm == swarm => Some((
+                    p.at.unix_millis(),
+                    u64::from(p.stream),
+                    p.parent.as_ref().and_then(index),
+                    p.why.name().to_owned(),
+                )),
+                _ => None,
+            })
+            .collect();
+        let checks = self.checks.as_ref().map(|(checks, lost)| {
+            let us = |d: Option<Duration>| d.map(|d| d.as_micros());
+            let rows = checks
+                .iter()
+                .filter(|d| d.swarm == Some(swarm))
+                .filter_map(|d| {
+                    let TapKind::ParentChoice { stream, choice: c } = d.kind else {
+                        return None;
+                    };
+                    Some(Check {
+                        t_us: d.at.unix_nanos() / 1000,
+                        stream: u64::from(stream),
+                        action: c.action.name().to_owned(),
+                        best: (d.peer.as_ref().and_then(index), us(c.best.map(|b| b.1))),
+                        runner_up: (
+                            d.runner_up.as_ref().and_then(index),
+                            us(c.runner_up.map(|r| r.1)),
+                        ),
+                        parent: d.parent.as_ref().and_then(index),
+                        parent_lag: (us(c.parent_have), us(c.parent_push)),
+                        counts: [
+                            c.unready,
+                            c.subscriber,
+                            c.backed_off,
+                            c.stale,
+                            c.behind,
+                            c.votes,
+                        ],
+                    })
+                })
+                .collect();
+            (rows, *lost)
+        });
+        let parents_lost = *parents_lost;
+        let logs = Logs::of(m, swarm, index);
+        let head = self.head(read);
+        LineParts {
+            head,
+            meter: meter.map_or("null".to_owned(), |m| m.json()),
+            seed,
+            bins,
+            parents,
+            parents_lost,
+            reads: self.reads,
+            checks,
+            logs,
+            timers: self.timers,
+            links: self.links,
+            ids: self.ids,
+            origin: self.origin,
+        }
+    }
+
+    /// The line up to its records, its links' readings' ages at `read`.
+    fn head(&self, read: Time) -> String {
+        let m = self.m;
+        let index = |id: &HostId| self.index(id);
         let transfers =
             TransferSample::of(m, self.swarm, index).map_or("null".to_owned(), |x| x.json());
         let ms = |d: Duration| d.as_millis();
@@ -758,13 +792,13 @@ impl Line<'_> {
                     opt(r.and_then(|r| r.rate)),
                     opt(r.and_then(|r| r.queued)),
                     opt(r.map(|r| r.written_since)),
-                    opt(r.map(|r| ms(r.age(self.now)))),
+                    opt(r.map(|r| ms(r.age(read)))),
                 ))
             })
             .collect();
         let lag = self.lag;
         format!(
-            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{},\"media\":{},\"rec\":{}}}",
+            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{},\"media\":{},\"rec\":",
             self.t_ms,
             self.t_ms as i64 - self.s.start_ms as i64,
             self.s.index,
@@ -779,8 +813,186 @@ impl Line<'_> {
             opt(self.write_late),
             opt(self.wakeups),
             self.media.as_deref().unwrap_or("null"),
-            self.rec,
         )
+    }
+}
+
+/// What writes a node's lines from their parts, given them in the order
+/// they were taken: the link log's links between takes
+/// ([`LinkRowsMaker`]), and the links the log named before the node's
+/// peer events named their peers, with the lines they have waited.
+#[derive(Debug, Default)]
+pub struct LineWriter {
+    links: LinkRowsMaker,
+    unnamed: Vec<(LinkOpen, u32)>,
+}
+
+impl LineWriter {
+    /// The line of `p` (see [`Moment`] for its records' fields).
+    pub fn write(&mut self, p: LineParts) -> String {
+        let LineParts {
+            mut head,
+            meter,
+            seed,
+            bins,
+            parents,
+            parents_lost,
+            reads,
+            checks,
+            logs,
+            timers,
+            links,
+            ids,
+            origin,
+        } = p;
+        let index = |id: &HostId| ids.iter().find(|(x, _)| x == id).map(|&(_, i)| i);
+        let out = &mut head;
+        let _ = write!(out, "{{\"meter\":{meter},\"seed\":{seed},\"bins\":");
+        record::list(out, &bins, |s, (at, counters, [p, a])| {
+            let _ = write!(s, "[{at},[");
+            for (i, c) in counters.iter().enumerate() {
+                if i > 0 {
+                    s.push(',');
+                }
+                let _ = write!(s, "{c}");
+            }
+            let _ = write!(s, "],{},{}]", record::waits_json(p), record::waits_json(a));
+        });
+        out.push_str(",\"parents\":");
+        record::list(out, &parents, |s, (at, stream, parent, why)| {
+            let _ = write!(s, "[{at},{stream},");
+            record::put_opt(s, *parent);
+            let _ = write!(s, ",\"{why}\"]");
+        });
+        let _ = write!(out, ",\"parents_lost\":{parents_lost},\"reads\":");
+        record::list(out, &reads, |s, [q, t, r]| {
+            let _ = write!(s, "[{q},{t},{r}]");
+        });
+        if let Some((checks, lost)) = &checks {
+            out.push_str(",\"checks\":");
+            record::list(out, checks, |s, c| {
+                let _ = write!(
+                    s,
+                    "[{},{},\"{}\",{},{},{},{},{},{},{}",
+                    c.t_us,
+                    c.stream,
+                    c.action,
+                    opt(c.best.0),
+                    opt(c.best.1),
+                    opt(c.runner_up.0),
+                    opt(c.runner_up.1),
+                    opt(c.parent),
+                    opt(c.parent_lag.0),
+                    opt(c.parent_lag.1),
+                );
+                for n in c.counts {
+                    let _ = write!(s, ",{n}");
+                }
+                s.push(']');
+            });
+            let _ = write!(out, ",\"checks_lost\":{lost}");
+        }
+        if !logs.is_empty() {
+            out.push_str(",\"logs\":");
+            Field::put(&logs, out, origin);
+        }
+        if let Some((rows, lost, context)) = &timers {
+            out.push_str(",\"timers\":");
+            record::put_timers(out, rows, *lost, *context, origin);
+        }
+        if let Some(take) = links {
+            let mut rows = self.links.rows(take);
+            let known = |l: &LinkOpen| ids.iter().any(|(id, _)| *id == l.peer);
+            let waiting: Vec<_> = self
+                .unnamed
+                .drain(..)
+                .chain(rows.links.drain(..).map(|l| (l, 0)))
+                .collect();
+            let (known, later): (Vec<_>, Vec<_>) = waiting.into_iter().partition(|(l, _)| known(l));
+            rows.links = known.into_iter().map(|(l, _)| l).collect();
+            // A peer the swarm never names (the relay) waits a minute.
+            self.unnamed = later
+                .into_iter()
+                .filter(|&(_, w)| w < 60)
+                .map(|(l, w)| (l, w + 1))
+                .collect();
+            out.push_str(",\"link_log\":");
+            record::links::put_link_log(out, &rows, index, origin);
+        }
+        out.push_str("}}");
+        head
+    }
+}
+
+impl Wire for Check {
+    fn to_wire(&self, out: &mut Vec<u8>) {
+        (self.t_us, self.stream, self.action.clone()).to_wire(out);
+        (self.best, self.runner_up, self.parent, self.parent_lag).to_wire(out);
+        self.counts.to_wire(out);
+    }
+    fn from_wire(r: &mut &[u8]) -> Option<Self> {
+        let (t_us, stream, action) = Wire::from_wire(r)?;
+        let (best, runner_up, parent, parent_lag) = Wire::from_wire(r)?;
+        Some(Check {
+            t_us,
+            stream,
+            action,
+            best,
+            runner_up,
+            parent,
+            parent_lag,
+            counts: Wire::from_wire(r)?,
+        })
+    }
+}
+
+impl Wire for LineParts {
+    fn to_wire(&self, out: &mut Vec<u8>) {
+        let LineParts {
+            head,
+            meter,
+            seed,
+            bins,
+            parents,
+            parents_lost,
+            reads,
+            checks,
+            logs,
+            timers,
+            links,
+            ids,
+            origin,
+        } = self;
+        head.to_wire(out);
+        meter.to_wire(out);
+        seed.to_wire(out);
+        bins.to_wire(out);
+        parents.to_wire(out);
+        parents_lost.to_wire(out);
+        reads.to_wire(out);
+        checks.to_wire(out);
+        logs.to_wire(out);
+        timers.to_wire(out);
+        links.to_wire(out);
+        ids.to_wire(out);
+        origin.to_wire(out);
+    }
+    fn from_wire(r: &mut &[u8]) -> Option<Self> {
+        Some(LineParts {
+            head: Wire::from_wire(r)?,
+            meter: Wire::from_wire(r)?,
+            seed: Wire::from_wire(r)?,
+            bins: Wire::from_wire(r)?,
+            parents: Wire::from_wire(r)?,
+            parents_lost: Wire::from_wire(r)?,
+            reads: Wire::from_wire(r)?,
+            checks: Wire::from_wire(r)?,
+            logs: Wire::from_wire(r)?,
+            timers: Wire::from_wire(r)?,
+            links: Wire::from_wire(r)?,
+            ids: Wire::from_wire(r)?,
+            origin: Wire::from_wire(r)?,
+        })
     }
 }
 
@@ -808,7 +1020,7 @@ pub fn kind_name(kind: LinkKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
     use crate::shape::RATE;
 
@@ -830,5 +1042,316 @@ mod tests {
         let mut live = shape.options.clone();
         live.delivery_mode = DeliveryMode::LOW_LATENCY;
         assert_eq!(frames_options(&shape, false, true), live);
+    }
+
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicI64, Ordering};
+
+    use strims_base::stats::WaitHistogram;
+    use strims_node_core::{
+        LinkEvent, LinkState, NodeBin, ParentInfo, SampleSource, SwarmBin, WriteWait,
+    };
+    use strims_ppspp::{ParentAction, ParentChoice, ParentWhy, SwarmCounters};
+
+    use crate::record::logs::tests::every;
+
+    /// The nodes a line's fixture names, by index.
+    fn host(i: usize) -> HostId {
+        HostId([i as u64 + 1, 0, 0, 0])
+    }
+
+    /// What a line's records hold: a snapshot with two bins of the swarm
+    /// and one of another, every kind of the scheduler's logs' records, a
+    /// parent change of each swarm and its cap's losses, frames read, a
+    /// parent check, timers and a link log's raw take; and the nodes it
+    /// names.
+    struct Fixture {
+        m: NodeMetrics,
+        ids: Vec<(HostId, usize)>,
+        parents: (Vec<ParentLogEntry>, u64),
+        checks: (Vec<DecisionInfo>, u64),
+        reads: Vec<[u64; 3]>,
+        timers: (Vec<TimerRecord>, u64, TimerContext),
+        links: LinkTake,
+        origin: Time,
+    }
+
+    fn fixture() -> Fixture {
+        let origin = Time::from_unix_millis(1_800_000_000_000);
+        let at = move |ms: i64| origin + Duration::from_millis(ms);
+        let swarm = SwarmKey::default();
+        let ids: Vec<_> = (0..64).map(|i| (host(i), i)).collect();
+        let peer = |i: Option<usize>| i.map(host);
+        let logs = every(origin);
+        let mut m = NodeMetrics::default();
+        for (p, forecast) in &logs.forecasts {
+            m.forecasts.push(strims_node_core::ForecastInfo {
+                swarm,
+                peer: peer(*p),
+                forecast: *forecast,
+            });
+        }
+        for (p, parent, asked, held) in &logs.held {
+            m.held.push(strims_node_core::HeldInfo {
+                swarm,
+                bin: held.bin,
+                at: held.at,
+                held: *held,
+                peer: peer(*p),
+                parent: peer(*parent),
+                asked: peer(*asked),
+            });
+        }
+        for (p, have) in &logs.haves {
+            m.haves.push(strims_node_core::HaveInfo {
+                swarm,
+                peer: peer(*p),
+                have: *have,
+            });
+        }
+        for (p, rivals, record) in &logs.asks {
+            m.requests.push(strims_node_core::RequestInfo {
+                swarm,
+                peer: peer(*p),
+                rivals: rivals.iter().map(|r| peer(*r)).collect(),
+                record: record.clone(),
+            });
+        }
+        for (p, record) in &logs.seed_decisions {
+            m.seed_decisions.push(strims_node_core::LogInfo {
+                swarm,
+                peer: peer(*p),
+                record: *record,
+            });
+        }
+        for (p, record) in &logs.seed_sends {
+            m.seed_sends.push(strims_node_core::LogInfo {
+                swarm,
+                peer: peer(*p),
+                record: *record,
+            });
+        }
+        m.forecasts_lost = logs.lost.forecasts;
+        m.held_lost = logs.lost.held;
+        m.haves_lost = logs.lost.haves;
+        m.requests_lost = logs.lost.requests;
+        m.seed_log_lost = logs.lost.seed_log;
+        let mut waits = WaitHistogram::default();
+        waits.buckets[1] = 4;
+        waits.buckets[3] = 2;
+        let bin = |ms: i64, hits: u64| NodeBin {
+            at: at(ms),
+            swarms: vec![SwarmBin {
+                swarm,
+                hits,
+                misses: 2,
+                pruned: 0,
+                switched: 1,
+                shed: 0,
+                sheds_sent: 0,
+                parents: 3,
+                upload_capacity: 250_000,
+                upload_busy_permille: 400,
+                seed_copies: 2,
+                seed_budget_capacity: 0,
+                counters: SwarmCounters {
+                    chunks_sent: 40,
+                    push_wait: waits,
+                    ..SwarmCounters::default()
+                },
+            }],
+            outbound: strims_ppspp::ChannelMetrics::default(),
+            bytes_written: 9000 + hits,
+        };
+        m.bins = vec![bin(100, 5), bin(200, 7)];
+        let parents = vec![
+            ParentLogEntry::Change(ParentInfo {
+                at: at(150),
+                swarm,
+                stream: 1,
+                parent: Some(host(2)),
+                why: ParentWhy::Open,
+            }),
+            ParentLogEntry::Change(ParentInfo {
+                at: at(160),
+                swarm,
+                stream: 2,
+                parent: None,
+                why: ParentWhy::Lost,
+            }),
+        ];
+        let choice = ParentChoice {
+            action: ParentAction::Graft,
+            parent: None,
+            best: None,
+            runner_up: None,
+            unready: 1,
+            subscriber: 0,
+            backed_off: 2,
+            stale: 0,
+            behind: 3,
+            votes: 4,
+            parent_have: Some(Duration::from_micros(2500)),
+            parent_push: None,
+        };
+        let checks = vec![DecisionInfo {
+            at: at(170),
+            swarm: Some(swarm),
+            peer: Some(host(3)),
+            runner_up: None,
+            parent: Some(host(4)),
+            kind: TapKind::ParentChoice { stream: 1, choice },
+        }];
+        let timer = |source, ms: i64| TimerRecord {
+            source,
+            armed: at(ms) - Duration::from_micros(2_500),
+            deadline: at(ms),
+            fired: at(ms) + Duration::from_micros(130),
+            requested: Duration::from_micros(2_500),
+        };
+        let timers = vec![
+            timer(TimerSource::Writer, 0),
+            timer(TimerSource::Record, 1000),
+        ];
+        let now = Arc::new(AtomicI64::new(0));
+        let clock = now.clone();
+        let log = LinkLog::new(Arc::new(move || at(clock.load(Ordering::Relaxed))));
+        let sink = log.sink();
+        sink.record(1, LinkEvent::Opened(LinkKind::WebRtc));
+        sink.record(1, LinkEvent::Peer(host(1)));
+        for k in 0..40 {
+            now.store(k, Ordering::Relaxed);
+            sink.record(1, LinkEvent::Queued(1200));
+            sink.record(1, LinkEvent::Began(1200));
+            if k % 2 == 0 {
+                sink.record(
+                    1,
+                    LinkEvent::Checked {
+                        source: SampleSource::WebRtc,
+                        buffered: 9000,
+                        low: Some(4096),
+                    },
+                );
+                sink.record(1, LinkEvent::Held(WriteWait::Host));
+            }
+            sink.record(1, LinkEvent::Done);
+            sink.record(1, LinkEvent::Arrived(80));
+            sink.record(1, LinkEvent::Taken(80));
+            sink.record(
+                1,
+                LinkEvent::Sample {
+                    source: SampleSource::WebRtc,
+                    state: LinkState {
+                        unsent: Some(k as u64),
+                        srtt: Some(Duration::from_micros(1500)),
+                        buffered: Some(4),
+                        uplink_queue: Some(Duration::from_micros(250)),
+                        ..LinkState::default()
+                    },
+                },
+            );
+        }
+        Fixture {
+            m,
+            ids,
+            parents: (parents, 2),
+            checks: (checks, 1),
+            reads: (0..50).map(|q| [q, 1000 + q, 1040 + q]).collect(),
+            timers: (timers, 0, TimerContext::Worker),
+            links: log.take_raw(),
+            origin,
+        }
+    }
+
+    /// The fixture's line's parts.
+    fn parts_of(f: &Fixture) -> LineParts {
+        let s = Settings {
+            index: 0,
+            nodes: 8,
+            start_ms: 1_800_000_000_000,
+            secs: 60,
+            arrives: false,
+            rate: RATE,
+            chunks: None,
+            stream: Stream::Frames,
+            probe: false,
+        };
+        Moment {
+            t_ms: 1_800_000_001_000,
+            read_ms: 1_800_000_001_000,
+            s: &s,
+            seed: true,
+            swarm: SwarmKey::default(),
+            m: &f.m,
+            lag: &[3, 5, 8],
+            cpu_ms: Some(120),
+            ids: f.ids.clone(),
+            tick_late: 1,
+            write_late: Some(2),
+            wakeups: None,
+            media: None,
+            parents: f.parents.clone(),
+            checks: Some(f.checks.clone()),
+            reads: f.reads.clone(),
+            timers: Some(f.timers.clone()),
+            links: Some(f.links.clone()),
+            origin: f.origin,
+        }
+        .parts()
+    }
+
+    /// A line's parts cross as bytes whole, and the writer makes the same
+    /// line of them as of the parts it was given; the line holds every
+    /// list's rows, the logs and the link log read back as their records.
+    #[test]
+    fn a_lines_parts_cross_as_bytes_and_make_the_same_line() {
+        let f = fixture();
+        let parts = parts_of(&f);
+        let mut bytes = Vec::new();
+        parts.to_wire(&mut bytes);
+        let mut r = bytes.as_slice();
+        let back = LineParts::from_wire(&mut r).unwrap();
+        assert!(r.is_empty());
+        assert_eq!(back, parts);
+        let line = LineWriter::default().write(parts);
+        assert_eq!(LineWriter::default().write(back), line);
+        assert_eq!(LineParts::from_wire(&mut &bytes[..bytes.len() - 1]), None);
+        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(v["rel_ms"], 1000);
+        let rec = &v["rec"];
+        assert_eq!(rec["bins"].as_array().unwrap().len(), 2);
+        assert_eq!(rec["parents"].as_array().unwrap().len(), 2);
+        assert_eq!(rec["reads"].as_array().unwrap().len(), 50);
+        assert_eq!(rec["checks"].as_array().unwrap().len(), 1);
+        assert_eq!(Logs::parse(&rec["logs"], f.origin), Some(every(f.origin)));
+        assert_eq!(rec["timers"]["rows"].as_array().unwrap().len(), 2);
+        let back = record::links::link_log_of(&rec["link_log"], f.origin).unwrap();
+        let rows = LinkRowsMaker::default().rows(f.links.clone());
+        assert_eq!(
+            (back.writes, back.reads, back.samples),
+            (rows.writes, rows.reads, rows.samples)
+        );
+        assert_eq!(back.links.len(), 1);
+    }
+
+    /// A link the log named before the node's peer events named its peer
+    /// waits for it in the writer, and a line names it once they have.
+    #[test]
+    fn a_link_waits_in_the_writer_for_its_peers_name() {
+        let mut f = fixture();
+        let log = LinkLog::new(Arc::new(|| Time::from_unix_millis(1_800_000_000_500)));
+        let sink = log.sink();
+        sink.record(9, LinkEvent::Opened(LinkKind::Tcp));
+        sink.record(9, LinkEvent::Peer(host(70)));
+        f.links = log.take_raw();
+        let mut w = LineWriter::default();
+        let named = |line: &str| {
+            let v: serde_json::Value = serde_json::from_str(line).unwrap();
+            v["rec"]["link_log"]["links"].as_array().unwrap().len()
+        };
+        assert_eq!(named(&w.write(parts_of(&f))), 0);
+        f.links = log.take_raw();
+        f.ids.push((host(70), 70));
+        assert_eq!(named(&w.write(parts_of(&f))), 1);
     }
 }

@@ -5,7 +5,10 @@
 // worker; the window hands it a port for the frontend RPC connection, a
 // port for signalling and a port players' feeds open on, hosts its
 // RTCPeerConnections and forwards visibility changes. The node's PSI
-// sessions compute in a second worker, over a port between the two.
+// sessions compute in a second worker, over a port between the two. The
+// testbed's bare node writes its lines in a second worker too, the lines
+// worker, which posts each line on a port whose messages the window takes
+// as the node's own.
 
 import { EventEmitter } from "events";
 
@@ -42,8 +45,16 @@ export type InitMessage =
       signal: MessagePort;
       psi?: MessagePort;
       feeds?: MessagePort;
+      lines?: MessagePort;
     }
-  | { type: "init"; role: "psi"; options: PsiWorkerOptions; port: MessagePort };
+  | { type: "init"; role: "psi"; options: PsiWorkerOptions; port: MessagePort }
+  | {
+      type: "init";
+      role: "lines";
+      options: PsiWorkerOptions;
+      port: MessagePort;
+      out: MessagePort;
+    };
 
 /** What the PSI worker posts the window when it can't start. */
 export type PsiWorkerMessage = { type: "fatal"; message: string };
@@ -374,9 +385,9 @@ export interface WasmNode {
   close(): void;
 }
 
-// Both workers run svc.worker.ts. It is constructed in one place, so webpack
+// Every worker runs svc.worker.ts. It is constructed in one place, so webpack
 // bundles it once.
-const spawnWorker = (name: "svc" | "psi") =>
+const spawnWorker = (name: "svc" | "psi" | "lines") =>
   new Worker(/* webpackChunkName: "svc" */ new URL("./svc.worker.ts", import.meta.url), {
     type: "module",
     name,
@@ -403,17 +414,47 @@ const startPsiWorker = (logLevel: number, port: MessagePort): Worker => {
   return worker;
 };
 
+// Starts the testbed's lines worker, which writes the lines whose parts the
+// node posts on `port` and posts them on `out`. A lines worker that dies is
+// logged, and the node's lines stop.
+const startLinesWorker = (logLevel: number, port: MessagePort, out: MessagePort): Worker => {
+  const worker = spawnWorker("lines");
+  const died = (message: string) => {
+    // eslint-disable-next-line no-console
+    console.error("strims-wasm lines worker:", message);
+    worker.terminate();
+  };
+  worker.onerror = (e: ErrorEvent) => died(e.message || "failed to load");
+  worker.onmessage = ({ data }: MessageEvent<PsiWorkerMessage>) => {
+    if (data.type === "fatal") died(data.message);
+  };
+  worker.postMessage(
+    { type: "init", role: "lines", options: { logLevel }, port, out } satisfies InitMessage,
+    [port, out]
+  );
+  return worker;
+};
+
 // Starts a strims-wasm node in a new dedicated worker, and its PSI worker.
-// The browser link tests' bare node runs no PSI, and gets no PSI worker.
+// The browser link tests' bare node runs no PSI, and gets no PSI worker,
+// but a lines worker, whose lines its bus emits as the node's messages.
 export const startWasmNode = (options: WasmNodeOptions, hooks: WasmNodeHooks = {}): WasmNode => {
   const worker = spawnWorker("svc");
   const psi = options.e2e ? undefined : new MessageChannel();
   const psiWorker = psi && startPsiWorker(options.logLevel, psi.port2);
+  const lines = options.e2e ? new MessageChannel() : undefined;
+  const linesOut = lines && new MessageChannel();
+  const linesWorker =
+    lines && linesOut && startLinesWorker(options.logLevel, lines.port2, linesOut.port2);
   const frontend = new MessageChannel();
   const signal = new MessageChannel();
   const feedPorts = new MessageChannel();
   const feeds = new FeedHost(feedPorts.port1);
   const bus = new PortBus(frontend.port1);
+  if (linesOut) {
+    linesOut.port1.onmessage = ({ data }: MessageEvent<ArrayBuffer>) =>
+      bus.emit("data", new Uint8Array(data));
+  }
   const peers = new PeerHost(
     (msg, transfer) => signal.port1.postMessage(msg, transfer ?? []),
     hooks.onSignalTiming
@@ -436,6 +477,8 @@ export const startWasmNode = (options: WasmNodeOptions, hooks: WasmNodeHooks = {
     signal.port1.close();
     worker.terminate();
     psiWorker?.terminate();
+    if (linesOut) linesOut.port1.onmessage = null;
+    linesWorker?.terminate();
     peers.closeAll();
     feeds.shut();
     bus.shut();
@@ -462,6 +505,7 @@ export const startWasmNode = (options: WasmNodeOptions, hooks: WasmNodeHooks = {
   const ports = [frontend.port2, signal.port2];
   if (psi) ports.push(psi.port1);
   ports.push(feedPorts.port2);
+  if (lines) ports.push(lines.port1);
   worker.postMessage(
     {
       type: "init",
@@ -471,6 +515,7 @@ export const startWasmNode = (options: WasmNodeOptions, hooks: WasmNodeHooks = {
       signal: signal.port2,
       psi: psi?.port1,
       feeds: feedPorts.port2,
+      lines: lines?.port1,
     } satisfies InitMessage,
     ports
   );

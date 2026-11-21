@@ -411,6 +411,17 @@
 #                          once their announce and answer bound its
 #                          channels; a run before run.sh named it ran it as
 #                          each peer's link came up, names none, and the
+#                          testbed module keys it apart), and LINES, how a
+#                          node wrote its line of a second (`apart`: its
+#                          metrics asked for once the second's push
+#                          period's writes had gone, its records taken on
+#                          the node's thread and the line written on a
+#                          thread or, a browser's, in a worker of its own,
+#                          strims-testbed's node module; a run before
+#                          run.sh named it took them in that period's own
+#                          pass and wrote each line on the node's thread as
+#                          they came, which held it, a browser's ahead of
+#                          the period's first write, names none, and the
 #                          testbed module keys it apart)
 #   .ctl                   while the run lasts, its control files, which go
 #                          with it
@@ -837,6 +848,7 @@ echo "STAMPS=clock" >> "$out/settings"
 echo "JOIN_LINKS=together" >> "$out/settings"
 echo "NEIGHBOURS=static" >> "$out/settings"
 echo "SWARMS=transfers" >> "$out/settings"
+echo "LINES=apart" >> "$out/settings"
 
 # Milliseconds since the epoch, from bash's clock ($EPOCHREALTIME: seconds
 # and six digits of microseconds, no fork); the containers' samplers stamp

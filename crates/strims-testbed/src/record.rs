@@ -14,9 +14,13 @@
 //! [`TimerLog`], with its link log on its links' I/O in a
 //! [`links::LinkLog`], and with its scheduler's logs on hands each line
 //! their records ([`logs`]).
+//!
+//! A line's parts cross from the node's thread to its line's writer as
+//! bytes in a browser ([`wire`]).
 
 pub mod links;
 pub mod logs;
+pub mod wire;
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -39,6 +43,32 @@ use strims_ppspp::TapKind;
 /// The width of the tables' bins, in ms, unless a sim run sets its own
 /// (`STRIMS_SIM_BIN_MS`): the testbed's nodes keep their stats bins at it.
 pub const BIN_MS: i64 = 100;
+
+/// Writes `items` as a JSON array, each by `put`.
+pub fn list<I>(
+    out: &mut String,
+    items: impl IntoIterator<Item = I>,
+    mut put: impl FnMut(&mut String, I),
+) {
+    out.push('[');
+    for (i, x) in items.into_iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        put(out, x);
+    }
+    out.push(']');
+}
+
+/// Writes `v`, or `null`.
+pub fn put_opt(out: &mut String, v: Option<impl std::fmt::Display>) {
+    match v {
+        Some(v) => {
+            let _ = write!(out, "{v}");
+        }
+        None => out.push_str("null"),
+    }
+}
 
 /// A node's upload meter at one sample (`PushStats::upload_rate`,
 /// `upload_busy_permille`, `upload_capacity`, `upload_queue_delay` in
@@ -511,14 +541,25 @@ fn us_since(t: Time, origin: Time) -> i64 {
 /// "lost": n, "rows": [[source, armed_us, deadline_us, fired_us,
 /// requested_us], ...]}`, times in µs from `origin`, floored.
 pub fn timers_json(rows: &[TimerRecord], lost: u64, context: TimerContext, origin: Time) -> String {
-    let mut s = format!(
-        "{{\"context\":\"{}\",\"lost\":{lost},\"rows\":[",
+    let mut s = String::new();
+    put_timers(&mut s, rows, lost, context, origin);
+    s
+}
+
+/// Writes [`timers_json`]'s text to `out`.
+pub fn put_timers(
+    out: &mut String,
+    rows: &[TimerRecord],
+    lost: u64,
+    context: TimerContext,
+    origin: Time,
+) {
+    let _ = write!(
+        out,
+        "{{\"context\":\"{}\",\"lost\":{lost},\"rows\":",
         context.name()
     );
-    for (i, r) in rows.iter().enumerate() {
-        if i > 0 {
-            s.push(',');
-        }
+    list(out, rows, |s, r| {
         let _ = write!(
             s,
             "[\"{}\",{},{},{},{}]",
@@ -528,9 +569,8 @@ pub fn timers_json(rows: &[TimerRecord], lost: u64, context: TimerContext, origi
             us_since(r.fired, origin),
             r.requested.as_nanos().div_euclid(1000),
         );
-    }
-    s.push_str("]}");
-    s
+    });
+    out.push('}');
 }
 
 /// A line's `rec.timers` ([`timers_json`]) read back, times from
@@ -681,7 +721,6 @@ mod tests {
     fn the_probe_arms_its_delays_in_turn() {
         use crate::node::{PROBE_DELAYS_MS, PROBE_PERIOD_MS, Runtime, probe};
         use std::cell::Cell;
-        use std::future::Future;
         use std::pin::pin;
         use std::task::{Context, Poll, Waker};
 
@@ -698,7 +737,9 @@ mod tests {
             fn cpu_ms(&self) -> Option<u64> {
                 None
             }
-            fn emit(&self, _: String) {}
+            fn line(&self, _: crate::node::LineParts) -> impl Future<Output = ()> {
+                std::future::ready(())
+            }
             fn error(&self, _: String) {}
         }
         let start = 1_700_000_000_000;

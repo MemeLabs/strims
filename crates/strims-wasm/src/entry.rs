@@ -4,7 +4,7 @@
 //! The worker's entry point.
 //!
 //! The worker script runs `await init(); start(options, frontend, signal,
-//! psi, feeds)` with the ports the window transferred to it. Ports buffer their
+//! psi, feeds, lines)` with the ports the window transferred to it. Ports buffer their
 //! messages until a handler is attached, so nothing sent before `start` is
 //! lost. A `start` that throws is reported to the window as `fatal` by the
 //! worker script.
@@ -15,7 +15,8 @@
 //! posts `{type: "fatal", message}` on `signal`.
 //!
 //! The PSI worker's script runs `await init(); start_psi(options, port)`
-//! instead ([`crate::psi::start_psi`]).
+//! instead ([`crate::psi::start_psi`]), and the testbed's lines worker
+//! `await init(); start_lines(options, port, out)` ([`start_lines`]).
 
 use std::rc::Rc;
 
@@ -32,6 +33,26 @@ use crate::kv::IdbKv;
 use crate::options::Options;
 use crate::{frontend, runtime};
 
+/// Starts the testbed's lines worker: the line of each of its node's
+/// lines' parts that arrive on `port`, posted on `out` (the `e2e` module's
+/// docs). `options` are the window's; only `logLevel` applies. A build
+/// without the `e2e` feature refuses.
+#[wasm_bindgen]
+pub fn start_lines(options: JsValue, port: MessagePort, out: MessagePort) -> Result<(), JsValue> {
+    let (parsed, _) = Options::parse(&options);
+    crate::log::init(parsed.log_level);
+    #[cfg(feature = "e2e")]
+    {
+        crate::e2e::start_lines(port, out);
+        Ok(())
+    }
+    #[cfg(not(feature = "e2e"))]
+    {
+        drop((port, out));
+        Err(js_sys::Error::new("a lines worker needs the e2e build").into())
+    }
+}
+
 /// The operating system a browser's device record reports: the UI's
 /// device list shows it.
 pub const DEVICE_OS: &str = "web";
@@ -47,8 +68,10 @@ pub type WasmManager = Manager<IdbKv, WasmFactory, WasmClock>;
 /// this worker. `feeds` is the port players' feeds open on
 /// ([`crate::feed`]), served while a profile runs; without one, players
 /// read streams over the frontend RPC. With the `e2e` feature,
-/// `options.e2e: true` hands `frontend`, `signal` and `feeds` to the
-/// browser link tests' and the testbed's bare node instead.
+/// `options.e2e: true` hands `frontend`, `signal`, `feeds` and `lines`
+/// (the port to the testbed's lines worker, [`start_lines`]) to the
+/// browser link tests' and the testbed's bare node instead; other nodes
+/// take no `lines`.
 #[wasm_bindgen]
 pub fn start(
     options: JsValue,
@@ -56,6 +79,7 @@ pub fn start(
     signal: MessagePort,
     psi: Option<MessagePort>,
     feeds: Option<MessagePort>,
+    lines: Option<MessagePort>,
 ) -> Result<(), JsValue> {
     let (parsed, ignored) = Options::parse(&options);
     crate::log::init(parsed.log_level);
@@ -63,9 +87,10 @@ pub fn start(
     // opens.
     #[cfg(feature = "e2e")]
     if crate::e2e::requested(&options) {
-        crate::e2e::start(frontend, signal, feeds);
+        crate::e2e::start(frontend, signal, feeds, lines);
         return Ok(());
     }
+    drop(lines);
     for line in &ignored {
         tracing::warn!("ignoring an option: {line}");
     }

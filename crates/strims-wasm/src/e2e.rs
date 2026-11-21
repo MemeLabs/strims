@@ -29,7 +29,7 @@
 //! | `connectPeer` | `hostId` | Starts a peer exchange with the host on the network (`Node::connect_peer`) and reports `connecting`. |
 //! | `send` | `hostId`, `bytes` | Sends `bytes` from `replyPort` to the host's `echoPort`. Nothing is reported unless it fails. |
 //! | `stats` | | Reports `stats`. |
-//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, `arrives`, and optionally `rate`, `chunk` with `munro`, `units` and `timerProbe` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]), negotiating it with every peer linked since `start` through the transfers' announce and answer as a deployed node does, but without the network membership run that precedes them on a deployed node ([`strims_testbed::peers`]), and reports `sample` each second. A viewer that `arrives` (a boolean) reads from the live edge ([`Settings::arrives`]): the harness makes its links into the running stream. With `units`, the stream is media in the unit format in a swarm of `units` chunks per signature ([`strims_testbed::media`]), which the node reads as a viewer and feeds the page's player (see below). With `timerProbe` (a boolean) and `start`'s `timerLog`, it runs the timer probe too ([`strims_testbed::node::probe`]). Only the first `testbed` runs. |
+//! | `testbed` | `index`, `nodes`, `startMs`, `secs`, `arrives`, and optionally `rate`, `chunk` with `munro`, `units` and `timerProbe` | Runs the testbed's swarm as node `index` of `nodes` ([`strims_testbed::node::run`]), negotiating it with every peer linked since `start` through the transfers' announce and answer as a deployed node does, but without the network membership run that precedes them on a deployed node ([`strims_testbed::peers`]), and sends its line each second (see below). A viewer that `arrives` (a boolean) reads from the live edge ([`Settings::arrives`]): the harness makes its links into the running stream. With `units`, the stream is media in the unit format in a swarm of `units` chunks per signature ([`strims_testbed::media`]), which the node reads as a viewer and feeds the page's player (see below). With `timerProbe` (a boolean) and `start`'s `timerLog`, it runs the timer probe too ([`strims_testbed::node::probe`]). Only the first `testbed` runs. |
 //!
 //! Events, from the node:
 //!
@@ -43,7 +43,6 @@
 //! | `exchangeClosed` | `hostId`, `outcome` | A peer exchange ended; `outcome` is the `ExchangeOutcome`'s debug form. |
 //! | `message` | `from`, `bytes` | A vpn message arrived on `replyPort`. |
 //! | `stats` | `echoed`, `echoErrors`, `eventsDropped`, `linkQueueFull`, `deliveriesDropped`, `links: [{kind, mtu, readBytes, writeBytes}]` | Answers `stats`. |
-//! | `sample` | `line`, `postMs` | The testbed's line of a second, a JSON object in a string, with `cpu_ms` `null`; and `Date.now()` as it's posted. |
 //! | `error` | `command`, `message`, and a failed dial's `uri` or `connectPeer`'s `hostId` | A command didn't parse or failed, an echo failed (`command` `echo`), or the testbed reported something (`command` `testbed`). |
 //! | `captureOpen` | `file`, `node` | The capture started file `file` of the node named `node`. |
 //!
@@ -51,6 +50,22 @@
 //! then the file's index as a LEB128 varint, then the bytes that follow
 //! in that file. The node sends them each time the capture flushes, which
 //! is between records, about once a second.
+//!
+//! The testbed's line of a second comes as one too: `0x03`, then
+//! `Date.now()` as it's posted (a big-endian u64 of ms), then the line,
+//! UTF-8, with `cpu_ms` `null`.
+//!
+//! # The lines worker
+//!
+//! The node's worker only takes each line's parts
+//! ([`strims_testbed::node::LineParts`]); the page's lines worker writes
+//! the line ([`start_lines`]), so its writing takes none of the node's
+//! thread. The page creates a channel between the two: the node posts
+//! each line's parts on its end (`start`'s `lines`) as one transferred
+//! buffer of their bytes ([`strims_testbed::record::wire`]), and the
+//! lines worker posts each line, as the binary message above, on `out`,
+//! which the page relays to the harness as a message of the node's.
+//! Without a lines port the node writes its lines itself.
 //!
 //! # A media stream's feed
 //!
@@ -101,9 +116,10 @@ use strims_node_core::{
 };
 use strims_proto::types::Key;
 use strims_testbed::media::Viewer;
-use strims_testbed::node::{Runtime, Settings, Stream, kind_name};
+use strims_testbed::node::{LineParts, LineWriter, Runtime, Settings, Stream, kind_name};
 use strims_testbed::peers::{self, Peers};
 use strims_testbed::record::links::LinkLog;
+use strims_testbed::record::wire::Wire;
 use strims_testbed::record::{DecisionLog, ParentLog, TimerContext, TimerLog};
 use strims_testbed::shape::RATE;
 use strims_transfer::SwarmRead;
@@ -124,9 +140,15 @@ pub fn requested(options: &JsValue) -> bool {
 }
 
 /// Runs the control task on `frontend` (see the [module docs](self)). The
-/// node it starts signals WebRTC with the window over `signal`, and feeds
-/// the page's player on `feeds`.
-pub fn start(frontend: MessagePort, signal: MessagePort, feeds: Option<MessagePort>) {
+/// node it starts signals WebRTC with the window over `signal`, feeds the
+/// page's player on `feeds`, and hands its testbed lines' parts to the
+/// lines worker on `lines`.
+pub fn start(
+    frontend: MessagePort,
+    signal: MessagePort,
+    feeds: Option<MessagePort>,
+    lines: Option<MessagePort>,
+) {
     let (commands_tx, commands) = mpsc::unbounded_channel();
     let on_message = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
         // Anything but an ArrayBuffer is no bytes, which don't parse.
@@ -144,6 +166,7 @@ pub fn start(frontend: MessagePort, signal: MessagePort, feeds: Option<MessagePo
         running: None,
         events: None,
         feeds: feeds.map(Feeds::serve),
+        lines: lines.map(Out),
         _on_message: on_message,
     };
     // Detached: the worker runs it for as long as it lives.
@@ -179,7 +202,26 @@ impl Out {
 
     /// Posts `bytes` as one binary message.
     fn post_bytes(&self, bytes: &[u8]) {
-        let buffer = Uint8Array::from(bytes).buffer();
+        self.post_parts(&[bytes]);
+    }
+
+    /// Posts `parts` as one binary message, each copied once, out of the
+    /// worker's memory into the message's buffer.
+    fn post_parts(&self, parts: &[&[u8]]) {
+        let len = parts.iter().map(|p| p.len()).sum::<usize>();
+        let Ok(len) = u32::try_from(len) else {
+            tracing::warn!(len, "e2e: a message too long to post");
+            return;
+        };
+        let bytes = Uint8Array::new_with_length(len);
+        let mut at = 0;
+        for p in parts {
+            // Each part fits: the parts' lengths sum to `len`.
+            let end = at + p.len() as u32;
+            bytes.subarray(at, end).copy_from(p);
+            at = end;
+        }
+        let buffer = bytes.buffer();
         if let Err(e) = self
             .0
             .post_message_with_transferable(&buffer, &Array::of1(&buffer))
@@ -231,6 +273,8 @@ struct Control {
     events: Option<mpsc::UnboundedReceiver<NodeEvent>>,
     /// The feeds port, which feeds the page's player.
     feeds: Option<Rc<Feeds>>,
+    /// The port to the lines worker.
+    lines: Option<Out>,
     _on_message: Closure<dyn FnMut(MessageEvent)>,
 }
 
@@ -366,11 +410,15 @@ impl Control {
                 };
                 let out = self.out.clone();
                 let feeds = self.feeds.clone();
+                let lines = self.lines.clone();
                 // Detached: it ends 5 s after the stream does.
                 drop(runtime::spawn(async move {
                     let rt = Testbed {
                         out: out.clone(),
                         feeds,
+                        lines,
+                        writer: Rc::default(),
+                        last: Rc::default(),
                     };
                     let peers = Peers::new(&r.node, events, WasmClock, WasmSpawn);
                     if let Err(e) = strims_testbed::node::run(
@@ -598,6 +646,45 @@ async fn post_capture(out: Out, mut chunks: mpsc::UnboundedReceiver<Chunk>) {
 pub const CAPTURE_BYTES: u8 = 0x01;
 /// The binary message that has the page open a feed for its player.
 pub const MEDIA_OPEN: u8 = 0x02;
+/// The first byte of a binary message that carries the testbed's line.
+pub const SAMPLE: u8 = 0x03;
+
+/// Posts `line` on `out` as its binary message (see the
+/// [module docs](self)), its bytes copied once into the message.
+fn post_line(out: &Out, line: &str) {
+    // `as` saturates, and NaN is 0.
+    let post = js_sys::Date::now() as u64;
+    let mut head = [SAMPLE; 9];
+    for (h, b) in head.iter_mut().skip(1).zip(post.to_be_bytes()) {
+        *h = b;
+    }
+    out.post_parts(&[&head, line.as_bytes()]);
+}
+
+/// Runs the lines worker (see the [module docs](self#the-lines-worker)):
+/// each line's parts that arrive on `port` it writes into the line, in the
+/// order they come, and posts on `out`. Bytes that aren't a line's parts
+/// are dropped, with a warning.
+pub fn start_lines(port: MessagePort, out: MessagePort) {
+    let out = Out(out);
+    let mut writer = LineWriter::default();
+    let on_message = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
+        let Ok(buffer) = e.data().dyn_into::<ArrayBuffer>() else {
+            tracing::warn!("e2e: a lines message that isn't bytes");
+            return;
+        };
+        let bytes = Uint8Array::new(&buffer).to_vec();
+        let mut r = bytes.as_slice();
+        match LineParts::from_wire(&mut r) {
+            Some(parts) if r.is_empty() => post_line(&out, &writer.write(parts)),
+            _ => tracing::warn!("e2e: a lines message that isn't a line's parts"),
+        }
+    });
+    // Setting `onmessage` starts the port, which delivers what it buffered.
+    port.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
+    // The worker serves the port for the rest of its life.
+    on_message.forget();
+}
 
 /// Reports the node's events, hands those its testbed's peers take to
 /// `testbed` ([`peers::serves`]), and echoes the messages on the echo
@@ -759,12 +846,18 @@ impl<S: SwarmRead> Pieces for Fed<'_, '_, S> {
     }
 }
 
-/// The testbed's side of the worker: its lines go out as `sample` events,
-/// and a media stream to the page's player on its feeds.
+/// The testbed's side of the worker: its lines' parts go to the lines
+/// worker, and a media stream to the page's player on its feeds.
 #[derive(Clone)]
 struct Testbed {
     out: Out,
     feeds: Option<Rc<Feeds>>,
+    /// The port to the lines worker.
+    lines: Option<Out>,
+    /// Without one, what writes the lines here.
+    writer: Rc<RefCell<LineWriter>>,
+    /// The bytes of the last line's parts, which the next's start as large.
+    last: Rc<Cell<usize>>,
 }
 
 impl Testbed {
@@ -843,16 +936,32 @@ impl Runtime for Testbed {
         clock::Sleep::until(Time::from_unix_millis(at_ms as i64)).await;
     }
 
+    fn yield_now(&self) -> impl Future<Output = ()> {
+        clock::yield_now()
+    }
+
     fn cpu_ms(&self) -> Option<u64> {
         None
     }
 
-    fn emit(&self, line: String) {
-        self.out.post(&[
-            ("type", "sample".into()),
-            ("line", line.into()),
-            ("postMs", js_sys::Date::now().into()),
-        ]);
+    /// Posts the line's parts to the lines worker as their bytes, copied
+    /// once out of the worker's memory (see the
+    /// [module docs](self#the-lines-worker)), yielding between the two.
+    async fn line(&self, parts: LineParts) {
+        match &self.lines {
+            Some(port) => {
+                let mut bytes = Vec::with_capacity(self.last.get());
+                parts.to_wire(&mut bytes);
+                drop(parts);
+                self.last.set(bytes.len());
+                clock::yield_now().await;
+                port.post_bytes(&bytes);
+            }
+            None => {
+                let line = self.writer.borrow_mut().write(parts);
+                post_line(&self.out, &line);
+            }
+        }
     }
 
     fn error(&self, message: String) {

@@ -91,7 +91,7 @@ use strims_node::{
 };
 use strims_testbed::media::FlvFile;
 use strims_testbed::native::{now_ms, self_cpu_ms, write_host};
-use strims_testbed::node::{Runtime, Settings, Stream};
+use strims_testbed::node::{LineParts, LineWriter, Runtime, Settings, Stream};
 use strims_testbed::peers::{self, Peers};
 use strims_testbed::record::links::LinkLog;
 use strims_testbed::record::{BIN_MS, DecisionLog, ParentLog, TimerContext, TimerLog};
@@ -198,11 +198,31 @@ fn args() -> Result<Args, String> {
     Ok(a)
 }
 
-/// The tokio driver's side of the node, and the file a viewer records its
-/// Data messages in.
+/// The tokio driver's side of the node, the file a viewer records its
+/// Data messages in, and the thread that writes its lines.
 #[derive(Clone, Default)]
 struct Native {
     record: Option<Rc<RefCell<BufWriter<File>>>>,
+    lines: Option<std::sync::mpsc::Sender<Option<LineParts>>>,
+}
+
+/// The thread that writes the node's lines from their parts, off the
+/// node's thread, to stdout in the order they come, until it is handed
+/// `None`: the sender's end, and the thread to join.
+fn line_writer() -> (
+    std::sync::mpsc::Sender<Option<LineParts>>,
+    std::thread::JoinHandle<()>,
+) {
+    let (tx, rx) = std::sync::mpsc::channel::<Option<LineParts>>();
+    // A driver's thread: the node's own runs on the runtime's.
+    #[allow(clippy::disallowed_methods)]
+    let thread = std::thread::spawn(move || {
+        let mut writer = LineWriter::default();
+        while let Ok(Some(parts)) = rx.recv() {
+            println!("{}", writer.write(parts));
+        }
+    });
+    (tx, thread)
 }
 
 impl Runtime for Native {
@@ -218,12 +238,20 @@ impl Runtime for Native {
         tokio::time::sleep(Duration::from_millis(at_ms.saturating_sub(now_ms()))).await;
     }
 
+    fn yield_now(&self) -> impl std::future::Future<Output = ()> {
+        // The runtime polls its I/O and timers before it polls the task
+        // again.
+        tokio::task::yield_now()
+    }
+
     fn cpu_ms(&self) -> Option<u64> {
         self_cpu_ms()
     }
 
-    fn emit(&self, line: String) {
-        println!("{line}");
+    async fn line(&self, parts: LineParts) {
+        if let Some(tx) = &self.lines {
+            let _ = tx.send(Some(parts));
+        }
     }
 
     fn error(&self, message: String) {
@@ -413,6 +441,7 @@ async fn run() -> Result<(), String> {
         }),
         probe: a.timer_probe,
     };
+    let (lines, writer) = line_writer();
     let rt = Native {
         record: match &a.record {
             Some(path) => Some(Rc::new(RefCell::new(BufWriter::new(
@@ -420,6 +449,7 @@ async fn run() -> Result<(), String> {
             )))),
             None => None,
         },
+        lines: Some(lines.clone()),
     };
     let ran = tokio::select! {
         biased;
@@ -443,6 +473,11 @@ async fn run() -> Result<(), String> {
         && let Err(e) = f.borrow_mut().flush()
     {
         eprintln!("record: {e}");
+    }
+    // Every line handed over is written before the node exits.
+    let _ = lines.send(None);
+    if writer.join().is_err() {
+        eprintln!("the line writer panicked");
     }
     ran
 }

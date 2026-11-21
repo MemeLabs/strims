@@ -3,18 +3,19 @@
 
 //! A node's link log ([`LinkLog`]): what its links' I/O did
 //! (`NodeConfig::link_log`), made into the rows of the tables'
-//! `link_writes`, `link_reads` and `link_samples`. A testbed node takes it
-//! at each line and writes the rows in the line's records
-//! ([`link_log_json`]), which strims-sim's `testbed` module reads back
-//! ([`link_log_of`]); strims-sim takes a simulated node's at its stats
-//! samples.
+//! `link_writes`, `link_reads` and `link_samples`. A testbed node takes
+//! the records it had kept at each line's moment ([`LinkLog::take_raw`]),
+//! which its line's writer makes rows ([`LinkRowsMaker`]) and writes in the
+//! line's records ([`link_log_json`], [`put_link_log`]), off the node's
+//! thread; strims-sim's `testbed` module reads them back ([`link_log_of`]). strims-sim takes a simulated node's
+//! at its stats samples ([`LinkLog::take`]).
 //!
 //! The node's code hands each [`LinkRecord`] to the log's sink as it runs,
-//! which stamps it with the log's clock and keeps it in a buffer it
-//! allocates once: at most [`LinkLog::CAP`] I/O records and
-//! [`LinkLog::SAMPLE_CAP`] samples between two takes, past which they are
-//! counted as lost (a lost record shifts the rows of its link after it).
-//! A take turns them into rows:
+//! which stamps it with the log's clock and keeps it in a buffer: at most
+//! [`LinkLog::CAP`] I/O records and [`LinkLog::SAMPLE_CAP`] samples
+//! between two takes, past which they are counted as lost (a lost record
+//! shifts the rows of its link after it). A take swaps the buffers for
+//! new ones as large, and turns the records into rows:
 //!
 //! - **writes**: each write a link's writer began and its transport took
 //!   whole, matched with the node's hand-off of it (the writes of a link go
@@ -40,8 +41,9 @@ use std::fmt::Write as _;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 
+use super::wire::{Wire, put_name, take_name};
+use super::{list, put_opt};
 use strims_base::time::{Duration, Time};
 use strims_node_core::{
     HostId, LinkEvent, LinkKind, LinkRecord, LinkSink, LinkState, SampleSource, WriteWait,
@@ -174,7 +176,7 @@ impl LinkRows {
 
 /// A link's I/O record as the log keeps it: a [`LinkEvent`] but a sample,
 /// which the log keeps apart, so its buffer's records stay small.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Io {
     Opened(LinkKind),
     Peer(HostId),
@@ -424,17 +426,69 @@ impl Assembler {
     }
 }
 
+/// A buffer the log's sink fills and its takes empty. A node's sinks are
+/// `Send + Sync`; one thread fills and takes, so the lock never waits.
+#[allow(clippy::disallowed_types)]
+type Buffer<T> = Arc<std::sync::Mutex<Vec<T>>>;
+
+/// The buffer `b` holds, swapped for an empty one as large.
+fn swap<T>(b: &Buffer<T>) -> Vec<T> {
+    let mut v = b.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let n = v.len();
+    std::mem::replace(&mut *v, Vec::with_capacity(n))
+}
+
+/// Keeps `x` in `b` if it holds fewer than `cap`; else counts it in `lost`.
+fn keep<T>(b: &Buffer<T>, cap: usize, lost: &AtomicU64, x: T) {
+    let mut v = b.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if v.len() < cap {
+        v.push(x);
+    } else {
+        lost.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
 /// See the [module docs](self). Clones share the log; only the clone that
 /// takes needs to be on the thread that made it.
 #[derive(Clone)]
 pub struct LinkLog {
-    tx: SyncSender<(Time, u64, Io)>,
-    rx: Rc<Receiver<(Time, u64, Io)>>,
-    samples_tx: SyncSender<LinkSample>,
-    samples_rx: Rc<Receiver<LinkSample>>,
+    io: Buffer<(Time, u64, Io)>,
+    samples: Buffer<LinkSample>,
     lost: Arc<AtomicU64>,
     clock: Arc<dyn Fn() -> Time + Send + Sync>,
-    assembler: Rc<RefCell<Assembler>>,
+    maker: Rc<RefCell<LinkRowsMaker>>,
+}
+
+/// The records a raw take took ([`LinkLog::take_raw`]), and those the
+/// log left out since the last: rows once a [`LinkRowsMaker`] makes them,
+/// wherever that runs ([`Wire`] carries them there).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LinkTake {
+    io: Vec<(Time, u64, Io)>,
+    samples: Vec<LinkSample>,
+    lost: u64,
+}
+
+/// What makes a log's raw takes rows, given them in the order they were
+/// taken: the links the log tracks between takes.
+#[derive(Debug, Default)]
+pub struct LinkRowsMaker(Assembler);
+
+impl LinkRowsMaker {
+    /// The rows `take`'s records made (see the [module docs](self)), and
+    /// the records left out.
+    pub fn rows(&mut self, take: LinkTake) -> LinkRows {
+        // The I/O first: a sample's link is known once its records are.
+        for (at, link, io) in take.io {
+            self.0.take_io(at, link, io);
+        }
+        for s in take.samples {
+            self.0.take_sample(s);
+        }
+        let mut rows = std::mem::take(&mut self.0.rows);
+        rows.lost = take.lost;
+        rows
+    }
 }
 
 impl std::fmt::Debug for LinkLog {
@@ -451,31 +505,27 @@ impl LinkLog {
 
     /// An empty log whose sink stamps records by `clock`.
     pub fn new(clock: Arc<dyn Fn() -> Time + Send + Sync>) -> LinkLog {
-        let (tx, rx) = sync_channel(Self::CAP);
-        let (samples_tx, samples_rx) = sync_channel(Self::SAMPLE_CAP);
         LinkLog {
-            tx,
-            rx: Rc::new(rx),
-            samples_tx,
-            samples_rx: Rc::new(samples_rx),
+            io: Buffer::default(),
+            samples: Buffer::default(),
             lost: Arc::default(),
             clock,
-            assembler: Rc::default(),
+            maker: Rc::default(),
         }
     }
 
     /// The sink for the node's config.
     pub fn sink(&self) -> LinkSink {
-        let (tx, samples, lost, clock) = (
-            self.tx.clone(),
-            self.samples_tx.clone(),
+        let (io, samples, lost, clock) = (
+            self.io.clone(),
+            self.samples.clone(),
             self.lost.clone(),
             self.clock.clone(),
         );
         LinkSink(Arc::new(
             move |LinkRecord { link, at, event }: LinkRecord| {
                 let at = at.unwrap_or_else(|| clock());
-                let io = match event {
+                let record = match event {
                     LinkEvent::Opened(kind) => Io::Opened(kind),
                     LinkEvent::Peer(peer) => Io::Peer(peer),
                     LinkEvent::Queued(_) => Io::Queued,
@@ -504,15 +554,11 @@ impl LinkLog {
                             cause: SampleCause::Sample,
                             state,
                         };
-                        if samples.try_send(s).is_err() {
-                            lost.fetch_add(1, Ordering::Relaxed);
-                        }
+                        keep(&samples, Self::SAMPLE_CAP, &lost, s);
                         return;
                     }
                 };
-                if tx.try_send((at, link, io)).is_err() {
-                    lost.fetch_add(1, Ordering::Relaxed);
-                }
+                keep(&io, Self::CAP, &lost, (at, link, record));
             },
         ))
     }
@@ -520,17 +566,19 @@ impl LinkLog {
     /// The rows the records since the last take made (see the
     /// [module docs](self)), and the records left out.
     pub fn take(&self) -> LinkRows {
-        let mut a = self.assembler.borrow_mut();
-        // The I/O first: a sample's link is known once its records are.
-        for (at, link, io) in self.rx.try_iter() {
-            a.take_io(at, link, io);
+        let take = self.take_raw();
+        self.maker.borrow_mut().rows(take)
+    }
+
+    /// The records kept since the last take, and those left out, whose
+    /// rows a [`LinkRowsMaker`] makes. A log's takes all go one way: by
+    /// [`LinkLog::take`], or raw to one maker.
+    pub fn take_raw(&self) -> LinkTake {
+        LinkTake {
+            io: swap(&self.io),
+            samples: swap(&self.samples),
+            lost: self.lost.swap(0, Ordering::Relaxed),
         }
-        for s in self.samples_rx.try_iter() {
-            a.take_sample(s);
-        }
-        let mut rows = std::mem::take(&mut a.rows);
-        rows.lost = self.lost.swap(0, Ordering::Relaxed);
-        rows
     }
 }
 
@@ -541,37 +589,38 @@ fn us(t: Time, origin: Time) -> i64 {
         .div_euclid(1000)
 }
 
-fn opt<T: std::fmt::Display>(v: Option<T>) -> String {
-    v.map_or("null".to_owned(), |v| v.to_string())
-}
-
-fn opt_us(v: Option<Duration>) -> String {
-    opt(v.map(|d| d.as_nanos().div_euclid(1000)))
-}
-
 /// The columns of a sample's state, in [`link_log_json`]'s order: unsent,
 /// unacked, cwnd, ssthresh, srtt_us, rttvar_us, retrans, delivery_rate,
 /// buffered, lowat, uplink_queue_us, link_pending, write_held,
 /// qos_backlog.
 const STATE_COLUMNS: usize = 14;
 
-fn state_fields(s: &LinkState) -> [String; STATE_COLUMNS] {
-    [
-        opt(s.unsent),
-        opt(s.unacked),
-        opt(s.cwnd),
-        opt(s.ssthresh),
-        opt_us(s.srtt),
-        opt_us(s.rttvar),
-        opt(s.retrans),
-        opt(s.delivery_rate),
-        opt(s.buffered),
-        opt(s.lowat),
-        opt_us(s.uplink_queue),
-        opt(s.link_pending),
-        opt(s.write_held),
-        opt(s.qos_backlog),
-    ]
+/// Writes a sample's state's [`STATE_COLUMNS`], comma-separated.
+fn put_state(out: &mut String, s: &LinkState) {
+    let n = |v: Option<u64>| v.map(i128::from);
+    let us = |d: Option<Duration>| d.map(|d| i128::from(d.as_nanos().div_euclid(1000)));
+    let columns: [Option<i128>; STATE_COLUMNS] = [
+        n(s.unsent),
+        n(s.unacked),
+        n(s.cwnd),
+        n(s.ssthresh),
+        us(s.srtt),
+        us(s.rttvar),
+        n(s.retrans),
+        n(s.delivery_rate),
+        n(s.buffered),
+        n(s.lowat),
+        us(s.uplink_queue),
+        n(s.link_pending),
+        n(s.write_held),
+        n(s.qos_backlog),
+    ];
+    for (i, c) in columns.into_iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        put_opt(out, c);
+    }
 }
 
 /// A take's rows as a line's records hold them (`rec.link_log`), their
@@ -588,69 +637,236 @@ pub fn link_log_json(
     peer: impl Fn(&HostId) -> Option<usize>,
     origin: Time,
 ) -> String {
-    let mut s = format!("{{\"lost\":{},\"links\":[", rows.lost);
-    let mut first = true;
-    for l in &rows.links {
-        let (Some(kind), Some(p)) = (kind_name(l.kind), peer(&l.peer)) else {
-            continue;
-        };
-        if !std::mem::take(&mut first) {
-            s.push(',');
-        }
+    let mut s = String::new();
+    put_link_log(&mut s, rows, peer, origin);
+    s
+}
+
+/// Writes [`link_log_json`]'s text to `out`.
+pub fn put_link_log(
+    out: &mut String,
+    rows: &LinkRows,
+    peer: impl Fn(&HostId) -> Option<usize>,
+    origin: Time,
+) {
+    let _ = write!(out, "{{\"lost\":{},\"links\":", rows.lost);
+    let named = rows
+        .links
+        .iter()
+        .filter_map(|l| Some((l, kind_name(l.kind)?, peer(&l.peer)?)));
+    list(out, named, |s, (l, kind, p)| {
         let _ = write!(s, "[{},\"{kind}\",{p},{}]", l.link, l.ordinal);
-    }
-    s.push_str("],\"writes\":[");
-    for (i, w) in rows.writes.iter().enumerate() {
-        if i > 0 {
-            s.push(',');
+    });
+    out.push_str(",\"writes\":");
+    list(out, &rows.writes, |s, w| {
+        let _ = write!(s, "[{},{},", w.link, us(w.began, origin));
+        put_opt(s, w.queued.map(|t| us(t, origin)));
+        let _ = write!(s, ",{},{},{},{},", us(w.done, origin), w.off, w.n, w.bytes);
+        put_opt(s, w.unsent_before);
+        match w.wait {
+            Some(w) => {
+                let _ = write!(s, ",\"{}\"]", w.name());
+            }
+            None => s.push_str(",null]"),
         }
+    });
+    out.push_str(",\"reads\":");
+    list(out, &rows.reads, |s, r| {
+        let _ = write!(s, "[{},{},", r.link, us(r.at, origin));
+        put_opt(s, r.taken.map(|t| us(t, origin)));
+        let _ = write!(s, ",{},{},{}]", r.off, r.n, r.bytes);
+    });
+    out.push_str(",\"samples\":");
+    list(out, &rows.samples, |s, x| {
         let _ = write!(
             s,
-            "[{},{},{},{},{},{},{},{},{}]",
-            w.link,
-            us(w.began, origin),
-            opt(w.queued.map(|t| us(t, origin))),
-            us(w.done, origin),
-            w.off,
-            w.n,
-            w.bytes,
-            opt(w.unsent_before),
-            opt(w.wait.map(|w| format!("\"{}\"", w.name()))),
-        );
-    }
-    s.push_str("],\"reads\":[");
-    for (i, r) in rows.reads.iter().enumerate() {
-        if i > 0 {
-            s.push(',');
-        }
-        let _ = write!(
-            s,
-            "[{},{},{},{},{},{}]",
-            r.link,
-            us(r.at, origin),
-            opt(r.taken.map(|t| us(t, origin))),
-            r.off,
-            r.n,
-            r.bytes,
-        );
-    }
-    s.push_str("],\"samples\":[");
-    for (i, x) in rows.samples.iter().enumerate() {
-        if i > 0 {
-            s.push(',');
-        }
-        let _ = write!(
-            s,
-            "[{},{},\"{}\",\"{}\",{}]",
+            "[{},{},\"{}\",\"{}\",",
             x.link,
             us(x.at, origin),
             x.source.name(),
             x.cause.name(),
-            state_fields(&x.state).join(","),
         );
+        put_state(s, &x.state);
+        s.push(']');
+    });
+    out.push('}');
+}
+
+impl Wire for LinkKind {
+    fn to_wire(&self, out: &mut Vec<u8>) {
+        out.push(match self {
+            LinkKind::Tcp => 0,
+            LinkKind::Ws => 1,
+            LinkKind::WebRtc => 2,
+            LinkKind::Other => 3,
+        });
     }
-    s.push_str("]}");
-    s
+    fn from_wire(r: &mut &[u8]) -> Option<Self> {
+        Some(match u8::from_wire(r)? {
+            0 => LinkKind::Tcp,
+            1 => LinkKind::Ws,
+            2 => LinkKind::WebRtc,
+            3 => LinkKind::Other,
+            _ => return None,
+        })
+    }
+}
+
+impl Wire for SampleSource {
+    fn to_wire(&self, out: &mut Vec<u8>) {
+        put_name(self.name(), out);
+    }
+    fn from_wire(r: &mut &[u8]) -> Option<Self> {
+        SampleSource::parse(take_name(r)?)
+    }
+}
+
+impl Wire for WriteWait {
+    fn to_wire(&self, out: &mut Vec<u8>) {
+        put_name(self.name(), out);
+    }
+    fn from_wire(r: &mut &[u8]) -> Option<Self> {
+        WriteWait::parse(take_name(r)?)
+    }
+}
+
+impl Wire for Io {
+    fn to_wire(&self, out: &mut Vec<u8>) {
+        match *self {
+            Io::Opened(kind) => {
+                out.push(0);
+                kind.to_wire(out);
+            }
+            Io::Peer(peer) => {
+                out.push(1);
+                peer.to_wire(out);
+            }
+            Io::Queued => out.push(2),
+            Io::Began(n) => {
+                out.push(3);
+                n.to_wire(out);
+            }
+            Io::Held(w) => {
+                out.push(4);
+                w.to_wire(out);
+            }
+            Io::Checked {
+                source,
+                buffered,
+                low,
+            } => {
+                out.push(5);
+                (source, buffered, low).to_wire(out);
+            }
+            Io::Low { source, buffered } => {
+                out.push(6);
+                (source, buffered).to_wire(out);
+            }
+            Io::Done => out.push(7),
+            Io::Arrived(n) => {
+                out.push(8);
+                n.to_wire(out);
+            }
+            Io::Read(n) => {
+                out.push(9);
+                n.to_wire(out);
+            }
+            Io::Taken(n) => {
+                out.push(10);
+                n.to_wire(out);
+            }
+            Io::Closed => out.push(11),
+        }
+    }
+    fn from_wire(r: &mut &[u8]) -> Option<Self> {
+        Some(match u8::from_wire(r)? {
+            0 => Io::Opened(Wire::from_wire(r)?),
+            1 => Io::Peer(Wire::from_wire(r)?),
+            2 => Io::Queued,
+            3 => Io::Began(Wire::from_wire(r)?),
+            4 => Io::Held(Wire::from_wire(r)?),
+            5 => {
+                let (source, buffered, low) = Wire::from_wire(r)?;
+                Io::Checked {
+                    source,
+                    buffered,
+                    low,
+                }
+            }
+            6 => {
+                let (source, buffered) = Wire::from_wire(r)?;
+                Io::Low { source, buffered }
+            }
+            7 => Io::Done,
+            8 => Io::Arrived(Wire::from_wire(r)?),
+            9 => Io::Read(Wire::from_wire(r)?),
+            10 => Io::Taken(Wire::from_wire(r)?),
+            11 => Io::Closed,
+            _ => return None,
+        })
+    }
+}
+
+impl Wire for LinkState {
+    fn to_wire(&self, out: &mut Vec<u8>) {
+        let s = self;
+        (s.unsent, s.unacked, s.cwnd, s.ssthresh).to_wire(out);
+        (s.srtt, s.rttvar, s.retrans, s.delivery_rate).to_wire(out);
+        (s.buffered, s.lowat, s.uplink_queue, s.link_pending).to_wire(out);
+        (s.write_held, s.qos_backlog).to_wire(out);
+    }
+    fn from_wire(r: &mut &[u8]) -> Option<Self> {
+        let (unsent, unacked, cwnd, ssthresh) = Wire::from_wire(r)?;
+        let (srtt, rttvar, retrans, delivery_rate) = Wire::from_wire(r)?;
+        let (buffered, lowat, uplink_queue, link_pending) = Wire::from_wire(r)?;
+        let (write_held, qos_backlog) = Wire::from_wire(r)?;
+        Some(LinkState {
+            unsent,
+            unacked,
+            cwnd,
+            ssthresh,
+            srtt,
+            rttvar,
+            retrans,
+            delivery_rate,
+            buffered,
+            lowat,
+            uplink_queue,
+            link_pending,
+            write_held,
+            qos_backlog,
+        })
+    }
+}
+
+impl Wire for LinkSample {
+    fn to_wire(&self, out: &mut Vec<u8>) {
+        (self.link, self.at, self.source).to_wire(out);
+        put_name(self.cause.name(), out);
+        self.state.to_wire(out);
+    }
+    fn from_wire(r: &mut &[u8]) -> Option<Self> {
+        let (link, at, source) = Wire::from_wire(r)?;
+        Some(LinkSample {
+            link,
+            at,
+            source,
+            cause: SampleCause::parse(take_name(r)?)?,
+            state: Wire::from_wire(r)?,
+        })
+    }
+}
+
+impl Wire for LinkTake {
+    fn to_wire(&self, out: &mut Vec<u8>) {
+        self.io.to_wire(out);
+        self.samples.to_wire(out);
+        self.lost.to_wire(out);
+    }
+    fn from_wire(r: &mut &[u8]) -> Option<Self> {
+        let (io, samples, lost) = Wire::from_wire(r)?;
+        Some(LinkTake { io, samples, lost })
+    }
 }
 
 /// A link a line names ([`link_log_of`]): its name in the rows, transport,
@@ -961,6 +1177,77 @@ mod tests {
         }
         assert_eq!(log.take().lost, 5);
         assert!(log.take().is_empty());
+    }
+
+    /// A raw take takes the records kept by then; the next takes those
+    /// after. Its records cross as bytes, and a maker given the takes in
+    /// order makes the rows a take of the log would.
+    #[test]
+    fn a_raw_take_takes_what_was_kept_by_then() {
+        let records = |log: &LinkLog| {
+            let sink = log.sink();
+            sink.record(1, LinkEvent::Opened(LinkKind::Tcp));
+            sink.record(1, LinkEvent::Peer(peer(1)));
+            for _ in 0..3 {
+                sink.record(1, LinkEvent::Queued(1));
+                sink.record(1, LinkEvent::Began(1));
+                sink.record(
+                    1,
+                    LinkEvent::Checked {
+                        source: SampleSource::Tcp,
+                        buffered: 9,
+                        low: Some(4),
+                    },
+                );
+                sink.record(1, LinkEvent::Held(WriteWait::Notsent));
+                sink.record(1, LinkEvent::Done);
+                sink.record(1, LinkEvent::Read(2));
+                sink.record(1, LinkEvent::Taken(2));
+                sink.record(
+                    1,
+                    LinkEvent::Sample {
+                        source: SampleSource::Tcp,
+                        state: LinkState {
+                            srtt: Some(Duration::from_micros(800)),
+                            cwnd: Some(10),
+                            ..LinkState::default()
+                        },
+                    },
+                );
+            }
+        };
+        let (marked, _) = log();
+        let sink = marked.sink();
+        sink.record(1, LinkEvent::Opened(LinkKind::Tcp));
+        sink.record(1, LinkEvent::Peer(peer(1)));
+        sink.record(1, LinkEvent::Queued(1));
+        let first = marked.take_raw();
+        sink.record(1, LinkEvent::Began(1));
+        sink.record(1, LinkEvent::Done);
+        assert_eq!((first.io.len(), first.samples.len()), (3, 0));
+        let rest = marked.take_raw();
+        assert_eq!(rest.io.len(), 2);
+        let mut maker = LinkRowsMaker::default();
+        assert!(maker.rows(first).writes.is_empty());
+        assert_eq!(maker.rows(rest).writes.len(), 1);
+
+        let (whole, _) = log();
+        records(&whole);
+        let (raw, _) = log();
+        records(&raw);
+        let take = raw.take_raw();
+        let mut bytes = Vec::new();
+        take.to_wire(&mut bytes);
+        let mut r = bytes.as_slice();
+        let back = LinkTake::from_wire(&mut r).unwrap();
+        assert!(r.is_empty());
+        assert_eq!(back, take);
+        let rows = LinkRowsMaker::default().rows(back);
+        assert_eq!(rows, whole.take());
+        assert_eq!(
+            (rows.writes.len(), rows.reads.len(), rows.samples.len()),
+            (3, 3, 6)
+        );
     }
 
     /// A take's rows read back as written, a peer that isn't a node's left

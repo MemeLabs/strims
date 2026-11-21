@@ -118,9 +118,9 @@ pub const TEST: &str = "calibration_star";
 /// The sim name a testbed run's records go under.
 pub const SIM: &str = "testbed";
 /// The settings that only record or capture, or say how run.sh ran
-/// (`STAMPS`, `JOIN_LINKS`, `NEIGHBOURS`, `SWARMS`, which [`knobs_of`]
-/// reads apart): no knob of the twin's.
-const RECORDING: [&str; 13] = [
+/// (`STAMPS`, `JOIN_LINKS`, `NEIGHBOURS`, `SWARMS`, `LINES`, which
+/// [`knobs_of`] reads apart): no knob of the twin's.
+const RECORDING: [&str; 14] = [
     "STAMPS",
     "CAPTURE",
     "PCAP",
@@ -134,6 +134,7 @@ const RECORDING: [&str; 13] = [
     "JOIN_LINKS",
     "NEIGHBOURS",
     "SWARMS",
+    "LINES",
 ];
 
 /// The settings [`knobs_of`] maps to the twin's knobs.
@@ -190,6 +191,13 @@ const NEIGHBOURS_STATIC: &str = "static";
 /// the network membership run that precedes them there (strims-testbed's
 /// peers module).
 const SWARMS_TRANSFERS: &str = "transfers";
+
+/// How a run's settings say its nodes wrote their lines (`LINES`): their
+/// metrics asked for once the second's push period's writes had gone, the
+/// line's records taken on the node's thread and the line written apart
+/// from it, on a thread or in a worker of its own (strims-testbed's node
+/// module), as the twin's hosts lose no time to their samples.
+const LINES_APART: &str = "apart";
 
 /// The clock a run's settings name (`STAMPS`) where run.sh stamps its logs
 /// and reckons its waits from bash's clock, which nothing makes late.
@@ -720,6 +728,15 @@ pub fn knobs_of(
     match get("SWARMS") {
         Some(SWARMS_TRANSFERS) => {}
         other => put("TESTBED_SWARMS", other.unwrap_or("direct").to_owned()),
+    }
+    // How the nodes wrote their lines (LINES). A run whose settings don't
+    // say `apart` took each line's metrics in its second's push period's
+    // own pass and wrote the line on the node's thread once they came,
+    // holding it, a browser's ahead of that period's first write: it keys
+    // apart, TESTBED_LINES pairing it with no cell.
+    match get("LINES") {
+        Some(LINES_APART) => {}
+        other => put("TESTBED_LINES", other.unwrap_or("whole").to_owned()),
     }
     for (k, v) in settings {
         let twin = RECORDING.contains(&k.as_str())
@@ -3311,7 +3328,7 @@ mod tests {
         let w = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
         w(
             "settings",
-            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\nNEIGHBOURS=static\nSWARMS=transfers\n",
+            "VIEWERS=1\nSECS=10\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\nNEIGHBOURS=static\nSWARMS=transfers\nLINES=apart\n",
         );
         w(
             "topology",
@@ -3406,7 +3423,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let star = "node 0 10.77.0.10:4000\nnode 1 10.77.0.11:4000\nnode 2 10.77.0.12:4000\nlink 0 1\nlink 0 2\n";
         let of = |text: &str, links: Option<&str>| knobs_of(&settings_of(text), star, links, &dir);
-        let base = "VIEWERS=2\nSECS=30\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\nNEIGHBOURS=static\nSWARMS=transfers\n";
+        let base = "VIEWERS=2\nSECS=30\nQDISC=clsact>ifb-netem>root-class\nSTAMPS=clock\nJOIN_LINKS=together\nNEIGHBOURS=static\nSWARMS=transfers\nLINES=apart\n";
         let k = of(base, None).unwrap();
         assert_eq!(k["TESTBED_QDISC"], "clsact>ifb-netem>root-class");
         assert!(
@@ -4481,6 +4498,29 @@ mod tests {
             .unwrap();
             assert_eq!(
                 Run::read(&dir, &BTreeMap::new()).unwrap().knobs["TESTBED_SWARMS"],
+                key
+            );
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run whose settings don't say its nodes wrote their lines apart
+    /// from their threads (LINES=apart) wrote each on them, and keys apart;
+    /// one that says so doesn't.
+    #[test]
+    fn a_run_whose_nodes_wrote_their_lines_whole_keys_apart() {
+        let dir = fixture("lines");
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs.get("TESTBED_LINES"), None);
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        for (setting, key) in [("", "whole"), ("LINES=other\n", "other")] {
+            std::fs::write(
+                dir.join("settings"),
+                settings.replace("LINES=apart\n", setting),
+            )
+            .unwrap();
+            assert_eq!(
+                Run::read(&dir, &BTreeMap::new()).unwrap().knobs["TESTBED_LINES"],
                 key
             );
         }

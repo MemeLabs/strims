@@ -178,7 +178,7 @@ impl Runtime for Virtual {
         None
     }
 
-    fn emit(&self, _: String) {}
+    async fn line(&self, _: crate::node::LineParts) {}
 
     fn error(&self, message: String) {
         panic!("{message}");

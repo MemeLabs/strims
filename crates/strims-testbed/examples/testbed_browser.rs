@@ -131,6 +131,9 @@ const CAPTURE_GRACE: Duration = Duration::from_secs(2);
 const CAPTURE_FILE_BYTES: u64 = 512 << 20;
 /// The first byte of a message of capture bytes (strims-wasm's `e2e`).
 const CAPTURE_BYTES: u8 = 0x01;
+/// The first byte of a message of the node's line (strims-wasm's `e2e`),
+/// which the post time (8 bytes) follows, then the line.
+const SAMPLE: u8 = 0x03;
 
 struct Args {
     index: usize,
@@ -788,20 +791,19 @@ async fn run() -> Result<(), String> {
                     }
                     continue;
                 }
-                let Ok(e) = serde_json::from_slice::<Value>(&b) else {
-                    eprintln!("an event that isn't JSON");
-                    continue;
-                };
-                if e["type"] == "sample" {
-                    let Some(line) = e["line"].as_str() else {
+                if b.first() == Some(&SAMPLE) {
+                    let (Some(post), Some(Ok(line))) = (
+                        b.get(1..9)
+                            .and_then(|p| <[u8; 8]>::try_from(p).ok())
+                            .map(u64::from_be_bytes),
+                        b.get(9..).map(std::str::from_utf8),
+                    ) else {
+                        eprintln!("a line that doesn't read");
                         continue;
                     };
                     let t = now_ms();
                     let cpu = format!("\"cpu_ms\":{}", tree_cpu_ms(pid));
                     let line = line.replacen("\"cpu_ms\":null", &cpu, 1);
-                    let post = e["postMs"]
-                        .as_u64()
-                        .map_or("null".to_owned(), |p| p.to_string());
                     if let Some(body) = line.strip_suffix('}') {
                         println!("{body},\"post_ms\":{post},\"host_t_ms\":{t}}}");
                     }
@@ -816,6 +818,10 @@ async fn run() -> Result<(), String> {
                     }
                     continue;
                 }
+                let Ok(e) = serde_json::from_slice::<Value>(&b) else {
+                    eprintln!("an event that isn't JSON");
+                    continue;
+                };
                 if e["type"] == "player" {
                     if let (Some(f), Value::Object(mut o)) = (player.as_mut(), e) {
                         let t = now_ms();

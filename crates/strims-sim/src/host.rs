@@ -419,7 +419,7 @@ impl strims_testbed::node::Runtime for ProbeClock {
         None
     }
 
-    fn emit(&self, _: String) {}
+    async fn line(&self, _: strims_testbed::node::LineParts) {}
 
     fn error(&self, message: String) {
         self.w.log(self.w.name(self.h), message);

@@ -151,7 +151,23 @@ crates differ from those the page was built from builds its own page.
   PLAN item), the relay serving the
   transfers and refusing each announce; before, each node ran it as the
   peer's link came up, where the side whose link comes up first now runs
-  it a trip after the other's came up. So does a run whose JOINS draw
+  it a trip after the other's came up. So does a run whose settings don't
+  say LINES=apart (TESTBED_LINES=whole): a node now asks for its line's
+  metrics once the second's push period's writes have gone, so the node
+  takes them in its next pass (a browser seed's about 7 ms after the
+  second at the median, a native node's tens of ms; the meter sample's
+  `t_ms` says when), takes the line's records then on its own thread, and
+  writes the line on a thread of its own (native) or in the page's lines
+  worker (a browser: the records cross as bytes, strims-testbed's
+  `record::wire`), as a deployed node, which writes none, loses no time
+  to it; before, each took its metrics in that period's own pass (a
+  browser seed's 1.6 ms after the second) and wrote its line on its
+  thread once they came: a browser seed's 100 kB line (SPEC and its link
+  log on) put every whole second's push period's first write 2-5 ms
+  late, a native node's took 0.5 ms later in the period. What stays on
+  the node's thread is the metrics' collection in its pass (node-core's,
+  some 0.4 ms on a browser seed, mostly its runner's) and the take. So
+  does a run whose JOINS draw
   the arrivals profile its matrix's knobs name and sit on the runner's
   100 ms tick grid, each a whole number of ticks from the start
   (TESTBED_JOINS=tick), as a draw to the tenth of a second or in whole
@@ -234,9 +250,10 @@ crates differ from those the page was built from builds its own page.
   joins, to the ms). Were run.sh to write STAMPS=date, each matrix's
   header would say its runs key apart. Each arm runs its own bundle's
   run.sh and TABLES_BIN, so in an A/B whose base predates a marker
-  (SWARMS=transfers, NEIGHBOURS=static, JOIN_LINKS=together) the base
-  arm's runs run their swarms at each link, resolve their peers by ARP or
-  link one at a time, and its TABLES_BIN, which
+  (LINES=apart, SWARMS=transfers, NEIGHBOURS=static, JOIN_LINKS=together)
+  the base arm's runs write their lines on the node's thread, run their
+  swarms at each link, resolve their peers by ARP or link one at a time,
+  and its TABLES_BIN, which
   doesn't know the marker, keys them in the other arm's cells: such an
   A/B compares harnesses as well as its change.
 
