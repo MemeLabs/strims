@@ -6002,6 +6002,19 @@ mod tests {
     /// Writes `n` messages of `chunks` 1000-byte chunks on channel `c` at
     /// `at`, a chunk a packet, numbering their records from `id` on.
     fn write_chunks(wan: &mut Scheduler, id: &mut u64, at: Time, c: ConnKey, n: u64, chunks: u64) {
+        write_sized(wan, id, at, c, n, chunks, 1000);
+    }
+
+    /// [`write_chunks`] of `len`-byte chunks.
+    fn write_sized(
+        wan: &mut Scheduler,
+        id: &mut u64,
+        at: Time,
+        c: ConnKey,
+        n: u64,
+        chunks: u64,
+        len: usize,
+    ) {
         let p = wan.assocs[&c].profile();
         let (from, to) = (wan.ip_host[&c.0.ip()], wan.ip_host[&c.1.ip()]);
         for k in 0..chunks * n {
@@ -6012,11 +6025,8 @@ mod tests {
                     dst: c.1,
                     from,
                     to,
-                    what: What::Data {
-                        seq: *id,
-                        len: 1000,
-                    },
-                    wire: p.data_wire(1000),
+                    what: What::Data { seq: *id, len },
+                    wire: p.data_wire(len),
                     packets: 1,
                     nominal: false,
                     state: State::InFlight,
@@ -6098,6 +6108,90 @@ mod tests {
                     (at(20), conns[2]),
                     (us(1000) + at(4), conns[2])
                 ]
+            );
+        }
+    }
+
+    /// A browser's SACK held back for its peer's data goes first in the
+    /// first packet of its next send opportunity toward that peer, whose
+    /// chunks take the room it leaves, so no packet passes the MTU: ahead
+    /// of a message of full chunks it goes alone and the burst's four
+    /// packets follow it, and a small chunk shares its packet. A send
+    /// opportunity whose window takes nothing sends it alone. A run gives
+    /// the same packets each time.
+    #[test]
+    fn a_held_sack_takes_its_room_within_the_mtu() {
+        for p in [SctpProfile::CHROMIUM, SctpProfile::FIREFOX] {
+            let run = || {
+                let (_sim, mut wan, conns) = channels_of(p, 1);
+                let (ab, ba) = (conns[0], (conns[0].1, conns[0].0));
+                wan.open_channel(ba, p);
+                // Each direction's chunks numbered on from a base of its own.
+                let (mut a_id, mut b_id) = (0, 1 << 20);
+                let t0 = sim_time(StdDuration::from_secs(1));
+                let ms = |n: i64| t0 + Duration::from_millis(n);
+                let mut a_writes = |wan: &mut Scheduler, at: i64| {
+                    wan.run_events(ms(at));
+                    write_sized(wan, &mut a_id, ms(at), ab, 1, 1, 1000);
+                    wan.run_events(ms(at + 20));
+                };
+                let mut b_writes = |wan: &mut Scheduler, at: i64, chunks: u64, len: usize| {
+                    write_sized(wan, &mut b_id, ms(at), ba, 1, chunks, len);
+                };
+                // b acknowledges a's first DATA at once and holds back the
+                // next packet's SACK, which goes ahead of a message of full
+                // chunks, ...
+                a_writes(&mut wan, 0);
+                a_writes(&mut wan, 50);
+                b_writes(&mut wan, 70, 4, p.max_payload);
+                // ... with a small chunk, ...
+                a_writes(&mut wan, 500);
+                b_writes(&mut wan, 520, 1, 500);
+                // ... and alone, the window full; the chunk goes with the
+                // next message.
+                a_writes(&mut wan, 900);
+                let cwnd = wan.assocs[&ba].cwnd();
+                wan.assocs.get_mut(&ba).unwrap().set_cwnd(0);
+                b_writes(&mut wan, 920, 1, 500);
+                wan.assocs.get_mut(&ba).unwrap().set_cwnd(cwnd);
+                wan.run_events(ms(940));
+                b_writes(&mut wan, 940, 1, 500);
+                wan.run_events(ms(1500));
+                wan.packets.clone()
+            };
+            let packets = run();
+            assert_eq!(packets, run(), "{p:?}");
+            // A packet's bytes in the log: its SCTP bytes and the overhead
+            // past them, framing and all, which this site's link charges
+            // as it is. The most SCTP bytes are dcSCTP's MTU rounded down
+            // to 4.
+            let ip = |sctp: usize| (sctp + p.packet_overhead) as u32;
+            let most = ip(p.mtu / 4 * 4);
+            for (h, rows) in packets.iter().enumerate() {
+                for r in rows {
+                    assert!(r.ip_bytes <= most, "{p:?} host {h}: {r:?}");
+                }
+            }
+            let b: Vec<(PacketKind, u32)> = packets[1]
+                .iter()
+                .filter(|r| r.proto == PacketProto::Udp)
+                .map(|r| (r.kind, r.ip_bytes))
+                .collect();
+            let (sack, full) = ((PacketKind::Sack, ip(12 + 16)), (PacketKind::Data, most));
+            assert_eq!(
+                b,
+                [
+                    sack,
+                    sack,
+                    full,
+                    full,
+                    full,
+                    full,
+                    (PacketKind::DataSack, ip(12 + 16 + 16 + 500)),
+                    sack,
+                    (PacketKind::Data, ip(12 + 2 * (16 + 500))),
+                ],
+                "{p:?}"
             );
         }
     }

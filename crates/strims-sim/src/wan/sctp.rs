@@ -64,9 +64,12 @@
 //!   [`SctpProfile::delayed_sack`] or half its own timeout, whichever is
 //!   less, and at once its first DATA, a packet past a gap, a duplicate
 //!   and a packet with the I bit, which a sender sets while its window is
-//!   under ten packets. A SACK it holds rides its next DATA. (A window
-//!   halved by a loss stays under ten packets while its association sends
-//!   less than it allows, as a thin relay's do: on the testbed 85-87 % of
+//!   under ten packets. A SACK it holds goes at its host's next send
+//!   opportunity on the reverse direction, first in its first packet, whose
+//!   chunks take the room it leaves within the MTU, or alone if none fits;
+//!   never in a fast retransmission's packet. (A window halved by a loss
+//!   stays under ten packets while its association sends less than it
+//!   allows, as a thin relay's do: on the testbed 85-87 % of
 //!   their SACKs answer one packet, within a millisecond of it.)
 //! - The window grows when the cumulative point advances and the flight
 //!   before the SACK came within a packet of the window: by at most a
@@ -479,13 +482,17 @@ struct Send {
 }
 
 /// A packet a send opportunity sends: its chunks, whether it is a fast
-/// retransmission, and the association's flight once it went (for its
-/// log).
+/// retransmission, the association's flight once it went (for its log),
+/// and whether it carries the SACK its host's receiver holds back for the
+/// reverse direction, first, its chunks taking the room it leaves (a
+/// dcSCTP send opportunity's first packet's, [`Scheduler::rfc_pump`]); a
+/// packet of no chunks is that SACK alone.
 #[derive(Debug)]
 struct Out {
     chunks: Vec<Send>,
     fast: bool,
     flight: usize,
+    sack: bool,
 }
 
 /// What a host's stack hands its uplink ([`Scheduler::hand_over`]): a
@@ -981,6 +988,7 @@ impl Scheduler {
                 chunks,
                 fast: false,
                 flight,
+                sack: false,
             };
             let (mut poll, mut polled) = (Vec::new(), 0);
             for (&seq, c) in &mut a.out {
@@ -1042,6 +1050,7 @@ impl Scheduler {
                     chunks,
                     fast: false,
                     flight,
+                    sack: false,
                 }
             }));
             if std::mem::take(&mut a.fast_resend) {
@@ -1068,6 +1077,7 @@ impl Scheduler {
                         chunks: packet,
                         fast: true,
                         flight: a.in_flight,
+                        sack: false,
                     });
                 }
             }
@@ -1083,11 +1093,31 @@ impl Scheduler {
     /// ones, of what the window has left, as of when its host's thread
     /// takes it up. As its last packet goes it answers a page that counts
     /// the amount, as [`ANSWER_EVERY`]'s docs say.
+    ///
+    /// The first of those packets carries first the SACK its host's
+    /// receiver holds back for the reverse direction, if it holds one, and
+    /// its chunks take the room the SACK leaves within the MTU; with none
+    /// of them fitting, the SACK goes alone. dcSCTP's
+    /// `TransmissionControlBlock::SendBufferedPackets`
+    /// (net/dcsctp/socket/transmission_control_block.cc:218-275) adds the
+    /// SACK (`DataTracker::ShouldSendAck`, also a delayed one) to its first
+    /// packet's builder before `RetransmissionQueue::GetChunksToSend` fills
+    /// the builder's `bytes_remaining`, and sends a builder that holds the
+    /// SACK alone (socket/packet_sender.cc:28-35). There the chunk at the
+    /// head of the queue is cut to that room as it goes; here chunks are
+    /// cut as they are written ([`Chunking`]), so one that the SACK leaves
+    /// no room for goes in the next packet, and a SACK that goes alone
+    /// ahead of chunks takes none of the burst's packets. The fast
+    /// retransmission's packet carries no SACK
+    /// (`TransmissionControlBlock::MaybeSendFastRetransmit`, :191-216, a
+    /// builder of its own).
     fn rfc_pump(&mut self, at: Time, conn: ConnKey) {
         let mut packets: Vec<Out> = Vec::new();
         let Some(profile) = self.assocs.get(&conn).map(|a| a.profile) else {
             return;
         };
+        let back = (conn.1, conn.0);
+        let mut sack = self.held_sack(back);
         let from = self.ip_host.get(&conn.0.ip()).copied();
         let at = from.map_or(at, |h| self.thread_start(h, at, &profile));
         let queued = self.queued(conn);
@@ -1142,11 +1172,19 @@ impl Scheduler {
                         chunks: packet,
                         fast: true,
                         flight: a.in_flight,
+                        sack: false,
                     });
                 }
             }
-            for _ in 0..a.profile.max_burst.unwrap_or(usize::MAX) {
-                let mut room = a.cwnd.saturating_sub(a.in_flight).min(room_in_packet) / 4 * 4;
+            let mut burst = 0;
+            while burst < a.profile.max_burst.unwrap_or(usize::MAX) {
+                let rides = sack.take();
+                let mut room = a
+                    .cwnd
+                    .saturating_sub(a.in_flight)
+                    .min(room_in_packet.saturating_sub(rides.unwrap_or(0)))
+                    / 4
+                    * 4;
                 let mut packet = Vec::new();
                 let marked: Vec<u64> = a
                     .out
@@ -1198,13 +1236,24 @@ impl Scheduler {
                     });
                 }
                 if packet.is_empty() {
+                    if rides.is_some() {
+                        packets.push(Out {
+                            chunks: packet,
+                            fast: false,
+                            flight: a.in_flight,
+                            sack: true,
+                        });
+                        continue;
+                    }
                     break;
                 }
                 packets.push(Out {
                     chunks: packet,
                     fast: false,
                     flight: a.in_flight,
+                    sack: rides.is_some(),
                 });
+                burst += 1;
             }
             let outstanding = a.out.values().any(|c| c.flight(stack) > 0 || c.retransmit);
             if outstanding && a.t3.is_none_or(|t| t < at) {
@@ -1217,7 +1266,11 @@ impl Scheduler {
         }
         let mut done = at;
         for packet in packets {
-            done = self.sctp_transmit(at, conn, &packet);
+            done = if packet.chunks.is_empty() {
+                self.sctp_send_sack(at, back)
+            } else {
+                self.sctp_transmit(at, conn, &packet)
+            };
         }
         if profile.amount_at_sends {
             let left = self.queued(conn);
@@ -1254,9 +1307,10 @@ impl Scheduler {
     /// sends it ([`Scheduler::thread_send`]): each chunk credited to its
     /// socket as it first goes, and a resent chunk whose last copy wasn't
     /// lost a copy; then handed to the uplink as the thread hands it over
-    /// ([`Scheduler::hand_over`], [`Scheduler::data_handed`]). A dcSCTP
-    /// packet carries the SACK its sender holds back for the reverse
-    /// direction, and the I bit while the window is under ten packets.
+    /// ([`Scheduler::hand_over`], [`Scheduler::data_handed`]). A packet
+    /// given the SACK its sender's host holds back for the reverse direction
+    /// ([`Out::sack`]) carries it, and a dcSCTP packet the I bit while the
+    /// window is under ten packets.
     /// The sender's log, if on, logs it as it is handed over, with the
     /// window and flight it left. Returns when it went.
     fn sctp_transmit(&mut self, at: Time, conn: ConnKey, out: &Out) -> Time {
@@ -1275,9 +1329,7 @@ impl Scheduler {
         };
         let at = self.thread_send(from, at, &profile);
         let back = (conn.1, conn.0);
-        let ride = profile.stack != Stack::SctpProto
-            && self.rcvs.get(&back).is_some_and(|r| r.due.is_some());
-        let sack = if ride { self.sack_of(back) } else { None };
+        let sack = if out.sack { self.sack_of(back) } else { None };
         let sack_bytes = sack
             .as_ref()
             .map_or(0, |s| SctpProfile::sack_chunk(gap_blocks(&s.above)));
@@ -1709,6 +1761,18 @@ impl Scheduler {
         }
     }
 
+    /// The bytes of the SACK chunk `conn`'s receiver holds back, if it
+    /// holds one: its host's next dcSCTP send opportunity on the reverse
+    /// direction carries it ([`Scheduler::rfc_pump`]).
+    fn held_sack(&self, conn: ConnKey) -> Option<usize> {
+        let r = self
+            .rcvs
+            .get(&conn)
+            .filter(|r| r.due.is_some() && r.cum.is_some())?;
+        let above: Vec<u64> = r.above.iter().copied().collect();
+        Some(SctpProfile::sack_chunk(gap_blocks(&above)))
+    }
+
     /// The SACK `conn`'s receiver would send now, no longer held back.
     fn sack_of(&mut self, conn: ConnKey) -> Option<Sack> {
         let r = self.rcvs.get_mut(&conn)?;
@@ -1742,18 +1806,19 @@ impl Scheduler {
     /// thread hands it over ([`Scheduler::hand_over`],
     /// [`Scheduler::sack_handed`]). Its log, if on, logs it as it is
     /// handed over, with the window and flight of its own association.
-    fn sctp_send_sack(&mut self, t: Time, conn: ConnKey) {
+    /// Returns when it went.
+    fn sctp_send_sack(&mut self, t: Time, conn: ConnKey) -> Time {
         let (Some(_), Some(&to)) = (
             self.ip_host.get(&conn.0.ip()),
             self.ip_host.get(&conn.1.ip()),
         ) else {
-            return;
+            return t;
         };
         let Some(sack) = self.sack_of(conn) else {
-            return;
+            return t;
         };
         let Some(p) = self.receiver_profile(conn) else {
-            return;
+            return t;
         };
         let t = self.thread_send(to, t, &p);
         let log = self.sctp_logs(to).then(|| {
@@ -1763,6 +1828,7 @@ impl Scheduler {
             sack_alone(gap_blocks(&sack.above)).event(t, Dir::Out, Some(tsns), state)
         });
         self.hand_over(t, &p, Handover::Sack { conn, sack, log });
+        t
     }
 
     /// `conn`'s receiver's SACK alone goes to its uplink at `t`: a packet
