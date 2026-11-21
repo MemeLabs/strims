@@ -2267,28 +2267,31 @@ fn wan_webrtc_channels(seed: u64) -> Scenario {
     s
 }
 
-/// The access kinds whose links lose packets in bursts (`Access::profile`):
-/// LTE's fades and Starlink's satellite reassignments.
-const BURSTY: [Access; 2] = [Access::Lte, Access::Starlink];
-
-/// The share of [`wan_webrtc_channels`]' stream that each viewer on a
-/// [`BURSTY`] link reads at least.
-const BURSTY_SHARE: f64 = 1.0 / 8.0;
+/// The share of [`wan_webrtc_channels`]' stream that each viewer whose
+/// access link loses packets in bursts (`Profile::bursts`: LTE's fades,
+/// Starlink's satellite reassignments) reads at least. A floor against an
+/// association that dies early, not a measure of how far such a viewer
+/// falls behind: set with margin below what they read under the model's
+/// planned defaults as well as today's (the access kinds' slots,
+/// `STRIMS_SIM_UPLINK_SLOTS=profiles`).
+const BURSTY_SHARE: f64 = 1.0 / 16.0;
 
 fn check_wan_webrtc_channels(r: &Report) -> Result<(), String> {
     sound(r)?;
     seed_webrtc_links(r)?;
     let spec = &r.scenario.swarms[0];
-    let bursty = on_access(r, &BURSTY);
-    let steady: Vec<HostIx> = all_viewers(r)
-        .into_iter()
-        .filter(|h| !bursty.contains(h))
-        .collect();
+    let (bursty, steady): (Vec<HostIx>, Vec<HostIx>) = all_viewers(r).into_iter().partition(|&h| {
+        r.scenario.hosts[h]
+            .site
+            .is_some_and(|s| s.profile.bursts.is_some())
+    });
     complete(r, &steady, spec.start, spec.stop)?;
-    for &h in &bursty {
+    for h in bursty {
         if matches!(r.scenario.hosts[h].class, HostClass::Hostile(_)) {
             continue;
         }
+        r.viewer(0, h)
+            .ok_or_else(|| format!("{} never read swarm 0", r.scenario.name_of(h)))?;
         let share = r.delivery_of(0, &[h]);
         if share < BURSTY_SHARE {
             return Err(format!(
@@ -2304,13 +2307,14 @@ fn check_wan_webrtc_channels(r: &Report) -> Result<(), String> {
 }
 
 /// Sound, the seed linked to all 4 viewers over WebRTC, every frame at each
-/// viewer on a steady link, and at least an eighth of them at each on LTE or
-/// Starlink ([`BURSTY`]). Behind its one association, the seed's, a viewer
-/// whose link loses packets in bursts can fall behind the stream and miss
-/// frames, the WAN gap of PLAN's browser item: over 256 seeds the least such a
-/// viewer read was a quarter of the stream. An eighth is half that, and
-/// fails a viewer whose association stops within the stream's first 4 s,
-/// an LTE fade's period.
+/// viewer on a steady link, and at least a sixteenth of them
+/// ([`BURSTY_SHARE`]) at each on a link that loses packets in bursts (LTE,
+/// Starlink). Behind its one association, the seed's, a viewer on a bursty
+/// link can fall behind the stream and miss frames, the WAN gap of PLAN's
+/// browser item. The floor catches only an association that stops within
+/// the stream's first sixteenth, about 2 s, which no LTE fade need fall in.
+/// A steady viewer that misses frames is one on a long path that fell
+/// behind, the same gap: investigate it, never move the seeds around it.
 #[test]
 fn wan_webrtc_channels_hybrid() {
     sweep(

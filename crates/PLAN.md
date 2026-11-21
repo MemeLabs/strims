@@ -600,8 +600,9 @@ and dropped are in `TRIED.md`.
     Reno holds a long, lossy path's window low. Mixed audiences (a native
     seed reaching browsers over WebSocket) wait for tuning once swarms stop
     collapsing.
-  - Measure, as a tier cell, how often a viewer on LTE or Starlink falls
-    behind its one WebRTC association (`wan_webrtc_channels`).
+  - Measure, as a tier cell, how often a viewer falls behind its one
+    WebRTC association (`wan_webrtc_channels`): on LTE or Starlink, and on
+    a long path.
   - A data channel's message holds one frame, and sctp-proto (str0m) ends
     each in a short chunk alone in its packet; ending messages at the
     sender's chunk boundary past their frames would save those packets.
