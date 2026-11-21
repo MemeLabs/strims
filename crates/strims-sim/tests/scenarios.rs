@@ -1647,6 +1647,53 @@ fn whole_second_clock_offsets_change_no_trace() {
     assert_eq!(unlogged(&skewed.trace), unlogged(&plain.trace));
 }
 
+/// A run's row holds its clocks' epoch phase (`epoch_phase_ms`): the one
+/// it drew, which its trace logs at 0 ms where it isn't 0, or the one its
+/// scenario set, calibration_star's from its knob (STRIMS_SIM_CAL_EPOCH_MS),
+/// 0 at 0.
+#[test]
+fn a_runs_row_holds_its_epoch_phase() {
+    const TEST: &str = "a_runs_row_holds_its_epoch_phase";
+    let run = |seed: u64, phase: Option<Duration>| {
+        let mut s = streaming(
+            "epoch_phase",
+            seed,
+            2,
+            (2048 * KIB, 1024 * KIB),
+            PushMode::Hybrid,
+            (1, 3),
+        )
+        .s;
+        s.epoch_phase = phase;
+        let r = strims_sim::run(s, seed).unwrap();
+        let row: serde_json::Value = serde_json::from_str(&r.row(TEST, None)).unwrap();
+        let logged = r.trace.iter().find_map(|l| {
+            l.strip_prefix("0 clock epoch +")?
+                .strip_suffix(" ms")?
+                .parse::<u64>()
+                .ok()
+        });
+        (row["epoch_phase_ms"].as_u64(), logged)
+    };
+    let mut drawn = BTreeMap::new();
+    for seed in 1..=4 {
+        let (row, logged) = run(seed, None);
+        let p = row.unwrap();
+        assert!(p < 1000, "seed {seed}: {p}");
+        assert_eq!(logged.unwrap_or(0), p, "seed {seed}");
+        drawn.insert(p, seed);
+    }
+    assert!(drawn.len() > 1, "{drawn:?}");
+    for ms in ["0", "902", "999"] {
+        let knob =
+            Calibration::from_knobs(|k| (k == "STRIMS_SIM_CAL_EPOCH_MS").then(|| ms.to_owned()));
+        let phase = calibration::calibration_star(&knob).epoch_phase;
+        let (row, logged) = run(1, phase);
+        assert_eq!(row.map(|p| p.to_string()).as_deref(), Some(ms));
+        assert_eq!(logged.is_none(), ms == "0", "{ms}: {logged:?}");
+    }
+}
+
 // --- 6. vpn services over multi-hop paths ----------------------------------
 
 /// How the vpn scenarios lay out their hosts.

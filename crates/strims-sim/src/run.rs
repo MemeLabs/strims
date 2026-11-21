@@ -583,5 +583,7 @@ fn report(
     };
     // As the run applied them, so `skipped_faults` indexes them.
     r.scenario.faults.sort_by_key(|f| f.at);
+    // The phase the run's clocks took, drawn or set.
+    r.scenario.epoch_phase = w.epoch_phase.to_std();
     r
 }

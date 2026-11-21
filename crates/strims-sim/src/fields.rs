@@ -527,6 +527,22 @@ pub(crate) enum RowInt {
     /// strims-sim: Its hosts of hostile kind liar+echo (`hostile.rs`), set by
     /// STRIMS_SIM_HOSTILE's shares; `liars` doesn't count them.
     EchoLiars,
+    /// The run's clock-epoch phase, a whole ms in \[0, 1000): where the run's
+    /// start falls in its nodes' clocks' second apart from each host's skew
+    /// (`clock_offsets_ms`, by which its clock leads too), which sets their
+    /// grids on Unix time (the upload meters' 100 ms intervals) against the
+    /// stream's writes. A testbed run's is its stream's start in Unix ms, mod
+    /// 1000.
+    ///
+    /// strims-sim: `Scenario::epoch_phase`: drawn from the run's rng, or set by
+    /// the scenario (STRIMS_SIM_CAL_EPOCH_MS in calibration_star, a testbed
+    /// run's twin taking its run's); 0 at a set phase of 0, the clocks as they
+    /// were before the phase. Older runs lack it, so a NULL isn't always 0:
+    /// those from before 9e7c41dee ran at 0, and those from 9e7c41dee until the
+    /// field drew a phase they don't record.
+    ///
+    /// Unit: ms.
+    EpochPhaseMs,
     /// The honest viewers' peer exchanges that ended Answered
     /// (ExchangeOutcome).
     ExchAnswered,
@@ -1427,6 +1443,7 @@ impl RowInt {
             RowInt::DupBytes => "dup_bytes",
             RowInt::EchoFreeRiders => "echo_free_riders",
             RowInt::EchoLiars => "echo_liars",
+            RowInt::EpochPhaseMs => "epoch_phase_ms",
             RowInt::ExchAnswered => "exch_answered",
             RowInt::ExchConnected => "exch_connected",
             RowInt::ExchFailed => "exch_failed",

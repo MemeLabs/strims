@@ -939,6 +939,9 @@ fn ms(d: strims_base::time::Duration) -> u32 {
 /// Everything one run measured.
 #[derive(Clone, Debug)]
 pub struct Report {
+    /// The run's scenario as it ran: its draws resolved (its arrivals and
+    /// departures, its hostile mix, its seed pin's viewers, and its epoch
+    /// phase, `Some` the run's), its faults in time order.
     pub scenario: Scenario,
     pub seed: u64,
     /// SHA-256 of the canonical trace.

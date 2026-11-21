@@ -1430,7 +1430,8 @@ impl Report {
     /// The run's measures as one JSON object, for scripts: the test, seed,
     /// trace, reads' digest ([`Report::reads_hash`]) and knobs, whether the
     /// test's check passed (`passed`, 0 or 1, and its `failure`, empty when
-    /// it passed), with clock skew its hosts'
+    /// it passed), its clocks' epoch phase (`epoch_phase_ms`,
+    /// [`crate::Scenario::epoch_phase`]), with clock skew its hosts'
     /// offsets (`clock_offsets_ms`, each host's in host order;
     /// `clock_max_ms`, the largest; `clock_<class>`, the hosts per
     /// [`SkewClass::name`]), then per scenario swarm 0 its viewers of each
@@ -1483,7 +1484,13 @@ impl Report {
                         .any(|h| h.upload_capacity.is_some()),
                 ),
             )
-            .str(RowText::ClockSkew, &self.scenario.clock_skew.to_string());
+            .str(RowText::ClockSkew, &self.scenario.clock_skew.to_string())
+            .int(
+                RowInt::EpochPhaseMs,
+                self.scenario
+                    .epoch_phase
+                    .map_or(0, |p| p.as_millis() as u64),
+            );
         if !self.scenario.clock_skew.is_off() {
             let (per, max) = self.clock_classes();
             let offsets = self.hosts.iter().map(|h| h.clock_offset.as_millis());

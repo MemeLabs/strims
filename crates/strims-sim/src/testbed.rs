@@ -3167,7 +3167,8 @@ fn add(c: &mut [u64; UP_COUNTERS.len()], name: &str, n: u64) {
 /// which a testbed run's report lacks. The joins are a run's whose viewers
 /// arrive into the running stream (`JOINS`, a `JOIN_AT` after the start:
 /// `Scenario::profiled`); a testbed viewer starts once, so a run has no
-/// rejoins.
+/// rejoins. Its epoch phase is its stream's start in Unix ms, mod 1000,
+/// its twin's ([`Run::read`]'s `STRIMS_SIM_CAL_EPOCH_MS`).
 pub const ROW: &[&str] = &[
     "test",
     "scenario",
@@ -3175,6 +3176,7 @@ pub const ROW: &[&str] = &[
     "reads_hash",
     "passed",
     "failure",
+    "epoch_phase_ms",
     "delivery",
     "delivery_honest",
     "arrivals",
@@ -3686,13 +3688,20 @@ mod tests {
     }
 
     /// The ms of its second a run's stream started at is its twin's epoch
-    /// phase, so the twin's clocks stand to its writes as the run's did.
+    /// phase, so the twin's clocks stand to its writes as the run's did,
+    /// and its row's `epoch_phase_ms`, as a twin's row holds its own.
     #[test]
     fn a_runs_start_in_its_second_is_its_twins_epoch_phase() {
         let dir = fixture("epoch");
+        let phase_of = |run: &Run| -> Option<u64> {
+            let r: serde_json::Map<String, Value> =
+                serde_json::from_str(&row(&run.report())).unwrap();
+            r.get("epoch_phase_ms").and_then(Value::as_u64)
+        };
         let run = Run::read(&dir, &BTreeMap::new()).unwrap();
         assert_eq!(run.start_ms, START);
         assert_eq!(run.knobs["STRIMS_SIM_CAL_EPOCH_MS"], "0");
+        assert_eq!(phase_of(&run), Some(0), "a run at phase 0 reads 0");
         for i in 0..=1 {
             let path = dir.join(format!("node-{i}.jsonl"));
             let text = std::fs::read_to_string(&path).unwrap();
@@ -3712,6 +3721,7 @@ mod tests {
         assert_eq!(run.start_ms, START - 98);
         assert_eq!(run.knobs["STRIMS_SIM_CAL_EPOCH_MS"], "902");
         assert_eq!(run.scenario().epoch_phase, Some(Duration::from_millis(902)));
+        assert_eq!(phase_of(&run), Some(run.start_ms % 1000));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
