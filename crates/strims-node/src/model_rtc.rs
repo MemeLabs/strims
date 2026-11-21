@@ -20,16 +20,18 @@
 //!   stack ([`LinkSetup::name`]), and the answering side's socket for
 //!   checks (UDP, at the same addresses). Each is ready its stack's
 //!   [`LinkSetup::offer_ready`] or [`LinkSetup::answer_ready`] after it is
-//!   asked for.
+//!   asked for, an answer of a stack that ends its gathering at its check
+//!   [`LinkSetup::answer_after_check`] after its check succeeds if that
+//!   comes first.
 //! - **ICE.** Each side's connectivity check is a dial of the other's
 //!   listener, whose connect is the check's round trip: the answering
-//!   side's once it has applied the offer, the offering side's once it has
-//!   applied the answer. The answering side's connection carries the rest;
-//!   the offering side's names the answer and ends. The offering side's
-//!   check also sends the answering side's socket a datagram as its
-//!   request, which tells the answering side, a one-way delay later, that
-//!   the check reached it (or the dial's name, should the path lose the
-//!   datagram).
+//!   side's its stack's [`LinkSetup::check_ready`] after the offer comes,
+//!   the offering side's once it has applied the answer. The answering
+//!   side's connection carries the rest; the offering side's names the
+//!   answer and ends. The offering side's check also sends the answering
+//!   side's socket a datagram as its request, which tells the answering
+//!   side, a one-way delay later, that the check reached it (or the dial's
+//!   name, should the path lose the datagram).
 //! - **DTLS and SCTP.** Over that connection, a modelled channel from its
 //!   first byte, each side sends what its stack sends ([`Handshake`]): the
 //!   answering side the offer's token first, as its check named the
@@ -80,9 +82,18 @@ pub struct LinkSetup {
     /// non-trickle ICE waits for them. The testbed's harness asks its
     /// browser nodes to connect, which takes them 2-3 ms more; a deployed
     /// node connects of itself, so the harness's share stays out. Each is
-    /// an unloaded host's.
+    /// an unloaded host's. A stack whose answer leaves at its check
+    /// ([`LinkSetup::answer_after_check`]) takes `answer_ready` only where
+    /// no check of its has succeeded by then.
     pub offer_ready: Duration,
     pub answer_ready: Duration,
+    /// From an offer's coming to the answering side's first ICE check: the
+    /// page setting the offer and its answer, whose setting starts the
+    /// gathering of the host candidate the check goes from.
+    pub check_ready: Duration,
+    /// Answering, its gathering ends as its first ICE check succeeds, and
+    /// its answer leaves this long after; else at `answer_ready`.
+    pub answer_after_check: Option<Duration>,
     /// Answering, the stack takes DTLS's client role (`a=setup:active`);
     /// else the server's.
     pub answers_active: bool,
@@ -163,12 +174,21 @@ const DTLS12_SERVER_FINISH: usize = 75;
 impl LinkSetup {
     /// Chromium, from the testbed (hack/testbed/run.sh, PCAP=1: the
     /// captures, the node's `connecting` and the page's `rtcTiming`) and
-    /// its libwebrtc. Its offer leaves 134 ms after the node connects and
-    /// its answer 27 ms after an offer comes, at the medians, with no ICE
-    /// servers: gathering takes 118 ms of the offer's and 22 of the
-    /// answer's (the port allocator's phases). A loaded host takes longer:
-    /// the testbed's seed, whose node serves every viewer, answers in 38
-    /// ms. Its DTLS (BoringSSL's 1.3) client sends its ClientHello as its
+    /// its libwebrtc. Its offer leaves 134 ms after the node connects, at
+    /// the median, with no ICE servers: its gathering runs every phase of
+    /// the port allocator, 123-125 ms from the offer's setting. Answering,
+    /// it has set the offer and its answer 2.1-2.5 ms after the page is
+    /// asked to, and checks 0.5-0.6 ms after that (the C6 bench's runs'
+    /// medians). Its gathering then ends as that check succeeds, libwebrtc
+    /// stopping its port allocator once a connection is strongly connected
+    /// (`stop_gather_on_strongly_connected`): in the runs' 72 answers it
+    /// ended 0.6 ms after the check's response came at the median
+    /// (0.2-3.4 ms), and the answer left 0.6 ms after that. So an answer's
+    /// gathering takes its check's round trip, 22 ms on the testbed's
+    /// 20-ms viewer paths and 32 on its seed's 30-ms ones, longer behind a
+    /// full uplink queue; one none of whose checks succeeds gathers every
+    /// phase, as an offer does, and leaves 127 ms after the offer came. Its
+    /// DTLS (BoringSSL's 1.3) client sends its ClientHello as its
     /// own check succeeds, 0.1-0.9 ms after it on the testbed, and its
     /// server starts then too, replaying the ClientHello it kept. Its
     /// client resends at twice its check's round trip, at least 50 ms and
@@ -182,7 +202,9 @@ impl LinkSetup {
     pub const CHROMIUM: LinkSetup = LinkSetup {
         name: "chromium",
         offer_ready: Duration::from_millis(134),
-        answer_ready: Duration::from_millis(27),
+        answer_ready: Duration::from_millis(127),
+        check_ready: Duration::from_micros(2_800),
+        answer_after_check: Some(Duration::from_micros(1_200)),
         answers_active: true,
         dtls13: true,
         hybrid: true,
@@ -211,19 +233,23 @@ impl LinkSetup {
 
     /// Firefox, from the testbed as Chromium is. Its offer leaves 18 ms
     /// after the node connects and its answer 6 ms after an offer comes, at
-    /// the medians, its gathering a millisecond of each. Its DTLS (NSS's
-    /// 1.3) client sends its ClientHello once the offering side's check has
-    /// reached it as well as its own succeeded: on the testbed, in each of
-    /// its 12 answers, 0.03-0.13 ms after its response to the offering
-    /// side's check, 2.3-4.7 ms after its own check's response came. So the
-    /// ClientHello comes to the offering side as that side's check
-    /// succeeds. Its server sees nothing before its own check succeeds, so
-    /// a ClientHello that comes earlier is lost to it, and its client
-    /// resends after 50 ms, doubling. Both its ends send an INIT.
+    /// the medians, its gathering a millisecond of each. Answering, it has
+    /// set the offer and its answer 3.0 ms after the page is asked to, and
+    /// checks 0.7-1.0 ms after that. Its DTLS (NSS's 1.3) client sends its
+    /// ClientHello once the offering side's check has reached it as well
+    /// as its own succeeded: on the testbed, in each of its 12 answers,
+    /// 0.03-0.13 ms after its response to the offering side's check,
+    /// 2.3-4.7 ms after its own check's response came. So the ClientHello
+    /// comes to the offering side as that side's check succeeds. Its server
+    /// sees nothing before its own check succeeds, so a ClientHello that
+    /// comes earlier is lost to it, and its client resends after 50 ms,
+    /// doubling. Both its ends send an INIT.
     pub const FIREFOX: LinkSetup = LinkSetup {
         name: "firefox",
         offer_ready: Duration::from_millis(18),
         answer_ready: Duration::from_millis(6),
+        check_ready: Duration::from_micros(3_800),
+        answer_after_check: None,
         answers_active: true,
         dtls13: true,
         hybrid: false,
@@ -260,6 +286,8 @@ impl LinkSetup {
         name: "str0m",
         offer_ready: Duration::ZERO,
         answer_ready: Duration::ZERO,
+        check_ready: Duration::ZERO,
+        answer_after_check: None,
         answers_active: false,
         dtls13: false,
         hybrid: false,
@@ -852,10 +880,11 @@ where
     Ok(())
 }
 
-/// The answering side: checks the offer's address with the dial that
-/// carries the handshake, its token first, hears of the offering side's
-/// check from `peer_check`, and attaches the stream once its association
-/// is up.
+/// The answering side: checks the offer's address, its stack's
+/// [`LinkSetup::check_ready`] after the offer came, with the dial that
+/// carries the handshake, its token first, tells `checked` once that check
+/// succeeds, hears of the offering side's check from `peer_check`, and
+/// attaches the stream once its association is up.
 #[allow(clippy::too_many_arguments)]
 async fn answer<N: Net>(
     net: N,
@@ -865,14 +894,19 @@ async fn answer<N: Net>(
     peer: LinkSetup,
     conn: RtcConn,
     cap: usize,
+    checked: oneshot::Sender<()>,
     peer_check: oneshot::Receiver<()>,
     origin: Instant,
     inputs: Inputs<Transport<N>>,
 ) {
     let linked = async {
+        if !me.check_ready.is_zero() {
+            tokio::time::sleep(me.check_ready).await;
+        }
         let start = Instant::now();
         let mut s = net.tcp_connect(addr).await?;
         let rtt = start.elapsed();
+        let _ = checked.send(());
         if !net.open_channel(&s, cap) {
             return Err(io::Error::other("the net models no data channels"));
         }
@@ -971,6 +1005,9 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
     // side's check. Bound: the endpoint's live connections.
     let mut offers: BTreeMap<u64, Offer<N::TcpStream>> = BTreeMap::new();
     let mut answers: BTreeMap<u64, oneshot::Sender<()>> = BTreeMap::new();
+    // Our answering checks' successes, until their answer is asked for.
+    // Bound: the endpoint's live connections.
+    let mut checked: BTreeMap<u64, oneshot::Receiver<()>> = BTreeMap::new();
     type Accepted<S> = (u64, u16, S);
     let (accepted_tx, mut accepted) = mpsc::unbounded_channel::<Accepted<N::TcpStream>>();
     // The answers whose offering side's check came, by token.
@@ -1024,19 +1061,28 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                 match cmd {
                     RtcCommand::Create { .. } => None,
                     RtcCommand::Describe { conn, sdp_type } => {
-                        let (sdp, ready) = if sdp_type == SdpType::Offer {
+                        let (sdp, ready, check) = if sdp_type == SdpType::Offer {
                             offers.insert(conn.0, Offer { conn, answer: None, stream: None });
-                            (format!("{PREFIX} {advertised} {} {}", conn.0, me.name), me.offer_ready)
+                            let sdp = format!("{PREFIX} {advertised} {} {}", conn.0, me.name);
+                            (sdp, me.offer_ready, None)
                         } else {
                             let sdp = format!(
                                 "{PREFIX} answer {advertised} {} {} {checks_at}",
                                 conn.0, me.name
                             );
-                            (sdp, me.answer_ready)
+                            let check = me.answer_after_check.zip(checked.remove(&conn.0));
+                            (sdp, me.answer_ready, check)
                         };
                         let inputs = inputs.clone();
                         tokio::spawn(async move {
-                            tokio::time::sleep(ready).await;
+                            let deadline = Instant::now() + ready;
+                            let mut at = deadline;
+                            if let Some((after, ok)) = check
+                                && let Ok(Ok(())) = tokio::time::timeout_at(deadline, ok).await
+                            {
+                                at = at.min(Instant::now() + after);
+                            }
+                            tokio::time::sleep_until(at).await;
                             let desc = SessionDescription { sdp_type, sdp };
                             signal(&inputs, conn, RtcSignal::LocalDescription(desc)).await;
                         });
@@ -1047,9 +1093,12 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                             Some((addr, token, peer)) => {
                                 let (tx, rx) = oneshot::channel();
                                 answers.insert(conn.0, tx);
+                                let (ok_tx, ok) = oneshot::channel();
+                                checked.insert(conn.0, ok);
                                 let (net, inputs) = (net.clone(), inputs.clone());
                                 tokio::spawn(answer(
-                                    net, addr, token, me, peer, conn, cap, rx, origin, inputs,
+                                    net, addr, token, me, peer, conn, cap, ok_tx, rx, origin,
+                                    inputs,
                                 ));
                             }
                             None => {
@@ -1080,6 +1129,7 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                     RtcCommand::Close { conn } => {
                         offers.remove(&conn.0);
                         answers.remove(&conn.0);
+                        checked.remove(&conn.0);
                         None
                     }
                 }

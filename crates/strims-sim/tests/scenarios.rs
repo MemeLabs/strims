@@ -4092,19 +4092,22 @@ fn the_twins_viewers_link_their_swarm_at_their_join() {
 /// (strims-node's `model_rtc`), on a quiet path of one delay `d` either
 /// way and the signalling relay on the bridge: the joiner's offer is ready
 /// its stack's `offer_ready` after its join and reaches the seed a delay
-/// later, the seed checks it (a round trip) and sends its hello, its answer
-/// ready its `answer_ready` after the offer and a delay on its way, then
-/// the joiner's check (a round trip), DTLS 1.3's server flight and the
-/// client's last (a round trip), the SCTP INITs and cookies (a round trip)
-/// and vnic's `PeerInit` (a round trip): the joiner's peer is up
-/// `offer_ready + answer_ready` and five round trips after its join, the
-/// seed's a round trip and a half sooner. A Firefox seed sends its hello
-/// once the joiner's check reaches it, so the hello comes as that check
-/// succeeds; a Chromium seed's comes earlier, and a Firefox joiner drops
-/// it and waits for the first of Chromium's resends, at twice the seed's
-/// check and doubling, to come after it, each on the next tick of
-/// Chromium's metronome. The sim's whole-millisecond steps add about a
-/// millisecond a flight, the same at either round trip.
+/// later, the seed checks it its `check_ready` later (a round trip) and
+/// sends its hello, its answer ready its `answer_ready` after the offer (a
+/// Chromium seed's its `answer_after_check` after its check succeeds, if
+/// that comes first) and a delay on its way, then the joiner's check (a
+/// round trip), DTLS 1.3's server flight and the client's last (a round
+/// trip), the SCTP INITs and cookies (a round trip) and vnic's `PeerInit`
+/// (a round trip): the joiner's peer is up four and a half round trips
+/// after the answer is ready, the seed's a delay sooner. A Firefox seed
+/// sends its hello once the joiner's check reaches it, so the hello comes
+/// as that check succeeds; a Chromium seed's comes earlier, and a Firefox
+/// joiner drops it and waits for the first of Chromium's resends, at twice
+/// the seed's check and doubling, to come after it, each on the next tick
+/// of Chromium's metronome. The sim's whole-millisecond steps add about a
+/// millisecond a flight, the same at either round trip. A Chromium seed
+/// whose check is slower than its `answer_ready`, on a 70-ms path, answers
+/// at that bound.
 #[test]
 fn browser_links_take_their_stacks_trips() {
     use strims_node::LinkSetup;
@@ -4116,14 +4119,19 @@ fn browser_links_take_their_stacks_trips() {
     // what a resend's tick may add.
     let want = |seed: &LinkSetup, joiner: &LinkSetup, d: u64| {
         let rtt = 2 * d;
-        let checked = ms(joiner.offer_ready) + d + rtt;
-        let reached = ms(joiner.offer_ready) + ms(seed.answer_ready) + rtt + d;
+        let offered = ms(joiner.offer_ready) + d;
+        let checked = offered + ms(seed.check_ready) + rtt;
+        let answered = offered + ms(seed.answer_ready);
+        let answered = seed
+            .answer_after_check
+            .map_or(answered, |after| answered.min(checked + ms(after)));
+        let reached = answered + 2 * d;
         let hello_sent = if seed.hello_after_peer_check {
             checked.max(reached)
         } else {
             checked
         };
-        let writable = ms(joiner.offer_ready) + ms(seed.answer_ready) + 2 * rtt;
+        let writable = answered + d + rtt;
         // The server's flight: once its check succeeds, at a hello it has
         // kept, or at the first of the client's resends to come after it.
         let (flight, tick) = if joiner.drops_early_hello && hello_sent + d < writable {
@@ -4208,6 +4216,26 @@ fn browser_links_take_their_stacks_trips() {
             );
         }
     }
+    // A Chromium seed whose check is slower than its bound answers at the
+    // bound, `answer_ready` after the offer came: on a 70-ms path its
+    // check, its round trip and `answer_after_check` come past the bound,
+    // and a Chromium joiner's peer is up no further past the trips than on
+    // a 10-ms path, where the answer leaves at the check (and takes the
+    // sim's whole-ms steps after it). An answer that waited for the check
+    // would come later.
+    let (seed, joiner) = (LinkSetup::CHROMIUM, LinkSetup::CHROMIUM);
+    let gated = |d: u64| ms(seed.check_ready) + 2 * d + seed.answer_after_check.map_or(0, ms);
+    assert!(gated(10) < ms(seed.answer_ready) && gated(70) > ms(seed.answer_ready));
+    let past = |d: u64| {
+        let (g, (w, _)) = (got(&seed, &joiner, d), want(&seed, &joiner, d));
+        (g.0 as i64 - w.0 as i64, g.1 as i64 - w.1 as i64)
+    };
+    let (near, far) = (past(10), past(70));
+    assert!(
+        (0..=near.0).contains(&far.0) && (0..=near.1).contains(&far.1),
+        "chromium to a chromium seed: past the trips by {near:?} ms at 10 ms, {far:?} at 70, \
+         where its check is slower than its bound"
+    );
 }
 
 /// The twin's buckets send at the testbed's peak (`run.sh`'s
