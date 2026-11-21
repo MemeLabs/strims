@@ -1697,6 +1697,175 @@ CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 10, hi_s := -1, full
          FROM twin_runs_of(b_jobs, lo_s := lo_s, hi_s := hi_s,
                            full_packet := full_packet, growth_x := growth_x)));
 
+-- The meter search's resume criterion (crates/PLAN.md) of twin rows against
+-- testbed rows, a run's measure each, as twin_runs_of gives them (`a_rows`
+-- the twin's: lists of {cell, measure, k, value, pair}; `b_rows` the
+-- testbed's: {cell, measure, k, seed, value, basis, arrivals}), with
+-- truth_bps, seed_upload, seed_budget and seed_children among them. A
+-- testbed run's twins are its cell's twin runs; with `paired`, in a cell
+-- that has joins-paired twins (`pair` a testbed seed: twins of that run's
+-- own joins), the run's own, and a run there without twins of its own
+-- meets none: it is left out of the cell's statistics and counted in
+-- tb_runs_unpaired (a fallback to the cell's twins would pool its pairs
+-- with the other runs' and outweigh them). A cell's statistic over runs is
+-- their median (quantile_cont's, as twin_fit_rows takes it), seed_budget's
+-- their mean where budget_stat is 'mean' (the default; 'median' takes it as
+-- the rest): a run's budget sits at its floor or near its children's share,
+-- and a median falls between the two. A cell's row: grp ('arrivals' where
+-- its testbed runs set STRIMS_SIM_ARRIVALS, else 'at once'), stat, tb_runs
+-- and twin_runs (each side's runs that met the other's), tb_runs_unpaired,
+-- tb_value (the statistic over its testbed runs), twin_value (the statistic
+-- over the twin runs that met them, in either mode: unpaired the cell's
+-- twins, paired the union of its runs' own), ratio (tb_value /
+-- twin_value), in_band (1 for a ratio within 0.80-1.25, else 0) and
+-- b_quantile (the runs' mean mid-rank place among their twins, as
+-- twin_fit_rows'). A row of cell NULL a measure, for every grp of 'all',
+-- 'arrivals' and 'at once' and measure of truth_bps, seed_upload and
+-- seed_budget, reads the group's cells (none: cells 0, pass false): cells,
+-- tb_runs, twin_runs and tb_runs_unpaired (summed), ratio (the geometric
+-- mean of their ratios), in_band (the count in band), b_quantile (their
+-- mean), corr and rank_corr (Pearson's and
+-- Spearman's, of twin_value against tb_value, ties their mean rank; NULL
+-- for a group of one cell or of one value, where DuckDB's corr is NaN), and
+-- for seed_budget the floor-mode shares: the runs whose budget over their
+-- children (at least 1) is below 1.6, floor_tb of floor_tb_runs testbed
+-- runs against floor_twin of floor_twin_runs twin runs, and their Fisher p
+-- (floor_p). Its bars, NULL where the measure has none: ratio_pass (ratio
+-- within 0.90-1.10), band_pass (truth_bps and seed_upload: at least 80 %
+-- of the cells in band), rank_pass (seed_budget: rank_corr at least 0.8),
+-- floor_pass (seed_budget: floor_p at least 0.05), and pass (all of its
+-- measure's). caveat is twin_fit_rows'.
+CREATE OR REPLACE MACRO twin_criterion_rows(a_rows, b_rows, paired := false, budget_stat := 'mean') AS TABLE
+    WITH a AS (SELECT unnest(a_rows, recursive := true)),
+    b AS (SELECT unnest(b_rows, recursive := true)),
+    cg AS (SELECT cell, CASE WHEN bool_or(arrivals) THEN 'arrivals' ELSE 'at once' END AS cgrp FROM b GROUP BY cell),
+    pc AS (SELECT DISTINCT cell FROM a WHERE pair IS NOT NULL),
+    t AS (
+        SELECT b.cell, b.measure, b.k, b.value, b.basis, a.k AS a_k, a.value AS a_value
+        FROM b JOIN a ON a.cell = b.cell AND a.measure = b.measure
+        WHERE CASE WHEN budget_stat NOT IN ('mean', 'median')
+                       THEN error('twin_criterion_rows: budget_stat ' || budget_stat || ' is neither mean nor median')
+                   WHEN paired AND b.cell IN (SELECT cell FROM pc) THEN a.pair = b.seed
+                   ELSE true END),
+    run AS (
+        SELECT cell, measure, k, value, any_value(basis) AS basis,
+               (count(*) FILTER (WHERE a_value < value) + 0.5 * count(*) FILTER (WHERE a_value = value))
+                   / count(*) AS q
+        FROM t GROUP BY cell, measure, k, value),
+    tw AS (
+        SELECT cell, measure, count(*) AS twin_runs,
+               CASE WHEN measure = 'seed_budget' AND budget_stat = 'mean' THEN avg(a_value)
+                    ELSE quantile_cont(a_value, 0.5) END AS twin_value
+        FROM (SELECT DISTINCT cell, measure, a_k, a_value FROM t) GROUP BY cell, measure),
+    bn AS (SELECT cell, measure, count(DISTINCT k) AS runs FROM b GROUP BY cell, measure),
+    c AS (
+        SELECT cell, measure, cgrp, count(*) AS tb_runs,
+               CASE WHEN measure = 'seed_budget' AND budget_stat = 'mean' THEN avg(value)
+                    ELSE quantile_cont(value, 0.5) END AS tb_value,
+               avg(q) AS b_quantile,
+               count(basis) AS given, string_agg(DISTINCT basis, '; ' ORDER BY basis) AS basis
+        FROM run JOIN cg USING (cell)
+        WHERE measure IN ('truth_bps', 'seed_upload', 'seed_budget') GROUP BY cell, measure, cgrp),
+    cells AS (
+        SELECT c.*, tw.twin_runs, bn.runs - c.tb_runs AS tb_runs_unpaired, tw.twin_value,
+               CASE WHEN twin_value <> 0 THEN tb_value / twin_value END AS ratio,
+               coalesce((CASE WHEN twin_value <> 0 THEN tb_value / twin_value END BETWEEN 0.80 AND 1.25)::BIGINT, 0)
+                   AS in_band
+        FROM c JOIN tw USING (cell, measure) JOIN bn USING (cell, measure)),
+    g AS (SELECT unnest(['all', 'arrivals', 'at once']) AS grp),
+    m AS (SELECT unnest(['truth_bps', 'seed_upload', 'seed_budget']) AS measure),
+    ranked AS (
+        SELECT g.grp, cells.*,
+               rank() OVER (PARTITION BY g.grp, measure ORDER BY twin_value)
+                   + (count(*) OVER (PARTITION BY g.grp, measure, twin_value) - 1) / 2.0 AS ra,
+               rank() OVER (PARTITION BY g.grp, measure ORDER BY tb_value)
+                   + (count(*) OVER (PARTITION BY g.grp, measure, tb_value) - 1) / 2.0 AS rb
+        FROM cells JOIN g ON g.grp IN ('all', cells.cgrp)),
+    bf AS (SELECT k, max(value) FILTER (WHERE measure = 'seed_budget')
+                     / greatest(coalesce(max(value) FILTER (WHERE measure = 'seed_children'), 1), 1) < 1.6 AS floor
+           FROM b GROUP BY k),
+    af AS (SELECT k, max(value) FILTER (WHERE measure = 'seed_budget')
+                     / greatest(coalesce(max(value) FILTER (WHERE measure = 'seed_children'), 1), 1) < 1.6 AS floor
+           FROM a GROUP BY k),
+    fl AS (
+        SELECT cell, true AS testbed, floor FROM (SELECT DISTINCT cell, k FROM t WHERE measure = 'seed_budget')
+        JOIN bf USING (k)
+        UNION ALL
+        SELECT cell, false, floor FROM (SELECT DISTINCT cell, a_k AS k FROM t WHERE measure = 'seed_budget')
+        JOIN af USING (k)),
+    fg AS (
+        SELECT g.grp, count(*) FILTER (WHERE testbed) AS n1, count(*) FILTER (WHERE testbed AND floor) AS k1,
+               count(*) FILTER (WHERE NOT testbed) AS n2, count(*) FILTER (WHERE NOT testbed AND floor) AS k2
+        FROM fl JOIN cg USING (cell) JOIN g ON g.grp IN ('all', cg.cgrp) GROUP BY g.grp),
+    summ AS (
+        SELECT g.grp, m.measure, count(r.cell) AS cells, coalesce(sum(tb_runs), 0) AS tb_runs,
+               coalesce(sum(twin_runs), 0) AS twin_runs, coalesce(sum(tb_runs_unpaired), 0) AS tb_runs_unpaired,
+               exp(avg(ln(CASE WHEN ratio > 0 THEN ratio END))) AS ratio, coalesce(sum(in_band), 0) AS in_band,
+               avg(b_quantile) AS b_quantile,
+               CASE WHEN NOT isnan(corr(twin_value, tb_value)) THEN corr(twin_value, tb_value) END AS corr,
+               CASE WHEN NOT isnan(corr(ra, rb)) THEN corr(ra, rb) END AS rank_corr,
+               sum(given) AS given, string_agg(DISTINCT basis, '; ' ORDER BY basis) AS basis,
+               any_value(CASE WHEN m.measure = 'seed_budget' THEN fg.k1 END) AS floor_tb,
+               any_value(CASE WHEN m.measure = 'seed_budget' THEN fg.n1 END) AS floor_tb_runs,
+               any_value(CASE WHEN m.measure = 'seed_budget' THEN fg.k2 END) AS floor_twin,
+               any_value(CASE WHEN m.measure = 'seed_budget' THEN fg.n2 END) AS floor_twin_runs
+        FROM g CROSS JOIN m LEFT JOIN ranked r ON r.grp = g.grp AND r.measure = m.measure
+        LEFT JOIN fg ON fg.grp = g.grp GROUP BY g.grp, m.measure),
+    bars AS (
+        SELECT *, CASE WHEN measure = 'seed_budget'
+                       THEN fisher_p(floor_tb, floor_tb_runs, floor_twin, floor_twin_runs) END AS floor_p,
+               ratio BETWEEN 0.90 AND 1.10 AS ratio_pass,
+               CASE WHEN measure <> 'seed_budget' THEN cells > 0 AND in_band >= 0.8 * cells END AS band_pass,
+               CASE WHEN measure = 'seed_budget' THEN rank_corr >= 0.8 END AS rank_pass,
+               CASE WHEN measure = 'seed_budget'
+                    THEN fisher_p(floor_tb, floor_tb_runs, floor_twin, floor_twin_runs) >= 0.05 END AS floor_pass
+        FROM summ)
+    SELECT grp, measure, NULL::VARCHAR AS cell,
+           CASE WHEN measure = 'seed_budget' AND budget_stat = 'mean' THEN 'mean' ELSE 'median' END AS stat,
+           cells, tb_runs, twin_runs, tb_runs_unpaired, NULL::DOUBLE AS tb_value, NULL::DOUBLE AS twin_value, ratio,
+           in_band,
+           b_quantile, corr, rank_corr, floor_tb, floor_tb_runs, floor_twin, floor_twin_runs, floor_p, ratio_pass,
+           band_pass, rank_pass, floor_pass,
+           CASE WHEN measure = 'seed_budget' THEN coalesce(ratio_pass AND rank_pass AND floor_pass, false)
+                ELSE coalesce(ratio_pass AND band_pass, false) END AS pass,
+           CASE WHEN given > 0 THEN 'the testbed''s ' || basis || ' in ' || given || ' of its ' || tb_runs || ' runs'
+                END AS caveat
+    FROM bars
+    UNION ALL
+    SELECT cgrp, measure, cell,
+           CASE WHEN measure = 'seed_budget' AND budget_stat = 'mean' THEN 'mean' ELSE 'median' END,
+           NULL, tb_runs, twin_runs, tb_runs_unpaired, tb_value, twin_value, ratio, in_band, b_quantile, NULL, NULL,
+           NULL, NULL, NULL,
+           NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+           CASE WHEN given > 0 THEN 'the testbed''s ' || basis || ' in ' || given || ' of its ' || tb_runs || ' runs'
+                END
+    FROM cells;
+
+-- twin_criterion_rows of a testbed side and its twin's (`a_side` the
+-- twin's, `b_side` the testbed's, as twin_fit_of takes them), each run over
+-- its own window (twin_window_of's), a testbed run's arrivals from its
+-- knobs (STRIMS_SIM_ARRIVALS set) and a twin run's pair from its arm: a
+-- twin of arm pair-r<n> (`simdb.py twin --arm pair-r<n>`, its knobs the
+-- testbed run's own joins) stands for its cell's testbed run of seed n.
+-- needs: seconds bins bins.seed_up_queue_ms node_bins meter_samples peer_samples viewer_seconds viewers events
+-- needs: meter_samples.rate_bps meter_samples.busy_permille meter_samples.queue_delay_ms
+-- needs: meter_samples.path_latest_ms meter_samples.children meter_samples.requests_in meter_samples.budget
+-- needs: meter_samples.copies meter_samples.latest_floor_ms jobs.env jobs.stored_arm
+CREATE OR REPLACE MACRO twin_criterion_of(a_side, b_side, paired := false, budget_stat := 'mean', lo_s := 10,
+                                          hi_s := -1, full_packet := 1500, growth_x := 3.5) AS TABLE
+    FROM twin_criterion_rows(
+        (SELECT list({'cell': r.cell, 'measure': r.measure, 'k': r.k, 'value': r.value,
+                      'pair': TRY_CAST(regexp_extract(j.stored_arm, '^pair-r(\d+)$', 1) AS BIGINT)})
+         FROM twin_runs_of(a_side, lo_s := lo_s, hi_s := hi_s, full_packet := full_packet, growth_x := growth_x) r
+         JOIN jobs j USING (k, src)
+         WHERE r.measure IN ('truth_bps', 'seed_upload', 'seed_budget', 'seed_children')),
+        (SELECT list({'cell': r.cell, 'measure': r.measure, 'k': r.k, 'seed': r.seed, 'value': r.value,
+                      'basis': r.basis, 'arrivals': j.env['STRIMS_SIM_ARRIVALS'] IS NOT NULL})
+         FROM twin_runs_of(b_side, lo_s := lo_s, hi_s := hi_s, full_packet := full_packet, growth_x := growth_x) r
+         JOIN jobs j USING (k, src)
+         WHERE r.measure IN ('truth_bps', 'seed_upload', 'seed_budget', 'seed_children')),
+        paired := paired, budget_stat := budget_stat);
+
 -- The links each viewer of the runs `jobs` (a side, as side_window_of
 -- takes it: one of no runs fails) made at its join (events' @{kind_join}) with the neighbours there
 -- before it, in ms after the join: open_ms when its channel with the

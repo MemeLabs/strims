@@ -36,6 +36,10 @@ their shaper replays.
            check's lags from the forecast as the scheduler moves them, the
            first joiner's left out; the bench's rule, a model's median
            within the testbed's repeat spread and a floor
+  Criterion  scoring.sql's twin_criterion_rows over a fixture: a cell's
+           ratio of medians, or seed_budget's of means; each group's cells
+           and bars; with `paired` a run against its own twins, a cell
+           without them against its cell's; and criterion_text
 
   python3 hack/simlab/tests/test_testbed.py
 """
@@ -895,6 +899,261 @@ class LinkOpens(unittest.TestCase):
         self.assertEqual(rows, [(2, 2, 0.0, 1, 1.0, None, None, None, 50.0),
                                 (3, 3, 200.0, 2, 1.0, 70.0, 20.0, 70.0, 70.0)])
 
+
+class Criterion(unittest.TestCase):
+    """twin_criterion_rows over a fixture of two cells, each run's seed
+    children 2. `arr` (arrivals): testbed budgets 2, 10 and 12 (mean 8,
+    median 10; the first at its floor, 2 / 2 below 1.6); its twins 2, 8, 8
+    and 14 (mean and median 8, the first at its floor); its joins-paired
+    twins 2 and 4 of run 1, 8 and 12 of run 2, 12 and 16 of run 3 (each
+    pair's mean and median 3, 10 and 14; theirs 9). `once` (at once):
+    testbed 4 and 6, twins 4, 4, 6 and 6 (5 each side). truth_bps is 100
+    everywhere but once's testbed runs' 130; seed_upload 1 everywhere."""
+
+    TB = {"arr": [2, 10, 12], "once": [4, 6]}
+    TWIN = {"arr": [2, 8, 8, 14], "once": [4, 4, 6, 6]}
+    PAIRS = {1: [2, 4], 2: [8, 12], 3: [12, 16]}
+
+    @classmethod
+    def setUpClass(cls):
+        import duckdb
+
+        from simlab import catalog
+
+        conn = duckdb.connect()
+        for s in catalog.scoring_statements(["compensated_sum", "hypergeom_p", "fisher_p", "twin_criterion_rows"],
+                                            set()):
+            conn.execute(s)
+        conn.execute("CREATE TABLE b (cell VARCHAR, measure VARCHAR, k VARCHAR, seed BIGINT, value DOUBLE, "
+                     "basis VARCHAR, arrivals BOOLEAN)")
+        conn.execute("CREATE TABLE a (cell VARCHAR, measure VARCHAR, k VARCHAR, value DOUBLE, pair BIGINT)")
+        for cell, budgets in cls.TB.items():
+            for seed, budget in enumerate(budgets, 1):
+                k = f"tb-{cell}-{seed}"
+                truth = 130.0 if cell == "once" else 100.0
+                for measure, value in (("seed_budget", budget), ("seed_children", 2), ("truth_bps", truth),
+                                       ("seed_upload", 1)):
+                    conn.execute("INSERT INTO b VALUES (?, ?, ?, ?, ?, NULL, ?)",
+                                 [cell, measure, k, seed, value, cell == "arr"])
+        twins = [(cell, f"tw-{cell}-{n}", budget, None) for cell, budgets in cls.TWIN.items()
+                 for n, budget in enumerate(budgets)]
+        twins += [("arr", f"pr-{pair}-{n}", budget, pair) for pair, budgets in cls.PAIRS.items()
+                  for n, budget in enumerate(budgets)]
+        for cell, k, budget, pair in twins:
+            for measure, value in (("seed_budget", budget), ("seed_children", 2), ("truth_bps", 100),
+                                   ("seed_upload", 1)):
+                conn.execute("INSERT INTO a VALUES (?, ?, ?, ?, ?)", [cell, measure, k, value, pair])
+        cls.conn = conn
+
+    def rows(self, paired=False, stat="mean", pairs=None, b_where=""):
+        """The macro's rows, {(grp, measure, cell): row}, over the twins of
+        no pair, with `pairs` the joins-paired ones too (or those `pairs`
+        names, a SQL condition), and the testbed rows b_where keeps."""
+        where = {None: "WHERE pair IS NULL", True: ""}.get(pairs, f"WHERE pair IS NULL OR {pairs}")
+        cur = self.conn.execute(
+            "FROM twin_criterion_rows("
+            "(SELECT list({'cell': cell, 'measure': measure, 'k': k, 'value': value, 'pair': pair}) "
+            f"FROM a {where}), "
+            "(SELECT list({'cell': cell, 'measure': measure, 'k': k, 'seed': seed, 'value': value, 'basis': basis, "
+            f"'arrivals': arrivals}}) FROM b {b_where}), paired := {str(paired).lower()}, budget_stat := '{stat}')")
+        names = [d[0] for d in cur.description]
+        return {(r["grp"], r["measure"], r["cell"]): r for r in (dict(zip(names, t)) for t in cur.fetchall())}
+
+    def test_a_cells_ratio_is_of_medians_and_seed_budgets_of_means(self):
+        mean, median = self.rows(), self.rows(stat="median")
+        cell = mean[("arrivals", "seed_budget", "arr")]
+        self.assertEqual((cell["stat"], cell["tb_runs"], cell["twin_runs"], cell["tb_value"], cell["twin_value"],
+                          cell["ratio"]), ("mean", 3, 4, 8.0, 8.0, 1.0))
+        self.assertAlmostEqual(cell["b_quantile"], (0.125 + 0.75 + 0.75) / 3)
+        cell = median[("arrivals", "seed_budget", "arr")]
+        self.assertEqual((cell["stat"], cell["tb_value"], cell["twin_value"], cell["ratio"]),
+                         ("median", 10.0, 8.0, 1.25))
+        self.assertEqual(mean[("at once", "truth_bps", "once")]["stat"], "median")
+        self.assertAlmostEqual(mean[("at once", "truth_bps", "once")]["ratio"], 1.3)
+
+    def test_each_group_reads_its_cells_against_the_bars(self):
+        mean, median = self.rows(), self.rows(stat="median")
+        self.assertEqual({(g, m["cells"]) for (g, _, c), m in mean.items() if c is None},
+                         {("all", 2), ("arrivals", 1), ("at once", 1)})
+        b = mean[("all", "seed_budget", None)]
+        self.assertEqual((b["ratio"], b["rank_corr"], b["floor_tb"], b["floor_tb_runs"], b["floor_twin"],
+                          b["floor_twin_runs"], b["band_pass"]), (1.0, 1.0, 1, 5, 1, 8, None))
+        self.assertEqual((b["ratio_pass"], b["rank_pass"], b["floor_pass"], b["pass"]),
+                         (True, True, b["floor_p"] >= 0.05, b["floor_p"] >= 0.05))
+        self.assertAlmostEqual(median[("all", "seed_budget", None)]["ratio"], 1.25 ** 0.5)
+        self.assertFalse(median[("all", "seed_budget", None)]["ratio_pass"])
+        # one cell has no rank correlation, and a seed_budget without one fails
+        one = mean[("arrivals", "seed_budget", None)]
+        self.assertEqual((one["ratio_pass"], one["rank_corr"], one["rank_pass"], one["pass"]),
+                         (True, None, None, False))
+        t = mean[("all", "truth_bps", None)]
+        self.assertAlmostEqual(t["ratio"], 1.3 ** 0.5)
+        self.assertEqual((t["in_band"], t["ratio_pass"], t["band_pass"], t["rank_pass"], t["floor_p"], t["pass"]),
+                         (1, False, False, None, None, False))
+        u = mean[("all", "seed_upload", None)]
+        self.assertEqual((u["ratio"], u["in_band"], u["ratio_pass"], u["band_pass"], u["pass"]),
+                         (1.0, 2, True, True, True))
+        self.assertEqual((mean[("at once", "truth_bps", None)]["pass"], mean[("arrivals", "truth_bps", None)]["pass"]),
+                         (False, True))
+
+    def test_paired_runs_meet_their_own_twins_and_a_cell_without_its_cells(self):
+        mean, median = self.rows(paired=True, pairs=True), self.rows(paired=True, stat="median", pairs=True)
+        cell = mean[("arrivals", "seed_budget", "arr")]
+        self.assertEqual((cell["tb_runs"], cell["twin_runs"], cell["tb_runs_unpaired"], cell["tb_value"],
+                          cell["twin_value"]), (3, 6, 0, 8.0, 9.0))
+        self.assertAlmostEqual(cell["ratio"], 8 / 9)
+        self.assertAlmostEqual(cell["b_quantile"], (0.25 + 0.5 + 0.25) / 3)
+        # the twins' statistic is over every twin that met a run, its pairs'
+        # 2, 4, 8, 12, 12 and 16 (median 10), not the mean of their medians (9)
+        cell = median[("arrivals", "seed_budget", "arr")]
+        self.assertEqual((cell["tb_value"], cell["twin_value"], cell["ratio"]), (10.0, 10.0, 1.0))
+        self.assertEqual(mean[("at once", "seed_budget", "once")]["twin_runs"], 4)
+        b = mean[("all", "seed_budget", None)]
+        self.assertEqual((b["floor_tb"], b["floor_tb_runs"], b["floor_twin"], b["floor_twin_runs"]), (1, 5, 1, 10))
+        # unpaired, the paired twins pool with the cell's
+        self.assertEqual(self.rows(pairs=True)[("arrivals", "seed_budget", "arr")]["twin_runs"], 10)
+
+    def test_a_paired_run_without_twins_of_its_own_is_counted_and_left_out(self):
+        rows = self.rows(paired=True, pairs="pair <> 3")
+        cell = rows[("arrivals", "seed_budget", "arr")]
+        self.assertEqual((cell["tb_runs"], cell["tb_runs_unpaired"], cell["twin_runs"], cell["tb_value"],
+                          cell["twin_value"]), (2, 1, 4, 6.0, 6.5))
+        self.assertEqual((rows[("all", "seed_budget", None)]["tb_runs_unpaired"],
+                          rows[("at once", "seed_budget", None)]["tb_runs_unpaired"]), (1, 0))
+        text = testbed.criterion_text(list(rows.values()))
+        self.assertIn("arrivals seed_budget: 1 testbed runs without twins of their own, left out", text)
+
+    def test_a_group_without_cells_is_scored_and_fails(self):
+        rows = self.rows(b_where="WHERE cell = 'once'")
+        for m in ("truth_bps", "seed_upload", "seed_budget"):
+            r = rows[("arrivals", m, None)]
+            self.assertEqual((r["cells"], r["tb_runs"], r["twin_runs"], r["ratio"], r["pass"]), (0, 0, 0, None, False))
+        self.assertEqual(rows[("arrivals", "seed_upload", None)]["band_pass"], False)
+        self.assertTrue(rows[("at once", "seed_upload", None)]["pass"])
+        text = testbed.criterion_text(list(rows.values()))
+        self.assertIn("arrivals truth_bps (no cells), arrivals seed_upload (no cells), "
+                      "arrivals seed_budget (no cells)", text)
+        # a summary row missing from the rows fails it too, as every passing one doesn't
+        passing = [{**r, "pass": True} for r in rows.values()]
+        self.assertEqual(testbed.criterion_failures(passing),
+                         ["arrivals truth_bps (no cells)", "arrivals seed_upload (no cells)",
+                          "arrivals seed_budget (no cells)"])
+        full = [{**r, "pass": True} for r in self.rows().values()]
+        self.assertTrue(testbed.criterion_met(full))
+        self.assertFalse(testbed.criterion_met([r for r in full if (r["grp"], r["measure"]) != ("all", "truth_bps")]))
+
+    def test_another_statistic_fails(self):
+        with self.assertRaisesRegex(Exception, "budget_stat mode is neither mean nor median"):
+            self.rows(stat="mode")
+
+    def test_the_text_gives_each_bar_each_cells_runs_and_the_verdict(self):
+        rows = sorted(self.rows().values(),
+                      key=lambda r: (r["cell"] is not None, r["cell"] or "", r["grp"], r["measure"]))
+        text = testbed.criterion_text(rows)
+        self.assertFalse(testbed.criterion_met(rows))
+        self.assertIn("criterion not met: all truth_bps, arrivals seed_budget, at once truth_bps, "
+                      "at once seed_budget", text)
+        self.assertRegex(text, r"all\s+seed_budget\s+mean\s+5/8\s+1\.000\s+ok\s+2/2\s+1\.000\s+ok\s+1/5 vs 1/8")
+        self.assertRegex(text, r"arr\s+arrivals\s+seed_budget\s+mean\s+3/4\s+8\.0000\s+8\.0000\s+1\.000")
+
+
+
+class CriterionOf(unittest.TestCase):
+    """criterion() through twin_criterion_of over a jobs fixture, with
+    twin_runs_of a stub giving each run's measures (RUNS): testbed/x's
+    native runs of cell arr (STRIMS_SIM_ARRIVALS set) seeds 1-3, budgets
+    10, 12 and 14, and of cell once (unset) seeds 1 and 2, budgets 6; a
+    browser run of once there (another kind); twins in testbed/x-twin, arm
+    twin, of arr (8, 8) and once (6, 6), of arm pair-r1 and pair-r2 (10 and
+    12: seeds 1's and 2's own joins) and of arm xpair-r1 (9: no pair), and
+    of a cell no testbed run has; testbed/y-twin's twin of arr (1000).
+    Every run's seed_children is 2, its truth_bps and seed_upload 100, and
+    testbed run arr 1's basis "mean of 2"."""
+
+    JOBS = [  # k, src, sim, cell, arm, seed, env
+        ("tb-arr-1", "testbed/x", "testbed", "arr", "testbed", 1, {"STRIMS_SIM_ARRIVALS": "1000"}),
+        ("tb-arr-2", "testbed/x", "testbed", "arr", "testbed", 2, {"STRIMS_SIM_ARRIVALS": "1000"}),
+        ("tb-arr-3", "testbed/x", "testbed", "arr", "testbed", 3, {"STRIMS_SIM_ARRIVALS": "1000"}),
+        ("tb-once-1", "testbed/x", "testbed", "once", "testbed", 1, {}),
+        ("tb-once-2", "testbed/x", "testbed", "once", "testbed", 2, {}),
+        ("tb-once-3", "testbed/x", "testbed", "once", "testbed", 3, {"STRIMS_SIM_RTC": "1"}),
+        ("tw-arr-1", "testbed/x-twin", "strims-sim", "arr", "twin", 1, {}),
+        ("tw-arr-2", "testbed/x-twin", "strims-sim", "arr", "twin", 2, {}),
+        ("tw-once-1", "testbed/x-twin", "strims-sim", "once", "twin", 1, {}),
+        ("tw-once-2", "testbed/x-twin", "strims-sim", "once", "twin", 2, {}),
+        ("pr-arr-1", "testbed/x-twin", "strims-sim", "arr", "pair-r1", 1, {}),
+        ("pr-arr-2", "testbed/x-twin", "strims-sim", "arr", "pair-r2", 1, {}),
+        ("xp-arr-1", "testbed/x-twin", "strims-sim", "arr", "xpair-r1", 1, {}),
+        ("tw-none-1", "testbed/x-twin", "strims-sim", "none", "twin", 1, {}),
+        ("ty-arr-1", "testbed/y-twin", "strims-sim", "arr", "twin", 1, {}),
+    ]
+    BUDGET = {"tb-arr-1": 10, "tb-arr-2": 12, "tb-arr-3": 14, "tb-once-1": 6, "tb-once-2": 6, "tb-once-3": 600,
+              "tw-arr-1": 8, "tw-arr-2": 8, "tw-once-1": 6, "tw-once-2": 6, "pr-arr-1": 10, "pr-arr-2": 12,
+              "xp-arr-1": 9, "tw-none-1": 6, "ty-arr-1": 1000}
+
+    def setUp(self):
+        import duckdb
+
+        from simlab import catalog
+
+        conn = duckdb.connect()
+        self.addCleanup(conn.close)
+        conn.execute("CREATE TABLE jobs (k VARCHAR, src VARCHAR, sim VARCHAR, stored_cell VARCHAR, "
+                     "stored_arm VARCHAR, seed BIGINT, env MAP(VARCHAR, VARCHAR))")
+        conn.execute("CREATE TABLE runs (cell VARCHAR, measure VARCHAR, k VARCHAR, src VARCHAR, seed BIGINT, "
+                     "value DOUBLE, basis VARCHAR)")
+        for k, src, sim, cell, arm, seed, env in self.JOBS:
+            conn.execute("INSERT INTO jobs VALUES (?, ?, ?, ?, ?, ?, MAP(?::VARCHAR[], ?::VARCHAR[]))",
+                         [k, src, sim, cell, arm, seed, list(env), list(env.values())])
+            for measure, value in (("seed_budget", self.BUDGET[k]), ("seed_children", 2), ("truth_bps", 100),
+                                   ("seed_upload", 100)):
+                conn.execute("INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?)",
+                             [cell, measure, k, src, seed, value, "mean of 2" if k == "tb-arr-1" else None])
+        conn.execute("CREATE MACRO twin_runs_of(jobs, lo_s := 10, hi_s := -1, full_packet := 1500, "
+                     "growth_x := 3.5) AS TABLE SELECT r.* FROM runs r "
+                     "JOIN (SELECT unnest(jobs, recursive := true)) j USING (k, src)")
+        text = catalog.scoring_text(catalog.scoring_consts())
+        for m in catalog.MACRO.finditer(text):
+            if m.group(2) in ("compensated_sum", "hypergeom_p", "fisher_p", "testbed_side", "twin_criterion_rows",
+                              "twin_criterion_of"):
+                conn.execute(text[m.start():catalog.STATEMENT_END.search(text, m.end()).end()])
+
+        def lake(sql, **kw):
+            cur = conn.execute(sql)
+            names = [d[0] for d in cur.description]
+            return [dict(zip(names, r)) for r in cur.fetchall()]
+
+        p = mock.patch.object(catalog, "lake", lake)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def rows(self, tw="testbed/x-twin", **kw):
+        return {(r["grp"], r["measure"], r["cell"]): r
+                for r in testbed.criterion("testbed/x", tw, kind="native", **kw)}
+
+    def test_a_runs_group_is_its_arrivals_and_its_twins_its_cells_in_the_source(self):
+        rows = self.rows()
+        arr, once = rows[("arrivals", "seed_budget", "arr")], rows[("at once", "seed_budget", "once")]
+        self.assertEqual((arr["tb_runs"], arr["twin_runs"], arr["tb_value"], arr["twin_value"]), (3, 5, 12.0, 9.4))
+        self.assertEqual((once["tb_runs"], once["twin_runs"], once["ratio"]), (2, 2, 1.0))
+        self.assertNotIn(("arrivals", "seed_budget", "once"), rows)
+        self.assertEqual(rows[("arrivals", "truth_bps", None)]["caveat"], "the testbed's mean of 2 in 1 of its 3 runs")
+        self.assertEqual([(r["grp"], r["measure"]) for r in list(rows.values())[:3]],
+                         [("all", "truth_bps"), ("all", "seed_upload"), ("all", "seed_budget")])
+
+    def test_paired_a_run_meets_its_pair_r_arms_twins(self):
+        arr = self.rows(paired=True)[("arrivals", "seed_budget", "arr")]
+        self.assertEqual((arr["tb_runs"], arr["tb_runs_unpaired"], arr["twin_runs"], arr["tb_value"],
+                          arr["twin_value"], arr["ratio"]), (2, 1, 2, 11.0, 11.0, 1.0))
+        self.assertEqual(self.rows(paired=True)[("at once", "seed_budget", "once")]["twin_runs"], 2)
+
+    def test_a_kind_at_a_time_and_twins_required(self):
+        with self.assertRaisesRegex(ValueError, "judged per kind"):
+            testbed.criterion("testbed/x", "testbed/x-twin", kind="any")
+        with self.assertRaisesRegex(Exception, "native and browser runs"):
+            testbed.criterion("testbed/x", "testbed/x-twin")
+        with self.assertRaisesRegex(Exception, "no twin run in testbed/z"):
+            self.rows(tw="testbed/z")
 
 if __name__ == "__main__":
     unittest.main()

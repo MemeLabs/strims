@@ -277,15 +277,15 @@ and dropped are in `TRIED.md`.
      `_honest`. Declare each of these names on main with `sims = []`.
    - Give the seed a meter that reads a bucketed uplink's sustained rate,
      scored with realistic buckets on (`STRIMS_SIM_UPLINK_BURST=profiles`).
-     The meter search resumes once the testbed and its twin agree on the
-     meter's truth (`truth_bps`, meter_samples' `avail_bps`), `seed_upload`
-     and `seed_budget` over the testbed tier's cells, for each of native
-     and browsers: for each measure, `twin_fit_of`'s ratio over the cells
-     (their geometric mean) within 0.90-1.10 over the stream window
-     (`twin_window_of`'s), and at least 80 % of the cells' ratios within
-     0.80-1.25. Then rescreen `meter-ytf-rebase` (the packet trains in
-     `TRIED.md`) with those buckets on. Choose the relays' meter change
-     after measuring the viewers' gap to a known uplink
+     The meter search resumes once `simdb.py criterion` is met over the
+     testbed tier's cells, for native and for browsers. Its targets, the
+     user's: in each group, each measure's ratio within 0.90-1.10; for
+     `truth_bps` and `seed_upload`, 80 % of the cells within 0.80-1.25; for
+     `seed_budget`, a rank correlation of at least 0.8 and floor-mode
+     shares alike (p at least 0.05). Run 8 testbed repeats a cell against
+     32 twin seeds. Then rescreen `meter-ytf-rebase` (the packet
+     trains in `TRIED.md`) with those buckets on. Choose the relays'
+     meter change after measuring the viewers' gap to a known uplink
      (`STRIMS_SIM_KNOWN_UPLINK=viewers`). A meter reads the uplink whatever
      the node sends, never by probes timed behind its own bursts.
    - Rescreen on strims-sim's measuring tiers the relay meter changes

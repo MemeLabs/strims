@@ -65,6 +65,12 @@ its knobs (`tb-<hash>`).
                  the tier as farm testbed matrices, one a cell, each naming
                  its cell, its arrivals' knob and each repeat's joins
                  (run_env: strims-sim's testbed::knobs_of the other way)
+  criterion(tb_like, tw_like, kind="one", paired=False,
+            budget_stat="mean") -> [row]
+                 the meter search's resume criterion (scoring.sql's
+                 twin_criterion_of) of a testbed source's runs against
+                 their cells' twins, per group and measure and per cell;
+                 criterion_text and criterion_met read its rows
 
 A fold only reads a run dir: the dir is its maker's (a run.sh caller's,
 another session's, a farm run's local copy under target/sim-farm/*/runs),
@@ -72,10 +78,11 @@ and a tables/ in it its maker's too. The fold writes each run's tables in
 a dir of its own under the cache's tmp/ (work_dir), folds them from
 there and removes it, so a run dir comes out of a fold as it went in.
 
-hack/sim-db/simdb.py testbed, twin and testbed-tier are its command line;
-`simdb.py index` then takes a source in. A testbed source is a local
-experiment (exp_id its source), its arm `arm`; a farm run of the tier's
-matrices puts its runs in the cache as farm sources (`simdb.py pull`).
+hack/sim-db/simdb.py testbed, twin, testbed-tier and criterion are its
+command line; `simdb.py index` then takes a source in. A testbed source
+is a local experiment (exp_id its source), its arm `arm`; a farm run of
+the tier's matrices puts its runs in the cache as farm sources
+(`simdb.py pull`).
 """
 
 import contextlib
@@ -611,3 +618,101 @@ def tier_matrices(dest, repeats=2, ref="main"):
         path.write_text("\n".join(lines) + "\n")
         out.append(path)
     return out
+
+
+BUDGET_STATS = ("mean", "median")
+
+# What the criterion scores, a summary row each: every group of a kind's
+# cells and every measure.
+CRITERION_GROUPS = ("all", "arrivals", "at once")
+CRITERION_MEASURES = ("truth_bps", "seed_upload", "seed_budget")
+
+
+def criterion(tb_like, tw_like, kind="one", paired=False, budget_stat="mean"):
+    """The meter search's resume criterion (crates/PLAN.md) over the
+    catalog: scoring.sql's twin_criterion_of of the testbed runs
+    testbed_side(tb_like, kind) names against the twin runs of their cells
+    whose source matches the LIKE pattern tw_like, with `paired` each
+    testbed run against its own joins-paired twins where its cell has them,
+    and seed_budget's statistic `budget_stat` (BUDGET_STATS). The criterion
+    is judged a kind at a time, so `kind` is native, browsers or one, never
+    any. Its rows as dicts: a group's and measure's (cell None) first, then
+    a cell's and measure's."""
+    from . import catalog
+
+    if kind == "any":
+        raise ValueError("criterion: kind any mixes native and browser runs; the criterion is judged per kind")
+    if budget_stat not in BUDGET_STATS:
+        raise ValueError(f"budget_stat {budget_stat} is none of {', '.join(BUDGET_STATS)}")
+    q = store_host.q
+    twin = (f"SELECT list({{'cell': stored_cell, 'seed': seed, 'k': k, 'src': src}} ORDER BY stored_cell, src, seed) "
+            f"FROM jobs WHERE sim <> 'testbed' AND src LIKE {q(tw_like)} "
+            f"AND list_contains((SELECT list_transform(side, x -> x.cell) FROM b), stored_cell)")
+    none = (f"error('criterion: no twin run in ' || {q(tw_like)} || ' of the cells of the testbed runs in ' "
+            f"|| {q(tb_like)})")
+    return catalog.lake(
+        f"WITH b AS (SELECT testbed_side({q(tb_like)}, kind := {q(kind)}) AS side), a AS ({twin}) "
+        f"SELECT * FROM twin_criterion_of(CASE WHEN (SELECT * FROM a) IS NULL THEN {none} ELSE (SELECT * FROM a) END, "
+        "(SELECT side FROM b), "
+        f"paired := {'true' if paired else 'false'}, budget_stat := {q(budget_stat)}) "
+        f"ORDER BY cell NULLS FIRST, list_position({list(CRITERION_GROUPS)}, grp), "
+        f"list_position({list(CRITERION_MEASURES)}, measure), cell;")
+
+
+def criterion_failures(rows):
+    """Why criterion's rows don't meet it, a reason a group and measure
+    that fails: no summary row or no cells (the criterion needs every
+    group and measure scored), or a bar not met. Empty when it's met."""
+    summary = {(r["grp"], r["measure"]): r for r in rows if r["cell"] is None}
+    out = []
+    for g in CRITERION_GROUPS:
+        for m in CRITERION_MEASURES:
+            r = summary.get((g, m))
+            if r is None or not r["cells"]:
+                out.append(f"{g} {m} (no cells)")
+            elif not r["pass"]:
+                out.append(f"{g} {m}")
+    return out
+
+
+def criterion_met(rows):
+    """Whether criterion's rows meet it: every group and measure scored,
+    each passing."""
+    return not criterion_failures(rows)
+
+
+def criterion_text(rows):
+    """criterion's rows as text: a line a group and measure (its readings,
+    each bar's pass), a line a cell and measure (each side's runs, the
+    statistic of each and their ratio), and whether they meet it."""
+    def num(x, d=3):
+        return "-" if x is None else f"{x:.{d}f}"
+
+    def bar(ok):
+        return "" if ok is None else ("ok" if ok else "FAIL")
+
+    def table(head, lines):
+        widths = [max(len(str(c)) for c in col) for col in zip(head, *lines)]
+        return ["  ".join(str(c).ljust(w) for c, w in zip(line, widths)).rstrip() for line in (head, *lines)]
+
+    summary = [r for r in rows if r["cell"] is None]
+    out = table(("group", "measure", "stat", "runs tb/twin", "ratio", "", "in band", "", "rank_corr", "",
+                 "floor tb vs twin", "floor_p", "", "pass"),
+                [(r["grp"], r["measure"], r["stat"], f"{r['tb_runs']}/{r['twin_runs']}", num(r["ratio"]),
+                  bar(r["ratio_pass"]), f"{r['in_band']}/{r['cells']}", bar(r["band_pass"]), num(r["rank_corr"]),
+                  bar(r["rank_pass"]),
+                  "" if r["floor_tb"] is None else
+                  f"{r['floor_tb']}/{r['floor_tb_runs']} vs {r['floor_twin']}/{r['floor_twin_runs']}",
+                  num(r["floor_p"]), bar(r["floor_pass"]), "yes" if r["pass"] else "no") for r in summary])
+    out += [f"  {r['grp']} {r['measure']}: {r['caveat']}" for r in summary if r["caveat"]]
+    out += [f"  {r['grp']} {r['measure']}: {r['tb_runs_unpaired']} testbed runs without twins of their own, "
+            "left out" for r in summary if r["tb_runs_unpaired"]]
+    out += [""] + table(("cell", "group", "measure", "stat", "runs tb/twin", "unpaired", "tb", "twin", "ratio",
+                         "b_quantile"),
+                        [(r["cell"], r["grp"], r["measure"], r["stat"], f"{r['tb_runs']}/{r['twin_runs']}",
+                          r["tb_runs_unpaired"] or "", num(r["tb_value"], 4), num(r["twin_value"], 4),
+                          num(r["ratio"]), num(r["b_quantile"]))
+                         for r in rows if r["cell"] is not None])
+    failed = criterion_failures(rows)
+    out += ["", "criterion not met: " + ", ".join(failed) if failed else "criterion met"]
+    return "\n".join(out) + "\n"

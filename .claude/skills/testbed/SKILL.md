@@ -209,7 +209,13 @@ crates differ from those the page was built from builds its own page.
   by default, from 10 s to its own SECS (`twin_window_of`): a twin records
   10 s past its stream and a testbed run about 5, where the meter reads
   nothing and the lag is carried. `effects` scores one against
-  the other, a testbed run paired with the twin seed of its number. The bare TCP bench is
+  the other, a testbed run paired with the twin seed of its number.
+  `simdb.py criterion TB_LIKE TW_LIKE --kind K` scores crates/PLAN.md's
+  meter-search resume criterion (the macro `twin_criterion_of`): each
+  group's and measure's readings and bars, and each cell's runs a side;
+  `--paired` takes each testbed run against its own joins-paired twins
+  (arm `pair-r<n>`, of its seed n) where its cell has them; otherwise the
+  cell's twins. The bare TCP bench is
   `hack/testbed/bench.sh` with `benchsuite.py run` and `benchsuite.py
   score`, over the cases in hack/testbed/bench/. Its comparison
   (`hack/testbed/bench.py`) reads a run's uplink queue and qdisc tree

@@ -33,6 +33,7 @@
   hack/sim-db/simdb.py twin SRC_LIKE --name NAME --bin SCENARIOS [--seeds N] [--arm A] [--kind K]
                        [--side-arm A] [--env KEY=VALUE ...] [--packet-hosts seed|all|N,...] [--replace]
   hack/sim-db/simdb.py testbed-tier DIR [--repeats N] [--ref REF]
+  hack/sim-db/simdb.py criterion TB_LIKE TW_LIKE [--kind K] [--paired] [--budget-stat mean|median] [--json]
 
 `describe`, `lake`, `view`, `index` and `fetch` are the catalog's
 (hack/sim-db/catalog.py, whose docs say more): every result the cache,
@@ -358,6 +359,8 @@ from simlab.query import PULL_MB  # noqa: E402, F401
 from simlab.forecast import SECTIONS as FORECAST_SECTIONS  # noqa: E402
 # The seed coverage report's sections (hack/simlab/coverage.py).
 from simlab.coverage import SECTIONS as COVERAGE_SECTIONS  # noqa: E402
+# The resume criterion's statistics for seed_budget (hack/simlab/testbed.py).
+from simlab.testbed import BUDGET_STATS  # noqa: E402
 # The event vocabulary (hack/simlab/vocab.py, stdlib), whose names the
 # docs list.
 from simlab import vocab  # noqa: E402
@@ -590,6 +593,13 @@ def cmd_twin(a):
     print("simdb.py index takes them in")
 
 
+def cmd_criterion(a):
+    from simlab import testbed
+
+    rows = testbed.criterion(a.tb, a.tw, kind=a.kind, paired=a.paired, budget_stat=a.budget_stat)
+    print(json.dumps(rows) if a.json else testbed.criterion_text(rows), end="\n" if a.json else "")
+
+
 def catalog():
     """hack/sim-db/catalog.py: the catalog's commands (simlab.catalog's)."""
     spec = importlib.util.spec_from_file_location("catalog", Path(__file__).with_name("catalog.py"))
@@ -754,6 +764,20 @@ def main():
     w.add_argument("--packet-hosts", default="seed",
                    help="the hosts whose packets a twin logs, of those its cell's runs hold (PCAP=1's): seed (the "
                         "default, the wire fits' at_node), all, or host numbers N,... (simlab.testbed.logged_hosts)")
+    c = sub.add_parser("criterion", help="the meter search's resume criterion (crates/PLAN.md): a testbed source's "
+                       "runs against their cells' twins, per group (all, arrivals, at once) and measure (truth_bps, "
+                       "seed_upload, seed_budget), the readings, each bar's pass and each side's runs a cell "
+                       "(simlab.testbed.criterion, the macro twin_criterion_of)")
+    c.add_argument("tb", help="the testbed runs' sources, a LIKE pattern (testbed_side's): farm/RUN/%%, testbed/NAME")
+    c.add_argument("tw", help="the twins' sources, a LIKE pattern: testbed/NAME%%")
+    c.add_argument("--kind", default="one", choices=("one", "native", "browsers"),
+                   help="the testbed runs' kind: native, browsers, or one (their one kind); the criterion is judged "
+                   "per kind")
+    c.add_argument("--paired", action="store_true", help="each testbed run against its own joins-paired twins "
+                   "(arm pair-r<n> for the run of seed n), where its cell has them")
+    c.add_argument("--budget-stat", default="mean", choices=BUDGET_STATS,
+                   help="seed_budget's statistic over a cell's runs (truth_bps' and seed_upload's are medians)")
+    c.add_argument("--json", action="store_true")
     a = ap.parse_args()
     if a.cmd == "duckdb":
         print(duckdb_bin())
@@ -779,6 +803,8 @@ def main():
         cmd_testbed_tier(a)
     elif a.cmd == "replay":
         cmd_replay(a)
+    elif a.cmd == "criterion":
+        cmd_criterion(a)
     elif a.cmd in lake:
         lake[a.cmd](a)
     elif a.cmd == "forecast-report":
