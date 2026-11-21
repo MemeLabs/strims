@@ -13,11 +13,15 @@
 //!
 //! A walk hands the uplinks the step's new messages first, at the step's
 //! start, and then runs the events due by its time in time order, each at
-//! its own time: every event comes after the step's start, so each uplink
-//! takes the step's messages before what the events hand it, and what the
-//! step's messages cause within the step (on a path that delivers at once,
-//! the pure ACK of a segment through its receiver's downlink) runs in the
-//! walk that sent them, before the bin edge at its time is read.
+//! its own time, so every uplink is handed what it carries in time order
+//! and serves it in that order, as a qdisc serves what its host hands it:
+//! every event comes after the step's start, and no host hands its uplink
+//! a packet before the walk reaches the time it hands it over. A receiver
+//! takes what its downlink delivers as the delivery comes, and a browser's
+//! network thread hands over each packet as it sends it ([`sctp`]). What
+//! the step's messages cause within the step (on a path that delivers at
+//! once, the pure ACK of a segment through its receiver's downlink) runs
+//! in the walk that sent them, before the bin edge at its time is read.
 //!
 //! The scheduler relies on these properties of turmoil's links:
 //!
@@ -411,6 +415,17 @@ enum Event {
         last: bool,
         immediate: bool,
     },
+    /// Chunk `seq` of data channel `conn` (the `last` of its packet, with
+    /// the I bit if `immediate`) is through its receiver's downlink, whose
+    /// stack takes it.
+    SctpThrough {
+        conn: (SocketAddr, SocketAddr),
+        seq: u64,
+        last: bool,
+        immediate: bool,
+    },
+    /// A host's network thread hands a data channel's packet to its uplink.
+    SctpOut(Box<sctp::Handover>),
 }
 
 /// The window model's segment size, for the window's growth.
@@ -1813,10 +1828,7 @@ impl Scheduler {
     pub fn walk(&mut self, sim: &Sim<'_>) -> Result<(), String> {
         let now = sim_time(sim.elapsed());
         self.walked = now;
-        // No edge is read before the walk's time, though the walk hands the
-        // uplinks packets past it (a data channel's, through its host's
-        // network thread): the network's ledgers take them as the
-        // scheduler's do ([`Scheduler::settled`]).
+        // No edge is read before the walk's time ([`Scheduler::settled`]).
         self.net.settle(now);
         // The step's writes, at its start, go first: every event of the walk
         // comes after it (the last walk ran those before), so each uplink
@@ -2160,6 +2172,19 @@ impl Scheduler {
                     self.sctp_copy_arrived(t, conn, seq, wire, (last, immediate));
                     continue;
                 }
+                Event::SctpThrough {
+                    conn,
+                    seq,
+                    last,
+                    immediate,
+                } => {
+                    self.sctp_received(t, conn, seq, (last, immediate));
+                    continue;
+                }
+                Event::SctpOut(hand) => {
+                    self.handed(t, *hand);
+                    continue;
+                }
                 Event::SynAck => {
                     self.syn_ack(t, id);
                     continue;
@@ -2263,7 +2288,9 @@ impl Scheduler {
                 | Event::SctpSack { .. }
                 | Event::SctpTimeout { .. }
                 | Event::SctpDelSack { .. }
-                | Event::SctpCopy { .. } => {}
+                | Event::SctpCopy { .. }
+                | Event::SctpThrough { .. }
+                | Event::SctpOut(_) => {}
             }
         }
     }
@@ -4084,9 +4111,18 @@ impl Scheduler {
         }
     }
 
-    /// `h` lost power at `now`: its access links forget their queues.
+    /// `h` lost power at `now`: its access links forget their queues, and
+    /// its network thread what it had yet to hand its uplink.
     pub fn crashed(&mut self, h: HostIx, now: Time) {
         self.net.reset(h, now);
+        let ip_host = &self.ip_host;
+        self.events.retain(|&(t, _), e| match e {
+            Event::SctpOut(hand) => t <= now || hand.host(ip_host) != Some(h),
+            _ => true,
+        });
+        if let Some(free) = self.threads.get_mut(h) {
+            *free = (*free).min(now);
+        }
         for d in [
             self.ack_out.get_mut(h),
             self.sack_out.get_mut(h),
@@ -4178,12 +4214,10 @@ impl Scheduler {
 
     /// `h` lost `packets` packets at `at`, which count in its drops from
     /// then on ([`Scheduler::up_counters`]): at a full queue as they came to
-    /// it, or a datagram on its path as it was handed over. A drop past the
-    /// walk's time (a data channel's packet at its host's network thread's,
-    /// a SACK alone at the delivery of what it acknowledges) counts in the
-    /// bin it came in, as the packets its uplink carried do, and one past
-    /// a crash never counts ([`Scheduler::crashed`]), which the report's
-    /// totals keep.
+    /// it, or a datagram on its path as it was handed over. A drop counts in
+    /// the bin it came in, as the packets its uplink carried do, and one
+    /// past a crash never counts ([`Scheduler::crashed`]), which the
+    /// report's totals keep.
     fn count_lost(&mut self, h: usize, at: Time, packets: u64) {
         let settled = self.settled(at);
         if let Some(d) = self.drop_out.get_mut(h) {
@@ -4196,9 +4230,7 @@ impl Scheduler {
     }
 
     /// The hand-over time a ledger takes for one at `at`: no later than the
-    /// walk's, at or after which every bin edge is read; a receiver's
-    /// acknowledgement goes as its downlink delivered what it acknowledges,
-    /// which can be past the walk's time.
+    /// walk's, at or after which every bin edge is read.
     fn settled(&self, at: Time) -> Time {
         if self.walked.is_nil() {
             at
@@ -5897,15 +5929,23 @@ mod tests {
 
     /// [`channels_of`], `a` at `site`.
     fn channels_on(p: SctpProfile, n: u16, site: Site) -> (Sim<'static>, Scheduler, Vec<ConnKey>) {
+        channels_between(p, n, site, Site::new(City::Frankfurt, Access::Fiber))
+    }
+
+    /// [`channels_of`], `a` at `at_a` and `b` at `at_b`, both hosts'
+    /// packets logged.
+    fn channels_between(
+        p: SctpProfile,
+        n: u16,
+        at_a: Site,
+        at_b: Site,
+    ) -> (Sim<'static>, Scheduler, Vec<ConnKey>) {
         let mut sim = build();
         echo(&mut sim, "a");
         echo(&mut sim, "b");
-        let sites = [
-            ("a", site),
-            ("b", Site::new(City::Frankfurt, Access::Fiber)),
-        ];
+        let sites = [("a", at_a), ("b", at_b)];
         let mut s = spec(&sites);
-        s.packet_log = BTreeSet::from([0]);
+        s.packet_log = BTreeSet::from([0, 1]);
         let buffers = SendBuffers::new(SendBuffer {
             uplink_queue: StdDuration::from_millis(100),
             window: true,
@@ -5930,14 +5970,15 @@ mod tests {
     /// `at`, a chunk a packet, numbering their records from `id` on.
     fn write_chunks(wan: &mut Scheduler, id: &mut u64, at: Time, c: ConnKey, n: u64, chunks: u64) {
         let p = wan.assocs[&c].profile();
+        let (from, to) = (wan.ip_host[&c.0.ip()], wan.ip_host[&c.1.ip()]);
         for k in 0..chunks * n {
             wan.records.insert(
                 *id,
                 Record {
                     src: c.0,
                     dst: c.1,
-                    from: 0,
-                    to: 1,
+                    from,
+                    to,
                     what: What::Data {
                         seq: *id,
                         len: 1000,
@@ -5980,6 +6021,9 @@ mod tests {
             // ... and one the window holds back in part leaves the channel's
             // queue waiting, unanswered.
             write(&mut wan, t0 + us(2000), conns[0], 1);
+            // The walks that reach the thread's hand-overs, before anything
+            // reaches `b`.
+            wan.run_events(t0 + us(2100));
             let times: Vec<Duration> = wan.packets[0]
                 .iter()
                 .map(|r| r.at - (t0 - epoch()))
@@ -6025,32 +6069,49 @@ mod tests {
         }
     }
 
-    /// What a Chromium's network thread hands its uplink past the walk's
-    /// time counts from when it left or was lost, whenever it was handed
-    /// over: three channels' messages written at the walk's time go a
-    /// packet every 12 µs from 12 µs past it; the 1 Mbit/s uplink's bucket
-    /// of two frames sends the first two at their hand-over, before the
-    /// third's, and its 100 ms queue drops the burst's last packets. Read
-    /// at the walk's time, nothing had left or been lost, and at each
-    /// packet's hand-over or departure, what had before it.
+    /// What a Chromium's network thread hands its uplink past the walk that
+    /// sent it counts from when it left or was lost: three channels'
+    /// messages written at the walk's time go a packet every 12 µs from
+    /// 12 µs past it, each handed over in the walk that reaches it; the
+    /// 1 Mbit/s uplink's bucket of two frames sends the first two at their
+    /// hand-over, before the third's, and its 100 ms queue drops the
+    /// burst's last packets. Read at the walk's time, nothing had left or
+    /// been lost, and at each packet's hand-over or departure, once a walk
+    /// reached it, what had before it. A crash at the walk's time forgets
+    /// what the thread had yet to hand over: none of it leaves or is lost.
     #[test]
     fn what_a_chromiums_thread_hands_over_past_the_walk_counts_from_when_it_left_or_was_lost() {
         let site = Site::new(City::Frankfurt, Access::Fiber)
             .with_up(125_000)
             .with_bucket(Some(strims_wan::Bucket::of(3028)));
-        let (sim, mut wan, conns) = channels_on(SctpProfile::CHROMIUM, 3, site);
-        wan.walk(&sim).unwrap();
-        let now = sim_time(sim.elapsed());
-        let mut id = 0;
-        for &c in &conns {
-            write_chunks(&mut wan, &mut id, now, c, 2, 4);
-        }
+        let written = || {
+            let (sim, mut wan, conns) = channels_on(SctpProfile::CHROMIUM, 3, site);
+            wan.walk(&sim).unwrap();
+            let now = sim_time(sim.elapsed());
+            let mut id = 0;
+            for &c in &conns {
+                write_chunks(&mut wan, &mut id, now, c, 2, 4);
+            }
+            (wan, now)
+        };
+        // A walk at `t`, of the events alone: the thread's hand-overs end
+        // within a millisecond, long before anything reaches `b`.
+        let reach = |wan: &mut Scheduler, t: Time| {
+            wan.walked = t;
+            wan.net.settle(t);
+            wan.run_events(t);
+        };
+        let us = Duration::from_micros;
+        let (mut wan, now) = written();
+        assert!(wan.packets[0].is_empty());
+        reach(&mut wan, now + us(1000));
         let log = wan.packets[0].clone();
         let at = |d: Duration| epoch() + d;
         let last = log.iter().map(|r| at(r.at)).max().unwrap();
         let first_left = log.iter().filter_map(|r| r.sent.map(at)).min().unwrap();
         let lost = |r: &PacketRecord| r.lost == Some(PacketLoss::Queue);
         assert!(log.iter().all(|r| at(r.at) > now), "{log:?}");
+        assert!(last < now + us(1000), "{log:?}");
         assert!(first_left < last && log.iter().any(lost), "{log:?}");
         let (left, drops) = (up_ix("up_packets"), up_ix("drops"));
         let mut reads: Vec<Time> = log
@@ -6060,7 +6121,9 @@ mod tests {
             .chain([now, Time::MAX])
             .collect();
         reads.sort_unstable();
+        let (mut wan, _) = written();
         for t in reads {
+            reach(&mut wan, t.min(now + us(1000)));
             let c = wan.up_counters(0, t);
             let want = (
                 log.iter()
@@ -6070,10 +6133,12 @@ mod tests {
             );
             assert_eq!((c[left] as usize, c[drops] as usize), want, "at {t:?}");
         }
-        // A crash at the walk's time forgets them all, none left or lost.
+        let (mut wan, _) = written();
         wan.crashed(0, now);
+        reach(&mut wan, now + us(1000));
         let c = wan.up_counters(0, Time::MAX);
         assert_eq!((c[left], c[drops]), (0, 0));
+        assert!(wan.packets[0].is_empty());
     }
 
     /// A Chromium stack whose channel's queue never empties answers its
@@ -6098,6 +6163,50 @@ mod tests {
         let answers: Vec<Duration> = wan.answers.keys().map(|&(t, _)| t - t0).collect();
         let cost = p.packet_cost.unwrap();
         assert_eq!(answers, [Duration::from_millis(25) + cost * 4]);
+    }
+
+    /// A receiver's stack takes a packet as its downlink delivers it, and
+    /// its SACK goes to its uplink no sooner, behind what its host handed
+    /// the uplink before: four packets reach `b`'s 1 Mbit/s downlink
+    /// together and come through it 8.6 ms apart, and a message `b` writes
+    /// back on their association as they reach it, before the first is
+    /// through, leaves at once and carries no SACK. Every packet `b`'s
+    /// uplink was handed came no sooner than the one before, a Chromium's
+    /// through its network thread, a Firefox's at once.
+    #[test]
+    fn a_receivers_sacks_go_to_its_uplink_as_its_downlink_delivers() {
+        let fiber = Site::new(City::Frankfurt, Access::Fiber);
+        for p in [SctpProfile::FIREFOX, SctpProfile::CHROMIUM] {
+            let (_sim, mut wan, conns) = channels_between(p, 1, fiber, fiber.with_down(125_000));
+            let (ab, ba) = (conns[0], (conns[0].1, conns[0].0));
+            wan.open_channel(ba, p);
+            // Records numbered apart from the scheduler's own keys.
+            let mut id = 1 << 32;
+            let t0 = sim_time(StdDuration::from_secs(1));
+            write_chunks(&mut wan, &mut id, t0, ab, 1, 4);
+            let t1 = t0 + wan.net.one_way(0, 1) + Duration::from_millis(1);
+            wan.run_events(t1);
+            write_chunks(&mut wan, &mut id, t1, ba, 1, 1);
+            wan.run_events(t1 + Duration::from_millis(200));
+            let log = &wan.packets[1];
+            let sacks: Vec<&PacketRecord> =
+                log.iter().filter(|r| r.kind == PacketKind::Sack).collect();
+            let data: Vec<&PacketRecord> =
+                log.iter().filter(|r| r.kind != PacketKind::Sack).collect();
+            assert!(!sacks.is_empty(), "{p:?}: {log:?}");
+            assert_eq!(data.len(), 1, "{p:?}: {log:?}");
+            assert!(
+                log.iter().map(|r| r.at).is_sorted(),
+                "{p:?}: handed over out of time order: {log:?}"
+            );
+            assert!(
+                sacks.iter().all(|s| s.sent > data[0].sent),
+                "{p:?}: a SACK left before the message: {log:?}"
+            );
+            assert_eq!(data[0].kind, PacketKind::Data, "{p:?}: {log:?}");
+            let first = t1 - epoch() + Duration::from_millis(7);
+            assert!(sacks.iter().all(|s| s.at > first), "{p:?}: {log:?}");
+        }
     }
 
     #[test]

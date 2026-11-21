@@ -119,9 +119,17 @@
 //! opportunity starts once the thread is done with the ones before it, its
 //! chunks go out as of then, and its packets leave one after another, each
 //! a packet's cost after the one before; a receiver's SACK alone takes its
-//! turn the same way. An inbound packet takes nothing of the thread here.
-//! A step's writes go before the walk's events, which come after the
-//! step's start, so the thread takes them first.
+//! turn the same way. Each goes to the host's uplink as it leaves the
+//! thread, in the walk that reaches that time, after what the host handed
+//! the uplink before it (its kernel's pure ACKs, its other sockets'
+//! writes) and before what after (`Scheduler::hand_over`). An inbound
+//! packet takes nothing of the thread here. A step's writes go before the
+//! walk's events, which come after the step's start, so the thread takes
+//! them first.
+//!
+//! A receiver takes a packet as its downlink delivers it, in the walk that
+//! reaches the delivery (`Scheduler::sctp_through`), and sends its SACK
+//! then or holds it as its stack does.
 //!
 //! A SACK of its own takes its turn on the receiver's uplink and is lost at
 //! a full queue as any packet is. A chunk resent while its last copy is
@@ -144,6 +152,7 @@
 //! testbed's 59-77.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::net::IpAddr;
 
 use strims_base::time::{Duration, Time};
 use strims_wan::Carrier;
@@ -153,6 +162,7 @@ use strims_wan::wire::tx_time;
 use strims_testbed::sctp::{Dir, SctpEvent, What as SctpWhat};
 
 use super::{Event, Offered, Scheduler, What};
+use crate::fast_map::FastMap;
 use crate::net::ConnKey;
 use crate::report::{PacketKind, PacketProto};
 use crate::spec::HostIx;
@@ -477,6 +487,40 @@ struct Out {
     flight: usize,
 }
 
+/// What a host's stack hands its uplink ([`Scheduler::hand_over`]): a
+/// packet of a connection's chunks, or a receiver's SACK alone of
+/// `conn`'s data.
+#[derive(Clone, Debug)]
+pub(super) enum Handover {
+    Data(DataOut),
+    Sack { conn: ConnKey, sack: Sack },
+}
+
+impl Handover {
+    /// The host that hands it over.
+    pub(super) fn host(&self, ip_host: &FastMap<IpAddr, HostIx>) -> Option<HostIx> {
+        match self {
+            Handover::Data(d) => ip_host.get(&d.conn.0.ip()).copied(),
+            Handover::Sack { conn, .. } => ip_host.get(&conn.1.ip()).copied(),
+        }
+    }
+}
+
+/// A packet of `conn`'s chunks as its send opportunity built it: each
+/// chunk's share of its bytes (the first's with the packet's overhead and
+/// the SACK it carries) and whether it is a copy, the SACK it carries, what
+/// it carried for the receiver's log if that is on, and its I bit.
+#[derive(Clone, Debug)]
+pub(super) struct DataOut {
+    conn: ConnKey,
+    chunks: Vec<Send>,
+    shares: Vec<usize>,
+    copies: Vec<bool>,
+    sack: Option<Sack>,
+    carried: Option<Carried>,
+    immediate: bool,
+}
+
 /// What a packet carried, for its log's events at either end
 /// ([`SctpEvent`]).
 #[derive(Clone, Copy, Debug)]
@@ -547,7 +591,7 @@ fn bundle(chunks: Vec<Send>, mtu: usize) -> Vec<Vec<Send>> {
 
 /// What a SACK says: the cumulative point, and the chunks past it the
 /// receiver holds.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Sack {
     cum: u64,
     above: Vec<u64>,
@@ -1173,17 +1217,15 @@ impl Scheduler {
 
     /// A packet of `conn`'s chunks goes out from `at`, as its host's thread
     /// sends it ([`Scheduler::thread_send`]): each chunk credited to its
-    /// socket as it first goes; lost whole at a full uplink queue or on
-    /// its path; and a resent chunk whose last copy wasn't lost goes as a
-    /// copy. Its chunks pass the receiver's downlink one after another,
-    /// the first charged the packet's overhead. A dcSCTP packet carries the
-    /// SACK its sender holds back for the reverse direction, and the I bit
-    /// while the window is under ten packets. Each end whose log is on
-    /// logs it: the sender as it goes, the receiver as it arrives (with a
-    /// SACK, as the receiver takes the SACK). Returns when it went.
+    /// socket as it first goes, and a resent chunk whose last copy wasn't
+    /// lost a copy; then handed to the uplink as the thread hands it over
+    /// ([`Scheduler::hand_over`], [`Scheduler::data_handed`]). A dcSCTP
+    /// packet carries the SACK its sender holds back for the reverse
+    /// direction, and the I bit while the window is under ten packets.
+    /// The sender's log, if on, logs it as it goes. Returns when it went.
     fn sctp_transmit(&mut self, at: Time, conn: ConnKey, out: &Out) -> Time {
         let packet = &out.chunks[..];
-        let (Some(cap), Some(_)) = (self.window(), packet.first()) else {
+        let (Some(_), Some(_)) = (self.window(), packet.first()) else {
             return at;
         };
         let (Some(&from), Some(&to)) = (
@@ -1213,17 +1255,15 @@ impl Scheduler {
             let e = c.event(at, Dir::Out, sack, Some((cwnd, out.flight)));
             self.sctp_event(from, to, conn, e);
         }
-        let rode = sack.is_some();
-        let share = |i: usize, len: usize| {
-            usize::from(i == 0) * (profile.packet_overhead + COMMON_HEADER + sack_bytes)
-                + chunk_size(len)
-        };
-        let wire: usize = packet
+        let shares = packet
             .iter()
             .enumerate()
-            .map(|(i, c)| share(i, c.len))
-            .sum();
-        let copies: Vec<bool> = packet
+            .map(|(i, c)| {
+                usize::from(i == 0) * (profile.packet_overhead + COMMON_HEADER + sack_bytes)
+                    + chunk_size(c.len)
+            })
+            .collect();
+        let copies = packet
             .iter()
             .map(|c| {
                 c.resend
@@ -1239,7 +1279,73 @@ impl Scheduler {
                 self.admits.insert((at, c.id), (conn, c.len));
             }
         }
-        let wire = link_wire(&self.net, from, wire);
+        let data = DataOut {
+            conn,
+            chunks: packet.to_vec(),
+            shares,
+            copies,
+            sack,
+            carried: carried.filter(|_| logs.1),
+            immediate: profile.stack == Stack::DcSctp && cwnd < 10 * profile.mtu,
+        };
+        self.hand_over(at, &profile, Handover::Data(data));
+        at
+    }
+
+    /// A host's stack of profile `p` hands `hand` to its uplink at `at`: at
+    /// once, or, where its sends go through its network thread (`p`'s
+    /// [`SctpProfile::packet_cost`]), which hands each packet over past the
+    /// work that sent it, in the walk that reaches `at`
+    /// ([`Event::SctpOut`]). So its uplink takes each packet after what
+    /// the host handed it before `at`, its kernel's pure ACKs and its other
+    /// sockets' writes among them, and before what after, as a qdisc takes
+    /// packets as they are handed to it.
+    fn hand_over(&mut self, at: Time, p: &SctpProfile, hand: Handover) {
+        if p.packet_cost.is_none() {
+            self.handed(at, hand);
+            return;
+        }
+        let key = self.next;
+        self.next += 1;
+        self.events
+            .insert((at, key), Event::SctpOut(Box::new(hand)));
+    }
+
+    /// `hand` goes to its host's uplink at `at` ([`Scheduler::hand_over`]).
+    pub(super) fn handed(&mut self, at: Time, hand: Handover) {
+        match hand {
+            Handover::Data(d) => self.data_handed(at, d),
+            Handover::Sack { conn, sack } => self.sack_handed(at, conn, sack),
+        }
+    }
+
+    /// Packet `d` of its connection's chunks goes to its sender's uplink at
+    /// `at`: lost whole at a full uplink queue or on its path, its chunks
+    /// passing the receiver's downlink one after another, the first charged
+    /// the packet's overhead. The receiver's log, if on, logs it as it
+    /// arrives (with a SACK, as the receiver takes the SACK).
+    fn data_handed(&mut self, at: Time, d: DataOut) {
+        let DataOut {
+            conn,
+            chunks: packet,
+            shares,
+            copies,
+            sack,
+            carried,
+            immediate,
+        } = d;
+        let Some(cap) = self.window() else {
+            return;
+        };
+        let (Some(&from), Some(&to)) = (
+            self.ip_host.get(&conn.0.ip()),
+            self.ip_host.get(&conn.1.ip()),
+        ) else {
+            return;
+        };
+        let back = (conn.1, conn.0);
+        let rode = sack.is_some();
+        let wire = link_wire(&self.net, from, shares.iter().sum());
         let charged = self.net.up_charge(from, wire, 1);
         let mut offer = Offered {
             at,
@@ -1247,7 +1353,7 @@ impl Scheduler {
             to: Some(to),
             conn: Some(conn),
             proto: PacketProto::Udp,
-            kind: if sack.is_some() {
+            kind: if rode {
                 PacketKind::DataSack
             } else {
                 PacketKind::Data
@@ -1294,7 +1400,7 @@ impl Scheduler {
             Some(t)
         };
         if let Some(mut sack) = sack {
-            if logs.1 {
+            if carried.is_some() {
                 sack.rode = carried;
             }
             self.sack_held(back, sack, t.filter(|t| !t.dropped).map(|t| t.arrival));
@@ -1305,18 +1411,13 @@ impl Scheduler {
                     self.sctp_lost(conn, c.seq);
                 }
             }
-            return at;
+            return;
         };
-        if logs.1
-            && !rode
-            && let Some(c) = carried
-        {
+        if !rode && let Some(c) = carried {
             self.sctp_event(to, from, conn, c.event(t.arrival, Dir::In, None, None));
         }
-        let last = packet.len() - 1;
-        let immediate = profile.stack == Stack::DcSctp && cwnd < 10 * profile.mtu;
-        for (i, (c, &copy)) in packet.iter().zip(&copies).enumerate() {
-            let w = share(i, c.len);
+        let last = packet.len().saturating_sub(1);
+        for (i, ((c, &copy), &w)) in packet.iter().zip(&copies).zip(&shares).enumerate() {
             if copy {
                 let key = self.next;
                 self.next += 1;
@@ -1352,7 +1453,6 @@ impl Scheduler {
             }
             self.events.insert((t.arrival, c.id), Event::Arrive);
         }
-        at
     }
 
     /// Chunk `seq` of `conn` was lost: the sender learns so only from the
@@ -1391,15 +1491,40 @@ impl Scheduler {
             }
         }
         let done = self.net.receive(t, to, wire);
-        self.sctp_received(done.max(t), conn, seq, flags);
+        self.sctp_through(done.max(t), conn, seq, flags);
     }
 
-    /// Chunk `seq` of `conn` passed its receiver's downlink at `t`.
+    /// Chunk `seq` of `conn` passes its receiver's downlink at `t`.
     pub(super) fn sctp_arrived(&mut self, t: Time, conn: ConnKey, seq: u64) {
         let flags = self.assocs.get_mut(&conn).map_or((true, false), |a| {
             (!a.bundled.remove(&seq), a.immediate.remove(&seq))
         });
-        self.sctp_received(t, conn, seq, flags);
+        self.sctp_through(t, conn, seq, flags);
+    }
+
+    /// Chunk `seq` of `conn` (`flags` as [`Scheduler::sctp_received`]
+    /// takes them) passes its receiver's downlink at `t`, and its
+    /// receiver's stack takes it then, in the walk that reaches `t`
+    /// ([`Event::SctpThrough`]), as dcSCTP takes a packet as its socket
+    /// hands it over (on a Chromium's network thread,
+    /// dcsctp_transport.cc:744-747) and sends its SACK as it takes it or on
+    /// its delayed SACK's timer. So a SACK goes to its host's uplink no
+    /// sooner than what the host handed it before the delivery, which the
+    /// uplink serves first, as a qdisc serves what it was given in the
+    /// order given; a receiver's state, which its own packets read (the
+    /// SACK it holds riding its DATA), holds no chunk before its delivery.
+    fn sctp_through(&mut self, t: Time, conn: ConnKey, seq: u64, (last, immediate): (bool, bool)) {
+        let key = self.next;
+        self.next += 1;
+        self.events.insert(
+            (t, key),
+            Event::SctpThrough {
+                conn,
+                seq,
+                last,
+                immediate,
+            },
+        );
     }
 
     /// The receiving end's stack for `conn`: its own association's, back
@@ -1496,9 +1621,9 @@ impl Scheduler {
     }
 
     /// `conn`'s receiver sends a SACK from `t`, as its host's thread sends
-    /// it ([`Scheduler::thread_send`]): a packet on its uplink that reaches
-    /// the sender a one-way trip after it leaves, or is lost to a full
-    /// uplink queue.
+    /// it ([`Scheduler::thread_send`]), and hands it to its uplink as the
+    /// thread hands it over ([`Scheduler::hand_over`],
+    /// [`Scheduler::sack_handed`]). Its log, if on, logs it as it goes.
     fn sctp_send_sack(&mut self, t: Time, conn: ConnKey) {
         let (Some(&from), Some(&to)) = (
             self.ip_host.get(&conn.0.ip()),
@@ -1520,6 +1645,22 @@ impl Scheduler {
             let e = sack_alone(gap_blocks(&sack.above)).event(t, Dir::Out, Some(tsns), state);
             self.sctp_event(to, from, conn, e);
         }
+        self.hand_over(t, &p, Handover::Sack { conn, sack });
+    }
+
+    /// `conn`'s receiver's SACK alone goes to its uplink at `t`: a packet
+    /// that reaches the sender a one-way trip after it leaves, or is lost
+    /// to a full uplink queue.
+    fn sack_handed(&mut self, t: Time, conn: ConnKey, sack: Sack) {
+        let (Some(&from), Some(&to)) = (
+            self.ip_host.get(&conn.0.ip()),
+            self.ip_host.get(&conn.1.ip()),
+        ) else {
+            return;
+        };
+        let Some(p) = self.receiver_profile(conn) else {
+            return;
+        };
         let wire = link_wire(
             &self.net,
             to,

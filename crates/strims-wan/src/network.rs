@@ -206,11 +206,10 @@ impl std::ops::AddAssign for Carried {
 /// ([`Departures::before`]).
 ///
 /// A caller can hand a packet over past its own clock, the earliest time
-/// it reads the ledger at next, as a model hands over a send that comes
-/// after a delay when it computes it (a host's network thread's, a
-/// receiver's acknowledgement of what its downlink delivers later). It
-/// hands such a packet over at its clock ([`Network::settle`]), so that
-/// what left between the clock and the hand-over counts from when it left.
+/// it reads the ledger at next, as a model may hand over a send that comes
+/// after a delay when it computes it. It hands such a packet over at its
+/// clock ([`Network::settle`]), so that what left between the clock and
+/// the hand-over counts from when it left.
 #[derive(Clone, Debug, Default)]
 pub struct Departures {
     /// What the packets that left before the latest hand-over carried.

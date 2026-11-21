@@ -3700,7 +3700,7 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
 /// queue dropped never left. Its drops are the packet log's packets its
 /// uplink queue dropped and datagrams its path lost, each in the bin it
 /// came to the uplink in (no downlink here fills, whose drops the log
-/// leaves out). A
+/// leaves out). Each uplink is handed its packets in time order. A
 /// 2 Mbit/s seed of a star of three viewers keeps its queue full and
 /// drops, its links' buckets run.sh's two frames, over TCP in 100 ms bins
 /// and as Chromiums in 1 ms bins, their signalling relay on the hosts'
@@ -3748,6 +3748,12 @@ fn a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry(
         };
         let wan = r.wan.as_ref().ok_or("no WAN report")?;
         for (h, w) in wan.hosts.iter().enumerate() {
+            if let Some(p) = w.packets.windows(2).find(|p| p[1].at < p[0].at) {
+                return Err(format!(
+                    "{}: handed {:?} at {:?} after {:?} at {:?}",
+                    w.name, p[1].kind, p[1].at, p[0].kind, p[0].at
+                ));
+            }
             let mut want = vec![[0u64; 5]; r.wire_bins.len().saturating_sub(1)];
             for p in &w.packets {
                 let lost = match p.lost {
