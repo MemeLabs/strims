@@ -3637,86 +3637,108 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
 /// what its shaper passed in the bin and the longest slot wait before it),
 /// its acknowledgements alone and its data together, and the frames a full
 /// queue dropped never left. A 2 Mbit/s seed of a star of three viewers
-/// keeps its queue full and drops, its links' buckets run.sh's two frames.
+/// keeps its queue full and drops, its links' buckets run.sh's two frames,
+/// over TCP in 100 ms bins and as Chromiums in 1 ms bins, their signalling
+/// relay a host of the WAN: a Chromium's network thread hands a data
+/// channel's packets to its uplink 12 µs apart, past the walk's time and
+/// the edge read at it, and the bucket sends each at its hand-over.
 #[test]
 fn a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry() {
     let mut c = collapse_case(3, 2, 15);
     c.topology = None;
     (c.seed_burst, c.viewer_burst) = (Some(3028), Some(3028));
-    let width = Duration::from_millis(100);
-    let build = |seed| {
+    let build = |seed, browsers, width| {
         let mut s = calibration_star_scenario(seed, &c);
+        if browsers {
+            s.signal_on_bridge = false;
+            s.over_webrtc(&[Some(SctpProfile::CHROMIUM)]);
+        }
         s.wire_bins = Some(width);
         s.packet_log = (0..s.hosts.len()).collect();
         s
     };
-    sweep_n(
-        "a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry",
-        2,
-        build,
-        |r| {
-            let ix = |c: &str| UP_COUNTERS.iter().position(|&n| n == c).unwrap();
-            let carried = ["up_bytes", "up_ack_bytes", "up_sack_bytes"].map(ix);
-            let seed = r.scenario.swarms[0].seed;
-            let drops = r.wire_bins.last().map_or(0, |e| e[seed][ix("drops")]);
-            if drops == 0 {
-                return Err("the seed's queue dropped nothing".into());
-            }
-            let cols = ["up_bytes", "up_packets", "up_ack_bytes", "up_sack_bytes"].map(ix);
-            let start = r.scenario.swarms[0].start.as_nanos() as i64;
-            let wan = r.wan.as_ref().ok_or("no WAN report")?;
-            for (h, w) in wan.hosts.iter().enumerate() {
-                let mut want = vec![[0u64; 4]; r.wire_bins.len().saturating_sub(1)];
-                for p in &w.packets {
-                    let Some(ns) = p.sent.map(|t| t.as_nanos() - start) else {
-                        continue;
-                    };
-                    let k = usize::try_from(ns / width.as_nanos() as i64).ok();
-                    let Some(b) = k.filter(|_| ns >= 0).and_then(|k| want.get_mut(k)) else {
-                        continue;
-                    };
-                    let charge = u64::from(p.charged_bytes.unwrap_or(0));
-                    match p.kind {
-                        PacketKind::Data | PacketKind::DataSack | PacketKind::Control => {
-                            b[0] += charge;
-                            b[1] += 1;
-                        }
-                        PacketKind::Ack => b[2] += charge,
-                        PacketKind::Sack => b[3] += charge,
-                        PacketKind::Competing => {}
+    let check = |r: &Report, width: Duration| {
+        let ix = |c: &str| UP_COUNTERS.iter().position(|&n| n == c).unwrap();
+        let carried = ["up_bytes", "up_ack_bytes", "up_sack_bytes"].map(ix);
+        let seed = r.scenario.swarms[0].seed;
+        let drops = r.wire_bins.last().map_or(0, |e| e[seed][ix("drops")]);
+        if drops == 0 {
+            return Err("the seed's queue dropped nothing".into());
+        }
+        let cols = ["up_bytes", "up_packets", "up_ack_bytes", "up_sack_bytes"].map(ix);
+        let start = r.scenario.swarms[0].start.as_nanos() as i64;
+        let wan = r.wan.as_ref().ok_or("no WAN report")?;
+        for (h, w) in wan.hosts.iter().enumerate() {
+            let mut want = vec![[0u64; 4]; r.wire_bins.len().saturating_sub(1)];
+            for p in &w.packets {
+                let Some(ns) = p.sent.map(|t| t.as_nanos() - start) else {
+                    continue;
+                };
+                let k = usize::try_from(ns / width.as_nanos() as i64).ok();
+                let Some(b) = k.filter(|_| ns >= 0).and_then(|k| want.get_mut(k)) else {
+                    continue;
+                };
+                let charge = u64::from(p.charged_bytes.unwrap_or(0));
+                match p.kind {
+                    PacketKind::Data | PacketKind::DataSack | PacketKind::Control => {
+                        b[0] += charge;
+                        b[1] += 1;
                     }
-                }
-                for (k, (e, want)) in r.wire_bins.windows(2).zip(&want).enumerate() {
-                    let got = cols.map(|c| e[1][h][c] - e[0][h][c]);
-                    if got != *want {
-                        return Err(format!(
-                            "{}: bin {k} counted {got:?}, its packets left {want:?}",
-                            w.name
-                        ));
-                    }
+                    PacketKind::Ack => b[2] += charge,
+                    PacketKind::Sack => b[3] += charge,
+                    PacketKind::Competing => {}
                 }
             }
-            for (h, host) in r.scenario.hosts.iter().enumerate() {
-                let Some(site) = host.site else { continue };
-                let p = site.profile;
-                let rate = host.up_steps.iter().map(|&(_, r)| r).fold(p.up, u64::max);
-                let wait = p.slots.map_or(0, |s| s.max.as_nanos().unsigned_abs());
-                let ns = width.as_nanos() as u64 + wait;
-                let cap = ns.saturating_mul(rate) / 1_000_000_000
-                    + p.bucket.map_or(p.framing.packet(1500) as u64, |b| b.bytes);
-                for (k, w) in r.wire_bins.windows(2).enumerate() {
-                    let bin: u64 = carried.iter().map(|&c| w[1][h][c] - w[0][h][c]).sum();
-                    if bin > cap {
-                        return Err(format!(
-                            "{}: bin {k} carried {bin} bytes, its link at most {cap}",
-                            host.name
-                        ));
-                    }
+            for (k, (e, want)) in r.wire_bins.windows(2).zip(&want).enumerate() {
+                let got = cols.map(|c| e[1][h][c] - e[0][h][c]);
+                if got != *want {
+                    return Err(format!(
+                        "{}: bin {k} counted {got:?}, its packets left {want:?}",
+                        w.name
+                    ));
                 }
             }
-            Ok(())
-        },
-    );
+        }
+        for (h, host) in r.scenario.hosts.iter().enumerate() {
+            let Some(site) = host.site else { continue };
+            let p = site.profile;
+            let rate = host.up_steps.iter().map(|&(_, r)| r).fold(p.up, u64::max);
+            let wait = p.slots.map_or(0, |s| s.max.as_nanos().unsigned_abs());
+            let ns = width.as_nanos() as u64 + wait;
+            let cap = ns.saturating_mul(rate) / 1_000_000_000
+                + p.bucket.map_or(p.framing.packet(1500) as u64, |b| b.bytes);
+            for (k, w) in r.wire_bins.windows(2).enumerate() {
+                let bin: u64 = carried.iter().map(|&c| w[1][h][c] - w[0][h][c]).sum();
+                if bin > cap {
+                    return Err(format!(
+                        "{}: bin {k} carried {bin} bytes, its link at most {cap}",
+                        host.name
+                    ));
+                }
+            }
+        }
+        Ok(())
+    };
+    for (name, browsers, ms) in [
+        (
+            "a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry",
+            false,
+            100,
+        ),
+        (
+            "a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry_browsers",
+            true,
+            1,
+        ),
+    ] {
+        let width = Duration::from_millis(ms);
+        sweep_n(
+            name,
+            2,
+            |seed| build(seed, browsers, width),
+            |r| check(r, width),
+        );
+    }
 }
 
 /// The twin's viewers make their links as the testbed's harness does

@@ -1792,6 +1792,11 @@ impl Scheduler {
     pub fn walk(&mut self, sim: &Sim<'_>) -> Result<(), String> {
         let now = sim_time(sim.elapsed());
         self.walked = now;
+        // No edge is read before the walk's time, though the walk hands the
+        // uplinks packets past it (a data channel's, through its host's
+        // network thread): the network's ledgers take them as the
+        // scheduler's do ([`Scheduler::settled`]).
+        self.net.settle(now);
         self.run_events(now);
         for i in 0..self.cross.len() {
             let Some(&Cross {
@@ -4147,9 +4152,8 @@ impl Scheduler {
     }
 
     /// Host `h`'s uplink counters at `at` ([`UP_COUNTERS`]), no earlier
-    /// than the latest message handed to its uplink: what its uplink
-    /// carried before `at`, each packet from when it left, and the rest as
-    /// they stand.
+    /// than the last walk's time: what its uplink carried before `at`, each
+    /// packet from when it left, and the rest as they stand.
     pub fn up_counters(&self, h: HostIx, at: Time) -> [u64; UP_COUNTERS.len()] {
         let s = self.net.stats(h);
         let n = |v: &Vec<u64>| v.get(h).copied().unwrap_or(0);

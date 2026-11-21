@@ -63,7 +63,9 @@
 //!   charges the IP bytes alone.
 //! - **Counts.** An uplink's stats count each message as it is handed to
 //!   the uplink; what it carried ([`Network::up_carried`]) counts each
-//!   packet as its last bit leaves, as a capture past its queue sees it.
+//!   packet as its last bit leaves, as a capture past its queue sees it,
+//!   read no earlier than its caller's clock ([`Network::settle`]),
+//!   however far past it a message was handed over.
 //!   Neither holds what a queue dropped: the caller hands the uplink only
 //!   what its queue took, and what a host's [`Network::reset`] forgets of
 //!   its queue never leaves.
@@ -202,6 +204,13 @@ impl std::ops::AddAssign for Carried {
 /// left: its packets go in as they are handed to the uplink, each with
 /// when it leaves ([`Departures::add`]), and come out by when they left
 /// ([`Departures::before`]).
+///
+/// A caller can hand a packet over past its own clock, the earliest time
+/// it reads the ledger at next, as a model hands over a send that comes
+/// after a delay when it computes it (a host's network thread's, a
+/// receiver's acknowledgement of what its downlink delivers later). It
+/// hands such a packet over at its clock ([`Network::settle`]), so that
+/// what left between the clock and the hand-over counts from when it left.
 #[derive(Clone, Debug, Default)]
 pub struct Departures {
     /// What the packets that left before the latest hand-over carried.
@@ -215,8 +224,8 @@ pub struct Departures {
 }
 
 impl Departures {
-    /// A packet carrying `c`, handed to the uplink at `now`, that leaves
-    /// at `depart`.
+    /// A packet carrying `c`, handed to the uplink at `now` (or later, its
+    /// caller's clock at `now`), that leaves at `depart`.
     pub fn add(&mut self, now: Time, depart: Time, c: Carried) {
         while let Some(&(t, x)) = self.pending.front()
             && t < now
@@ -669,6 +678,9 @@ pub struct Network {
     ends: Vec<End>,
     /// Row-major by (sender, receiver).
     dirs: Vec<Dir>,
+    /// The caller's clock ([`Network::settle`]): no read of what an
+    /// uplink carried comes before it. [`Time::MAX`] until one is set.
+    settled: Time,
 }
 
 impl Network {
@@ -717,6 +729,7 @@ impl Network {
             options,
             ends,
             dirs,
+            settled: Time::MAX,
         }
     }
 
@@ -853,6 +866,7 @@ impl Network {
         packets: u32,
         carrier: Carrier,
     ) -> Transit {
+        let settled = sent.min(self.settled);
         let end = self.end_mut(a);
         let (start, charged) = end.admit(sent, wire, packets);
         let pass = end.serve_frames(sent, start, charged, wire, packets);
@@ -876,7 +890,7 @@ impl Network {
                 packets: 1,
                 small_packets: if k == last { small } else { 0 },
             };
-            end.carried.add(sent, left, c);
+            end.carried.add(settled, left, c);
         }
         self.transit(depart, a, b, packets, carrier)
     }
@@ -1163,11 +1177,19 @@ impl Network {
 
     /// What `h`'s uplink carried of the messages [`Network::send`] handed
     /// it: its packets whose last bit left before `at` (no earlier than the
-    /// latest message's hand-over), as its shaper passed each or, with
-    /// slots, as its slot sent it. What a [`Network::reset`] forgot never
-    /// left.
+    /// latest message's hand-over, or the clock [`Network::settle`] set if
+    /// that was earlier), as its shaper passed each or, with slots, as its
+    /// slot sent it. What a [`Network::reset`] forgot never left.
     pub fn up_carried(&self, h: usize, at: Time) -> Carried {
         self.end(h).carried.before(at)
+    }
+
+    /// The caller's clock is at `at`: no read of what an uplink carried
+    /// ([`Network::up_carried`]) comes before it from now on, though a
+    /// message may be handed over past it ([`Departures`]). Without one,
+    /// each read comes no earlier than the latest hand-over.
+    pub fn settle(&mut self, at: Time) {
+        self.settled = at;
     }
 }
 
@@ -2136,6 +2158,33 @@ mod tests {
                 small_packets: 0
             }
         );
+    }
+
+    #[test]
+    fn what_left_after_the_clock_counts_after_it_however_late_its_hand_overs() {
+        // A bucket whose bytes leave at once, and a caller at 0 ms handing
+        // over three small packets from 7 µs on, 12 µs apart, as a
+        // browser's network thread sends them: each leaves at its
+        // hand-over, so a read at the clock counts none, and one between
+        // two of them those handed over before it.
+        let sites = [
+            Site::new(City::Frankfurt, Access::Fiber)
+                .with_up(1_250_000)
+                .with_bucket(Some(Bucket::of(3028))),
+            Site::new(City::Frankfurt, Access::Fiber),
+        ];
+        let mut n = net(&sites, QUIET);
+        n.settle(t(0));
+        let us = |k: i64| t(0) + Duration::from_micros(k);
+        for k in 0..3 {
+            let d = n.send(us(7 + 12 * k), 0, 1, 100, 1, Carrier::Datagram);
+            assert_eq!(d.depart, us(7 + 12 * k));
+        }
+        let got = |at| n.up_carried(0, at).packets;
+        assert_eq!(got(t(0)), 0);
+        assert_eq!(got(us(8)), 1);
+        assert_eq!(got(us(20)), 2);
+        assert_eq!(got(us(32)), 3);
     }
 
     #[test]
