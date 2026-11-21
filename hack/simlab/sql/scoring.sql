@@ -2040,16 +2040,44 @@ CREATE OR REPLACE MACRO shaper_fit_of(a_jobs, b_jobs, per := 'node') AS TABLE
 -- lateness in whole ms, 0, 1, 2 and 3 or more (ms0 .. ms3; a negative
 -- lateness, a clock behind the deadline's, reads as 0), its mean and its
 -- p99 in ms (mean_ms, p99_ms: sketch_quantile's, of the lateness as
--- measured, a negative one as 0).
+-- measured, a negative one as 0). Beside the logged sources, a node's hold
+-- starts (source `hold`, delay_ms NULL): for each of its frame writer's
+-- writes (source `writer`) due in the window off the whole second (a
+-- testbed node's line timer runs in the period of each second's ms 0, and
+-- stalls its page), the earliest first poll of its host pacer (source
+-- `pacer`: a poll armed with no other poll of the node's run in the 20 µs
+-- before, a hold's rather than a re-poll's) armed from the write's due ms
+-- to 20 ms past it: the arming past that ms as its lateness, so its shares
+-- are the hold start's whole ms past the period's.
 -- needs: timers hosts jobs.env jobs.stored_cell
 CREATE OR REPLACE MACRO timer_runs_of(side, lo_s := 10, hi_s := -1, by_delay := false) AS TABLE
     WITH w AS (FROM side_window_of(side, 'timer_runs_of', lo_s := lo_s, hi_s := hi_s)),
-    t AS (
+    lt AS (
         SELECT t.k, j.stored_cell AS cell, t.node, t.source, h.kind,
                CASE WHEN by_delay THEN t.requested_us // 1000 END AS delay_ms,
                CASE WHEN t.late_us IS NOT NULL THEN greatest(t.late_us, 0) END AS late_us
         FROM timers t JOIN w USING (k, src) JOIN hosts h USING (k, src, node) JOIN jobs j ON j.k = t.k
-        WHERE t.requested_us >= 0 AND t.t_us >= w.lo * 1000000 AND t.t_us < w.hi * 1000000)
+        WHERE t.requested_us >= 0 AND t.t_us >= w.lo * 1000000 AND t.t_us < w.hi * 1000000),
+    pp AS (SELECT t.k, t.src, t.node, t.n, t.t_us, t.armed_us FROM timers t SEMI JOIN w USING (k, src)
+           WHERE t.source = 'pacer'),
+    fp AS (
+        SELECT x.* FROM pp x
+        WHERE NOT EXISTS (SELECT 1 FROM pp y WHERE y.k = x.k AND y.src = x.src AND y.node = x.node AND y.n <> x.n
+                                                AND y.t_us BETWEEN x.armed_us - 20 AND x.armed_us)),
+    wr AS (
+        SELECT t.k, t.src, t.node, t.deadline_us // 1000 AS q FROM timers t JOIN w USING (k, src)
+        WHERE t.source = 'writer' AND t.deadline_us % 1000000 <> 0 AND t.deadline_us >= w.lo * 1000000
+          AND t.deadline_us < w.hi * 1000000),
+    hd AS (
+        SELECT wr.k, wr.src, wr.node, min(fp.armed_us) - wr.q * 1000 AS late_us
+        FROM wr JOIN fp ON fp.k = wr.k AND fp.src = wr.src AND fp.node = wr.node AND fp.armed_us >= wr.q * 1000
+                           AND fp.armed_us < wr.q * 1000 + 20000
+        GROUP BY wr.k, wr.src, wr.node, wr.q),
+    t AS (
+        FROM lt
+        UNION ALL
+        SELECT hd.k, j.stored_cell, hd.node, 'hold', h.kind, NULL::BIGINT, greatest(hd.late_us, 0)
+        FROM hd JOIN hosts h USING (k, src, node) JOIN jobs j ON j.k = hd.k)
     SELECT kind, source, delay_ms, k, any_value(cell) AS cell, count(DISTINCT node) AS nodes,
            count(late_us) AS timers, count(*) - count(late_us) AS missing,
            avg((late_us < 1000)::INT) AS ms0, avg((late_us >= 1000 AND late_us < 2000)::INT) AS ms1,
@@ -2100,7 +2128,8 @@ CREATE OR REPLACE MACRO timer_shares_of(side, lo_s := 10, hi_s := -1, by_delay :
     FROM p LEFT JOIN s ON p.kind = s.kind AND p.source = s.source AND p.delay_ms IS NOT DISTINCT FROM s.delay_ms;
 
 -- A model's timer lateness against the testbed's (the timer bench): each
--- kind, source (and with by_delay, delay) either side has, `a_side` the
+-- kind, source (timer_runs_of's: the hold start's among them, `hold`; and
+-- with by_delay, delay) either side has, `a_side` the
 -- model's runs (a twin's) and `b_side` the testbed's, over the same
 -- windows (timer_shares_of): each side's runs and timers, its shares of 0,
 -- 1, 2 and 3+ ms late (a_ms0 .. a_ms3, b_ms0 .. b_ms3), its mean and p99
@@ -2290,6 +2319,14 @@ CREATE OR REPLACE MACRO sctp_events_or_none() AS TABLE FROM sctp_events;
 --   the bytes the node's sends wrote can't stand for it (on the bench's
 --   testbed runs a link's stream holds 9-12 bytes a send more than they
 --   do, by link and run: some three of its writes by 20 s);
+-- - `1 push: held`: of those, each written 2 ms or more after it was
+--   queued (past its period's round-robin pass, a hold's release), queued
+--   off the whole second (a testbed node's line timer runs in the period
+--   of each second's ms 0, and stalls its page), queued_ms to t_ms; and
+--   `1 push: released 6-8 ms`, the share of them written 6 to 8 ms after
+--   they were queued (a hold's first poll a ms or more late or begun past
+--   its period's ms), a value a run (n its held pushes, p50 and p90 the
+--   share);
 -- - each write of the node's links (link_writes): `2 driver queue`,
 --   queued_us to t_us; `3 held: channel`, `4 held: host`, `5 notsent` (a
 --   TCP socket's mark) and `5 unheld`, t_us to done_us, by its wait;
@@ -2329,10 +2366,12 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
         FROM w ASOF JOIN r ON w.k = r.k AND r.node = w.peer AND r.link = w.link
             AND r.off + r.bytes >= w.off + w.bytes),
     p AS (
-        SELECT x.k, (x.t_ms - x.queued_ms)::DOUBLE AS v
+        SELECT x.k, (x.t_ms - x.queued_ms)::DOUBLE AS v, x.queued_ms
         FROM seed_sends_or_none() x JOIN j USING (k, src)
         WHERE x.node = at_node AND x.how = 'push' AND x.fate = 'written'
           AND x.t_ms * 1000 >= j.lo_us AND x.t_ms * 1000 < j.hi_us),
+    hp AS (SELECT k, v FROM p WHERE v >= 2 AND queued_ms % 1000 <> 0),
+    hs AS (SELECT k, count(*) AS n, avg((v BETWEEN 6 AND 8)::INT) AS share FROM hp GROUP BY k),
     lw AS (
         SELECT x.k, x.buffered_bytes FROM link_samples_or_none() x JOIN j USING (k, src)
         WHERE x.node = at_node AND x.cause = 'low' AND x.t_us >= j.lo_us AND x.t_us < j.hi_us),
@@ -2349,6 +2388,7 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
         ASOF JOIN pk ON a.k = pk.k AND a.peer = pk.peer AND pk.t_us >= a.done_us),
     st AS (
         SELECT k, '1 push: runner' AS stage, v FROM p
+        UNION ALL SELECT k, '1 push: held', v FROM hp
         UNION ALL SELECT k, '2 driver queue', (t_us - queued_us) / 1000.0 FROM w
         UNION ALL SELECT k, CASE wait WHEN 'channel' THEN '3 held: channel' WHEN 'host' THEN '4 held: host'
                                       WHEN 'notsent' THEN '5 notsent' ELSE '5 unheld' END,
@@ -2365,7 +2405,8 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
     -- catalog lacks, with their caveats.
     sd AS (
         SELECT t.stage, u.tbl
-        FROM (VALUES ('1 push: runner', ['seed_sends']), ('2 driver queue', ['link_writes']),
+        FROM (VALUES ('1 push: runner', ['seed_sends']), ('1 push: held', ['seed_sends']),
+                     ('1 push: released 6-8 ms', ['seed_sends']), ('2 driver queue', ['link_writes']),
                      ('3 held: channel', ['link_writes']), ('4 held: host', ['link_writes']),
                      ('5 notsent', ['link_writes']), ('5 unheld', ['link_writes']),
                      ('6 low reading', ['link_samples']), ('7 done to read', ['link_writes', 'link_reads']),
@@ -2385,6 +2426,8 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
            NULL::VARCHAR AS caveat
     FROM st JOIN jk USING (k) GROUP BY st.k, jk.sim, st.stage
     UNION ALL
+    SELECT hs.k, jk.sim, '1 push: released 6-8 ms', hs.n, hs.share, hs.share, NULL FROM hs JOIN jk USING (k)
+    UNION ALL
     SELECT jk.k, jk.sim, gone.stage, NULL, NULL, NULL, gone.caveat FROM jk, gone;
 
 -- The write path bench's pass (C4): a model's stages (`a_side`, a twin's
@@ -2395,7 +2438,9 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
 -- a_n: quantile_cont's), and passes, each the plan's rule (the testbed's
 -- repeat range, widened by a floor): pass50 and pass90, the model's median
 -- within the testbed's runs' range widened by `floor_ms` either side (a
--- byte stage's by floor_bytes); for the holds and the lows (stages 3, 4
+-- byte stage's by floor_bytes, the share of `1 push: released 6-8 ms` by
+-- floor_share); for the
+-- holds and the lows (stages 3, 4
 -- and 6) pass_n, the model's median count a run within the testbed's
 -- runs' range widened by counting noise at each end, twice a Poisson
 -- count's standard deviation (2√n of the end's count), so a stage's times
@@ -2414,7 +2459,7 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
 -- the catalog holds, their caveat NULL.
 -- needs: hosts jobs.sim jobs.env
 CREATE OR REPLACE MACRO write_fit_of(a_side, b_side, at_node := 0, lo_s := 20, hi_s := -1, floor_ms := 0.2,
-                                     floor_bytes := 0) AS TABLE
+                                     floor_bytes := 0, floor_share := 0.05) AS TABLE
     WITH sa AS MATERIALIZED (FROM write_stages_of(a_side, at_node := at_node, lo_s := lo_s, hi_s := hi_s)),
     a AS (
         SELECT stage, count(*) AS runs, quantile_cont(p50, 0.5) AS p50, quantile_cont(p90, 0.5) AS p90,
@@ -2431,7 +2476,8 @@ CREATE OR REPLACE MACRO write_fit_of(a_side, b_side, at_node := 0, lo_s := 20, h
     f AS (
         SELECT coalesce(a.stage, b.stage) AS stage, a.runs AS a_runs, b.runs AS b_runs,
                b.p50s AS b_p50s, a.p50 AS a_p50, b.p90s AS b_p90s, a.p90 AS a_p90, b.ns AS b_ns, a.n AS a_n,
-               CASE WHEN coalesce(a.stage, b.stage) LIKE '6 %' THEN floor_bytes ELSE floor_ms END AS fl,
+               CASE WHEN coalesce(a.stage, b.stage) LIKE '6 %' THEN floor_bytes
+                    WHEN coalesce(a.stage, b.stage) LIKE '1 push: released%' THEN floor_share ELSE floor_ms END AS fl,
                b.lo50, b.hi50, b.lo90, b.hi90, b.lo_n, b.hi_n,
                coalesce(a.stage, b.stage)[1] IN ('3', '4', '6') AS counted
         FROM a FULL JOIN b USING (stage)),

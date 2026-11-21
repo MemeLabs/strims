@@ -11,7 +11,8 @@ already past left out, one armed for now kept, a negative lateness read
 as 0 ms, one with no lateness counted missing; the testbed's repeat
 spread of each run's mean and p99 (sketch_quantile's) in a cell; the
 fit's total-variation distance, and its mean and p99 checks within the
-spread and a floor; a source the model keeps no rows of expected and any
+spread and a floor; the hold start, each period's earliest first poll
+past its frame writer's due ms, as a source of its own; a source the model keeps no rows of expected and any
 other one-sided row failing; an empty or NULL side refused; and the
 seed's allocation-check steps, on time or a tick late, with their fit
 within the larger of 5 points and twice the difference's standard
@@ -49,15 +50,17 @@ def connect():
     repeat (`tb3`, the same cell), a testbed run (`tb2`) of a Firefox seed,
     and a twin (`tw`) of the first; and for the steps a testbed run and a
     twin of 40 steps each (`tb4`, `tw2`); and for the host pacer a testbed
-    run and a twin of a Chromium seed's polls (`tb5`, `tw4`); every stream
-    60 s."""
+    run and a twin of a Chromium seed's polls (`tb5`, `tw4`); for the hold
+    start a testbed run and a twin of a Chromium seed's frame writer and
+    its holds (`tb6`, `tw6`); every stream 60 s."""
     import duckdb
 
     conn = duckdb.connect()
     conn.execute("CREATE TABLE jobs (k VARCHAR, src VARCHAR, env MAP(VARCHAR, VARCHAR), stored_cell VARCHAR)")
     for k, src, cell in [("tb", "testbed/b", "cA"), ("tb3", "testbed/b", "cA"), ("tb2", "testbed/c", "cB"),
                          ("tw", "testbed/a", "tA"), ("tb4", "testbed/d", "cD"), ("tw2", "testbed/e", "tD"),
-                         ("tw3", "testbed/f", "tD"), ("tb5", "testbed/p", "cP"), ("tw4", "testbed/q", "tP")]:
+                         ("tw3", "testbed/f", "tD"), ("tb5", "testbed/p", "cP"), ("tw4", "testbed/q", "tP"),
+                         ("tb6", "testbed/r", "cH"), ("tw6", "testbed/s", "tH")]:
         conn.execute("INSERT INTO jobs VALUES (?, ?, MAP {'STRIMS_SIM_CAL_SECS': '60'}, ?)", [k, src, cell])
     conn.execute("CREATE TABLE hosts (k VARCHAR, src VARCHAR, node BIGINT, kind VARCHAR)")
     conn.executemany("INSERT INTO hosts VALUES (?, ?, ?, ?)", [
@@ -66,7 +69,8 @@ def connect():
         ("tw", "testbed/a", 0, "chromium"), ("tw", "testbed/a", 1, "native"), ("tw", "testbed/a", 2, "native"),
         ("tb3", "testbed/b", 0, "chromium"), ("tb3", "testbed/b", 1, "native"),
         ("tb4", "testbed/d", 0, "chromium"), ("tw2", "testbed/e", 0, "chromium"), ("tw3", "testbed/f", 0, "chromium"),
-        ("tb5", "testbed/p", 0, "chromium"), ("tw4", "testbed/q", 0, "chromium")])
+        ("tb5", "testbed/p", 0, "chromium"), ("tw4", "testbed/q", 0, "chromium"),
+        ("tb6", "testbed/r", 0, "chromium"), ("tw6", "testbed/s", 0, "chromium")])
     conn.execute("CREATE TABLE timers (k VARCHAR, src VARCHAR, t_us BIGINT, node BIGINT, n BIGINT, "
                  "source VARCHAR, armed_us BIGINT, deadline_us BIGINT, late_us BIGINT, requested_us BIGINT, "
                  "context VARCHAR)")
@@ -109,6 +113,29 @@ def connect():
     # (mean 0.25).
     add("tb5", "testbed/p", 0, "pacer", [400, 700, 1300, 200], requested=5000)
     add("tw4", "testbed/q", 0, "pacer", [0, 0, 1000, 0], requested=5000)
+
+    def period(k, src, q_ms, holds):
+        # The frame writer's write due at q_ms, run 300 µs late; each hold
+        # its first poll armed `at` µs past q_ms's ms, and re-polled once,
+        # armed as the first poll fires.
+        rows.append((k, src, q_ms * 1000 + 300, 0, len(rows), "writer", q_ms * 1000 - 250_000, q_ms * 1000,
+                     300, 250_000, "worker"))
+        for at in holds:
+            armed = q_ms * 1000 + at
+            fired = (armed // 1000) * 1000 + 5000 + 200
+            rows.append((k, src, fired, 0, len(rows), "pacer", armed, (armed // 1000) * 1000 + 5000,
+                         fired - ((armed // 1000) * 1000 + 5000), 5000, "worker"))
+            rows.append((k, src, fired + 5200, 0, len(rows), "pacer", fired, (fired // 1000) * 1000 + 5000,
+                         200, 5000, "worker"))
+
+    # The testbed's holds start 1.4, 1.4 and 0.6 ms past their periods'
+    # ms, the twin's 1, 0 and 0; the period at a whole second, its hold
+    # 1.4 ms on, counts in neither; the last period holds nothing.
+    for k, src, starts in (("tb6", "testbed/r", (1400, 1400, 600)), ("tw6", "testbed/s", (1000, 0, 0))):
+        for q_ms, at in zip((10_250, 10_500, 10_750), starts):
+            period(k, src, q_ms, [at])
+        period(k, src, 11_000, [1400])
+        period(k, src, 11_250, [])
     conn.executemany("INSERT INTO timers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
     conn.execute("CREATE TABLE seed_decisions (k VARCHAR, src VARCHAR, t_ms BIGINT, node BIGINT, n BIGINT, "
                  "kind VARCHAR, why VARCHAR, stream BIGINT)")
@@ -261,6 +288,19 @@ class Timers(unittest.TestCase):
         # A twin without the polls fails them.
         got = self.q("SELECT a_runs, pass FROM timer_fit_of([{'k': 'tw'}], [{'k': 'tb5'}]) WHERE source = 'pacer'")
         self.assertEqual(got, [(None, False)])
+
+    def test_the_hold_start_is_a_source_of_its_own(self):
+        # Each period's earliest first poll past its writer's due ms: 1.4,
+        # 1.4 and 0.6 ms on the testbed (the re-polls and the whole second's
+        # period left out), 1, 0 and 0 in the twin.
+        got = self.q("SELECT runs, timers, late_ms0, late_ms1, round(mean_ms, 6) FROM timer_shares_of([{'k': 'tb6'}]) "
+                     "WHERE source = 'hold'")
+        self.assertEqual(got, [(1, 3, 1 / 3, 2 / 3, 1.133333)])
+        got = self.q("SELECT kind, a_ms0, b_ms0, round(tv, 6), pass FROM timer_fit_of([{'k': 'tw6'}], [{'k': 'tb6'}]) "
+                     "WHERE source = 'hold'")
+        self.assertEqual(got, [("chromium", 2 / 3, 1 / 3, 0.333333, False)])
+        # A run whose node logs no pacer's polls, or no writer's, has none.
+        self.assertEqual(self.q("SELECT count(*) FROM timer_runs_of([{'k': 'tb5'}]) WHERE source = 'hold'"), [(0,)])
 
     def test_delays_pair_by_delay(self):
         got = self.q("SELECT delay_ms, a_timers, b_timers FROM timer_fit_of([{'k': 'tb2'}], [{'k': 'tb2'}], "

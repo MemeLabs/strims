@@ -150,7 +150,10 @@
 //!   each on a timer of its own ([`Scenario::pacer_lateness`],
 //!   `crate::net`); `off` on time. `STRIMS_SIM_PACER_TURNS=on` makes the
 //!   writers whose polls come at one instant read the host's load in turn
-//!   ([`Scenario::pacer_turns`]); `off` as their tasks run. Unset, a
+//!   ([`Scenario::pacer_turns`]); `off` as their tasks run.
+//!   `STRIMS_SIM_PACER_HOLD=on` starts the holds a browser seed's frame
+//!   writer's pass meets as late as the page's work does
+//!   ([`Scenario::pacer_hold_start`]); `off` at the pass. Unset, a
 //!   scenario keeps its own, on unless it says otherwise.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), which the run second by second
@@ -547,7 +550,8 @@ fn timer_lateness_knob() -> Option<bool> {
 
 /// The switch `name` (`STRIMS_SIM_PACER_LATENESS`,
 /// [`Scenario::pacer_lateness`]; `STRIMS_SIM_PACER_TURNS`,
-/// [`Scenario::pacer_turns`]): `on` or `off`, if set and not blank.
+/// [`Scenario::pacer_turns`]; `STRIMS_SIM_PACER_HOLD`,
+/// [`Scenario::pacer_hold_start`]): `on` or `off`, if set and not blank.
 #[allow(clippy::panic)] // a mistyped setting fails its test
 fn on_off_knob(name: &str) -> Option<bool> {
     let v = env(name).filter(|v| !v.trim().is_empty())?;
@@ -854,6 +858,7 @@ fn sweep_seeds(
     let timer_lateness = timer_lateness_knob();
     let pacer_lateness = on_off_knob("STRIMS_SIM_PACER_LATENESS");
     let pacer_turns = on_off_knob("STRIMS_SIM_PACER_TURNS");
+    let pacer_hold = on_off_knob("STRIMS_SIM_PACER_HOLD");
     let timer_log = timer_log_knob();
     let timer_probe = knob::<u32>("STRIMS_SIM_TIMER_PROBE") == Some(1);
     let link_log = link_log_knob();
@@ -1041,6 +1046,9 @@ fn sweep_seeds(
         }
         if let Some(turns) = pacer_turns {
             spec.pacer_turns = turns;
+        }
+        if let Some(hold) = pacer_hold {
+            spec.pacer_hold_start = hold;
         }
         if let Some(pin) = &seed_pin {
             if let Err(e) = pin.check(&spec) {

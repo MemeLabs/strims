@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """The write path bench's macros (scoring.sql's write_stages_of and
 write_fit_of) over a fixture of two testbed runs and a twin with known
-answers: each stage's p50 and p90 at the seed over each run's window, a
+answers: each stage's p50 and p90 at the seed over each run's window, the
+held pushes' release and its share at 6-8 ms off the whole second, a
 write's read found by its bytes, the testbed's first packet less its
 egress delay, and the pass: within the testbed's runs' range widened by
 the floor, the holds' and lows' counts within it widened by counting
@@ -160,6 +161,9 @@ class WritePath(unittest.TestCase):
     def test_a_runs_stages(self):
         got = self.stages("tb1")
         self.assertEqual(got["1 push: runner"], (1, 10, 10))
+        # Held past its period's pass (10 ms), not at 6-8 ms.
+        self.assertEqual(got["1 push: held"], (1, 10, 10))
+        self.assertEqual(got["1 push: released 6-8 ms"], (1, 0.0, 0.0))
         self.assertFalse({"1a", "1b", "1c"} & {s.split(" ")[0] for s in got})
         # The window's writes alone: 20 s to the stream's end (60 s).
         self.assertEqual(got["2 driver queue"], (3, 0.5, 1))
@@ -179,6 +183,31 @@ class WritePath(unittest.TestCase):
         got = self.q("SELECT n FROM write_stages_of([{'k': 'tb1'}], lo_s := 20, hi_s := 20.05) "
                      "WHERE stage = '2 driver queue'")
         self.assertEqual(got, [(2,)])
+
+    def test_held_pushes_release_and_their_share_at_6_to_8_ms(self):
+        # Each run's pushes of one period past the window's 20 s: written in
+        # its pass (0 and 1 ms after they were queued), held 2, 7, 8 and 13
+        # ms (the testbed's runs) or 5, 5, 6 and 13 ms (the twin's); and a
+        # period at a whole second, held 7 ms, which neither stage takes.
+        conn = connect()
+        for k, src, held in (("tb1", "testbed/b", (2, 7, 8, 13)), ("tb2", "testbed/b", (2, 7, 8, 13)),
+                             ("tw", "testbed/b-twin", (5, 5, 6, 13))):
+            for d in (0, 1, *held):
+                conn.execute("INSERT INTO seed_sends VALUES (?, ?, ?, 0, 1, 'push', 'written', 25250)",
+                             (k, src, 25250 + d))
+            conn.execute("INSERT INTO seed_sends VALUES (?, ?, 26007, 0, 1, 'push', 'written', 26000)", (k, src))
+        got = {s: (n, p50, p90) for s, n, p50, p90 in conn.execute(
+            "SELECT stage, n, p50, p90 FROM write_stages_of([{'k': 'tb1'}]) WHERE stage LIKE '1 %'").fetchall()}
+        # With the fixture's push, held 10 ms: 2, 7, 8, 10, 13.
+        self.assertEqual(got["1 push: held"], (5, 8, 13))
+        self.assertEqual(got["1 push: released 6-8 ms"], (5, 0.4, 0.4))
+        self.assertEqual(got["1 push: runner"], (8, 7, 13))
+        # The twin's share, 1 of 5, is past the testbed's 0.4 less the floor
+        # of 0.05, and within one of 0.25.
+        fit = ("SELECT a_p50, pass50, pass FROM write_fit_of(?, ?, floor_share := ?) "
+               "WHERE stage = '1 push: released 6-8 ms'")
+        self.assertEqual(conn.execute(fit, (TW, TB, 0.05)).fetchall(), [(0.2, False, False)])
+        self.assertEqual(conn.execute(fit, (TW, TB, 0.25)).fetchall(), [(0.2, True, True)])
 
     def test_the_twin_passes_within_the_testbeds_range(self):
         got = {r[0]: r[1:] for r in self.q(
@@ -258,7 +287,8 @@ class WritePath(unittest.TestCase):
                          r"7a empty: to first packet, 7b empty: packet to arrival, 7c empty: arrival to read, 8 read "
                          r"to take read:")
         self.assertRegex(self.refused("DELETE FROM seed_sends WHERE k = 'tw'"),
-                         r"runs tw hold no seed_sends rows at node 0 \(STRIMS_SIM_SPEC\), which 1 push: runner read:")
+                         r"runs tw hold no seed_sends rows at node 0 \(STRIMS_SIM_SPEC\), which 1 push: held, 1 "
+                         r"push: released 6-8 ms, 1 push: runner read:")
         self.assertRegex(self.refused("DELETE FROM link_samples WHERE k = 'tw'"),
                          r"runs tw hold no link_samples rows at node 0 \(STRIMS_SIM_LINK_LOG\), which 6 low reading "
                          r"read:")
@@ -358,7 +388,8 @@ class Lacking(unittest.TestCase):
         # Without the link log, the seed's pushes alone.
         conn, _ = self.lacking["link"]
         self.assertEqual(conn.execute("SELECT stage, n, p50 FROM write_stages_of([{'k': 'tb1'}]) "
-                                      "WHERE caveat IS NULL").fetchall(), [("1 push: runner", 1, 10)])
+                                      "WHERE caveat IS NULL ORDER BY stage").fetchall(),
+                         [("1 push: held", 1, 10), ("1 push: released 6-8 ms", 1, 0), ("1 push: runner", 1, 10)])
 
     def test_the_fit_scores_what_the_catalog_holds(self):
         full = {r["stage"]: r for r in dicts(self.full, "FROM write_fit_of(?, ?)", TW, TB)}
@@ -384,8 +415,9 @@ class Lacking(unittest.TestCase):
         try:
             conn.execute("DELETE FROM seed_sends WHERE k = 'tw'")
             with self.assertRaisesRegex(duckdb.Error, r"write_fit_of: a_side's runs tw hold no seed_sends rows at node "
-                                                      r"0 \(STRIMS_SIM_SPEC\), which 1 push: runner read: their model "
-                                                      r"side is missing, not failed$"):
+                                                      r"0 \(STRIMS_SIM_SPEC\), which 1 push: held, 1 push: released "
+                                                      r"6-8 ms, 1 push: runner read: their model side is missing, not "
+                                                      r"failed$"):
                 conn.execute("FROM write_fit_of(?, ?)", (TW, TB)).fetchall()
         finally:
             conn.execute("ROLLBACK")

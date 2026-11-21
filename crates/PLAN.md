@@ -562,6 +562,10 @@ and dropped are in `TRIED.md`.
     the node task's macrotask yield (strims-wasm's `yield_now`), which
     strims-sim's host pacer turns take to come after it
     (`net::QUIET`'s third round).
+  - Draw a browser seed's hold start by the writes its frame writer's
+    pass made before the hold (about 21 µs a write on the testbed's
+    halve-15-20), below the millisecond; and give a start to the holds a
+    pass doesn't meet (after a release, after a poll's turn).
   - Model a loaded machine's timer stalls (tens to hundreds of ms, one
     node's or every node's at once, which a host's other load makes and
     a host of its own doesn't) once a measure of users' machines says

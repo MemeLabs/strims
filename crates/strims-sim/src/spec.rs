@@ -704,6 +704,14 @@ pub struct Scenario {
     /// (`crate::net`): on by default. Off, they read it as their tasks run,
     /// their writes interleaving.
     pub pacer_turns: bool,
+    /// Whether the holds a browser seed's frame writer's pass meets start
+    /// as late as the page's work makes them, with
+    /// [`Scenario::timer_lateness`] ([`crate::late`]'s hold start;
+    /// `crate::net`): such a hold, its write's begin and its first poll's
+    /// arming, whole ms past the frame write's due ms, no earlier than the
+    /// pass, a draw for each pass: on by default. Off, at the pass, and
+    /// nothing is drawn.
+    pub pacer_hold_start: bool,
     /// With [`Scenario::wire_bins`], the hosts that keep their timers as
     /// they fire for the tables' `timers` (`NodeConfig::timer_log`, and
     /// their frame writers' and probes' waits): none by default. Changes
@@ -994,6 +1002,7 @@ impl Scenario {
             timer_lateness: true,
             pacer_lateness: true,
             pacer_turns: true,
+            pacer_hold_start: true,
             timer_log: None,
             timer_probe: false,
             link_log: None,

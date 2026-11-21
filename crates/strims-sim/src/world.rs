@@ -348,6 +348,9 @@ pub(crate) struct World {
     /// hosts' own streams, so the probe moves none of their draws; empty
     /// otherwise.
     pub probe_lateness: Vec<crate::late::Lateness>,
+    /// Each host's frame writes and the hold starts drawn at them
+    /// ([`Scenario::pacer_hold_start`]), its incarnations' in turn.
+    pub(crate) hold_starts: Vec<crate::net::HoldStarts>,
     /// With the tables, the nodes' parent sinks' channel
     /// ([`NodeConfig::parent_log`]): they send from inside the nodes'
     /// passes, and the records take what came at each stats sample, so it
@@ -481,6 +484,9 @@ impl World {
             loops: spec.loops.then(crate::loops::Loops::default),
         };
         let send_buffers = spec.wan.and(spec.send_buffer).map(SendBuffers::new);
+        let hold_starts = (0..spec.hosts.len())
+            .map(|_| crate::net::HoldStarts::default())
+            .collect();
         let (parent_tx, parent_rx) = mpsc::channel();
         let (stopped_tx, stopped_rx) = mpsc::channel();
         let (checks_tx, checks_rx) = mpsc::channel();
@@ -501,6 +507,7 @@ impl World {
             timer_logs,
             link_logs,
             probe_lateness,
+            hold_starts,
             parent_tx,
             parent_rx,
             stopped_tx,

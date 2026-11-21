@@ -5880,7 +5880,10 @@ pub(crate) mod cols {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub(crate) enum LinkWrites {
         /// When the link's writer began the write, in µs of true time from the
-        /// stream's start, by the node's precise clock.
+        /// stream's start, by the node's precise clock; in strims-sim, a
+        /// browser seed's write that its frame writer's pass hands and its host
+        /// holds, at the hold's start with `STRIMS_SIM_PACER_HOLD=on`
+        /// (`crate::net`).
         ///
         /// Unit: us.
         TUs,

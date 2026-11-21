@@ -33,7 +33,12 @@
 //! too: each data channel's writer the host's pacer holds sleeps on a
 //! timer of its own, `HOST_POLL` and its lateness from its hold or its
 //! last poll, as strims-wasm's `DcSocket::send` does, the timers armed for
-//! one deadline drawing one lateness (`crate::net`).
+//! one deadline drawing one lateness (`crate::net`). With
+//! [`Scenario::pacer_hold_start`] the holds a browser seed's frame
+//! writer's pass meets start late as well: the page's work from the
+//! writer's timer to the write its host refuses takes about a ms, so such
+//! a hold arms its first poll whole ms past the write's due time, and no
+//! earlier than the pass (`crate::net`).
 //!
 //! Each host draws from the model of its kind ([`HostKind`]: native,
 //! Chromium or Firefox, by the browser its data channels model, as the
@@ -144,6 +149,10 @@ pub enum Source {
     /// that the host's pacer holds, until it reads the host's load again
     /// (strims-wasm's `DcSocket::send`, `crate::net`).
     Pacer,
+    /// A browser seed's hold start: the whole ms past its frame writer's
+    /// write's due time at which a hold that write's pass meets arms its
+    /// first poll, the pass's own if that is later (`crate::net`).
+    Hold,
 }
 
 /// A host's lateness stream, shared by its incarnations' clocks.
@@ -242,6 +251,20 @@ const PARTS: u32 = 1000;
 /// share a draw, which leaves each poll's shares the model's. A native
 /// node has no host pacer, and its model, on time, is never drawn
 /// (`crate::net`).
+///
+/// A hold start's is the seed's in the bench's idle cells, Chromium's and
+/// Firefox's runs together, each run weighed alike (the bench reads no
+/// kind apart): for each push period off the whole second (the testbed's
+/// line timer shares the second's) whose frame writer ran within its due
+/// ms, the whole ms from that ms to the arming of the period's first poll
+/// that no other poll's read preceded, the hold the writer's pass met. A
+/// writer that runs a ms late ([`Source::Writer`]) meets its hold in its
+/// own ms in 91-93 % of such periods (the rest the next), which taking the
+/// later of the two gives; one 2 ms late or more in its own ms in 35-38 %
+/// (Chromium's 3 of 8, Firefox's 6 of 17), the rest a ms later, which the
+/// model leaves out. One period's first hold 18 ms past its writer's, a
+/// hold the pass didn't meet, is left out. A native node has no host
+/// pacer; its model, at once, is never drawn.
 pub(crate) fn model(kind: HostKind, source: Source) -> Model {
     match (kind, source) {
         (HostKind::Native, Source::NodeTask) => Model {
@@ -279,6 +302,14 @@ pub(crate) fn model(kind: HostKind, source: Source) -> Model {
         (HostKind::Firefox, Source::Pacer) => Model {
             shares: [859, 139, 1],
             tail: &[3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+        },
+        (HostKind::Native, Source::Hold) => Model {
+            shares: [1000, 0, 0],
+            tail: &[],
+        },
+        (HostKind::Chromium | HostKind::Firefox, Source::Hold) => Model {
+            shares: [203, 795, 2],
+            tail: &[],
         },
     }
 }
@@ -321,7 +352,12 @@ mod tests {
     use strims_base::rng::det_rng;
 
     const KINDS: [HostKind; 3] = [HostKind::Native, HostKind::Chromium, HostKind::Firefox];
-    const SOURCES: [Source; 3] = [Source::NodeTask, Source::Writer, Source::Pacer];
+    const SOURCES: [Source; 4] = [
+        Source::NodeTask,
+        Source::Writer,
+        Source::Pacer,
+        Source::Hold,
+    ];
 
     /// The 0, 1, 2 and 3+ ms counts of `n` timers `draw` fires.
     fn buckets(n: u32, mut draw: impl FnMut() -> Duration) -> [u32; 4] {
@@ -380,13 +416,21 @@ mod tests {
         assert_eq!(most, MAX_LATE_MS);
     }
 
-    /// No two kinds and sources share a model: each is its own pool.
+    /// No two kinds and sources share a model: each is its own pool, but
+    /// the hold start's, one for both browsers (and never drawn on a
+    /// native node).
     #[test]
     fn every_kind_and_source_has_a_model_of_its_own() {
         let all: Vec<(HostKind, Source)> = KINDS
             .iter()
             .flat_map(|&k| SOURCES.iter().map(move |&s| (k, s)))
+            .filter(|&(k, s)| s != Source::Hold || k == HostKind::Chromium)
             .collect();
+        let (c, f) = (
+            model(HostKind::Chromium, Source::Hold),
+            model(HostKind::Firefox, Source::Hold),
+        );
+        assert!(c.shares == f.shares && c.tail == f.tail);
         for (i, &(ka, sa)) in all.iter().enumerate() {
             for &(kb, sb) in &all[i + 1..] {
                 let (a, b) = (model(ka, sa), model(kb, sb));

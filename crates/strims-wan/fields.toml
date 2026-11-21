@@ -4679,7 +4679,7 @@ knobs = ["TIMER_LOG"]
 sample = true
 zstd = true
 description = "How late each node's timers fired: when each was armed, the deadline it was armed for, and when the code it woke ran, with the delay it was armed for and where it ran."
-notes.strims-sim = "Written with `STRIMS_SIM_TIMER_LOG=<hosts>` (`Scenario::timer_log`, `HostSet::parse`: `all` or `1`, `seed`, or `hosts:` and host indices, `hosts:0,3`), each host's timers that fired as its log kept them (`strims_testbed::record::TimerLog`), taken at its stats samples: its node task's (strims-node-core's loop: its lateness is the one `crate::late` draws, with `STRIMS_SIM_TIMER_LATENESS=on`), its frame writer's writes, and with `STRIMS_SIM_TIMER_PROBE=1` its probe's. A testbed run's are its nodes' (run.sh's `TIMER_LOG`, from its lines' records, `crate::testbed`), each read by the node's own clock at its finest: the wall clock to the nanosecond natively, `performance.timeOrigin + performance.now()` on `Date.now()`'s milliseconds in a browser's worker, its page cross-origin isolated. A deadline that input or another wake-up passed before its timer fired has no row. A simulated browser's host pacer keeps its polls, each as its held writer reads the load (`crate::net`): with `STRIMS_SIM_PACER_LATENESS=on` (and `STRIMS_SIM_TIMER_LATENESS=on`) as late as `crate::late` draws them, else on time."
+notes.strims-sim = "Written with `STRIMS_SIM_TIMER_LOG=<hosts>` (`Scenario::timer_log`, `HostSet::parse`: `all` or `1`, `seed`, or `hosts:` and host indices, `hosts:0,3`), each host's timers that fired as its log kept them (`strims_testbed::record::TimerLog`), taken at its stats samples: its node task's (strims-node-core's loop: its lateness is the one `crate::late` draws, with `STRIMS_SIM_TIMER_LATENESS=on`), its frame writer's writes, and with `STRIMS_SIM_TIMER_PROBE=1` its probe's. A testbed run's are its nodes' (run.sh's `TIMER_LOG`, from its lines' records, `crate::testbed`), each read by the node's own clock at its finest: the wall clock to the nanosecond natively, `performance.timeOrigin + performance.now()` on `Date.now()`'s milliseconds in a browser's worker, its page cross-origin isolated. A deadline that input or another wake-up passed before its timer fired has no row. A simulated browser's host pacer keeps its polls, each as its held writer reads the load (`crate::net`): with `STRIMS_SIM_PACER_LATENESS=on` (and `STRIMS_SIM_TIMER_LATENESS=on`) as late as `crate::late` draws them, else on time; with `STRIMS_SIM_PACER_HOLD=on` the first poll of a hold its seed's frame writer's pass meets armed whole ms past the frame write's due ms, no earlier than the pass, as `crate::late`'s hold start draws it."
 
 [columns.timers.t_us]
 sims = ["strims-sim"]
@@ -4746,7 +4746,7 @@ notes.strims-sim = "Written with `STRIMS_SIM_LINK_LOG=<hosts>` (`Scenario::link_
 sims = ["strims-sim"]
 type = "int"
 unit = "us"
-description = "When the link's writer began the write, in µs of true time from the stream's start, by the node's precise clock."
+description = "When the link's writer began the write, in µs of true time from the stream's start, by the node's precise clock; in strims-sim, a browser seed's write that its frame writer's pass hands and its host holds, at the hold's start with `STRIMS_SIM_PACER_HOLD=on` (`crate::net`)."
 
 [columns.link_writes.node]
 sims = ["strims-sim"]
