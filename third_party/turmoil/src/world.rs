@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::envelope::Protocol;
+use crate::hash::IndexMap;
 use crate::host::HostTimer;
 use crate::ip::IpVersionAddrIter;
 use crate::net::udp::MulticastGroups;
@@ -8,7 +9,6 @@ use crate::{
     TRACING_TARGET,
 };
 
-use indexmap::IndexMap;
 use rand::RngCore;
 use scoped_tls::scoped_thread_local;
 use std::cell::RefCell;
@@ -53,7 +53,7 @@ impl World {
         tick_duration: Duration,
     ) -> World {
         World {
-            hosts: IndexMap::new(),
+            hosts: IndexMap::default(),
             topology: Topology::new(link),
             dns: Dns::new(addrs),
             multicast_groups: MulticastGroups::default(),

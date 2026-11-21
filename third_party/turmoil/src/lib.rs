@@ -212,6 +212,8 @@ pub mod barriers;
 
 pub mod net;
 
+mod hash;
+
 mod rt;
 use rt::Rt;
 

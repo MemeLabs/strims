@@ -1,5 +1,4 @@
 use bytes::Bytes;
-use indexmap::{IndexMap, IndexSet};
 use tokio::{
     sync::{mpsc, Mutex},
     time::sleep,
@@ -7,6 +6,7 @@ use tokio::{
 
 use crate::{
     envelope::{Datagram, Envelope, Protocol},
+    hash::{IndexMap, IndexSet},
     host::is_same,
     ToSocketAddrs, World, TRACING_TARGET,
 };
@@ -55,7 +55,7 @@ impl MulticastGroups {
                 members.insert(member);
                 tracing::info!(target: TRACING_TARGET, ?member, group = ?group, protocol = %"UDP", "Join multicast group");
             })
-            .or_insert_with(|| IndexSet::from([member]));
+            .or_insert_with(|| IndexSet::from_iter([member]));
     }
 
     fn leave(&mut self, group: IpAddr, member: SocketAddr) {

@@ -1,4 +1,4 @@
-use indexmap::IndexMap;
+use crate::hash::IndexMap;
 #[cfg(feature = "regex")]
 use regex::Regex;
 use std::io;
@@ -38,7 +38,7 @@ impl Dns {
     pub(crate) fn new(addrs: IpVersionAddrIter) -> Dns {
         Dns {
             addrs,
-            names: IndexMap::new(),
+            names: IndexMap::default(),
         }
     }
 

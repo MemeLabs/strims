@@ -6,10 +6,10 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
-use indexmap::IndexMap;
 use tokio::time::Duration;
 use tracing::Level;
 
+use crate::hash::IndexMap;
 use crate::host::HostTimer;
 use crate::{
     for_pairs, rt, BusyLinksIter, Config, LinksIter, Result, Rt, ToIpAddr, ToIpAddrs, World,
@@ -49,7 +49,7 @@ impl<'a> Sim<'a> {
         Self {
             config,
             world: RefCell::new(world),
-            rts: IndexMap::new(),
+            rts: IndexMap::default(),
             since_epoch,
             elapsed: Duration::ZERO,
             steps: 1, // bumped after each step

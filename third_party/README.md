@@ -24,6 +24,16 @@ messages in flight instead (`src/top.rs`), delivering in the same order:
 - `src/net/tcp/stream.rs` calls `AtomicUsize::try_update` where it called
   `fetch_update`, its deprecated name.
 
+turmoil hashed its maps with `RandomState`, whose keys the OS draws for
+each thread. A map's keys decide which of its removals leave a tombstone,
+and so at which insert its table grows, and a simulation's allocations are
+its caller's to count: strims-sim's live heap (`World::check_invariants`)
+differed from one process to the next by a stream's reorder buffer
+(`StreamSocket::buf` in `src/host.rs`), and with it the trace of a run
+whose heap bound it crossed. The patch hashes every map with SipHash's
+fixed keys (`src/hash.rs`); the `fs` module, behind the `unstable-fs`
+feature the workspace doesn't enable, keeps its own.
+
 Its tests (`cargo test` in a copy outside this workspace, with the
 crate's `.cargo/config.toml`, which sets `--cfg tokio_unstable`) pass, and
 `src/sim.rs` adds `busy_links_are_the_links_with_messages_in_flight`.

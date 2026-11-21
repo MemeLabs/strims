@@ -132,9 +132,10 @@
 //! Randomness the seed doesn't reach (tungstenite's WebSocket masks,
 //! WebRTC's DTLS and SCTP) changes bytes on the wire but not the bytes vnic
 //! carries. The trace records vnic byte counts only, never datagram sizes,
-//! and no memory or wall-clock figure. WAN mode times messages by their
-//! wire size, and the sizes of STUN messages and DTLS handshake records
-//! depend on key material, so they are charged a fixed size.
+//! no wall-clock figure, and no memory figure but a violated heap bound's
+//! ([`memory`]). WAN mode times messages by their wire size, and the sizes
+//! of STUN messages and DTLS handshake records depend on key material, so
+//! they are charged a fixed size.
 
 pub mod arrivals;
 pub mod bench;

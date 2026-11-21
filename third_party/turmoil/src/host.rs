@@ -1,4 +1,5 @@
 use crate::envelope::{hex, Datagram, Protocol, Segment, Syn};
+use crate::hash::IndexMap;
 #[cfg(feature = "unstable-fs")]
 use crate::fs::{Fs, FsConfig};
 use crate::net::tcp::stream::BidiFlowControl;
@@ -6,7 +7,6 @@ use crate::net::{SocketPair, TcpListener, UdpSocket};
 use crate::{Envelope, TRACING_TARGET};
 
 use bytes::Bytes;
-use indexmap::IndexMap;
 use std::collections::VecDeque;
 use std::fmt::Display;
 use std::io;
@@ -221,7 +221,7 @@ struct UdpBind {
 impl Udp {
     fn new(capacity: usize) -> Self {
         Self {
-            binds: IndexMap::new(),
+            binds: IndexMap::default(),
             capacity,
         }
     }
@@ -378,7 +378,7 @@ impl StreamSocket {
         let (tx, rx) = mpsc::channel(capacity);
         let flow_control = BidiFlowControl::new(capacity);
         let sock = Self {
-            buf: IndexMap::new(),
+            buf: IndexMap::default(),
             next_send_seq: 1,
             recv_seq: 0,
             sender: tx,
@@ -427,8 +427,8 @@ impl StreamSocket {
 impl Tcp {
     fn new(capacity: usize) -> Self {
         Self {
-            binds: IndexMap::new(),
-            sockets: IndexMap::new(),
+            binds: IndexMap::default(),
+            sockets: IndexMap::default(),
             server_socket_capacity: capacity,
             socket_capacity: capacity,
         }

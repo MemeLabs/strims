@@ -1499,6 +1499,61 @@ fn frame_codec_changes_no_trace() {
     }
 }
 
+/// turmoil keeps a stream's segments that arrive out of order in a map
+/// until the gap before them fills, and a map's table grows at an insert
+/// its hashes decide: a removal among full neighbours leaves a tombstone,
+/// which counts as taken until the table next grows or rehashes. Two
+/// simulations of a stream whose segments overtake each other, each on a
+/// thread of its own (whose `RandomState` keys are its own), hold the same
+/// heap at every step. A process's first simulation also initialises its
+/// globals, so the two follow one.
+#[test]
+fn a_stream_whose_segments_overtake_holds_the_same_heap() {
+    let heap = || std::thread::scope(|s| s.spawn(reordered_stream_heap).join().unwrap());
+    heap();
+    let (a, b) = (heap(), heap());
+    assert_eq!(a.len(), b.len());
+    if let Some(i) = a.iter().zip(&b).position(|(x, y)| x != y) {
+        panic!("step {i}: {} bytes against {}", a[i], b[i]);
+    }
+}
+
+/// The live heap of a turmoil simulation after each of its steps, counted
+/// in an allocation group of its own: a client writes 20,000 segments of
+/// 64 bytes to a server over a link of 1 to 50 ms a message, so they
+/// overtake each other.
+fn reordered_stream_heap() -> Vec<i64> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut group = strims_sim::memory::MemoryGroup::new().unwrap();
+    let counters = group.counters();
+    let _counted = group.enter();
+    let mut sim = turmoil::Builder::new()
+        .rng_seed(1)
+        .min_message_latency(Duration::from_millis(1))
+        .max_message_latency(Duration::from_millis(50))
+        .simulation_duration(secs(3600))
+        .build();
+    sim.host("server", || async {
+        let listener = turmoil::net::TcpListener::bind("0.0.0.0:1").await?;
+        let (mut stream, _) = listener.accept().await?;
+        let mut buf = vec![0; 4096];
+        while stream.read(&mut buf).await? > 0 {}
+        Ok(())
+    });
+    sim.client("client", async {
+        let mut stream = turmoil::net::TcpStream::connect("server:1").await?;
+        for _ in 0..20_000 {
+            stream.write_all(&[7; 64]).await?;
+        }
+        Ok(())
+    });
+    let mut live = Vec::new();
+    while !sim.step().unwrap() {
+        live.push(counters.live());
+    }
+    live
+}
+
 /// Every host's clock 15 s ahead of true time or behind, through a seed
 /// restart and a writer reset, against every host's at true time with
 /// the same draws (an offset of none draws its sign too, so the streams

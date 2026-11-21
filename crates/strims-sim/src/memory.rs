@@ -18,8 +18,13 @@
 //! The harness's records of the run grow with its length, so they count
 //! in a second group, and the run's numbers are its nodes' and network's.
 //! Without the allocator the counters stay at zero and reports carry no
-//! memory section. Memory numbers never enter the trace: allocator
-//! behaviour is not part of the determinism contract.
+//! memory section.
+//!
+//! A run's allocations follow its seed (the vendored turmoil hashes its
+//! maps with fixed keys, `third_party/README.md`), so a run in a process
+//! of its own repeats its memory numbers, and a violated heap bound
+//! ([`crate::Invariants::max_heap`]) logs its reading in the trace. A
+//! process's first run also counts the globals it initialises.
 
 use std::sync::Once;
 use std::sync::atomic::{AtomicI64, Ordering};

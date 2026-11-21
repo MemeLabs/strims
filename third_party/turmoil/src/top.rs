@@ -1,9 +1,9 @@
 use crate::envelope::{Envelope, Protocol};
+use crate::hash::IndexMap;
 use crate::host::Host;
 use crate::rt::Rt;
 use crate::{config, TRACING_TARGET};
 
-use indexmap::IndexMap;
 use rand::{Rng, RngCore};
 use rand_distr::{Distribution, Exp};
 use std::collections::{BTreeSet, VecDeque};
@@ -230,9 +230,9 @@ impl Topology {
         let rt = Rt::no_software();
         Topology {
             config,
-            links: IndexMap::new(),
+            links: IndexMap::default(),
             busy: BTreeSet::new(),
-            ready: IndexMap::new(),
+            ready: IndexMap::default(),
             now: rt.now(),
             rt,
         }
@@ -453,7 +453,7 @@ impl Link {
             state_b_a: State::Healthy,
             config: config::Link::default(),
             sent: VecDeque::new(),
-            deliverable: IndexMap::new(),
+            deliverable: IndexMap::default(),
         }
     }
 
