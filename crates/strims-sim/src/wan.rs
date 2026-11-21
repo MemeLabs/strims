@@ -11,6 +11,14 @@
 //! `SentRef::deliver`; turmoil hands it to the receiving host at the start
 //! of the next step. Delivery times round up to the next step.
 //!
+//! A walk hands the uplinks the step's new messages first, at the step's
+//! start, and then runs the events due by its time in time order, each at
+//! its own time: every event comes after the step's start, so each uplink
+//! takes the step's messages before what the events hand it, and what the
+//! step's messages cause within the step (on a path that delivers at once,
+//! the pure ACK of a segment through its receiver's downlink) runs in the
+//! walk that sent them, before the bin edge at its time is read.
+//!
 //! The scheduler relies on these properties of turmoil's links:
 //!
 //! - a link's in-flight queue changes only by appends (new sends, and
@@ -384,6 +392,9 @@ enum Event {
     /// acknowledgements acknowledged and no later one carried, its
     /// acknowledgement carries a round trip on.
     CrossProbe { i: usize },
+    /// Competing upload `i` starts, or its setup's next round trip begins,
+    /// or once the setup is done its data starts.
+    CrossTrip { i: usize },
     /// A SACK of data channel `conn` reaches its sender: the association's
     /// SACK of the event's key.
     SctpSack { conn: (SocketAddr, SocketAddr) },
@@ -1209,9 +1220,8 @@ struct Cross {
     rtt: Duration,
     flow: Flow,
     started: bool,
-    /// The setup's round trips taken, and when the next begins.
+    /// The setup's round trips taken.
     trips: u32,
-    trip_at: Time,
     /// Lost segments not yet resent, by sequence number, and their frames.
     /// Bound: the segments in flight.
     resend: BTreeMap<u64, u32>,
@@ -1505,7 +1515,6 @@ impl Scheduler {
                     flow: Flow::default(),
                     started: false,
                     trips: 0,
-                    trip_at: Time::NIL,
                     resend: BTreeMap::new(),
                     acks_lost: Vec::new(),
                     probe_at: Time::NIL,
@@ -1516,6 +1525,12 @@ impl Scheduler {
         if !cross.is_empty() && !windowed {
             return Err("wan: competing uploads need the window model".to_owned());
         }
+        // Each competing upload's client starts at its start.
+        let events: BTreeMap<(Time, u64), Event> = cross
+            .iter()
+            .enumerate()
+            .map(|(i, c)| ((c.start, i as u64), Event::CrossTrip { i }))
+            .collect();
         let names: Vec<String> = spec.hosts.iter().map(|h| h.name.clone()).collect();
         let ip_host: FastMap<IpAddr, HostIx> = names
             .iter()
@@ -1557,8 +1572,8 @@ impl Scheduler {
             recorded: BTreeSet::new(),
             released: Vec::new(),
             records: Records::default(),
-            events: BTreeMap::new(),
-            next: 0,
+            next: events.len() as u64,
+            events,
             frozen: BTreeSet::new(),
             partitioned: BTreeSet::new(),
             tick: Duration::from(spec.tick),
@@ -1803,63 +1818,14 @@ impl Scheduler {
         // network thread): the network's ledgers take them as the
         // scheduler's do ([`Scheduler::settled`]).
         self.net.settle(now);
-        self.run_events(now);
-        for i in 0..self.cross.len() {
-            let Some(&Cross {
-                host,
-                start,
-                rtt,
-                started,
-                ..
-            }) = self.cross.get(i)
-            else {
-                continue;
-            };
-            if !started
-                && now >= start
-                && let Some(c) = self.cross.get_mut(i)
-            {
-                c.started = true;
-                c.trip_at = start;
-            }
-            // Each of the setup's round trips waits for the uplink's queue
-            // as it begins. The second is the data connection's handshake,
-            // its round trip's first sample (the smoothed round trip and the
-            // least); the last carries iperf3's cookie on it, whose
-            // acknowledgement is the first sample of CUBIC's state, begun
-            // at the handshake's end (`tcp_init_transfer`): HyStart's least
-            // round trip.
-            while let Some(c) = self.cross.get(i)
-                && c.started
-                && c.data_at.is_nil()
-                && now >= c.trip_at
-            {
-                let at = c.trip_at;
-                let trip = rtt + self.net.up_backlog(host, at);
-                if let Some(c) = self.cross.get_mut(i) {
-                    c.trips += 1;
-                    c.trip_at = at + trip;
-                    if c.trips == 2 {
-                        c.flow.estimate(trip);
-                    }
-                    if c.trips >= crate::spec::COMPETE_SETUP_TRIPS {
-                        c.data_at = c.trip_at;
-                        c.stop += c.data_at - c.start;
-                        c.flow.sampled(0, trip);
-                    }
-                }
-            }
-            if let Some(c) = self.cross.get(i)
-                && !c.data_at.is_nil()
-                && c.flow.last_send.is_nil()
-                && now >= c.data_at
-            {
-                let at = c.data_at;
-                self.cross_pump(at, i);
-            }
-        }
-        let fresh = self.match_queues(sim)?;
+        // The step's writes, at its start, go first: every event of the walk
+        // comes after it (the last walk ran those before), so each uplink
+        // takes them before what the events hand it, and what they cause
+        // within the step runs in the walk.
+        let fresh = self.match_queues(sim, false)?;
         self.send(now - self.tick, fresh);
+        self.run_events(now);
+        self.match_queues(sim, true)?;
         self.purge(sim);
         self.admit(now);
         self.tell_rooms();
@@ -2168,6 +2134,10 @@ impl Scheduler {
                     self.cross_probe(t, i);
                     continue;
                 }
+                Event::CrossTrip { i } => {
+                    self.cross_trip(t, i);
+                    continue;
+                }
                 Event::SctpSack { conn } => {
                     self.sctp_sacked(t, conn, id);
                     continue;
@@ -2289,6 +2259,7 @@ impl Scheduler {
                 | Event::CrossAck { .. }
                 | Event::CrossLost { .. }
                 | Event::CrossProbe { .. }
+                | Event::CrossTrip { .. }
                 | Event::SctpSack { .. }
                 | Event::SctpTimeout { .. }
                 | Event::SctpDelSack { .. }
@@ -2772,6 +2743,45 @@ impl Scheduler {
             self.cross_acked(t, i, s, n, t - sent);
         }
         self.cross_acked(t, i, seq, frames, rtt);
+    }
+
+    /// Competing upload `i` at `t`, its start or the end of a round trip of
+    /// its setup ([`Event::CrossTrip`]): each of the setup's round trips
+    /// waits for the uplink's queue as it begins. The second is the data
+    /// connection's handshake, its round trip's first sample (the smoothed
+    /// round trip and the least); the last carries iperf3's cookie on it,
+    /// whose acknowledgement is the first sample of CUBIC's state, begun at
+    /// the handshake's end (`tcp_init_transfer`): HyStart's least round
+    /// trip. Once the setup is done, its data starts.
+    fn cross_trip(&mut self, t: Time, i: usize) {
+        let Some(c) = self.cross.get_mut(i) else {
+            return;
+        };
+        if !c.data_at.is_nil() {
+            if c.flow.last_send.is_nil() {
+                self.cross_pump(t, i);
+            }
+            return;
+        }
+        c.started = true;
+        let (host, rtt) = (c.host, c.rtt);
+        let trip = rtt + self.net.up_backlog(host, t);
+        let Some(c) = self.cross.get_mut(i) else {
+            return;
+        };
+        c.trips += 1;
+        let at = t + trip;
+        if c.trips == 2 {
+            c.flow.estimate(trip);
+        }
+        if c.trips >= crate::spec::COMPETE_SETUP_TRIPS {
+            c.data_at = at;
+            c.stop += c.data_at - c.start;
+            c.flow.sampled(0, trip);
+        }
+        let key = self.next;
+        self.next += 1;
+        self.events.insert((at, key), Event::CrossTrip { i });
     }
 
     /// Competing upload `i`'s tail-loss probe is due at `t`: if what lost
@@ -3371,15 +3381,18 @@ impl Scheduler {
         );
     }
 
-    /// Lines every queue up against its records, releases the due ones and
-    /// records new messages, on the links with records or messages in
-    /// flight: a link with neither has nothing to line up. Returns the new
-    /// records in queue order; [`Scheduler::released`] holds the links that
-    /// released a message.
-    fn match_queues(&mut self, sim: &Sim<'_>) -> Result<Vec<u64>, String> {
+    /// Lines queues up against their records, on the links with records or
+    /// messages in flight (a link with neither has nothing to line up): to
+    /// `release`, the links with due records, whose due ones it releases
+    /// ([`Scheduler::released`] holds the links that released a message);
+    /// otherwise the links with new messages, which it records, releasing
+    /// nothing. Returns the new records in queue order.
+    fn match_queues(&mut self, sim: &Sim<'_>, release: bool) -> Result<Vec<u64>, String> {
         let mut fresh = Vec::new();
         let released = &mut self.released;
-        released.clear();
+        if release {
+            released.clear();
+        }
         let mut err = None;
         let links = &mut self.links;
         let recorded = &mut self.recorded;
@@ -3426,8 +3439,13 @@ impl Scheduler {
                 let Some((a, b)) = ls.hosts else {
                     continue;
                 };
-                // Nothing to release and nothing new.
-                if !ls.due && link.len() == ls.records.len() {
+                let new = link.len() != ls.records.len();
+                if release && new {
+                    err = Some(format!("wan: link {li} took messages during the walk"));
+                    break;
+                }
+                // Nothing to release, or nothing new.
+                if if release { !ls.due } else { !new } {
                     continue;
                 }
                 let frozen = frozen.contains(&pair_key(a, b));
@@ -3435,7 +3453,7 @@ impl Scheduler {
                 // goes once every chunk of its connection through the end
                 // of its message is due.
                 let mut whole: Vec<(ConnKey, u64)> = Vec::new();
-                if !assocs.is_empty() && !frozen {
+                if release && !assocs.is_empty() && !frozen {
                     let mut cut: Vec<ConnKey> = Vec::new();
                     for &id in &ls.records {
                         let Some(r) = records.get(&id) else {
@@ -3469,7 +3487,9 @@ impl Scheduler {
                 // order; those it delivers leave a mark until it compacts.
                 let known = ls.records.len();
                 let (mut seen, mut gone) = (0, 0);
-                ls.due = false;
+                if release {
+                    ls.due = false;
+                }
                 for sent in link {
                     let (src, dst) = sent.pair();
                     let what = What::of(sent.protocol());
@@ -3489,6 +3509,9 @@ impl Scheduler {
                                 r.src, r.dst, r.what
                             ));
                             break 'links;
+                        }
+                        if !release {
+                            continue;
                         }
                         if r.state == State::Due && (frozen || held(r)) {
                             ls.due = true;
@@ -5325,6 +5348,73 @@ mod tests {
         };
         assert!(left < before, "{left} of {before}");
         assert_eq!(wan.up_counters(1, Time::MAX)[ack], left);
+    }
+
+    /// What a step's write causes within the step counts by the walk's
+    /// time: `a` reaches `b` at once, as the signalling relay on the hosts'
+    /// bridge reaches its hosts, over fiber either way, so a segment it
+    /// writes comes through `b`'s downlink within the step it was written
+    /// in, and `b`'s pure ACK of it leaves then. Read after each step's
+    /// walk, `b`'s uplink had carried every pure ACK its packet log says
+    /// left before the walk's time, the last walk's ACKs among them.
+    #[test]
+    fn what_a_write_causes_within_its_step_counts_by_the_walks_time() {
+        let mut sim = build();
+        let fiber = Site::new(City::Frankfurt, Access::Fiber);
+        let buffers = SendBuffers::new(SendBuffer {
+            uplink_queue: StdDuration::from_millis(100),
+            window: true,
+        });
+        let net = sim_net(Some(buffers.clone()));
+        sim.host("a", move || {
+            let net = net.clone();
+            async move {
+                let l = net.tcp_bind("0.0.0.0:9000".into()).await?;
+                let (mut s, _) = net.tcp_accept(&l).await?;
+                net.configure_tcp_send_queue(&s, &TcpSocketConfig::default())?;
+                for _ in 0..20 {
+                    s.write_all(&[1u8; 14_480]).await?;
+                }
+                Ok(())
+            }
+        });
+        sim.client("b", async move {
+            let mut s = TcpStream::connect(("a", 9000)).await?;
+            let mut buf = vec![0u8; 20 * 14_480];
+            s.read_exact(&mut buf).await?;
+            tokio::time::sleep(StdDuration::from_secs(1)).await;
+            Ok(())
+        });
+        let mut s = spec(&[("a", fiber), ("b", fiber)]);
+        s.packet_log = BTreeSet::from([1]);
+        let mut wan = Scheduler::new(&sim, &s, QUIET, 1, Some(buffers)).unwrap();
+        wan.set_latency_from(0, 1, Duration::ZERO);
+        let ack = up_ix("up_ack_packets");
+        let mut reads = Vec::new();
+        loop {
+            wan.walk(&sim).unwrap();
+            let now = sim_time(sim.elapsed());
+            reads.push((now, wan.up_counters(1, now)[ack]));
+            if sim.step().unwrap() {
+                break;
+            }
+        }
+        let acks: Vec<Time> = wan.packets[1]
+            .iter()
+            .filter(|r| r.kind == PacketKind::Ack)
+            .filter_map(|r| r.sent.map(|s| epoch() + s))
+            .collect();
+        // Some left within the step their segment came through in.
+        let step = |d: Duration| d.as_nanos() / 1_000_000;
+        let within = wan.packets[1]
+            .iter()
+            .filter(|r| r.kind == PacketKind::Ack && r.sent.is_some_and(|s| step(s) == step(r.at)))
+            .count();
+        assert!(within > 0 && acks.len() > 20, "{} pure ACKs", acks.len());
+        for (now, got) in reads {
+            let want = acks.iter().filter(|&&s| s < now).count() as u64;
+            assert_eq!(got, want, "pure ACKs out by {now:?}");
+        }
     }
 
     #[test]

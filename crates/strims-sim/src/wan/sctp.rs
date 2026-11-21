@@ -120,9 +120,8 @@
 //! chunks go out as of then, and its packets leave one after another, each
 //! a packet's cost after the one before; a receiver's SACK alone takes its
 //! turn the same way. An inbound packet takes nothing of the thread here.
-//! A walk's events go before the writes of the step before it, so within a
-//! walk their send opportunities go first, though the writes came earlier
-//! in the step.
+//! A step's writes go before the walk's events, which come after the
+//! step's start, so the thread takes them first.
 //!
 //! A SACK of its own takes its turn on the receiver's uplink and is lost at
 //! a full queue as any packet is. A chunk resent while its last copy is

@@ -650,12 +650,9 @@ and dropped are in `TRIED.md`.
     so a writer held on its own cap wakes as the browser's does, when its
     network thread ends the send opportunity that answers it (the SCTP
     bench's next step; `SctpProfile::packet_cost`,
-    `SendBuffers::answered`), and give the thread a step's writes before
-    the work that came after them in the step. At a channel's write, run
-    its host's thread up to the write (its associations' SACKs and timers
-    due by then, the step's earlier writes) and then the message's send
-    opportunity, matching its chunks to turmoil's segments at the walk;
-    give the page's writes the time a browser's worker takes for them.
+    `SendBuffers::answered`), and give the page's writes the time a
+    browser's worker takes for them within the step, the walk handing each
+    over in time order among its events.
     Then fit against the quiet hosts' runs: the write path's holds and
     lows (`write_fit_of`'s stages 3, 4 and 6, stage 6's p90 among them),
     its stages 1 and 7c at 20 Mbit/s and 7b at 10; the buffered amount at
