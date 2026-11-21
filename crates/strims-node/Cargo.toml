@@ -9,7 +9,7 @@ license.workspace = true
 [features]
 default = []
 # Simulated network and clock for deterministic whole-node tests.
-turmoil = ["dep:turmoil"]
+turmoil = ["dep:turmoil", "strims-base/fixed-hash"]
 
 [dependencies]
 strims-base.workspace = true

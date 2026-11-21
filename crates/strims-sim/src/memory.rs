@@ -20,11 +20,15 @@
 //! Without the allocator the counters stay at zero and reports carry no
 //! memory section.
 //!
-//! A run's allocations follow its seed (the vendored turmoil hashes its
-//! maps with fixed keys, `third_party/README.md`), so a run in a process
-//! of its own repeats its memory numbers, and a violated heap bound
-//! ([`crate::Invariants::max_heap`]) logs its reading in the trace. A
-//! process's first run also counts the globals it initialises.
+//! A run's allocations follow its seed (the vendored turmoil's maps,
+//! `third_party/README.md`, and the nodes' maps keyed by peer,
+//! `strims_base::hash`, hash with fixed keys), so a run in a process of its
+//! own repeats its memory numbers, and a violated heap bound
+//! ([`crate::Invariants::max_heap`]) logs its reading in the trace. Runs
+//! that share a process needn't repeat theirs: a global initialised lazily
+//! counts in the group of the run that first touches it: a process's first
+//! run counts the globals it initialises, and of a parallel sweep's runs,
+//! whichever reaches one first as their threads happen to be timed.
 
 use std::sync::Once;
 use std::sync::atomic::{AtomicI64, Ordering};

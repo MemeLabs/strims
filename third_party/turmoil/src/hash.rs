@@ -6,10 +6,11 @@
 //! removals leave a tombstone, which a table counts as taken until it next
 //! grows or rehashes: a stream's reorder buffer (`StreamSocket::buf`) grew
 //! at a different insert from one process to the next, and the same
-//! simulation held a different heap. Every map here hashes with SipHash's
-//! fixed keys ([`DefaultHasher::new`]), so its allocations follow the
-//! simulation's inserts and removals alone. No peer chooses a simulation's
-//! keys.
+//! simulation held a different heap. Every map here hashes with std's
+//! [`DefaultHasher`] at fixed keys, so its allocations follow the
+//! simulation's inserts and removals alone. That hasher's algorithm is
+//! std's and can change with the toolchain, which moves a simulation's heap
+//! but not its order. No peer chooses a simulation's keys.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::BuildHasherDefault;

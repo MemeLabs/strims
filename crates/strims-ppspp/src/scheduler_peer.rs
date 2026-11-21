@@ -180,7 +180,7 @@
 
 use std::collections::BTreeMap;
 
-use indexmap::IndexMap;
+use strims_base::hash::IndexMap;
 use strims_base::rng::DetRng;
 use strims_base::stats::{Sma, WaitHistogram};
 use strims_base::time::{Duration, Time};
@@ -1808,7 +1808,7 @@ impl PeerSwarmScheduler {
                 backlog: None,
                 unannounced: Map::new(),
             },
-            channels: IndexMap::new(),
+            channels: IndexMap::default(),
         }
     }
 

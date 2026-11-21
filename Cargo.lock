@@ -1989,6 +1989,7 @@ dependencies = [
 name = "strims-base"
 version = "0.1.0"
 dependencies = [
+ "indexmap",
  "rand_chacha 0.10.0",
  "rand_core 0.10.1",
 ]
@@ -2315,7 +2316,6 @@ dependencies = [
  "blake2",
  "blake3",
  "hex",
- "indexmap",
  "proptest",
  "prost",
  "rand_core 0.10.1",

@@ -6,7 +6,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+# `hash`'s maps hash with fixed keys, so a simulation's heap repeats. Only a
+# simulation's build enables it (strims-node's `turmoil`).
+fixed-hash = []
+
 [dependencies]
+indexmap.workspace = true
 rand_core.workspace = true
 rand_chacha.workspace = true
 

@@ -30,9 +30,10 @@ and so at which insert its table grows, and a simulation's allocations are
 its caller's to count: strims-sim's live heap (`World::check_invariants`)
 differed from one process to the next by a stream's reorder buffer
 (`StreamSocket::buf` in `src/host.rs`), and with it the trace of a run
-whose heap bound it crossed. The patch hashes every map with SipHash's
-fixed keys (`src/hash.rs`); the `fs` module, behind the `unstable-fs`
-feature the workspace doesn't enable, keeps its own.
+whose heap bound it crossed. The patch hashes every map with std's
+`DefaultHasher` at fixed keys (`src/hash.rs`), whose algorithm can change
+with the toolchain; the `fs` module, behind the `unstable-fs` feature the
+workspace doesn't enable, keeps its own.
 
 Its tests (`cargo test` in a copy outside this workspace, with the
 crate's `.cargo/config.toml`, which sets `--cfg tokio_unstable`) pass, and

@@ -12,8 +12,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::ops::{Deref, DerefMut};
 
-use indexmap::IndexMap;
 use slotmap::SlotMap;
+use strims_base::hash::IndexMap;
 use strims_base::path::{PathReading, PathSample};
 use strims_base::rng::{DetRng, fork};
 use strims_base::stats::Sma;
@@ -1084,7 +1084,7 @@ impl Runner {
         let key = self.swarms.insert(RunnerSwarm {
             swarm,
             scheduler: None,
-            channels: IndexMap::new(),
+            channels: IndexMap::default(),
             seed_pin: None,
             committed: 0.0,
             forecast_log: ForecastLog::default(),

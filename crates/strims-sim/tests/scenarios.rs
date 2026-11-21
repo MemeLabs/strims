@@ -1512,10 +1512,58 @@ fn a_stream_whose_segments_overtake_holds_the_same_heap() {
     let heap = || std::thread::scope(|s| s.spawn(reordered_stream_heap).join().unwrap());
     heap();
     let (a, b) = (heap(), heap());
+    assert!(a.iter().any(|&x| x != 0), "no allocation counted");
     assert_eq!(a.len(), b.len());
     if let Some(i) = a.iter().zip(&b).position(|(x, y)| x != y) {
         panic!("step {i}: {} bytes against {}", a[i], b[i]);
     }
+}
+
+/// A seed and 27 viewers that dial it over TCP, every third viewer down
+/// from 6 s to 8 s: the seed's runner drops a crashed viewer's channels
+/// and takes the restarted one's, in maps keyed by peer, whose tables grow
+/// at an insert their hashes decide (`strims_base::hash`). Four runs, each
+/// on a thread of its own (whose `RandomState` keys are its own) after one
+/// that initialises the process's globals, read the same heap at every
+/// sample.
+#[test]
+fn a_star_whose_viewers_restart_holds_the_same_heap() {
+    let heap = || {
+        let r = std::thread::scope(|s| {
+            s.spawn(|| strims_sim::run(restarting_star(), 1))
+                .join()
+                .unwrap()
+        });
+        r.unwrap().memory.expect("no allocation counted").samples
+    };
+    heap();
+    let a = heap();
+    for _ in 0..3 {
+        let b = heap();
+        assert_eq!(a.len(), b.len());
+        if let Some(i) = a.iter().zip(&b).position(|(x, y)| x != y) {
+            panic!("at {} ms: {} bytes against {}", a[i].0, a[i].1, b[i].1);
+        }
+    }
+}
+
+/// [`a_star_whose_viewers_restart_holds_the_same_heap`]'s star, sampled
+/// every second.
+fn restarting_star() -> Scenario {
+    let mut s = Scenario::new("restarting_star");
+    let seed = s.host("seed", Some(2048 * KIB));
+    let viewers = s.hosts("v", 27, Some(1024 * KIB));
+    for &v in &viewers {
+        s.link(v, seed, Transport::Tcp);
+    }
+    for &v in viewers.iter().step_by(3) {
+        s.at(secs(6), Fault::Crash(v));
+        s.at(secs(8), Fault::Restart(v));
+    }
+    s.swarm(SwarmSpec::live(seed, viewers, RATE, secs(2), secs(12)));
+    s.duration = secs(14);
+    s.sample_every = secs(1);
+    s
 }
 
 /// The live heap of a turmoil simulation after each of its steps, counted
