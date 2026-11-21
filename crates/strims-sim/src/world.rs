@@ -40,7 +40,7 @@ use crate::report::{
 };
 use crate::skew::OffsetCapture;
 use crate::spec::{HostIx, Scenario, Transport};
-use crate::stats::{HostStats, TransferSample};
+use crate::stats::{Answer, HostStats, TransferSample};
 use crate::stream::{FrameParser, JoinRewind, MediaParser, Parsed, SeqSet, ViewerStats};
 use crate::wan::SharedWan;
 use crate::{EPOCH_MS, TCP_PORT, UDP_PORT, WS_PORT};
@@ -64,7 +64,12 @@ pub(crate) fn sim_now() -> Duration {
 }
 
 pub(crate) fn sim_now_ms() -> u64 {
-    u64::try_from(sim_now().as_millis()).unwrap_or(u64::MAX)
+    ms_of(sim_now())
+}
+
+/// `d` in whole ms.
+fn ms_of(d: Duration) -> u64 {
+    u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
 }
 
 /// Key `i` of kind `tag` (`P`rofile, `S`warm, `N`etwork, `H`ash table):
@@ -1545,9 +1550,7 @@ impl World {
             }
             m.bins.clear();
             self.observe_bins(h, &m);
-            let (link_bytes, app_bytes, resent_bytes) = wan.map_or((0, 0, 0), |s| {
-                (s.own_up_bytes(h), s.own_app_bytes(h), s.own_resent_bytes(h))
-            });
+            let answer = Answer::of(wan, h, at);
             let log = wan.map_or(&[][..], |s| s.competing_log(h));
             let live: Vec<bool> = self
                 .spec
@@ -1562,18 +1565,8 @@ impl World {
                 };
                 let swarms = std::mem::take(&mut hs.swarms);
                 let hostile = |id: &HostId| ids.get(id).is_some_and(|&p| self.is_hostile(p));
-                hs.stats.observe(
-                    &m,
-                    &swarms,
-                    &live,
-                    at,
-                    at,
-                    self.clock_at(h, at),
-                    link_bytes,
-                    app_bytes,
-                    resent_bytes,
-                    hostile,
-                );
+                hs.stats
+                    .observe(&m, &swarms, &live, self.clock_at(h, at), answer, hostile);
                 if let Some(spec) = self.spec.hosts.get(h) {
                     hs.stats
                         .gate(at, |from, to| crate::report::available(spec, log, from, to));
@@ -1597,8 +1590,9 @@ impl World {
     }
 
     /// The live oracle as a stats sample of host `h` is asked for: the
-    /// truth it tells the node now, ahead of the sample, which records it;
-    /// `None` for a host it doesn't tell.
+    /// truth it tells the node now, ahead of the sample, which records it
+    /// (its own truth is read at its answer); `None` for a host it doesn't
+    /// tell.
     pub fn oracle(&self, h: HostIx) -> Option<u64> {
         if !self.spec.hosts.get(h)?.upload_capacity_live {
             return None;
@@ -1648,24 +1642,28 @@ impl World {
             .unwrap_or_default()
     }
 
+    /// Host `h`'s answer to a stats sample's ask, as it comes now
+    /// (`control::sample`).
+    pub(crate) fn answer(&self, h: HostIx) -> Answer {
+        Answer::of(self.wan.lock().as_ref(), h, sim_now())
+    }
+
     /// Folds a stats sample of `h` into its [`HostStats`] and checks the
     /// runner invariants (see [`crate::Invariants`]). Each broken invariant
-    /// is logged once per host.
-    /// `asked` is when the controller asked for the sample, which its
-    /// meter sample's truth is read at (`MeterSample::asked`).
-    pub fn observe_stats(&self, h: HostIx, m: &NodeMetrics, asked: Duration) {
+    /// is logged once per host. What it records of the sample is stamped
+    /// with its `answer`'s time, its meter sample's truth read there
+    /// ([`HostStats::gate`]), however much later the controller folds it.
+    pub fn observe_stats(&self, h: HostIx, m: &NodeMetrics, answer: Answer) {
+        let now = answer.at;
         self.take_checks();
         self.observe_bins(h, m);
         self.take_parents();
         if self.spec.departures.is_some() {
-            self.observe_parents(h, m);
+            self.observe_parents(h, m, ms_of(now));
         }
         let inv = &self.spec.invariants;
         let mut found = Vec::new();
         let wan = self.wan.lock();
-        let (link_bytes, app_bytes, resent_bytes) = wan.as_ref().map_or((0, 0, 0), |s| {
-            (s.own_up_bytes(h), s.own_app_bytes(h), s.own_resent_bytes(h))
-        });
         let log = wan.as_ref().map_or(&[][..], |s| s.competing_log(h));
         self.record(|st| {
             let ids = &st.ids;
@@ -1673,7 +1671,6 @@ impl World {
                 return;
             };
             let swarms = std::mem::take(&mut hs.swarms);
-            let now = sim_now();
             let live: Vec<bool> = self
                 .spec
                 .swarms
@@ -1681,20 +1678,11 @@ impl World {
                 .map(|s| now >= s.start && now <= s.stop)
                 .collect();
             let hostile = |id: &HostId| ids.get(id).is_some_and(|&p| self.is_hostile(p));
-            let g = hs.stats.observe(
-                m,
-                &swarms,
-                &live,
-                now,
-                asked,
-                self.clock_at(h, now),
-                link_bytes,
-                app_bytes,
-                resent_bytes,
-                hostile,
-            );
+            let g = hs
+                .stats
+                .observe(m, &swarms, &live, self.clock_at(h, now), answer, hostile);
             if let Some(spec) = self.spec.hosts.get(h) {
-                hs.stats.gate(asked, |from, to| {
+                hs.stats.gate(now, |from, to| {
                     crate::report::available(spec, log, from, to)
                 });
             }
@@ -1702,14 +1690,14 @@ impl World {
             let mut ns: Vec<HostIx> = linked.filter_map(|id| st.ids.get(&id).copied()).collect();
             ns.sort_unstable();
             ns.dedup();
-            hs.neighbours.push((sim_now(), ns));
+            hs.neighbours.push((now, ns));
             if self.spec.transfer_samples {
                 for (s, key) in swarms.iter().enumerate() {
                     let index = |id: &HostId| st.ids.get(id).copied();
                     if let Some(key) = key
                         && let Some(t) = TransferSample::of(m, *key, index)
                     {
-                        hs.transfers.push((sim_now(), s, t));
+                        hs.transfers.push((now, s, t));
                     }
                 }
             }
@@ -1780,11 +1768,11 @@ impl World {
                 );
             }
         });
-        let now = sim_now_ms();
+        let at = ms_of(now);
         for f in found {
             let f = format!("{} {f}", self.name(h));
             self.log("invariant", &f);
-            self.record(|st| st.violations.push((now, f)));
+            self.record(|st| st.violations.push((at, f)));
         }
     }
 
@@ -2010,10 +1998,9 @@ impl World {
     }
 
     /// Keeps the push parents of `h`'s first scenario swarm from a stats
-    /// sample ([`HostState::parents`]), and notes the departed ones it no
-    /// longer has ([`World::parent_gone`]).
-    fn observe_parents(&self, h: HostIx, m: &NodeMetrics) {
-        let now = sim_now_ms();
+    /// sample answered at `now` (ms of run time) ([`HostState::parents`]),
+    /// and notes the departed ones it no longer has ([`World::parent_gone`]).
+    fn observe_parents(&self, h: HostIx, m: &NodeMetrics, now: u64) {
         let gone = self.record(|st| {
             let ids = &st.ids;
             let hs = st.hosts.get_mut(h)?;

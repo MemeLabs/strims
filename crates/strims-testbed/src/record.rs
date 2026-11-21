@@ -106,16 +106,18 @@ pub fn put_opt(out: &mut String, v: Option<impl std::fmt::Display>) {
 /// charged its own messages (`link_bytes`, `EndStats::up_bytes`; with no
 /// WAN, 0) and its transports' bytes beside them, which the sim's counters
 /// give and a testbed run's captures (strims-sim's `testbed` module), 0
-/// in a node's records, as `asked` is its `t` there. With the live
-/// oracle, what it told the node ahead of the sample (`told`).
+/// in a node's records. With the live oracle, what it told the node ahead
+/// of the sample (`told`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MeterSample {
     /// When it was taken: simulated time since the start of the run in
     /// strims-sim, the wall clock since the Unix epoch on the testbed.
     pub t: Duration,
-    /// When the controller asked for the sample, which the meter's truth
-    /// is read at (strims-sim's `Report::upload_cap_at`): the live oracle
-    /// tells the node that truth then, ahead of the sample.
+    /// When the meter's truth is read (strims-sim's `Report::upload_cap_at`,
+    /// the end of its gated window): the sample's own answer, its `t`, in
+    /// strims-sim as on the testbed. strims-sim's live oracle tells the
+    /// node the truth as the controller asks, ahead of the answer, its
+    /// window ending that much earlier.
     pub asked: Duration,
     pub rate: u64,
     pub busy_permille: u32,

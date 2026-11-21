@@ -4272,8 +4272,9 @@ fn a_saturated_links_share_is_a_full_messages() {
 
 /// The live oracle tells the seed the truth before each of its meter
 /// samples, which the node takes at once, so the meter reads it there: at
-/// each sample what it was told is `Report::upload_cap_at` at the sample,
-/// and where that is above 0 so is its reading but where the meter reads a
+/// each sample what it was told is `Report::upload_cap_at` at the
+/// controller's ask (the sample's own truth is read at its answer, a few
+/// ms on), and where that is above 0 so is its reading but where the meter reads a
 /// link busy for at least half its window lower (`SATURATED_BUSY`: the
 /// lower of what it knows and what it measures; never higher), on an ATM
 /// link that steps down while a competing upload runs, on a trace whose
@@ -4298,12 +4299,22 @@ fn the_live_oracle_tells_the_truth() {
             let window = strims_base::time::Duration::from(strims_sim::report::TRUTH_WINDOW);
             span.is_some_and(|(first, last)| at > first && at - window < last)
         };
+        // The controller asks at its stats ticks, and a sample is answered
+        // before the next.
+        let every = r.scenario.cadences().1;
+        let ask = |t: Duration| every * u32::try_from(t.as_nanos() / every.as_nanos()).unwrap();
         let (mut told, mut outside, mut read, mut zeros) = (0, 0, 0, 0);
         let mut truths = Vec::new();
         for m in &r.hosts[0].runner.meter {
             if let Some(x) = m.told {
-                let truth = r.upload_cap_at(0, m.asked);
-                assert_eq!(Some(x), truth, "told at {:?}", m.t);
+                let truth = r.upload_cap_at(0, ask(m.t));
+                assert_eq!(
+                    Some(x),
+                    truth,
+                    "told at {:?}, answered at {:?}",
+                    ask(m.t),
+                    m.t
+                );
                 if x == 0 {
                     zeros += 1;
                     continue;
@@ -4316,7 +4327,7 @@ fn the_live_oracle_tells_the_truth() {
                     m.t
                 );
                 told += 1;
-                if !beside(m.asked) {
+                if !beside(ask(m.t)) {
                     outside += 1;
                     read += usize::from(m.capacity == x);
                 }

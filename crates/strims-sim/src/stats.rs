@@ -38,6 +38,8 @@ use strims_ppspp::ChannelSchedulerStats;
 pub use strims_testbed::record::{Gated, MeterSample, SeedSample};
 pub use strims_testbed::transfer::{PeerTransfer, TransferSample};
 
+use crate::spec::HostIx;
+
 /// Extremes of the gauges over every sample of a host (all incarnations).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Peaks {
@@ -608,27 +610,59 @@ pub(crate) struct SampleGauges {
     pub vpn_bad_input: u64,
 }
 
+/// A host's answer to a stats sample's ask, as it came: when, and the
+/// run's own counters of the host's uplink then, which its meter sample
+/// sets beside the node's readings of that moment
+/// ([`MeterSample::link_bytes`], `app_bytes`, `resent_bytes`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Answer {
+    /// Time since the start.
+    pub at: Duration,
+    pub link_bytes: u64,
+    pub app_bytes: u64,
+    pub resent_bytes: u64,
+}
+
+impl Answer {
+    /// Host `h`'s answer at `at`, its counters `wan`'s (none outside WAN
+    /// mode).
+    pub(crate) fn of(wan: Option<&crate::wan::Scheduler>, h: HostIx, at: Duration) -> Answer {
+        let (link_bytes, app_bytes, resent_bytes) = wan.map_or((0, 0, 0), |s| {
+            (s.own_up_bytes(h), s.own_app_bytes(h), s.own_resent_bytes(h))
+        });
+        Answer {
+            at,
+            link_bytes,
+            app_bytes,
+            resent_bytes,
+        }
+    }
+}
+
 impl HostStats {
-    /// Folds one sample of the current incarnation, taken at `t`, when the
-    /// node's clock read `clock` (its own readings' times are by it).
-    /// `swarms` maps the node's swarm keys to scenario swarm indexes, and
-    /// `live` says which scenario swarms stream at `t`. The gauges'
-    /// invalid and rejected input leave out what peers `hostile` names
-    /// sent ([`Invariants::clean_input`](crate::Invariants::clean_input)).
-    #[allow(clippy::too_many_arguments)]
+    /// Folds one sample of the current incarnation, taken at its
+    /// `answer`, when the node's clock read `clock` (its own readings'
+    /// times are by it); its meter sample's truth is read there too
+    /// (`MeterSample::asked`). `swarms` maps the node's swarm keys to
+    /// scenario swarm indexes, and `live` says which scenario swarms stream
+    /// then. The gauges' invalid and rejected input leave out what peers
+    /// `hostile` names sent
+    /// ([`Invariants::clean_input`](crate::Invariants::clean_input)).
     pub fn observe(
         &mut self,
         m: &NodeMetrics,
         swarms: &[Option<SwarmKey>],
         live: &[bool],
-        t: Duration,
-        asked: Duration,
         clock: Time,
-        link_bytes: u64,
-        app_bytes: u64,
-        resent_bytes: u64,
+        answer: Answer,
         hostile: impl Fn(&HostId) -> bool,
     ) -> SampleGauges {
+        let Answer {
+            at: t,
+            link_bytes,
+            app_bytes,
+            resent_bytes,
+        } = answer;
         let index = |k: SwarmKey| swarms.iter().position(|s| *s == Some(k));
         let v = &m.host;
         self.echoes.observe([
@@ -733,12 +767,12 @@ impl HostStats {
         let channel_bytes = self.channel_done + self.channel_now;
         self.vnic_now = m.driver.bytes_written;
         let vnic_bytes = self.vnic_done + self.vnic_now;
+        // Its truth is read at `t`, the answer (`MeterSample::asked`).
         let (mut meter, seeds) = strims_testbed::record::meter_sample(m, index, t, clock);
         // What the meter's truth takes its share from: the channel and vnic
         // bytes of every incarnation (the node's records hold its own
         // incarnation's), and what the sim's own counters give.
         if let Some(ms) = meter.as_mut() {
-            ms.asked = asked;
             ms.channel_bytes = Some(channel_bytes);
             ms.link_bytes = link_bytes;
             ms.told = told;
@@ -816,7 +850,8 @@ impl HostStats {
         self.meter.last().or_else(|| self.totals.meter.last())
     }
 
-    /// Marks the meter sample asked for at `t`, if one was, as ending a
+    /// Marks the meter sample whose truth is read at `t` (its answer's
+    /// time, `MeterSample::asked`), if one is, as ending a
     /// near-saturated window when the host's link charged it at least
     /// [`crate::report::NEAR_SATURATED`] of what `available` says its link
     /// could carry for it between its sample before and `t`, and sums its

@@ -66,42 +66,67 @@ pub(crate) async fn controller(w: Rc<World>) -> turmoil::Result {
 /// invariants, and logs two lines per host (with more counters on the
 /// `last` one). Every node is asked at once, and each answer is folded in
 /// host order once the hosts before it are, so a round takes as long as
-/// its slowest answer. A host that departed before the round isn't
-/// sampled: its node's last snapshot, as the node went, holds its counters
-/// and logs from its last sample on (`World::observe_stopped`). One that
-/// leaves during the round and answers is folded, since its answer took
-/// its logs.
+/// its slowest answer; what the round records of a host is of its own
+/// answer, stamped as it came ([`in_host_order`], [`World::answer`]), as
+/// a testbed node's line stamps its meter at its own answer. A host that
+/// departed before the round isn't sampled: its node's last snapshot, as
+/// the node went, holds its counters and logs from its last sample on
+/// (`World::observe_stopped`). One that leaves during the round and
+/// answers is folded, since its answer took its logs.
 async fn sample(w: &World, full: bool, last: bool) {
-    let asked = sim_now();
     // A host the live oracle tells is told the truth for the second before
     // now, which its node takes at once, before its sample.
-    let ask = |h: HostIx, node: Node, told: Option<u64>| async move {
+    let ask = |node: Node, told: Option<u64>| async move {
         if let Some(c) = told {
             let _ = tokio::time::timeout(CALL_TIMEOUT, node.set_upload_capacity(Some(c))).await;
         }
-        (h, tokio::time::timeout(CALL_TIMEOUT, node.metrics()).await)
+        tokio::time::timeout(CALL_TIMEOUT, node.metrics()).await
     };
-    let mut asks = FuturesOrdered::new();
-    for h in 0..w.spec.hosts.len() {
-        let Some(node) = w.node(h).filter(|_| !w.departed(h)) else {
-            continue;
-        };
-        asks.push_back(ask(h, node, w.oracle(h)));
-    }
-    while let Some((h, answer)) = asks.next().await {
-        let Ok(Ok(m)) = answer else {
-            continue;
-        };
-        w.observe_stats(h, &m, asked);
-        if full {
-            w.log("ctl", metrics_line(w.name(h), &m, last));
-            w.log("ctl", runner_line(w.name(h), &m, &w.swarm_keys(h)));
-            w.store_metrics(h, m);
-        }
-    }
+    let asks = (0..w.spec.hosts.len()).filter_map(|h| {
+        let node = w.node(h).filter(|_| !w.departed(h))?;
+        Some((h, ask(node, w.oracle(h))))
+    });
+    in_host_order(
+        asks,
+        |h| w.answer(h),
+        |h, answer, at| {
+            let Ok(Ok(m)) = answer else {
+                return;
+            };
+            w.observe_stats(h, &m, at);
+            if full {
+                w.log("ctl", metrics_line(w.name(h), &m, last));
+                w.log("ctl", runner_line(w.name(h), &m, &w.swarm_keys(h)));
+                w.store_metrics(h, m);
+            }
+        },
+    )
+    .await;
     w.loops_round();
     if full {
         w.check_invariants();
+    }
+}
+
+/// Waits on every host's ask in `asks` at once, and hands `fold` each
+/// answer in host order, once the hosts before it have theirs, with what
+/// `stamp` read for its host the moment the answer came: a host's stamp is
+/// its own answer's, however long a host before it took.
+async fn in_host_order<F: Future, S>(
+    asks: impl IntoIterator<Item = (HostIx, F)>,
+    stamp: impl Fn(HostIx) -> S,
+    mut fold: impl FnMut(HostIx, F::Output, S),
+) {
+    let stamp = &stamp;
+    let mut answers: FuturesOrdered<_> = asks
+        .into_iter()
+        .map(|(h, ask)| async move {
+            let answer = ask.await;
+            (h, answer, stamp(h))
+        })
+        .collect();
+    while let Some((h, answer, at)) = answers.next().await {
+        fold(h, answer, at);
     }
 }
 
@@ -418,4 +443,58 @@ pub(crate) fn unicast_phases(w: &World) -> Vec<(String, u64, u64)> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
+    use std::cell::RefCell;
+
+    use super::*;
+
+    /// Hosts that answer out of host order: each answer is folded in host
+    /// order, once every host before it has answered, and stamped at its
+    /// own answer, however much later its fold comes. Each `at` is the
+    /// stamp's time, each `fold` the fold's, both since the asks.
+    #[test]
+    fn each_host_is_stamped_at_its_own_answer() {
+        let ms = Duration::from_millis;
+        let folded = Rc::new(RefCell::new(Vec::new()));
+        let mut sim = turmoil::Builder::new().tick_duration(ms(1)).build();
+        let out = folded.clone();
+        sim.client("ctl", async move {
+            let asked = sim_now();
+            let answers = [30, 5, 10, 5, 40, 2].map(ms);
+            let asks = answers.into_iter().enumerate().map(|(h, took)| {
+                (h, async move {
+                    tokio::time::sleep(took).await;
+                    took
+                })
+            });
+            in_host_order(
+                asks,
+                |_| sim_now() - asked,
+                |h, took, at| out.borrow_mut().push((h, took, at, sim_now() - asked)),
+            )
+            .await;
+            Ok(())
+        });
+        sim.run().unwrap();
+        let folded = folded.borrow();
+        assert_eq!(folded.len(), 6);
+        let mut slowest = Duration::ZERO;
+        for (i, &(h, took, at, fold)) in folded.iter().enumerate() {
+            assert_eq!(h, i, "folded out of host order: {folded:?}");
+            assert!(at >= took && at < took + ms(1), "host {h}: {folded:?}");
+            slowest = slowest.max(took);
+            assert!(
+                fold >= slowest && fold < slowest + ms(1),
+                "host {h}: {folded:?}"
+            );
+        }
+        // Hosts 1 to 3 answered before host 0 and were folded behind it, at
+        // its answer; host 5 behind host 4's.
+        assert!(folded[1].2 < folded[0].2 && folded[5].2 < folded[4].2);
+    }
 }

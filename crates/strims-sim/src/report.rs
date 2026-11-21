@@ -109,8 +109,8 @@ pub struct HostReport {
     pub loop_iterations: u64,
     /// Links at the last sample.
     pub links: usize,
-    /// At every stats sample (time since the start), the hosts the node
-    /// had linked, every incarnation.
+    /// At every stats sample (its answer's time since the start), the
+    /// hosts the node had linked, every incarnation.
     pub neighbours: Vec<(std::time::Duration, Vec<HostIx>)>,
     /// Links the node made and lost (`NodeEvent::PeerAdded`/`PeerRemoved`).
     pub peers_added: u64,
@@ -147,8 +147,8 @@ pub struct HostReport {
     pub frame_bytes: u64,
     pub control_bytes: u64,
     /// With [`Scenario::transfer_samples`], the node's transfers at every
-    /// stats sample: (time since the start, scenario swarm, transfers),
-    /// peers indexed by host.
+    /// stats sample: (its answer's time since the start, scenario swarm,
+    /// transfers), peers indexed by host.
     pub transfers: Vec<(std::time::Duration, usize, TransferSample)>,
     /// How far its clock read ahead of true time
     /// ([`Scenario::clock_skew`]).
@@ -199,7 +199,8 @@ pub struct HostReport {
     /// Its answers to its peers' path probes, and its reads of theirs.
     pub echoes: crate::stats::Echoes,
     /// Where it seeds a hybrid swarm, its allocation at every stats sample,
-    /// every incarnation: (time since the start, scenario swarm, sample).
+    /// every incarnation: (its answer's time since the start, scenario
+    /// swarm, sample).
     pub seed_allocs: Vec<(std::time::Duration, usize, crate::seed_alloc::AllocSample)>,
     /// The host as a testbed run's settings and links give it (the
     /// `hosts` table's row, [`crate::testbed`]); `None` for a sim run's,
@@ -2146,9 +2147,10 @@ pub const NEAR_SATURATED: f64 = 0.8;
 /// before `t`, within its rate limit (QoS's, in vnic's bytes) in channel bytes
 /// ([`channel_share`]).
 ///
-/// The live oracle (`STRIMS_SIM_KNOWN_UPLINK`) tells the node this as each
-/// of its stats samples is asked for, from the same inputs, ahead of the
-/// sample.
+/// The live oracle (`STRIMS_SIM_KNOWN_UPLINK`) tells the node this as the
+/// controller asks for each of its stats samples, from the same inputs,
+/// ahead of the sample, whose own truth is read at its answer
+/// (`MeterSample::asked`).
 pub(crate) fn upload_truth(
     spec: &crate::spec::HostSpec,
     last: Option<&crate::stats::MeterSample>,
