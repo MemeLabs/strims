@@ -21,7 +21,7 @@ use strims_ppspp::{DeliveryMode, PushMode, SeedPolicy, SendFate, SendHow};
 use strims_sim::calibration::{
     self, ADAPTIVE, Calibration, STRIPES, UPLINK_QUEUE, WAN_RATE, WAN_WINDOW, full_mesh, striped,
 };
-use strims_sim::report::PacketKind;
+use strims_sim::report::{PacketKind, PacketLoss, PacketProto};
 use strims_sim::stream::Join;
 use strims_sim::tables::UP_COUNTERS;
 use strims_sim::topology::{random_graph, random_hub, random_mesh};
@@ -3636,7 +3636,10 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
 /// without a bucket the frame on the way at the bin's start; with slots,
 /// what its shaper passed in the bin and the longest slot wait before it),
 /// its acknowledgements alone and its data together, and the frames a full
-/// queue dropped never left. A 2 Mbit/s seed of a star of three viewers
+/// queue dropped never left. Its drops are the packet log's packets its
+/// uplink queue dropped and datagrams its path lost, each in the bin it
+/// came to the uplink in (no downlink here fills, whose drops the log
+/// leaves out). A 2 Mbit/s seed of a star of three viewers
 /// keeps its queue full and drops, its links' buckets run.sh's two frames,
 /// over TCP in 100 ms bins and as Chromiums in 1 ms bins, their signalling
 /// relay a host of the WAN: a Chromium's network thread hands a data
@@ -3665,17 +3668,34 @@ fn a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry(
         if drops == 0 {
             return Err("the seed's queue dropped nothing".into());
         }
-        let cols = ["up_bytes", "up_packets", "up_ack_bytes", "up_sack_bytes"].map(ix);
+        let cols = [
+            "up_bytes",
+            "up_packets",
+            "up_ack_bytes",
+            "up_sack_bytes",
+            "drops",
+        ]
+        .map(ix);
         let start = r.scenario.swarms[0].start.as_nanos() as i64;
+        let bin = |t: strims_base::time::Duration| {
+            let ns = t.as_nanos() - start;
+            usize::try_from(ns / width.as_nanos() as i64)
+                .ok()
+                .filter(|_| ns >= 0)
+        };
         let wan = r.wan.as_ref().ok_or("no WAN report")?;
         for (h, w) in wan.hosts.iter().enumerate() {
-            let mut want = vec![[0u64; 4]; r.wire_bins.len().saturating_sub(1)];
+            let mut want = vec![[0u64; 5]; r.wire_bins.len().saturating_sub(1)];
             for p in &w.packets {
-                let Some(ns) = p.sent.map(|t| t.as_nanos() - start) else {
-                    continue;
+                let lost = match p.lost {
+                    Some(PacketLoss::Queue) => true,
+                    Some(PacketLoss::Path) => p.proto == PacketProto::Udp,
+                    None => false,
                 };
-                let k = usize::try_from(ns / width.as_nanos() as i64).ok();
-                let Some(b) = k.filter(|_| ns >= 0).and_then(|k| want.get_mut(k)) else {
+                if lost && let Some(b) = bin(p.at).and_then(|k| want.get_mut(k)) {
+                    b[4] += 1;
+                }
+                let Some(b) = p.sent.and_then(bin).and_then(|k| want.get_mut(k)) else {
                     continue;
                 };
                 let charge = u64::from(p.charged_bytes.unwrap_or(0));
@@ -3693,7 +3713,7 @@ fn a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry(
                 let got = cols.map(|c| e[1][h][c] - e[0][h][c]);
                 if got != *want {
                     return Err(format!(
-                        "{}: bin {k} counted {got:?}, its packets left {want:?}",
+                        "{}: bin {k} counted {got:?}, its packets left or were lost {want:?}",
                         w.name
                     ));
                 }

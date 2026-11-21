@@ -1268,12 +1268,13 @@ impl Scheduler {
             if let Some(d) = self.drops.get_mut(from) {
                 *d += 1;
             }
-            if let Some(d) = self.drop_packets.get_mut(from) {
-                *d += 1;
-            }
+            self.queue_lost(from, at, 1);
             None
         } else {
             let t = self.net.send(at, from, to, wire, 1, Carrier::Datagram);
+            if t.dropped {
+                self.count_lost(from, at, 1);
+            }
             offer.transit = Some((t.depart, t.arrival));
             offer.path_lost = t.dropped.then_some(0);
             self.offered(&offer);
@@ -1386,9 +1387,7 @@ impl Scheduler {
                 if let Some(d) = self.drops.get_mut(from) {
                     *d += 1;
                 }
-                if let Some(d) = self.drop_packets.get_mut(from) {
-                    *d += 1;
-                }
+                self.queue_lost(from, t, 1);
                 return;
             }
         }
@@ -1551,9 +1550,7 @@ impl Scheduler {
             if let Some(d) = self.drops.get_mut(to) {
                 *d += 1;
             }
-            if let Some(d) = self.drop_packets.get_mut(to) {
-                *d += 1;
-            }
+            self.queue_lost(to, t, 1);
             return;
         }
         let depart = self.net.occupy_up(t, to, wire, 1);

@@ -486,9 +486,11 @@ const HYSTART_LOW_WINDOW: f64 = 16.0 * MSS;
 /// that the host sent, a frame each: its connections' segments' frames
 /// and its data channels' packets at its uplink queue or at their
 /// receiver's downlink queue, its datagrams at either, its SACKs at its
-/// uplink queue, and its competing uploads' frames at its uplink queue.
-/// A testbed run's column is its tbf's drops, the frames its uplink queue
-/// lost, pure TCP ACKs among them, which the model's queues always take.
+/// uplink queue, and its competing uploads' frames at its uplink queue,
+/// each counted from when it was lost: at a queue as it came to it, a
+/// datagram on its path as it was handed over. A testbed run's column is
+/// its tbf's drops, the frames its uplink queue lost, pure TCP ACKs among
+/// them, which the model's queues always take.
 pub const UP_COUNTERS: [&str; 11] = [
     "up_bytes",
     "up_packets",
@@ -1351,6 +1353,9 @@ pub(crate) struct Scheduler {
     /// Per host, its resends of stream data its path lost, each from when
     /// it left (packets: one a resend; [`Scheduler::up_counters`]).
     retx_out: Vec<Departures>,
+    /// Per host, the packets it lost, each from when it was lost
+    /// ([`Scheduler::count_lost`]).
+    drop_out: Vec<Departures>,
     /// Per host, the bytes it handed its transports that went out, resends
     /// left out: its wire bytes less these are the transports' framing and
     /// resends ([`Scheduler::sent`]).
@@ -1584,6 +1589,7 @@ impl Scheduler {
             ack_out: vec![Departures::default(); spec.hosts.len()],
             sack_out: vec![Departures::default(); spec.hosts.len()],
             retx_out: vec![Departures::default(); spec.hosts.len()],
+            drop_out: vec![Departures::default(); spec.hosts.len()],
             app_bytes: vec![0; spec.hosts.len()],
             resent_bytes: vec![0; spec.hosts.len()],
             cross_drops: vec![0; spec.hosts.len()],
@@ -2032,8 +2038,8 @@ impl Scheduler {
                         if let Some(d) = sender.and_then(|h| self.drops.get_mut(h)) {
                             *d += 1;
                         }
-                        if let Some(d) = sender.and_then(|h| self.drop_packets.get_mut(h)) {
-                            *d += u64::from(packets);
+                        if let Some(h) = sender {
+                            self.queue_lost(h, t, u64::from(packets));
                         }
                         if whole {
                             self.dropped(t, conn, seq);
@@ -2215,9 +2221,8 @@ impl Scheduler {
                             if let Some(d) = self.drops.get_mut(from) {
                                 *d += 1;
                             }
-                            if let Some(d) = self.drop_packets.get_mut(from) {
-                                *d += u64::from(r.packets);
-                            }
+                            let packets = u64::from(r.packets);
+                            self.queue_lost(from, t, packets);
                             self.sctp_lost(conn, seq);
                             continue;
                         }
@@ -2248,11 +2253,10 @@ impl Scheduler {
                         if let Some(d) = self.drops.get_mut(r.from) {
                             *d += 1;
                         }
-                        if let Some(d) = self.drop_packets.get_mut(r.from) {
-                            *d += u64::from(r.packets);
-                        }
+                        let (from, packets) = (r.from, u64::from(r.packets));
                         r.state = State::Dropped;
                         self.records.dropped += 1;
+                        self.queue_lost(from, t, packets);
                         continue;
                     }
                     let done = self.net.receive(t, r.to, r.wire);
@@ -2935,6 +2939,7 @@ impl Scheduler {
                 if let Some(d) = self.cross_drop_packets.get_mut(host) {
                     *d += u64::from(frames - took);
                 }
+                self.count_lost(host, at, u64::from(frames - took));
                 let tail = seq + u64::from(took);
                 if let Some(c) = self.cross.get_mut(i) {
                     // The tail is a segment of its own from now on.
@@ -3253,9 +3258,7 @@ impl Scheduler {
             if let Some(d) = self.drops.get_mut(from) {
                 *d += 1;
             }
-            if let Some(d) = self.drop_packets.get_mut(from) {
-                *d += u64::from(packets - took);
-            }
+            self.queue_lost(from, at, u64::from(packets - took));
             if took == 0 {
                 self.offered(&offer);
                 self.dropped(at, conn, seq);
@@ -3733,9 +3736,7 @@ impl Scheduler {
                 if let Some(d) = self.drops.get_mut(offer.from) {
                     *d += 1;
                 }
-                if let Some(d) = self.drop_packets.get_mut(offer.from) {
-                    *d += u64::from(offer.packets);
-                }
+                self.queue_lost(offer.from, at, u64::from(offer.packets));
                 if let Some(r) = self.records.get_mut(&id) {
                     r.state = State::Dropped;
                 }
@@ -3758,6 +3759,9 @@ impl Scheduler {
         let from = r.from;
         let t = self.net.send(at, r.from, r.to, r.wire, r.packets, carrier);
         self.sent(from, app);
+        if t.dropped {
+            self.count_lost(from, at, 1);
+        }
         if t.retransmit > Duration::ZERO {
             // Its resend arrives the delay late, so leaves the delay late.
             self.retransmitted(from, at, t.depart + t.retransmit);
@@ -4064,6 +4068,7 @@ impl Scheduler {
             self.ack_out.get_mut(h),
             self.sack_out.get_mut(h),
             self.retx_out.get_mut(h),
+            self.drop_out.get_mut(h),
         ]
         .into_iter()
         .flatten()
@@ -4139,6 +4144,34 @@ impl Scheduler {
         }
     }
 
+    /// `h` lost `packets` frames at `at` at a full queue, its uplink's or
+    /// their receiver's downlink's, as they came to it.
+    fn queue_lost(&mut self, h: usize, at: Time, packets: u64) {
+        if let Some(d) = self.drop_packets.get_mut(h) {
+            *d += packets;
+        }
+        self.count_lost(h, at, packets);
+    }
+
+    /// `h` lost `packets` packets at `at`, which count in its drops from
+    /// then on ([`Scheduler::up_counters`]): at a full queue as they came to
+    /// it, or a datagram on its path as it was handed over. A drop past the
+    /// walk's time (a data channel's packet at its host's network thread's,
+    /// a SACK alone at the delivery of what it acknowledges) counts in the
+    /// bin it came in, as the packets its uplink carried do, and one past
+    /// a crash never counts ([`Scheduler::crashed`]), which the report's
+    /// totals keep.
+    fn count_lost(&mut self, h: usize, at: Time, packets: u64) {
+        let settled = self.settled(at);
+        if let Some(d) = self.drop_out.get_mut(h) {
+            let lost = Carried {
+                packets,
+                ..Carried::default()
+            };
+            d.add(settled, at, lost);
+        }
+    }
+
     /// The hand-over time a ledger takes for one at `at`: no later than the
     /// walk's, at or after which every bin edge is read; a receiver's
     /// acknowledgement goes as its downlink delivered what it acknowledges,
@@ -4155,7 +4188,6 @@ impl Scheduler {
     /// than the last walk's time: what its uplink carried before `at`, each
     /// packet from when it left, and the rest as they stand.
     pub fn up_counters(&self, h: HostIx, at: Time) -> [u64; UP_COUNTERS.len()] {
-        let s = self.net.stats(h);
         let n = |v: &Vec<u64>| v.get(h).copied().unwrap_or(0);
         let out = |v: &Vec<Departures>| v.get(h).map_or_else(Carried::default, |d| d.before(at));
         let (up, acks, sacks) = (
@@ -4168,7 +4200,7 @@ impl Scheduler {
             up.packets,
             up.small_packets,
             out(&self.retx_out).packets,
-            s.drops + n(&self.drop_packets) + n(&self.cross_drop_packets),
+            out(&self.drop_out).packets,
             n(&self.cuts),
             n(&self.rtos),
             acks.packets,
@@ -5770,11 +5802,16 @@ mod tests {
     /// A scheduler of hosts `a` and `b` with send buffers and the window
     /// model, `a`'s packets logged, and `n` channels of `p` from `a` to `b`.
     fn channels_of(p: SctpProfile, n: u16) -> (Sim<'static>, Scheduler, Vec<ConnKey>) {
+        channels_on(p, n, Site::new(City::Frankfurt, Access::Fiber))
+    }
+
+    /// [`channels_of`], `a` at `site`.
+    fn channels_on(p: SctpProfile, n: u16, site: Site) -> (Sim<'static>, Scheduler, Vec<ConnKey>) {
         let mut sim = build();
         echo(&mut sim, "a");
         echo(&mut sim, "b");
         let sites = [
-            ("a", Site::new(City::Frankfurt, Access::Fiber)),
+            ("a", site),
             ("b", Site::new(City::Frankfurt, Access::Fiber)),
         ];
         let mut s = spec(&sites);
@@ -5896,6 +5933,57 @@ mod tests {
                 ]
             );
         }
+    }
+
+    /// What a Chromium's network thread hands its uplink past the walk's
+    /// time counts from when it left or was lost, whenever it was handed
+    /// over: three channels' messages written at the walk's time go a
+    /// packet every 12 µs from 12 µs past it; the 1 Mbit/s uplink's bucket
+    /// of two frames sends the first two at their hand-over, before the
+    /// third's, and its 100 ms queue drops the burst's last packets. Read
+    /// at the walk's time, nothing had left or been lost, and at each
+    /// packet's hand-over or departure, what had before it.
+    #[test]
+    fn what_a_chromiums_thread_hands_over_past_the_walk_counts_from_when_it_left_or_was_lost() {
+        let site = Site::new(City::Frankfurt, Access::Fiber)
+            .with_up(125_000)
+            .with_bucket(Some(strims_wan::Bucket::of(3028)));
+        let (sim, mut wan, conns) = channels_on(SctpProfile::CHROMIUM, 3, site);
+        wan.walk(&sim).unwrap();
+        let now = sim_time(sim.elapsed());
+        let mut id = 0;
+        for &c in &conns {
+            write_chunks(&mut wan, &mut id, now, c, 2, 4);
+        }
+        let log = wan.packets[0].clone();
+        let at = |d: Duration| epoch() + d;
+        let last = log.iter().map(|r| at(r.at)).max().unwrap();
+        let first_left = log.iter().filter_map(|r| r.sent.map(at)).min().unwrap();
+        let lost = |r: &PacketRecord| r.lost == Some(PacketLoss::Queue);
+        assert!(log.iter().all(|r| at(r.at) > now), "{log:?}");
+        assert!(first_left < last && log.iter().any(lost), "{log:?}");
+        let (left, drops) = (up_ix("up_packets"), up_ix("drops"));
+        let mut reads: Vec<Time> = log
+            .iter()
+            .flat_map(|r| [Some(at(r.at)), r.sent.map(at)])
+            .flatten()
+            .chain([now, Time::MAX])
+            .collect();
+        reads.sort_unstable();
+        for t in reads {
+            let c = wan.up_counters(0, t);
+            let want = (
+                log.iter()
+                    .filter(|r| r.sent.is_some_and(|s| at(s) < t))
+                    .count(),
+                log.iter().filter(|r| lost(r) && at(r.at) < t).count(),
+            );
+            assert_eq!((c[left] as usize, c[drops] as usize), want, "at {t:?}");
+        }
+        // A crash at the walk's time forgets them all, none left or lost.
+        wan.crashed(0, now);
+        let c = wan.up_counters(0, Time::MAX);
+        assert_eq!((c[left], c[drops]), (0, 0));
     }
 
     /// A Chromium stack whose channel's queue never empties answers its

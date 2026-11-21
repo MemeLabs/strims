@@ -1181,6 +1181,11 @@ impl Network {
     /// that was earlier), as its shaper passed each or, with slots, as its
     /// slot sent it. What a [`Network::reset`] forgot never left.
     pub fn up_carried(&self, h: usize, at: Time) -> Carried {
+        debug_assert!(
+            self.settled == Time::MAX || at >= self.settled,
+            "read at {at:?}, before the caller's clock at {:?}",
+            self.settled
+        );
         self.end(h).carried.before(at)
     }
 
