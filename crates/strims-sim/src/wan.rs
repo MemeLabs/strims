@@ -1411,6 +1411,9 @@ pub(crate) struct Scheduler {
     /// Per host, when its network thread is done with what its
     /// associations sent so far ([`sctp`]'s module docs).
     threads: Vec<Time>,
+    /// Per host, whether it is down, from its crash
+    /// ([`Scheduler::crashed`]) to its restart ([`Scheduler::restarted`]).
+    down: Vec<bool>,
     /// The answers of the stacks whose page counts a channel's amount
     /// ([`sctp::SctpProfile::amount_at_sends`]), by time and order: the
     /// channel's connection. Bound: the channels' send opportunities in
@@ -1632,6 +1635,7 @@ impl Scheduler {
             assocs: FastMap::default(),
             rcvs: FastMap::default(),
             threads: vec![Time::NIL; spec.hosts.len()],
+            down: vec![false; spec.hosts.len()],
             answers: BTreeMap::new(),
             packet_log: (0..spec.hosts.len())
                 .map(|h| spec.packet_log.contains(&h))
@@ -4111,15 +4115,19 @@ impl Scheduler {
         }
     }
 
-    /// `h` lost power at `now`: its access links forget their queues, and
-    /// its network thread what it had yet to hand its uplink.
+    /// `h` lost power at `now`, before the walk that reaches it. What its
+    /// data channels' stack did by then goes first
+    /// ([`Scheduler::sctp_until_crash`]), so its uplink holds it as the
+    /// crash finds it; then its access links forget their queues, and its
+    /// data channels the rest ([`Scheduler::sctp_forget`]), its downlink
+    /// taking no copy of a chunk until its restart.
     pub fn crashed(&mut self, h: HostIx, now: Time) {
+        self.sctp_until_crash(h, now);
         self.net.reset(h, now);
-        let ip_host = &self.ip_host;
-        self.events.retain(|&(t, _), e| match e {
-            Event::SctpOut(hand) => t <= now || hand.host(ip_host) != Some(h),
-            _ => true,
-        });
+        self.sctp_forget(h);
+        if let Some(d) = self.down.get_mut(h) {
+            *d = true;
+        }
         if let Some(free) = self.threads.get_mut(h) {
             *free = (*free).min(now);
         }
@@ -4141,6 +4149,13 @@ impl Scheduler {
         self.owed.retain(|(src, dst), _| {
             ip_host.get(&src.ip()) != Some(&h) && ip_host.get(&dst.ip()) != Some(&h)
         });
+    }
+
+    /// `h` restarted after its crash ([`Scheduler::crashed`]).
+    pub fn restarted(&mut self, h: HostIx) {
+        if let Some(d) = self.down.get_mut(h) {
+            *d = false;
+        }
     }
 
     /// `h`'s link charged `charge` bytes for what it resent.
@@ -4230,7 +4245,9 @@ impl Scheduler {
     }
 
     /// The hand-over time a ledger takes for one at `at`: no later than the
-    /// walk's, at or after which every bin edge is read.
+    /// walk's, at or after which every bin edge is read. A walk hands
+    /// nothing over past its time, so this is a guard, which moves only a
+    /// crash's hand-overs past the last walk ([`Scheduler::crashed`]).
     fn settled(&self, at: Time) -> Time {
         if self.walked.is_nil() {
             at
@@ -6077,8 +6094,10 @@ mod tests {
     /// hand-over, before the third's, and its 100 ms queue drops the
     /// burst's last packets. Read at the walk's time, nothing had left or
     /// been lost, and at each packet's hand-over or departure, once a walk
-    /// reached it, what had before it. A crash at the walk's time forgets
-    /// what the thread had yet to hand over: none of it leaves or is lost.
+    /// reached it, what had before it. The sender's SCTP log has each
+    /// packet go out once it is handed over. A crash at the walk's time
+    /// forgets what the thread had yet to hand over: none of it leaves, is
+    /// lost or is in the log.
     #[test]
     fn what_a_chromiums_thread_hands_over_past_the_walk_counts_from_when_it_left_or_was_lost() {
         let site = Site::new(City::Frankfurt, Access::Fiber)
@@ -6086,6 +6105,7 @@ mod tests {
             .with_bucket(Some(strims_wan::Bucket::of(3028)));
         let written = || {
             let (sim, mut wan, conns) = channels_on(SctpProfile::CHROMIUM, 3, site);
+            wan.sctp_log[0] = true;
             wan.walk(&sim).unwrap();
             let now = sim_time(sim.elapsed());
             let mut id = 0;
@@ -6102,10 +6122,20 @@ mod tests {
             wan.run_events(t);
         };
         let us = Duration::from_micros;
+        // The packets the sender's SCTP log has gone out.
+        let outs = |wan: &Scheduler| {
+            wan.sctp_events[0]
+                .values()
+                .flatten()
+                .filter(|e| e.dir == Some(strims_testbed::sctp::Dir::Out))
+                .count()
+        };
         let (mut wan, now) = written();
         assert!(wan.packets[0].is_empty());
+        assert_eq!(outs(&wan), 0);
         reach(&mut wan, now + us(1000));
         let log = wan.packets[0].clone();
+        assert_eq!(outs(&wan), log.len());
         let at = |d: Duration| epoch() + d;
         let last = log.iter().map(|r| at(r.at)).max().unwrap();
         let first_left = log.iter().filter_map(|r| r.sent.map(at)).min().unwrap();
@@ -6139,6 +6169,7 @@ mod tests {
         let c = wan.up_counters(0, Time::MAX);
         assert_eq!((c[left], c[drops]), (0, 0));
         assert!(wan.packets[0].is_empty());
+        assert_eq!(outs(&wan), 0);
     }
 
     /// A Chromium stack whose channel's queue never empties answers its
@@ -6206,6 +6237,91 @@ mod tests {
             assert_eq!(data[0].kind, PacketKind::Data, "{p:?}: {log:?}");
             let first = t1 - epoch() + Duration::from_millis(7);
             assert!(sacks.iter().all(|s| s.at > first), "{p:?}: {log:?}");
+        }
+    }
+
+    /// A Chromium's network thread hands its uplink what it sent before a
+    /// crash that comes before the walk reaching it, and the crash finds it
+    /// there: three channels' messages written at a walk's time go a packet
+    /// every 12 µs, and a crash a millisecond on finds the 1 Mbit/s
+    /// uplink's bucket of two frames sent and its 100 ms queue full, the
+    /// burst's last packets lost to it. The crash forgets what was queued;
+    /// read up to 2 s on (past the chunks' retransmission timeouts and the
+    /// SACKs of those that went), the uplink carried what left before the
+    /// crash, lost what it lost before it, and was handed nothing after.
+    #[test]
+    fn a_crash_finds_what_a_chromiums_thread_handed_over_before_it() {
+        let site = Site::new(City::Frankfurt, Access::Fiber)
+            .with_up(125_000)
+            .with_bucket(Some(strims_wan::Bucket::of(3028)));
+        let (sim, mut wan, conns) = channels_on(SctpProfile::CHROMIUM, 3, site);
+        wan.walk(&sim).unwrap();
+        let now = sim_time(sim.elapsed());
+        let mut id = 0;
+        for &c in &conns {
+            write_chunks(&mut wan, &mut id, now, c, 2, 4);
+        }
+        let crash = now + Duration::from_millis(1);
+        wan.crashed(0, crash);
+        let end = crash + Duration::from_secs(2);
+        wan.walked = end;
+        wan.net.settle(end);
+        wan.run_events(end);
+        let log = &wan.packets[0];
+        let at = |d: Duration| epoch() + d;
+        let lost = |r: &PacketRecord| r.lost == Some(PacketLoss::Queue);
+        assert_eq!(log.len(), 24, "{log:?}");
+        assert!(log.iter().all(|r| at(r.at) < crash), "{log:?}");
+        assert!(log.iter().any(lost), "{log:?}");
+        assert!(
+            log.iter().any(|r| r.sent.is_some_and(|s| at(s) > crash)),
+            "nothing queued at the crash: {log:?}"
+        );
+        let c = wan.up_counters(0, Time::MAX);
+        let want = (
+            log.iter()
+                .filter(|r| r.sent.is_some_and(|s| at(s) < crash))
+                .count(),
+            log.iter().filter(|r| lost(r)).count(),
+        );
+        assert!(want.0 > 0, "{log:?}");
+        assert_eq!(
+            (c[up_ix("up_packets")] as usize, c[up_ix("drops")] as usize),
+            want
+        );
+    }
+
+    /// A receiver that crashes with chunks in its downlink's queue takes
+    /// none of them and SACKs nothing, nor the copies its sender's
+    /// retransmission timeouts send it, as a Firefox and as a Chromium:
+    /// four packets reach `b`'s 1 Mbit/s downlink together, `b` crashes a
+    /// millisecond on, before the first is through, and up to 2 s on its
+    /// uplink is handed nothing.
+    #[test]
+    fn a_receiver_that_crashes_takes_and_sacks_nothing_after() {
+        let fiber = Site::new(City::Frankfurt, Access::Fiber);
+        for p in [SctpProfile::FIREFOX, SctpProfile::CHROMIUM] {
+            let (_sim, mut wan, conns) = channels_between(p, 1, fiber, fiber.with_down(125_000));
+            let ab = conns[0];
+            let mut id = 1 << 32;
+            let t0 = sim_time(StdDuration::from_secs(1));
+            write_chunks(&mut wan, &mut id, t0, ab, 1, 4);
+            let t1 = t0 + wan.net.one_way(0, 1) + Duration::from_millis(1);
+            wan.walked = t1;
+            wan.net.settle(t1);
+            wan.run_events(t1);
+            assert_eq!(wan.packets[0].len(), 4, "{p:?}");
+            wan.crashed(1, t1);
+            let end = t1 + Duration::from_secs(2);
+            wan.walked = end;
+            wan.net.settle(end);
+            wan.run_events(end);
+            assert!(
+                wan.packets[0].len() > 4,
+                "{p:?}: `a` resent nothing: {:?}",
+                wan.packets[0]
+            );
+            assert!(wan.packets[1].is_empty(), "{p:?}: {:?}", wan.packets[1]);
         }
     }
 

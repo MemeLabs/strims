@@ -3703,12 +3703,14 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
 /// leaves out). Each uplink is handed its packets in time order. A
 /// 2 Mbit/s seed of a star of three viewers keeps its queue full and
 /// drops, its links' buckets run.sh's two frames, over TCP in 100 ms bins
-/// and as Chromiums in 1 ms bins, their signalling relay on the hosts'
-/// bridge, which reaches each at once: a Chromium's network thread hands a
-/// data channel's packets to its uplink 12 µs apart, past the walk that
-/// sent them and the edge read at it, and the bucket sends each at its
-/// hand-over; what the relay's writes cause within their step (their
-/// receivers' pure ACKs) counts in the bin it came in.
+/// and as browsers in 1 ms bins, Chromiums but the last viewer, a Firefox,
+/// their signalling relay on the hosts' bridge, which reaches each at once:
+/// a Chromium's network thread hands a data channel's packets to its
+/// uplink 12 µs apart, past the walk that sent them and the edge read at
+/// it, and the bucket sends each at its hand-over; a Firefox's stack hands
+/// its SACKs over as its downlink delivers their chunks, with no thread;
+/// what the relay's writes cause within their step (their receivers' pure
+/// ACKs) counts in the bin it came in.
 #[test]
 fn a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry() {
     let mut c = collapse_case(3, 2, 15);
@@ -3717,7 +3719,8 @@ fn a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry(
     let build = |seed, browsers, width| {
         let mut s = calibration_star_scenario(seed, &c);
         if browsers {
-            s.over_webrtc(&[Some(SctpProfile::CHROMIUM)]);
+            let chromium = Some(SctpProfile::CHROMIUM);
+            s.over_webrtc(&[chromium, chromium, chromium, Some(SctpProfile::FIREFOX)]);
         }
         s.wire_bins = Some(width);
         s.packet_log = (0..s.hosts.len()).collect();

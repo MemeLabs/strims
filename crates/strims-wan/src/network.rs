@@ -1190,8 +1190,10 @@ impl Network {
 
     /// The caller's clock is at `at`: no read of what an uplink carried
     /// ([`Network::up_carried`]) comes before it from now on, though a
-    /// message may be handed over past it ([`Departures`]). Without one,
-    /// each read comes no earlier than the latest hand-over.
+    /// message may be handed over past it ([`Departures`]); for a caller
+    /// that hands nothing over past its clock, as strims-sim's walk, the
+    /// clamp is a guard. Without a clock set, each read comes no earlier
+    /// than the latest hand-over.
     pub fn settle(&mut self, at: Time) {
         self.settled = at;
     }

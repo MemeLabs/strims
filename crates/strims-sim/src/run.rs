@@ -392,6 +392,7 @@ fn apply(sim: &mut Sim<'_>, w: &World, wan: Option<&mut Scheduler>, f: &Fault) -
                     sim.hold(w.name(*h), w.name(x));
                     s.repair(*h, x);
                 }
+                s.restarted(*h);
             }
             sim.bounce(w.name(*h));
             w.restarted(*h);
