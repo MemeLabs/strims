@@ -26,6 +26,8 @@ import { SignalTiming, startWasmNode } from "./wasm";
 const params = new URLSearchParams(location.search);
 const count = Math.max(1, parseInt(params.get("count") ?? "1") >> 0);
 const logLevel = parseInt(params.get("logLevel") ?? "0") >> 0;
+// A testbed's page (?lines=1) writes its nodes' lines in a lines worker.
+const lines = params.get("lines") === "1";
 const scheme = location.protocol === "https:" ? "wss:" : "ws:";
 
 /** The node's message that a media stream starts (strims-wasm's e2e). */
@@ -142,7 +144,7 @@ for (let i = 0; i < count; i++) {
   const onSignalTiming = (t: SignalTiming) =>
     ws.write(new TextEncoder().encode(JSON.stringify({ type: "rtcTiming", ...t })));
   const node = startWasmNode(
-    { logLevel, allowInsecureWs: true, iceServers: [], e2e: true },
+    { logLevel, allowInsecureWs: true, iceServers: [], e2e: true, lines },
     { onSignalTiming }
   );
   let viewer: Viewer | null = null;

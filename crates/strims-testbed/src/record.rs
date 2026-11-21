@@ -188,7 +188,9 @@ pub fn meter_sample(
     let mut meter: Option<MeterSample> = None;
     let mut seeds = Vec::new();
     for sw in &m.runner.swarms {
-        let (Some(s), Some(_), Some(push)) = (index(sw.swarm), sw.scheduler, &sw.push) else {
+        // A swarm's push stats are there while its scheduler is, as its
+        // scheduler's state is (a meter query leaves that out).
+        let (Some(s), Some(push)) = (index(sw.swarm), &sw.push) else {
             continue;
         };
         if push.mode.resolve() != PushMode::Hybrid {

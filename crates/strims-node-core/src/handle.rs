@@ -281,6 +281,15 @@ impl Node {
         self.query(|s, now| s.metrics(now)).await
     }
 
+    /// What a meter sample reads of [`Node::metrics`]: the driver's
+    /// counters, the links, each swarm's push stats and store, and the
+    /// channels' totals, the rest empty, no bin or log taken. Cheap enough
+    /// to take in the pass a burst of writes takes, where
+    /// [`Node::metrics`] walks every channel. A query, as it is.
+    pub async fn meter_metrics(&self) -> Result<NodeMetrics, NodeError> {
+        self.query(|s, now| s.meter_metrics(now)).await
+    }
+
     // --- networks -----------------------------------------------------------
 
     /// Joins the network with this key (the network CA's public key).

@@ -1106,9 +1106,12 @@ impl Run {
             let mut links = BTreeMap::new();
             let mut link_rows = LinkLines::default();
             for l in lines {
-                let t = l
-                    .get("t_ms")
-                    .and_then(Value::as_u64)
+                // A line's transfers are of when its node's metrics were
+                // read (`read_ms`), as a simulated host's are of its
+                // sample's answer; a line before it said is of its second.
+                let t = ["read_ms", "t_ms"]
+                    .iter()
+                    .find_map(|k| l.get(*k).and_then(Value::as_u64))
                     .and_then(|t| self.at(t));
                 if let (Some(t), Some(x)) = (t, l.get("transfers").and_then(transfer_of)) {
                     host.transfers.push((t, 0, x));
@@ -1304,7 +1307,8 @@ impl Run {
                 .collect()
         };
         let t = self.at(u("t_ms")?)?;
-        // A node is sampled at its line: its truth is read there.
+        // A node is sampled when its meter is read (the sample's `t_ms`):
+        // its truth is read there.
         Some(MeterSample {
             t,
             asked: t,
@@ -3345,8 +3349,9 @@ mod tests {
         };
         let line = |t: u64, rec: &str| {
             format!(
-                "{{\"t_ms\":{t},\"rel_ms\":{},\"transfers\":{{\"hits\":1,\"parent_peers\":[0]}},\"rec\":{rec}}}\n",
-                t as i64 - START as i64
+                "{{\"t_ms\":{t},\"rel_ms\":{},\"read_ms\":{},\"transfers\":{{\"hits\":1,\"parent_peers\":[0]}},\"rec\":{rec}}}\n",
+                t as i64 - START as i64,
+                t + 7
             )
         };
         let bins = format!("[[{},[1{}],[[2,3]],[]]]", START + 100, ",0".repeat(29));
@@ -3776,6 +3781,18 @@ mod tests {
         assert!(run.scenario().profiled());
         std::fs::write(dir.join("settings"), format!("{settings}JOIN_AT=0\n")).unwrap();
         assert!(!Run::read(&dir, &none).unwrap().scenario().profiled());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A line's transfers are of when its node's metrics were read, its
+    /// meter sample of its own read.
+    #[test]
+    fn a_lines_transfers_are_of_its_metrics_read() {
+        let dir = fixture("read");
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        let seed = &r.hosts[0];
+        assert_eq!(seed.transfers[0].0, LEAD + Duration::from_millis(1007));
+        assert_eq!(seed.runner.meter[0].t, LEAD + Duration::from_secs(1));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

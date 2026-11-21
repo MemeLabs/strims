@@ -30,8 +30,8 @@
 //! the stream's first chunk its peers still hold: a late viewer would read
 //! that backlog, up to a window, in its lag.
 //!
-//! Every second from 5 s before the start, the node emits one JSON line
-//! ([`Runtime::emit`]); a second it missed has none:
+//! Every second from 5 s before the start, the node writes one JSON line
+//! ([`Runtime::line`]); a second it missed has none:
 //!
 //! | field | |
 //! |---|---|
@@ -39,6 +39,7 @@
 //! | `index`, `seed` | the node, and whether it seeds |
 //! | `frames`, `lag_p50_ms`, `lag_p99_ms`, `lag_max_ms` | at a viewer, the frames read in that second and their lag; of a media stream, the unit records read whole and their lag from their publish times, which no record holds |
 //! | `cpu_ms` | the driver's CPU time so far, `null` when it can't tell |
+//! | `read_ms` | when the node's metrics were read, which `transfers`, `links` and the records are of; the meter sample's `t_ms` is its own |
 //! | `transfers` | [`TransferSample`], peers by index |
 //! | `links` | every link: `peer` (its index, `null` for the relay), `kind`, `dialed`, and its path measure as of the latest echo (`null` before one): `rtt_ms`, `base_ms`, `recent_ms`, `in_flight`, `rate`, `queued`, `written_since`, `age_ms` |
 //! | `tick_late_ms` | how late the timer of this line fired |
@@ -50,18 +51,21 @@
 //! `tick_late_ms` and `write_late_ms` show a throttled timer or an
 //! overloaded host.
 //!
-//! A line holds what its node had about its second: its metrics, which the
-//! node takes in the pass after the one that took the work the second's
-//! timers queued (its push period's writes), and its logs' records up to
-//! then. The node's thread only takes them ([`LineParts`]), once what that
-//! pass handed the links has gone, and hands them to its driver
-//! ([`Runtime::line`]), whose [`LineWriter`] writes the line elsewhere: a
-//! native node's on a thread of its own, a browser's in a worker of its
-//! own. A deployed node writes no lines, so the line keeps out of the
-//! node's way: metrics taken in the period's own pass would hold its
-//! links' first writes behind them, and a line of the scheduler's and link
-//! logs written on the node's thread would hold it for a millisecond or
-//! more in the period after them.
+//! A line holds what its node had about its second. Its meter's readings
+//! are asked for at the second, as strims-sim's controller asks a host
+//! for its metrics, and answered after the node's next pass
+//! ([`Node::meter_metrics`], cheap enough to answer in the pass that takes
+//! the second's push period's writes); its meter sample's `t_ms` is when
+//! they were. The rest of its metrics the node takes in the pass after,
+//! and its logs' records up to then. The node's thread only takes them
+//! ([`LineParts`]), once what that pass handed the links has gone, and
+//! hands them to its driver ([`Runtime::line`]), whose [`LineWriter`]
+//! writes the line elsewhere: a native node's on a thread of its own, a
+//! browser's in a worker of its own. A deployed node writes no lines, so
+//! the line keeps out of the node's way: the whole metrics taken in the
+//! period's own pass would hold its links' first writes behind them, and a
+//! line of the scheduler's and link logs written on the node's thread
+//! would hold it for a millisecond or more in the period after them.
 
 use std::cell::{Cell, RefCell};
 use std::fmt::Write as _;
@@ -357,11 +361,17 @@ pub async fn run<R: Runtime + Clone + 'static, T: Timer, S: Spawn>(
             while next <= t {
                 next += 1000;
             }
-            // The work the second's timers queued goes first (its push
-            // period's writes): the node answers the query after its next
-            // pass, and takes its metrics then, ahead of what that pass
-            // handed its links.
-            rt.yield_now().await;
+            // The meter's readings, as strims-sim's controller takes a
+            // host's: asked at the second, answered after the node's next
+            // pass (a seed's takes the push period's writes; a viewer's
+            // is its next input or timer). A cheap query: the full one's
+            // collection would hold a seed's writes behind it.
+            let Ok(meter) = node.meter_metrics().await else {
+                continue;
+            };
+            let meter_ms = rt.now_ms();
+            // The rest once the period's writes have gone: the node answers
+            // after its next pass.
             let Ok(m) = node.metrics().await else {
                 continue;
             };
@@ -392,6 +402,8 @@ pub async fn run<R: Runtime + Clone + 'static, T: Timer, S: Spawn>(
             rt.yield_now().await;
             let moment = Moment {
                 t_ms: t,
+                meter_ms,
+                meter: &meter,
                 read_ms,
                 s: &s,
                 seed,
@@ -577,7 +589,7 @@ async fn read_frames(
 /// "reads": [[seq, stamp_ms, read_ms], ...]}`, times Unix ms, peers by
 /// index (`null`: none, or one without), waits as
 /// [`record::waits_json`]. The meter sample's `t_ms` is when the node's
-/// metrics were read, which its readings are of. With the node's decision
+/// meter was read, which its readings are of. With the node's decision
 /// log ([`DecisionLog`]), its parent checks since the last line too,
 /// `"checks": [[t_us, stream, action, best, best_lag_us, runner_up,
 /// runner_up_lag_us, parent, parent_have_us, parent_push_us, unready,
@@ -599,6 +611,10 @@ async fn read_frames(
 struct Moment<'a> {
     /// The line's second, as its timer fired.
     t_ms: u64,
+    /// When the node's meter was read ([`Node::meter_metrics`]), and what
+    /// was.
+    meter_ms: u64,
+    meter: &'a NodeMetrics,
     /// When the node's metrics were read.
     read_ms: u64,
     s: &'a Settings,
@@ -678,13 +694,14 @@ impl Moment<'_> {
         let index = |id: &HostId| self.index(id);
         let swarm = self.swarm;
         let m = self.m;
-        let read = Time::from_unix_millis(i64::try_from(self.read_ms).unwrap_or(i64::MAX));
+        let at = |ms: u64| Time::from_unix_millis(i64::try_from(ms).unwrap_or(i64::MAX));
         let (meter, seeds) = record::meter_sample(
-            m,
+            self.meter,
             |k| (k == swarm).then_some(0),
-            std::time::Duration::from_millis(self.read_ms),
-            read,
+            std::time::Duration::from_millis(self.meter_ms),
+            at(self.meter_ms),
         );
+        let read = at(self.read_ms);
         let seed = seeds
             .iter()
             .find(|(s, _)| *s == 0)
@@ -798,7 +815,7 @@ impl Moment<'_> {
             .collect();
         let lag = self.lag;
         format!(
-            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"cpu_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{},\"media\":{},\"rec\":",
+            "{{\"t_ms\":{},\"rel_ms\":{},\"index\":{},\"seed\":{},\"frames\":{},\"lag_p50_ms\":{},\"lag_p99_ms\":{},\"lag_max_ms\":{},\"cpu_ms\":{},\"read_ms\":{},\"transfers\":{transfers},\"links\":[{}],\"tick_late_ms\":{},\"write_late_ms\":{},\"wakeups\":{},\"media\":{},\"rec\":",
             self.t_ms,
             self.t_ms as i64 - self.s.start_ms as i64,
             self.s.index,
@@ -808,6 +825,7 @@ impl Moment<'_> {
             pct(lag, 0.99),
             lag.last().copied().unwrap_or(0),
             opt(self.cpu_ms),
+            self.read_ms,
             links.join(","),
             self.tick_late,
             opt(self.write_late),
@@ -1047,11 +1065,15 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicI64, Ordering};
 
+    use slotmap::KeyData;
     use strims_base::stats::WaitHistogram;
     use strims_node_core::{
-        LinkEvent, LinkState, NodeBin, ParentInfo, SampleSource, SwarmBin, WriteWait,
+        LinkEvent, LinkInfo, LinkState, NodeBin, ParentInfo, RunnerMetrics, SampleSource,
+        StoreInfo, SwarmBin, SwarmInfo, WriteWait,
     };
-    use strims_ppspp::{ParentAction, ParentChoice, ParentWhy, SwarmCounters};
+    use strims_ppspp::{
+        ParentAction, ParentChoice, ParentWhy, PeerKey, PushMode, PushStats, SwarmCounters, SwarmId,
+    };
 
     use crate::record::logs::tests::every;
 
@@ -1060,9 +1082,80 @@ mod tests {
         HostId([i as u64 + 1, 0, 0, 0])
     }
 
-    /// What a line's records hold: a snapshot with two bins of the swarm
-    /// and one of another, every kind of the scheduler's logs' records, a
-    /// parent change of each swarm and its cap's losses, frames read, a
+    /// A swarm the line isn't of.
+    fn other_swarm() -> SwarmKey {
+        KeyData::from_ffi((1 << 32) | 7).into()
+    }
+
+    /// A hybrid swarm's info, an adaptive seed's, its readings offset by
+    /// `n`.
+    fn swarm_info(swarm: SwarmKey, n: u64) -> SwarmInfo {
+        let peer: PeerKey = KeyData::from_ffi((1 << 32) | 3).into();
+        SwarmInfo {
+            swarm,
+            id: SwarmId::new(&[1, 2, n as u8]),
+            label: "x".into(),
+            channels: 3,
+            store: StoreInfo {
+                ready: true,
+                tail: strims_binmap::Bin(2),
+                next: strims_binmap::Bin(6),
+                window: 16,
+                readable_seq: 2,
+            },
+            scheduler: None,
+            push: Some(PushStats {
+                mode: PushMode::Hybrid,
+                parents: vec![Some(peer), None],
+                upload_rate: 123_456 + n,
+                upload_busy_permille: 321,
+                upload_capacity: 2_000_000 + n,
+                upload_queue_delay: Some(Duration::from_micros(4_700)),
+                children: 5,
+                accepted: 9,
+                rejected: 2,
+                pace_channels: 4,
+                have_lazy_out: 1,
+                have_lazy_in: 2,
+                seed_window: 6,
+                seed_budget: 4,
+                seed_copies: 2,
+                seed_first_wave: 3,
+                seed_first_wave_capacity: 1_500_000,
+                seed_budget_capacity: 1_900_000,
+                seed_latest_floor_ms: Some(7),
+                ..PushStats::default()
+            }),
+            parent_hosts: vec![Some(host(2)), None],
+            seed_allocation: None,
+            readers: 1,
+            readers_waiting: 0,
+            publishers: 1,
+        }
+    }
+
+    /// A link to `peer`, without a path reading yet.
+    fn link(peer: Option<HostId>, kind: LinkKind) -> LinkInfo {
+        LinkInfo {
+            host_id: peer,
+            kind,
+            metrics: Default::default(),
+            dialed: true,
+            mtu: 1200,
+            transmit_pending: 0,
+            input_buffered: 0,
+            write_blocked: false,
+            buffered_amount: 64,
+            path: None,
+        }
+    }
+
+    /// What a line's records hold: a snapshot with its swarm and another,
+    /// both hybrid and seeded (a meter and a seed sample), links (one to
+    /// no testbed node), two bins of the swarm, one holding the other's
+    /// too and one the other's alone, every kind of the scheduler's logs'
+    /// records, a parent change of each swarm and its cap's losses, frames
+    /// read, a
     /// parent check, timers and a link log's raw take; and the nodes it
     /// names.
     struct Fixture {
@@ -1139,31 +1232,47 @@ mod tests {
         let mut waits = WaitHistogram::default();
         waits.buckets[1] = 4;
         waits.buckets[3] = 2;
-        let bin = |ms: i64, hits: u64| NodeBin {
-            at: at(ms),
-            swarms: vec![SwarmBin {
-                swarm,
-                hits,
-                misses: 2,
-                pruned: 0,
-                switched: 1,
-                shed: 0,
-                sheds_sent: 0,
-                parents: 3,
-                upload_capacity: 250_000,
-                upload_busy_permille: 400,
-                seed_copies: 2,
-                seed_budget_capacity: 0,
-                counters: SwarmCounters {
-                    chunks_sent: 40,
-                    push_wait: waits,
-                    ..SwarmCounters::default()
-                },
-            }],
-            outbound: strims_ppspp::ChannelMetrics::default(),
-            bytes_written: 9000 + hits,
+        let other = other_swarm();
+        m.driver.bytes_written = 77_777;
+        m.runner = RunnerMetrics {
+            swarms: vec![swarm_info(other, 9), swarm_info(swarm, 1)],
+            ..RunnerMetrics::default()
         };
-        m.bins = vec![bin(100, 5), bin(200, 7)];
+        m.links = vec![
+            link(Some(host(3)), LinkKind::WebRtc),
+            link(None, LinkKind::Tcp),
+            link(Some(host(99)), LinkKind::Ws),
+        ];
+        let swarm_bin = |swarm: SwarmKey, hits: u64| SwarmBin {
+            swarm,
+            hits,
+            misses: 2,
+            pruned: 0,
+            switched: 1,
+            shed: 0,
+            sheds_sent: 0,
+            parents: 3,
+            upload_capacity: 250_000,
+            upload_busy_permille: 400,
+            seed_copies: 2,
+            seed_budget_capacity: 0,
+            counters: SwarmCounters {
+                chunks_sent: 40,
+                push_wait: waits,
+                ..SwarmCounters::default()
+            },
+        };
+        let bin = |ms: i64, swarms: Vec<SwarmBin>| NodeBin {
+            at: at(ms),
+            swarms,
+            outbound: strims_ppspp::ChannelMetrics::default(),
+            bytes_written: 9000 + ms as u64,
+        };
+        m.bins = vec![
+            bin(100, vec![swarm_bin(other, 1), swarm_bin(swarm, 5)]),
+            bin(200, vec![swarm_bin(swarm, 7)]),
+            bin(300, vec![swarm_bin(other, 2)]),
+        ];
         let parents = vec![
             ParentLogEntry::Change(ParentInfo {
                 at: at(150),
@@ -1178,6 +1287,13 @@ mod tests {
                 stream: 2,
                 parent: None,
                 why: ParentWhy::Lost,
+            }),
+            ParentLogEntry::Change(ParentInfo {
+                at: at(165),
+                swarm: other,
+                stream: 1,
+                parent: Some(host(4)),
+                why: ParentWhy::Open,
             }),
         ];
         let choice = ParentChoice {
@@ -1278,6 +1394,8 @@ mod tests {
         };
         Moment {
             t_ms: 1_800_000_001_000,
+            meter_ms: 1_800_000_001_000,
+            meter: &f.m,
             read_ms: 1_800_000_001_000,
             s: &s,
             seed: true,
@@ -1318,7 +1436,12 @@ mod tests {
         assert_eq!(LineParts::from_wire(&mut &bytes[..bytes.len() - 1]), None);
         let v: serde_json::Value = serde_json::from_str(&line).unwrap();
         assert_eq!(v["rel_ms"], 1000);
+        assert_eq!(v["links"].as_array().unwrap().len(), 2);
+        assert_eq!(v["links"][0]["peer"], 3);
         let rec = &v["rec"];
+        assert_eq!(rec["meter"]["rate"], 123_457);
+        assert_eq!(rec["meter"]["bytes_written"], 77_777);
+        assert_eq!(rec["seed"], serde_json::json!([4, 6, 2, 3, 1_500_000]));
         assert_eq!(rec["bins"].as_array().unwrap().len(), 2);
         assert_eq!(rec["parents"].as_array().unwrap().len(), 2);
         assert_eq!(rec["reads"].as_array().unwrap().len(), 50);

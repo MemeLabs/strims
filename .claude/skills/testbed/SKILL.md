@@ -272,7 +272,8 @@ a sizing decision rests on them.
 - CPU follows bytes moved, at about 0.2 core-seconds per MB in a WebRTC
   mesh, not frames.
 - Memory: Firefox about 650-720 MB per container, Chromium about
-  280-290 MB.
+  280-300 MB (peaks of 295 MB a viewer, 312 MB a seed with SPEC and its
+  logs on, the page's lines worker among them).
 - About 15 browsers in a full mesh fit the dev VM. They ran without
   disturbing timers, with the host about 55 % idle on average and 10 % at
   peaks. Sparser topologies fit more. Size a farm testbed host's

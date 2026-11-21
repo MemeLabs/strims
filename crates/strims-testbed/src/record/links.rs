@@ -11,11 +11,12 @@
 //! at its stats samples ([`LinkLog::take`]).
 //!
 //! The node's code hands each [`LinkRecord`] to the log's sink as it runs,
-//! which stamps it with the log's clock and keeps it in a buffer: at most
-//! [`LinkLog::CAP`] I/O records and [`LinkLog::SAMPLE_CAP`] samples
+//! which stamps it with the log's clock and keeps it in a buffer of room
+//! for [`LinkLog::CAP`] I/O records and [`LinkLog::SAMPLE_CAP`] samples
 //! between two takes, past which they are counted as lost (a lost record
-//! shifts the rows of its link after it). A take swaps the buffers for
-//! new ones as large, and turns the records into rows:
+//! shifts the rows of its link after it): the sink never grows it. A take
+//! swaps the buffers for new ones as large, and turns the records into
+//! rows:
 //!
 //! - **writes**: each write a link's writer began and its transport took
 //!   whole, matched with the node's hand-off of it (the writes of a link go
@@ -431,11 +432,17 @@ impl Assembler {
 #[allow(clippy::disallowed_types)]
 type Buffer<T> = Arc<std::sync::Mutex<Vec<T>>>;
 
-/// The buffer `b` holds, swapped for an empty one as large.
-fn swap<T>(b: &Buffer<T>) -> Vec<T> {
+/// An empty buffer of room for `cap`, which the sink fills without
+/// growing it.
+#[allow(clippy::disallowed_types)]
+fn buffer<T>(cap: usize) -> Buffer<T> {
+    Arc::new(std::sync::Mutex::new(Vec::with_capacity(cap)))
+}
+
+/// The buffer `b` holds, swapped for an empty one of room for `cap`.
+fn swap<T>(b: &Buffer<T>, cap: usize) -> Vec<T> {
     let mut v = b.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    let n = v.len();
-    std::mem::replace(&mut *v, Vec::with_capacity(n))
+    std::mem::replace(&mut *v, Vec::with_capacity(cap))
 }
 
 /// Keeps `x` in `b` if it holds fewer than `cap`; else counts it in `lost`.
@@ -506,8 +513,8 @@ impl LinkLog {
     /// An empty log whose sink stamps records by `clock`.
     pub fn new(clock: Arc<dyn Fn() -> Time + Send + Sync>) -> LinkLog {
         LinkLog {
-            io: Buffer::default(),
-            samples: Buffer::default(),
+            io: buffer(Self::CAP),
+            samples: buffer(Self::SAMPLE_CAP),
             lost: Arc::default(),
             clock,
             maker: Rc::default(),
@@ -575,8 +582,8 @@ impl LinkLog {
     /// [`LinkLog::take`], or raw to one maker.
     pub fn take_raw(&self) -> LinkTake {
         LinkTake {
-            io: swap(&self.io),
-            samples: swap(&self.samples),
+            io: swap(&self.io, Self::CAP),
+            samples: swap(&self.samples, Self::SAMPLE_CAP),
             lost: self.lost.swap(0, Ordering::Relaxed),
         }
     }

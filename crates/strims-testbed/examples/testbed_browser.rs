@@ -47,7 +47,8 @@
 //!    why): WebSocket dials, and peer exchanges once the other node's
 //!    host id is in `--hosts`, each retried until it links.
 //!
-//! The node's line per second goes to stdout as the page sends it, with
+//! The node's line per second goes to stdout as the page's lines worker
+//! writes it (strims-wasm's `e2e`), with
 //! `cpu_ms` the CPU time of the browser and every process below it,
 //! `post_ms` the page's clock as it posted the line, and `host_t_ms` the
 //! harness's clock when the line arrived: the page's clock and the
@@ -57,7 +58,8 @@
 //! connections' signalling, `src/web/wasm.ts`'s `SignalTiming`) and the
 //! node's `connecting` (its `atMs` when the command came), and the
 //! harness's own `ask` of each peer exchange as it sends it. The harness ends 5 s after the stream does,
-//! like `testbed_node`, and kills the browser.
+//! like `testbed_node`, and kills the browser; it fails once the page
+//! says its lines worker died.
 //!
 //! With `--units`, the stream is media in the unit format
 //! ([`strims_testbed::media`]): the page plays what the node reads through
@@ -691,7 +693,8 @@ async fn run() -> Result<(), String> {
         }
         .into()
     });
-    let url = format!("http://{}/e2e.html?count=1&logLevel=0", site.addr);
+    // The testbed's page writes the node's lines in its lines worker.
+    let url = format!("http://{}/e2e.html?count=1&logLevel=0&lines=1", site.addr);
     let mut args = browser_args(me.kind, &profile, &url);
     let sctp = match &a.trace_sctp {
         Some(_) if me.kind != Kind::Chromium => {
@@ -765,10 +768,13 @@ async fn run() -> Result<(), String> {
     // Lines, events and capture bytes, until the line 5 s after the
     // stream's end, and with a capture, a grace after it.
     let last_rel = (a.secs * 1000 + 5000) as i64;
+    // The page's lines worker's death, which ends the run.
+    let mut lines_died = None;
     let receive = {
         let events = control.events.clone();
         let capture = &mut capture;
         let player = &mut player;
+        let lines_died = &mut lines_died;
         async move {
             let mut until = None;
             loop {
@@ -848,6 +854,10 @@ async fn run() -> Result<(), String> {
                 }
                 if e["type"] != "message" {
                     eprintln!("{} {e}", now_ms());
+                }
+                if e["type"] == "error" && e["command"] == "lines" {
+                    *lines_died = Some(e["message"].to_string());
+                    return;
                 }
                 let _ = events.send(e);
             }
@@ -990,7 +1000,10 @@ async fn run() -> Result<(), String> {
         eprintln!("player file: {e}");
     }
     let _ = std::fs::remove_dir_all(&profile);
-    Ok(())
+    match lines_died {
+        Some(message) => Err(format!("the page's lines worker died: {message}")),
+        None => Ok(()),
+    }
 }
 
 /// A time in seconds (`2`, `0.5`) as whole ms.

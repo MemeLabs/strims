@@ -60,12 +60,14 @@
 //! The node's worker only takes each line's parts
 //! ([`strims_testbed::node::LineParts`]); the page's lines worker writes
 //! the line ([`start_lines`]), so its writing takes none of the node's
-//! thread. The page creates a channel between the two: the node posts
+//! thread. A testbed's page (`e2e.html?lines=1`) starts it, and creates
+//! a channel between the two: the node posts
 //! each line's parts on its end (`start`'s `lines`) as one transferred
 //! buffer of their bytes ([`strims_testbed::record::wire`]), and the
 //! lines worker posts each line, as the binary message above, on `out`,
-//! which the page relays to the harness as a message of the node's.
-//! Without a lines port the node writes its lines itself.
+//! which the page relays to the harness as a message of the node's; a
+//! lines worker that dies the page reports as an `error` of `command`
+//! `lines`. Without a lines port the node writes its lines itself.
 //!
 //! # A media stream's feed
 //!

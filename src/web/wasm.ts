@@ -24,6 +24,8 @@ export interface WasmNodeOptions {
   iceServers: string[];
   /** Starts the bare node the browser link tests control. */
   e2e?: boolean;
+  /** With `e2e`, starts the testbed's lines worker beside the node. */
+  lines?: boolean;
 }
 
 /** The PSI worker's options. */
@@ -414,15 +416,25 @@ const startPsiWorker = (logLevel: number, port: MessagePort): Worker => {
   return worker;
 };
 
+// What the window emits on a node's bus when its lines worker dies.
+const linesDied = (message: string): Uint8Array =>
+  new TextEncoder().encode(JSON.stringify({ type: "error", command: "lines", message }));
+
 // Starts the testbed's lines worker, which writes the lines whose parts the
 // node posts on `port` and posts them on `out`. A lines worker that dies is
-// logged, and the node's lines stop.
-const startLinesWorker = (logLevel: number, port: MessagePort, out: MessagePort): Worker => {
+// logged and handed to `onDied`: the node's lines stop.
+const startLinesWorker = (
+  logLevel: number,
+  port: MessagePort,
+  out: MessagePort,
+  onDied: (message: string) => void
+): Worker => {
   const worker = spawnWorker("lines");
   const died = (message: string) => {
     // eslint-disable-next-line no-console
     console.error("strims-wasm lines worker:", message);
     worker.terminate();
+    onDied(message);
   };
   worker.onerror = (e: ErrorEvent) => died(e.message || "failed to load");
   worker.onmessage = ({ data }: MessageEvent<PsiWorkerMessage>) => {
@@ -436,21 +448,27 @@ const startLinesWorker = (logLevel: number, port: MessagePort, out: MessagePort)
 };
 
 // Starts a strims-wasm node in a new dedicated worker, and its PSI worker.
-// The browser link tests' bare node runs no PSI, and gets no PSI worker,
-// but a lines worker, whose lines its bus emits as the node's messages.
+// The browser link tests' bare node runs no PSI, and gets no PSI worker; a
+// testbed's (`lines`) gets a lines worker, whose lines its bus emits as the
+// node's messages, and the worker's death as an error event of the node's
+// (`command` `lines`), which ends the harness's run.
 export const startWasmNode = (options: WasmNodeOptions, hooks: WasmNodeHooks = {}): WasmNode => {
   const worker = spawnWorker("svc");
   const psi = options.e2e ? undefined : new MessageChannel();
   const psiWorker = psi && startPsiWorker(options.logLevel, psi.port2);
-  const lines = options.e2e ? new MessageChannel() : undefined;
-  const linesOut = lines && new MessageChannel();
-  const linesWorker =
-    lines && linesOut && startLinesWorker(options.logLevel, lines.port2, linesOut.port2);
   const frontend = new MessageChannel();
   const signal = new MessageChannel();
   const feedPorts = new MessageChannel();
   const feeds = new FeedHost(feedPorts.port1);
   const bus = new PortBus(frontend.port1);
+  const lines = options.e2e && options.lines ? new MessageChannel() : undefined;
+  const linesOut = lines && new MessageChannel();
+  const linesWorker =
+    lines &&
+    linesOut &&
+    startLinesWorker(options.logLevel, lines.port2, linesOut.port2, (message) =>
+      bus.emit("data", linesDied(message))
+    );
   if (linesOut) {
     linesOut.port1.onmessage = ({ data }: MessageEvent<ArrayBuffer>) =>
       bus.emit("data", new Uint8Array(data));

@@ -1704,6 +1704,68 @@ impl State {
         }
     }
 
+    /// What a meter sample reads of [`State::metrics`]
+    /// ([`crate::Node::meter_metrics`]): the driver's counters, the links,
+    /// each swarm's push stats and its store, and the channels' totals. The
+    /// swarms' scheduler state, parents and seed allocations, the peers,
+    /// vnic's, vpn's and the networks' counters are left out, and no bin
+    /// or log is taken: those walk every channel. `&mut` and `now` as for
+    /// [`State::metrics`].
+    pub(crate) fn meter_metrics(&mut self, now: Time) -> NodeMetrics {
+        let swarms = self
+            .swarms
+            .iter()
+            .filter_map(|&key| {
+                Some(SwarmInfo {
+                    push: self.runner.push_stats(key),
+                    ..self.swarm_basics(key)?
+                })
+            })
+            .collect();
+        NodeMetrics {
+            driver: self.metrics,
+            links: self.link_metrics(now),
+            runner: RunnerMetrics {
+                swarms,
+                peers: Vec::new(),
+                totals: self.runner.channel_totals(),
+            },
+            ..NodeMetrics::default()
+        }
+    }
+
+    /// Swarm `key`'s info but its scheduler's: its id, label, channels,
+    /// store and local handles, the rest empty.
+    fn swarm_basics(&self, key: SwarmKey) -> Option<SwarmInfo> {
+        let swarm = self.runner.swarm(key)?;
+        let store = swarm.store();
+        let readers = self.readers.values().filter(|r| r.swarm == key);
+        Some(SwarmInfo {
+            swarm: key,
+            id: swarm.id().clone(),
+            label: swarm.options().label.clone(),
+            channels: self
+                .peers
+                .values()
+                .filter(|p| p.swarms.contains_key(&key))
+                .count(),
+            store: StoreInfo {
+                ready: store.is_ready(),
+                tail: store.tail(),
+                next: store.next(),
+                window: store.window(),
+                readable_seq: store.readable_seq(),
+            },
+            scheduler: None,
+            push: None,
+            parent_hosts: Vec::new(),
+            seed_allocation: None,
+            readers: readers.clone().count(),
+            readers_waiting: readers.filter(|r| r.pending.is_some()).count(),
+            publishers: self.publishers.values().filter(|p| p.swarm == key).count(),
+        })
+    }
+
     /// With [`NodeConfig::stats_bins`], reads the counters if `now` is past
     /// the next edge, for every edge passed: before the pass at `now`
     /// changes them, they stand as they did at each edge since the last
@@ -1939,27 +2001,8 @@ impl State {
             .swarms
             .iter()
             .filter_map(|&key| {
-                let swarm = self.runner.swarm(key)?;
-                let (id, label) = (swarm.id().clone(), swarm.options().label.clone());
-                let store = swarm.store();
-                let store = StoreInfo {
-                    ready: store.is_ready(),
-                    tail: store.tail(),
-                    next: store.next(),
-                    window: store.window(),
-                    readable_seq: store.readable_seq(),
-                };
-                let readers = self.readers.values().filter(|r| r.swarm == key);
+                let basics = self.swarm_basics(key)?;
                 Some(SwarmInfo {
-                    swarm: key,
-                    id,
-                    label,
-                    channels: self
-                        .peers
-                        .values()
-                        .filter(|p| p.swarms.contains_key(&key))
-                        .count(),
-                    store,
                     scheduler: self.runner.swarm_stats(key),
                     push: self.runner.push_stats(key),
                     parent_hosts: self.runner.push_stats(key).map_or(Vec::new(), |p| {
@@ -1996,9 +2039,7 @@ impl State {
                             counters: a.counters,
                         }
                     }),
-                    readers: readers.clone().count(),
-                    readers_waiting: readers.filter(|r| r.pending.is_some()).count(),
-                    publishers: self.publishers.values().filter(|p| p.swarm == key).count(),
+                    ..basics
                 })
             })
             .collect();
