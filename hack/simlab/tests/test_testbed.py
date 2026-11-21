@@ -38,7 +38,8 @@ their shaper replays.
            within the testbed's repeat spread and a floor
   Criterion  scoring.sql's twin_criterion_rows over a fixture: a cell's
            ratio of medians, or seed_budget's of means; each group's cells
-           and bars; with `paired` a run against its own twins, a cell
+           and bars, a reading an ulp short of a bar passing it; with
+           `paired` a run against its own twins, a cell
            without them against its cell's; and criterion_text
 
   python3 hack/simlab/tests/test_testbed.py
@@ -1041,6 +1042,31 @@ class Criterion(unittest.TestCase):
         full = [{**r, "pass": True} for r in self.rows().values()]
         self.assertTrue(testbed.criterion_met(full))
         self.assertFalse(testbed.criterion_met([r for r in full if (r["grp"], r["measure"]) != ("all", "truth_bps")]))
+
+    def test_a_reading_on_a_bar_passes_it(self):
+        # five at-once cells, a run each side: seed_budget's tier r6 browser
+        # medians, whose ranks differ by a Σd² of 4 (a Spearman of 0.8), and
+        # truth_bps' ratios of geometric mean 0.9; floating point reads each
+        # an ulp short of its bar
+        values = {"seed_budget": ([28.5, 61, 33.5, 128, 37.5], [26.5, 86.5, 17, 67.5, 37]),
+                  "truth_bps": ([20, 30, 210, 240, 290], [18, 189, 27, 261, 216])}
+
+        def side(n, extra):
+            return "[" + ", ".join(f"{{'cell': 'c{i}', 'measure': '{m}', 'k': '{i}', 'value': {v[n][i]}::DOUBLE, "
+                                   f"{extra}}}" for m, v in values.items() for i in range(5)) + "]"
+
+        twin, tb = side(0, "'pair': NULL::BIGINT"), side(1, "'seed': 1, 'basis': NULL::VARCHAR, 'arrivals': false")
+        cur = self.conn.execute(f"FROM twin_criterion_rows({twin}, {tb}) WHERE grp = 'at once' AND cell IS NULL")
+        names = [d[0] for d in cur.description]
+        rows = {r["measure"]: r for r in (dict(zip(names, t)) for t in cur.fetchall())}
+        b, t = rows["seed_budget"], rows["truth_bps"]
+        self.assertEqual((b["cells"], t["cells"]), (5, 5))
+        self.assertLess(b["rank_corr"], 0.8)
+        self.assertAlmostEqual(b["rank_corr"], 0.8)
+        self.assertTrue(b["rank_pass"])
+        self.assertLess(t["ratio"], 0.9)
+        self.assertAlmostEqual(t["ratio"], 0.9)
+        self.assertTrue(t["ratio_pass"])
 
     def test_another_statistic_fails(self):
         with self.assertRaisesRegex(Exception, "budget_stat mode is neither mean nor median"):

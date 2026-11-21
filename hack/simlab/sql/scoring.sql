@@ -1734,7 +1734,11 @@ CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 10, hi_s := -1, full
 -- within 0.90-1.10), band_pass (truth_bps and seed_upload: at least 80 %
 -- of the cells in band), rank_pass (seed_budget: rank_corr at least 0.8),
 -- floor_pass (seed_budget: floor_p at least 0.05), and pass (all of its
--- measure's). caveat is twin_fit_rows'.
+-- measure's). in_band and the bars compare a reading (ratio, rank_corr,
+-- floor_p) rounded to 9 decimals, so one on a bar passes it where floating
+-- point leaves it an ulp short (five cells whose ranks differ by a Σd² of
+-- 4 have a Spearman of 0.8, which corr reads 0.7999999999999998); the
+-- rows give the readings unrounded. caveat is twin_fit_rows'.
 CREATE OR REPLACE MACRO twin_criterion_rows(a_rows, b_rows, paired := false, budget_stat := 'mean') AS TABLE
     WITH a AS (SELECT unnest(a_rows, recursive := true)),
     b AS (SELECT unnest(b_rows, recursive := true)),
@@ -1769,8 +1773,8 @@ CREATE OR REPLACE MACRO twin_criterion_rows(a_rows, b_rows, paired := false, bud
     cells AS (
         SELECT c.*, tw.twin_runs, bn.runs - c.tb_runs AS tb_runs_unpaired, tw.twin_value,
                CASE WHEN twin_value <> 0 THEN tb_value / twin_value END AS ratio,
-               coalesce((CASE WHEN twin_value <> 0 THEN tb_value / twin_value END BETWEEN 0.80 AND 1.25)::BIGINT, 0)
-                   AS in_band
+               coalesce((round(CASE WHEN twin_value <> 0 THEN tb_value / twin_value END, 9) BETWEEN 0.80 AND 1.25)
+                            ::BIGINT, 0) AS in_band
         FROM c JOIN tw USING (cell, measure) JOIN bn USING (cell, measure)),
     g AS (SELECT unnest(['all', 'arrivals', 'at once']) AS grp),
     m AS (SELECT unnest(['truth_bps', 'seed_upload', 'seed_budget']) AS measure),
@@ -1814,11 +1818,12 @@ CREATE OR REPLACE MACRO twin_criterion_rows(a_rows, b_rows, paired := false, bud
     bars AS (
         SELECT *, CASE WHEN measure = 'seed_budget'
                        THEN fisher_p(floor_tb, floor_tb_runs, floor_twin, floor_twin_runs) END AS floor_p,
-               ratio BETWEEN 0.90 AND 1.10 AS ratio_pass,
+               round(ratio, 9) BETWEEN 0.90 AND 1.10 AS ratio_pass,
                CASE WHEN measure <> 'seed_budget' THEN cells > 0 AND in_band >= 0.8 * cells END AS band_pass,
-               CASE WHEN measure = 'seed_budget' THEN rank_corr >= 0.8 END AS rank_pass,
+               CASE WHEN measure = 'seed_budget' THEN round(rank_corr, 9) >= 0.8 END AS rank_pass,
                CASE WHEN measure = 'seed_budget'
-                    THEN fisher_p(floor_tb, floor_tb_runs, floor_twin, floor_twin_runs) >= 0.05 END AS floor_pass
+                    THEN round(fisher_p(floor_tb, floor_tb_runs, floor_twin, floor_twin_runs), 9) >= 0.05 END
+                   AS floor_pass
         FROM summ)
     SELECT grp, measure, NULL::VARCHAR AS cell,
            CASE WHEN measure = 'seed_budget' AND budget_stat = 'mean' THEN 'mean' ELSE 'median' END AS stat,
