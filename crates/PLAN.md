@@ -566,6 +566,10 @@ and dropped are in `TRIED.md`.
     pass made before the hold (about 21 µs a write on the testbed's
     halve-15-20), below the millisecond; and give a start to the holds a
     pass doesn't meet (after a release, after a poll's turn).
+  - Find why a loaded browser seed's host pacer holds its frame writer's
+    pass in fewer periods in the twin than on the testbed (the timer
+    bench's loaded cells: `timer_runs_of`'s hold starts a run), and
+    model it.
   - Model a loaded machine's timer stalls (tens to hundreds of ms, one
     node's or every node's at once, which a host's other load makes and
     a host of its own doesn't) once a measure of users' machines says
