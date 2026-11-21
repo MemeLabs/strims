@@ -2085,22 +2085,30 @@ CREATE OR REPLACE MACRO timer_runs_of(side, lo_s := 10, hi_s := -1, by_delay := 
            avg(late_us) / 1000 AS mean_ms, sketch_quantile(late_us, 99) / 1000 AS p99_ms
     FROM t GROUP BY kind, source, delay_ms, k;
 
--- A side's timers by kind and source (and with by_delay, delay), from
--- its runs' (timer_runs_of): runs, nodes, timers, missing, the shares of
--- 0, 1, 2 and 3+ ms late (late_ms0 .. late_ms3), mean_ms and p99_ms,
--- each the mean over the runs (a run weighs as any other, however many
--- timers it fired, so a side of cells repeated alike weighs its cells
--- alike), and the side's repeat spread of the mean and the p99
--- (mean_spread_ms, p99_spread_ms): each cell's range over its repeats
--- (its runs' largest less their smallest), the mean over the cells of
--- two runs or more; NULL with none. Each mean over the runs or the cells
--- is compensated_sum's of a list ordered by the run (k) or the cell, over
--- its count, so a query gives the same bits every time: DuckDB's avg adds
--- in the order its threads meet the rows, and timer_fit_spread_of's
--- distance, bounds and pass read these.
+-- A side's timers by kind and source (and with by_delay, delay), from its
+-- runs' (timer_runs_of): runs, nodes, timers, missing, the shares of 0, 1,
+-- 2 and 3+ ms late (late_ms0 .. late_ms3), mean_ms and p99_ms, each the
+-- mean over the runs (a run weighs as any other, however many timers it
+-- fired, so a side of cells repeated alike weighs its cells alike), and
+-- the side's repeat spread of the mean and the p99 (mean_spread_ms,
+-- p99_spread_ms): each cell's range over its repeats (its runs' largest
+-- less their smallest), the mean over the cells of two runs or more; NULL
+-- with none. The hold starts' rows (source `hold`) take only the runs of
+-- `min_holds` holds or more (10), in their spread too: a run's holds are
+-- the periods its host held, which a load can leave a handful of, and a
+-- run of n holds reads a share to within 0.5/√n (its binomial standard
+-- error at a share of a half), 0.16 at 10 and 0.5 at one, so a run of a
+-- few, weighed as one of hundreds, would carry its row. Weighing each hold
+-- alike instead would weigh a side's cells by the holds their load leaves,
+-- not alike. Each mean over the runs or the cells is compensated_sum's of
+-- a list ordered by the run (k) or the cell, over its count, so a query
+-- gives the same bits every time: DuckDB's avg adds in the order its
+-- threads meet the rows, and timer_fit_spread_of's distance, bounds and
+-- pass read these.
 -- needs: timers hosts jobs.env jobs.stored_cell
-CREATE OR REPLACE MACRO timer_shares_of(side, lo_s := 10, hi_s := -1, by_delay := false) AS TABLE
-    WITH r AS (FROM timer_runs_of(side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
+CREATE OR REPLACE MACRO timer_shares_of(side, lo_s := 10, hi_s := -1, by_delay := false, min_holds := 10) AS TABLE
+    WITH r AS (FROM timer_runs_of(side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)
+               WHERE source <> 'hold' OR timers >= min_holds),
     c AS (
         SELECT kind, source, delay_ms, cell, max(mean_ms) - min(mean_ms) AS mean_range,
                max(p99_ms) - min(p99_ms) AS p99_range
@@ -2129,31 +2137,31 @@ CREATE OR REPLACE MACRO timer_shares_of(side, lo_s := 10, hi_s := -1, by_delay :
 
 -- A model's timer lateness against the testbed's (the timer bench): each
 -- kind, source (timer_runs_of's: the hold start's among them, `hold`; and
--- with by_delay, delay) either side has, `a_side` the
--- model's runs (a twin's) and `b_side` the testbed's, over the same
--- windows (timer_shares_of): each side's runs and timers, its shares of 0,
--- 1, 2 and 3+ ms late (a_ms0 .. a_ms3, b_ms0 .. b_ms3), its mean and p99
--- lateness in ms; the shares' total-variation distance (tv: half the sum
--- of their differences) with its bound, the plan's 0.05; the means' and
--- p99s' differences (b less a) with theirs, by the plan's general rule:
--- the testbed's own repeat spread (timer_shares_of's mean_spread_ms and
--- p99_spread_ms of the runs of `spread_side`, its repeats; none counts
--- as 0) plus a floor, mean_floor 0.1 ms (a tenth of the ms the
--- deadlines' clocks count) and p99_floor 1 ms (one such ms); and pass,
--- all three within their bounds. A source the model keeps no rows of
--- (`unmodelled`, joined by commas: the testbed's record timer) has the
--- testbed's numbers alone, its checks and pass NULL; any other kind and
--- source one side lacks fails. A held-out
--- score names as spread_side the testbed runs whose repeats measure it,
--- its b_side holding one repeat of each cell; timer_fit_of takes
--- b_side's own.
+-- with by_delay, delay) either side has, `a_side` the model's runs (a
+-- twin's) and `b_side` the testbed's, over the same windows and holds
+-- (timer_shares_of, its min_holds): each side's runs and timers, its
+-- shares of 0, 1, 2 and 3+ ms late (a_ms0 .. a_ms3, b_ms0 .. b_ms3), its
+-- mean and p99 lateness in ms; the shares' total-variation distance (tv:
+-- half the sum of their differences) with its bound, the plan's 0.05; the
+-- means' and p99s' differences (b less a) with theirs, by the plan's
+-- general rule: the testbed's own repeat spread (timer_shares_of's
+-- mean_spread_ms and p99_spread_ms of the runs of `spread_side`, its
+-- repeats; none counts as 0) plus a floor, mean_floor 0.1 ms (a tenth of
+-- the ms the deadlines' clocks count) and p99_floor 1 ms (one such ms);
+-- and pass, all three within their bounds. A source the model keeps no
+-- rows of (`unmodelled`, joined by commas: the testbed's record timer) has
+-- the testbed's numbers alone, its checks and pass NULL; any other kind
+-- and source one side lacks fails. A held-out score names as spread_side
+-- the testbed runs whose repeats measure it, its b_side holding one repeat
+-- of each cell; timer_fit_of takes b_side's own.
 -- needs: timers hosts jobs.env jobs.stored_cell
 CREATE OR REPLACE MACRO timer_fit_spread_of(a_side, b_side, spread_side, lo_s := 10, hi_s := -1,
                                             by_delay := false, bound := 0.05, mean_floor := 0.1,
-                                            p99_floor := 1.0, unmodelled := 'record') AS TABLE
-    WITH a AS (FROM timer_shares_of(a_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
-    b AS (FROM timer_shares_of(b_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
-    sp AS (FROM timer_shares_of(spread_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
+                                            p99_floor := 1.0, unmodelled := 'record', min_holds := 10) AS TABLE
+    WITH a AS (FROM timer_shares_of(a_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay, min_holds := min_holds)),
+    b AS (FROM timer_shares_of(b_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay, min_holds := min_holds)),
+    sp AS (FROM timer_shares_of(spread_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay,
+                                min_holds := min_holds)),
     f AS (
         SELECT coalesce(a.kind, b.kind) AS kind, coalesce(a.source, b.source) AS source,
                coalesce(a.delay_ms, b.delay_ms) AS delay_ms, a.runs AS a_runs, b.runs AS b_runs,
@@ -2183,10 +2191,10 @@ CREATE OR REPLACE MACRO timer_fit_spread_of(a_side, b_side, spread_side, lo_s :=
 -- needs: timers hosts jobs.env jobs.stored_cell
 CREATE OR REPLACE MACRO timer_fit_of(a_side, b_side, lo_s := 10, hi_s := -1, by_delay := false,
                                      bound := 0.05, mean_floor := 0.1, p99_floor := 1.0,
-                                     unmodelled := 'record') AS TABLE
+                                     unmodelled := 'record', min_holds := 10) AS TABLE
     FROM timer_fit_spread_of(a_side, b_side, b_side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay,
                              bound := bound, mean_floor := mean_floor, p99_floor := p99_floor,
-                             unmodelled := unmodelled);
+                             unmodelled := unmodelled, min_holds := min_holds);
 
 -- The seed's allocation checks over a side's runs (`side`, as
 -- side_window_of takes it; seed_decisions, SPEC): each check of a
@@ -2439,14 +2447,15 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
 -- repeat range, widened by a floor): pass50 and pass90, the model's median
 -- within the testbed's runs' range widened by `floor_ms` either side (a
 -- byte stage's by floor_bytes, the share of `1 push: released 6-8 ms` by
--- floor_share); for the
--- holds and the lows (stages 3, 4
--- and 6) pass_n, the model's median count a run within the testbed's
--- runs' range widened by counting noise at each end, twice a Poisson
--- count's standard deviation (2√n of the end's count), so a stage's times
--- pass only with about as many of them. `pass` is every one of the
--- stage's; a stage one side lacks fails. A stage the testbed's runs have
--- whose table none of the model's runs holds a row of at the node, in
+-- floor_share: 0.05, the timer bench's distance bound, and about twice the
+-- binomial standard error of a run's share at a few hundred held pushes:
+-- twice it is 0.05 at 400, at a share of a half); for the holds and the
+-- lows (stages 3, 4 and 6) pass_n, the model's median count a run within
+-- the testbed's runs' range widened by counting noise at each end, twice a
+-- Poisson count's standard deviation (2√n of the end's count), so a
+-- stage's times pass only with about as many of them. `pass` is every one
+-- of the stage's; a stage one side lacks fails. A stage the testbed's runs
+-- have whose table none of the model's runs holds a row of at the node, in
 -- its window or not (twins without its log: seed_sends, STRIMS_SIM_SPEC;
 -- link_*, STRIMS_SIM_LINK_LOG; packets for 7a-c, STRIMS_SIM_PACKET_LOG),
 -- fails the query, naming the table, the runs, the stages and the knob

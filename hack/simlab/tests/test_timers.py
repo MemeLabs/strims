@@ -12,9 +12,11 @@ as 0 ms, one with no lateness counted missing; the testbed's repeat
 spread of each run's mean and p99 (sketch_quantile's) in a cell; the
 fit's total-variation distance, and its mean and p99 checks within the
 spread and a floor; the hold start, each period's earliest first poll
-past its frame writer's due ms, as a source of its own; a source the model keeps no rows of expected and any
-other one-sided row failing; an empty or NULL side refused; and the
-seed's allocation-check steps, on time or a tick late, with their fit
+past its frame writer's due ms, as a source of its own, a run of fewer
+than min_holds holds in none of its rows; a source the model keeps no
+rows of expected and any other one-sided row failing; an empty or NULL
+side refused; and the seed's allocation-check steps, on time or a tick
+late, with their fit
 within the larger of 5 points and twice the difference's standard
 error. Over runs whose scans and aggregates run on threads (Repeats), 20
 queries of the fit give the same bits.
@@ -52,7 +54,8 @@ def connect():
     twin of 40 steps each (`tb4`, `tw2`); and for the host pacer a testbed
     run and a twin of a Chromium seed's polls (`tb5`, `tw4`); for the hold
     start a testbed run and a twin of a Chromium seed's frame writer and
-    its holds (`tb6`, `tw6`); every stream 60 s."""
+    its holds, 3 each (`tb6`, `tw6`), and a testbed run of 10 in tb6's
+    cell (`tb7`); every stream 60 s."""
     import duckdb
 
     conn = duckdb.connect()
@@ -60,7 +63,7 @@ def connect():
     for k, src, cell in [("tb", "testbed/b", "cA"), ("tb3", "testbed/b", "cA"), ("tb2", "testbed/c", "cB"),
                          ("tw", "testbed/a", "tA"), ("tb4", "testbed/d", "cD"), ("tw2", "testbed/e", "tD"),
                          ("tw3", "testbed/f", "tD"), ("tb5", "testbed/p", "cP"), ("tw4", "testbed/q", "tP"),
-                         ("tb6", "testbed/r", "cH"), ("tw6", "testbed/s", "tH")]:
+                         ("tb6", "testbed/r", "cH"), ("tw6", "testbed/s", "tH"), ("tb7", "testbed/t", "cH")]:
         conn.execute("INSERT INTO jobs VALUES (?, ?, MAP {'STRIMS_SIM_CAL_SECS': '60'}, ?)", [k, src, cell])
     conn.execute("CREATE TABLE hosts (k VARCHAR, src VARCHAR, node BIGINT, kind VARCHAR)")
     conn.executemany("INSERT INTO hosts VALUES (?, ?, ?, ?)", [
@@ -70,7 +73,8 @@ def connect():
         ("tb3", "testbed/b", 0, "chromium"), ("tb3", "testbed/b", 1, "native"),
         ("tb4", "testbed/d", 0, "chromium"), ("tw2", "testbed/e", 0, "chromium"), ("tw3", "testbed/f", 0, "chromium"),
         ("tb5", "testbed/p", 0, "chromium"), ("tw4", "testbed/q", 0, "chromium"),
-        ("tb6", "testbed/r", 0, "chromium"), ("tw6", "testbed/s", 0, "chromium")])
+        ("tb6", "testbed/r", 0, "chromium"), ("tw6", "testbed/s", 0, "chromium"),
+        ("tb7", "testbed/t", 0, "chromium")])
     conn.execute("CREATE TABLE timers (k VARCHAR, src VARCHAR, t_us BIGINT, node BIGINT, n BIGINT, "
                  "source VARCHAR, armed_us BIGINT, deadline_us BIGINT, late_us BIGINT, requested_us BIGINT, "
                  "context VARCHAR)")
@@ -136,6 +140,9 @@ def connect():
             period(k, src, q_ms, [at])
         period(k, src, 11_000, [1400])
         period(k, src, 11_250, [])
+    # Ten periods whose holds each start 1.4 ms past their ms.
+    for i in range(10):
+        period("tb7", "testbed/t", 20_050 + 100 * i, [1400])
     conn.executemany("INSERT INTO timers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
     conn.execute("CREATE TABLE seed_decisions (k VARCHAR, src VARCHAR, t_ms BIGINT, node BIGINT, n BIGINT, "
                  "kind VARCHAR, why VARCHAR, stream BIGINT)")
@@ -293,14 +300,38 @@ class Timers(unittest.TestCase):
         # Each period's earliest first poll past its writer's due ms: 1.4,
         # 1.4 and 0.6 ms on the testbed (the re-polls and the whole second's
         # period left out), 1, 0 and 0 in the twin.
-        got = self.q("SELECT runs, timers, late_ms0, late_ms1, round(mean_ms, 6) FROM timer_shares_of([{'k': 'tb6'}]) "
-                     "WHERE source = 'hold'")
+        got = self.q("SELECT runs, timers, late_ms0, late_ms1, round(mean_ms, 6) "
+                     "FROM timer_shares_of([{'k': 'tb6'}], min_holds := 3) WHERE source = 'hold'")
         self.assertEqual(got, [(1, 3, 1 / 3, 2 / 3, 1.133333)])
-        got = self.q("SELECT kind, a_ms0, b_ms0, round(tv, 6), pass FROM timer_fit_of([{'k': 'tw6'}], [{'k': 'tb6'}]) "
-                     "WHERE source = 'hold'")
+        got = self.q("SELECT kind, a_ms0, b_ms0, round(tv, 6), pass "
+                     "FROM timer_fit_of([{'k': 'tw6'}], [{'k': 'tb6'}], min_holds := 3) WHERE source = 'hold'")
         self.assertEqual(got, [("chromium", 2 / 3, 1 / 3, 0.333333, False)])
         # A run whose node logs no pacer's polls, or no writer's, has none.
         self.assertEqual(self.q("SELECT count(*) FROM timer_runs_of([{'k': 'tb5'}]) WHERE source = 'hold'"), [(0,)])
+
+    def test_a_run_of_few_holds_is_in_no_hold_row(self):
+        # tb6's 3 holds are fewer than min_holds' 10 and tb7's 10 aren't:
+        # the row is tb7's alone, its spread none. At 3 both runs count,
+        # alike, and their means spread.
+        side = "[{'k': 'tb6'}, {'k': 'tb7'}]"
+        got = self.q("SELECT runs, timers, late_ms0, late_ms1, round(mean_ms, 6), mean_spread_ms "
+                     f"FROM timer_shares_of({side}) WHERE source = 'hold'")
+        self.assertEqual(got, [(1, 10, 0.0, 1.0, 1.4, None)])
+        got = self.q("SELECT runs, timers, round(late_ms0, 6), round(late_ms1, 6), round(mean_spread_ms, 6) "
+                     f"FROM timer_shares_of({side}, min_holds := 3) WHERE source = 'hold'")
+        self.assertEqual(got, [(2, 13, 0.166667, 0.833333, 0.266667)])
+        # The other sources keep every run, however few its timers.
+        others = ("SELECT source, runs, timers FROM timer_shares_of([{'k': 'tb6'}], min_holds := ?) "
+                  "WHERE source <> 'hold' ORDER BY source")
+        self.assertEqual(self.q(others, 1000), self.q(others, 1))
+        self.assertEqual(self.q(others, 1000), [("pacer", 1, 8), ("writer", 1, 5)])
+        # A fit whose model has no run of enough holds lacks them, and
+        # fails; with no such run on either side it has no hold row.
+        got = self.q("SELECT a_runs, b_runs, pass FROM timer_fit_of([{'k': 'tw6'}], [{'k': 'tb7'}]) "
+                     "WHERE source = 'hold'")
+        self.assertEqual(got, [(None, 1, False)])
+        got = self.q("SELECT count(*) FROM timer_fit_of([{'k': 'tw6'}], [{'k': 'tb6'}]) WHERE source = 'hold'")
+        self.assertEqual(got, [(0,)])
 
     def test_delays_pair_by_delay(self):
         got = self.q("SELECT delay_ms, a_timers, b_timers FROM timer_fit_of([{'k': 'tb2'}], [{'k': 'tb2'}], "

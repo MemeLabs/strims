@@ -222,6 +222,11 @@ struct Link {
     /// The node's hand-offs not yet written, in order. Bound: the link's
     /// write buffers.
     queued: VecDeque<Time>,
+    /// The write begun and not yet done. A later `Began` before its `Done`
+    /// supersedes it, with the checks and hold logged since, so the write
+    /// begins at the later one: the sim's hold start relies on this, logging
+    /// a pass's held write's `Began` again where its hold starts (strims-sim
+    /// net's `flush_log`).
     begun: Option<Begun>,
     written: u64,
     writes: u64,
