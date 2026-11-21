@@ -215,6 +215,18 @@ class Measured(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "two sets of uploads"):
             testbed.twin_cells([("c", runs[0]), ("c", {**base, "STRIMS_SIM_CAL_COMPETE_MS": "10201:30"})])
 
+    def test_a_runs_epoch_keys_nothing_and_a_twin_of_it_alone_takes_it(self):
+        base = {"STRIMS_SIM_CAL_VIEWERS": "15", "TESTBED_QDISC": "a>root-class"}
+        runs = [{**base, testbed.EPOCH: "902"}, {**base, testbed.EPOCH: "168"}]
+        a, b = testbed.cells_of(runs)
+        self.assertEqual(a, b)
+        self.assertEqual(a, testbed.cells_of([base])[0])
+        self.assertEqual(testbed.twin_cells([("c", runs[0])])["c"][testbed.EPOCH], "902")
+        # Two runs at two epochs, or one without: each twin seed draws its own.
+        self.assertEqual(testbed.twin_cells([("c", runs[0]), ("c", runs[1])]), {"c": base})
+        self.assertEqual(testbed.twin_cells([("c", runs[0]), ("c", base)]), {"c": base})
+        self.assertEqual(testbed.twin_cells([("c", runs[0]), ("c", runs[0])])["c"][testbed.EPOCH], "902")
+
 
 # A stand-in for strims-sim's scenarios binary: its one row names the
 # packet log it ran with, and it writes a packet a host of the log's

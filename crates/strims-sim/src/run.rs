@@ -121,6 +121,10 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
             }
         }
     }
+    if w.epoch_phase != strims_base::time::Duration::ZERO {
+        let ms = w.epoch_phase.as_millis();
+        w.log_at(0, "clock", format!("epoch +{ms} ms"));
+    }
     if !spec.clock_skew.is_off() {
         for (h, hs) in spec.hosts.iter().enumerate() {
             let ms = w.clock_offset(h).as_millis();

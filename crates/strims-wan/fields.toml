@@ -4668,7 +4668,7 @@ description = "The most the host's uplink queue holds, in µs of transmission ti
 sims = ["strims-sim"]
 type = "int"
 unit = "us"
-description = "The host's clock's offset from true time, in µs (`HostReport::clock_offset`); 0 on the testbed, whose containers share their host's clock."
+description = "The host's clock skew, in µs (`HostReport::clock_offset`): how far its clock reads ahead of true time apart from the run's epoch phase (`Scenario::epoch_phase`), by which every host's clock leads too; 0 on the testbed, whose containers share their host's clock."
 
 [tables.timers]
 sims = ["strims-sim"]

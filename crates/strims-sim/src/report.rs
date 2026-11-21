@@ -150,8 +150,9 @@ pub struct HostReport {
     /// stats sample: (its answer's time since the start, scenario swarm,
     /// transfers), peers indexed by host.
     pub transfers: Vec<(std::time::Duration, usize, TransferSample)>,
-    /// How far its clock read ahead of true time
-    /// ([`Scenario::clock_skew`]).
+    /// How far its clock read ahead of true time by its skew
+    /// ([`Scenario::clock_skew`]), apart from the run's epoch phase
+    /// ([`Scenario::epoch_phase`]), by which every host's clock leads too.
     pub clock_offset: strims_base::time::Duration,
     /// With [`Scenario::wire_bins`], the node's counters at every edge of
     /// the tables' bins, every incarnation ([`NodeBinRecord`]).

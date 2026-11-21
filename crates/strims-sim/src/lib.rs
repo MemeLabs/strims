@@ -114,7 +114,12 @@
 //!   from a stream forked per host from the same rng after the seed pin's,
 //!   before the controller's choices, and with [`Scenario::timer_probe`]
 //!   its probe's from one more forked per host after them; without it
-//!   nothing is drawn.
+//!   nothing is drawn;
+//! - the run's epoch phase ([`Scenario::epoch_phase`]), where its hosts'
+//!   clocks start in their second, comes from the same rng last, after
+//!   the lateness streams, before the controller's choices; a scenario
+//!   that sets it draws nothing, and at 0 its run is the one before the
+//!   phase.
 //!
 //! The schedule stays fixed because every host, the controller and every
 //! task run on the turmoil thread, shared state is `Rc<RefCell<…>>` over
@@ -193,5 +198,7 @@ pub const WS_PORT: u16 = 7001;
 pub const UDP_PORT: u16 = 7002;
 /// The vpn port vpn probes and their handlers use.
 pub const APP_PORT: u16 = 20_000;
-/// The simulation's epoch (Unix milliseconds).
+/// The simulation's epoch (Unix milliseconds): true time at a run's start,
+/// which its hosts' clocks read plus its epoch phase
+/// ([`Scenario::epoch_phase`]).
 pub const EPOCH_MS: i64 = 1_700_000_000_000;

@@ -109,9 +109,14 @@ DEFAULT_LINK = "tbf"
 JOB_KNOBS = ("STRIMS_SIM_JOB", "STRIMS_SIM_SERIES", "STRIMS_SIM_SEED", "STRIMS_SIM_OUT")
 # What a testbed run recorded for its twin, not configured: its competing
 # uploads' starts (each iperf3 report's timestamp, ms of stream), which
-# differ by tens of ms from run to run. The keying sets them aside, and a
-# cell's twin takes their median over its runs (twin_cells).
-MEASURED = ("STRIMS_SIM_CAL_COMPETE_MS",)
+# differ by tens of ms from run to run, and the ms of its second its stream
+# started at (EPOCH), its twin's epoch phase, where its nodes' grids on Unix
+# time sit against the stream's writes. The keying sets them aside; a
+# cell's twin takes the starts' median over its runs, and the epoch where
+# its runs agree on one (a twin of one run's, as a joins-paired twin is),
+# else none, each twin seed drawing its own (twin_cells).
+EPOCH = "STRIMS_SIM_CAL_EPOCH_MS"
+MEASURED = ("STRIMS_SIM_CAL_COMPETE_MS", EPOCH)
 
 
 def fresh_out(run_dir, out):
@@ -288,9 +293,12 @@ def twin_cells(rows):
     sets aside, two buckets, say), which one twin can't stand for, or a run
     holds a TESTBED_ setting other than its qdisc tree, which no twin knob
     takes (a refused link, a seed's loss, run.sh's late date stamps). What
-    the runs MEASURED is each cell's median over them (median_measured)."""
-    out, measured = {}, {}
+    the runs MEASURED is each cell's median over them (median_measured),
+    but EPOCH, the runs' one where every run holds the same, else left
+    out."""
+    out, measured, runs = {}, {}, {}
     for cell, env in rows:
+        runs[cell] = runs.get(cell, 0) + 1
         odd = sorted(k for k in env if k.startswith("TESTBED_") and k != "TESTBED_QDISC")
         if odd:
             raise ValueError(f"cell {cell}: {', '.join(odd)}, which no twin knob takes: no twin")
@@ -304,7 +312,10 @@ def twin_cells(rows):
             measured.setdefault(cell, {}).setdefault(k, []).append(v)
     for cell, ks in measured.items():
         for k, values in ks.items():
-            out[cell][k] = median_measured(cell, k, values)
+            if k != EPOCH:
+                out[cell][k] = median_measured(cell, k, values)
+            elif len(values) == runs[cell] and len(set(values)) == 1:
+                out[cell][k] = values[0]
     return dict(sorted(out.items()))
 
 

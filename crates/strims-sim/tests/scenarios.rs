@@ -3774,6 +3774,7 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
         secs,
         join_at_ms: None,
         joins: Vec::new(),
+        epoch_ms: None,
         harness_links: false,
         slow_down_kbit: None,
         topology: Some(full_mesh(viewers)),

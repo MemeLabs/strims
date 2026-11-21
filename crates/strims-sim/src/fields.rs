@@ -5731,9 +5731,10 @@ pub(crate) mod cols {
         ///
         /// Unit: us. None is written as an empty field.
         QueueUs,
-        /// The host's clock's offset from true time, in µs
-        /// (`HostReport::clock_offset`); 0 on the testbed, whose containers
-        /// share their host's clock.
+        /// The host's clock skew, in µs (`HostReport::clock_offset`): how far
+        /// its clock reads ahead of true time apart from the run's epoch phase
+        /// (`Scenario::epoch_phase`), by which every host's clock leads too; 0
+        /// on the testbed, whose containers share their host's clock.
         ///
         /// Unit: us.
         ClockUs,

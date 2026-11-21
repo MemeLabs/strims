@@ -104,6 +104,11 @@ fn value<T: std::str::FromStr>(get: &impl Fn(&str) -> Option<String>, name: &str
 ///   starts, to the ms, so a join falls anywhere within its second, and
 ///   arrives then whatever the time (0 too), as run.sh's `--arrive` has
 ///   it; a viewer it doesn't name joins at JOIN_AT's time.
+/// - `STRIMS_SIM_CAL_EPOCH_MS=<ms>`, a testbed run's stream start's ms in
+///   its second (`testbed::Run::read`), is the run's epoch phase
+///   ([`Scenario::epoch_phase`]), 0 to 999: the nodes' clocks then stand
+///   to the stream's writes as the testbed's did, their upload meters'
+///   100 ms intervals at the run's phase. Unset, each seed draws its own.
 /// - `STRIMS_SIM_CAL_SEED_BURST=<bytes>` and `STRIMS_SIM_CAL_VIEWER_BURST=<bytes>`
 ///   give the seed's and each viewer's uplink a shaper bucket that size
 ///   (`strims_wan::Bucket`, leaving at once), as `run.sh`'s `SEED_BURST`
@@ -140,6 +145,8 @@ pub struct Calibration {
     /// Each viewer's own join, in place of `join_at_ms`'s: (node `i`, ms
     /// after the stream starts), arriving then.
     pub joins: Vec<(usize, u64)>,
+    /// The run's epoch phase in ms, under 1000; `None` draws it.
+    pub epoch_ms: Option<u64>,
     /// The viewers make their links as the testbed's harness does
     /// ([`HostSpec::links_at`](crate::spec::HostSpec::links_at)).
     pub harness_links: bool,
@@ -224,6 +231,7 @@ impl Calibration {
                     .map(|s| s * 1000)
             }),
             joins: joins(&get, viewers),
+            epoch_ms: value(&get, "STRIMS_SIM_CAL_EPOCH_MS"),
             harness_links: value::<u64>(&get, "STRIMS_SIM_CAL_HARNESS_LINKS")
                 .is_none_or(|v| v != 0),
             slow_down_kbit: value(&get, "STRIMS_SIM_CAL_SLOW_DOWN_KBIT"),
@@ -265,6 +273,12 @@ impl Calibration {
                     .collect()
             },
         };
+        if let Some(ms) = c.epoch_ms {
+            assert!(
+                ms < 1000,
+                "STRIMS_SIM_CAL_EPOCH_MS={ms}: a ms of the second, 0 to 999"
+            );
+        }
         // A peak is the rate a bucket sends at: without the bucket it would
         // shape nothing.
         for (who, peak, burst) in [
@@ -528,6 +542,7 @@ pub fn calibration_star(c: &Calibration) -> Scenario {
     s.duration = secs(5 + c.secs + 10);
     s.transfer_samples = true;
     s.signal_on_bridge = true;
+    s.epoch_phase = c.epoch_ms.map(Duration::from_millis);
     striped(s, STRIPES, ADAPTIVE)
 }
 
@@ -637,6 +652,28 @@ mod tests {
         for bad in ["0:2", "4:2", "1:-1", "1:2 1:3", "1"] {
             let refused = std::panic::catch_unwind(|| star(bad, None)).is_err();
             assert!(refused, "JOINS={bad}");
+        }
+    }
+
+    /// EPOCH_MS sets the run's epoch phase, to the ms of its second; unset,
+    /// the run draws its own.
+    #[test]
+    fn epoch_ms_sets_the_runs_epoch_phase() {
+        let star = |ms: Option<&str>| {
+            calibration_star(&Calibration::from_knobs(|k| {
+                (k == "STRIMS_SIM_CAL_EPOCH_MS")
+                    .then_some(ms)
+                    .flatten()
+                    .map(str::to_owned)
+            }))
+        };
+        assert_eq!(star(None).epoch_phase, None);
+        for (v, ms) in [("0", 0), ("902", 902), ("999", 999)] {
+            assert_eq!(star(Some(v)).epoch_phase, Some(Duration::from_millis(ms)));
+        }
+        for bad in ["1000", "-1", "0.5"] {
+            let refused = std::panic::catch_unwind(|| star(Some(bad))).is_err();
+            assert!(refused, "EPOCH_MS={bad}");
         }
     }
 }

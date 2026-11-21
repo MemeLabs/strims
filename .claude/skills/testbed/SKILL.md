@@ -181,7 +181,13 @@ crates differ from those the page was built from builds its own page.
   cell's knobs (a scenarios test binary from `cargo test --release -p
   strims-sim --test scenarios --no-run`), its runs a side's from the
   catalog (index first; `farm/RUN/%` for a farm run's, `--kind` and
-  `--side-arm` as testbed_side's). A cell's twin logs the seed's packets
+  `--side-arm` as testbed_side's). A twin of one run (a side of one, as
+  a joins-paired twin's is) sets its clocks' epoch phase to the run's
+  (`STRIMS_SIM_CAL_EPOCH_MS`, the ms of its second the stream started
+  at, which the fold records), so its upload meter's 100 ms grid sits
+  against the stream's writes as the run's did; a twin of runs that
+  started at different ms of their second leaves it out, each of its
+  seeds drawing its own. A cell's twin logs the seed's packets
   where its runs hold them in the catalog (a PCAP=1 run's every node:
   `STRIMS_SIM_PACKET_LOG`, which `testbed.cells_in` adds), which the wire
   fits read at their `at_node`; `--packet-hosts all` (or host numbers)

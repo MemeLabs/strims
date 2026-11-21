@@ -686,6 +686,18 @@ pub struct Scenario {
     /// [`MAX_SKEW`](crate::skew::MAX_SKEW): as user machines' clocks are
     /// ([`ClockSkew::Real`]) by default.
     pub clock_skew: ClockSkew,
+    /// Where the run's start falls in its clocks' second: every host's
+    /// clock reads [`EPOCH_MS`](crate::EPOCH_MS) plus this (and its skew)
+    /// at the run's start, while the frame writers and everything the
+    /// harness measures keep the run's own time. A node's grids on Unix
+    /// time (its upload meter's 100 ms intervals) then sit at this phase
+    /// against the stream's writes, as a deployed stream starts at any ms
+    /// of its second. `None` draws it from the run's rng, a whole ms in
+    /// `[0, 1000)` uniformly (the crate docs' Determinism says when);
+    /// `Some` sets it (a whole ms under a second, which `World::new`
+    /// asserts) and draws nothing,
+    /// `Some(ZERO)` the run as it was before the phase.
+    pub epoch_phase: Option<Duration>,
     /// Whether each host's node task wakes and its frame writer writes as
     /// late as a real node's of its kind do ([`crate::late`] says which
     /// timers that covers, and how late): on by default; off, they run at
@@ -999,6 +1011,7 @@ impl Scenario {
             signal_on_bridge: false,
             exp: BTreeSet::new(),
             clock_skew: ClockSkew::Real,
+            epoch_phase: None,
             timer_lateness: true,
             pacer_lateness: true,
             pacer_turns: true,

@@ -126,15 +126,16 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
             .cloned()
             .zip(w.hold_starts.get(h).cloned()),
         w.timer_log(h).filter(|_| browser).map(|l| l.sink()),
-        w.clock_offset(h),
+        w.clock_lead(h),
     );
     let net = SimNet::new(w.send_buffers.clone())
         .with_wan(w.wan.clone())
         .with_segment(w.spec.segment())
         .with_rtc_stack(rtc_stack.filter(|_| w.spec.window_model()))
         .with_pacer(pacer);
-    // The node's clock, off true time by the host's offset
-    // (`Scenario::clock_skew`), as is the transfers' timer below.
+    // The node's clock, off true time by the run's epoch phase and the
+    // host's offset (`Scenario::epoch_phase`, `Scenario::clock_skew`), as
+    // is the transfers' timer below.
     let clock = SimClock::turmoil(w.clock_epoch(h));
     // Its timers fire late (`Scenario::timer_lateness`).
     let late = w

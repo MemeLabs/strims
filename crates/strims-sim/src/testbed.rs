@@ -847,6 +847,15 @@ impl Run {
             };
             knobs.insert("STRIMS_SIM_CAL_COMPETE_MS".to_owned(), ms);
         }
+        // Where the stream started in its nodes' second, for the twin's
+        // epoch phase: their clocks' grids (the upload meters' 100 ms
+        // intervals on Unix time) against the stream's writes. The keying
+        // sets it aside (simlab's testbed MEASURED), and a twin of this run
+        // alone takes it.
+        knobs.insert(
+            "STRIMS_SIM_CAL_EPOCH_MS".to_owned(),
+            (start_ms % 1000).to_string(),
+        );
         Ok(Run {
             dir: dir.to_owned(),
             settings,
@@ -3674,6 +3683,36 @@ mod tests {
             }
             std::fs::remove_dir_all(&dir).unwrap();
         }
+    }
+
+    /// The ms of its second a run's stream started at is its twin's epoch
+    /// phase, so the twin's clocks stand to its writes as the run's did.
+    #[test]
+    fn a_runs_start_in_its_second_is_its_twins_epoch_phase() {
+        let dir = fixture("epoch");
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.start_ms, START);
+        assert_eq!(run.knobs["STRIMS_SIM_CAL_EPOCH_MS"], "0");
+        for i in 0..=1 {
+            let path = dir.join(format!("node-{i}.jsonl"));
+            let text = std::fs::read_to_string(&path).unwrap();
+            let shifted: String = text
+                .lines()
+                .map(|l| {
+                    let mut v: Value = serde_json::from_str(l).unwrap();
+                    if let Some(rel) = v.get("rel_ms").and_then(Value::as_i64) {
+                        v["rel_ms"] = (rel + 98).into();
+                    }
+                    format!("{v}\n")
+                })
+                .collect();
+            std::fs::write(&path, shifted).unwrap();
+        }
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.start_ms, START - 98);
+        assert_eq!(run.knobs["STRIMS_SIM_CAL_EPOCH_MS"], "902");
+        assert_eq!(run.scenario().epoch_phase, Some(Duration::from_millis(902)));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// A run's joins are its twin's knob, to the ms its nodes took them,

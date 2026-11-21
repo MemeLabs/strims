@@ -511,11 +511,12 @@ mod tests {
         );
     }
 
-    /// Lateness draws from the run's rng last of the scenario's draws: a
-    /// trickle's arrivals, the dishonest mix and the clock offsets come out
-    /// as they do without it, and then its streams (a host's each, and with
-    /// the probe a probe's each) fork the rng the controller's choices
-    /// take, which off it doesn't touch; every host's stream is its kind's.
+    /// Lateness draws from the run's rng last of the scenario's draws but
+    /// the epoch phase: a trickle's arrivals, the dishonest mix and the
+    /// clock offsets come out as they do without it, and then its streams
+    /// (a host's each, and with the probe a probe's each) fork the rng the
+    /// controller's choices take, which off it doesn't touch; every host's
+    /// stream is its kind's.
     #[test]
     fn lateness_forks_last_of_the_scenarios_draws() {
         use crate::Scenario;

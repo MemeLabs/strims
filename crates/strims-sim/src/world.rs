@@ -53,6 +53,13 @@ pub(crate) fn epoch() -> Time {
     Time::from_unix_millis(EPOCH_MS)
 }
 
+/// A run's epoch phase ([`Scenario::epoch_phase`]) drawn from `rng`: a
+/// whole ms in `[0, 1000)`, uniformly.
+pub(crate) fn draw_epoch_phase(rng: &mut DetRng) -> Duration {
+    use rand_core::Rng;
+    Duration::from_millis(rng.next_u64() % 1000)
+}
+
 /// The run's first stretch, over which a host's offers to link it count
 /// apart ([`HostReport::offers_early`](crate::report::HostReport)): a
 /// seed's first wave.
@@ -333,9 +340,13 @@ pub(crate) struct World {
     /// Each media swarm's access units, by arrival from its stream's
     /// start.
     pub media_traces: Vec<Option<Vec<Au>>>,
-    /// How far each host's clock reads ahead of true time
-    /// ([`Scenario::clock_skew`]); empty without skew.
+    /// How far each host's clock reads ahead of true time by its skew
+    /// ([`Scenario::clock_skew`]), apart from the run's epoch phase
+    /// ([`World::clock_lead`] adds it); empty without skew.
     pub clock_offsets: Vec<strims_base::time::Duration>,
+    /// How far every host's clock reads ahead of true time besides its
+    /// skew: the run's epoch phase ([`Scenario::epoch_phase`]).
+    pub epoch_phase: strims_base::time::Duration,
     /// Each host's timers' and stream writer's lateness
     /// ([`Scenario::timer_lateness`]), its incarnations' in turn; empty
     /// without it.
@@ -436,9 +447,8 @@ impl World {
         crate::arrivals::resolve(&mut spec, &mut rng);
         crate::hostile::draw_mix(&mut spec, &mut rng);
         crate::seed_pin::resolve(&mut spec, &mut rng);
-        // Last of the scenario's draws, before the controller's: each
-        // host's lateness stream forked from the run's rng, then with the
-        // probe one more a host for its probe's.
+        // Each host's lateness stream forked from the run's rng, then with
+        // the probe one more a host for its probe's.
         let (lateness, probe_lateness) = if spec.timer_lateness {
             let streams = |rng: &mut DetRng| -> Vec<crate::late::Lateness> {
                 (0..spec.hosts.len())
@@ -460,6 +470,19 @@ impl World {
         } else {
             (Vec::new(), Vec::new())
         };
+        // Last of the scenario's draws, before the controller's: the
+        // epoch's phase, unless the scenario sets it (a whole ms under a
+        // second).
+        if let Some(p) = spec.epoch_phase {
+            assert!(
+                p < Duration::from_secs(1) && p.subsec_nanos() % 1_000_000 == 0,
+                "Scenario::epoch_phase {p:?}: a whole ms under a second"
+            );
+        }
+        let epoch_phase = spec
+            .epoch_phase
+            .unwrap_or_else(|| draw_epoch_phase(&mut rng))
+            .into();
         let st = WorldState {
             trace: Vec::new(),
             hosts: (0..spec.hosts.len())
@@ -508,6 +531,7 @@ impl World {
             wan: SharedWan::default(),
             media_traces,
             clock_offsets,
+            epoch_phase,
             lateness,
             timer_logs,
             link_logs,
@@ -573,10 +597,16 @@ impl World {
         self.clock_offsets.get(h).copied().unwrap_or_default()
     }
 
+    /// How far host `h`'s clock reads ahead of true time: the run's epoch
+    /// phase plus its offset.
+    pub fn clock_lead(&self, h: HostIx) -> strims_base::time::Duration {
+        self.epoch_phase + self.clock_offset(h)
+    }
+
     /// The time host `h`'s clock reads at the run's start: the run's epoch
-    /// plus its offset.
+    /// plus its lead.
     pub fn clock_epoch(&self, h: HostIx) -> Time {
-        epoch() + self.clock_offset(h)
+        epoch() + self.clock_lead(h)
     }
 
     /// The time host `h`'s clock reads `t` into the run.
@@ -728,7 +758,7 @@ impl World {
         }
         if let Some(dir) = &self.spec.capture {
             let path = dir.join(format!("{}-{incarnation}.ppcap", spec.name));
-            let offset = self.clock_offset(h);
+            let offset = self.clock_lead(h);
             c.ppspp_capture = Some(PpsppCapture {
                 open: Arc::new(move |_, _| {
                     std::fs::create_dir_all(path.parent().unwrap_or(&path))?;
@@ -2080,6 +2110,74 @@ impl World {
         for f in found {
             self.log("invariant", &f);
             self.record(|st| st.violations.push((now, f)));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand_core::Rng;
+
+    use super::*;
+    use crate::spec::{SwarmSpec, Transport};
+
+    fn world(phase: Option<Duration>, seed: u64) -> World {
+        let mut s = Scenario::new("epoch");
+        let host = s.host("seed", None);
+        let vs = s.hosts("v", 3, None);
+        for &v in &vs {
+            s.link(v, host, Transport::Tcp);
+        }
+        s.swarm(SwarmSpec::live(
+            host,
+            vs,
+            1024,
+            Duration::from_secs(5),
+            Duration::from_secs(10),
+        ));
+        s.epoch_phase = phase;
+        World::new(s, seed, None, None)
+    }
+
+    /// A run's epoch phase is its seed's, a whole ms under a second, or
+    /// the scenario's, which draws nothing: the controller's rng goes on
+    /// from where it would at any set phase, so a phase of 0 is the run
+    /// before the phase, its clocks at the epoch plus their skew. A set
+    /// phase that isn't a whole ms under a second is refused. Every host's
+    /// clock leads true time by the phase.
+    #[test]
+    fn the_epoch_phase_is_drawn_from_the_seed_unless_the_scenario_sets_it() {
+        let ms = |n: i64| strims_base::time::Duration::from_millis(n);
+        let mut seen = BTreeSet::new();
+        for seed in 1..=64 {
+            let p = world(None, seed).epoch_phase;
+            assert_eq!(world(None, seed).epoch_phase, p, "seed {seed}");
+            assert!(p >= ms(0) && p < ms(1000), "seed {seed}: {p:?}");
+            assert_eq!(p.truncate(ms(1)), p, "seed {seed}: {p:?}");
+            seen.insert(p.as_millis());
+        }
+        assert!(seen.len() > 48, "{seen:?}");
+        let next = |w: &World| w.with_rng(|r| r.next_u64());
+        let zero = world(Some(Duration::ZERO), 7);
+        let set = world(Some(Duration::from_millis(902)), 7);
+        let drawn = world(None, 7);
+        let (z, s, d) = (next(&zero), next(&set), next(&drawn));
+        assert_eq!(z, s, "a set phase draws nothing");
+        assert_ne!(z, d);
+        assert_eq!(next(&zero), d, "a drawn phase takes one value");
+        assert_eq!(zero.clock_offsets, set.clock_offsets);
+        for bad in [Duration::from_secs(1), Duration::from_micros(902_500)] {
+            let refused = std::panic::catch_unwind(|| world(Some(bad), 7)).is_err();
+            assert!(refused, "{bad:?}");
+        }
+        for h in 0..4 {
+            assert_eq!(zero.clock_epoch(h), epoch() + zero.clock_offset(h));
+            assert_eq!(set.clock_lead(h), ms(902) + set.clock_offset(h));
+            assert_eq!(set.clock_epoch(h), epoch() + set.clock_lead(h));
+            assert_eq!(
+                drawn.clock_lead(h),
+                drawn.epoch_phase + drawn.clock_offset(h)
+            );
         }
     }
 }
