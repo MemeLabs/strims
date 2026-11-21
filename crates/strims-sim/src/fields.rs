@@ -5509,7 +5509,8 @@ pub(crate) mod cols {
         /// Unit: us.
         TUs,
         /// When the packet's last bit left the node's uplink, in µs from the
-        /// stream's start; empty for one the queue dropped.
+        /// stream's start; empty for one that never left (`lost` `queue` or
+        /// `crash`).
         ///
         /// strims-sim: The model's shaper's departure of the packet, or its
         /// slot's with slots (`Network::up_last_departures`); on the testbed
@@ -5530,13 +5531,16 @@ pub(crate) mod cols {
         /// Unit: us. None is written as an empty field.
         ArrivedUs,
         /// Where the packet was lost: `queue` (its uplink's queue had no room
-        /// for it), `path` (the path between the nodes lost it); empty for one
-        /// that went.
+        /// for it), `path` (the path between the nodes lost it), `crash` (its
+        /// node crashed with it in its uplink's queue, which the crash
+        /// emptied); empty for one that went.
         ///
         /// strims-sim: The model's queue rule is `Network::up_admit`'s, its
-        /// path's loss the sites'. On the testbed a packet its offered capture
+        /// path's loss the sites', and a crash's fate what its reset forgot
+        /// (`Scheduler::crashed`). On the testbed a packet its offered capture
         /// holds and its eth0 never carried within 1 s is the queue's; the
-        /// testbed's bridge loses nothing on its own, so it writes no `path`.
+        /// testbed's bridge loses nothing on its own, and no node crashes, so
+        /// it writes no `path` and no `crash`.
         ///
         /// None is written as an empty field.
         Lost,

@@ -839,6 +839,9 @@ pub enum PacketLoss {
     Queue,
     /// The path between the nodes lost it.
     Path,
+    /// Its node crashed with it in its uplink's queue, which the crash
+    /// emptied: it never left.
+    Crash,
 }
 
 impl PacketLoss {
@@ -847,6 +850,7 @@ impl PacketLoss {
         match self {
             PacketLoss::Queue => "queue",
             PacketLoss::Path => "path",
+            PacketLoss::Crash => "crash",
         }
     }
 }

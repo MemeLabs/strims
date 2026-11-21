@@ -3762,7 +3762,7 @@ fn a_bin_holds_what_its_uplink_sent_in_it_and_no_more_than_its_link_could_carry(
                 let lost = match p.lost {
                     Some(PacketLoss::Queue) => true,
                     Some(PacketLoss::Path) => p.proto == PacketProto::Udp,
-                    None => false,
+                    Some(PacketLoss::Crash) | None => false,
                 };
                 if lost && let Some(b) = bin(p.at).and_then(|k| want.get_mut(k)) {
                     b[4] += 1;

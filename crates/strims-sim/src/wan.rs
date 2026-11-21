@@ -407,13 +407,15 @@ enum Event {
     /// Data channel `conn`'s receiver sends the SACK it held back.
     SctpDelSack { conn: (SocketAddr, SocketAddr) },
     /// A copy of chunk `seq` of data channel `conn` (`wire` bytes) reaches
-    /// its receiver's downlink.
+    /// its receiver's downlink, its packet's last bit having left its
+    /// sender's uplink at `left`.
     SctpCopy {
         conn: (SocketAddr, SocketAddr),
         seq: u64,
         wire: usize,
         last: bool,
         immediate: bool,
+        left: Time,
     },
     /// Chunk `seq` of data channel `conn` (the `last` of its packet, with
     /// the I bit if `immediate`) is through its receiver's downlink, whose
@@ -2172,6 +2174,7 @@ impl Scheduler {
                     wire,
                     last,
                     immediate,
+                    ..
                 } => {
                     self.sctp_copy_arrived(t, conn, seq, wire, (last, immediate));
                     continue;
@@ -4118,13 +4121,24 @@ impl Scheduler {
     /// `h` lost power at `now`, before the walk that reaches it. What its
     /// data channels' stack did by then goes first
     /// ([`Scheduler::sctp_until_crash`]), so its uplink holds it as the
-    /// crash finds it; then its access links forget their queues, and its
-    /// data channels the rest ([`Scheduler::sctp_forget`]), its downlink
-    /// taking no copy of a chunk until its restart.
+    /// crash finds it; then its access links forget their queues, so what
+    /// its uplink had yet to send never leaves (its packet log's rows of it
+    /// take the crash as their fate, [`PacketLoss::Crash`]) and reaches no
+    /// peer, and its data channels forget the rest
+    /// ([`Scheduler::sctp_forget`]), its downlink taking no copy of a chunk
+    /// until its restart.
     pub fn crashed(&mut self, h: HostIx, now: Time) {
         self.sctp_until_crash(h, now);
         self.net.reset(h, now);
-        self.sctp_forget(h);
+        if let Some(rows) = self.packets.get_mut(h) {
+            let at = now - epoch();
+            for r in rows.iter_mut().filter(|r| r.sent.is_some_and(|s| s > at)) {
+                r.sent = None;
+                r.arrived = None;
+                r.lost = Some(PacketLoss::Crash);
+            }
+        }
+        self.sctp_forget(h, now);
         if let Some(d) = self.down.get_mut(h) {
             *d = true;
         }
@@ -4151,7 +4165,9 @@ impl Scheduler {
         });
     }
 
-    /// `h` restarted after its crash ([`Scheduler::crashed`]).
+    /// `h` restarted after its crash ([`Scheduler::crashed`]). Its peers'
+    /// data channels with it from before the crash go on sending to it,
+    /// and its new stack takes none of their packets.
     pub fn restarted(&mut self, h: HostIx) {
         if let Some(d) = self.down.get_mut(h) {
             *d = false;
@@ -6245,10 +6261,11 @@ mod tests {
     /// there: three channels' messages written at a walk's time go a packet
     /// every 12 µs, and a crash a millisecond on finds the 1 Mbit/s
     /// uplink's bucket of two frames sent and its 100 ms queue full, the
-    /// burst's last packets lost to it. The crash forgets what was queued;
-    /// read up to 2 s on (past the chunks' retransmission timeouts and the
-    /// SACKs of those that went), the uplink carried what left before the
-    /// crash, lost what it lost before it, and was handed nothing after.
+    /// burst's last packets lost to it. The crash forgets what was queued,
+    /// which never leaves: the packet log keeps its offers, the crash their
+    /// fate. Read up to 2 s on (past the chunks' retransmission timeouts and
+    /// the SACKs of those that went), the uplink carried what left before
+    /// the crash, lost what it lost before it, and was handed nothing after.
     #[test]
     fn a_crash_finds_what_a_chromiums_thread_handed_over_before_it() {
         let site = Site::new(City::Frankfurt, Access::Fiber)
@@ -6270,12 +6287,23 @@ mod tests {
         let log = &wan.packets[0];
         let at = |d: Duration| epoch() + d;
         let lost = |r: &PacketRecord| r.lost == Some(PacketLoss::Queue);
+        let forgot = |r: &PacketRecord| r.lost == Some(PacketLoss::Crash);
         assert_eq!(log.len(), 24, "{log:?}");
         assert!(log.iter().all(|r| at(r.at) < crash), "{log:?}");
         assert!(log.iter().any(lost), "{log:?}");
         assert!(
-            log.iter().any(|r| r.sent.is_some_and(|s| at(s) > crash)),
+            log.iter().any(forgot),
             "nothing queued at the crash: {log:?}"
+        );
+        assert!(
+            log.iter()
+                .filter(|r| forgot(r))
+                .all(|r| r.sent.is_none() && r.arrived.is_none()),
+            "{log:?}"
+        );
+        assert!(
+            log.iter().all(|r| r.sent.is_none_or(|s| at(s) <= crash)),
+            "left after the crash: {log:?}"
         );
         let c = wan.up_counters(0, Time::MAX);
         let want = (
@@ -6322,6 +6350,172 @@ mod tests {
                 wan.packets[0]
             );
             assert!(wan.packets[1].is_empty(), "{p:?}: {:?}", wan.packets[1]);
+        }
+    }
+
+    /// A walk at `t` of the events alone, as a step's walk runs them.
+    fn reach(wan: &mut Scheduler, t: Time) {
+        wan.walked = t;
+        wan.net.settle(t);
+        wan.run_events(t);
+    }
+
+    /// A crash that comes after a chunk is through its host's downlink and
+    /// before the walk that reaches it finds the chunk taken and its SACK
+    /// handed over, as a Firefox and as a Chromium: four packets reach
+    /// `b`'s 1 Mbit/s downlink together and come through it 8.7 ms apart; a
+    /// walk a millisecond after they reach it leaves the first still in the
+    /// downlink, and `b` crashes 10 ms on, after the first is through.
+    #[test]
+    fn a_crash_finds_the_sack_of_what_its_downlink_delivered_before_it() {
+        let fiber = Site::new(City::Frankfurt, Access::Fiber);
+        for p in [SctpProfile::FIREFOX, SctpProfile::CHROMIUM] {
+            let (_sim, mut wan, conns) = channels_between(p, 1, fiber, fiber.with_down(125_000));
+            let mut id = 1 << 32;
+            let t0 = sim_time(StdDuration::from_secs(1));
+            write_chunks(&mut wan, &mut id, t0, conns[0], 1, 4);
+            let t1 = t0 + wan.net.one_way(0, 1) + Duration::from_millis(1);
+            reach(&mut wan, t1);
+            assert!(wan.packets[1].is_empty(), "{p:?}: {:?}", wan.packets[1]);
+            let crash = t1 + Duration::from_millis(10);
+            wan.crashed(1, crash);
+            let log = &wan.packets[1];
+            let at = |d: Duration| epoch() + d;
+            assert!(
+                log.iter()
+                    .any(|r| r.kind == PacketKind::Sack && at(r.at) > t1 && at(r.at) <= crash),
+                "{p:?}: no SACK handed over between the walk and the crash: {log:?}"
+            );
+            let handed = log.len();
+            reach(&mut wan, crash + Duration::from_secs(2));
+            assert_eq!(wan.packets[1].len(), handed, "{p:?}: {:?}", wan.packets[1]);
+        }
+    }
+
+    /// A receiver that crashed takes nothing of what its peer's association
+    /// with its stack from before the crash sends it once it is up again, as
+    /// a Firefox and as a Chromium: four packets reach `b`'s 1 Mbit/s
+    /// downlink together, `b` crashes a millisecond on, before the first is
+    /// through, and restarts 5 s later. Up to two minutes on, `a`'s
+    /// association, which never heard of the crash, sends copies on its
+    /// retransmission timer, which come through `b`'s downlink, and `b`'s
+    /// uplink is handed nothing.
+    #[test]
+    fn a_restarted_receiver_takes_nothing_its_crashed_stack_was_sent() {
+        let fiber = Site::new(City::Frankfurt, Access::Fiber);
+        for p in [SctpProfile::FIREFOX, SctpProfile::CHROMIUM] {
+            let (_sim, mut wan, conns) = channels_between(p, 1, fiber, fiber.with_down(125_000));
+            let mut id = 1 << 32;
+            let t0 = sim_time(StdDuration::from_secs(1));
+            write_chunks(&mut wan, &mut id, t0, conns[0], 1, 4);
+            let t1 = t0 + wan.net.one_way(0, 1) + Duration::from_millis(1);
+            reach(&mut wan, t1);
+            wan.crashed(1, t1);
+            let t2 = t1 + Duration::from_secs(5);
+            reach(&mut wan, t2);
+            assert!(
+                wan.packets[1].is_empty(),
+                "{p:?}: down: {:?}",
+                wan.packets[1]
+            );
+            wan.restarted(1);
+            let (sent, through) = (wan.packets[0].len(), wan.net.stats(1).down_bytes);
+            reach(&mut wan, t2 + Duration::from_secs(120));
+            assert!(wan.packets[0].len() > sent, "{p:?}: `a` resent nothing");
+            assert!(
+                wan.net.stats(1).down_bytes > through,
+                "{p:?}: no copy reached `b`"
+            );
+            assert!(
+                wan.packets[1].is_empty(),
+                "{p:?}: restarted `b` handed over: {:?}",
+                wan.packets[1]
+            );
+        }
+    }
+
+    /// A SACK its receiver's crash forgot reaches no sender: a Firefox `b`
+    /// on a 2 kB/s uplink with no bucket SACKs `a`'s chunk as it comes
+    /// through, and its uplink takes 46 ms to send it; `b` crashes before
+    /// it has left. The packet log keeps the SACK's offer, the crash its
+    /// fate, nothing left `b`, and `a`, which took no SACK, resends.
+    #[test]
+    fn a_sack_its_receivers_crash_forgot_reaches_no_sender() {
+        let fiber = Site::new(City::Frankfurt, Access::Fiber);
+        let slow = fiber.with_up(2_000).with_bucket(None);
+        let (_sim, mut wan, conns) = channels_between(SctpProfile::FIREFOX, 1, fiber, slow);
+        let mut id = 1 << 32;
+        let t0 = sim_time(StdDuration::from_secs(1));
+        write_chunks(&mut wan, &mut id, t0, conns[0], 1, 1);
+        let t1 = t0 + wan.net.one_way(0, 1) + Duration::from_millis(1);
+        reach(&mut wan, t1);
+        let handed = wan.packets[1].clone();
+        let at = |d: Duration| epoch() + d;
+        assert!(!handed.is_empty(), "no SACK handed over");
+        assert!(
+            handed
+                .iter()
+                .all(|r| r.lost.is_none() && r.sent.is_some_and(|s| at(s) > t1)),
+            "{handed:?}"
+        );
+        wan.crashed(1, t1);
+        let log = &wan.packets[1];
+        assert_eq!(log.len(), handed.len(), "{log:?}");
+        for (r, h) in log.iter().zip(&handed) {
+            assert_eq!((r.at, r.kind, r.ip_bytes), (h.at, h.kind, h.ip_bytes));
+            assert_eq!(
+                (r.sent, r.arrived, r.lost),
+                (None, None, Some(PacketLoss::Crash))
+            );
+        }
+        assert_eq!(wan.up_counters(1, Time::MAX)[up_ix("up_packets")], 0);
+        reach(&mut wan, t1 + Duration::from_secs(2));
+        assert!(
+            wan.packets[0].len() > 1,
+            "`a` took a SACK that never left `b` and resent nothing: {:?}",
+            wan.packets[0]
+        );
+    }
+
+    /// A copy its sender's crash forgot reaches no receiver, as a Firefox
+    /// and as a Chromium: `a`'s 25 kB/s uplink with no bucket sends its
+    /// chunk in 44 ms, `b`'s SACK of it takes 0.92 s through its 100 B/s
+    /// uplink, and `a`'s retransmission timer resends the chunk at 0.5 s, a
+    /// copy, which takes 44 ms to leave; `a` crashes 20 ms on, before it
+    /// has. `b` takes the chunk and SACKs it, and nothing more: the copy
+    /// never comes.
+    #[test]
+    fn a_copy_its_senders_crash_forgot_reaches_no_receiver() {
+        let fiber = Site::new(City::Frankfurt, Access::Fiber);
+        let (at_a, at_b) = (
+            fiber.with_up(25_000).with_bucket(None),
+            fiber.with_up(100).with_bucket(None),
+        );
+        for p in [SctpProfile::FIREFOX, SctpProfile::CHROMIUM] {
+            let (_sim, mut wan, conns) = channels_between(p, 1, at_a, at_b);
+            let ab = conns[0];
+            wan.open_channel((ab.1, ab.0), p);
+            let mut id = 1 << 32;
+            let t0 = sim_time(StdDuration::from_secs(1));
+            write_chunks(&mut wan, &mut id, t0, ab, 1, 1);
+            let crash = t0 + Duration::from_millis(520);
+            reach(&mut wan, crash);
+            let at = |d: Duration| epoch() + d;
+            let log = wan.packets[0].clone();
+            assert_eq!(log.len(), 2, "{p:?}: {log:?}");
+            assert!(log[0].sent.is_some_and(|s| at(s) < crash), "{p:?}: {log:?}");
+            assert!(log[1].sent.is_some_and(|s| at(s) > crash), "{p:?}: {log:?}");
+            let sacks = wan.packets[1].len();
+            assert!(sacks > 0, "{p:?}: `b` SACKed nothing");
+            wan.crashed(0, crash);
+            assert_eq!(wan.packets[0][1].lost, Some(PacketLoss::Crash), "{p:?}");
+            reach(&mut wan, crash + Duration::from_secs(2));
+            assert_eq!(
+                wan.packets[1].len(),
+                sacks,
+                "{p:?}: `b` took a copy that never left `a`: {:?}",
+                wan.packets[1]
+            );
         }
     }
 

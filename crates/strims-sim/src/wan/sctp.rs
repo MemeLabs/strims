@@ -511,18 +511,19 @@ impl Handover {
     }
 }
 
-/// Whether `e` is host `h`'s data channels' event: a packet its network
-/// thread hands over, a chunk or a copy reaching its downlink or through
-/// it, its receivers' delayed SACKs, and its associations' timers and the
-/// SACKs reaching them.
-fn sctp_of(e: &Event, h: HostIx, ip_host: &FastMap<IpAddr, HostIx>) -> bool {
+/// Whether `e` is host `h`'s data channels' event, as `h` crashes at
+/// `now`: a packet its network thread hands over, a chunk or a copy
+/// reaching its downlink or through it, its receivers' delayed SACKs, and
+/// its associations' timers and the SACKs reaching them; or a copy it sent
+/// whose packet hadn't left its uplink by `now`, which the crash forgot
+/// with the uplink's queue.
+fn sctp_of(e: &Event, h: HostIx, now: Time, ip_host: &FastMap<IpAddr, HostIx>) -> bool {
     let at = |a: &SocketAddr| ip_host.get(&a.ip()) == Some(&h);
     match e {
         Event::SctpOut(hand) => hand.host(ip_host) == Some(h),
         Event::SctpSack { conn } | Event::SctpTimeout { conn } => at(&conn.0),
-        Event::SctpDelSack { conn }
-        | Event::SctpCopy { conn, .. }
-        | Event::SctpThrough { conn, .. } => at(&conn.1),
+        Event::SctpCopy { conn, left, .. } => at(&conn.1) || (at(&conn.0) && *left > now),
+        Event::SctpDelSack { conn } | Event::SctpThrough { conn, .. } => at(&conn.1),
         _ => false,
     }
 }
@@ -659,9 +660,19 @@ pub(super) struct Assoc {
     /// it last stopped.
     t3: Option<Time>,
     timeouts: u32,
-    /// SACKs on their way, by event key. Bound: the SACKs a round trip
+    /// SACKs on their way, by event key, each with when its packet's last
+    /// bit left the receiver's uplink. Bound: the SACKs a round trip
     /// holds.
-    sacks: BTreeMap<u64, Sack>,
+    sacks: BTreeMap<u64, (Time, Sack)>,
+    /// Its peer's host crashed since it opened ([`Scheduler::sctp_forget`]):
+    /// the association goes on sending, as its stack has no word of the
+    /// crash, its timer resending at its backoff's cap (WebRTC gives dcSCTP
+    /// no limit on retransmissions, media/sctp/dcsctp_transport.cc:809-811,
+    /// and sctp-proto has none by default), and the host, up again, takes
+    /// none of it, its new stack holding no state for the association (a
+    /// restarted browser's new ICE and DTLS state answer nothing on the old
+    /// 5-tuple).
+    peer_crashed: bool,
     /// The chunks on their way that a later chunk of their packet follows,
     /// and the last chunks of packets with the I bit: the receiver takes
     /// the packet at its last. Bound: the window.
@@ -718,6 +729,7 @@ impl Assoc {
             t3: None,
             timeouts: 0,
             sacks: BTreeMap::new(),
+            peer_crashed: false,
             ends: BTreeSet::new(),
             bundled: BTreeSet::new(),
             immediate: BTreeSet::new(),
@@ -1381,16 +1393,26 @@ impl Scheduler {
         }
     }
 
-    /// Host `h`'s data channels die with it at its crash: it forgets its
-    /// associations, its receivers' state, and every event that would move
-    /// them or bring them a packet ([`sctp_of`]): what its network thread
-    /// had yet to hand over, what its downlink had yet to deliver, its
-    /// timers, and the SACKs on their way to it.
-    pub(super) fn sctp_forget(&mut self, h: HostIx) {
+    /// Host `h`'s data channels die with it at its crash at `now`, after
+    /// its links forgot what they held ([`strims_wan::Network::reset`]): it
+    /// forgets its associations, its receivers' state, and every event that
+    /// would move them or bring them a packet ([`sctp_of`]): what its
+    /// network thread had yet to hand over, what its downlink had yet to
+    /// deliver, its timers, and the SACKs on their way to it. What its
+    /// uplink had yet to send reaches no peer: neither its copies nor its
+    /// SACKs, alone or riding its data, whose packets left after `now`.
+    /// (Its chunks' records go with the links the run cuts before the
+    /// crash, [`Scheduler::partition`].) Its peers' associations with it
+    /// live on ([`Assoc::peer_crashed`]).
+    pub(super) fn sctp_forget(&mut self, h: HostIx, now: Time) {
         let ip_host = &self.ip_host;
         let at = |a: &SocketAddr| ip_host.get(&a.ip()) == Some(&h);
-        self.events.retain(|_, e| !sctp_of(e, h, ip_host));
+        self.events.retain(|_, e| !sctp_of(e, h, now, ip_host));
         self.assocs.retain(|conn, _| !at(&conn.0));
+        for (_, a) in self.assocs.iter_mut().filter(|(conn, _)| at(&conn.1)) {
+            a.peer_crashed = true;
+            a.sacks.retain(|_, (left, _)| *left <= now);
+        }
         self.rcvs.retain(|conn, _| !at(&conn.1));
     }
 
@@ -1483,7 +1505,8 @@ impl Scheduler {
             if carried.is_some() {
                 sack.rode = carried;
             }
-            self.sack_held(back, sack, t.filter(|t| !t.dropped).map(|t| t.arrival));
+            let went = t.filter(|t| !t.dropped).map(|t| (t.depart, t.arrival));
+            self.sack_held(back, sack, went);
         }
         let Some(t) = t.filter(|t| !t.dropped) else {
             for (c, copy) in packet.iter().zip(&copies) {
@@ -1509,6 +1532,7 @@ impl Scheduler {
                         wire: w,
                         last: i == last,
                         immediate,
+                        left: t.depart,
                     },
                 );
                 continue;
@@ -1546,7 +1570,9 @@ impl Scheduler {
     /// A copy of chunk `seq` of `conn` (`wire` bytes, the `last` of its
     /// packet, with the I bit if `immediate`) reached its receiver's
     /// downlink at `t`. One that reaches a host down from a crash is gone,
-    /// as a message on its cut links is ([`Scheduler::partition`]).
+    /// as a message on its cut links is ([`Scheduler::partition`]); one
+    /// that reaches it up again takes its downlink, and its stack none of
+    /// it ([`Scheduler::sctp_received`]).
     pub(super) fn sctp_copy_arrived(
         &mut self,
         t: Time,
@@ -1623,7 +1649,10 @@ impl Scheduler {
     /// A packet of chunk `seq` of `conn` was through its receiver's
     /// downlink at `t` (`flags`: the last chunk of its packet, and the
     /// packet's I bit): the receiver takes the chunk, and at its packet's
-    /// last, sends a SACK now or holds a lone packet's.
+    /// last, sends a SACK now or holds a lone packet's. A receiver that
+    /// crashed since `conn`'s association opened takes nothing of it, up
+    /// again or not ([`Assoc::peer_crashed`]): the copies its peer's timer
+    /// sends come through its downlink and go no further.
     pub(super) fn sctp_received(
         &mut self,
         t: Time,
@@ -1631,6 +1660,9 @@ impl Scheduler {
         seq: u64,
         (last, immediate): (bool, bool),
     ) {
+        if self.assocs.get(&conn).is_some_and(|a| a.peer_crashed) {
+            return;
+        }
         let Some(p) = self.receiver_profile(conn) else {
             return;
         };
@@ -1689,10 +1721,11 @@ impl Scheduler {
         })
     }
 
-    /// `sack` of `conn` rode a packet that reaches the sender at `at`, if
-    /// the packet wasn't lost.
-    fn sack_held(&mut self, conn: ConnKey, sack: Sack, at: Option<Time>) {
-        let Some(at) = at else {
+    /// `sack` of `conn` rode a packet whose last bit left the receiver's
+    /// uplink at `went`'s first and that reaches the sender at its second,
+    /// if the packet wasn't lost.
+    fn sack_held(&mut self, conn: ConnKey, sack: Sack, went: Option<(Time, Time)>) {
+        let Some((left, at)) = went else {
             return;
         };
         let Some(a) = self.assocs.get_mut(&conn) else {
@@ -1700,7 +1733,7 @@ impl Scheduler {
         };
         let key = self.next;
         self.next += 1;
-        a.sacks.insert(key, sack);
+        a.sacks.insert(key, (left, sack));
         self.events.insert((at, key), Event::SctpSack { conn });
     }
 
@@ -1785,7 +1818,7 @@ impl Scheduler {
         let at = depart + self.net.one_way(to, from);
         offer.transit = Some((depart, at));
         self.offered(&offer);
-        self.sack_held(conn, sack, Some(at));
+        self.sack_held(conn, sack, Some((depart, at)));
     }
 
     /// SACK `key` of `conn` reaches the sender at `t`, which takes it as
@@ -1794,7 +1827,7 @@ impl Scheduler {
         let Some(a) = self.assocs.get_mut(&conn) else {
             return;
         };
-        let Some(sack) = a.sacks.remove(&key) else {
+        let Some((_, sack)) = a.sacks.remove(&key) else {
             return;
         };
         let Some(cum0) = a.cum else {
