@@ -91,8 +91,8 @@ printed places would print differently from the Python scoring's.
 
 - These sums use `compensated_sum`: effects_of's means and sums of
   squares, arm_score_of's geometric means and fisher_p's sum; and
-  sctp_fit_of's shares and total variation distances, each of a list in
-  an order of its own.
+  sctp_fit_of's shares and total variation distances and timer_shares_of's
+  means over runs and cells, each of a list in an order of its own.
 - These sums of floats add plainly, as no golden compares them with a
   reference to the bit: dynamics' means (DuckDB's avg) and a metric's own
   SQL in metrics.toml (depth_mean's terms).
@@ -103,7 +103,8 @@ does one that a rule's pass or bound reads, over a list ordered by a key
 (`compensated_sum(list(x ORDER BY k))`): an aggregate's sum adds in the
 order its threads meet the rows, so its last bits move from one query to
 the next, and a value at its bound passes in one and fails in the next
-(sctp_fit_of's distances did, test_sctp_bench's `Repeats`).
+(sctp_fit_of's distances and timer_shares_of's means did,
+test_sctp_bench's and test_timers' `Repeats`).
 
 ## Checks
 

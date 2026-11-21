@@ -691,14 +691,19 @@ pub struct Scenario {
     /// timers that covers, and how late): on by default; off, they run at
     /// their deadlines and nothing is drawn.
     pub timer_lateness: bool,
-    /// Whether a browser host's pacer holds its channels' writers as the
-    /// browser's does (`crate::net`): each held writer asleep on a timer
-    /// of its own, as late as its kind's host pacer polls are with
-    /// [`Scenario::timer_lateness`] ([`crate::late`]), and the writers due
-    /// at one instant resuming in turn, each once the work of the one
-    /// before it is done: on by default. Off, a held writer polls every
-    /// `HOST_POLL` on time, and those due at one instant resume together.
-    pub pacer_timers: bool,
+    /// Whether a browser host's held channel writers' polls of its pacer
+    /// fire as late as its kind's host pacer polls are, with
+    /// [`Scenario::timer_lateness`] ([`crate::late`]; `crate::net`): each
+    /// writer asleep on a timer of its own, those armed for one deadline as
+    /// late as one another: on by default. Off, each polls `HOST_POLL`
+    /// from its hold on time, and nothing is drawn.
+    pub pacer_lateness: bool,
+    /// Whether a browser host's held channel writers whose polls come at
+    /// one instant read the host's load in turn, each once the work of the
+    /// one before it is done, as the browser's timer callbacks run
+    /// (`crate::net`): on by default. Off, they read it as their tasks run,
+    /// their writes interleaving.
+    pub pacer_turns: bool,
     /// With [`Scenario::wire_bins`], the hosts that keep their timers as
     /// they fire for the tables' `timers` (`NodeConfig::timer_log`, and
     /// their frame writers' and probes' waits): none by default. Changes
@@ -987,7 +992,8 @@ impl Scenario {
             exp: BTreeSet::new(),
             clock_skew: ClockSkew::Real,
             timer_lateness: true,
-            pacer_timers: true,
+            pacer_lateness: true,
+            pacer_turns: true,
             timer_log: None,
             timer_probe: false,
             link_log: None,

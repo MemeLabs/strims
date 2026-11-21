@@ -113,11 +113,13 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
     let config = w.node_config(h, inc).ok_or("unknown host")?;
     let rtc_stack = w.spec.hosts.get(h).and_then(|s| s.rtc_stack);
     // A browser's held channel writers poll its pacer as the browser's
-    // (`Scenario::pacer_timers`), each poll in its timer log.
+    // (`Scenario::pacer_lateness`, `Scenario::pacer_turns`), each poll in
+    // its timer log.
     let browser = crate::late::HostKind::of_host(&w.spec, h) != crate::late::HostKind::Native;
     let pacer = crate::net::PacerTimers::new(
-        browser && w.spec.pacer_timers,
-        w.lateness.get(h).cloned(),
+        browser,
+        w.lateness.get(h).filter(|_| w.spec.pacer_lateness).cloned(),
+        w.spec.pacer_turns,
         w.timer_log(h).filter(|_| browser).map(|l| l.sink()),
         w.clock_offset(h),
     );

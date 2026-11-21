@@ -173,6 +173,21 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
     let secs = sim.elapsed().as_secs_f64();
     let end = sim.elapsed();
     let ms = u64::try_from(end.as_millis()).unwrap_or(u64::MAX);
+    // A host pacer's due poll left without its turn: its writer's task
+    // stopped while it waited (`SendBuffers::turn`), which no run should
+    // show.
+    if let Some(n) = w
+        .send_buffers
+        .as_ref()
+        .map(|b| b.evicted())
+        .filter(|&n| n > 0)
+    {
+        w.log_at(
+            ms,
+            "wan",
+            format!("host pacer polls evicted from their turns {n}"),
+        );
+    }
     // Dropping the simulation drops every runtime, and with them the nodes.
     drop(sim);
     w.observe_stopped(end, true, w.wan.lock().as_ref());

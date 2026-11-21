@@ -145,12 +145,13 @@
 //!   timers that covers, and how late); `off` keeps them at their
 //!   deadlines. Unset, a scenario keeps its own, on unless it says
 //!   otherwise.
-//! - `STRIMS_SIM_PACER_TIMERS=on` makes a browser host's pacer hold its
-//!   channels' writers as the browser's does, each on a timer of its own
-//!   as late as its kind's host pacer polls are, those due at one instant
-//!   resuming in turn ([`Scenario::pacer_timers`], `crate::net`); `off`
-//!   polls every held writer on time, those due at once together. Unset,
-//!   a scenario keeps its own, on unless it says otherwise.
+//! - `STRIMS_SIM_PACER_LATENESS=on` makes a browser host's held channel
+//!   writers poll its pacer as late as its kind's host pacer polls are,
+//!   each on a timer of its own ([`Scenario::pacer_lateness`],
+//!   `crate::net`); `off` on time. `STRIMS_SIM_PACER_TURNS=on` makes the
+//!   writers whose polls come at one instant read the host's load in turn
+//!   ([`Scenario::pacer_turns`]); `off` as their tasks run. Unset, a
+//!   scenario keeps its own, on unless it says otherwise.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), which the run second by second
 //!   (`Report::series_data`) and the tables' `seconds` take.
@@ -544,15 +545,16 @@ fn timer_lateness_knob() -> Option<bool> {
     }
 }
 
-/// `STRIMS_SIM_PACER_TIMERS` ([`Scenario::pacer_timers`]): `on` or
-/// `off`, if set and not blank.
+/// The switch `name` (`STRIMS_SIM_PACER_LATENESS`,
+/// [`Scenario::pacer_lateness`]; `STRIMS_SIM_PACER_TURNS`,
+/// [`Scenario::pacer_turns`]): `on` or `off`, if set and not blank.
 #[allow(clippy::panic)] // a mistyped setting fails its test
-fn pacer_timers_knob() -> Option<bool> {
-    let v = env("STRIMS_SIM_PACER_TIMERS").filter(|v| !v.trim().is_empty())?;
+fn on_off_knob(name: &str) -> Option<bool> {
+    let v = env(name).filter(|v| !v.trim().is_empty())?;
     match v.trim() {
         "on" => Some(true),
         "off" => Some(false),
-        other => panic!("STRIMS_SIM_PACER_TIMERS={other}: on or off"),
+        other => panic!("{name}={other}: on or off"),
     }
 }
 
@@ -850,7 +852,8 @@ fn sweep_seeds(
     let departures = depart_knob();
     let clock_skew = clock_skew_knob();
     let timer_lateness = timer_lateness_knob();
-    let pacer_timers = pacer_timers_knob();
+    let pacer_lateness = on_off_knob("STRIMS_SIM_PACER_LATENESS");
+    let pacer_turns = on_off_knob("STRIMS_SIM_PACER_TURNS");
     let timer_log = timer_log_knob();
     let timer_probe = knob::<u32>("STRIMS_SIM_TIMER_PROBE") == Some(1);
     let link_log = link_log_knob();
@@ -1033,8 +1036,11 @@ fn sweep_seeds(
         if let Some(late) = timer_lateness {
             spec.timer_lateness = late;
         }
-        if let Some(timers) = pacer_timers {
-            spec.pacer_timers = timers;
+        if let Some(late) = pacer_lateness {
+            spec.pacer_lateness = late;
+        }
+        if let Some(turns) = pacer_turns {
+            spec.pacer_turns = turns;
         }
         if let Some(pin) = &seed_pin {
             if let Err(e) = pin.check(&spec) {

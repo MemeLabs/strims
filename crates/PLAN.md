@@ -556,10 +556,12 @@ and dropped are in `TRIED.md`.
     pacer fail the bench's mean alone.
   - Draw a timer's lateness by its host's load, where the timer bench's
     runs beside a competing upload read it later than its idle runs
-    (`timer_fit_of` per condition), and by its node's own work, where a
-    busy browser seed's host pacer polls run later than the bench's
-    (seed_sends' release delays of held pushes on the testbed's SPEC=1
-    halve-15 runs).
+    (`timer_fit_of` per condition), and by its node's own work: fit a
+    busy browser seed's host pacer polls from its timer log.
+  - Measure where a browser runs a held writer's timer callback against
+    the node task's macrotask yield (strims-wasm's `yield_now`), which
+    strims-sim's host pacer turns take to come after it
+    (`net::QUIET`'s third round).
   - Model a loaded machine's timer stalls (tens to hundreds of ms, one
     node's or every node's at once, which a host's other load makes and
     a host of its own doesn't) once a measure of users' machines says

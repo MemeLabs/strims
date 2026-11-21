@@ -90,19 +90,16 @@ CREATE OR REPLACE MACRO t975_at(df_) AS
 -- means and fisher_p's sum, so those are the Python scoring's bit for bit
 -- (hack/sim-suite/golden.py's reference): a left fold strays from it by
 -- last bits, which a value on a tie at the places a scorecard prints shows.
--- sctp_fit_of's shares and total variation distances are this too, of
--- lists in an order of their own, so that a query's bits are the same
--- every time: an aggregate's sum adds in the order its threads meet the
--- rows, and a distance at its bound would pass or fail by it. No other
+-- sctp_fit_of's shares and total variation distances and timer_shares_of's
+-- means over runs and cells are this too, of lists in an order of their
+-- own, so that a query's bits are the same every time: an aggregate's sum
+-- adds in the order its threads meet the rows, and a distance or a bound
+-- a value is at would pass or fail it by them. No other
 -- sum is: dynamics' means of the rows' playback fields are DuckDB's avg,
 -- most other macros' sums are of integers, and a metric's own SQL
 -- (metrics.toml's: depth_mean's six terms) adds as written, as the
 -- reference restates it. 0 for an empty list, NULL for NULL or a NULL
 -- among xs.
---
--- timer_shares_of's means over runs and cells take it too, each of a list
--- in an order of its own, so the timer bench's distance, bounds and pass
--- are the same bits in every query.
 CREATE OR REPLACE MACRO compensated_sum(xs) AS
     list_transform([list_reduce(list_transform(xs, lambda cs_x: {'s': cs_x::DOUBLE, 'c': 0.0::DOUBLE}),
                                 lambda cs_acc, cs_y: {'s': cs_acc.s + cs_y.s,

@@ -1855,10 +1855,11 @@ fn pacer_polls_free_the_hosts_holds(r: &strims_sim::Report, d: &Path) {
 /// a timer fired at its deadline plus the lateness the run draws (none
 /// without `Scenario::timer_lateness`, else whole milliseconds within
 /// `strims_sim::late`'s draws; a host pacer's none without
-/// `Scenario::pacer_timers` either), after it was armed; its delay is its
+/// `Scenario::pacer_lateness` either), after it was armed; its delay is its
 /// deadline less the whole ms it was armed at, a host pacer's poll's
-/// `HOST_POLL`, on a browser host alone; and a node's timers of a source
-/// fire in order, its node task's a millisecond apart at least.
+/// `HOST_POLL`, on a browser host alone, those armed for one deadline at
+/// one instant; and a node's timers of a source fire in order, its node
+/// task's a millisecond apart at least.
 fn timers_say_what_they_are(r: &strims_sim::Report, d: &Path) {
     let rows = table_rows(d, "timers");
     let meta: serde_json::Value =
@@ -1869,6 +1870,7 @@ fn timers_say_what_they_are(r: &strims_sim::Report, d: &Path) {
     let mut last: BTreeMap<(i64, String), i64> = BTreeMap::new();
     let mut sources: BTreeMap<i64, BTreeSet<String>> = BTreeMap::new();
     let mut ns: BTreeMap<i64, Vec<i64>> = BTreeMap::new();
+    let mut pacer_fired: BTreeMap<(i64, i64), i64> = BTreeMap::new();
     // A node task's deadline can fall within a millisecond, and its timer
     // then fires at the simulation's next tick past it.
     let most = if r.scenario.timer_lateness {
@@ -1892,7 +1894,10 @@ fn timers_say_what_they_are(r: &strims_sim::Report, d: &Path) {
         if row["source"] == "pacer" {
             assert!(browser(r, node), "{row:?}");
             assert_eq!(x("requested_us"), 5_000, "{row:?}");
-            if !r.scenario.pacer_timers {
+            // The polls a node armed for one deadline fire at one instant.
+            let fired = *pacer_fired.entry((node, x("deadline_us"))).or_insert(t);
+            assert_eq!(fired, t, "{row:?}");
+            if !r.scenario.pacer_lateness {
                 assert_eq!(late, 0, "{row:?}");
             }
         }

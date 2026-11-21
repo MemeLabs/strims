@@ -29,11 +29,11 @@
 //! lateness), the driver's own sleeps (its accept and receive backoffs)
 //! and the WAN model's transport timers.
 //!
-//! With [`Scenario::pacer_timers`] a browser's host pacer runs late too:
-//! each data channel's writer the host's pacer holds sleeps on a timer of
-//! its own, `HOST_POLL` and its lateness from its hold or its last poll,
-//! as strims-wasm's `DcSocket::send` does (`crate::net` says how the
-//! writers due at one instant take their turns).
+//! With [`Scenario::pacer_lateness`] a browser's host pacer runs late
+//! too: each data channel's writer the host's pacer holds sleeps on a
+//! timer of its own, `HOST_POLL` and its lateness from its hold or its
+//! last poll, as strims-wasm's `DcSocket::send` does, the timers armed for
+//! one deadline drawing one lateness (`crate::net`).
 //!
 //! Each host draws from the model of its kind ([`HostKind`]: native,
 //! Chromium or Firefox, by the browser its data channels model, as the
@@ -57,7 +57,7 @@
 //! strims-wasm's `Sleep` and `setTimeout`-free waits do, drawing nothing;
 //! a native node's fires on its next tick, as any. A testbed node's line
 //! timer has no draw: the controller samples on time. Without
-//! [`Scenario::pacer_timers`] a browser's host pacer polls on time and
+//! [`Scenario::pacer_lateness`] a browser's host pacer polls on time and
 //! draws nothing.
 //!
 //! The model draws no stalls. In the bench's runs, each on a host of its
@@ -235,10 +235,13 @@ const PARTS: u32 = 1000;
 /// draws); and the tail, the 3+ ms timers' 20 quantiles, none for a
 /// native node, whose timers there never fired 3 ms late. A host pacer's
 /// polls are its seed's, the one node whose writes the bench's hosts held:
-/// every poll fires a row, so its shares are the testbed's as they are. A
-/// Chromium seed's polls never fired 2 ms late; 7 of a Firefox seed's 4555
-/// fired 3 ms late, none 4. A native node has no host pacer, and its
-/// model, on time, is never drawn (`crate::net`).
+/// every poll fires a row, so its shares are the testbed's as they are. In
+/// the fit's repeats a Chromium seed's polls never fired 2 ms late (the
+/// third repeat of the loaded cell has one of its 2793); 7 of a Firefox
+/// seed's 4555 fired 3 ms late, none 4. The polls armed for one deadline
+/// share a draw, which leaves each poll's shares the model's. A native
+/// node has no host pacer, and its model, on time, is never drawn
+/// (`crate::net`).
 pub(crate) fn model(kind: HostKind, source: Source) -> Model {
     match (kind, source) {
         (HostKind::Native, Source::NodeTask) => Model {
