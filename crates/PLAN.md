@@ -514,6 +514,13 @@ and dropped are in `TRIED.md`.
     later passes, so a sim's sampling cadence changes its trace. Make query
     wakes leave the schedule untouched, or keep treating the cadence as a
     scenario input.
+  - Have the twin's controller ask a host ahead of that host's own work at
+    the same instant, as a testbed node's line ask is polled ahead of its
+    frame writer (strims-testbed node.rs's biased select), so a seed's
+    meter is read in the pass that takes its second's write. The live
+    oracle's commands and an idle node's wakes would reach the node a step
+    earlier, so judge it as a fidelity change, by its sim–real
+    correlation.
   - strims-sim's swarm counters and clean-input check read each channel's
     counters while it's open, so they're lower bounds: move them onto the
     runner's totals, which keep closed channels'.
