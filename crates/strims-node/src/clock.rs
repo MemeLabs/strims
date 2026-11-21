@@ -21,8 +21,10 @@ pub trait Clock: Clone + Send + Sync + 'static {
     /// The current time, at [`Time::PRECISION`].
     fn now(&self) -> Time;
 
-    /// The current time at the clock's finest precision, for the timer log
-    /// (`NodeConfig::timer_log`), which alone reads it. By default
+    /// The current time at the clock's finest precision, for what times
+    /// the node's own work below a millisecond: the timer and link logs
+    /// (`NodeConfig::timer_log`, `NodeConfig::link_log`) and a harness's
+    /// schedule (the testbed's joins). No decision reads it. By default
     /// [`Clock::now`].
     fn precise_now(&self) -> Time {
         self.now()
@@ -58,7 +60,7 @@ impl Clock for SystemClock {
     }
 
     fn precise_now(&self) -> Time {
-        // The wall clock, as `now` reads it, for the timer log alone.
+        // The wall clock, as `now` reads it, to the nanosecond.
         #[allow(clippy::disallowed_methods)]
         let t = std::time::SystemTime::now();
         let n = match t.duration_since(std::time::UNIX_EPOCH) {

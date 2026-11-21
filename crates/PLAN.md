@@ -610,6 +610,8 @@ and dropped are in `TRIED.md`.
     `seed_up_queue_ms`), and model it: its links' SYN-ACKs wait behind
     it. Read it with the 20 Mbit/s seed item above and
     the bare bench's `seed-20` case (hack/testbed/bench/seed-20.sched).
+  - Seed a window-model flow's srtt and min_rtt from its handshake, as
+    Linux's `tcp_synack_rtt_meas` does.
   - Run or model network membership before transfers, on the testbed
     and in the twin, as a deployed node has it: its transfers learn a
     peer's network only from `NodeEvent::NetworkPeerAdded`, which

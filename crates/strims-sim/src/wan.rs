@@ -40,7 +40,10 @@
 //! window model acknowledges it with a pure ACK ahead of its first data.
 //! The SYN and the SYN-ACK charge [`TCP_SYN`]'s bytes, and a full queue
 //! takes them as it takes pure ACKs, where a tbf would drop one and Linux
-//! resend it a second later.
+//! resend it a second later. A modelled WebRTC link's ICE check is such a
+//! connect ([`Scheduler::ice_check`]): its SYN-ACK is the STUN binding
+//! response a browser sends, queued as one, of [`STUN_RESPONSE`]'s bytes,
+//! and its connector sends no ACK.
 //!
 //! The controller's links carry nothing and stay with turmoil.
 //!
@@ -159,6 +162,7 @@ use strims_wan::wire::{TCP_SYN, tcp_wire, tx_time, udp_wire};
 use strims_wan::{Carrier, Network, Options, Site};
 use turmoil::{Protocol, Segment, Sim};
 
+use crate::UDP_PORT;
 use crate::fast_map::FastMap;
 use crate::net::{ConnKey, SendBuffers};
 use crate::report::{
@@ -183,6 +187,12 @@ pub use sctp::SctpProfile;
 /// carries depends on those sizes, so the loss of one datagram would make
 /// the handshake recover differently from run to run.
 const NOMINAL_DATAGRAM: usize = 1228;
+
+/// The IP bytes of a STUN binding success response over IPv4, its
+/// XOR-MAPPED-ADDRESS, MESSAGE-INTEGRITY and FINGERPRINT, as the testbed's
+/// Chromium and Firefox answer each other's ICE checks: what a modelled
+/// check's reply charges ([`Scheduler::ice_check`]).
+const STUN_RESPONSE: usize = 92;
 
 /// An acknowledgement alone that its link charged `wire` bytes, as its
 /// uplink carries it.
@@ -1402,6 +1412,10 @@ pub(crate) struct Scheduler {
     offers: Option<Vec<Vec<(Duration, u64, u32)>>>,
     /// Per host, whether it is a swarm's (its seed or a viewer).
     swarm_hosts: Vec<bool>,
+    /// Per host, whether its WebRTC connections are the window model's
+    /// data channels ([`HostSpec::rtc_stack`](crate::spec::HostSpec::rtc_stack)),
+    /// whose listener on [`UDP_PORT`] takes the ICE checks' dials.
+    rtc_hosts: Vec<bool>,
 }
 
 /// A message handed to a host's uplink, as its packet log and offers take
@@ -1600,6 +1614,11 @@ impl Scheduler {
                         .iter()
                         .any(|w| w.seed == h || w.viewers.contains(&h))
                 })
+                .collect(),
+            rtc_hosts: spec
+                .hosts
+                .iter()
+                .map(|h| spec.window_model() && h.webrtc && h.rtc_stack.is_some())
                 .collect(),
         })
     }
@@ -2639,7 +2658,9 @@ impl Scheduler {
 
     /// The receiver of `conn` as a sender: its smoothed round trip and
     /// retransmission timeout on the connection, or failing a sample, the
-    /// handshake's, the path's round trip.
+    /// path's base round trip ([`Scheduler::conn_rtt`]), where Linux's
+    /// first estimate is its handshake's round trip, the SYN-ACK's queue
+    /// wait in it.
     fn rcv_clock(&self, conn: (SocketAddr, SocketAddr)) -> RcvClock {
         match self.flows.get(&(conn.1, conn.0)) {
             Some(f) if f.srtt > Duration::ZERO => RcvClock {
@@ -3751,17 +3772,31 @@ impl Scheduler {
             .insert((t.arrival + t.retransmit, id), Event::Arrive);
     }
 
+    /// Whether `r`, a SYN, is a modelled WebRTC link's ICE check: a dial of
+    /// a channel listener (`strims_node`'s `model_rtc`), whose connect is
+    /// the check's round trip and its SYN-ACK the STUN binding response.
+    fn ice_check(&self, r: &Record) -> bool {
+        r.dst.port() == UDP_PORT && self.rtc_hosts.get(r.to).copied().unwrap_or(false)
+    }
+
     /// SYN `id`'s acceptor answers it at `t`, as it comes through its
     /// downlink: a SYN-ACK handed to its uplink, behind what the uplink
     /// holds (Linux replies from the SYN's softirq), whose arrival at the
-    /// connector completes the connect.
+    /// connector completes the connect. An ICE check's answer is the STUN
+    /// binding response a browser sends at once, as it queues behind its
+    /// uplink too.
     fn syn_ack(&mut self, t: Time, id: u64) {
         let Some(r) = self.records.get(&id) else {
             return;
         };
         let (from, to, conn) = (r.to, r.from, (r.dst, r.src));
+        let (wire, proto) = if self.ice_check(r) {
+            (STUN_RESPONSE, PacketProto::Udp)
+        } else {
+            (TCP_SYN, PacketProto::Tcp)
+        };
         let held = self.held(from, t);
-        let back = self.net.send(t, from, to, TCP_SYN, 1, Carrier::Stream);
+        let back = self.net.send(t, from, to, wire, 1, Carrier::Stream);
         if back.retransmit > Duration::ZERO {
             self.retransmitted(from, t, back.depart + back.retransmit);
         }
@@ -3770,9 +3805,9 @@ impl Scheduler {
             from,
             to: Some(to),
             conn: Some(conn),
-            proto: PacketProto::Tcp,
+            proto,
             kind: PacketKind::Control,
-            wire: TCP_SYN,
+            wire,
             packets: 1,
             took: 1,
             off: None,
@@ -3788,11 +3823,13 @@ impl Scheduler {
     /// SYN `id`'s SYN-ACK reaches the connector at `t`. Turmoil's connect
     /// and accept complete as it delivers the SYN, at the next step. With
     /// the window model, the connector acknowledges the SYN-ACK at once
-    /// with a pure ACK on its uplink, ahead of its first data. That ACK's
+    /// with a pure ACK on its uplink, ahead of its first data; an ICE
+    /// check's connector, a browser's ICE agent, sends nothing. That ACK's
     /// loss would change nothing, the first data acknowledging the SYN-ACK
     /// in its place, so none is drawn: a counter of pure ACKs, a packet
     /// log's row and the uplink's time are all it moves.
     fn syn_acked(&mut self, t: Time, id: u64) {
+        let check = self.records.get(&id).is_some_and(|r| self.ice_check(r));
         let Some(r) = self.records.get_mut(&id) else {
             return;
         };
@@ -3801,7 +3838,7 @@ impl Scheduler {
             ls.due = true;
         }
         let (from, to, conn) = (r.from, r.to, (r.src, r.dst));
-        if self.window().is_none() {
+        if self.window().is_none() || check {
             return;
         }
         let ack = tcp_wire(0).0;
@@ -4741,6 +4778,124 @@ mod tests {
             (want..want + 5).contains(&took),
             "connect {took} ms, want {want}"
         );
+    }
+
+    /// `b` connects to `a` on `port` and writes 1000 bytes, which `a`
+    /// reads, both hosts' packets logged; with `window`, under the window
+    /// model, and with `rtc`, `a` a host whose WebRTC connections are the
+    /// model's data channels. Returns each host's packet log.
+    fn handshake(window: bool, rtc: bool, port: u16) -> [Vec<PacketRecord>; 2] {
+        let mut sim = build();
+        let sites = [
+            ("a", Site::new(City::Frankfurt, Access::Fiber)),
+            ("b", Site::new(City::Frankfurt, Access::Fiber)),
+        ];
+        let buffers = window.then(|| {
+            SendBuffers::new(SendBuffer {
+                uplink_queue: StdDuration::from_millis(100),
+                window: true,
+            })
+        });
+        let net = sim_net(buffers.clone());
+        let n = net.clone();
+        sim.host("a", move || {
+            let net = n.clone();
+            async move {
+                let l = net.tcp_bind(format!("0.0.0.0:{port}")).await?;
+                let (mut s, _) = net.tcp_accept(&l).await?;
+                let mut buf = [0u8; 1000];
+                s.read_exact(&mut buf).await?;
+                std::future::pending::<()>().await;
+                Ok(())
+            }
+        });
+        sim.client("b", async move {
+            let mut s = net.tcp_connect(format!("a:{port}")).await?;
+            s.write_all(&[7u8; 1000]).await?;
+            tokio::time::sleep(StdDuration::from_millis(500)).await;
+            Ok(())
+        });
+        let mut s = spec(&sites);
+        s.packet_log = BTreeSet::from([0, 1]);
+        if window {
+            s.wan = Some(QUIET);
+            s.send_buffer = Some(SendBuffer {
+                uplink_queue: StdDuration::from_millis(100),
+                window: true,
+            });
+        }
+        if rtc {
+            s.hosts[0].webrtc = true;
+            s.hosts[0].rtc_stack = Some(SctpProfile::CHROMIUM);
+        }
+        let mut wan = Scheduler::new(&sim, &s, QUIET, 1, buffers).unwrap();
+        drive(&mut sim, &mut wan);
+        [wan.packets[0].clone(), wan.packets[1].clone()]
+    }
+
+    /// The kinds and IP bytes of a packet log's first `n` rows.
+    fn first_rows(rows: &[PacketRecord], n: usize) -> Vec<(PacketKind, PacketProto, u32)> {
+        rows.iter()
+            .take(n)
+            .map(|r| (r.kind, r.proto, r.ip_bytes))
+            .collect()
+    }
+
+    #[test]
+    fn a_connect_is_a_syn_a_syn_ack_and_with_windows_an_ack_ahead_of_its_data() {
+        use PacketKind::{Ack, Control, Data};
+        use PacketProto::Tcp;
+        let syn = TCP_SYN as u32;
+        let ack = tcp_wire(0).0 as u32;
+        let data = tcp_wire(1000).0 as u32;
+        for window in [true, false] {
+            let [a, b] = handshake(window, false, 9000);
+            // The acceptor's first packet is its SYN-ACK, handed to its
+            // uplink as the SYN reached it and logged as the SYN is.
+            let (b_syn, a_syn_ack) = (&b[0], &a[0]);
+            assert_eq!(first_rows(&a, 1), [(Control, Tcp, syn)], "window {window}");
+            assert_eq!((a_syn_ack.peer, a_syn_ack.link), (Some(1), Some(0)));
+            let reached = b_syn.arrived.unwrap();
+            assert!(
+                a_syn_ack.at >= reached && a_syn_ack.at < reached + Duration::from_millis(1),
+                "{a_syn_ack:?} {b_syn:?}"
+            );
+            assert!(a_syn_ack.sent.is_some() && a_syn_ack.arrived > a_syn_ack.sent);
+            if window {
+                // The connector's handshake ACK goes as the SYN-ACK comes,
+                // ahead of its data, a pure ACK of its counters.
+                assert_eq!(
+                    first_rows(&b, 3),
+                    [(Control, Tcp, syn), (Ack, Tcp, ack), (Data, Tcp, data)]
+                );
+                assert_eq!(Some(b[1].at), a_syn_ack.arrived);
+                assert!(b[2].at > b[1].at);
+                assert_eq!(b.iter().filter(|r| r.kind == Ack).count(), 1);
+            } else {
+                // Without the window model no pure ACK goes.
+                assert_eq!(first_rows(&b, 2), [(Control, Tcp, syn), (Data, Tcp, data)]);
+                assert!(b.iter().all(|r| r.kind != Ack));
+            }
+        }
+    }
+
+    #[test]
+    fn an_ice_checks_reply_is_a_stun_response_and_takes_no_ack() {
+        use PacketKind::{Ack, Control, Data};
+        use PacketProto::{Tcp, Udp};
+        let syn = TCP_SYN as u32;
+        let data = tcp_wire(1000).0 as u32;
+        let [a, b] = handshake(true, true, UDP_PORT);
+        assert_eq!(first_rows(&a, 1), [(Control, Udp, STUN_RESPONSE as u32)]);
+        assert_eq!(first_rows(&b, 2), [(Control, Tcp, syn), (Data, Tcp, data)]);
+        assert!(b.iter().all(|r| r.kind != Ack));
+        // A connection to another port of the host is no check, and one to
+        // that port of a host without modelled channels neither.
+        for (rtc, port) in [(true, 9000), (false, UDP_PORT)] {
+            let [a, b] = handshake(true, rtc, port);
+            assert_eq!(first_rows(&a, 1), [(Control, Tcp, syn)], "{rtc} {port}");
+            assert_eq!(b.get(1).map(|r| r.kind), Some(Ack), "{rtc} {port}");
+        }
     }
 
     #[test]
