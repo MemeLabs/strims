@@ -45,7 +45,7 @@ use crate::report::{
     HostReport, HostRow, PacketKind, PacketLoss, PacketProto, PacketRecord, WanReport,
 };
 use crate::spec::{HostIx, Scenario};
-use crate::wan::SctpProfile;
+use crate::wan::{QUEUE_SAMPLE_EVERY, SctpProfile};
 
 /// The testbed's MTU: its bridge's and its containers' eth0, whose ifbs cut
 /// a GSO buffer into packets of at most this many IP bytes.
@@ -499,6 +499,115 @@ pub(super) fn fill(run: &Run, s: &Scenario, wan: &mut WanReport, hosts: &mut [Ho
     for (h, host) in hosts.iter_mut().enumerate() {
         host.host_row = host_row(run, s, h);
     }
+}
+
+/// Each node's uplink queue (`WanHostReport::up_queue`, `up_backlog`)
+/// where its captures tell it, sampled where the sim samples its uplinks:
+/// every [`QUEUE_SAMPLE_EVERY`] from the run's start (the bins' edges) to
+/// its last packet's entry, what its queue held then ([`queue_every`]),
+/// and as a wait that over its tbf's rate as its tc samples show it
+/// (`rates`, from `Network::read`): the latest sample's, the first's after
+/// a step logged since that one, the first's before any, else the
+/// scenario's. Its tc samples, which fall at their sampler's own phase, up
+/// to an interval before an edge, stay past that alone, and the column
+/// ends at the captures' last sample where they don't go on to the next
+/// edge (a sample of theirs by it, their sampler not stopped before it):
+/// that edge's would be the last sample's, an interval old. A node without
+/// a tc log has no tbf to queue at, and its queue stays empty, as its
+/// drops do ([`drops`]).
+pub(super) fn queues(s: &Scenario, wan: &mut WanReport, rates: &[Vec<(SimDuration, u64)>]) {
+    for (h, spec) in s.hosts.iter().enumerate() {
+        let (Some(site), Some(w)) = (
+            spec.site,
+            wan.hosts.iter_mut().find(|w| w.name == spec.name),
+        ) else {
+            continue;
+        };
+        let tc = rates.get(h).map_or(&[][..], Vec::as_slice);
+        if tc.is_empty() {
+            continue;
+        }
+        let held = queue_every(&w.packets, QUEUE_SAMPLE_EVERY);
+        let Some(&(last, _)) = held.last() else {
+            continue;
+        };
+        let rate_at = |t: SimDuration| {
+            let step = spec
+                .up_steps
+                .iter()
+                .rfind(|&&(at, _)| SimDuration::from(at) <= t);
+            let i = tc.partition_point(|&(x, _)| x <= t);
+            let sample = match i.checked_sub(1).and_then(|i| tc.get(i)) {
+                // A step logged since that sample (steps.log stamps one once
+                // applied): the first sample after it shows its rate.
+                Some(&(x, _)) if step.is_some_and(|&(at, _)| SimDuration::from(at) > x) => {
+                    tc.get(i)
+                }
+                Some(s) => Some(s),
+                None => tc.first(),
+            };
+            sample
+                .map_or_else(|| step.map_or(site.profile.up, |&(_, r)| r), |&(_, r)| r)
+                .max(1)
+        };
+        let after = w.up_queue.partition_point(|&(t, _)| t <= last);
+        let next = last + QUEUE_SAMPLE_EVERY;
+        let covered = w.up_queue.get(after).is_some_and(|&(t, _)| t <= next)
+            && w.up_queue_until.is_none_or(|u| u >= next);
+        if !covered {
+            w.up_queue_until = Some(last);
+        }
+        let tail: Vec<_> = w.up_queue.drain(after..).collect();
+        w.up_queue = held
+            .iter()
+            .map(|&(t, b)| {
+                let wait = i64::try_from(b * 1_000_000 / rate_at(t)).unwrap_or(i64::MAX);
+                (t, SimDuration::from_micros(wait))
+            })
+            .chain(tail)
+            .collect();
+        let after = w.up_backlog.partition_point(|&(t, _)| t <= last);
+        let tail: Vec<_> = w.up_backlog.drain(after..).collect();
+        w.up_backlog = held.into_iter().chain(tail).collect();
+    }
+}
+
+/// A node's uplink queue every `every` from the run's start, as its
+/// packets (`WanHostReport::packets`) tell it: at each time to its last
+/// packet's entry, the charges of those that had entered its queue and not
+/// left, the dropped left out, as each one's `backlog_bytes` counts those
+/// ahead of it. None without packets.
+fn queue_every(packets: &[PacketRecord], every: SimDuration) -> Vec<(SimDuration, u64)> {
+    let Some(last) = packets.iter().map(|p| p.at).max() else {
+        return Vec::new();
+    };
+    if every <= SimDuration::ZERO {
+        return Vec::new();
+    }
+    let (mut joins, mut leaves) = (Vec::new(), Vec::new());
+    for p in packets {
+        if let Some(sent) = p.sent.filter(|&t| t > p.at) {
+            let c = u64::from(p.charged_bytes.unwrap_or(p.ip_bytes));
+            joins.push((p.at, c));
+            leaves.push((sent, c));
+        }
+    }
+    joins.sort_by_key(|&(t, _)| t);
+    leaves.sort_by_key(|&(t, _)| t);
+    let (mut joins, mut leaves) = (joins.into_iter().peekable(), leaves.into_iter().peekable());
+    let (mut q, mut out, mut t) = (0u64, Vec::new(), SimDuration::ZERO);
+    while t <= last {
+        while let Some((_, c)) = joins.next_if(|&(x, _)| x <= t) {
+            q += c;
+        }
+        // Each one left after it entered, so it is in `q` by now.
+        while let Some((_, c)) = leaves.next_if(|&(x, _)| x <= t) {
+            q = q.saturating_sub(c);
+        }
+        out.push((t, q));
+        t += every;
+    }
+    out
 }
 
 /// A TCP bench's out dir's captures (`hack/testbed/bench.sh`'s: run.sh's

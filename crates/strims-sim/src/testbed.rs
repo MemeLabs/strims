@@ -34,15 +34,21 @@
 //!   class, each packet's IP length and an Ethernet header). A testbed run
 //!   counts each packet's IP length from its node's capture of its egress
 //!   to the swarm's nodes (`PCAP=1`: `pcap-<i>.pcap`, after the queue), and
-//!   its queue drops and backlog from its tbf (`tc-<i>.log`), whose rate,
-//!   as each sample shows it, is the uplink's; the queries convert between
-//!   the two by the link class (scoring.sql's link_overhead). What a
+//!   its queue drops from its tbf (`tc-<i>.log`), whose rate, as each
+//!   sample shows it, is the uplink's; the queries convert between the two
+//!   by the link class (scoring.sql's link_overhead). Its queue is sampled
+//!   where the sim samples its uplinks, every 100 ms from the run's start
+//!   (the bins' edges), from its captures (`packets::queues`: what had
+//!   entered and not left), and past them, or without them, at its tc
+//!   samples, which fall at their sampler's own phase; a node without a tc
+//!   log has no tbf, and no queue. What a
 //!   capture can't tell (a data channel's SACKs inside DTLS, which it
 //!   counts with the data) is left empty, and a sampler that stopped before
 //!   the run's end leaves its columns empty past it (`Report::wire_ends`,
-//!   `WanHostReport::up_queue_until`): a tc sampler past its last sample, a
-//!   capture past the stamp run.sh writes when its tcpdump exits while its
-//!   node runs (`pcap-<i>.end`). The competing upload's bytes are its
+//!   `WanHostReport::up_queue_until`): a tc sampler past its last sample,
+//!   the captures' queue past their last sample where the tc samples don't
+//!   go on to the next edge, a capture past the stamp run.sh writes when
+//!   its tcpdump exits while its node runs (`pcap-<i>.end`). The competing upload's bytes are its
 //!   packets' to the sink, from the seed's capture.
 //! - **TCP's own counts.** A native node's retransmits are its capture's
 //!   segments to the swarm that resent bytes its link had carried
@@ -1244,6 +1250,7 @@ impl Run {
         }
         let mut net = Network::read(self, &scenario, seed);
         packets::fill(self, &scenario, &mut net.wan, &mut hosts);
+        packets::queues(&scenario, &mut net.wan, &net.up_rates);
         for (i, host) in hosts.iter().enumerate() {
             let (Some(spec), Some(events)) = (scenario.hosts.get(i), self.sctp_of(i, host, epoch))
             else {
@@ -2502,6 +2509,10 @@ struct Network {
     /// Each host's own sends, from its capture (none without one): what
     /// its meter's truth takes its share from (`gate`).
     sends: Vec<Sent>,
+    /// Each host's uplink rate at each of its tc samples, bytes a second:
+    /// its tbf's as the sample shows it, else the scenario's (none without
+    /// a tc log). What its queue's wait divides by (`packets::queues`).
+    up_rates: Vec<Vec<(strims_base::time::Duration, u64)>>,
 }
 
 /// What a node's capture says it sent: its segments and datagrams to the
@@ -2704,6 +2715,7 @@ impl Network {
         // The nodes without a capture, a tc log or TCP counters: their
         // columns are unmeasured alone, where another node's are measured.
         let (mut no_pcap, mut no_tc, mut no_tcp) = (Vec::new(), Vec::new(), Vec::new());
+        let mut up_rates = vec![Vec::new(); s.hosts.len()];
         let kinds: Vec<&str> = run
             .settings
             .get("KINDS")
@@ -3030,6 +3042,9 @@ impl Network {
                         w.up_queue
                             .push((t.into(), strims_base::time::Duration::from_micros(wait)));
                         w.up_backlog.push((t.into(), s.held));
+                        if let Some(r) = up_rates.get_mut(h) {
+                            r.push((t.into(), rate));
+                        }
                     }
                 }
                 None => no_tc.push(h),
@@ -3144,6 +3159,7 @@ impl Network {
             unmeasured,
             ends,
             sends,
+            up_rates,
         }
     }
 }
@@ -3242,8 +3258,9 @@ pub const ROW: &[&str] = &[
 /// [`ROW`]'s: the queueing delay readings' scores against the uplink's
 /// queue (`Report::queue_delay_accuracy`: `{reading}_err_{role}_ms`,
 /// `{reading}_fp_{role}`, `{reading}_fn_{role}`) and the standing queue's
-/// share (`standing_{pop}`), whose truth is a testbed run's tbf backlog over
-/// its rate (`tc-<i>.log`) as it is a sim's model queue.
+/// share (`standing_{pop}`), whose truth is a testbed run's uplink queue
+/// (its captures' at the sim's samples, else its tbf's, `tc-<i>.log`) over
+/// its rate as it is a sim's model queue.
 pub const ROW_FAMILIES: &[&str] = &["qd_", "qdv_", "qdb_", "qdbi_", "qdl_", "standing_"];
 
 /// The testbed run's row: [`Report::row`]'s fields that [`ROW`] names or
@@ -3877,6 +3894,106 @@ mod tests {
             }
         }
         assert!(before > 0 && after > 0, "{before} {after}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// With its captures, a run's uplink queue at each bin's end is what
+    /// they say its queue held there, as the sim samples its model's at the
+    /// edges, not its tc samples', which fall at their sampler's phase.
+    #[test]
+    fn a_testbed_runs_uplink_queue_at_a_bins_end_is_its_captures() {
+        let dir = fixture("edges");
+        let us = |ms: u64| (START + ms) * 1000;
+        let seg = |i: u16| {
+            let mut p = tcp_seq(10, 11, 1448, u32::from(i) * 1448);
+            p[4..6].copy_from_slice(&i.to_be_bytes());
+            p
+        };
+        // The seed offers 15 segments at 270 ms, which enter its tbf 20 ms
+        // on (its delay) and leave 2 ms apart; 2 at 375 ms, 10 ms apart,
+        // after a step to 5 Mbit/s logged at 380 ms that the tc samples show
+        // from 450 ms; 7 at 570 ms, 3 ms apart; one at 860 ms, and one at
+        // 1180 ms past what the captures tell.
+        let (mut offered, mut carried) = (Vec::new(), Vec::new());
+        let mut add = |at: u64, n: u16, gap: u64| {
+            for k in 0..n {
+                let i = offered.len() as u16;
+                offered.push((us(at), seg(i)));
+                carried.push((us(at + 20 + gap * (u64::from(k) + 1)), seg(i)));
+            }
+        };
+        add(270, 15, 2);
+        add(375, 2, 10);
+        add(570, 7, 3);
+        add(860, 1, 1);
+        add(1180, 1, 1);
+        std::fs::write(dir.join("pcap-0-offered.pcap"), pcap(&offered)).unwrap();
+        std::fs::write(dir.join("pcap-0.pcap"), pcap(&carried)).unwrap();
+        std::fs::write(dir.join("steps.log"), format!("{} 5\n", START + 380)).unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        let out = dir.join("tables");
+        r.write_tables(&out, Duration::from_millis(100), true)
+            .unwrap();
+        // The seed's queue at each bin's end (`up_queue_at`, which its
+        // node_bins read too): (t_ms, ms, bytes).
+        let text = crate::tables::read_table(&out, "bins").unwrap();
+        let head: Vec<&str> = text.lines().next().unwrap().split(',').collect();
+        let col = |name: &str| head.iter().position(|c| *c == name).unwrap();
+        let (t, ms, bytes) = (
+            col("t_ms"),
+            col("seed_up_queue_ms"),
+            col("seed_up_queue_bytes"),
+        );
+        let got: Vec<(i64, String)> = text
+            .lines()
+            .skip(1)
+            .map(|l| {
+                let f: Vec<&str> = l.split(',').collect();
+                (f[t].parse().unwrap(), format!("{},{}", f[ms], f[bytes]))
+            })
+            .collect();
+        let at = |t: i64| got.iter().find(|x| x.0 == t).map(|x| x.1.clone());
+        let queue = |b: u64, rate: u64| format!("{},{b}", b * 1000 / rate);
+        let charge = 1500 + 14;
+        // The bin to 300 ms: 5 of the 15 had left by its end, the wait at
+        // the 10 Mbit/s of the tc sample before it (250 ms), whose backlog
+        // reads one packet.
+        assert_eq!(
+            at(200),
+            Some(queue((15 - 5) * charge, 1_250_000)),
+            "{:?}",
+            &got[..10]
+        );
+        // To 400 ms: both of the 2 there, at the step's rate, which the tc
+        // sample after it shows.
+        assert_eq!(at(300), Some(queue(2 * charge, 625_000)));
+        // To 600 ms: 3 of the 7 had left, at the 5 Mbit/s since 450 ms.
+        assert_eq!(at(500), Some(queue((7 - 3) * charge, 625_000)));
+        // The captures tell to the last told packet's entry (880 ms),
+        // their last sample at 800 ms, and the tc samples end at 450 ms:
+        // the queue is empty past that sample.
+        assert_eq!(at(700), Some(queue(0, 1)));
+        assert_eq!(at(800), Some(",".to_owned()));
+        // At every edge they tell, the packets' own queue.
+        let w = &r.wan.as_ref().unwrap().hosts[0];
+        let last = w.packets.iter().map(|p| p.at).max().unwrap();
+        let mut n = 0;
+        for (t, q) in &got {
+            let edge = strims_base::time::Duration::from(LEAD)
+                + strims_base::time::Duration::from_millis(t + 100);
+            if edge > last {
+                continue;
+            }
+            let held: u64 = w
+                .packets
+                .iter()
+                .filter(|p| p.at <= edge && p.sent.is_some_and(|s| s > edge))
+                .map(|p| u64::from(p.charged_bytes.unwrap()))
+                .sum();
+            assert!(q.ends_with(&format!(",{held}")), "{t} {q}");
+            n += 1;
+        }
+        assert!(n >= 8, "{n}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

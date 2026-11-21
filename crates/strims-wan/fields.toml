@@ -2592,14 +2592,14 @@ sims = ["strims-sim"]
 type = "int"
 unit = "ms"
 none = "empty"
-description = "The seed's uplink queue at the bin's end, as the wait a byte joining it would have (`WanHostReport::up_queue`, its latest sample at or before the edge). The sim measures the wait (its uplink's model); a testbed run derives it from its tbf's backlog over the tbf's own rate as the sample shows it (its steps as applied). Empty outside WAN mode or before a sample."
+description = "The seed's uplink queue at the bin's end, as the wait a byte joining it would have (`WanHostReport::up_queue`, its latest sample at or before the edge). The sim samples its uplink's model every 100 ms from the run's start, at the bins' edges; a testbed run takes the queue there from its captures (PCAP=1: what had entered its tbf and not left, `seed_up_queue_bytes`) over the tbf's own rate as its tc samples show it (its steps as applied), and without them, or past their end, its tc samples', which fall at their sampler's own phase, up to 100 ms before the edge. Empty outside WAN mode or before a sample."
 
 [columns.bins.seed_up_queue_bytes]
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
 none = "empty"
-description = "The seed's uplink queue at the bin's end, in bytes (`WanHostReport::up_backlog`, its latest sample at or before the edge). A testbed run measures it (its tbf's backlog, in the bytes the tbf counts: a frame's length, each packet's IP length and its Ethernet header, or a class's size table's figure where links.sh gives the tbf one: fiber, dsl, cable); the sim derives it as its measured wait times its uplink's rate then. Empty outside WAN mode or before a sample."
+description = "The seed's uplink queue at the bin's end, in bytes (`WanHostReport::up_backlog`, its latest sample at or before the edge). A testbed run measures it in the bytes its tbf counts (a frame's length, each packet's IP length and its Ethernet header, or a class's size table's figure where links.sh gives the tbf one: fiber, dsl, cable): at the edge from its captures (PCAP=1: the charges of the packets that had entered the queue and not left, as `packets.backlog_bytes` counts them), else its tbf's backlog at its latest tc sample; the sim derives it as its measured wait times its uplink's rate then, sampled at the edge. Empty outside WAN mode or before a sample."
 
 [tables.viewers]
 sims = ["strims-sim"]
@@ -2959,14 +2959,14 @@ sims = ["strims-sim"]
 type = "int"
 unit = "ms"
 none = "empty"
-description = "The node's uplink queue at the bin's end, as the wait a byte joining it would have (`WanHostReport::up_queue`, its latest sample at or before the edge): measured by the sim's uplink model, derived on the testbed from the tbf's backlog over its own rate as the sample shows it. Empty outside WAN mode or before a sample."
+description = "The node's uplink queue at the bin's end, as the wait a byte joining it would have (`WanHostReport::up_queue`, its latest sample at or before the edge): measured by the sim's uplink model, sampled at the edges; derived on the testbed from its queue at the edge (`up_queue_bytes`) over the tbf's own rate as its tc samples show it, its tc samples' alone (up to 100 ms before the edge) without captures or past their end. Empty outside WAN mode or before a sample."
 
 [columns.node_bins.up_queue_bytes]
 sims = ["strims-sim"]
 type = "int"
 unit = "bytes"
 none = "empty"
-description = "The node's uplink queue at the bin's end, in bytes (`WanHostReport::up_backlog`, its latest sample at or before the edge): measured on the testbed (the tbf's backlog, in the bytes it counts: IP length and Ethernet header per packet, or its class's size table's figure), derived in the sim as its measured wait times its uplink's rate then. Empty outside WAN mode or before a sample."
+description = "The node's uplink queue at the bin's end, in bytes (`WanHostReport::up_backlog`, its latest sample at or before the edge): measured on the testbed in the bytes its tbf counts (IP length and Ethernet header per packet, or its class's size table's figure), at the edge from its captures (PCAP=1: the packets that had entered the queue and not left), else the tbf's backlog at its latest tc sample; derived in the sim as its measured wait times its uplink's rate then, sampled at the edge. Empty outside WAN mode or before a sample."
 
 [columns.node_bins.offered_bytes]
 sims = ["strims-sim"]

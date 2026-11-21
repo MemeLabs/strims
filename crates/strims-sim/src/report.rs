@@ -716,16 +716,20 @@ pub struct WanHostReport {
     pub site: Site,
     pub stats: EndStats,
     /// The uplink queue's wait every 100 ms: (time since the start, wait).
-    /// The sim's uplink model measures it; a testbed run derives it from its
-    /// tbf's backlog over the tbf's nominal rate ([`crate::testbed`]).
+    /// The sim's uplink model measures it, at every 100 ms from the start; a
+    /// testbed run derives it from its backlog over its tbf's rate as its tc
+    /// samples show it ([`crate::testbed`]), its backlog at those times from
+    /// its captures where it has them, else at its tc samples' own times.
     pub up_queue: Vec<(strims_base::time::Duration, strims_base::time::Duration)>,
     /// The uplink queue's bytes at the same samples: (time since the start,
-    /// bytes). A testbed run measures them (its tbf's backlog); the sim
+    /// bytes). A testbed run measures them (its captures' queue, else its
+    /// tbf's backlog); the sim
     /// derives them as the wait times the uplink's rate then.
     pub up_backlog: Vec<(strims_base::time::Duration, u64)>,
-    /// Past this time the uplink queue is unmeasured (a testbed run's tbf
-    /// sampler that stopped: its last sample and one interval more); `None`
-    /// sampled to the end, as a sim's.
+    /// Past this time the uplink queue is unmeasured (a testbed run's: its
+    /// tbf sampler that stopped, its last sample and one interval more; with
+    /// captures, their last sample where the tc samples don't go on to the
+    /// next one's time); `None` sampled to the end, as a sim's.
     pub up_queue_until: Option<strims_base::time::Duration>,
     /// With competing uploads
     /// ([`HostSpec::competing`](crate::spec::HostSpec::competing)), the

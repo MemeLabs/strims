@@ -1484,7 +1484,7 @@ struct Offered {
 
 /// How often the scheduler samples each host's uplink queue, by default,
 /// and its competing uploads.
-const QUEUE_SAMPLE_EVERY: Duration = Duration::from_millis(100);
+pub(crate) const QUEUE_SAMPLE_EVERY: Duration = Duration::from_millis(100);
 
 impl Scheduler {
     /// Holds every link between `spec`'s hosts, which `sim` has registered
