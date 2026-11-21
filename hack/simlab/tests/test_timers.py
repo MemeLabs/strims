@@ -15,7 +15,8 @@ spread and a floor; a source the model keeps no rows of expected and any
 other one-sided row failing; an empty or NULL side refused; and the
 seed's allocation-check steps, on time or a tick late, with their fit
 within the larger of 5 points and twice the difference's standard
-error.
+error. Over runs whose scans and aggregates run on threads (Repeats), 20
+queries of the fit give the same bits.
 
   python3 hack/simlab/tests/test_timers.py
 """
@@ -36,7 +37,9 @@ if __name__ == "__main__":
 from simlab import catalog  # noqa: E402
 
 MACROS = ("twin_window_of", "side_window_of", "timer_runs_of", "timer_shares_of", "timer_fit_of",
-          "timer_fit_spread_of", "alloc_steps_of", "alloc_step_fit_of", "sketch_exp", "sketch_lo", "sketch_floor", "sketch_quantile")
+          "timer_fit_spread_of", "alloc_steps_of", "alloc_step_fit_of", "sketch_exp", "sketch_lo", "sketch_floor",
+          "sketch_quantile", "compensated_sum")
+HAVE = {"timers", "hosts", "seed_decisions", "jobs.env", "jobs.stored_cell"}
 S = 1_000_000
 
 
@@ -130,8 +133,7 @@ def connect():
     # A twin's 40 of which every fourth slipped.
     checks("tw3", "testbed/f", 0, [10_000 + sum(1100 if i % 4 == 3 else 1000 for i in range(j)) for j in range(41)])
     conn.executemany("INSERT INTO seed_decisions VALUES (?, ?, ?, ?, ?, ?, ?, ?)", decisions)
-    for s in catalog.scoring_statements(MACROS, {"timers", "hosts", "seed_decisions", "jobs.env",
-                                                 "jobs.stored_cell"}):
+    for s in catalog.scoring_statements(MACROS, HAVE):
         conn.execute(s)
     return conn
 
@@ -292,6 +294,77 @@ class Timers(unittest.TestCase):
         # A kind one side lacks fails.
         got = self.q("SELECT kind, pass FROM alloc_step_fit_of([{'k': 'tw'}], [{'k': 'tb2'}])")
         self.assertEqual(got, [("chromium", False)])
+
+
+class Repeats(unittest.TestCase):
+    """The fit over 40 testbed runs and 40 twin runs of a Chromium seed's
+    5000 timers each, of two sources, 800,000 in all, more than a row
+    group's 122,880, so their scans and aggregates run on threads: every
+    column the same bits in each of 20 queries, the shares' distance, the
+    means' and p99s' bounds and the pass too, whose means over the runs
+    and the cells once added in the order the threads met their rows.
+    Each cell holds four runs a side, the lateness a hash's of the run and
+    the timer, 0 to 3.5 ms, so the runs' shares and means are no power of
+    two's. The seed's 2000 allocation checks a run (160,000), each step
+    1000 or 1100 ms by a hash, give the steps' fit the same bits too: its
+    sums are of integers."""
+
+    TIMERS = 5_000
+    CHECKS = 2_000
+
+    @classmethod
+    def setUpClass(cls):
+        import duckdb
+
+        conn = cls.conn = duckdb.connect()
+        conn.execute("CREATE TABLE jobs (k VARCHAR, src VARCHAR, env MAP(VARCHAR, VARCHAR), stored_cell VARCHAR)")
+        for c in range(10):
+            for i in range(4):
+                for side in ("tb", "tw"):
+                    conn.execute("INSERT INTO jobs VALUES (?, ?, MAP {'STRIMS_SIM_CAL_SECS': '60'}, ?)",
+                                 [f"{side}{c}-{i}", f"testbed/{side}", f"{side}-c{c}"])
+        conn.execute("CREATE TABLE hosts AS SELECT k, src, 0::BIGINT AS node, 'chromium' AS kind FROM jobs")
+        conn.execute(f"""
+            CREATE TABLE timers AS
+            SELECT j.k, j.src, (10 * {S} + r.i * 9000)::BIGINT AS t_us, 0::BIGINT AS node, r.i::BIGINT AS n,
+                   CASE WHEN r.i % 2 = 0 THEN 'pacer' ELSE 'node_task' END AS source, 0::BIGINT AS armed_us,
+                   0::BIGINT AS deadline_us, (hash(j.k, r.i) % 3500)::BIGINT AS late_us,
+                   5000::BIGINT AS requested_us, 'worker' AS context
+            FROM jobs j, range({cls.TIMERS}) r(i)""")
+        conn.execute(f"""
+            CREATE TABLE seed_decisions AS
+            WITH g AS (
+                SELECT j.k, j.src, r.i, CASE WHEN hash(j.k, r.i) % 4 = 0 THEN 1100 ELSE 1000 END AS step
+                FROM jobs j, range({cls.CHECKS}) r(i))
+            SELECT k, src, (10000 + sum(step) OVER (PARTITION BY k ORDER BY i))::BIGINT AS t_ms, 0::BIGINT AS node,
+                   i::BIGINT AS n, 'window' AS kind, 'check' AS why, 0::BIGINT AS stream
+            FROM g""")
+        conn.execute("UPDATE jobs SET env = MAP {'STRIMS_SIM_CAL_SECS': '3000'}")
+        for s in catalog.scoring_statements(MACROS, HAVE):
+            conn.execute(s)
+
+    def test_the_steps_fit_gives_the_same_bits(self):
+        tw = "(SELECT list({'k': k} ORDER BY k) FROM jobs WHERE src = 'testbed/tw')"
+        tb = "(SELECT list({'k': k} ORDER BY k) FROM jobs WHERE src = 'testbed/tb')"
+        fit = f"FROM alloc_step_fit_of({tw}, {tb})"
+        got = {repr(self.conn.execute(fit).fetchall()) for _ in range(20)}
+        self.assertEqual(len(got), 1)
+        (row,) = self.conn.execute(f"SELECT a_steps, b_steps, a_share FROM ({fit})").fetchall()
+        self.assertGreater(row[0], 70_000)
+        self.assertGreater(row[2], 0.2)
+
+    def test_every_query_gives_the_same_bits(self):
+        tw = "(SELECT list({'k': k} ORDER BY k) FROM jobs WHERE src = 'testbed/tw')"
+        tb = "(SELECT list({'k': k} ORDER BY k) FROM jobs WHERE src = 'testbed/tb')"
+        fit = f"FROM timer_fit_of({tw}, {tb}) ORDER BY kind, source"
+        # repr: a float's every bit.
+        got = {repr(self.conn.execute(fit).fetchall()) for _ in range(20)}
+        self.assertEqual(len(got), 1)
+        rows = self.conn.execute(f"SELECT source, a_runs, b_runs, tv, mean_bound FROM ({fit})").fetchall()
+        self.assertEqual([r[:3] for r in rows], [("node_task", 40, 40), ("pacer", 40, 40)])
+        for r in rows:
+            self.assertGreater(r[3], 0, r)
+            self.assertGreater(r[4], 0.1, r)
 
 
 if __name__ == "__main__":

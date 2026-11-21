@@ -99,6 +99,10 @@ CREATE OR REPLACE MACRO t975_at(df_) AS
 -- (metrics.toml's: depth_mean's six terms) adds as written, as the
 -- reference restates it. 0 for an empty list, NULL for NULL or a NULL
 -- among xs.
+--
+-- timer_shares_of's means over runs and cells take it too, each of a list
+-- in an order of its own, so the timer bench's distance, bounds and pass
+-- are the same bits in every query.
 CREATE OR REPLACE MACRO compensated_sum(xs) AS
     list_transform([list_reduce(list_transform(xs, lambda cs_x: {'s': cs_x::DOUBLE, 'c': 0.0::DOUBLE}),
                                 lambda cs_acc, cs_y: {'s': cs_acc.s + cs_y.s,
@@ -2064,7 +2068,11 @@ CREATE OR REPLACE MACRO timer_runs_of(side, lo_s := 10, hi_s := -1, by_delay := 
 -- alike), and the side's repeat spread of the mean and the p99
 -- (mean_spread_ms, p99_spread_ms): each cell's range over its repeats
 -- (its runs' largest less their smallest), the mean over the cells of
--- two runs or more; NULL with none.
+-- two runs or more; NULL with none. Each mean over the runs or the cells
+-- is compensated_sum's of a list ordered by the run (k) or the cell, over
+-- its count, so a query gives the same bits every time: DuckDB's avg adds
+-- in the order its threads meet the rows, and timer_fit_spread_of's
+-- distance, bounds and pass read these.
 -- needs: timers hosts jobs.env jobs.stored_cell
 CREATE OR REPLACE MACRO timer_shares_of(side, lo_s := 10, hi_s := -1, by_delay := false) AS TABLE
     WITH r AS (FROM timer_runs_of(side, lo_s := lo_s, hi_s := hi_s, by_delay := by_delay)),
@@ -2073,13 +2081,23 @@ CREATE OR REPLACE MACRO timer_shares_of(side, lo_s := 10, hi_s := -1, by_delay :
                max(p99_ms) - min(p99_ms) AS p99_range
         FROM r WHERE timers > 0 GROUP BY ALL HAVING count(*) > 1),
     s AS (
-        SELECT kind, source, delay_ms, avg(mean_range) AS mean_spread_ms, avg(p99_range) AS p99_spread_ms
+        SELECT kind, source, delay_ms,
+               compensated_sum(list(mean_range ORDER BY cell) FILTER (WHERE mean_range IS NOT NULL))
+                   / count(mean_range) AS mean_spread_ms,
+               compensated_sum(list(p99_range ORDER BY cell) FILTER (WHERE p99_range IS NOT NULL))
+                   / count(p99_range) AS p99_spread_ms
         FROM c GROUP BY ALL),
     p AS (
         SELECT kind, source, delay_ms, count(*) FILTER (WHERE timers > 0) AS runs, sum(nodes)::BIGINT AS nodes,
-               sum(timers)::BIGINT AS timers, sum(missing)::BIGINT AS missing, avg(ms0) AS late_ms0,
-               avg(ms1) AS late_ms1, avg(ms2) AS late_ms2, avg(ms3) AS late_ms3, avg(mean_ms) AS mean_ms,
-               avg(p99_ms) AS p99_ms
+               sum(timers)::BIGINT AS timers, sum(missing)::BIGINT AS missing,
+               compensated_sum(list(ms0 ORDER BY k) FILTER (WHERE ms0 IS NOT NULL)) / count(ms0) AS late_ms0,
+               compensated_sum(list(ms1 ORDER BY k) FILTER (WHERE ms1 IS NOT NULL)) / count(ms1) AS late_ms1,
+               compensated_sum(list(ms2 ORDER BY k) FILTER (WHERE ms2 IS NOT NULL)) / count(ms2) AS late_ms2,
+               compensated_sum(list(ms3 ORDER BY k) FILTER (WHERE ms3 IS NOT NULL)) / count(ms3) AS late_ms3,
+               compensated_sum(list(mean_ms ORDER BY k) FILTER (WHERE mean_ms IS NOT NULL))
+                   / count(mean_ms) AS mean_ms,
+               compensated_sum(list(p99_ms ORDER BY k) FILTER (WHERE p99_ms IS NOT NULL))
+                   / count(p99_ms) AS p99_ms
         FROM r GROUP BY ALL)
     SELECT p.*, s.mean_spread_ms, s.p99_spread_ms
     FROM p LEFT JOIN s ON p.kind = s.kind AND p.source = s.source AND p.delay_ms IS NOT DISTINCT FROM s.delay_ms;
