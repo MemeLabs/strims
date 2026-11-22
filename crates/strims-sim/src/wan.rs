@@ -406,23 +406,28 @@ enum Event {
     SctpTimeout { conn: (SocketAddr, SocketAddr) },
     /// Data channel `conn`'s receiver sends the SACK it held back.
     SctpDelSack { conn: (SocketAddr, SocketAddr) },
-    /// A copy of chunk `seq` of data channel `conn` (`wire` bytes) reaches
-    /// its receiver's downlink, its packet's last bit having left its
-    /// sender's uplink at `left`.
-    SctpCopy {
+    /// Chunk `seq` of data channel `conn` (`wire` bytes), which its record
+    /// doesn't carry, reaches its receiver's downlink, its packet (keyed
+    /// `packet`) having left its sender's uplink at `left`: a `copy` of a
+    /// chunk whose last copy wasn't lost, or a dcSCTP chunk, which its
+    /// association cut from its message as it sent it.
+    SctpChunk {
         conn: (SocketAddr, SocketAddr),
         seq: u64,
         wire: usize,
+        copy: bool,
+        packet: u64,
         last: bool,
         immediate: bool,
         left: Time,
     },
-    /// Chunk `seq` of data channel `conn` (the `last` of its packet, with
-    /// the I bit if `immediate`) is through its receiver's downlink, whose
-    /// stack takes it.
+    /// Chunk `seq` of data channel `conn` (of the packet keyed `packet`,
+    /// its `last`, with the I bit if `immediate`) is through its receiver's
+    /// downlink, whose stack takes it.
     SctpThrough {
         conn: (SocketAddr, SocketAddr),
         seq: u64,
+        packet: u64,
         last: bool,
         immediate: bool,
     },
@@ -1797,13 +1802,7 @@ impl Scheduler {
     pub(crate) fn conn_state(&self, conn: (SocketAddr, SocketAddr), now: Time) -> ConnState {
         let host = self.ip_host.get(&conn.0.ip()).copied();
         if let Some(a) = self.assocs.get(&conn) {
-            let pending = a
-                .pending()
-                .filter_map(|id| match self.records.get(&id)?.what {
-                    What::Data { len, .. } => Some(len as u64),
-                    _ => None,
-                })
-                .sum();
+            let pending = self.queued(conn) as u64;
             return ConnState {
                 cwnd: Some(a.cwnd() as u64),
                 ssthresh: Some(a.ssthresh() as u64),
@@ -2168,24 +2167,28 @@ impl Scheduler {
                     self.sctp_delayed_sack(t, conn);
                     continue;
                 }
-                Event::SctpCopy {
+                Event::SctpChunk {
                     conn,
                     seq,
                     wire,
+                    copy,
+                    packet,
                     last,
                     immediate,
                     ..
                 } => {
-                    self.sctp_copy_arrived(t, conn, seq, wire, (last, immediate));
+                    let flags = (packet, last, immediate);
+                    self.sctp_chunk_arrived(t, conn, (seq, wire, copy), flags);
                     continue;
                 }
                 Event::SctpThrough {
                     conn,
                     seq,
+                    packet,
                     last,
                     immediate,
                 } => {
-                    self.sctp_received(t, conn, seq, (last, immediate));
+                    self.sctp_received(t, conn, seq, (packet, last, immediate));
                     continue;
                 }
                 Event::SctpOut(hand) => {
@@ -2295,7 +2298,7 @@ impl Scheduler {
                 | Event::SctpSack { .. }
                 | Event::SctpTimeout { .. }
                 | Event::SctpDelSack { .. }
-                | Event::SctpCopy { .. }
+                | Event::SctpChunk { .. }
                 | Event::SctpThrough { .. }
                 | Event::SctpOut(_) => {}
             }
@@ -3987,7 +3990,9 @@ impl Scheduler {
     }
 
     /// Turmoil partitioned `a` from `b`, which cleared their link: forget
-    /// its messages.
+    /// its messages (a dcSCTP association's bytes of one not yet through
+    /// with them), and lose its data channels' packets on their way
+    /// ([`Scheduler::sctp_cut`]).
     pub fn partition(&mut self, a: HostIx, b: HostIx) {
         if a == b {
             return;
@@ -3998,13 +4003,18 @@ impl Scheduler {
             .and_then(|&li| self.links.get_mut(li))
         {
             for id in ls.records.drain(..) {
-                self.records.remove(&id);
+                if let Some(r) = self.records.remove(&id)
+                    && let Some(assoc) = self.assocs.get_mut(&(r.src, r.dst))
+                {
+                    assoc.forget(id);
+                }
             }
             ls.due = false;
             if let Some(&li) = self.link_of.get(&pair_key(a, b)) {
                 self.recorded.remove(&li);
             }
         }
+        self.sctp_cut(a, b);
         self.net.cut(a, b);
         self.partitioned.insert(pair_key(a, b));
     }
@@ -6061,7 +6071,8 @@ mod tests {
             write(&mut wan, t0 + us(30), conns[2], 1);
             // Once the thread is idle, a message goes at once ...
             write(&mut wan, t0 + us(1000), conns[2], 1);
-            // ... and one the window holds back in part leaves the channel's
+            // ... and one the window holds back in part, its last packet's
+            // chunk cut to the room the window leaves, leaves the channel's
             // queue waiting, unanswered.
             write(&mut wan, t0 + us(2000), conns[0], 1);
             // The walks that reach the thread's hand-overs, before anything
@@ -6078,7 +6089,7 @@ mod tests {
                 .map(|(&(t, _), &c)| (t - t0, c))
                 .collect();
             let Some(cost) = p.packet_cost else {
-                assert_eq!(times.len(), 27, "{p:?}");
+                assert_eq!(times.len(), 28, "{p:?}");
                 assert!(times[..20].iter().all(|&t| t <= us(30)), "{times:?}");
                 assert!(answers.is_empty());
                 continue;
@@ -6086,16 +6097,18 @@ mod tests {
             let at = |i: i64| cost * i;
             let mut expected: Vec<Duration> = (1..=20).map(at).collect();
             expected.extend((1..=4).map(|i| us(1000) + at(i)));
-            expected.extend((1..=3).map(|i| us(2000) + at(i)));
+            expected.extend((1..=4).map(|i| us(2000) + at(i)));
             assert_eq!(times, expected);
             assert_eq!(
                 links,
-                [vec![0; 8], vec![1; 8], vec![2; 8], vec![0; 3]].concat()
+                [vec![0; 8], vec![1; 8], vec![2; 8], vec![0; 4]].concat()
             );
             // A send opportunity's chunks go as of when the thread took it up.
             let sent = |c: ConnKey, seq: u64| wan.assocs[&c].sent_at(seq).unwrap() - t0;
+            // Each association's TSNs from 1: the first message's four
+            // packets carry seven chunks.
             assert_eq!(
-                (sent(conns[0], 4), sent(conns[1], 8), sent(conns[2], 16)),
+                (sent(conns[0], 8), sent(conns[1], 1), sent(conns[2], 1)),
                 (at(4), at(8), at(16))
             );
             assert_eq!(
@@ -6115,10 +6128,11 @@ mod tests {
     /// A browser's SACK held back for its peer's data goes first in the
     /// first packet of its next send opportunity toward that peer, whose
     /// chunks take the room it leaves, so no packet passes the MTU: ahead
-    /// of a message of full chunks it goes alone and the burst's four
-    /// packets follow it, and a small chunk shares its packet. A send
-    /// opportunity whose window takes nothing sends it alone. A run gives
-    /// the same packets each time.
+    /// of a message of full chunks it rides the burst's first packet, whose
+    /// chunk is cut to the room it leaves, the rest of the message's bytes
+    /// going on in the chunks after, and a small chunk shares its packet.
+    /// A send opportunity whose window takes nothing sends it alone. A run
+    /// gives the same packets each time.
     #[test]
     fn a_held_sack_takes_its_room_within_the_mtu() {
         for p in [SctpProfile::CHROMIUM, SctpProfile::FIREFOX] {
@@ -6139,8 +6153,8 @@ mod tests {
                     write_sized(wan, &mut b_id, ms(at), ba, 1, chunks, len);
                 };
                 // b acknowledges a's first DATA at once and holds back the
-                // next packet's SACK, which goes ahead of a message of full
-                // chunks, ...
+                // next packet's SACK, which rides a message of full chunks'
+                // first, ...
                 a_writes(&mut wan, 0);
                 a_writes(&mut wan, 50);
                 b_writes(&mut wan, 70, 4, p.max_payload);
@@ -6178,21 +6192,82 @@ mod tests {
                 .map(|r| (r.kind, r.ip_bytes))
                 .collect();
             let (sack, full) = ((PacketKind::Sack, ip(12 + 16)), (PacketKind::Data, most));
+            // The four records' last bytes the burst's cuts left.
+            let rest = 4 * p.max_payload - (most as usize - p.packet_overhead - 12 - 16 - 16);
+            let rest = rest - 3 * (most as usize - p.packet_overhead - 12 - 2 * 16);
             assert_eq!(
                 b,
                 [
                     sack,
-                    sack,
+                    (PacketKind::DataSack, most),
                     full,
                     full,
                     full,
-                    full,
+                    (PacketKind::Data, ip(12 + 16 + rest)),
                     (PacketKind::DataSack, ip(12 + 16 + 16 + 500)),
                     sack,
                     (PacketKind::Data, ip(12 + 2 * (16 + 500))),
                 ],
                 "{p:?}"
             );
+        }
+    }
+
+    /// A dcSCTP association cuts a message into chunks as it sends them,
+    /// each numbered on as it is cut and as large as the room its packet
+    /// and its window leave: a window of 600 bytes takes a chunk of 584
+    /// (its header past it), a window opened the most a packet carries.
+    /// The channel's queue holds the bytes not yet cut. A resent chunk
+    /// keeps its number and bytes, and the reader takes the message once
+    /// every chunk of it is through. A run gives the same chunks and
+    /// packets each time.
+    #[test]
+    fn dcsctp_cuts_a_message_as_it_sends() {
+        for p in [SctpProfile::CHROMIUM, SctpProfile::FIREFOX] {
+            let run = || {
+                let (_sim, mut wan, conns) = channels_of(p, 1);
+                let c = conns[0];
+                let t0 = sim_time(StdDuration::from_secs(1));
+                wan.assocs.get_mut(&c).unwrap().set_cwnd(600);
+                let mut id = 0;
+                write_sized(&mut wan, &mut id, t0, c, 1, 1, 4000);
+                assert_eq!(wan.assocs[&c].chunks(), [(1, 584, 1)], "{p:?}");
+                assert_eq!(wan.conn_state(c, t0).pending, Some(4000 - 584));
+                wan.assocs.get_mut(&c).unwrap().set_cwnd(1 << 20);
+                wan.sctp_pump(t0, c);
+                let full = p.max_payload;
+                let last = 4000 - 584 - 2 * full;
+                assert_eq!(
+                    wan.assocs[&c].chunks(),
+                    [(1, 584, 1), (2, full, 1), (3, full, 1), (4, last, 1)],
+                    "{p:?}"
+                );
+                assert_eq!(wan.conn_state(c, t0).pending, Some(0));
+                wan.assocs.get_mut(&c).unwrap().mark_retransmit(1);
+                wan.sctp_pump(t0, c);
+                assert_eq!(wan.assocs[&c].chunks()[0], (1, 584, 2), "{p:?}");
+                // The message is due to its reader once its chunks are through.
+                let through = |wan: &Scheduler| wan.records.get(&0).unwrap().state == State::Due;
+                assert!(!through(&wan));
+                wan.run_events(t0 + Duration::from_secs(1));
+                assert!(through(&wan), "{p:?}");
+                let ip = |sctp: usize| (sctp + p.packet_overhead) as u32;
+                let sizes: Vec<u32> = wan.packets[0].iter().map(|r| r.ip_bytes).collect();
+                let first = ip(12 + 16 + 584);
+                assert_eq!(
+                    sizes,
+                    [
+                        first,
+                        ip(12 + 16 + full),
+                        ip(12 + 16 + full),
+                        ip(12 + 16 + last),
+                        first
+                    ],
+                    "{p:?}"
+                );
+                (wan.assocs[&c].chunks(), wan.packets.clone())
+            };
+            assert_eq!(run(), run(), "{p:?}");
         }
     }
 
@@ -6294,22 +6369,23 @@ mod tests {
         }
         let t0 = sim_time(StdDuration::from_secs(1));
         let mut id = 0;
-        // A message of eight chunks leaves four waiting: its send
-        // opportunity sends four packets. The 26th's take the stack's sends
-        // to 104 000 bytes since the start.
+        // A message of eight chunks leaves some waiting: its send
+        // opportunity sends four full packets, two chunks each, 4576 bytes.
+        // The 23rd's take the stack's sends to 105 248 bytes since the
+        // start.
         for i in 0..30 {
             let at = t0 + Duration::from_millis(i);
             write_chunks(&mut wan, &mut id, at, conns[0], 1, 8);
         }
         let answers: Vec<Duration> = wan.answers.keys().map(|&(t, _)| t - t0).collect();
         let cost = p.packet_cost.unwrap();
-        assert_eq!(answers, [Duration::from_millis(25) + cost * 4]);
+        assert_eq!(answers, [Duration::from_millis(22) + cost * 4]);
     }
 
     /// A receiver's stack takes a packet as its downlink delivers it, and
     /// its SACK goes to its uplink no sooner, behind what its host handed
     /// the uplink before: four packets reach `b`'s 1 Mbit/s downlink
-    /// together and come through it 8.6 ms apart, and a message `b` writes
+    /// together and come through it about 10 ms apart, and a message `b` writes
     /// back on their association as they reach it, before the first is
     /// through, leaves at once and carries no SACK. Every packet `b`'s
     /// uplink was handed came no sooner than the one before, a Chromium's
@@ -6457,8 +6533,8 @@ mod tests {
     /// A crash that comes after a chunk is through its host's downlink and
     /// before the walk that reaches it finds the chunk taken and its SACK
     /// handed over, as a Firefox and as a Chromium: four packets reach
-    /// `b`'s 1 Mbit/s downlink together and come through it 8.7 ms apart; a
-    /// walk a millisecond after they reach it leaves the first still in the
+    /// `b`'s 1 Mbit/s downlink together and come through it about 10 ms
+    /// apart; a walk once they reach it leaves the first still in the
     /// downlink, and `b` crashes 10 ms on, after the first is through.
     #[test]
     fn a_crash_finds_the_sack_of_what_its_downlink_delivered_before_it() {
@@ -6468,7 +6544,7 @@ mod tests {
             let mut id = 1 << 32;
             let t0 = sim_time(StdDuration::from_secs(1));
             write_chunks(&mut wan, &mut id, t0, conns[0], 1, 4);
-            let t1 = t0 + wan.net.one_way(0, 1) + Duration::from_millis(1);
+            let t1 = t0 + wan.net.one_way(0, 1) + Duration::from_millis(2);
             reach(&mut wan, t1);
             assert!(wan.packets[1].is_empty(), "{p:?}: {:?}", wan.packets[1]);
             let crash = t1 + Duration::from_millis(10);
@@ -6611,6 +6687,75 @@ mod tests {
                 wan.packets[1]
             );
         }
+    }
+
+    /// A first send on its way when its path is cut reaches no receiver,
+    /// as a Firefox and as a Chromium, as the messages on the cut link
+    /// don't: `a`'s chunk to `b` in Singapore leaves its uplink within a
+    /// millisecond and is a one-way trip from `b`'s downlink. Cut then (a
+    /// partition, or the run's cut before `a` crashes), `b` takes nothing
+    /// and SACKs nothing in 2 s, neither the chunk nor its resends; a crash
+    /// alone forgets only what hadn't left, and `b` takes the chunk.
+    #[test]
+    fn a_first_send_on_a_cut_path_reaches_no_receiver() {
+        let (at_a, at_b) = (
+            Site::new(City::Frankfurt, Access::Fiber),
+            Site::new(City::Singapore, Access::Fiber),
+        );
+        for p in [SctpProfile::FIREFOX, SctpProfile::CHROMIUM] {
+            for (cut, crash) in [(true, false), (true, true), (false, true)] {
+                let (_sim, mut wan, conns) = channels_between(p, 1, at_a, at_b);
+                wan.open_channel((conns[0].1, conns[0].0), p);
+                let mut id = 1 << 32;
+                let t0 = sim_time(StdDuration::from_secs(1));
+                write_chunks(&mut wan, &mut id, t0, conns[0], 1, 1);
+                let now = t0 + Duration::from_millis(1);
+                reach(&mut wan, now);
+                let at = |d: Duration| epoch() + d;
+                let log = &wan.packets[0];
+                assert_eq!(log.len(), 1, "{p:?}: {log:?}");
+                assert!(log[0].sent.is_some_and(|s| at(s) < now), "{p:?}: {log:?}");
+                assert!(
+                    log[0].arrived.is_some_and(|s| at(s) > now),
+                    "{p:?}: {log:?}"
+                );
+                if cut {
+                    wan.partition(0, 1);
+                }
+                if crash {
+                    wan.crashed(0, now);
+                }
+                reach(&mut wan, now + Duration::from_secs(2));
+                let took = !wan.packets[1].is_empty();
+                assert_eq!(
+                    took, !cut,
+                    "{p:?} cut {cut} crash {crash}: {:?}",
+                    wan.packets[1]
+                );
+            }
+        }
+    }
+
+    /// A dcSCTP receiver acknowledges at once a packet whose first chunk is
+    /// its association's first DATA, though its last isn't: TSNs 1 and 2 in
+    /// one packet on channel one. A packet whose last chunk the downlink
+    /// lost leaves no mark on the next: on channel two the first packet's
+    /// TSN 1 alone comes through, then a packet of TSN 2, whose SACK waits.
+    #[test]
+    fn a_dcsctp_receiver_acks_a_packet_with_its_first_data_at_once() {
+        let fiber = Site::new(City::Frankfurt, Access::Fiber);
+        let (_sim, mut wan, conns) = channels_between(SctpProfile::CHROMIUM, 2, fiber, fiber);
+        let t = sim_time(StdDuration::from_secs(1));
+        wan.sctp_received(t, conns[0], 1, (7, false, false));
+        wan.sctp_received(t, conns[0], 2, (7, true, false));
+        reach(&mut wan, t + Duration::from_millis(1));
+        assert_eq!(wan.packets[1].len(), 1, "{:?}", wan.packets[1]);
+        assert_eq!(wan.packets[1][0].kind, PacketKind::Sack);
+        let t = t + Duration::from_millis(1);
+        wan.sctp_received(t, conns[1], 1, (8, false, false));
+        wan.sctp_received(t, conns[1], 2, (9, true, false));
+        reach(&mut wan, t + Duration::from_millis(1));
+        assert_eq!(wan.packets[1].len(), 1, "{:?}", wan.packets[1]);
     }
 
     #[test]

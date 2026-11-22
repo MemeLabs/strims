@@ -1272,8 +1272,9 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
         builder.tcp_capacity(64 * (64 * 1024usize).div_ceil(seg.max(1)));
     }
     if channels {
-        // A channel's chunks, as many as its cap and the reader's buffer
-        // hold.
+        // A channel's records, as many as its cap and the reader's buffer
+        // hold, at a chunk's payload each: sctp-proto writes a chunk a
+        // record, dcSCTP a message (`wan::sctp::Chunking`).
         let least = bench.stacks.iter().map(|p| p.max_payload).min();
         let chunk = least.unwrap_or(SctpProfile::STR0M.max_payload);
         builder.tcp_capacity(64 * (64 * 1024usize).div_ceil(chunk));

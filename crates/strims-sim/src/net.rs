@@ -52,8 +52,10 @@
 //! channel's queue empty, or had sent more than 100 KiB of it since the last
 //! answer); between, as the stack sends, it holds. A writer waiting for
 //! its mark wakes on an answer. A
-//! write goes to turmoil as segments of a DATA chunk's payload at most,
-//! which the window model's association sends as packets.
+//! write goes to turmoil as segments, which the window model's association
+//! sends as packets: on sctp-proto, DATA chunks of the most a chunk
+//! carries; on dcSCTP, the message whole, which the association cuts into
+//! chunks as it sends ([`Chunking`]).
 //!
 //! # The host's polls
 //!
@@ -176,7 +178,7 @@ struct Conn {
     /// scheduler hasn't taken yet, and whether it ends a data channel's
     /// message. Bound: the connection's segments written in one step.
     writes: VecDeque<(u64, bool)>,
-    /// A data channel's cap and how it cuts its writes into chunks, and
+    /// A data channel's cap and how it cuts its writes into records, and
     /// its bytes sent and not yet acknowledged.
     channel: Option<(u64, Chunking)>,
     unacked: u64,
@@ -1076,9 +1078,6 @@ impl SendBuffers {
             let stamp = x.stamp;
             x.stamp += 1;
             if let Some(c) = x.conns.get_mut(key) {
-                if let Some((_, ch)) = &mut c.channel {
-                    ch.cut(n);
-                }
                 c.unsent = c.unsent.saturating_add(n as u64);
                 // A page that counts the amount adds the message to its
                 // last reading.
@@ -1165,7 +1164,7 @@ impl SimTcpStream {
     }
 
     /// Writes `buf` as a channel's message: as turmoil segments, the
-    /// chunks its [`Chunking`] cuts, each stamped and unsent until the WAN
+    /// records its [`Chunking`] cuts, each stamped and unsent until the WAN
     /// scheduler sends it.
     fn write_message(&mut self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         let mut done = 0;
@@ -1173,12 +1172,10 @@ impl SimTcpStream {
             let left = buf.len() - done;
             let len = self.conn.as_ref().map_or(left, |(key, b)| {
                 b.with(|x| {
-                    x.conns.get_mut(key).map_or(left, |c| {
-                        let waiting = c.unsent > 0;
-                        c.channel
-                            .as_mut()
-                            .map_or(left, |(_, ch)| ch.next(left, waiting))
-                    })
+                    x.conns
+                        .get(key)
+                        .and_then(|c| c.channel.as_ref())
+                        .map_or(left, |(_, ch)| ch.next(left))
                 })
             });
             let piece = buf.get(done..done + len).unwrap_or_default();

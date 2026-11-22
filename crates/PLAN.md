@@ -656,8 +656,12 @@ and dropped are in `TRIED.md`.
     Then fit against the quiet hosts' runs: the write path's holds and
     lows (`write_fit_of`'s stages 3, 4 and 6, stage 6's p90 among them),
     its stages 1 and 7c at 20 Mbit/s and 7b at 10; the buffered amount at
-    writes, the trains a send opportunity sends at both rates and the
-    one-way delay at 20 Mbit/s (`sctp_fit_of`'s readings 2, 3 and 1).
+    writes (`sctp_fit_of`'s reading 2).
+  - Close the dcSCTP twin's remaining gaps to the testbed's browser
+    seeds: the calm 10 Mbit/s runs' queue drops and drain rate on the
+    SCTP bench (`sctp_fit_of`'s readings 6 and 5, against the testbed's
+    runs with the SCTP log off), halve-7-20's seed capacity reading after
+    the step, and halve-15-10's queue drops in its first wave.
   - Charge a Chromium host's network thread for the packets it takes in:
     its DATA and SACKs are handled there (WebRTC's
     media/sctp/dcsctp_transport.cc:744-747), where the model charges only

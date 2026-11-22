@@ -8,18 +8,21 @@
 //! its message has arrived, as a channel's `onmessage` fires (the queues'
 //! release, `Scheduler::match_queues`). A channel's writes reach
 //! the connection whole while its buffered amount (bytes unsent or
-//! unacknowledged) is under its cap (see [`crate::net`]), cut into DATA
-//! chunks (turmoil segments) and each marked where its message ends; here
-//! the association sends them as its node's stack ([`SctpProfile`]) does,
-//! and the receiver acknowledges them in SACKs as its own node's stack
-//! does. Chunks that go together share packets as their stack bundles
-//! them; a packet is lost whole, and its receiver counts it once. Channels
+//! unacknowledged) is under its cap (see [`crate::net`]), as records
+//! (turmoil segments), each marked where its message ends ([`Chunking`]);
+//! here the association cuts them into DATA chunks and sends them as its
+//! node's stack ([`SctpProfile`]) does, and the receiver acknowledges them
+//! in SACKs as its own node's stack does. Chunks that go together share
+//! packets as their stack bundles them; a packet is lost whole, and its
+//! receiver counts it once. Channels
 //! carry the bare bench's WebRTC links, and the node's on hosts with a
 //! stack ([`HostSpec::rtc_stack`](crate::HostSpec::rtc_stack)).
 //!
 //! [`Stack::SctpProto`] is sctp-proto 0.10 as str0m drives it for the node
 //! ([`SctpProfile::STR0M`]):
 //!
+//! - A write is cut into chunks as it is written, at the most a chunk
+//!   carries, each a record and its sequence number its TSN.
 //! - New chunks go out while the payload in flight (sent, not
 //!   acknowledged) and the chunk fit the window; with nothing outstanding,
 //!   one goes anyway. A chunk starts a packet when its payload would take
@@ -55,11 +58,18 @@
 //!   of [`SctpProfile::max_burst`] packets at most. A packet takes the
 //!   chunks marked for retransmission and then new ones that fit what the
 //!   window has left past the flight, which counts chunks as sent (their
-//!   header and padding) and leaves out those marked lost. (dcSCTP cuts a
-//!   message's chunks to fit the room as it sends; here a write is cut as
-//!   it is written ([`Chunking`]): its first chunk to the room the packet
-//!   of the chunks waiting before it has left, the rest at the most a
-//!   packet carries, and a chunk that doesn't fit the window waits.)
+//!   header and padding) and leaves out those marked lost. A message is a
+//!   record, cut into chunks as they go: each new chunk is the message's
+//!   next bytes, as many as the room the packet and the window leave less a
+//!   chunk's header, rounded down to 4 (net/dcsctp/tx/retransmission_queue.cc,
+//!   `GetChunksToSend`, :479-507; rr_send_queue.cc,
+//!   `OutgoingStream::Produce`, :245-249), given the next TSN as it is cut
+//!   (`OutstandingData::Insert`, :509), and a message's last chunk and the
+//!   next one's first share a packet. A resent chunk keeps its TSN and
+//!   bytes, and goes only where it fits whole
+//!   (outstanding_data.cc, `ExtractChunksThatCanFit`, :413-415). A
+//!   message reaches its reader once each of its chunks is through the
+//!   receiver's downlink, in order (dcSCTP's reassembly).
 //! - The receiver acknowledges every second packet, a lone one after
 //!   [`SctpProfile::delayed_sack`] or half its own timeout, whichever is
 //!   less, and at once its first DATA, a packet past a gap, a duplicate
@@ -72,9 +82,11 @@
 //!   allows, as a thin relay's do: on the testbed 85-87 % of
 //!   their SACKs answer one packet, within a millisecond of it.)
 //! - The window grows when the cumulative point advances and the flight
-//!   before the SACK came within a packet of the window: by at most a
-//!   packet in slow start, by a packet once a window's bytes are
-//!   acknowledged past it.
+//!   before the SACK came within a packet of the window: by the bytes it
+//!   acknowledged, at most a packet, in slow start, by a packet once a
+//!   window's bytes are acknowledged past it. Both count a chunk as sent,
+//!   its header and padding with its payload (outstanding_data.cc,
+//!   `AckChunk`, :128-129).
 //! - Each SACK marks a miss for the chunks between its gap blocks, up to
 //!   the highest one it newly acknowledges (in fast recovery when the
 //!   cumulative point advances, up to its last gap block), a resent chunk
@@ -373,54 +385,29 @@ fn chunk_size(len: usize) -> usize {
     CHUNK_HEADER + len.next_multiple_of(4)
 }
 
-/// How a channel cuts its writes into DATA chunks: at the most a chunk
-/// carries, and on dcSCTP, which cuts each chunk to the room its packet
-/// has left as it sends, a write's first chunk to the room the packet of
-/// the chunks before it leaves while they wait to go, so a message's last
-/// chunk and the next one's first share a packet as they do there.
+/// How a channel cuts its writes into records: sctp-proto into DATA
+/// chunks as they are written, at the most a chunk carries; dcSCTP not at
+/// all, a message a record, which its association cuts into chunks as it
+/// sends them ([`Scheduler::rfc_pump`]).
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Chunking {
     max: usize,
-    /// dcSCTP's room for chunks in a packet, and the bytes of it the
-    /// chunks cut since the channel last had none waiting take.
-    fit: Option<usize>,
-    open: usize,
 }
 
 impl Chunking {
     pub(crate) fn new(p: &SctpProfile) -> Chunking {
         Chunking {
-            max: p.max_payload.max(1),
-            fit: (p.stack == Stack::DcSctp).then(|| p.mtu - COMMON_HEADER),
-            open: 0,
+            max: match p.stack {
+                Stack::SctpProto => p.max_payload.max(1),
+                Stack::DcSctp => usize::MAX,
+            },
         }
     }
 
-    /// The payload of the next chunk of a write with `left` bytes still to
-    /// cut; `waiting` says chunks cut before it wait to go.
-    pub(crate) fn next(&mut self, left: usize, waiting: bool) -> usize {
-        if !waiting {
-            self.open = 0;
-        }
-        let room = match self.fit {
-            Some(fit) if self.open > 0 => fit.saturating_sub(self.open + CHUNK_HEADER) / 4 * 4,
-            _ => 0,
-        };
-        let n = if room > 0 { room } else { self.max };
-        left.min(n).max(1)
-    }
-
-    /// Records a chunk of `len` payload bytes cut.
-    pub(crate) fn cut(&mut self, len: usize) {
-        let Some(fit) = self.fit else {
-            return;
-        };
-        let size = chunk_size(len);
-        self.open = if self.open > 0 && self.open + size <= fit {
-            self.open + size
-        } else {
-            size
-        };
+    /// The bytes of the next record of a write with `left` bytes still to
+    /// cut.
+    pub(crate) fn next(&self, left: usize) -> usize {
+        left.min(self.max).max(1)
     }
 }
 
@@ -442,6 +429,8 @@ struct Chunk {
     acked: bool,
     /// Its last copy was lost, so a resend sends the record.
     lost: bool,
+    /// (dcSCTP) A copy of it passed the receiver's downlink.
+    through: bool,
 }
 
 impl Chunk {
@@ -456,6 +445,7 @@ impl Chunk {
             fast: false,
             acked: false,
             lost: false,
+            through: false,
         }
     }
 
@@ -521,15 +511,15 @@ impl Handover {
 /// Whether `e` is host `h`'s data channels' event, as `h` crashes at
 /// `now`: a packet its network thread hands over, a chunk or a copy
 /// reaching its downlink or through it, its receivers' delayed SACKs, and
-/// its associations' timers and the SACKs reaching them; or a copy it sent
-/// whose packet hadn't left its uplink by `now`, which the crash forgot
-/// with the uplink's queue.
+/// its associations' timers and the SACKs reaching them; or a chunk it
+/// sent, a first send or a copy, whose packet hadn't left its uplink by
+/// `now`, which the crash forgot with the uplink's queue.
 fn sctp_of(e: &Event, h: HostIx, now: Time, ip_host: &FastMap<IpAddr, HostIx>) -> bool {
     let at = |a: &SocketAddr| ip_host.get(&a.ip()) == Some(&h);
     match e {
         Event::SctpOut(hand) => hand.host(ip_host) == Some(h),
         Event::SctpSack { conn } | Event::SctpTimeout { conn } => at(&conn.0),
-        Event::SctpCopy { conn, left, .. } => at(&conn.1) || (at(&conn.0) && *left > now),
+        Event::SctpChunk { conn, left, .. } => at(&conn.1) || (at(&conn.0) && *left > now),
         Event::SctpDelSack { conn } | Event::SctpThrough { conn, .. } => at(&conn.1),
         _ => false,
     }
@@ -638,8 +628,13 @@ pub(super) struct Assoc {
     ssthresh: usize,
     partial_acked: usize,
     /// New chunks waiting for the window, in write order, and whether each
-    /// ends its message. Bound: the channel's cap.
+    /// ends its message; on dcSCTP, records it cuts into chunks as it sends,
+    /// the first's bytes it has sent so far, and each record's bytes not
+    /// yet through the receiver's downlink, which hands it to the reader
+    /// once none are. Bound: the channel's cap.
     pending: VecDeque<(u64, bool)>,
+    cut: usize,
+    unthrough: FastMap<u64, usize>,
     /// Chunks past the cumulative point, by sequence number, and the bytes
     /// they put in the flight. Bound: the window.
     out: BTreeMap<u64, Chunk>,
@@ -719,11 +714,15 @@ impl Assoc {
             ssthresh: profile.rwnd,
             partial_acked: 0,
             pending: VecDeque::new(),
+            cut: 0,
+            unthrough: FastMap::default(),
             out: BTreeMap::new(),
             in_flight: 0,
             cum: None,
             base: None,
-            next_seq: 0,
+            // dcSCTP's TSNs are its own, from 1; sctp-proto's chunks are
+            // its records, their sequence numbers their TSNs.
+            next_seq: u64::from(profile.stack == Stack::DcSctp),
             measure_from: 0,
             in_recovery: false,
             recovery_exit: 0,
@@ -773,10 +772,6 @@ impl Assoc {
         self.in_flight
     }
 
-    pub(super) fn pending(&self) -> impl Iterator<Item = u64> + '_ {
-        self.pending.iter().map(|&(id, _)| id)
-    }
-
     /// When chunk `seq` first went, while it is outstanding.
     #[cfg(test)]
     pub(super) fn sent_at(&self, seq: u64) -> Option<Time> {
@@ -787,6 +782,18 @@ impl Assoc {
     #[cfg(test)]
     pub(super) fn set_cwnd(&mut self, cwnd: usize) {
         self.cwnd = cwnd;
+    }
+
+    /// Its chunks outstanding: each one's TSN, payload bytes and sends.
+    #[cfg(test)]
+    pub(super) fn chunks(&self) -> Vec<(u64, usize, u32)> {
+        self.out.iter().map(|(&s, c)| (s, c.len, c.nsent)).collect()
+    }
+
+    /// Chunk `seq` goes again within the window, as a timeout marks it.
+    #[cfg(test)]
+    pub(super) fn mark_retransmit(&mut self, seq: u64) {
+        self.update(seq, |c| c.retransmit = true);
     }
 
     fn stack(&self) -> Stack {
@@ -862,6 +869,12 @@ impl Assoc {
         self.ends.contains(&seq)
     }
 
+    /// Record `id` is gone with its link ([`Scheduler::partition`]): its
+    /// bytes not yet through wait for no chunk.
+    pub(super) fn forget(&mut self, id: u64) {
+        self.unthrough.swap_remove(&id);
+    }
+
     /// The reader has every message up to the one chunk `seq` ends.
     pub(super) fn read_through(&mut self, seq: u64) {
         self.ends = self.ends.split_off(&(seq + 1));
@@ -890,13 +903,15 @@ impl Assoc {
 }
 
 /// One association's receiver: its cumulative point, the chunks past it
-/// it holds, a lone packet's SACK it holds back until `due`, and whether
-/// it has taken DATA yet.
+/// it holds, a lone packet's SACK it holds back until `due`, and the
+/// packet it is taking (its key) and whether the chunks it has taken of it
+/// held its first DATA or a duplicate, which dcSCTP's alone reads.
 #[derive(Debug, Default)]
 pub(super) struct Rcv {
     cum: Option<u64>,
     above: BTreeSet<u64>,
     due: Option<Time>,
+    marked: Option<(u64, bool)>,
 }
 
 impl Scheduler {
@@ -952,8 +967,14 @@ impl Scheduler {
         let Some(a) = self.assocs.get_mut(&conn) else {
             return;
         };
-        if end && let Some((seq, _)) = Assoc::chunk_of(&self.records, id) {
+        let record = Assoc::chunk_of(&self.records, id);
+        if end && let Some((seq, _)) = record {
             a.ends.insert(seq);
+        }
+        if a.stack() == Stack::DcSctp
+            && let Some((_, len)) = record
+        {
+            a.unthrough.insert(id, len);
         }
         a.pending.push_back((id, end));
         a.wrote |= end;
@@ -1214,19 +1235,25 @@ impl Scheduler {
                         resend: true,
                     });
                 }
+                // The front message's next chunk, cut to the room left.
                 while room > CHUNK_HEADER {
                     let Some(&(id, _)) = a.pending.front() else {
                         break;
                     };
-                    let Some((seq, len)) = Assoc::chunk_of(&self.records, id) else {
+                    let rest = Assoc::chunk_of(&self.records, id)
+                        .map_or(0, |(_, len)| len.saturating_sub(a.cut));
+                    let len = rest.min(room - CHUNK_HEADER);
+                    if len == rest {
                         a.pending.pop_front();
-                        continue;
-                    };
-                    if chunk_size(len) > room {
-                        break;
+                        a.cut = 0;
+                    } else {
+                        a.cut += len;
                     }
-                    a.pending.pop_front();
+                    if len == 0 {
+                        continue;
+                    }
                     room -= chunk_size(len);
+                    let seq = a.next_seq;
                     a.launch(at, id, seq, len);
                     packet.push(Send {
                         id,
@@ -1292,14 +1319,16 @@ impl Scheduler {
         }
     }
 
-    /// The payload of `conn`'s chunks waiting for its window.
-    fn queued(&self, conn: ConnKey) -> usize {
+    /// The payload of `conn`'s chunks waiting for its window: on dcSCTP,
+    /// its messages' bytes not yet cut into chunks.
+    pub(super) fn queued(&self, conn: ConnKey) -> usize {
         self.assocs.get(&conn).map_or(0, |a| {
             a.pending
                 .iter()
                 .filter_map(|&(id, _)| Assoc::chunk_of(&self.records, id))
                 .map(|(_, len)| len)
-                .sum()
+                .sum::<usize>()
+                .saturating_sub(a.cut)
         })
     }
 
@@ -1361,7 +1390,7 @@ impl Scheduler {
             .collect();
         if self.buffers.is_some() {
             for c in packet.iter().filter(|c| !c.resend) {
-                self.admits.insert((at, c.id), (conn, c.len));
+                self.admits.entry((at, c.id)).or_insert((conn, 0)).1 += c.len;
             }
         }
         let data = DataOut {
@@ -1437,9 +1466,10 @@ impl Scheduler {
                 Some(Event::SctpThrough {
                     conn,
                     seq,
+                    packet,
                     last,
                     immediate,
-                }) => self.sctp_received(key.0, conn, seq, (last, immediate)),
+                }) => self.sctp_received(key.0, conn, seq, (packet, last, immediate)),
                 _ => {}
             }
         }
@@ -1451,11 +1481,12 @@ impl Scheduler {
     /// would move them or bring them a packet ([`sctp_of`]): what its
     /// network thread had yet to hand over, what its downlink had yet to
     /// deliver, its timers, and the SACKs on their way to it. What its
-    /// uplink had yet to send reaches no peer: neither its copies nor its
+    /// uplink had yet to send reaches no peer: neither its chunks nor its
     /// SACKs, alone or riding its data, whose packets left after `now`.
-    /// (Its chunks' records go with the links the run cuts before the
-    /// crash, [`Scheduler::partition`].) Its peers' associations with it
-    /// live on ([`Assoc::peer_crashed`]).
+    /// (The run cuts its links before the crash, [`Scheduler::partition`],
+    /// which loses what was on its way on them too, its chunks' records
+    /// and [`Scheduler::sctp_cut`]'s packets.) Its peers' associations with
+    /// it live on ([`Assoc::peer_crashed`]).
     pub(super) fn sctp_forget(&mut self, h: HostIx, now: Time) {
         let ip_host = &self.ip_host;
         let at = |a: &SocketAddr| ip_host.get(&a.ip()) == Some(&h);
@@ -1468,8 +1499,44 @@ impl Scheduler {
         self.rcvs.retain(|conn, _| !at(&conn.1));
     }
 
+    /// The path between hosts `x` and `y` was cut
+    /// ([`Scheduler::partition`]): the data channels' packets on their way
+    /// between them are lost with the messages on the link, as turmoil
+    /// loses those: every chunk, a first send (lost to its sender, as at a
+    /// full queue) or a copy, those still in their sender's uplink queue
+    /// among them, and every SACK. What a downlink took before the cut is
+    /// its receiver's. Until the path is repaired it loses what is handed
+    /// onto it ([`Scheduler::data_handed`], [`Scheduler::sack_handed`]), as
+    /// turmoil does a message sent across it.
+    pub(super) fn sctp_cut(&mut self, x: HostIx, y: HostIx) {
+        let ip_host = &self.ip_host;
+        let between = |c: &ConnKey| {
+            let ends = (ip_host.get(&c.0.ip()), ip_host.get(&c.1.ip()));
+            ends == (Some(&x), Some(&y)) || ends == (Some(&y), Some(&x))
+        };
+        let mut lost = Vec::new();
+        self.events.retain(|_, e| match e {
+            Event::SctpChunk {
+                conn, seq, copy, ..
+            } if between(conn) => {
+                if !*copy {
+                    lost.push((*conn, *seq));
+                }
+                false
+            }
+            _ => true,
+        });
+        for (_, a) in self.assocs.iter_mut().filter(|(c, _)| between(c)) {
+            a.sacks.clear();
+        }
+        for (conn, seq) in lost {
+            self.sctp_lost(conn, seq);
+        }
+    }
+
     /// Packet `d` of its connection's chunks goes to its sender's uplink at
-    /// `at`: lost whole at a full uplink queue or on its path, its chunks
+    /// `at`: lost whole at a full uplink queue or on its path (always on a
+    /// cut one, [`Scheduler::partition`]), its chunks
     /// passing the receiver's downlink one after another, the first charged
     /// the packet's overhead. The receiver's log, if on, logs it as it
     /// arrives (with a SACK, as the receiver takes the SACK), and the
@@ -1530,7 +1597,8 @@ impl Scheduler {
             self.queue_lost(from, at, 1);
             None
         } else {
-            let t = self.net.send(at, from, to, wire, 1, Carrier::Datagram);
+            let mut t = self.net.send(at, from, to, wire, 1, Carrier::Datagram);
+            t.dropped |= self.partitioned.contains(&super::pair_key(from, to));
             if t.dropped {
                 self.count_lost(from, at, 1);
             }
@@ -1572,16 +1640,34 @@ impl Scheduler {
             self.sctp_event(to, from, conn, c.event(t.arrival, Dir::In, None, None));
         }
         let last = packet.len().saturating_sub(1);
+        let cut = self
+            .assocs
+            .get(&conn)
+            .is_some_and(|a| a.stack() == Stack::DcSctp);
+        // The packet's key, its first chunk event's on dcSCTP, whose every
+        // chunk is one.
+        let in_packet = self.next;
         for (i, ((c, &copy), &w)) in packet.iter().zip(&copies).zip(&shares).enumerate() {
-            if copy {
+            if !copy
+                && cut
+                && let Some(x) = self
+                    .assocs
+                    .get_mut(&conn)
+                    .and_then(|a| a.out.get_mut(&c.seq))
+            {
+                x.lost = false;
+            }
+            if copy || cut {
                 let key = self.next;
                 self.next += 1;
                 self.events.insert(
                     (t.arrival, key),
-                    Event::SctpCopy {
+                    Event::SctpChunk {
                         conn,
                         seq: c.seq,
                         wire: w,
+                        copy,
+                        packet: in_packet,
                         last: i == last,
                         immediate,
                         left: t.depart,
@@ -1619,19 +1705,21 @@ impl Scheduler {
         }
     }
 
-    /// A copy of chunk `seq` of `conn` (`wire` bytes, the `last` of its
-    /// packet, with the I bit if `immediate`) reached its receiver's
-    /// downlink at `t`. One that reaches a host down from a crash is gone,
-    /// as a message on its cut links is ([`Scheduler::partition`]); one
-    /// that reaches it up again takes its downlink, and its stack none of
-    /// it ([`Scheduler::sctp_received`]).
-    pub(super) fn sctp_copy_arrived(
+    /// Chunk `seq` of `conn` (`wire` bytes; `flags` as
+    /// [`Scheduler::sctp_received`] takes them), a copy or a dcSCTP chunk,
+    /// which its record doesn't carry, reached its receiver's downlink at
+    /// `t`: lost at a full queue, a chunk not a `copy` lost to its sender.
+    /// One that reaches a host down from a crash is gone, as a message on
+    /// its cut links is ([`Scheduler::partition`], which loses the chunks
+    /// on their way too, [`Scheduler::sctp_cut`]); one that reaches it up
+    /// again takes its downlink, and its stack none of it
+    /// ([`Scheduler::sctp_received`]).
+    pub(super) fn sctp_chunk_arrived(
         &mut self,
         t: Time,
         conn: ConnKey,
-        seq: u64,
-        wire: usize,
-        flags: (bool, bool),
+        (seq, wire, copy): (u64, usize, bool),
+        flags: (u64, bool, bool),
     ) {
         let (Some(&from), Some(&to)) = (
             self.ip_host.get(&conn.0.ip()),
@@ -1649,6 +1737,9 @@ impl Scheduler {
                     *d += 1;
                 }
                 self.queue_lost(from, t, 1);
+                if !copy {
+                    self.sctp_lost(conn, seq);
+                }
                 return;
             }
         }
@@ -1656,10 +1747,12 @@ impl Scheduler {
         self.sctp_through(done.max(t), conn, seq, flags);
     }
 
-    /// Chunk `seq` of `conn` passes its receiver's downlink at `t`.
+    /// Chunk `seq` of `conn` passes its receiver's downlink at `t`: an
+    /// sctp-proto chunk its record carries, of no packet's key (its
+    /// receiver reads no mark, [`Rcv`]).
     pub(super) fn sctp_arrived(&mut self, t: Time, conn: ConnKey, seq: u64) {
-        let flags = self.assocs.get_mut(&conn).map_or((true, false), |a| {
-            (!a.bundled.remove(&seq), a.immediate.remove(&seq))
+        let flags = self.assocs.get_mut(&conn).map_or((0, true, false), |a| {
+            (0, !a.bundled.remove(&seq), a.immediate.remove(&seq))
         });
         self.sctp_through(t, conn, seq, flags);
     }
@@ -1675,7 +1768,13 @@ impl Scheduler {
     /// uplink serves first, as a qdisc serves what it was given in the
     /// order given; a receiver's state, which its own packets read (the
     /// SACK it holds riding its DATA), holds no chunk before its delivery.
-    fn sctp_through(&mut self, t: Time, conn: ConnKey, seq: u64, (last, immediate): (bool, bool)) {
+    fn sctp_through(
+        &mut self,
+        t: Time,
+        conn: ConnKey,
+        seq: u64,
+        (packet, last, immediate): (u64, bool, bool),
+    ) {
         let key = self.next;
         self.next += 1;
         self.events.insert(
@@ -1683,6 +1782,7 @@ impl Scheduler {
             Event::SctpThrough {
                 conn,
                 seq,
+                packet,
                 last,
                 immediate,
             },
@@ -1699,8 +1799,8 @@ impl Scheduler {
     }
 
     /// A packet of chunk `seq` of `conn` was through its receiver's
-    /// downlink at `t` (`flags`: the last chunk of its packet, and the
-    /// packet's I bit): the receiver takes the chunk, and at its packet's
+    /// downlink at `t` (`flags`: its packet's key, whether the chunk is its
+    /// last, and the packet's I bit): the receiver takes the chunk, and at its packet's
     /// last, sends a SACK now or holds a lone packet's. A receiver that
     /// crashed since `conn`'s association opened takes nothing of it, up
     /// again or not ([`Assoc::peer_crashed`]): the copies its peer's timer
@@ -1710,8 +1810,9 @@ impl Scheduler {
         t: Time,
         conn: ConnKey,
         seq: u64,
-        (last, immediate): (bool, bool),
+        (packet, last, immediate): (u64, bool, bool),
     ) {
+        self.chunk_through(conn, seq);
         if self.assocs.get(&conn).is_some_and(|a| a.peer_crashed) {
             return;
         }
@@ -1723,6 +1824,9 @@ impl Scheduler {
         let first = r.cum.is_none();
         let cum = *r.cum.get_or_insert(seq.saturating_sub(1));
         let duplicate = seq <= cum || r.above.contains(&seq);
+        // A mark of a packet whose last chunk the downlink lost goes with it.
+        let carried = r.marked.take().is_some_and(|m| m == (packet, true));
+        let marked = carried || first || duplicate;
         if seq == cum + 1 {
             let mut c = seq;
             while r.above.remove(&(c + 1)) {
@@ -1733,11 +1837,12 @@ impl Scheduler {
             r.above.insert(seq);
         }
         if !last {
+            r.marked = Some((packet, marked));
             return;
         }
         let at_once = !r.above.is_empty()
             || r.due.is_some()
-            || (p.stack == Stack::DcSctp && (first || duplicate || immediate));
+            || (p.stack == Stack::DcSctp && (marked || immediate));
         if at_once {
             self.sctp_send_sack(t, conn);
             return;
@@ -1751,6 +1856,40 @@ impl Scheduler {
         self.next += 1;
         self.events
             .insert((t + delay, key), Event::SctpDelSack { conn });
+    }
+
+    /// dcSCTP chunk `seq` of `conn` is through its receiver's downlink: its
+    /// record's bytes count it the first time, and with none left the
+    /// record is due to its reader ([`Scheduler::match_queues`]).
+    fn chunk_through(&mut self, conn: ConnKey, seq: u64) {
+        let Some(a) = self.assocs.get_mut(&conn) else {
+            return;
+        };
+        let Some(c) = a
+            .out
+            .get_mut(&seq)
+            .filter(|_| a.profile.stack == Stack::DcSctp)
+        else {
+            return;
+        };
+        if std::mem::replace(&mut c.through, true) {
+            return;
+        }
+        let (id, len) = (c.id, c.len);
+        let Some(left) = a.unthrough.get_mut(&id) else {
+            return;
+        };
+        *left = left.saturating_sub(len);
+        if *left > 0 {
+            return;
+        }
+        a.unthrough.swap_remove(&id);
+        if let Some(r) = self.records.get_mut(&id) {
+            r.state = super::State::Due;
+            if let Some(ls) = self.links.get_mut(r.link) {
+                ls.due = true;
+            }
+        }
     }
 
     /// `conn`'s receiver sends the SACK it holds back, if it still does at
@@ -1833,7 +1972,8 @@ impl Scheduler {
 
     /// `conn`'s receiver's SACK alone goes to its uplink at `t`: a packet
     /// that reaches the sender a one-way trip after it leaves, or is lost
-    /// to a full uplink queue; `log` goes to its log.
+    /// to a full uplink queue or on a cut path ([`Scheduler::partition`]);
+    /// `log` goes to its log.
     fn sack_handed(&mut self, t: Time, conn: ConnKey, sack: Sack, log: Option<SctpEvent>) {
         let (Some(&from), Some(&to)) = (
             self.ip_host.get(&conn.0.ip()),
@@ -1883,6 +2023,12 @@ impl Scheduler {
         self.sack_sent(to, self.net.up_charge(to, wire, 1), t, depart);
         let at = depart + self.net.one_way(to, from);
         offer.transit = Some((depart, at));
+        if self.partitioned.contains(&super::pair_key(from, to)) {
+            offer.path_lost = Some(0);
+            self.offered(&offer);
+            self.count_lost(to, t, 1);
+            return;
+        }
         self.offered(&offer);
         self.sack_held(conn, sack, Some((depart, at)));
     }
@@ -2163,7 +2309,9 @@ fn sctp_proto_sacked(a: &mut Assoc, t: Time, _conn: ConnKey, sack: &Sack, cum0: 
 }
 
 /// dcSCTP's `HandleSack` on `sack` at `t`, the cumulative point `cum0`
-/// before it: returns the payload it acknowledged.
+/// before it: returns the payload it acknowledged. The window grows by the
+/// chunks' serialized bytes, header and padding with the payload, as
+/// `OutstandingData::AckChunk`'s `bytes_acked` counts them.
 fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
     let stack = a.stack();
     let flight_before = a.in_flight;
@@ -2179,7 +2327,7 @@ fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
     if a.in_recovery && sack.cum >= a.recovery_exit {
         a.in_recovery = false;
     }
-    let (mut acked, mut highest) = (0, cum0);
+    let (mut acked, mut acked_wire, mut highest) = (0, 0, cum0);
     while let Some(entry) = a.out.first_entry() {
         if *entry.key() > sack.cum {
             break;
@@ -2188,6 +2336,7 @@ fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
         a.in_flight = a.in_flight.saturating_sub(c.flight(stack));
         if !c.acked {
             acked += c.len;
+            acked_wire += chunk_size(c.len);
             highest = highest.max(seq);
         }
     }
@@ -2199,6 +2348,7 @@ fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
             continue;
         }
         acked += c.len;
+        acked_wire += chunk_size(c.len);
         highest = highest.max(seq);
         a.update(seq, |c| {
             c.acked = true;
@@ -2248,10 +2398,10 @@ fn rfc_sacked(a: &mut Assoc, t: Time, sack: &Sack, cum0: u64) -> usize {
         let full = flight_before + mtu >= a.cwnd;
         if a.cwnd <= a.ssthresh {
             if full && !a.in_recovery {
-                a.cwnd += acked.min(mtu);
+                a.cwnd += acked_wire.min(mtu);
             }
         } else {
-            a.partial_acked += acked;
+            a.partial_acked += acked_wire;
             if a.partial_acked >= a.cwnd && full {
                 a.partial_acked -= a.cwnd;
                 a.cwnd += mtu;
@@ -2275,21 +2425,17 @@ mod tests {
 
     use super::*;
 
-    /// The payloads `chunking` cuts `writes` into, the earlier chunks
-    /// still waiting at each write when `waiting` says so.
-    fn cuts(mut chunking: Chunking, writes: &[usize], waiting: bool) -> Vec<Vec<usize>> {
-        let mut first = true;
+    /// The records `chunking` cuts `writes` into.
+    fn cuts(chunking: Chunking, writes: &[usize]) -> Vec<Vec<usize>> {
         writes
             .iter()
             .map(|&len| {
                 let mut pieces = Vec::new();
                 let mut left = len;
                 while left > 0 {
-                    let n = chunking.next(left, waiting && !first);
-                    chunking.cut(n);
+                    let n = chunking.next(left);
                     pieces.push(n);
                     left -= n;
-                    first = false;
                 }
                 pieces
             })
@@ -2345,24 +2491,16 @@ mod tests {
         assert_eq!(a.srtt, Duration::from_millis(25), "the link's first");
     }
 
+    /// dcSCTP's channels hand their association each message whole, which
+    /// it cuts as it sends ([`Scheduler::rfc_pump`]).
     #[test]
-    fn dcsctp_fills_the_packet_a_message_ends_in() {
-        let c = Chunking::new(&SctpProfile::CHROMIUM);
-        let full = SctpProfile::CHROMIUM.max_payload;
-        let tail = 8192 - 7 * full;
-        // The next message's first chunk takes what the 72-byte tail's
-        // packet has left: 1179 less the tail's chunk (88) and its own
-        // header, in fours.
-        let fill = (1179 - chunk_size(tail) - CHUNK_HEADER) / 4 * 4;
-        let w = cuts(c, &[8192, 8192], true);
-        assert_eq!(w[0], [vec![full; 7], vec![tail]].concat());
-        assert_eq!(w[1].first(), Some(&fill));
-        assert!(w[1].iter().skip(1).all(|&n| n <= full));
-        assert_eq!(w[1].iter().sum::<usize>(), 8192);
-        // A chunk and the next one's fill share a packet as bundled.
-        assert!(chunk_size(tail) + chunk_size(fill) <= 1179);
-        // Once the chunks before it went, a message starts a packet.
-        assert_eq!(cuts(c, &[8192, 8192], false)[1].first(), Some(&full));
+    fn dcsctp_writes_a_message_whole() {
+        for p in [SctpProfile::CHROMIUM, SctpProfile::FIREFOX] {
+            assert_eq!(
+                cuts(Chunking::new(&p), &[8192, 1, 70_000]),
+                [vec![8192], vec![1], vec![70_000]]
+            );
+        }
     }
 
     /// An association of `CHROMIUM`'s with chunks 1 to `n` of 1000 bytes
@@ -2441,7 +2579,7 @@ mod tests {
     #[test]
     fn sctp_proto_cuts_at_the_most_a_chunk_carries() {
         let p = SctpProfile::STR0M;
-        let w = cuts(Chunking::new(&p), &[3000, 3000], true);
+        let w = cuts(Chunking::new(&p), &[3000, 3000]);
         let full = p.max_payload;
         assert_eq!(w[1], vec![full, full, 3000 - 2 * full]);
     }
