@@ -325,9 +325,11 @@ impl SctpProfile {
     /// and 400 ms-60 s with a variation of 27.5 ms at least (its 220 ms
     /// option over 8) and its timers backing off to 3 s at most, the
     /// delayed SACK 200 ms at most, and four packets a send opportunity;
-    /// its packets 12 µs of its network thread each (the testbed's quiet
-    /// hosts' Chromium seeds, through their busy spells: 11.7-12.2 µs apart
-    /// on average, whatever their size or peer).
+    /// its packets 12 µs of its network thread each, a host's cost that its
+    /// CPU model sets (the farm's EPYC 9R14 hosts' Chromium seeds: 12.3 µs
+    /// apart in their trains, whatever their size or peer; a testbed run's
+    /// twin takes its run's, `STRIMS_SIM_CAL_PACKET_COST_US`:
+    /// strims-sim's `testbed::thread_cost`).
     /// Its misses are Chromium 156's (WebRTC's branch-heads/8078, see the
     /// module docs); WebRTC's main takes a resent chunk's misses only from
     /// SACKs that newly acknowledge a chunk sent after the resend
@@ -367,6 +369,16 @@ impl SctpProfile {
         packet_cost: None,
         ..SctpProfile::CHROMIUM
     };
+
+    /// This stack with each packet taking `cost` of its host's network
+    /// thread, where its sends go through one ([`SctpProfile::packet_cost`]);
+    /// any other as it is.
+    pub fn with_packet_cost(self, cost: Duration) -> SctpProfile {
+        SctpProfile {
+            packet_cost: self.packet_cost.map(|_| cost),
+            ..self
+        }
+    }
 
     /// Whether this is a native node's stack (str0m's), whose channels the
     /// node writes in process, rather than a browser's.

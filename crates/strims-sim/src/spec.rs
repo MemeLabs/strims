@@ -698,6 +698,13 @@ pub struct Scenario {
     /// asserts) and draws nothing,
     /// `Some(ZERO)` the run as it was before the phase.
     pub epoch_phase: Option<Duration>,
+    /// What each packet of a browser whose stack sends through its host's
+    /// network thread takes of it ([`SctpProfile::packet_cost`]), in place
+    /// of its stack's, as [`Scenario::over_webrtc`] gives each host its
+    /// stack; `None` keeps each stack's. A testbed run's twin takes its
+    /// run's (calibration_star's `STRIMS_SIM_CAL_PACKET_COST_US`): the
+    /// cost is its host's CPU's.
+    pub packet_cost: Option<Duration>,
     /// Whether each browser ([`Scenario::is_browser`]) draws its links'
     /// setups as its stack's do (strims-node's `SetupDraws`): its
     /// metronome's phase, one shared by every host when the clocks are
@@ -1021,6 +1028,7 @@ impl Scenario {
             exp: BTreeSet::new(),
             clock_skew: ClockSkew::Real,
             epoch_phase: None,
+            packet_cost: None,
             link_setup_draws: true,
             timer_lateness: true,
             pacer_lateness: true,
@@ -1167,7 +1175,11 @@ impl Scenario {
             if let Some(spec) = self.hosts.get_mut(h) {
                 spec.listen = false;
                 spec.webrtc = true;
-                spec.rtc_stack = stacks.get(h % stacks.len().max(1)).copied().flatten();
+                spec.rtc_stack = stacks
+                    .get(h % stacks.len().max(1))
+                    .copied()
+                    .flatten()
+                    .map(|p| self.packet_cost.map_or(p, |c| p.with_packet_cost(c.into())));
             }
             self.link(h, relay, Transport::Tcp);
         }

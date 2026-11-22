@@ -108,8 +108,18 @@ use crate::stream::{SeqSet, ViewerStats};
 use crate::wan::{SctpProfile, UP_COUNTERS};
 
 mod packets;
+pub mod thread_cost;
 
 pub use packets::{NodeCapture, NodeLink, bench_captures, captures, node_link};
+
+/// The knob a twin takes its Chromium nodes' packet cost from, in µs
+/// (calibration_star's; [`thread_cost`]).
+pub const PACKET_COST: &str = "STRIMS_SIM_CAL_PACKET_COST_US";
+/// The job knob a run with a Chromium node records its host's CPU model in
+/// ([`thread_cost::cpu_model`]): which host's [`PACKET_COST`] it is, for
+/// simlab's testbed to tell a cell of one model's runs from several's. No
+/// twin takes it.
+pub const CPU_MODEL: &str = "STRIMS_SIM_CAL_CPU";
 
 /// The twin's stream starts this far into its run.
 const LEAD: Duration = Duration::from_secs(5);
@@ -864,6 +874,31 @@ impl Run {
             "STRIMS_SIM_CAL_EPOCH_MS".to_owned(),
             (start_ms % 1000).to_string(),
         );
+        // What each packet of its Chromium nodes took of their network
+        // thread, for the twin's (thread_cost), and the CPU model of the
+        // host whose it is: both the host's, which the keying sets aside
+        // (simlab's testbed MEASURED), a twin of one model's runs taking
+        // their median, of several models' each seed its run's. A knob the
+        // caller gave stands.
+        let kinds: Vec<&str> = settings
+            .get("KINDS")
+            .map_or("", String::as_str)
+            .split_whitespace()
+            .collect();
+        let chromium: Vec<usize> = (0..=viewers)
+            .filter(|&i| kinds.get(i) == Some(&"chromium"))
+            .collect();
+        if !chromium.is_empty() {
+            if let Some(model) = thread_cost::cpu_model(dir) {
+                knobs.entry(CPU_MODEL.to_owned()).or_insert(model);
+            }
+            let traced = knobs.contains_key("STRIMS_SIM_TRACE_SCTP");
+            if !knobs.contains_key(PACKET_COST)
+                && let Some(us) = thread_cost::packet_cost_us(dir, &chromium, start_ms, traced)
+            {
+                knobs.insert(PACKET_COST.to_owned(), format!("{us:.1}"));
+            }
+        }
         Ok(Run {
             dir: dir.to_owned(),
             settings,
@@ -3767,6 +3802,41 @@ mod tests {
         assert_eq!(run.knobs["STRIMS_SIM_CAL_EPOCH_MS"], "902");
         assert_eq!(run.scenario().epoch_phase, Some(Duration::from_millis(902)));
         assert_eq!(phase_of(&run), Some(run.start_ms % 1000));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run with a Chromium node holds its packet cost for its twin
+    /// (thread_cost): here its host's CPU's, without a capture; a run of
+    /// native nodes holds none, nor one whose CPU no reading knows, and a
+    /// caller's knob stands. Beside it, the CPU model run.sh recorded.
+    #[test]
+    fn a_chromium_runs_packet_cost_is_its_twins() {
+        let dir = fixture("thread-cost");
+        std::fs::write(dir.join("cpu"), "AMD EPYC 9R45\n").unwrap();
+        let knob = |extra: &[(&str, &str)], k: &str| {
+            let extra = extra
+                .iter()
+                .map(|&(k, v)| (k.to_owned(), v.to_owned()))
+                .collect();
+            Run::read(&dir, &extra).unwrap().knobs.get(k).cloned()
+        };
+        let cost = |extra: &[(&str, &str)]| knob(extra, PACKET_COST);
+        assert_eq!(cost(&[]), None, "native nodes");
+        assert_eq!(knob(&[], CPU_MODEL), None, "native nodes");
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}KINDS=chromium native\nBROWSER_LINKS=webrtc\n"),
+        )
+        .unwrap();
+        assert_eq!(cost(&[]).as_deref(), Some("5.4"));
+        assert_eq!(knob(&[], CPU_MODEL).as_deref(), Some("AMD EPYC 9R45"));
+        assert_eq!(cost(&[(PACKET_COST, "9.0")]).as_deref(), Some("9.0"));
+        std::fs::write(dir.join("cpu"), "Intel(R) Xeon(R)\n").unwrap();
+        assert_eq!(cost(&[]), None, "a CPU no reading knows");
+        assert_eq!(knob(&[], CPU_MODEL).as_deref(), Some("Intel(R) Xeon(R)"));
+        std::fs::remove_file(dir.join("cpu")).unwrap();
+        assert_eq!(knob(&[], CPU_MODEL), None, "a run dir without `cpu`");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

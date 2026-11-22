@@ -233,6 +233,43 @@ class Measured(unittest.TestCase):
         self.assertEqual(testbed.twin_cells([("c", runs[0]), ("c", base)]), {"c": base})
         self.assertEqual(testbed.twin_cells([("c", runs[0]), ("c", runs[0])])["c"][testbed.EPOCH], "902")
 
+    def test_a_runs_packet_cost_keys_nothing_and_its_cells_cpu_models_set_its_twins(self):
+        base = {"STRIMS_SIM_CAL_VIEWERS": "7", "TESTBED_QDISC": "a>root-class"}
+        cost, cpu = testbed.COST, testbed.CPU
+        zen4, zen3 = "AMD EPYC 9R14 Processor", "AMD EPYC 7R13 Processor"
+
+        def twin(*runs):
+            return testbed.twin_cells([("c", {**base, **({cost: c} if c else {}), **({cpu: m} if m else {})})
+                                       for c, m in runs])["c"]
+
+        a, b = testbed.cells_of([{**base, cost: "5.4", cpu: zen4}, {**base, cost: "12.3", cpu: zen3}])
+        self.assertEqual(a, b)
+        self.assertEqual(a, testbed.cells_of([base])[0])
+        # Runs of one CPU model: their median, to a tenth, however far apart
+        # they read; the model no twin knob.
+        self.assertEqual(twin(("12.3", zen4)), {**base, cost: "12.3"})
+        self.assertEqual(twin(("12.3", zen4), ("11.9", zen4), ("13.1", zen4))[cost], "12.3")
+        self.assertEqual(twin(("12.3", zen4), ("12.0", zen4))[cost], "12.2")
+        self.assertEqual(twin(("12.1", zen4), ("16.0", zen4), ("13.0", zen4))[cost], "13.0")
+        # Two models, however near their costs: each run's, in run order, a
+        # seed its run's.
+        mixed = twin(("12.3", zen4), ("18.1", zen3), ("12.4", zen4))
+        self.assertEqual(mixed[cost], "12.3 18.1 12.4")
+        self.assertEqual(twin(("15.0", zen4), ("15.4", zen3))[cost], "15.0 15.4")
+        seeds = [testbed.seed_knobs(mixed, s)[cost] for s in range(1, 6)]
+        self.assertEqual(seeds, ["12.3", "18.1", "12.4", "12.3", "18.1"])
+        self.assertEqual({k: v for k, v in testbed.seed_knobs(mixed, 2).items() if k != cost}, base)
+        one = twin(("12.3", zen4), ("12.0", zen4))
+        self.assertEqual(testbed.seed_knobs(one, 2), one)
+        # A run of no model (a run dir from before run.sh wrote `cpu`): each
+        # run's, as two models'.
+        self.assertEqual(twin(("12.3", zen4), ("12.0", None))[cost], "12.3 12.0")
+        self.assertEqual(twin(("12.3", None), ("12.0", None))[cost], "12.3 12.0")
+        self.assertEqual(twin(("12.3", None))[cost], "12.3")
+        # A run without a cost (folded before the fold read it): the profile's.
+        self.assertEqual(twin(("12.3", zen4), (None, zen4)), base)
+        self.assertEqual(testbed.seed_knobs(base, 1), base)
+
 
 # A stand-in for strims-sim's scenarios binary: its one row names the
 # packet log it ran with, and it writes a packet a host of the log's

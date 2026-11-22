@@ -333,6 +333,10 @@
 #
 # Writes to <out dir>:
 #   topology
+#   cpu                    the host's CPU model (/proc/cpuinfo's model name):
+#                          its Chromium nodes' cost of a packet on their
+#                          network thread, where the run has no capture
+#                          (strims-sim's testbed::thread_cost)
 #   node-<i>.jsonl         a JSON line per second from each node
 #                          (strims-testbed's node module); a browser's adds
 #                          post_ms and host_t_ms (testbed_browser's)
@@ -841,6 +845,14 @@ nov6=(--sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv6.conf.default.d
     for i in $(seq 1 $viewers); do echo "link 0 $i"; done
   fi
 } > "$out/topology"
+# The host's CPU model, which sets what each packet of a Chromium node's
+# takes of its network thread: the twin's, where the run has no capture.
+while IFS=: read -r key value; do
+  if [[ $key == "model name"* ]]; then
+    echo "${value# }" > "$out/cpu"
+    break
+  fi
+done < /proc/cpuinfo
 # The qdisc tree each node's shape (below) builds, by name: a change to
 # the tree changes it, so runs of two trees don't pool. Its root is the
 # node's access link class's (the `links` file names each node's).

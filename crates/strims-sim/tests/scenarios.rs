@@ -3822,6 +3822,7 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
         join_at_ms: None,
         joins: Vec::new(),
         epoch_ms: None,
+        packet_cost_us: None,
         harness_links: false,
         slow_down_kbit: None,
         topology: Some(full_mesh(viewers)),

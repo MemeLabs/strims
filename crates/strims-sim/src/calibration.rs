@@ -109,6 +109,11 @@ fn value<T: std::str::FromStr>(get: &impl Fn(&str) -> Option<String>, name: &str
 ///   ([`Scenario::epoch_phase`]), 0 to 999: the nodes' clocks then stand
 ///   to the stream's writes as the testbed's did, their upload meters'
 ///   100 ms intervals at the run's phase. Unset, each seed draws its own.
+/// - `STRIMS_SIM_CAL_PACKET_COST_US=<µs>`, a testbed run's Chromium nodes'
+///   cost of a packet on their network thread (`testbed::thread_cost`,
+///   their host's CPU's), is each Chromium host's
+///   ([`Scenario::packet_cost`]); unset, its stack's 12 µs
+///   ([`SctpProfile::CHROMIUM`](crate::SctpProfile::CHROMIUM)).
 /// - `STRIMS_SIM_CAL_SEED_BURST=<bytes>` and `STRIMS_SIM_CAL_VIEWER_BURST=<bytes>`
 ///   give the seed's and each viewer's uplink a shaper bucket that size
 ///   (`strims_wan::Bucket`, leaving at once), as `run.sh`'s `SEED_BURST`
@@ -147,6 +152,9 @@ pub struct Calibration {
     pub joins: Vec<(usize, u64)>,
     /// The run's epoch phase in ms, under 1000; `None` draws it.
     pub epoch_ms: Option<u64>,
+    /// The Chromium hosts' packet cost on their network thread, in µs;
+    /// `None` keeps their stack's.
+    pub packet_cost_us: Option<f64>,
     /// The viewers make their links as the testbed's harness does
     /// ([`HostSpec::links_at`](crate::spec::HostSpec::links_at)).
     pub harness_links: bool,
@@ -232,6 +240,7 @@ impl Calibration {
             }),
             joins: joins(&get, viewers),
             epoch_ms: value(&get, "STRIMS_SIM_CAL_EPOCH_MS"),
+            packet_cost_us: value(&get, "STRIMS_SIM_CAL_PACKET_COST_US"),
             harness_links: value::<u64>(&get, "STRIMS_SIM_CAL_HARNESS_LINKS")
                 .is_none_or(|v| v != 0),
             slow_down_kbit: value(&get, "STRIMS_SIM_CAL_SLOW_DOWN_KBIT"),
@@ -277,6 +286,12 @@ impl Calibration {
             assert!(
                 ms < 1000,
                 "STRIMS_SIM_CAL_EPOCH_MS={ms}: a ms of the second, 0 to 999"
+            );
+        }
+        if let Some(us) = c.packet_cost_us {
+            assert!(
+                us.is_finite() && us > 0.0 && us < 1000.0,
+                "STRIMS_SIM_CAL_PACKET_COST_US={us}: µs a packet, over 0 and under 1000"
             );
         }
         // A peak is the rate a bucket sends at: without the bucket it would
@@ -543,6 +558,9 @@ pub fn calibration_star(c: &Calibration) -> Scenario {
     s.transfer_samples = true;
     s.signal_on_bridge = true;
     s.epoch_phase = c.epoch_ms.map(Duration::from_millis);
+    s.packet_cost = c
+        .packet_cost_us
+        .map(|us| Duration::from_nanos((us * 1000.0).round() as u64));
     striped(s, STRIPES, ADAPTIVE)
 }
 
@@ -674,6 +692,75 @@ mod tests {
         for bad in ["1000", "-1", "0.5"] {
             let refused = std::panic::catch_unwind(|| star(Some(bad))).is_err();
             assert!(refused, "EPOCH_MS={bad}");
+        }
+    }
+
+    /// PACKET_COST_US gives the Chromium hosts' stacks that cost a packet
+    /// on their network thread, to the ns, once they link as browsers do;
+    /// Firefox's, str0m's and a host over UDP keep theirs, and unset every
+    /// stack keeps its own.
+    #[test]
+    fn packet_cost_us_reaches_the_chromium_hosts_stacks_alone() {
+        use crate::SctpProfile;
+        let star = |us: Option<&str>| {
+            calibration_star(&Calibration::from_knobs(|k| {
+                (k == "STRIMS_SIM_CAL_PACKET_COST_US")
+                    .then_some(us)
+                    .flatten()
+                    .map(str::to_owned)
+            }))
+        };
+        let stacks = [
+            Some(SctpProfile::CHROMIUM),
+            Some(SctpProfile::FIREFOX),
+            Some(SctpProfile::STR0M),
+            None,
+        ];
+        let linked = |us: Option<&str>| {
+            let mut s = star(us);
+            let relay = s.over_webrtc(&stacks);
+            s.hosts[..relay]
+                .iter()
+                .map(|h| h.rtc_stack)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(star(None).packet_cost, None);
+        assert_eq!(
+            star(Some("5.4")).packet_cost,
+            Some(Duration::from_nanos(5400))
+        );
+        let before = linked(None);
+        let after = linked(Some("5.4"));
+        assert_eq!(before.len(), after.len());
+        for (h, (b, a)) in before.iter().zip(&after).enumerate() {
+            match h % stacks.len() {
+                0 => {
+                    assert_eq!(
+                        b.unwrap().packet_cost,
+                        Some(strims_base::time::Duration::from_micros(12))
+                    );
+                    assert_eq!(
+                        a.unwrap().packet_cost,
+                        Some(strims_base::time::Duration::from_nanos(5400))
+                    );
+                    let rest = SctpProfile {
+                        packet_cost: None,
+                        ..a.unwrap()
+                    };
+                    assert_eq!(
+                        rest,
+                        SctpProfile {
+                            packet_cost: None,
+                            ..b.unwrap()
+                        }
+                    );
+                }
+                _ => assert_eq!(a, b, "host {h}"),
+            }
+        }
+        for bad in ["0", "-1", "nan", "1000"] {
+            let refused = std::panic::catch_unwind(|| star(Some(bad))).is_err();
+            assert!(refused, "PACKET_COST_US={bad}");
         }
     }
 }

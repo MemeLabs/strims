@@ -121,9 +121,14 @@ JOB_KNOBS = ("STRIMS_SIM_JOB", "STRIMS_SIM_SERIES", "STRIMS_SIM_SEED", "STRIMS_S
 # time sit against the stream's writes. The keying sets them aside; a
 # cell's twin takes the starts' median over its runs, and the epoch where
 # its runs agree on one (a twin of one run's, as a joins-paired twin is),
-# else none, each twin seed drawing its own (twin_cells).
+# else none, each twin seed drawing its own (twin_cells). And what each
+# packet of its Chromium nodes took of their network thread (COST, µs:
+# strims-sim's testbed::thread_cost), its host's, which its CPU model (CPU,
+# run.sh's `cpu`, no twin knob) sets.
 EPOCH = "STRIMS_SIM_CAL_EPOCH_MS"
-MEASURED = ("STRIMS_SIM_CAL_COMPETE_MS", EPOCH)
+COST = "STRIMS_SIM_CAL_PACKET_COST_US"
+CPU = "STRIMS_SIM_CAL_CPU"
+MEASURED = ("STRIMS_SIM_CAL_COMPETE_MS", EPOCH, COST, CPU)
 
 
 def fresh_out(run_dir, out):
@@ -302,7 +307,9 @@ def twin_cells(rows):
     takes (a refused link, a seed's loss, run.sh's late date stamps). What
     the runs MEASURED is each cell's median over them (median_measured),
     but EPOCH, the runs' one where every run holds the same, else left
-    out."""
+    out, COST (twin_cost, by the runs' CPU), where every run holds one,
+    and CPU, which only says whose COST it is. `rows` come in each cell's
+    run order (1, 2, ...)."""
     out, measured, runs = {}, {}, {}
     for cell, env in rows:
         runs[cell] = runs.get(cell, 0) + 1
@@ -319,11 +326,49 @@ def twin_cells(rows):
             measured.setdefault(cell, {}).setdefault(k, []).append(v)
     for cell, ks in measured.items():
         for k, values in ks.items():
-            if k != EPOCH:
+            if k == COST:
+                if len(values) == runs[cell]:
+                    cpus = ks.get(CPU, [])
+                    out[cell][k] = twin_cost(values, cpus if len(cpus) == runs[cell] else [])
+            elif k == CPU:
+                pass
+            elif k != EPOCH:
                 out[cell][k] = median_measured(cell, k, values)
             elif len(values) == runs[cell] and len(set(values)) == 1:
                 out[cell][k] = values[0]
     return dict(sorted(out.items()))
+
+
+def twin_cost(values, cpus):
+    """A cell's twin's COST of its runs' (`values`, in run order) by their
+    hosts' CPU models (`cpus`, each run's CPU, or none where a run's fold
+    recorded none): the costs' median, to a tenth of a µs, where every run
+    names one model, which sets the cost; else each run's, joined by
+    spaces, a twin seed taking the one of the run it pairs with
+    (seed_knobs), so the twin's seeds run on the runs' hosts' costs in their
+    shares, as a joins-paired twin runs on its run's. A cell with a run of
+    no model pairs too: one model's runs read 12.1-16.0 µs (tier r6's
+    star-15-10-event, all on c7a's EPYC 9R14) where the models' own costs
+    lie 12.3, 15.4 and 18.1, so no bound on the costs alone tells one
+    model's runs from two models', and a seed taking its run's cost runs on
+    a host a run had where two models' median runs on neither."""
+    if len(cpus) == len(values) and len(set(cpus)) == 1:
+        costs = sorted(float(v) for v in values)
+        mid = len(costs) // 2
+        med = costs[mid] if len(costs) % 2 else (costs[mid - 1] + costs[mid]) / 2
+        return f"{med:.1f}"
+    return " ".join(values)
+
+
+def seed_knobs(knobs, seed):
+    """A cell's twin knobs (twin_cells') for its twin seed `seed`: a COST of
+    its runs' each (twin_cost) the one of the run the seed pairs with, run
+    (seed - 1) mod their count in run order, as a twin seed pairs with the
+    testbed run of its number."""
+    costs = knobs.get(COST, "").split()
+    if len(costs) < 2:
+        return knobs
+    return {**knobs, COST: costs[(seed - 1) % len(costs)]}
 
 
 def median_measured(cell, knob, values):
@@ -354,8 +399,8 @@ def cells_in(src_like, kind="one", arm="one", packet_hosts="seed"):
 
     side = (f"testbed_side({store_host.q(src_like)}, kind := {store_host.q(kind)}, "
             f"arm := {store_host.q(arm)})")
-    rows = catalog.lake(f"SELECT DISTINCT j.stored_cell AS cell, j.env FROM jobs j SEMI JOIN (SELECT unnest("
-                        f"{side}, recursive := true)) s ON s.k = j.k ORDER BY 1;")
+    rows = catalog.lake(f"SELECT DISTINCT j.stored_cell AS cell, j.seed, j.env FROM jobs j SEMI JOIN (SELECT "
+                        f"unnest({side}, recursive := true)) s ON s.k = j.k ORDER BY 1, 2;")
     envs = [r["env"] if isinstance(r["env"], dict) else dict(r["env"]) for r in rows]
     out = twin_cells([(r["cell"], {k: v for k, v in e.items() if k not in JOB_KNOBS}) for r, e in zip(rows, envs)])
     if out:
@@ -410,7 +455,8 @@ def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8, kind="on
     """Each cell's twin of the testbed runs side (src, kind, side_arm)
     names (cells_in: `src` a source's LIKE pattern): strims-sim's
     calibration_star (the scenarios test binary `binary`) at seeds 1..N
-    with the cell's knobs (cells_in's, the packet log of those of
+    with the cell's knobs (cells_in's, a COST of its runs' each the seed's
+    run's (seed_knobs), the packet log of those of
     `packet_hosts` whose packets the cell's runs hold among them; its
     TESTBED_QDISC left out), TWIN_TABLES and `env`'s, one farm job's way
     each (STRIMS_SIM_JOB=1) into a dir of work_dir's, their tables folded
@@ -430,7 +476,7 @@ def twins(src, binary, name, seeds=8, arm="twin", env=None, parallel=8, kind="on
     for cell, knobs in cells.items():
         base = {k: v for k, v in knobs.items() if not k.startswith("TESTBED_")}
         for seed in range(1, seeds + 1):
-            todo.append((cell, {**base, **TWIN_TABLES, **(env or {}), "STRIMS_SIM_JOB": "1"}, seed))
+            todo.append((cell, {**seed_knobs(base, seed), **TWIN_TABLES, **(env or {}), "STRIMS_SIM_JOB": "1"}, seed))
 
     def one(t):
         cell, e, seed = t

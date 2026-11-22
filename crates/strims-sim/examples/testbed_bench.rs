@@ -11,7 +11,7 @@
 //!               [--web <dir>] [--browser-bin <path>]
 //! testbed_bench --sim <testbed run dir> --out <dir> [--window]
 //!               [--segment <bytes>] [--str0m] [--no-bucket] [--nominal]
-//!               [--seed <n>] [--trace-tcp] [--trace-sctp]
+//!               [--seed <n>] [--trace-tcp] [--trace-sctp] [--packet-cost-us <µs>]
 //! ```
 //!
 //! On the testbed a node listens on its topology address, dials the nodes
@@ -52,6 +52,12 @@
 //! `--trace-tcp` and `--trace-sctp` add the window model's TCP events, and
 //! node 0's packets and SCTP events, to the logs ([`Bench::trace_tcp`],
 //! [`Bench::trace_sctp`]).
+//! Each Chromium node's packets take the run's cost of its network thread
+//! ([`bench_packet_cost_us`]: its captures', else its host's CPU's), as a
+//! testbed run's twin's do; without either, or with `--packet-cost-us`,
+//! its stack's or the one given.
+//!
+//! [`bench_packet_cost_us`]: strims_sim::testbed::thread_cost::bench_packet_cost_us
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -70,6 +76,7 @@ use strims_sim::bench::{
     Bench, BenchClock, Entry, LINGER, NodePlan, Releases, RtcPlan, Schedule, Written, links, node,
     read_signal, simulate, write_signal,
 };
+use strims_sim::testbed::thread_cost;
 use strims_testbed::browser::{Bundle, Site, Socket, args as browser_args, firefox_profile};
 use strims_testbed::native::now_ms;
 use strims_testbed::topology::{Kind, Topology};
@@ -98,6 +105,7 @@ struct Args {
     trace_sctp: bool,
     nominal: bool,
     seed: Option<u64>,
+    packet_cost_us: Option<f64>,
     web: Option<PathBuf>,
     browser_bin: Option<PathBuf>,
 }
@@ -130,6 +138,16 @@ fn args() -> Result<Args, String> {
             "--trace-sctp" => a.trace_sctp = true,
             "--nominal" => a.nominal = true,
             "--seed" => a.seed = Some(num(value()?)?),
+            "--packet-cost-us" => {
+                let v = value()?;
+                let us: f64 = v.parse().map_err(|_| format!("--packet-cost-us {v}"))?;
+                if !(us.is_finite() && us > 0.0 && us < 1000.0) {
+                    return Err(format!(
+                        "--packet-cost-us {v}: µs a packet, over 0 and under 1000"
+                    ));
+                }
+                a.packet_cost_us = Some(us);
+            }
             "--web" => a.web = Some(value()?.into()),
             "--browser-bin" => a.browser_bin = Some(value()?.into()),
             "--join-at" | "--rate" | "--hosts" | "--capture" | "--units" | "--player" => {
@@ -285,6 +303,21 @@ fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
     bench.trace_sctp = a.trace_sctp;
     if let Some(seed) = a.seed {
         bench.seed = seed;
+    }
+    let chromium: Vec<usize> = bench
+        .stacks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.packet_cost.is_some().then_some(i))
+        .collect();
+    if let Some(us) = a
+        .packet_cost_us
+        .or_else(|| thread_cost::bench_packet_cost_us(dir, &chromium))
+    {
+        let cost = strims_base::time::Duration::from_nanos((us * 1000.0).round() as i64);
+        for p in &mut bench.stacks {
+            *p = p.with_packet_cost(cost);
+        }
     }
     let logs = simulate(&bench)?;
     std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;

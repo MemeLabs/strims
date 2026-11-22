@@ -187,7 +187,21 @@ crates differ from those the page was built from builds its own page.
   at, which the fold records), so its upload meter's 100 ms grid sits
   against the stream's writes as the run's did; a twin of runs that
   started at different ms of their second leaves it out, each of its
-  seeds drawing its own. A cell's twin logs the seed's packets
+  seeds drawing its own. A run's Chromium nodes' cost of a packet on
+  their network thread, set by the host's CPU model (EPYC 9R45 5.4 µs,
+  9R14 12.3, 7R13 18.1, the dev VM 15.4), is its twin's
+  (`STRIMS_SIM_CAL_PACKET_COST_US`, which the fold reads from the long
+  trains of a Chromium node's offered capture, else, and always in a
+  TRACE_SCTP run, from the CPU model run.sh writes to the out dir's
+  `cpu`: strims-sim's `testbed::thread_cost`); the bench sim takes its
+  run's too. The fold records that model beside it
+  (`STRIMS_SIM_CAL_CPU`, no twin knob). A cell's twin takes its runs'
+  median where they all ran on one CPU model, else each twin seed its
+  paired run's (`testbed.twin_cost`), so a farm cell whose repeats ran on
+  two instance types is twinned on both; a cell with a run of no recorded
+  model (its run dir from before `cpu`) pairs too, as one model's runs'
+  costs spread wider than two models' lie apart. A cell's
+  twin logs the seed's packets
   where its runs hold them in the catalog (a PCAP=1 run's every node:
   `STRIMS_SIM_PACKET_LOG`, which `testbed.cells_in` adds), which the wire
   fits read at their `at_node`; `--packet-hosts all` (or host numbers)
