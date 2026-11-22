@@ -585,7 +585,8 @@ pub struct PageTiming {
     /// A Firefox offer's leaving for the relay after that end
     /// (`LinkSetup::offer_post`).
     pub firefox_post: Vec<Duration>,
-    /// A Chromium page's setting of a lone offer after its node's connect,
+    /// A Chromium page's first setting of an offer after its node's
+    /// connect, which follows every offer its page was asked for by then,
     /// at the median (`LinkSetup::set_ready`).
     pub chromium_set: Vec<Duration>,
 }
@@ -614,6 +615,16 @@ impl PageTiming {
         } else {
             setup
         }
+    }
+
+    /// Host `h`'s rank among the hosts of its kind
+    /// ([`HostKind::of_host`](crate::late::HostKind::of_host)) in `s`, which
+    /// picks its entry ([`PageTiming::apply`]), as a testbed run's nodes'
+    /// order picks theirs.
+    pub fn rank(s: &Scenario, h: HostIx) -> usize {
+        use crate::late::HostKind;
+        let kind = HostKind::of_host(s, h);
+        (0..h).filter(|&i| HostKind::of_host(s, i) == kind).count()
     }
 
     /// Each list, its name and the kind of host it holds an entry of.

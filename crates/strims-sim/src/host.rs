@@ -129,12 +129,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         w.timer_log(h).filter(|_| browser).map(|l| l.sink()),
         w.clock_lead(h),
     );
-    // Its page's offer times are those of its rank among the hosts of its
-    // kind, as a testbed run's are its nodes' in node order.
-    let kind = crate::late::HostKind::of_host(&w.spec, h);
-    let page_rank = (0..h)
-        .filter(|&i| crate::late::HostKind::of_host(&w.spec, i) == kind)
-        .count();
+    let page_rank = crate::spec::PageTiming::rank(&w.spec, h);
     let net = SimNet::new(w.send_buffers.clone())
         .with_wan(w.wan.clone())
         .with_segment(w.spec.segment())

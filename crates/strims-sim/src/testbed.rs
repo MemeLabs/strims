@@ -951,8 +951,10 @@ impl Run {
         // node order, the host's, which the keying sets aside (simlab's
         // testbed MEASURED), a twin of one model's runs taking each
         // node's median, of several models' each seed its run's. A knob
-        // the caller gave stands.
-        for (knob, ms) in offer_timing::offer_timing(dir, &kinds) {
+        // the caller gave stands. Its nodes alone: a kind past them names
+        // no host of the twin's.
+        let nodes_kinds = kinds.get(..=viewers).unwrap_or(&kinds);
+        for (knob, ms) in offer_timing::offer_timing(dir, nodes_kinds) {
             let ms: Vec<String> = ms.into_iter().map(num).collect();
             knobs.entry(knob.to_owned()).or_insert_with(|| ms.join(","));
         }
@@ -3979,6 +3981,38 @@ mod tests {
         assert_eq!(knob(&[], CPU_MODEL).as_deref(), Some("Intel(R) Xeon(R)"));
         std::fs::remove_file(dir.join("cpu")).unwrap();
         assert_eq!(knob(&[], CPU_MODEL), None, "a run dir without `cpu`");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run's offer times are its nodes' alone: KINDS past its last node
+    /// adds no entry, so its twin's world takes the list, an entry a
+    /// Firefox host under the window model (its STRIMS_SIM_TCP=1).
+    #[test]
+    fn a_runs_offer_times_are_its_nodes_alone() {
+        let dir = fixture("offer-kinds");
+        std::fs::write(dir.join("cpu"), "AMD EPYC 9R45\n").unwrap();
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}KINDS=firefox firefox firefox\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("node-0.err"),
+            "1000 {\"atMs\":1000,\"type\":\"connecting\"}\n\
+             1014 {\"asked\":1001,\"gathered\":1014,\"sdpType\":\"offer\",\"step\":\"describe\",\"type\":\"rtcTiming\"}\n",
+        )
+        .unwrap();
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(run.knobs[offer_timing::FIREFOX_GATHER], "14,12.8");
+        assert_eq!(run.knobs["STRIMS_SIM_TCP"], "1");
+        let mut s = run.scenario();
+        let ms = |ms: u64| Duration::from_micros(ms * 100);
+        assert_eq!(s.page_timing.firefox_gather, [ms(140), ms(128)]);
+        if let Some(b) = &mut s.send_buffer {
+            b.window = true;
+        }
+        crate::world::World::new(s, 1, None, None);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

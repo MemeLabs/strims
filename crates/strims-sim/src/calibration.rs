@@ -139,7 +139,7 @@ fn values(get: &impl Fn(&str) -> Option<String>, name: &str) -> Vec<f64> {
 ///   `STRIMS_SIM_CAL_CHROMIUM_SET_MS=<ms>,...`, a testbed run's browser
 ///   pages' offer times (`testbed::offer_timing`, their host's): a Firefox
 ///   page's gathering end after its node's connect and its offer's post
-///   after that, and a Chromium page's lone setting after the connect, are
+///   after that, and a Chromium page's first setting after the connect, are
 ///   their stacks' ([`Scenario::page_timing`]), an entry a host of its
 ///   kind in host order, or one for every such host; unset, each stack's.
 /// - `STRIMS_SIM_CAL_SEED_BURST=<bytes>` and `STRIMS_SIM_CAL_VIEWER_BURST=<bytes>`
@@ -184,7 +184,7 @@ pub struct Calibration {
     /// `None` keeps their stack's.
     pub packet_cost_us: Option<f64>,
     /// The browsers' pages' offer times, ms: Firefox's gathering end and
-    /// its post after it, Chromium's lone setting, an entry a host of its
+    /// its post after it, Chromium's first setting, an entry a host of its
     /// kind in host order, or one for all; empty keeps the stack's.
     pub firefox_gather_ms: Vec<f64>,
     pub firefox_post_ms: Vec<f64>,
@@ -894,5 +894,139 @@ mod tests {
             let refused = std::panic::catch_unwind(|| star(Some(bad))).is_err();
             assert!(refused, "PACKET_COST_US={bad}");
         }
+    }
+
+    /// A seed of `seed`'s stack and five viewers (Chromium, Firefox,
+    /// Firefox, Chromium, Chromium), linked as browsers do under the
+    /// window model (a twin's `STRIMS_SIM_TCP=1`), with the offer-time
+    /// knobs `knobs`.
+    fn page_star(seed: Option<crate::SctpProfile>, knobs: &[(&str, &str)]) -> Scenario {
+        use crate::SctpProfile;
+        let mut c = Calibration::from_knobs(|k| {
+            let knob = knobs.iter().find(|&&(n, _)| n == k).map(|&(_, v)| v);
+            (k == "STRIMS_SIM_CAL_VIEWERS")
+                .then_some("5")
+                .or(knob)
+                .map(str::to_owned)
+        });
+        c.window = true;
+        let mut s = calibration_star(&c);
+        let (cr, ff) = (Some(SctpProfile::CHROMIUM), Some(SctpProfile::FIREFOX));
+        s.over_webrtc(&[seed, cr, ff, ff, cr, cr]);
+        s
+    }
+
+    /// Each browser host's page takes its kind's entry of its rank among
+    /// that kind's hosts in host order, the seed's among them, and a list
+    /// of one entry stands for every host of its kind; a native seed keeps
+    /// str0m's, and the world takes lists of either length.
+    #[test]
+    fn page_timing_gives_each_browser_host_its_kinds_entry_by_rank() {
+        use strims_node::LinkSetup;
+
+        use crate::SctpProfile;
+        use crate::late::HostKind;
+        let ms = Duration::from_millis;
+        // A host's stack's setup with its page's times, as its SimNet's.
+        let setup = |s: &Scenario, h: HostIx| {
+            let stack = match HostKind::of_host(s, h) {
+                HostKind::Chromium => LinkSetup::CHROMIUM,
+                HostKind::Firefox => LinkSetup::FIREFOX,
+                HostKind::Native => LinkSetup::STR0M,
+            };
+            s.page_timing.apply(stack, PageTiming::rank(s, h))
+        };
+        // Each case's lists, gathering ends 10 + i ms, posts 1 + i and
+        // settings 20 + i, and the entry each host takes: Firefox's (F),
+        // Chromium's (C) or none (N).
+        enum Is {
+            F(usize),
+            C(usize),
+            N,
+        }
+        use Is::{C, F, N};
+        let cases = [
+            (
+                None,
+                "10,11",
+                "1,2",
+                "20,21,22",
+                [N, C(0), F(0), F(1), C(1), C(2)],
+            ),
+            (
+                Some(SctpProfile::FIREFOX),
+                "10,11,12",
+                "1,2,3",
+                "20,21,22",
+                [F(0), C(0), F(1), F(2), C(1), C(2)],
+            ),
+            (
+                Some(SctpProfile::CHROMIUM),
+                "10,11",
+                "1,2",
+                "20,21,22,23",
+                [C(0), C(1), F(0), F(1), C(2), C(3)],
+            ),
+        ];
+        for (seed, gather, post, set, want) in cases {
+            let s = page_star(
+                seed,
+                &[
+                    ("STRIMS_SIM_CAL_FIREFOX_GATHER_MS", gather),
+                    ("STRIMS_SIM_CAL_FIREFOX_POST_MS", post),
+                    ("STRIMS_SIM_CAL_CHROMIUM_SET_MS", set),
+                ],
+            );
+            for (h, want) in want.iter().enumerate() {
+                let got = setup(&s, h);
+                let (stack, i) = match *want {
+                    F(i) => (LinkSetup::FIREFOX, i as u64),
+                    C(i) => (LinkSetup::CHROMIUM, i as u64),
+                    N => (LinkSetup::STR0M, 0),
+                };
+                assert_eq!(got.name, stack.name, "{seed:?} host {h}");
+                let (ready, post, set) = match want {
+                    F(_) => (ms(10 + i), ms(1 + i), stack.set_ready),
+                    C(_) => (stack.offer_ready, stack.offer_post, ms(20 + i)),
+                    N => (stack.offer_ready, stack.offer_post, stack.set_ready),
+                };
+                assert_eq!(got.offer_ready, ready, "{seed:?} host {h}");
+                assert_eq!(got.offer_post, post, "{seed:?} host {h}");
+                assert_eq!(got.set_ready, set, "{seed:?} host {h}");
+            }
+            crate::world::World::new(s, 1, None, None);
+        }
+        // One entry a kind: every host of the kind takes it.
+        let s = page_star(
+            Some(SctpProfile::FIREFOX),
+            &[
+                ("STRIMS_SIM_CAL_FIREFOX_GATHER_MS", "15"),
+                ("STRIMS_SIM_CAL_CHROMIUM_SET_MS", "25"),
+            ],
+        );
+        for h in 0..6 {
+            let got = setup(&s, h);
+            if got.name == LinkSetup::FIREFOX.name {
+                assert_eq!(got.offer_ready, ms(15), "host {h}");
+                assert_eq!(got.offer_post, LinkSetup::FIREFOX.offer_post, "host {h}");
+            } else {
+                assert_eq!(got.set_ready, ms(25), "host {h}");
+            }
+        }
+        crate::world::World::new(s, 1, None, None);
+    }
+
+    /// The world refuses a page timing's list of neither one entry nor
+    /// one a host of its kind.
+    #[test]
+    #[should_panic(
+        expected = "Scenario::page_timing's firefox_gather: 2 entries for 3 firefox hosts"
+    )]
+    fn the_world_refuses_a_page_timing_list_of_another_length() {
+        let s = page_star(
+            Some(crate::SctpProfile::FIREFOX),
+            &[("STRIMS_SIM_CAL_FIREFOX_GATHER_MS", "10,11")],
+        );
+        crate::world::World::new(s, 1, None, None);
     }
 }

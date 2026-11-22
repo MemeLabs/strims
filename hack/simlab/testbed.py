@@ -394,7 +394,8 @@ def twin_offer(values, cpus):
     standing for each of its nodes), where every run names one model and
     the lists agree in length; else each run's list, joined by spaces, a
     twin seed taking the one of the run it pairs with (seed_knobs), as
-    twin_cost's."""
+    twin_cost's. A fold records CPU only for a run with Chromium nodes,
+    so a cell of Firefox-only runs always takes each run's list."""
     runs = [[float(x) for x in v.split(",")] for v in values]
     n = max(len(r) for r in runs)
     if len(cpus) == len(values) and len(set(cpus)) == 1 and all(len(r) in (1, n) for r in runs):

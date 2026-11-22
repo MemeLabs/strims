@@ -145,11 +145,12 @@ pub struct LinkSetup {
     /// With the host's draws, an offer's gathering ends at the first tick
     /// at or after its setting plus this, [`GATHER_TAIL`] past that tick,
     /// in place of `offer_ready`; and its setting comes after the node
-    /// asks for it `set_ready` at the median for a lone offer (the
-    /// harness's `rtcTiming` `set` less its `connecting`), `set_lead` its
-    /// spread about that, or `set_per_offer` after the setting of the
-    /// offer before if that comes later: the page makes every offer it is
-    /// asked for before it sets any.
+    /// asks for it `set_ready` at the median for its first offer (the
+    /// harness's `rtcTiming` `set` of the node's first offer less its first
+    /// `connecting`, a setting after every offer the page was asked for by
+    /// then), `set_lead` its spread about that, or `set_per_offer` after
+    /// the setting of the offer before if that comes later: the page makes
+    /// every offer it is asked for before it sets any.
     pub gather_after_set: Option<Duration>,
     pub set_ready: Duration,
     pub set_lead: Spread,
@@ -503,7 +504,7 @@ impl LinkSetup {
     /// median of a lone offer, 7.2-11.8 (p10-p90; `set_lead`, which with
     /// the ticks has a lone offer's gathering end 130 ms after the ask at
     /// the median, 124-137 at p10-p90, where the runs' 16 read 132, 125
-    /// and 136). A twin takes its run's lone setting (`set_ready`,
+    /// and 136). A twin takes its run's first setting (`set_ready`,
     /// strims-sim's `testbed::offer_timing`): 10.2 ms on c8a's EPYC 9R45,
     /// 13.9 on c7a's 9R14. Its offer left for the relay 0.86 ms after its
     /// gathering's end (`offer_post`: the first relay payload in its
