@@ -51,7 +51,10 @@
 //! send opportunity of its association, on its host's thread, left the
 //! channel's queue empty, or had sent more than 100 KiB of it since the last
 //! answer); between, as the stack sends, it holds. A writer waiting for
-//! its mark wakes on an answer. A
+//! its mark wakes on an answer, and its pacer reads the amount at its
+//! check, as the browser's writer wakes on `bufferedamountlow` and reads
+//! it at its loop's next turn; its pacers read the page's clock, whole
+//! ms ([`page_time`]). A
 //! write goes to turmoil as segments, which the window model's association
 //! sends as packets: on sctp-proto, DATA chunks of the most a chunk
 //! carries; on dcSCTP, the message whole, which the association cuts into
@@ -886,13 +889,11 @@ fn release(b: &mut Buffers, conn: ConnKey, at: Time) -> Option<Waker> {
         }
         c.above = buffered > c.threshold;
     }
-    match &mut c.pacer {
-        // A browser waiting on its own cap reads the amount as it falls to
-        // its mark; one its host holds sleeps until its poll.
-        Some(p) if c.waker.is_some() && c.waits && buffered <= c.low => {
-            p.observe(at, buffered as usize);
-            c.waker.take()
-        }
+    match c.pacer {
+        // A browser waiting on its own cap wakes as the amount falls to its
+        // mark, and reads it at its check; one its host holds sleeps until
+        // its poll.
+        Some(_) if c.waker.is_some() && c.waits && buffered <= c.low => c.waker.take(),
         Some(_) => None,
         None if 2 * buffered < cap => c.waker.take(),
         None => None,
@@ -923,6 +924,7 @@ fn check(x: &mut Buffers, key: &ConnKey, now: Time, waker: &Waker) -> ChannelWri
     {
         h.moves += 1;
     }
+    let now = page_time(now);
     let may = match &mut c.pacer {
         Some(p) => {
             p.observe(now, buffered as usize);
@@ -986,6 +988,17 @@ fn check(x: &mut Buffers, key: &ConnKey, now: Time, waker: &Waker) -> ChannelWri
 /// it (outside a host, the run's start).
 fn sim_now() -> Time {
     sim_time(turmoil::sim_elapsed().unwrap_or_default())
+}
+
+/// The time a browser's writer hands its pacers at `now`: strims-wasm's
+/// `clock::now`, `Date.now()`'s whole ms as the page's turn first read
+/// it, at its checks and its writes alike. The pacers take a round trip
+/// as the time from a write to the reading that shows it drained, and a
+/// rate over the time between two readings, so a finer clock would give
+/// them round trips under a ms and readings between ms, which the page's
+/// never does.
+fn page_time(now: Time) -> Time {
+    now.truncate(Time::PRECISION)
 }
 
 /// A turmoil TCP stream whose writes wait while its unsent bytes reach
@@ -1142,6 +1155,7 @@ impl SendBuffers {
                 }
                 c.above = c.amount() > c.threshold;
                 c.writes.push_back((stamp, end));
+                let now = page_time(now);
                 if let Some(p) = &mut c.pacer {
                     p.wrote(now, n);
                     if let Some(h) = x.hosts.get_mut(&key.0.ip()) {
