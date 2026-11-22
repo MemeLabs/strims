@@ -5216,6 +5216,16 @@ mod tests {
             "competing upload 1 3000 ms late"
         );
         assert_eq!(read("", &compete(3050)).unwrap(), "step 1 not logged");
+        // run.sh's line: when the step applied in the seed's container, its
+        // rate, and its exec's start and return here, which is late. The
+        // run is on time, and its twin steps when the step applied.
+        let line = format!("{} 5 {} {}\n", START + 2100, START + 2030, START + 4500);
+        assert_eq!(read(&line, &compete(3050)), None);
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap();
+        assert_eq!(
+            r.scenario().hosts[0].up_steps,
+            vec![(r.at(START + 2100).unwrap(), 625_000)]
+        );
         // An upload iperf3 failed (its report's `error`) keys the run apart,
         // and its twin has none of it.
         let c = compete(3050);

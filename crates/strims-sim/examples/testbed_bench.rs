@@ -208,11 +208,15 @@ fn competitor_starts(dir: &std::path::Path, bench: &mut Bench) -> Result<(), Str
 }
 
 /// The seed's capacity steps when the run applied them (steps.log's
-/// times, from the run's start), as the tier's twin takes them, not at
-/// SEED_UP_STEPS's: run.sh's step waits for its time plus the seed's
-/// delay and logs once its `tc` returns, 83-91 ms past the nominal time
-/// in rtc-holders-chromium-halve's runs, a third of a burst period. A step
-/// the log lacks keeps its nominal time.
+/// first column, from the run's start), as the tier's twin takes them,
+/// not at SEED_UP_STEPS's: run.sh's step waits for its time plus the
+/// seed's delay, and its `docker exec` takes tens of ms more to run `tc`
+/// (83-91 ms past the nominal time in rtc-holders-chromium-halve's runs,
+/// a third of a burst period). The column is when `tc` returned in the
+/// seed's container, the kernel having changed the qdisc by then; a run
+/// whose log has two columns stamped the exec's return here instead,
+/// which can trail the change by 0.7 s. A step the log lacks keeps its
+/// nominal time.
 fn applied_steps(dir: &std::path::Path, bench: &mut Bench) -> Result<(), String> {
     let Ok(log) = std::fs::read_to_string(dir.join("steps.log")) else {
         return Ok(());

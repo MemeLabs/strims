@@ -373,8 +373,12 @@
 #                          its modem with its size table, the delay's ifbd,
 #                          the slots' ifbm, the slow downlink's ifbs and
 #                          PCAP's ifbo
-#   steps.log              when each of SEED_UP_STEPS applied, ms since the
-#                          epoch, and its rate
+#   steps.log              each of SEED_UP_STEPS: when it applied (its tc's
+#                          return, stamped in the seed's container), its
+#                          rate, and when its docker exec began and
+#                          returned here, ms since the epoch: `<applied>
+#                          <mbit> <began> <returned>` (a run from before
+#                          the stamp has `<returned> <mbit>`)
 #   compete-<s>.json       each upload's iperf3 report
 #   compete.log            when each upload started
 #   links                  each node's link spec, rate, delay and queue, and
@@ -1084,13 +1088,21 @@ if [ -n "$steps" ]; then
       wait=$(( ms - $(now_ms) ))
       if [ "$wait" -gt 0 ]; then sleep "$(awk "BEGIN { print $wait / 1000 }")"; fi
       [ -e "$ctl/run" ] || exit 0
-      err=$(docker exec tb-0 bash -c "$ours; ${step_cmds[k]}" 2>&1) && rc=0 || rc=$?
+      # The step's time is when its tc returned in the container (the
+      # kernel changes the qdisc before it acks tc's request), the last
+      # line out: docker exec's own return can trail it by 0.7 s. Errors
+      # go apart, docker exec keeping no order between the two.
+      began=$(now_ms)
+      got=$(docker exec tb-0 bash -c "$ours; ${step_cmds[k]} || exit; t=\${EPOCHREALTIME/[.,]/}; echo \${t%???}" \
+        2>"$ctl/step.err") && rc=0 || rc=$?
+      returned=$(now_ms)
       [ "$rc" = 3 ] && exit 0
-      if [ "$rc" != 0 ]; then
-        echo "SEED_UP_STEPS: the step $step failed: $err" > "$ctl/failed"
+      applied=${got##*$'\n'}
+      if [ "$rc" != 0 ] || ! [[ $applied =~ ^[0-9]+$ ]]; then
+        echo "SEED_UP_STEPS: the step $step failed: $got$(cat "$ctl/step.err")" > "$ctl/failed"
         exit 1
       fi
-      echo "$(now_ms) $rate" >> "$out/steps.log"
+      echo "$applied $rate $began $returned" >> "$out/steps.log"
       k=$((k + 1))
     done
   ) &
