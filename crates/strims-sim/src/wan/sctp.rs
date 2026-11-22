@@ -1090,11 +1090,23 @@ impl Scheduler {
     }
 
     /// When host `h`'s datagram written at `at` (record `id`) leaves its
-    /// network thread, where its associations send through one: its
-    /// thread sends every packet its WebRTC transport sends, an ICE
-    /// check's as its channels' (Chromium's `BasicPortAllocator` sockets
-    /// and its `Connection`s live on the network thread), so the datagram
-    /// goes once the thread is done with what it sent before, a cost after
+    /// network thread, where its stack sends through one (from the
+    /// transport's start, before its first channel opens:
+    /// [`Scheduler::new`] takes the cost from its
+    /// [`HostSpec::rtc_stack`](crate::HostSpec::rtc_stack)): the thread
+    /// sends every packet its WebRTC transport sends, an ICE check's as its
+    /// channels'. In WebRTC's branch-heads/8078 the transport pings a
+    /// candidate pair on its network thread
+    /// (p2p/base/p2p_transport_channel.cc, `SendPingRequestInternal` and
+    /// `PingConnection`, :2089-2123); the pair's `Connection` builds the
+    /// check there and hands it to its `StunRequestManager`
+    /// (p2p/base/connection.cc, `Ping`, :1084-1116), which runs on the
+    /// port's thread (:250-253) and sends it back through the connection
+    /// (p2p/base/stun_request.cc, `SendInternal` and `SendPacket`,
+    /// :244-301) to the port's `SendTo` (connection.cc,
+    /// `OnSendStunPacket`, :460-466), the socket its channels' DTLS records
+    /// go out on. So the datagram goes once the thread is done with what it
+    /// sent before, a channel's packet or another datagram, a cost after
     /// it, and the thread's next packet a cost after the datagram. A
     /// datagram to an idle thread goes at `at`, as without one: the thread
     /// is taken as having done its work in the cost before. `None` where
@@ -1134,15 +1146,7 @@ impl Scheduler {
     }
 
     /// `conn` carries a data channel from now on, sent as `profile` sends.
-    /// A host whose channels send through its network thread
-    /// ([`SctpProfile::packet_cost`]) sends its datagrams through it from
-    /// now on ([`Scheduler::thread_datagram`]).
     pub(crate) fn open_channel(&mut self, conn: ConnKey, profile: SctpProfile) {
-        if let (Some(cost), Some(&h)) = (profile.packet_cost, self.ip_host.get(&conn.0.ip()))
-            && let Some(c) = self.thread_costs.get_mut(h)
-        {
-            *c = Some(cost);
-        }
         self.assocs.insert(conn, Assoc::new(profile));
     }
 

@@ -1428,12 +1428,18 @@ pub(crate) struct Scheduler {
     /// carries the channel's data. Bound: one per channel opened.
     assocs: FastMap<(SocketAddr, SocketAddr), sctp::Assoc>,
     rcvs: FastMap<(SocketAddr, SocketAddr), sctp::Rcv>,
-    /// Per host, when its network thread is done with what its
-    /// associations sent so far ([`sctp`]'s module docs).
+    /// Per host, when its network thread is done with what it sent so far,
+    /// its associations' packets and its datagrams ([`sctp`]'s module
+    /// docs, [`Scheduler::thread_datagram`]).
     threads: Vec<Time>,
-    /// Each host's network thread's cost of a packet, once a channel of
-    /// its opened that sends through one ([`Scheduler::open_channel`]):
-    /// its datagrams take the thread too ([`Scheduler::thread_datagram`]).
+    /// Each host's network thread's cost of a packet, where its stack
+    /// sends through one: its [`HostSpec::rtc_stack`]'s
+    /// [`SctpProfile::packet_cost`] under the window model, as its
+    /// [`SimNet`](crate::net::SimNet) takes the stack. Its datagrams take
+    /// the thread from the transport's start, before its first channel
+    /// opens ([`Scheduler::thread_datagram`]).
+    ///
+    /// [`HostSpec::rtc_stack`]: crate::spec::HostSpec::rtc_stack
     thread_costs: Vec<Option<Duration>>,
     /// Per host, when its network thread last woke, or wakes, for the
     /// writes its page posted it while it was idle ([`sctp::POST_WAKE`]):
@@ -1683,7 +1689,15 @@ impl Scheduler {
             assocs: FastMap::default(),
             rcvs: FastMap::default(),
             threads: vec![Time::NIL; spec.hosts.len()],
-            thread_costs: vec![None; spec.hosts.len()],
+            thread_costs: spec
+                .hosts
+                .iter()
+                .map(|h| {
+                    h.rtc_stack
+                        .filter(|_| spec.window_model())
+                        .and_then(|p| p.packet_cost)
+                })
+                .collect(),
             wakes: vec![Time::NIL; spec.hosts.len()],
             down: vec![false; spec.hosts.len()],
             answers: BTreeMap::new(),
@@ -6117,7 +6131,9 @@ mod tests {
     }
 
     /// A scheduler of hosts `a` and `b` with send buffers and the window
-    /// model, `a`'s packets logged, and `n` channels of `p` from `a` to `b`.
+    /// model, `a`'s packets logged, `a`'s stack `p`
+    /// ([`HostSpec::rtc_stack`](crate::spec::HostSpec::rtc_stack)), and `n`
+    /// channels of `p` from `a` to `b`.
     fn channels_of(p: SctpProfile, n: u16) -> (Sim<'static>, Scheduler, Vec<ConnKey>) {
         channels_on(p, n, Site::new(City::Frankfurt, Access::Fiber))
     }
@@ -6141,10 +6157,14 @@ mod tests {
         let sites = [("a", at_a), ("b", at_b)];
         let mut s = spec(&sites);
         s.packet_log = BTreeSet::from([0, 1]);
-        let buffers = SendBuffers::new(SendBuffer {
+        let buffer = SendBuffer {
             uplink_queue: StdDuration::from_millis(100),
             window: true,
-        });
+        };
+        s.wan = Some(QUIET);
+        s.send_buffer = Some(buffer);
+        s.hosts[0].rtc_stack = Some(p);
+        let buffers = SendBuffers::new(buffer);
         let mut wan = Scheduler::new(&sim, &s, QUIET, 1, Some(buffers)).unwrap();
         let ip = |h: HostIx| *wan.ip_host.iter().find(|&(_, &x)| x == h).unwrap().0;
         let conns: Vec<ConnKey> = (0..n)
@@ -6778,6 +6798,50 @@ mod tests {
             assert_eq!(
                 handed,
                 [want[0], want[1], want[2], ms10],
+                "{p:?}: {:?}",
+                wan.packets[0]
+            );
+        }
+    }
+
+    /// A Chromium host's network thread sends its ICE checks from the
+    /// transport's start, its stack's cost known before any channel of its
+    /// opens: two checks written in one step, before its first channel,
+    /// go a packet cost apart. A Firefox's go as they were written.
+    #[test]
+    fn a_threads_checks_before_its_first_channel_go_a_packet_cost_apart() {
+        for p in [SctpProfile::CHROMIUM, SctpProfile::FIREFOX] {
+            let (_sim, mut wan, conns) = channels_of(p, 0);
+            assert!(conns.is_empty() && wan.assocs.is_empty());
+            let ip = |h: HostIx| *wan.ip_host.iter().find(|&(_, &x)| x == h).unwrap().0;
+            let (src, dst) = (SocketAddr::new(ip(0), 1000), SocketAddr::new(ip(1), 2000));
+            let t0 = sim_time(StdDuration::from_secs(1));
+            for id in [1 << 32, (1 << 32) + 1] {
+                let check = Record {
+                    src,
+                    dst,
+                    from: 0,
+                    to: 1,
+                    what: What::Datagram(100),
+                    wire: 128,
+                    packets: 1,
+                    nominal: false,
+                    state: State::InFlight,
+                    link: 0,
+                };
+                wan.records.insert(id, check);
+                wan.transmit(t0, id);
+            }
+            wan.run_events(t0 + Duration::from_millis(1));
+            let handed: Vec<Duration> = wan.packets[0]
+                .iter()
+                .filter(|r| r.proto == PacketProto::Udp)
+                .map(|r| r.at - (t0 - epoch()))
+                .collect();
+            let cost = p.packet_cost.unwrap_or(Duration::ZERO);
+            assert_eq!(
+                handed,
+                [Duration::ZERO, cost],
                 "{p:?}: {:?}",
                 wan.packets[0]
             );
