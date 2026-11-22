@@ -14,7 +14,9 @@
 //! The source run is read as testbed_tables reads it
 //! ([`strims_sim::testbed::Run`], its `--knob`s with it), and each node's
 //! packets as its `packets` table has them: what the node offered its
-//! link, each at its entry into the queue. `--offers offered` (the
+//! link, each at its offer, offered to the model's queue at its entry into
+//! the testbed's, its egress delay later
+//! (`strims_sim::report::WanHostReport::entry_delay`). `--offers offered` (the
 //! default) replays them all, the drops' stimulus; `--offers carried`
 //! replays those alone that the testbed's link carried, through a queue
 //! without a limit, the departures': a packet the model and the tbf
@@ -122,13 +124,15 @@ impl Offers {
     }
 }
 
-/// `packets` (a node's, times since `origin`), those `offers` takes, with
-/// their fates on `uplink` in place of theirs, each with its number among
-/// `packets` (its row's `n`). What the link carried goes through a queue
-/// without a limit, so the model's holds what the tbf's held.
+/// `packets` (a node's, offered at their times since `origin`, entering
+/// its queue `entry_delay` later), those `offers` takes, with their fates
+/// on `uplink` in place of theirs, each with its number among `packets`
+/// (its row's `n`). What the link carried goes through a queue without a
+/// limit, so the model's holds what the tbf's held.
 fn replayed(
     uplink: &Uplink,
     packets: &[PacketRecord],
+    entry_delay: Duration,
     offers: Offers,
     seed: u64,
 ) -> Vec<(u64, PacketRecord)> {
@@ -151,7 +155,7 @@ fn replayed(
     let offers: Vec<Offer> = packets
         .iter()
         .map(|&(_, p)| Offer {
-            at: origin + p.at,
+            at: origin + p.at + entry_delay,
             ip: p.ip_bytes as usize,
         })
         .collect();
@@ -267,11 +271,23 @@ fn run() -> Result<(), String> {
             source.push((h, numbered(&c.packets)));
             model.push((
                 h,
-                replayed(&uplink, &c.packets, Offers::Offered, seed ^ h as u64),
+                replayed(
+                    &uplink,
+                    &c.packets,
+                    c.entry_delay,
+                    Offers::Offered,
+                    seed ^ h as u64,
+                ),
             ));
             carried.push((
                 h,
-                replayed(&uplink, &c.packets, Offers::Carried, seed ^ h as u64),
+                replayed(
+                    &uplink,
+                    &c.packets,
+                    c.entry_delay,
+                    Offers::Carried,
+                    seed ^ h as u64,
+                ),
             ));
         }
         let model = refs(&model);
@@ -325,7 +341,10 @@ fn run() -> Result<(), String> {
             role,
         );
         let uplink = uplink_of(&run.dir, h, burst, peak, steps)?;
-        done.push((h, replayed(&uplink, &w.packets, offers, seed ^ h as u64)));
+        done.push((
+            h,
+            replayed(&uplink, &w.packets, w.entry_delay, offers, seed ^ h as u64),
+        ));
     }
     write_numbered_packets(&out, start, &refs(&done))
         .map_err(|e| format!("{}: {e}", out.display()))?;

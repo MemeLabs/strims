@@ -4340,6 +4340,7 @@ impl Scheduler {
                             .unwrap_or(0),
                         competing_cwnd: self.cross_cwnd.get(h).cloned().unwrap_or_default(),
                         packets: self.packets.get(h).cloned().unwrap_or_default(),
+                        entry_delay: Duration::ZERO,
                         sctp: self
                             .sctp_events
                             .get(h)

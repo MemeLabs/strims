@@ -2817,6 +2817,7 @@ impl Network {
                 competing_drop_packets: 0,
                 competing_cwnd: Vec::new(),
                 packets: Vec::new(),
+                entry_delay: Default::default(),
                 sctp: BTreeMap::new(),
                 offers: None,
             };
@@ -4005,9 +4006,12 @@ mod tests {
         // the queue is empty past that sample.
         assert_eq!(at(700), Some(queue(0, 1)));
         assert_eq!(at(800), Some(",".to_owned()));
-        // At every edge they tell, the packets' own queue.
+        // At every edge they tell, the packets' own queue, each in it from
+        // its entry, its delay after its offer.
         let w = &r.wan.as_ref().unwrap().hosts[0];
-        let last = w.packets.iter().map(|p| p.at).max().unwrap();
+        let entry = |p: &crate::report::PacketRecord| p.at + w.entry_delay;
+        assert_eq!(w.entry_delay, Duration::from_millis(20).into());
+        let last = w.packets.iter().map(entry).max().unwrap();
         let mut n = 0;
         for (t, q) in &got {
             let edge = strims_base::time::Duration::from(LEAD)
@@ -4018,7 +4022,7 @@ mod tests {
             let held: u64 = w
                 .packets
                 .iter()
-                .filter(|p| p.at <= edge && p.sent.is_some_and(|s| s > edge))
+                .filter(|p| entry(p) <= edge && p.sent.is_some_and(|s| s > edge))
                 .map(|p| u64::from(p.charged_bytes.unwrap()))
                 .sum();
             assert!(q.ends_with(&format!(",{held}")), "{t} {q}");
@@ -4055,7 +4059,9 @@ mod tests {
                 .packets
                 .iter()
                 .filter(|p| {
-                    p.lost == Some(crate::report::PacketLoss::Queue) && from <= p.at && p.at < to
+                    p.lost == Some(crate::report::PacketLoss::Queue)
+                        && from <= entry(p)
+                        && entry(p) < to
                 })
                 .count();
             assert_eq!(*x, lost.to_string(), "{t}");
@@ -4115,7 +4121,8 @@ mod tests {
         std::fs::write(dir.join("tc-0.log"), tc).unwrap();
         let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
         let w = &r.wan.as_ref().unwrap().hosts[0];
-        let last = w.packets.iter().map(|p| p.at).max().unwrap();
+        let entry = |p: &crate::report::PacketRecord| p.at + w.entry_delay;
+        let last = w.packets.iter().map(entry).max().unwrap();
         assert_eq!(
             last,
             (LEAD + Duration::from_millis(820)).into(),
@@ -4158,7 +4165,9 @@ mod tests {
                 .packets
                 .iter()
                 .filter(|p| {
-                    p.lost == Some(crate::report::PacketLoss::Queue) && from <= p.at && p.at < to
+                    p.lost == Some(crate::report::PacketLoss::Queue)
+                        && from <= entry(p)
+                        && entry(p) < to
                 })
                 .count();
             assert_eq!(at(k * 100)[d], lost.to_string(), "{k}");

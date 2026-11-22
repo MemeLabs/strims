@@ -41,7 +41,7 @@ from simlab import catalog  # noqa: E402
 
 MACROS = ("sketch_exp", "sketch_lo", "sketch_floor", "sketch_quantile", "compensated_sum", "twin_window_of",
           "side_window_of", "bench_lacking", "bench_logs", "packets_or_none", "link_writes_or_none", "sctp_events_or_none",
-          "sctp_stages_of", "sctp_logged_side", "sctp_fit_of")
+          "entry_folds_of", "sctp_stages_of", "sctp_logged_side", "sctp_fit_of")
 HAVE = {"packets", "hosts", "bins", "sctp_events", "link_writes", "jobs.sim", "jobs.env"}
 T = 20_000_000
 TB, TC, TW = [{"k": "tb1"}, {"k": "tb2"}], [{"k": "tc1"}, {"k": "tc2"}], [{"k": "tw1"}, {"k": "tw2"}]
@@ -65,9 +65,10 @@ def connect(lacking=()):
       packets of DATA 50 µs apart (the twin's four), a SACK alone 20 µs
       after, one more 30 µs after that, and one 10 ms on: trains of 3, 1
       and 1 at either gap; one lost; each arriving 20 ms after its offer
-      (the twin's 30), a testbed capture's time 5 ms past the offer, its
-      egress delay; send gaps of 50, 50, 100, 9800 and 5000 µs (the
-      twin's 50, 50, 50, 100, 9750 and 5000).
+      (the twin's 30), a testbed run's 5 ms egress delay (hosts.delay_us)
+      among them, each carried packet leaving its queue (sent_us) 1 ms
+      after it; send gaps of 50, 50, 100, 9800 and 5000 µs (the twin's 50,
+      50, 50, 100, 9750 and 5000).
     - The bins: the seed's drops, 10 and 12 off, 4 and 5 on, 8 and 10 in
       the twin, and 99 past the window.
     - The writes: three unheld to the channel, a held one, a TCP one and
@@ -89,7 +90,7 @@ def connect(lacking=()):
                  "done_us BIGINT, unsent_before BIGINT, wait VARCHAR)")
     conn.execute(f"CREATE TABLE sctp_events ({', '.join(c + (' VARCHAR' if c in ('k', 'src', 'dir', 'what') else ' BOOLEAN' if c == 'estimated' else ' BIGINT') for c in EVENT)})")
     conn.execute("CREATE TABLE packets (k VARCHAR, src VARCHAR, node BIGINT, n BIGINT, t_us BIGINT, arrived_us BIGINT, "
-                 "lost VARCHAR, peer BIGINT, kind VARCHAR, ip_bytes BIGINT)")
+                 "lost VARCHAR, peer BIGINT, kind VARCHAR, ip_bytes BIGINT, sent_us BIGINT)")
     conn.execute("CREATE TABLE bins (k VARCHAR, src VARCHAR, t_ms BIGINT, seed_drops BIGINT)")
     conn.execute("CREATE TABLE hosts (k VARCHAR, src VARCHAR, node BIGINT, delay_us BIGINT)")
     buffered = {"tc1": [4096, 8192, 32768], "tc2": [4096, 16384, 32768], "tw1": [2048, 4096, 8192],
@@ -97,7 +98,8 @@ def connect(lacking=()):
     drops = {"tb1": 4, "tb2": 5, "tc1": 10, "tc2": 12, "tw1": 8, "tw2": 10}
     for k, src, _ in RUNS:
         twin = k.startswith("tw")
-        # The seed's egress delay, 5 ms: a testbed capture's t_us holds it.
+        # The seed's egress delay, 5 ms, between its offer (t_us) and its
+        # queue: the arrival holds it.
         conn.execute("INSERT INTO hosts VALUES (?, ?, 0, 5000)", (k, src))
         conn.execute("INSERT INTO bins VALUES (?, ?, 30000, ?), (?, ?, 61000, 99)", (k, src, drops[k], k, src))
         writes = [(T + 1000 * i, b, "none", "webrtc") for i, b in enumerate(buffered[k])]
@@ -107,8 +109,8 @@ def connect(lacking=()):
             conn.execute("INSERT INTO link_writes VALUES (?, ?, ?, 0, 1, 0, ?, ?, ?, 1000, ?, ?, ?, ?)",
                          (k, src, t, kind, 1000 * n, n, t - 100, t + 10, b, wait))
         if k in WIRED:
-            # The testbed's 20 ms from its offer, 15 of it past its capture.
-            delay = 30_000 if twin else 15_000
+            # The testbed's 20 ms from its offer, the twin's 30.
+            delay = 30_000 if twin else 20_000
             train = 4 if twin else 3
             wire = [(T + 50 * i, "data") for i in range(train)]
             wire += [(T + 50 * train + 20, "sack"), (T + 50 * train + 50, "data"), (T + 10_000, "data")]
@@ -116,8 +118,9 @@ def connect(lacking=()):
             for n, (t, kind) in enumerate(sorted(wire)):
                 lost = "queue" if kind == "lost" else None
                 arrived = None if lost else t + delay
-                conn.execute("INSERT INTO packets VALUES (?, ?, 0, ?, ?, ?, ?, 1, ?, 1000)",
-                             (k, src, 10 * n, t, arrived, lost, "data" if kind == "lost" else kind))
+                sent = None if lost else t + (0 if twin else 6000)
+                conn.execute("INSERT INTO packets VALUES (?, ?, 0, ?, ?, ?, ?, 1, ?, 1000, ?)",
+                             (k, src, 10 * n, t, arrived, lost, "data" if kind == "lost" else kind, sent))
         if k in LOGGED:
             seed = [(T + 250 * i, "out", "data", i, i, 1) for i in range(3)]
             seed += [(T + 30_000, "in", "sack", None, None, 0), (T + 30_100, "out", "data", 3, 3, 1),
@@ -254,6 +257,20 @@ class SctpBench(unittest.TestCase):
         # The window's first packet of DATA has no gap before it.
         got = self.q("SELECT n FROM sctp_stages_of([{'k': 'tc1'}], lo_s := 20.0001) WHERE reading = ?", GAPS)
         self.assertEqual(got, [(3,)])
+
+    def test_a_fold_of_the_entry_has_its_egress_delay_taken_off(self):
+        # tc1 folded as before t_us was the offer: each packet's t_us its
+        # entry, 5 ms later, which a carried one leaves 1 ms after; the
+        # window's first packet then entered past 20 s.
+        conn = connect()
+        conn.execute("UPDATE packets SET t_us = t_us + 5000 WHERE k = 'tc1'")
+        self.assertEqual(conn.execute("SELECT k, delay_us FROM entry_folds_of(?, 0)", (TB + TC + TW,)).fetchall(),
+                         [("tc1", 5000)])
+        for lo, hi in ((20, -1), (20, 20.0001), (20.0001, -1)):
+            sql = f"FROM sctp_stages_of([{{'k': 'tc1'}}], lo_s := {lo}, hi_s := {hi}) ORDER BY reading"
+            self.assertEqual(dicts(conn, sql), dicts(self.conn, sql))
+        self.assertEqual(dicts(conn, "SELECT p50 FROM sctp_stages_of([{'k': 'tc1'}]) "
+                                     "WHERE reading = '1 one-way delay'"), [{"p50": 20}])
 
     def test_trains_at_each_gap(self):
         # A packet 250 µs after the one 10 ms on: its own train at 100 µs,
@@ -490,8 +507,8 @@ class SctpBench(unittest.TestCase):
         self.conn.execute("BEGIN")
         try:
             self.conn.execute("INSERT INTO packets SELECT k, src, 0, 1000 + i, ? + 10 * i, ? + 10 * i + 20000, NULL, "
-                              "1, 'data', 1000 FROM range(12) r(i), (SELECT DISTINCT k, src FROM packets "
-                              "WHERE k = 'tc1')", (T + 30_000, T + 30_000))
+                              "1, 'data', 1000, ? + 10 * i + 6000 FROM range(12) r(i), "
+                              "(SELECT DISTINCT k, src FROM packets WHERE k = 'tc1')", (T + 30_000,) * 3)
             got = self.q("SELECT p90, dist FROM sctp_stages_of([{'k': 'tc1'}]) WHERE reading = ?", G100)
             self.assertEqual(got[0][0], 12)
             self.assertIn(12, {d["v"] for d in got[0][1]})
@@ -715,9 +732,9 @@ class Repeats(unittest.TestCase):
             SELECT k, src, 0::BIGINT AS node, i::BIGINT AS n,
                    (20000000 + sum(gap) OVER (PARTITION BY k ORDER BY i))::BIGINT AS t_us,
                    NULL::BIGINT AS arrived_us, NULL::VARCHAR AS lost, 1::BIGINT AS peer, 'data' AS kind,
-                   1200::BIGINT AS ip_bytes
+                   1200::BIGINT AS ip_bytes, NULL::BIGINT AS sent_us
             FROM g""")
-        conn.execute("UPDATE packets SET arrived_us = t_us + 20000 + hash(k, n, 3) % 1000")
+        conn.execute("UPDATE packets SET arrived_us = t_us + 20000 + hash(k, n, 3) % 1000, sent_us = t_us")
         for s in catalog.scoring_statements(MACROS, HAVE):
             conn.execute(s)
 

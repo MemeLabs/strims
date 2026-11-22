@@ -4496,7 +4496,7 @@ knobs = ["PACKET_LOG"]
 sample = true
 zstd = true
 normalized = "lost, peer, link, lo_off, hi_off, resent, sent_us, arrived_us, charged_bytes and backlog_bytes NULL where the run wrote none."
-description = "Each packet a node offered its access link's queue, in the order the queue took them: when it entered, when its last bit left (or that the queue dropped it), when it reached its receiver, what it was and carried, what the shaper charged it and what the uplink held as it came. One definition on every side: a testbed run's from its captures, a twin's from the model's WAN scheduler, a shaper replay's from the model's uplink fed the testbed's own offers, so the shaper benches join them packet by packet (`shaper_fit_of`)."
+description = "Each packet a node offered its access link's queue, in the order the queue took them: when the node offered it, when its last bit left (or that the queue dropped it), when it reached its receiver, what it was and carried, what the shaper charged it and what the uplink held as it entered. One definition on every side: a testbed run's from its captures, a twin's from the model's WAN scheduler, a shaper replay's from the model's uplink fed the testbed's own offers, so the shaper benches join them packet by packet (`shaper_fit_of`)."
 notes.strims-sim = "A sim run writes the hosts `STRIMS_SIM_PACKET_LOG` names (`all` or `1`, `seed`, `viewers`, or host numbers, `0,3`; none without it), from its WAN scheduler as each message is admitted to the uplink (`Scheduler::offered`), each of the message's packets a row, held to the run's end (every host of star-31-5's 30 s, 1.17 M rows, took 180 MB more at the peak): `seed` or a few hosts for a long or wide cell. A testbed run writes every node with both captures (`PCAP=1`: `pcap-<i>-offered.pcap`, ahead of the egress delay and the queue, GSO's buffers cut into the link's packets, and `pcap-<i>.pcap`, past the queue), each offered packet matched to the carried one of its flow, IP id and length (`crate::testbed`'s packets), the node's frames that aren't IPv4 (from its MAC) to the next of their length, its rows ending twice its queue's time before its eth0 capture's last record (past it no capture tells a packet's fate). The shaper replay (strims-sim's `shaper_replay`) writes its source's node's offers with the model's fates."
 
 [columns.packets.node]
@@ -4513,8 +4513,8 @@ description = "The packet's place among the node's offers, from 0, in the order 
 sims = ["strims-sim"]
 type = "int"
 unit = "us"
-description = "When the packet entered the node's uplink queue, in µs of true time from the stream's start."
-notes.strims-sim = "The model's WAN scheduler's admission of the message that holds it; on the testbed its offered capture's time plus the node's egress delay (the netem ahead of the modem: its `links` line's delay); a shaper replay's its source's."
+description = "When the node offered the packet to its uplink, in µs of true time from the stream's start: ahead of any delay on its way, so `arrived_us` less it is the whole of its way to its receiver on every side, wherever a side puts the node's egress delay (`hosts.delay_us`)."
+notes.strims-sim = "The model's WAN scheduler's admission of the message that holds it, where it enters the uplink's queue (the model's path delay comes after the queue); on the testbed its offered capture's time, ahead of the node's egress delay (the netem ahead of the modem: its `links` line's delay), which it enters the queue after; a shaper replay's its source's, which the model's queue takes at the testbed's entry, that delay later."
 
 [columns.packets.sent_us]
 sims = ["strims-sim"]
@@ -4522,7 +4522,7 @@ type = "int"
 unit = "us"
 none = "empty"
 description = "When the packet's last bit left the node's uplink, in µs from the stream's start; empty for one that never left (`lost` `queue` or `crash`)."
-notes.strims-sim = "The model's shaper's departure of the packet, or its slot's with slots (`Network::up_last_departures`); on the testbed its capture past the modem (tcpdump on eth0, as the device took it)."
+notes.strims-sim = "The model's shaper's departure of the packet, or its slot's with slots (`Network::up_last_departures`); on the testbed its capture past the modem (tcpdump on eth0, as the device took it), so `sent_us` less `t_us` holds the node's egress delay (`hosts.delay_us`, the netem ahead of the queue) as well as the packet's wait in the queue; a shaper replay's the model's departure of its source's packet, offered to the queue that delay after its `t_us`."
 
 [columns.packets.arrived_us]
 sims = ["strims-sim"]
@@ -4606,7 +4606,7 @@ type = "int"
 unit = "bytes"
 none = "empty"
 description = "What the node's uplink held as the packet entered its queue, in the bytes its link charges: the packets handed to it before whose last bit hadn't left, the one it was sending included."
-notes.strims-sim = "The model's own (`Network::up_held`); on the testbed the charges of the packets that entered before it and hadn't left by its entry, from the two captures, those the queue dropped left out."
+notes.strims-sim = "The model's own (`Network::up_held`); on the testbed the charges of the packets that entered before it and hadn't left by its entry (its `t_us` and the node's egress delay), from the two captures, those the queue dropped left out."
 
 [tables.hosts]
 sims = ["strims-sim"]

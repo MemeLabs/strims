@@ -774,6 +774,13 @@ pub struct WanHostReport {
     /// its uplink, in the order the uplink's queue took them (the
     /// `packets` table): a testbed run's from its captures.
     pub packets: Vec<PacketRecord>,
+    /// How long after its offer ([`PacketRecord::at`]) each packet entered
+    /// its uplink's queue: a testbed node's egress delay, the netem ahead
+    /// of its modem's queue; zero in the model, whose path's delay comes
+    /// after the queue. What rebuilds the queue from `packets` (the
+    /// testbed's `packets::queues` and `packets::drops`, the shaper
+    /// replay) adds it.
+    pub entry_delay: strims_base::time::Duration,
     /// With [`Scenario::sctp_log`] naming it, its data channels'
     /// associations' events by peer and link, each association's in time
     /// order (the `sctp_events` table): a testbed run's from its dcSCTP's
@@ -865,7 +872,8 @@ impl PacketLoss {
 /// are true time from the run's start.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PacketRecord {
-    /// When it entered the uplink's queue, when its last bit left the
+    /// When its host offered it to its uplink (its queue takes it
+    /// [`WanHostReport::entry_delay`] later), when its last bit left the
     /// uplink, and when it reached its receiver's access link.
     pub at: strims_base::time::Duration,
     pub sent: Option<strims_base::time::Duration>,
@@ -885,7 +893,8 @@ pub struct PacketRecord {
     pub resent: Option<bool>,
     /// Its kind read from its length, its payload hidden.
     pub estimated: bool,
-    /// What the uplink held as it entered, in the bytes its link charges.
+    /// What the uplink held as it entered the queue, in the bytes its link
+    /// charges.
     pub backlog_bytes: Option<u64>,
 }
 

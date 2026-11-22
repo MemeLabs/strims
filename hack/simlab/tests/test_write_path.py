@@ -5,8 +5,10 @@
 write_fit_of) over a fixture of two testbed runs and a twin with known
 answers: each stage's p50 and p90 at the seed over each run's window, the
 held pushes' release and its share at 6-8 ms off the whole second, a
-write's read found by its bytes, the testbed's first packet less its
-egress delay, and the pass: within the testbed's runs' range widened by
+write's read found by its bytes, the first packet at its offer on either
+side (a testbed run folded with t_us at the packet's entry into its
+node's queue, hosts.delay_us after the offer, having the delay taken
+off), and the pass: within the testbed's runs' range widened by
 the floor, the holds' and lows' counts within it widened by counting
 noise, a stage one side lacks failing, and a side of no runs refused;
 over the fixture as a catalog without the link log, the packets or
@@ -35,7 +37,7 @@ from simlab import catalog  # noqa: E402
 
 MACROS = ("sketch_exp", "sketch_lo", "sketch_floor", "sketch_quantile", "twin_window_of", "side_window_of",
           "bench_lacking", "bench_logs", "packets_or_none", "seed_sends_or_none", "link_writes_or_none",
-          "link_reads_or_none", "link_samples_or_none", "write_stages_of", "write_fit_of")
+          "link_reads_or_none", "link_samples_or_none", "entry_folds_of", "write_stages_of", "write_fit_of")
 HAVE = {"link_writes", "link_reads", "link_samples", "seed_sends", "packets", "hosts", "jobs.sim", "jobs.env"}
 T = 20_000_000
 TB, TW = [{"k": "tb1"}, {"k": "tb2"}], [{"k": "tw"}]
@@ -64,7 +66,7 @@ def connect(lacking=()):
     conn.execute("CREATE TABLE seed_sends (k VARCHAR, src VARCHAR, t_ms BIGINT, node BIGINT, peer BIGINT, "
                  "how VARCHAR, fate VARCHAR, queued_ms BIGINT)")
     conn.execute("CREATE TABLE packets (k VARCHAR, src VARCHAR, node BIGINT, n BIGINT, t_us BIGINT, "
-                 "arrived_us BIGINT, lost VARCHAR, peer BIGINT, kind VARCHAR)")
+                 "arrived_us BIGINT, lost VARCHAR, peer BIGINT, kind VARCHAR, sent_us BIGINT)")
     conn.execute("CREATE TABLE hosts (k VARCHAR, src VARCHAR, node BIGINT, delay_us BIGINT)")
     for k, src in (("tb1", "testbed/b"), ("tb2", "testbed/b"), ("tw", "testbed/b-twin")):
         tb = src == "testbed/b"
@@ -96,11 +98,12 @@ def connect(lacking=()):
         conn.execute("INSERT INTO link_samples VALUES (?, ?, 1000, 0, 1, 0, 'webrtc', 'low', 7)", (k, src))
         conn.execute("INSERT INTO seed_sends VALUES (?, ?, 20000, 0, 1, 'push', 'written', 19990)", (k, src))
         # The first data packet after the first write's done: offered at
-        # +3 ms on the testbed (its t_us its capture's plus the 1 ms egress
-        # delay), at +2 ms in the twin; it arrives 20 ms after.
+        # +3 ms on the testbed (its t_us its offer, the 1 ms egress delay
+        # after it, ahead of the queue it leaves 0.5 ms later), at +2 ms in
+        # the twin; it arrives 20 ms after.
         offered = T + 1000 + (3_000 if tb else 2_000)
-        conn.execute("INSERT INTO packets VALUES (?, ?, 0, 0, ?, ?, NULL, 1, 'data')",
-                     (k, src, offered + (1000 if tb else 0), offered + 20_000))
+        conn.execute("INSERT INTO packets VALUES (?, ?, 0, 0, ?, ?, NULL, 1, 'data', ?)",
+                     (k, src, offered, offered + 20_000, offered + (1500 if tb else 500)))
         conn.execute("INSERT INTO hosts VALUES (?, ?, 0, ?)", (k, src, 1000 if tb else 0))
     for t in lacking:
         conn.execute(f"DROP TABLE {t}")
@@ -173,7 +176,7 @@ class WritePath(unittest.TestCase):
         self.assertEqual(got["6 low reading"][0], 2)
         # A write's read is the one holding its last byte.
         self.assertEqual(got["7 done to read"], (3, 10, 30))
-        # The testbed's first packet less its egress delay.
+        # The testbed's first packet at its offer, its egress delay after.
         self.assertEqual(got["7a empty: to first packet"], (1, 3, 3))
         self.assertEqual(got["7b empty: packet to arrival"], (1, 20, 20))
         self.assertEqual(got["7c empty: arrival to read"], (1, 7, 7))
@@ -183,6 +186,18 @@ class WritePath(unittest.TestCase):
         got = self.q("SELECT n FROM write_stages_of([{'k': 'tb1'}], lo_s := 20, hi_s := 20.05) "
                      "WHERE stage = '2 driver queue'")
         self.assertEqual(got, [(2,)])
+
+    def test_a_fold_of_the_entry_has_its_egress_delay_taken_off(self):
+        # tb1 folded as before t_us was the offer: its packet's t_us the
+        # entry, 1 ms later, which it leaves at once.
+        conn = connect()
+        conn.execute("UPDATE packets SET t_us = t_us + 1000, sent_us = t_us + 1000 WHERE k = 'tb1'")
+        self.assertEqual(conn.execute("SELECT k, delay_us FROM entry_folds_of(?, 0)", (TB + TW,)).fetchall(),
+                         [("tb1", 1000)])
+        got = {s: (n, p50, p90) for s, n, p50, p90 in conn.execute(
+            "SELECT stage, n, p50, p90 FROM write_stages_of([{'k': 'tb1'}]) ORDER BY stage").fetchall()}
+        self.assertEqual(got, self.stages("tb1"))
+        self.assertEqual(got["7a empty: to first packet"], (1, 3, 3))
 
     def test_held_pushes_release_and_their_share_at_6_to_8_ms(self):
         # Each run's pushes of one period past the window's 20 s: written in
@@ -456,7 +471,7 @@ def tied():
     conn.execute("CREATE TABLE hosts (k VARCHAR, src VARCHAR, node BIGINT, delay_us BIGINT)")
     conn.execute("INSERT INTO hosts VALUES ('tie', 'testbed/b-twin', 0, 0)")
     conn.execute("CREATE TABLE packets_src (k VARCHAR, src VARCHAR, node BIGINT, n BIGINT, t_us BIGINT, "
-                 "arrived_us BIGINT, lost VARCHAR, peer BIGINT, kind VARCHAR)")
+                 "arrived_us BIGINT, lost VARCHAR, peer BIGINT, kind VARCHAR, sent_us BIGINT)")
     for w in range(TIED_WRITES):
         t = T + 100_000 * w
         conn.execute("INSERT INTO link_writes VALUES ('tie', 'testbed/b-twin', ?, 0, 1, 0, 'webrtc', ?, ?, 1000, ?, "
@@ -465,8 +480,8 @@ def tied():
                      (t + 31_000, 1000 * w, w, t + 32_000))
         offered = t + 3000
         for i, after in enumerate(TIED_AFTER_MS):
-            conn.execute("INSERT INTO packets_src VALUES ('tie', 'testbed/b-twin', 0, ?, ?, ?, NULL, 1, ?)",
-                         (TIED * w + i, offered, offered + 1000 * after, "data" if i else "data_sack"))
+            conn.execute("INSERT INTO packets_src VALUES ('tie', 'testbed/b-twin', 0, ?, ?, ?, NULL, 1, ?, ?)",
+                         (TIED * w + i, offered, offered + 1000 * after, "data" if i else "data_sack", offered))
     conn.execute("CREATE TABLE packets AS FROM packets_src LIMIT 0")
     for s in catalog.scoring_statements(MACROS, HAVE):
         conn.execute(s)

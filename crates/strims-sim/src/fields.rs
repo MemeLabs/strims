@@ -5541,13 +5541,19 @@ pub(crate) mod cols {
         /// uplink's queue took them: a message's or a GSO buffer's packets one
         /// after another. A shaper replay's n is its source's.
         N,
-        /// When the packet entered the node's uplink queue, in µs of true time
-        /// from the stream's start.
+        /// When the node offered the packet to its uplink, in µs of true time
+        /// from the stream's start: ahead of any delay on its way, so
+        /// `arrived_us` less it is the whole of its way to its receiver on
+        /// every side, wherever a side puts the node's egress delay
+        /// (`hosts.delay_us`).
         ///
         /// strims-sim: The model's WAN scheduler's admission of the message
-        /// that holds it; on the testbed its offered capture's time plus the
-        /// node's egress delay (the netem ahead of the modem: its `links`
-        /// line's delay); a shaper replay's its source's.
+        /// that holds it, where it enters the uplink's queue (the model's path
+        /// delay comes after the queue); on the testbed its offered capture's
+        /// time, ahead of the node's egress delay (the netem ahead of the
+        /// modem: its `links` line's delay), which it enters the queue after; a
+        /// shaper replay's its source's, which the model's queue takes at the
+        /// testbed's entry, that delay later.
         ///
         /// Unit: us.
         TUs,
@@ -5656,7 +5662,8 @@ pub(crate) mod cols {
         ///
         /// strims-sim: The model's own (`Network::up_held`); on the testbed the
         /// charges of the packets that entered before it and hadn't left by its
-        /// entry, from the two captures, those the queue dropped left out.
+        /// entry (its `t_us` and the node's egress delay), from the two
+        /// captures, those the queue dropped left out.
         ///
         /// Unit: bytes. None is written as an empty field.
         BacklogBytes,

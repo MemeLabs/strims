@@ -2097,9 +2097,11 @@ CREATE OR REPLACE MACRO first_checks_of(jobs) AS TABLE
 --   testbed's drops the offered replay dropped too, at least 0.95 (no
 --   bound without a testbed drop);
 -- - a link with slots (cable's grants, slot=): delay_ks, the
---   Kolmogorov-Smirnov distance between the delays through the uplink
---   (sent_us - t_us) of the packets the testbed carried and of those the
---   carried replay sent, at most 0.1, as the slots' draws differ.
+--   Kolmogorov-Smirnov distance between the delays from offer to
+--   departure (sent_us - t_us: the node's egress delay, hosts.delay_us,
+--   and the wait in its uplink's queue) of the packets the testbed carried
+--   and of those the carried replay sent, at most 0.1, as the slots'
+--   draws differ.
 -- No rule reads the backlog. The tbf's own counter at each tcsample
 -- instant is what one would hold the model's to, and the lake has a tc
 -- sample only as node_bins' up_backlog_bytes, the latest at or before a
@@ -2198,8 +2200,8 @@ CREATE OR REPLACE MACRO shaper_fit_of(a_jobs, b_jobs, per := 'node') AS TABLE
                count(*) FILTER (WHERE tb_drop) AS drops_testbed, count(*) FILTER (WHERE m_drop) AS drops_model,
                count(*) FILTER (WHERE tb_drop AND m_drop) AS drops_both_count
         FROM pk GROUP BY ALL),
-    -- On a link with slots, each side's delays through the uplink and their
-    -- distance: the largest gap between their empirical distributions.
+    -- On a link with slots, each side's delays from offer to departure and
+    -- their distance: the largest gap between their empirical distributions.
     slotted AS (SELECT pk.* FROM pk JOIN link l ON l.k = pk.k AND l.node = pk.node WHERE l.slots),
     delays AS (
         SELECT cell, seed, k, node, peer, 'b' AS side, tb_delay AS d FROM slotted WHERE tb_delay IS NOT NULL
@@ -2500,8 +2502,26 @@ CREATE OR REPLACE MACRO bench_logs() AS TABLE
 -- none, of the columns they read (bench_logs).
 -- needs: packets
 -- else none: k VARCHAR, src VARCHAR, node BIGINT, n BIGINT, peer BIGINT, t_us BIGINT, arrived_us BIGINT
--- else none: lost VARCHAR, kind VARCHAR, ip_bytes BIGINT
+-- else none: lost VARCHAR, kind VARCHAR, ip_bytes BIGINT, sent_us BIGINT
 CREATE OR REPLACE MACRO packets_or_none() AS TABLE FROM packets;
+
+-- The testbed runs of `side` (structs with a `k`) whose node `at_node`'s
+-- packets were folded with each t_us at its entry into the node's queue,
+-- its egress delay (hosts.delay_us) after its offer, as testbed_tables
+-- folded them before t_us was the offer: k, src and that delay, which the
+-- bench macros take off those t_us. A fold of the offer has each packet
+-- the node's link carried leave at least that delay after its t_us (the
+-- delay is ahead of the queue); one of the entry has packets that left
+-- sooner. A side of no runs fails, naming `who`.
+-- needs: hosts jobs.sim
+CREATE OR REPLACE MACRO entry_folds_of(side, at_node, who := 'entry_folds_of') AS TABLE
+    SELECT x.k, x.src, any_value(h.delay_us) AS delay_us
+    FROM packets_or_none() x
+    JOIN (SELECT DISTINCT w.k, w.src FROM side_window_of(side, who) w JOIN jobs b USING (k, src)
+          WHERE b.sim = 'testbed') j USING (k, src)
+    JOIN hosts h ON h.k = x.k AND h.src = x.src AND h.node = x.node
+    WHERE x.node = at_node AND x.sent_us IS NOT NULL AND h.delay_us > 0
+    GROUP BY x.k, x.src HAVING min(x.sent_us - x.t_us) < any_value(h.delay_us);
 
 -- The bench macros' seed_sends: the table's rows, or in a catalog without
 -- it none, of the columns they read (bench_logs).
@@ -2572,9 +2592,7 @@ CREATE OR REPLACE MACRO sctp_events_or_none() AS TABLE FROM sctp_events;
 --   channel's stream, so none is found by its bytes): the first at or
 --   after the done, and of those offered at that µs (a message's packets
 --   share theirs) the first its queue took, the least n: `7a empty: to
---   first packet` (on the testbed a packet's t_us is its capture's plus
---   the node's egress delay, hosts.delay_us, which comes off; the model's
---   is its admission, the delay after), `7b empty: packet to arrival`,
+--   first packet`, `7b empty: packet to arrival`,
 --   `7c empty: arrival to read`;
 -- - `8 read to take`: the peer's read's t_us to its node task's take of
 --   it (taken_us).
@@ -2607,10 +2625,9 @@ CREATE OR REPLACE MACRO write_stages_of(side, at_node := 0, lo_s := 20, hi_s := 
         SELECT x.k, x.buffered_bytes FROM link_samples_or_none() x JOIN j USING (k, src)
         WHERE x.node = at_node AND x.cause = 'low' AND x.t_us >= j.lo_us AND x.t_us < j.hi_us),
     pk AS (
-        SELECT x.k, x.peer, x.t_us - CASE WHEN j.sim = 'testbed' THEN coalesce(h.delay_us, 0) ELSE 0 END AS t_us,
-               x.arrived_us
+        SELECT x.k, x.peer, x.t_us - coalesce(e.delay_us, 0) AS t_us, x.arrived_us
         FROM packets_or_none() x JOIN j USING (k, src)
-        LEFT JOIN hosts h ON h.k = x.k AND h.src = x.src AND h.node = x.node
+        LEFT JOIN entry_folds_of(side, at_node, who := 'write_stages_of') e ON e.k = x.k AND e.src = x.src
         WHERE x.node = at_node AND x.kind IN ('data', 'data_sack') AND x.lost IS NULL
         QUALIFY row_number() OVER (PARTITION BY x.k, x.peer, x.t_us ORDER BY x.n) = 1),
     fp AS (
@@ -2781,9 +2798,7 @@ CREATE OR REPLACE MACRO write_fit_of(a_side, b_side, at_node := 0, lo_s := 20, h
 -- - from the wire (`packets`, PACKET_LOG; a testbed run's PCAP=1):
 --   `1 one-way delay` (ms), each packet of DATA the seed offered a peer,
 --   from its offer to reaching the peer (one lost has none): its t_us to
---   arrived_us, a testbed run's t_us less the seed's egress delay
---   (hosts.delay_us), which a testbed run's delay holds ahead of the
---   queue and the model's path after it; `3 packets a send opportunity,
+--   arrived_us; `3 packets a send opportunity,
 --   <gap> µs`, at each gap, `short_gap_us` and `long_gap_us`, the seed's
 --   trains of packets of DATA to a peer, each within the gap of the one
 --   before and no other packet to the peer between; `4 drain` (ms) and `5 drain
@@ -2831,13 +2846,14 @@ CREATE OR REPLACE MACRO sctp_stages_of(side, at_node := 0, lo_s := 20, hi_s := -
         SELECT DISTINCT w.k, w.src, w.lo * 1000000 AS lo_us, w.hi * 1000000 AS hi_us, b.sim
         FROM side_window_of(side, 'sctp_stages_of', lo_s := lo_s, hi_s := hi_s) w JOIN jobs b USING (k, src)),
     pk AS (
-        SELECT x.k, x.peer, x.n, x.t_us, x.arrived_us, x.lost, x.ip_bytes, x.kind IN ('data', 'data_sack') AS dat,
-               x.t_us - CASE WHEN j.sim = 'testbed' THEN coalesce(h.delay_us, 0) ELSE 0 END AS offered_us
+        SELECT x.k, x.peer, x.n, x.t_us - coalesce(e.delay_us, 0) AS t_us, x.arrived_us, x.lost, x.ip_bytes,
+               x.kind IN ('data', 'data_sack') AS dat
         FROM packets_or_none() x JOIN j USING (k, src)
-        LEFT JOIN hosts h ON h.k = x.k AND h.src = x.src AND h.node = x.node
-        WHERE x.node = at_node AND x.peer IS NOT NULL AND x.t_us >= j.lo_us AND x.t_us < j.hi_us),
+        LEFT JOIN entry_folds_of(side, at_node, who := 'sctp_stages_of') e ON e.k = x.k AND e.src = x.src
+        WHERE x.node = at_node AND x.peer IS NOT NULL
+          AND x.t_us - coalesce(e.delay_us, 0) >= j.lo_us AND x.t_us - coalesce(e.delay_us, 0) < j.hi_us),
     owd AS (
-        SELECT k, (arrived_us - offered_us) / 1000.0 AS v FROM pk WHERE dat AND lost IS NULL AND arrived_us IS NOT NULL),
+        SELECT k, (arrived_us - t_us) / 1000.0 AS v FROM pk WHERE dat AND lost IS NULL AND arrived_us IS NOT NULL),
     lg AS (
         SELECT k, peer, n, t_us, dat, lag(dat) OVER w AS pd, lag(t_us) OVER w AS pt
         FROM pk WINDOW w AS (PARTITION BY k, peer ORDER BY n)),

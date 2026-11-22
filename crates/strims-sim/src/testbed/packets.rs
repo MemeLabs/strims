@@ -10,21 +10,25 @@
 //!   ifb ahead of the modem cuts a buffer into the link's packets (its
 //!   offloads are off), so each is cut here as its device does: MSS-sized
 //!   segments of the testbed's [`MTU`], their IP ids and sequence numbers
-//!   counting on from the buffer's. Each packet enters the modem's queue
-//!   the node's egress delay after its offer (its `links` line's netem),
-//!   in offer order: a fixed delay keeps the order. Its frames that
-//!   aren't IPv4 (ARP's, IPv6's neighbour discovery: [`others`]) are
-//!   offers too, among its packets in time order, as its queue holds them
-//!   and its tbf charges them as it does a packet: kind `control`,
-//!   protocol `other`, their bytes past the Ethernet header.
+//!   counting on from the buffer's. Each packet's row is at its offer, as
+//!   the model's is at its admission (its path's delay after its queue),
+//!   and enters the modem's queue the node's egress delay later (its
+//!   `links` line's netem, `WanHostReport::entry_delay`), in offer order:
+//!   a fixed delay keeps the order. Its frames that aren't IPv4 (ARP's,
+//!   IPv6's neighbour discovery: [`others`]) are offers too, among its
+//!   packets in time order, as its queue holds them and its tbf charges
+//!   them as it does a packet: kind `control`, protocol `other`, their
+//!   bytes past the Ethernet header.
 //! - **Fates.** The modem's queue is a FIFO, so what the node's eth0
 //!   carried (`pcap-<i>.pcap`, past the queue) is what it was offered, in
 //!   order, less what the queue dropped: each offered packet is the first
 //!   carried one of its destination, ports, IP id and length at or after
 //!   its offer and within [`DROP_WAIT_US`] of it, else the queue's drop.
 //!   Its departure is that capture's time; its backlog the charges of the
-//!   packets that entered before it and hadn't left, the dropped left out;
-//!   its arrival its receiver's own capture of it, inbound. A packet that
+//!   packets that entered the queue before it and hadn't left by its
+//!   entry, the dropped left out; its arrival its receiver's own capture
+//!   of it, inbound. The node's queue and drops in the bins ([`queues`],
+//!   [`drops`]) are its packets' at their entries too. A packet that
 //!   entered the queue within twice its time ([`told`]: its `links`
 //!   line's queue, the most a packet waits there, and as much again) of
 //!   its eth0 capture's last record has no fate the captures tell (its
@@ -290,11 +294,14 @@ fn node_of(o: Option<u8>, nodes: usize) -> Option<HostIx> {
 
 /// A node's packets as its captures give them: the `packets` table's rows
 /// (with both captures: its offered one and its eth0's), and its offers of
-/// data to the swarm's nodes (with an offered capture: `None` without).
+/// data to the swarm's nodes (with an offered capture: `None` without),
+/// and how long after its offer each packet entered its queue (its egress
+/// delay, `WanHostReport::entry_delay`).
 #[derive(Clone, Debug, Default)]
 pub struct NodeCapture {
     pub packets: Vec<PacketRecord>,
     pub offers: Option<Vec<(SimDuration, u64, u32)>>,
+    pub entry_delay: SimDuration,
 }
 
 /// Each of out dir `dir`'s `nodes` nodes' captures (see the module docs),
@@ -324,6 +331,7 @@ pub fn captures(
             .and_then(|l| strims_wan::testbed::Spec::parse(&l.spec).ok())
             .map_or(Framing::ETHERNET, |x| x.framing());
         let stack = stacks.get(h).copied().flatten();
+        cap.entry_delay = SimDuration::from_micros(i64::try_from(delay_us).unwrap_or(i64::MAX));
         let Some(offered) = read(dir, &format!("pcap-{h}-offered.pcap")) else {
             continue;
         };
@@ -410,8 +418,10 @@ pub fn captures(
                     t,
                 ));
             }
+            // Its offer, its entry less the delay: one that entered the
+            // queue before the run's zero entered at it, as `since` has it.
             rows.push(PacketRecord {
-                at: since(entry),
+                at: since(entry) - cap.entry_delay,
                 sent: sent.map(since),
                 arrived: None,
                 lost: sent.is_none().then_some(PacketLoss::Queue),
@@ -494,6 +504,7 @@ pub(super) fn fill(run: &Run, s: &Scenario, wan: &mut WanReport, hosts: &mut [Ho
         if let Some(w) = wan.hosts.iter_mut().find(|w| Some(w.name.as_str()) == name) {
             w.packets = cap.packets;
             w.offers = cap.offers;
+            w.entry_delay = cap.entry_delay;
         }
     }
     for (h, host) in hosts.iter_mut().enumerate() {
@@ -504,7 +515,8 @@ pub(super) fn fill(run: &Run, s: &Scenario, wan: &mut WanReport, hosts: &mut [Ho
 /// Each node's uplink queue (`WanHostReport::up_queue`, `up_backlog`)
 /// where its captures tell it, sampled where the sim samples its uplinks:
 /// every [`QUEUE_SAMPLE_EVERY`] from the run's start (the bins' edges) to
-/// its last packet's entry, what its queue held then ([`queue_every`]),
+/// its last packet's entry into it (its offer and its egress delay,
+/// `WanHostReport::entry_delay`), what its queue held then ([`queue_every`]),
 /// and as a wait that over its tbf's rate as its tc samples show it
 /// (`rates`, from `Network::read`): the latest sample's, the first's after
 /// a step logged since that one, the first's before any, else the
@@ -527,7 +539,7 @@ pub(super) fn queues(s: &Scenario, wan: &mut WanReport, rates: &[Vec<(SimDuratio
         if tc.is_empty() {
             continue;
         }
-        let held = queue_every(&w.packets, QUEUE_SAMPLE_EVERY);
+        let held = queue_every(&w.packets, w.entry_delay, QUEUE_SAMPLE_EVERY);
         let Some(&(last, _)) = held.last() else {
             continue;
         };
@@ -579,7 +591,8 @@ pub(super) type TcDrops = (Vec<(SimDuration, u64)>, Option<usize>);
 /// Each node's drops in the bins (`bins`: [`UP_COUNTERS`] at each of their
 /// edges, every `bin` from the run's start; `ends` as `Report::wire_ends`
 /// has them) where its captures tell them, as the sim counts its drops: at
-/// each edge to its last packet's entry, the packets its queue had dropped
+/// each edge to its last packet's entry (its offer and its egress delay,
+/// `WanHostReport::entry_delay`), the packets its queue had dropped
 /// before it, each as it came to the queue, beside what its receivers'
 /// downlinks dropped. Past that edge its tc samples' count (`tc`, from
 /// `Network::read`: each sample's, and the last edge they tell; at an edge,
@@ -608,7 +621,7 @@ pub(super) fn drops(
         else {
             continue;
         };
-        let Some(last) = w.packets.iter().map(|p| p.at).max() else {
+        let Some(last) = w.packets.iter().map(|p| p.at + w.entry_delay).max() else {
             continue;
         };
         let (Some(&first), true) = (tc.first(), bin > SimDuration::ZERO) else {
@@ -618,7 +631,7 @@ pub(super) fn drops(
             .packets
             .iter()
             .filter(|p| p.lost == Some(PacketLoss::Queue))
-            .map(|p| p.at)
+            .map(|p| p.at + w.entry_delay)
             .collect();
         lost.sort_unstable();
         let lost_before = |t: SimDuration| lost.partition_point(|&x| x < t) as u64;
@@ -672,12 +685,17 @@ pub(super) fn drops(
 }
 
 /// A node's uplink queue every `every` from the run's start, as its
-/// packets (`WanHostReport::packets`) tell it: at each time to its last
-/// packet's entry, the charges of those that had entered its queue and not
-/// left, the dropped left out, as each one's `backlog_bytes` counts those
-/// ahead of it. None without packets.
-fn queue_every(packets: &[PacketRecord], every: SimDuration) -> Vec<(SimDuration, u64)> {
-    let Some(last) = packets.iter().map(|p| p.at).max() else {
+/// packets (`WanHostReport::packets`, each entering the queue `delay`
+/// after its offer) tell it: at each time to its last packet's entry, the
+/// charges of those that had entered its queue and not left, the dropped
+/// left out, as each one's `backlog_bytes` counts those ahead of it. None
+/// without packets.
+fn queue_every(
+    packets: &[PacketRecord],
+    delay: SimDuration,
+    every: SimDuration,
+) -> Vec<(SimDuration, u64)> {
+    let Some(last) = packets.iter().map(|p| p.at + delay).max() else {
         return Vec::new();
     };
     if every <= SimDuration::ZERO {
@@ -685,9 +703,10 @@ fn queue_every(packets: &[PacketRecord], every: SimDuration) -> Vec<(SimDuration
     }
     let (mut joins, mut leaves) = (Vec::new(), Vec::new());
     for p in packets {
-        if let Some(sent) = p.sent.filter(|&t| t > p.at) {
+        let entry = p.at + delay;
+        if let Some(sent) = p.sent.filter(|&t| t > entry) {
             let c = u64::from(p.charged_bytes.unwrap_or(p.ip_bytes));
-            joins.push((p.at, c));
+            joins.push((entry, c));
             leaves.push((sent, c));
         }
     }
@@ -955,12 +974,15 @@ mod tests {
                 )
             })
             .collect();
+        // Each row at its offer, as the model's at its admission; its
+        // backlog what the queue held as it entered, its delay later.
         let (q, data) = (Some(PacketLoss::Queue), PacketKind::Data);
+        assert_eq!(caps[0].entry_delay, SimDuration::from_millis(20));
         assert_eq!(
             got,
             [
                 (
-                    20_000,
+                    0,
                     Some(20_005),
                     Some(20_007),
                     None,
@@ -971,7 +993,7 @@ mod tests {
                     Some(0)
                 ),
                 (
-                    20_000,
+                    0,
                     None,
                     None,
                     q,
@@ -982,7 +1004,7 @@ mod tests {
                     Some(1514)
                 ),
                 (
-                    20_000,
+                    0,
                     Some(21_300),
                     None,
                     None,
@@ -993,7 +1015,7 @@ mod tests {
                     Some(1514)
                 ),
                 (
-                    20_100,
+                    100,
                     Some(21_500),
                     Some(21_502),
                     None,
@@ -1004,7 +1026,7 @@ mod tests {
                     Some(170)
                 ),
                 (
-                    20_200,
+                    200,
                     Some(21_600),
                     None,
                     None,
@@ -1015,7 +1037,7 @@ mod tests {
                     Some(236)
                 ),
                 (
-                    20_300,
+                    300,
                     Some(21_700),
                     None,
                     None,
@@ -1026,6 +1048,28 @@ mod tests {
                     Some(402)
                 ),
             ]
+        );
+        // The queue rebuilt from the rows at their entries is the one their
+        // entries as their times give: at 20 ms, the first segment and the
+        // third (the second dropped), and nothing before.
+        let every = SimDuration::from_micros(5_000);
+        let entered: Vec<PacketRecord> = rows
+            .iter()
+            .map(|r| PacketRecord {
+                at: r.at + caps[0].entry_delay,
+                ..r.clone()
+            })
+            .collect();
+        let held = queue_every(rows, caps[0].entry_delay, every);
+        assert_eq!(held, queue_every(&entered, SimDuration::ZERO, every));
+        let at = |us: u64| {
+            held.iter()
+                .find(|&&(t, _)| t == SimDuration::from_micros(us as i64))
+                .map(|&(_, b)| b)
+        };
+        assert_eq!(
+            (at(t0 + 15_000), at(t0 + 20_000)),
+            (Some(0), Some(1514 + 170))
         );
         assert_eq!(rows[5].proto, PacketProto::Other);
         let links: Vec<Option<u32>> = rows.iter().map(|r| r.link).collect();
@@ -1054,5 +1098,52 @@ mod tests {
         // Node 1 has no offered capture: no packets, its offers unmeasured.
         assert!(caps[1].packets.is_empty() && caps[1].offers.is_none());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Every packet a node's link carried leaves at least its entry delay
+    /// after its row's time, the offer, its entry clamped at the run's zero
+    /// or not: the delay is ahead of the queue. scoring.sql's
+    /// entry_folds_of tells a fold of the offer from one of the entry by it.
+    #[test]
+    fn a_carried_packet_leaves_its_entry_delay_or_more_after_its_offer() {
+        let dir = std::env::temp_dir().join(format!("strims-entry-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("links"), "node 0 tbf 10 20 100 eth0\n").unwrap();
+        let t0 = 1_000_000_000u64;
+        // The run's zero 10 ms past the second offer: the first enters the
+        // queue and leaves it before the zero, the second enters after it
+        // and leaves at once, the third waits 4 ms and the fourth drops.
+        let run0 = t0 + 10_000;
+        let offered = [
+            (t0 - 30_000, tcp(10, 11, 100, 1000, 20, 0x18)),
+            (t0, tcp(10, 11, 100, 1100, 21, 0x18)),
+            (t0 + 1_000, tcp(10, 11, 100, 1200, 22, 0x18)),
+            (t0 + 2_000, tcp(10, 11, 100, 1300, 23, 0x18)),
+        ];
+        let carried = [
+            (t0 - 5_000, tcp(10, 11, 100, 1000, 20, 0x18)),
+            (t0 + 20_000, tcp(10, 11, 100, 1100, 21, 0x18)),
+            (t0 + 25_000, tcp(10, 11, 100, 1200, 22, 0x18)),
+            (t0 + 1_000_000, tcp(11, 10, 0, 1, 99, 0x10)),
+        ];
+        std::fs::write(dir.join("pcap-0-offered.pcap"), pcap(&offered)).unwrap();
+        std::fs::write(dir.join("pcap-0.pcap"), pcap(&carried)).unwrap();
+        let caps = captures(&dir, 1, &[None], run0);
+        std::fs::remove_dir_all(&dir).unwrap();
+        let delay = caps[0].entry_delay;
+        assert_eq!(delay, SimDuration::from_millis(20));
+        let left: Vec<_> = caps[0]
+            .packets
+            .iter()
+            .map(|r| r.sent.map(|t| (t - r.at).as_micros()))
+            .collect();
+        assert_eq!(left, [Some(20_000), Some(20_000), Some(24_000), None]);
+        assert!(
+            caps[0]
+                .packets
+                .iter()
+                .filter_map(|r| r.sent.map(|t| (t, r.at)))
+                .all(|(t, at)| t >= at + delay)
+        );
     }
 }
