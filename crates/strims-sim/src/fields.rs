@@ -3421,21 +3421,25 @@ pub(crate) mod cols {
         /// after it left), and packets lost (the network's `UP_COUNTERS`). A
         /// testbed run's retransmits are each native node's TCP segments to a
         /// swarm node that its capture (`PCAP=1`) saw resend bytes its link had
-        /// carried before, at its capture time: a segment lost past its queue,
-        /// as the window model's are its path's losses, a resend of what its
-        /// own queue dropped counting in drops alone. A testbed run's drops are
-        /// its own queue's, each in the bin it came to the queue in as the sim
-        /// counts its: with its captures (`PCAP=1`), each of its packets its
-        /// queue had no room for, and past their end, or without them, its tc
-        /// log's count, whose samples fall at their sampler's own phase, up to
-        /// an interval before an edge; and those of its packets a receiver's
-        /// downlink queue dropped (SLOW_DOWN_KBIT's viewer 1, its ifb's tbf),
-        /// each its resend of carried bytes to that receiver, which isn't a
-        /// retransmit, as the window model counts a full downlink queue's loss
-        /// as the sender's drop (with SEED_LOSS_PCT too, the seed's resends to
-        /// it are that loss's as well: its drops and retransmits are empty; and
-        /// a data channel's to it can't be told: its sender's drops are empty);
-        /// a spurious resend (a tail-loss probe's or an early timeout's of a
+        /// carried before, at its capture time less the node's egress delay: a
+        /// segment lost past its queue, as the window model's are its path's
+        /// losses, a resend of what its own queue dropped counting in drops
+        /// alone. A testbed run's drops are its own queue's, each in the bin
+        /// its packet was offered in, as the sim counts its as they come to its
+        /// queue, which comes before its path's delay and takes each at its
+        /// offer (the testbed's tbf, behind the node's egress delay, takes it
+        /// that delay later): with its captures (`PCAP=1`), each of its packets
+        /// its queue had no room for, and past their end, or without them, its
+        /// tc log's count, each sample timed its delay before it, whose samples
+        /// fall at their sampler's own phase, up to an interval before an edge;
+        /// and those of its packets a receiver's downlink queue dropped
+        /// (SLOW_DOWN_KBIT's viewer 1, its ifb's tbf), each its resend of
+        /// carried bytes to that receiver, which isn't a retransmit, as the
+        /// window model counts a full downlink queue's loss as the sender's
+        /// drop (with SEED_LOSS_PCT too, the seed's resends to it are that
+        /// loss's as well: its drops and retransmits are empty; and a data
+        /// channel's to it can't be told: its sender's drops are empty); a
+        /// spurious resend (a tail-loss probe's or an early timeout's of a
         /// segment that had arrived) counts there and not in the sim; a
         /// browser's, its data channels' resends inside DTLS, are empty, as are
         /// a native node's with a data channel to a browser (WebRTC). What a
@@ -3451,9 +3455,10 @@ pub(crate) mod cols {
         /// count). The row's `packets_ack` and `up_acks` count both kinds, over
         /// the whole run and every host. A testbed run writes IP bytes there:
         /// each pure TCP ACK's IP length from its node's capture past the
-        /// queue, at its capture time, and no SACKs (a data channel's, inside
-        /// DTLS, count with its data: the up_sack columns are empty); the
-        /// queries add its class's overhead (scoring.sql's link_overhead).
+        /// queue, at its capture time less the node's egress delay, and no
+        /// SACKs (a data channel's, inside DTLS, count with its data: the
+        /// up_sack columns are empty); the queries add its class's overhead
+        /// (scoring.sql's link_overhead).
         ///
         /// None is written as -1.
         WhoCounter(u16),
@@ -3541,11 +3546,12 @@ pub(crate) mod cols {
         /// Ethernet header, 14 bytes), pure acknowledgements (`up_ack_bytes`,
         /// `up_sack_bytes`) and competing uploads apart; a testbed run counts
         /// each packet's IP length from its capture past the queue
-        /// (`pcap-<i>.pcap`, at its capture time, past the node's egress delay
-        /// too, which run.sh puts ahead of the queue), its pure TCP ACKs apart,
-        /// a data channel's SACKs with its data (inside DTLS: its up_sack
-        /// columns empty). The queries convert by the class (scoring.sql's
-        /// link_overhead).
+        /// (`pcap-<i>.pcap`, at its capture time less the node's egress delay,
+        /// which run.sh puts ahead of the queue and the model after it: its
+        /// offer plus its wait, as the model's departure is), its pure TCP ACKs
+        /// apart, a data channel's SACKs with its data (inside DTLS: its
+        /// up_sack columns empty). The queries convert by the class
+        /// (scoring.sql's link_overhead).
         ///
         /// Unit: bytes. None is written as -1.
         ViewerUpBytes,
@@ -3614,11 +3620,12 @@ pub(crate) mod cols {
         /// class (the testbed's tbf class an Ethernet header, 14 bytes), pure
         /// acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing
         /// uploads apart; a testbed run counts each packet's IP length from its
-        /// capture past the queue (`pcap-<i>.pcap`, at its capture time, past
-        /// the node's egress delay too, which run.sh puts ahead of the queue),
-        /// its pure TCP ACKs apart, a data channel's SACKs with its data
-        /// (inside DTLS: its up_sack columns empty). The queries convert by the
-        /// class (scoring.sql's link_overhead).
+        /// capture past the queue (`pcap-<i>.pcap`, at its capture time less
+        /// the node's egress delay, which run.sh puts ahead of the queue and
+        /// the model after it: its offer plus its wait, as the model's
+        /// departure is), its pure TCP ACKs apart, a data channel's SACKs with
+        /// its data (inside DTLS: its up_sack columns empty). The queries
+        /// convert by the class (scoring.sql's link_overhead).
         ///
         /// Unit: bytes. None is written as -1.
         SeedUpBytes,
@@ -3652,28 +3659,35 @@ pub(crate) mod cols {
         BudgetCapacity,
         /// The seed's uplink queue at the bin's end, as the wait a byte joining
         /// it would have (`WanHostReport::up_queue`, its latest sample at or
-        /// before the edge). The sim samples its uplink's model every 100 ms
-        /// from the run's start, at the bins' edges; a testbed run takes the
-        /// queue there from its captures (PCAP=1: what had entered its tbf and
-        /// not left, `seed_up_queue_bytes`) over the tbf's own rate as its tc
-        /// samples show it (its steps as applied), and without them, or past
-        /// their end, its tc samples', which fall at their sampler's own phase,
-        /// up to 100 ms before the edge. Empty outside WAN mode or before a
-        /// sample.
+        /// before the edge): the queue a byte offered at the edge meets. The
+        /// sim samples its uplink's model every 100 ms from the run's start, at
+        /// the bins' edges, its queue ahead of its path's delay; a testbed
+        /// run's tbf sits behind the seed's egress delay (its `links` line's
+        /// netem, `hosts.delay_us`), so it takes the queue as the tbf held it
+        /// that delay past the edge, from its captures (PCAP=1: what offered
+        /// before the edge had not left, `seed_up_queue_bytes`) over the tbf's
+        /// own rate as its tc samples show it (its steps as applied, each met
+        /// by the offers from its time less the delay), and without them, or
+        /// past their end, its tc samples', each timed its delay before it,
+        /// which fall at their sampler's own phase, up to 100 ms before the
+        /// edge. Empty outside WAN mode or before a sample.
         ///
         /// Unit: ms. None is written as an empty field.
         SeedUpQueueMs,
         /// The seed's uplink queue at the bin's end, in bytes
         /// (`WanHostReport::up_backlog`, its latest sample at or before the
-        /// edge). A testbed run measures it in the bytes its tbf counts (a
-        /// frame's length, each packet's IP length and its Ethernet header, or
-        /// a class's size table's figure where links.sh gives the tbf one:
-        /// fiber, dsl, cable): at the edge from its captures (PCAP=1: the
-        /// charges of the packets that had entered the queue and not left, as
-        /// `packets.backlog_bytes` counts them), else its tbf's backlog at its
-        /// latest tc sample; the sim derives it as its measured wait times its
-        /// uplink's rate then, sampled at the edge. Empty outside WAN mode or
-        /// before a sample.
+        /// edge): the queue a byte offered at the edge meets, as
+        /// `seed_up_queue_ms`'s. A testbed run measures it in the bytes its tbf
+        /// counts (a frame's length, each packet's IP length and its Ethernet
+        /// header, or a class's size table's figure where links.sh gives the
+        /// tbf one: fiber, dsl, cable), as the tbf held it the seed's egress
+        /// delay past the edge: from its captures (PCAP=1: the charges of the
+        /// packets offered before the edge that had not left the queue by then,
+        /// as `packets.backlog_bytes` counts a packet's at its entry), else its
+        /// tbf's backlog at its latest tc sample, each timed its delay before
+        /// it; the sim derives it as its measured wait times its uplink's rate
+        /// then, sampled at the edge. Empty outside WAN mode or before a
+        /// sample.
         ///
         /// Unit: bytes. None is written as an empty field.
         SeedUpQueueBytes,
@@ -4224,21 +4238,25 @@ pub(crate) mod cols {
         /// after it left), and packets lost (the network's `UP_COUNTERS`). A
         /// testbed run's retransmits are each native node's TCP segments to a
         /// swarm node that its capture (`PCAP=1`) saw resend bytes its link had
-        /// carried before, at its capture time: a segment lost past its queue,
-        /// as the window model's are its path's losses, a resend of what its
-        /// own queue dropped counting in drops alone. A testbed run's drops are
-        /// its own queue's, each in the bin it came to the queue in as the sim
-        /// counts its: with its captures (`PCAP=1`), each of its packets its
-        /// queue had no room for, and past their end, or without them, its tc
-        /// log's count, whose samples fall at their sampler's own phase, up to
-        /// an interval before an edge; and those of its packets a receiver's
-        /// downlink queue dropped (SLOW_DOWN_KBIT's viewer 1, its ifb's tbf),
-        /// each its resend of carried bytes to that receiver, which isn't a
-        /// retransmit, as the window model counts a full downlink queue's loss
-        /// as the sender's drop (with SEED_LOSS_PCT too, the seed's resends to
-        /// it are that loss's as well: its drops and retransmits are empty; and
-        /// a data channel's to it can't be told: its sender's drops are empty);
-        /// a spurious resend (a tail-loss probe's or an early timeout's of a
+        /// carried before, at its capture time less the node's egress delay: a
+        /// segment lost past its queue, as the window model's are its path's
+        /// losses, a resend of what its own queue dropped counting in drops
+        /// alone. A testbed run's drops are its own queue's, each in the bin
+        /// its packet was offered in, as the sim counts its as they come to its
+        /// queue, which comes before its path's delay and takes each at its
+        /// offer (the testbed's tbf, behind the node's egress delay, takes it
+        /// that delay later): with its captures (`PCAP=1`), each of its packets
+        /// its queue had no room for, and past their end, or without them, its
+        /// tc log's count, each sample timed its delay before it, whose samples
+        /// fall at their sampler's own phase, up to an interval before an edge;
+        /// and those of its packets a receiver's downlink queue dropped
+        /// (SLOW_DOWN_KBIT's viewer 1, its ifb's tbf), each its resend of
+        /// carried bytes to that receiver, which isn't a retransmit, as the
+        /// window model counts a full downlink queue's loss as the sender's
+        /// drop (with SEED_LOSS_PCT too, the seed's resends to it are that
+        /// loss's as well: its drops and retransmits are empty; and a data
+        /// channel's to it can't be told: its sender's drops are empty); a
+        /// spurious resend (a tail-loss probe's or an early timeout's of a
         /// segment that had arrived) counts there and not in the sim; a
         /// browser's, its data channels' resends inside DTLS, are empty, as are
         /// a native node's with a data channel to a browser (WebRTC). What a
@@ -4254,9 +4272,10 @@ pub(crate) mod cols {
         /// count). The row's `packets_ack` and `up_acks` count both kinds, over
         /// the whole run and every host. A testbed run writes IP bytes there:
         /// each pure TCP ACK's IP length from its node's capture past the
-        /// queue, at its capture time, and no SACKs (a data channel's, inside
-        /// DTLS, count with its data: the up_sack columns are empty); the
-        /// queries add its class's overhead (scoring.sql's link_overhead).
+        /// queue, at its capture time less the node's egress delay, and no
+        /// SACKs (a data channel's, inside DTLS, count with its data: the
+        /// up_sack columns are empty); the queries add its class's overhead
+        /// (scoring.sql's link_overhead).
         ///
         /// None is written as an empty field.
         Counter(u16),
@@ -4293,11 +4312,12 @@ pub(crate) mod cols {
         /// class (the testbed's tbf class an Ethernet header, 14 bytes), pure
         /// acknowledgements (`up_ack_bytes`, `up_sack_bytes`) and competing
         /// uploads apart; a testbed run counts each packet's IP length from its
-        /// capture past the queue (`pcap-<i>.pcap`, at its capture time, past
-        /// the node's egress delay too, which run.sh puts ahead of the queue),
-        /// its pure TCP ACKs apart, a data channel's SACKs with its data
-        /// (inside DTLS: its up_sack columns empty). The queries convert by the
-        /// class (scoring.sql's link_overhead).
+        /// capture past the queue (`pcap-<i>.pcap`, at its capture time less
+        /// the node's egress delay, which run.sh puts ahead of the queue and
+        /// the model after it: its offer plus its wait, as the model's
+        /// departure is), its pure TCP ACKs apart, a data channel's SACKs with
+        /// its data (inside DTLS: its up_sack columns empty). The queries
+        /// convert by the class (scoring.sql's link_overhead).
         ///
         /// Unit: bytes.
         UpBytes,
@@ -4341,24 +4361,28 @@ pub(crate) mod cols {
         Rtos,
         /// The node's uplink queue at the bin's end, as the wait a byte joining
         /// it would have (`WanHostReport::up_queue`, its latest sample at or
-        /// before the edge): measured by the sim's uplink model, sampled at the
-        /// edges; derived on the testbed from its queue at the edge
-        /// (`up_queue_bytes`) over the tbf's own rate as its tc samples show
-        /// it, its tc samples' alone (up to 100 ms before the edge) without
-        /// captures or past their end. Empty outside WAN mode or before a
-        /// sample.
+        /// before the edge): the queue a byte offered at the edge meets.
+        /// Measured by the sim's uplink model, ahead of its path's delay,
+        /// sampled at the edges; derived on the testbed, whose tbf sits behind
+        /// the node's egress delay (`hosts.delay_us`), from its queue that
+        /// delay past the edge (`up_queue_bytes`) over the tbf's own rate as
+        /// its tc samples show it, its tc samples' alone (each timed its delay
+        /// before it, up to 100 ms before the edge) without captures or past
+        /// their end. Empty outside WAN mode or before a sample.
         ///
         /// Unit: ms. None is written as an empty field.
         UpQueueMs,
         /// The node's uplink queue at the bin's end, in bytes
         /// (`WanHostReport::up_backlog`, its latest sample at or before the
-        /// edge): measured on the testbed in the bytes its tbf counts (IP
-        /// length and Ethernet header per packet, or its class's size table's
-        /// figure), at the edge from its captures (PCAP=1: the packets that had
-        /// entered the queue and not left), else the tbf's backlog at its
-        /// latest tc sample; derived in the sim as its measured wait times its
-        /// uplink's rate then, sampled at the edge. Empty outside WAN mode or
-        /// before a sample.
+        /// edge): the queue a byte offered at the edge meets, as
+        /// `up_queue_ms`'s. Measured on the testbed in the bytes its tbf counts
+        /// (IP length and Ethernet header per packet, or its class's size
+        /// table's figure), as the tbf held it the node's egress delay past the
+        /// edge: from its captures (PCAP=1: the packets offered before the edge
+        /// that had not left the queue by then), else the tbf's backlog at its
+        /// latest tc sample, each timed its delay before it; derived in the sim
+        /// as its measured wait times its uplink's rate then, sampled at the
+        /// edge. Empty outside WAN mode or before a sample.
         ///
         /// Unit: bytes. None is written as an empty field.
         UpQueueBytes,
@@ -4367,19 +4391,19 @@ pub(crate) mod cols {
         /// its datagrams to the swarm's nodes (its seed and viewers: the
         /// signalling relay left out), resends included; its pure
         /// acknowledgements, a data channel's SACKs alone and its competing
-        /// uploads left out. Each offer counts in the bin it entered the queue
-        /// in (`WanHostReport::offers`). Empty outside WAN mode and for a
-        /// testbed node without an offered capture.
+        /// uploads left out. Each offer counts in the bin it was offered in
+        /// (`WanHostReport::offers`). Empty outside WAN mode and for a testbed
+        /// node without an offered capture.
         ///
         /// strims-sim: A twin counts the WAN scheduler's admissions
         /// (`Scheduler::offered`: each segment, datagram and SCTP packet as its
         /// sender hands it to the uplink, its IP bytes); a testbed run its
         /// offered capture (`pcap-<i>-offered.pcap`, ahead of the egress delay
-        /// and the queue: each packet at its capture time plus the node's
-        /// delay, a GSO buffer cut into the link's packets), a datagram whose
-        /// length its stack reads as a SACK alone left out: its other datagrams
-        /// count, its DTLS handshake's and STUN's among them, which the model's
-        /// data channels don't send.
+        /// and the queue: each packet at its capture time, a GSO buffer cut
+        /// into the link's packets), a datagram whose length its stack reads as
+        /// a SACK alone left out: its other datagrams count, its DTLS
+        /// handshake's and STUN's among them, which the model's data channels
+        /// don't send.
         ///
         /// Unit: bytes. None is written as an empty field.
         OfferedBytes,

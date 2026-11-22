@@ -28,7 +28,9 @@
 //!   packets that entered the queue before it and hadn't left by its
 //!   entry, the dropped left out; its arrival its receiver's own capture
 //!   of it, inbound. The node's queue and drops in the bins ([`queues`],
-//!   [`drops`]) are its packets' at their entries too. A packet that
+//!   [`drops`]) are its offers' as the model's are: at each edge, the
+//!   queue an offer there met, its tbf's a delay later, and the drops of
+//!   the packets offered before it, each in its offer's bin. A packet that
 //!   entered the queue within twice its time ([`told`]: its `links`
 //!   line's queue, the most a packet waits there, and as much again) of
 //!   its eth0 capture's last record has no fate the captures tell (its
@@ -81,6 +83,15 @@ pub fn node_link(dir: &Path, h: usize) -> Option<NodeLink> {
             _ => None,
         }
     })
+}
+
+impl NodeLink {
+    /// How long after its offer a packet of the node's enters its modem's
+    /// queue, µs: its egress delay, the netem ahead of the queue
+    /// (`WanHostReport::entry_delay`).
+    pub(super) fn delay_us(&self) -> u64 {
+        (self.delay_ms * 1000.0).round() as u64
+    }
 }
 
 /// A packet's flow: its destination, protocol and ports.
@@ -323,9 +334,7 @@ pub fn captures(
     for (h, cap) in out.iter_mut().enumerate() {
         let me = u8::try_from(10 + h).ok();
         let link = node_link(dir, h);
-        let delay_us = link
-            .as_ref()
-            .map_or(0, |l| (l.delay_ms * 1000.0).round() as u64);
+        let delay_us = link.as_ref().map_or(0, NodeLink::delay_us);
         let framing = link
             .as_ref()
             .and_then(|l| strims_wan::testbed::Spec::parse(&l.spec).ok())
@@ -340,7 +349,9 @@ pub fn captures(
             cut(&refs, me),
             &others(dir, &format!("pcap-{h}-offered.pcap"), me),
         );
-        // Its data to the swarm, as it entered the queue.
+        // Its data to the swarm, each packet at its offer, as the model
+        // counts one as it is offered (its queue ahead of its path's
+        // delay), not as it entered the tbf a delay later.
         cap.offers = Some(
             offers
                 .iter()
@@ -348,7 +359,7 @@ pub fn captures(
                     node_of(o.dst, nodes).is_some()
                         && kind_estimated(o, stack).0 == PacketKind::Data
                 })
-                .map(|o| (since(o.us + delay_us), o.ip_len, 1))
+                .map(|o| (since(o.us), o.ip_len, 1))
                 .collect(),
         );
         let Some(carried) = read(dir, &format!("pcap-{h}.pcap")) else {
@@ -515,18 +526,23 @@ pub(super) fn fill(run: &Run, s: &Scenario, wan: &mut WanReport, hosts: &mut [Ho
 /// Each node's uplink queue (`WanHostReport::up_queue`, `up_backlog`)
 /// where its captures tell it, sampled where the sim samples its uplinks:
 /// every [`QUEUE_SAMPLE_EVERY`] from the run's start (the bins' edges) to
-/// its last packet's entry into it (its offer and its egress delay,
-/// `WanHostReport::entry_delay`), what its queue held then ([`queue_every`]),
-/// and as a wait that over its tbf's rate as its tc samples show it
-/// (`rates`, from `Network::read`): the latest sample's, the first's after
-/// a step logged since that one, the first's before any, else the
-/// scenario's. Its tc samples, which fall at their sampler's own phase, up
-/// to an interval before an edge, stay past that alone, and the column
-/// ends at the captures' last sample where they don't go on to the next
-/// edge (a sample of theirs by it, their sampler not stopped before it):
-/// that edge's would be the last sample's, an interval old. A node without
-/// a tc log has no tbf to queue at, and its queue stays empty, as its
-/// drops do ([`drops`]).
+/// its last packet's offer, the queue an offer then met ([`queue_every`]):
+/// what its queue held its egress delay later (`WanHostReport::entry_delay`),
+/// as the offer entered it. The sim's queue comes before its path's delay,
+/// so its sample at an edge is the queue an offer there meets; the
+/// testbed's tbf, behind the delay, holds at the edge itself what was
+/// offered a delay before it. The wait is that over its tbf's rate as its
+/// tc samples show it (`rates`, from `Network::read`, which times them as
+/// the offers that met them): the latest sample's, the first's after a
+/// step logged since that one (each step meeting the offers from its own
+/// time less the delay), the first's before any, else the scenario's. Its
+/// tc samples, which fall at their sampler's own phase, up to an interval
+/// before an edge, stay past that alone, and the column ends at the
+/// captures' last sample where they don't go on to the next edge (a sample
+/// of theirs by it, their sampler not stopped before it): that edge's
+/// would be the last sample's, an interval old. A node without a tc log
+/// has no tbf to queue at, and its queue stays empty, as its drops do
+/// ([`drops`]).
 pub(super) fn queues(s: &Scenario, wan: &mut WanReport, rates: &[Vec<(SimDuration, u64)>]) {
     for (h, spec) in s.hosts.iter().enumerate() {
         let (Some(site), Some(w)) = (
@@ -543,16 +559,19 @@ pub(super) fn queues(s: &Scenario, wan: &mut WanReport, rates: &[Vec<(SimDuratio
         let Some(&(last, _)) = held.last() else {
             continue;
         };
+        // A step applies at the tbf at its time: to the offers from a delay
+        // before it.
+        let delay = w.entry_delay;
         let rate_at = |t: SimDuration| {
             let step = spec
                 .up_steps
                 .iter()
-                .rfind(|&&(at, _)| SimDuration::from(at) <= t);
+                .rfind(|&&(at, _)| SimDuration::from(at) - delay <= t);
             let i = tc.partition_point(|&(x, _)| x <= t);
             let sample = match i.checked_sub(1).and_then(|i| tc.get(i)) {
                 // A step logged since that sample (steps.log stamps one once
                 // applied): the first sample after it shows its rate.
-                Some(&(x, _)) if step.is_some_and(|&(at, _)| SimDuration::from(at) > x) => {
+                Some(&(x, _)) if step.is_some_and(|&(at, _)| SimDuration::from(at) - delay > x) => {
                     tc.get(i)
                 }
                 Some(s) => Some(s),
@@ -591,19 +610,22 @@ pub(super) type TcDrops = (Vec<(SimDuration, u64)>, Option<usize>);
 /// Each node's drops in the bins (`bins`: [`UP_COUNTERS`] at each of their
 /// edges, every `bin` from the run's start; `ends` as `Report::wire_ends`
 /// has them) where its captures tell them, as the sim counts its drops: at
-/// each edge to its last packet's entry (its offer and its egress delay,
-/// `WanHostReport::entry_delay`), the packets its queue had dropped
-/// before it, each as it came to the queue, beside what its receivers'
-/// downlinks dropped. Past that edge its tc samples' count (`tc`, from
-/// `Network::read`: each sample's, and the last edge they tell; at an edge,
-/// the latest sample's before it) goes on from their latest sample the
-/// captures also cover (at or before their last packet's entry, else their
-/// first) and the captures' count before it: a drop between that sample
-/// and the edge is in both, and an anchor at the edge's own latest sample
-/// would count it twice. The tc samples fall at their sampler's own phase,
-/// up to an interval before an edge. Where its tc log stopped before that
-/// edge, its drops are told to it. A node without a tc log keeps its drops
-/// unmeasured, as its queue ([`queues`]).
+/// each edge to its last packet's offer, the packets offered before it
+/// that its queue dropped, beside what its receivers' downlinks dropped.
+/// The sim counts a drop as its packet comes to the queue, which, its
+/// queue ahead of its path's delay, is its offer; the testbed's packet
+/// comes to its tbf its egress delay later (`WanHostReport::entry_delay`),
+/// so it counts in its offer's bin, as the queue it met does ([`queues`]).
+/// Past that edge its tc samples' count (`tc`, from `Network::read`, timed
+/// as the offers that met them: each sample's, and the last edge they
+/// tell; at an edge, the latest sample's before it) goes on from their
+/// latest sample the captures also cover (at or before their last
+/// packet's offer, else their first) and the captures' count before it: a
+/// drop between that sample and the edge is in both, and an anchor at the
+/// edge's own latest sample would count it twice. The tc samples fall at
+/// their sampler's own phase, up to an interval before an edge. Where its
+/// tc log stopped before that edge, its drops are told to it. A node
+/// without a tc log keeps its drops unmeasured, as its queue ([`queues`]).
 pub(super) fn drops(
     s: &Scenario,
     wan: &WanReport,
@@ -621,7 +643,7 @@ pub(super) fn drops(
         else {
             continue;
         };
-        let Some(last) = w.packets.iter().map(|p| p.at + w.entry_delay).max() else {
+        let Some(last) = w.packets.iter().map(|p| p.at).max() else {
             continue;
         };
         let (Some(&first), true) = (tc.first(), bin > SimDuration::ZERO) else {
@@ -631,7 +653,7 @@ pub(super) fn drops(
             .packets
             .iter()
             .filter(|p| p.lost == Some(PacketLoss::Queue))
-            .map(|p| p.at + w.entry_delay)
+            .map(|p| p.at)
             .collect();
         lost.sort_unstable();
         let lost_before = |t: SimDuration| lost.partition_point(|&x| x < t) as u64;
@@ -642,8 +664,8 @@ pub(super) fn drops(
                 .and_then(|i| tc.get(i))
                 .map_or(first.1, |&(_, d)| d)
         };
-        // The edges the captures tell: those to the last packet's entry,
-        // before which every packet's fate is told.
+        // The edges the captures tell: those to the last packet's offer,
+        // before which every offer's fate is told.
         let edges: Vec<SimDuration> = (0..bins.len())
             .scan(SimDuration::from(LEAD), |e, _| {
                 let at = *e;
@@ -684,29 +706,31 @@ pub(super) fn drops(
     }
 }
 
-/// A node's uplink queue every `every` from the run's start, as its
-/// packets (`WanHostReport::packets`, each entering the queue `delay`
-/// after its offer) tell it: at each time to its last packet's entry, the
-/// charges of those that had entered its queue and not left, the dropped
-/// left out, as each one's `backlog_bytes` counts those ahead of it. None
-/// without packets.
+/// A node's uplink queue every `every` from the run's start, as an offer
+/// then meets it, and as its packets (`WanHostReport::packets`, each
+/// entering the queue `delay` after its offer) tell it: at each time `t`
+/// to its last packet's offer, the charges of those offered before `t`
+/// that hadn't left the queue by `t + delay`, as the queue held them when
+/// an offer at `t` entered it, the dropped left out, as each one's
+/// `backlog_bytes` counts those ahead of it. None without packets.
 fn queue_every(
     packets: &[PacketRecord],
     delay: SimDuration,
     every: SimDuration,
 ) -> Vec<(SimDuration, u64)> {
-    let Some(last) = packets.iter().map(|p| p.at + delay).max() else {
+    let Some(last) = packets.iter().map(|p| p.at).max() else {
         return Vec::new();
     };
     if every <= SimDuration::ZERO {
         return Vec::new();
     }
+    // Each packet's stay in the queue in its offers' time: from its offer
+    // to its departure less the delay.
     let (mut joins, mut leaves) = (Vec::new(), Vec::new());
     for p in packets {
-        let entry = p.at + delay;
-        if let Some(sent) = p.sent.filter(|&t| t > entry) {
+        if let Some(sent) = p.sent.map(|t| t - delay).filter(|&t| t > p.at) {
             let c = u64::from(p.charged_bytes.unwrap_or(p.ip_bytes));
-            joins.push((entry, c));
+            joins.push((p.at, c));
             leaves.push((sent, c));
         }
     }
@@ -715,10 +739,12 @@ fn queue_every(
     let (mut joins, mut leaves) = (joins.into_iter().peekable(), leaves.into_iter().peekable());
     let (mut q, mut out, mut t) = (0u64, Vec::new(), SimDuration::ZERO);
     while t <= last {
-        while let Some((_, c)) = joins.next_if(|&(x, _)| x <= t) {
+        // Those offered before `t`: one offered at `t` is behind the offer
+        // the sample stands for, as its `backlog_bytes` leaves itself out.
+        while let Some((_, c)) = joins.next_if(|&(x, _)| x < t) {
             q += c;
         }
-        // Each one left after it entered, so it is in `q` by now.
+        // Each one left after it was offered, so it is in `q` by now.
         while let Some((_, c)) = leaves.next_if(|&(x, _)| x <= t) {
             q = q.saturating_sub(c);
         }
@@ -1049,27 +1075,29 @@ mod tests {
                 ),
             ]
         );
-        // The queue rebuilt from the rows at their entries is the one their
-        // entries as their times give: at 20 ms, the first segment and the
-        // third (the second dropped), and nothing before.
-        let every = SimDuration::from_micros(5_000);
-        let entered: Vec<PacketRecord> = rows
+        // The queue rebuilt from the rows (from t0, every 100 µs) is the one
+        // an offer at each time meets, as the first offered then met it at
+        // its entry, its delay later: none at t0; the first segment and the
+        // third as the ACK entered the queue at 20.1 ms (the second
+        // dropped), the first gone by then, and so on.
+        let base = SimDuration::from_micros(t0 as i64);
+        let from_t0: Vec<PacketRecord> = rows
             .iter()
             .map(|r| PacketRecord {
-                at: r.at + caps[0].entry_delay,
+                at: r.at - base,
+                sent: r.sent.map(|t| t - base),
                 ..r.clone()
             })
             .collect();
-        let held = queue_every(rows, caps[0].entry_delay, every);
-        assert_eq!(held, queue_every(&entered, SimDuration::ZERO, every));
-        let at = |us: u64| {
-            held.iter()
-                .find(|&&(t, _)| t == SimDuration::from_micros(us as i64))
-                .map(|&(_, b)| b)
-        };
+        let held = queue_every(&from_t0, caps[0].entry_delay, SimDuration::from_micros(100));
+        assert_eq!(held.len(), 4);
+        for (k, &(t, b)) in held.iter().enumerate() {
+            let first = from_t0.iter().find(|r| r.at == t).unwrap();
+            assert_eq!(Some(b), first.backlog_bytes, "{k}");
+        }
         assert_eq!(
-            (at(t0 + 15_000), at(t0 + 20_000)),
-            (Some(0), Some(1514 + 170))
+            held.iter().map(|&(_, b)| b).collect::<Vec<_>>(),
+            [0, 170, 170 + 66, 170 + 66 + 166]
         );
         assert_eq!(rows[5].proto, PacketProto::Other);
         let links: Vec<Option<u32>> = rows.iter().map(|r| r.link).collect();
@@ -1086,15 +1114,7 @@ mod tests {
             .iter()
             .map(|&(t, b, _)| (t.as_micros() as u64 - t0, b))
             .collect();
-        assert_eq!(
-            offers,
-            [
-                (20_000, 1500),
-                (20_000, 1500),
-                (20_000, 156),
-                (1_520_000, 152)
-            ]
-        );
+        assert_eq!(offers, [(0, 1500), (0, 1500), (0, 156), (1_500_000, 152)]);
         // Node 1 has no offered capture: no packets, its offers unmeasured.
         assert!(caps[1].packets.is_empty() && caps[1].offers.is_none());
         std::fs::remove_dir_all(&dir).unwrap();

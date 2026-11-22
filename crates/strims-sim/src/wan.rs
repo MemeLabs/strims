@@ -521,9 +521,11 @@ const HYSTART_LOW_WINDOW: f64 = 16.0 * MSS;
 /// receiver's downlink queue, its datagrams at either, its SACKs at its
 /// uplink queue, and its competing uploads' frames at its uplink queue,
 /// each counted from when it was lost: at a queue as it came to it, a
-/// datagram on its path as it was handed over. A testbed run's column is
-/// its tbf's drops, the frames its uplink queue lost, pure TCP ACKs among
-/// them, which the model's queues always take.
+/// datagram on its path as it was handed over (the uplink queue, ahead of
+/// its path's delay, takes a packet as it is offered). A testbed run's
+/// column is its tbf's drops, the frames its uplink queue lost, pure TCP
+/// ACKs among them, which the model's queues always take, each counted at
+/// its offer, its egress delay before its tbf took it.
 pub const UP_COUNTERS: [&str; 11] = [
     "up_bytes",
     "up_packets",

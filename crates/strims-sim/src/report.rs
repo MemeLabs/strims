@@ -716,10 +716,12 @@ pub struct WanHostReport {
     pub site: Site,
     pub stats: EndStats,
     /// The uplink queue's wait every 100 ms: (time since the start, wait).
-    /// The sim's uplink model measures it, at every 100 ms from the start; a
-    /// testbed run derives it from its backlog over its tbf's rate as its tc
-    /// samples show it ([`crate::testbed`]), its backlog at those times from
-    /// its captures where it has them, else at its tc samples' own times.
+    /// The sim's uplink model measures it, at every 100 ms from the start,
+    /// as a packet offered then meets it; a testbed run derives it from its
+    /// backlog over its tbf's rate as its tc samples show it
+    /// ([`crate::testbed`]), its backlog at those times from its captures
+    /// where it has them, else at its tc samples' own times, each the queue
+    /// an offer then met: its tbf's `entry_delay` later.
     pub up_queue: Vec<(strims_base::time::Duration, strims_base::time::Duration)>,
     /// The uplink queue's bytes at the same samples: (time since the start,
     /// bytes). A testbed run measures them (its captures' queue, else its
@@ -738,7 +740,8 @@ pub struct WanHostReport {
     pub competing: Vec<(strims_base::time::Duration, u64)>,
     /// The same after each walk of the run that moved it, stamped with the
     /// walk's time (a testbed run's after each of their packets, stamped
-    /// with its capture time): the truth's competing uploads
+    /// with its capture time less the node's egress delay: its offer and
+    /// its wait in the queue): the truth's competing uploads
     /// (`competing_before`).
     pub competing_log: Vec<(strims_base::time::Duration, u64)>,
     /// With the window model, the segments its connections lost to a full
@@ -778,8 +781,9 @@ pub struct WanHostReport {
     /// its uplink's queue: a testbed node's egress delay, the netem ahead
     /// of its modem's queue; zero in the model, whose path's delay comes
     /// after the queue. What rebuilds the queue from `packets` (the
-    /// testbed's `packets::queues` and `packets::drops`, the shaper
-    /// replay) adds it.
+    /// testbed's `packets::queues`, the shaper replay) adds it; the
+    /// testbed's `packets::drops` counts each drop at its offer, as the
+    /// model's queue takes it, and doesn't.
     pub entry_delay: strims_base::time::Duration,
     /// With [`Scenario::sctp_log`] naming it, its data channels'
     /// associations' events by peer and link, each association's in time

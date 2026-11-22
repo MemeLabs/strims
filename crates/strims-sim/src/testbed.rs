@@ -33,25 +33,33 @@
 //!   link charges them (`strims_wan::framing`: under the testbed's tbf
 //!   class, each packet's IP length and an Ethernet header). A testbed run
 //!   counts each packet's IP length from its node's capture of its egress
-//!   to the swarm's nodes (`PCAP=1`: `pcap-<i>.pcap`, after the queue), and
-//!   its queue's rate from its tbf (`tc-<i>.log`), as each sample shows
-//!   it; the queries convert between the two by the link class
+//!   to the swarm's nodes (`PCAP=1`: `pcap-<i>.pcap`, after the queue),
+//!   each at its capture time less the node's egress delay, its departure
+//!   in its offer's clock (its offer and its wait in the queue, as the
+//!   model's queue, ahead of its path's delay, has it), and its queue's
+//!   rate from its tbf (`tc-<i>.log`), as each sample shows it; the queries convert between the two by the link class
 //!   (scoring.sql's link_overhead). Its queue is sampled where the sim
 //!   samples its uplinks, every 100 ms from the run's start (the bins'
-//!   edges), and its drops counted in the bin they came to the queue in,
-//!   as the sim counts its, from its captures (`packets::queues`: what had
-//!   entered and not left; `packets::drops`: what had no room), and past
-//!   them, or without them, at its tc samples, which fall at their
-//!   sampler's own phase; a node without a tc log has no tbf, and no queue
-//!   or drops. What a
+//!   edges), as the queue an offer at the edge met, and its drops counted
+//!   in the bin their packets were offered in, as the sim, whose queue
+//!   comes before its path's delay, counts its: its tbf, behind the node's
+//!   egress delay, is read that delay later. They come from its captures
+//!   (`packets::queues`: what had entered and not left; `packets::drops`:
+//!   what had no room), and past them, or without them, from its tc
+//!   samples, which fall at their sampler's own phase, each timed its
+//!   delay before; a node without a tc log has no tbf, and no queue or
+//!   drops. What a
 //!   capture can't tell (a data channel's SACKs inside DTLS, which it
 //!   counts with the data) is left empty, and a sampler that stopped before
 //!   the run's end leaves its columns empty past it (`Report::wire_ends`,
 //!   `WanHostReport::up_queue_until`): a tc sampler past its last sample,
 //!   the captures' queue past their last sample where the tc samples don't
 //!   go on to the next edge, a capture past the stamp run.sh writes when
-//!   its tcpdump exits while its node runs (`pcap-<i>.end`). The competing upload's bytes are its
-//!   packets' to the sink, from the seed's capture.
+//!   its tcpdump exits while its node runs (`pcap-<i>.end`). The
+//!   competing upload's bytes are its packets' to the sink, from the
+//!   seed's capture, in the same clock. Its steps (steps.log) are the
+//!   scenario's at their stamps less the seed's delay, when the offers
+//!   met them.
 //! - **TCP's own counts.** A native node's retransmits are its capture's
 //!   segments to the swarm that resent bytes its link had carried
 //!   (`carried_again`): a loss past its queue, as the window model counts
@@ -1013,6 +1021,12 @@ impl Run {
             *sw = x;
         }
         let seed = s.swarms.first().map_or(0, |sw| sw.seed);
+        // Each step at its stamped time (when its tc applied at the seed's
+        // tbf) less the seed's egress delay, the netem ahead of the tbf:
+        // the offers from then met the step's rate, as the model's queue,
+        // ahead of its path's delay, meets each offer as it is made.
+        let entry =
+            Duration::from_micros(packets::node_link(&self.dir, seed).map_or(0, |l| l.delay_us()));
         if let Some(text) = self.file("steps.log")
             && let Some(h) = s.hosts.get_mut(seed)
         {
@@ -1022,7 +1036,10 @@ impl Run {
                     let mut w = l.split_whitespace();
                     let ms: u64 = w.next()?.parse().ok()?;
                     let mbit: f64 = w.next()?.parse().ok()?;
-                    Some((self.at(ms)?, (mbit * 125_000.0) as u64))
+                    Some((
+                        self.at(ms)?.saturating_sub(entry),
+                        (mbit * 125_000.0) as u64,
+                    ))
                 })
                 .collect();
         }
@@ -2556,11 +2573,14 @@ struct Network {
     sends: Vec<Sent>,
     /// Each host's uplink rate at each of its tc samples, bytes a second:
     /// its tbf's as the sample shows it, else the scenario's (none without
-    /// a tc log). What its queue's wait divides by (`packets::queues`).
+    /// a tc log), each timed as the offers that met it, its egress delay
+    /// before the sample. What its queue's wait divides by
+    /// (`packets::queues`).
     up_rates: Vec<Vec<(strims_base::time::Duration, u64)>>,
     /// Each host's tbf drops at each of its tc samples, (time since the
-    /// start, the counter: none without a tc log), and the last edge they
-    /// tell (`ends`'): what `packets::drops` takes past its captures.
+    /// start, the counter: none without a tc log), timed as `up_rates`',
+    /// and the last edge they tell (`ends`'): what `packets::drops` takes
+    /// past its captures.
     tc_drops: Vec<packets::TcDrops>,
 }
 
@@ -2638,15 +2658,21 @@ fn dropped(
 /// The truth's log of a competing upload from the node at `me` (its
 /// packets to the sink in its capture `ps`, in capture order): after each
 /// packet, its IP bytes so far, stamped with the packet's capture time
+/// less the node's egress delay `delay_us` (the netem ahead of its queue)
 /// since the run's start (`LEAD` before the stream's, `start_ms`), as
 /// `report::competing_before` reads a log: what a window counts is what
-/// the link carried in it.
+/// the link carried in it, each packet at its offer and its wait in the
+/// queue. The model logs a competing segment's bytes as its queue takes it
+/// (`Scheduler::cross_log`), its wait ahead of it: a carried capture can't
+/// tell a packet's offer from its wait, and its offered capture holds the
+/// competitor's segments GSO's buffers whole and its drops among them.
 fn competing_log(
     ps: &[Packet],
     me: Option<u8>,
     start_ms: u64,
+    delay_us: u64,
 ) -> Vec<(strims_base::time::Duration, u64)> {
-    let run0_us = start_ms.saturating_sub(LEAD.as_millis() as u64) * 1000;
+    let run0_us = start_ms.saturating_sub(LEAD.as_millis() as u64) * 1000 + delay_us;
     let mut sent = 0u64;
     ps.iter()
         .filter(|p| p.src.is_some() && p.src == me && p.dst == Some(SINK))
@@ -2864,16 +2890,23 @@ impl Network {
             let pcap = std::fs::read(run.dir.join(format!("pcap-{h}.pcap")))
                 .ok()
                 .and_then(|b| packets(&b));
+            // Its egress delay (its `links` line's netem), ahead of its
+            // tbf, where the model's path's delay comes after its queue: a
+            // packet its eth0 capture took at t left the queue, in its
+            // offer's clock (its offer and its wait in the queue, the
+            // model's departure), at t less the delay, and its tbf's
+            // sample at t is the queue an offer then met.
+            let delay_us = packets::node_link(&run.dir, h).map_or(0, |l| l.delay_us());
             // A capture that stopped while its node ran (tcpdump exited:
             // run.sh's pcap-<i>.end, its unix ms) leaves the node's wire
             // columns unmeasured past it, not 0: they end at the first
-            // edge after it, as a stopped tc sampler's drops do. A
-            // capture's last packet can't tell: a node's own traffic
-            // falls silent for seconds while it runs.
+            // edge after it, in the offers' clock, as a stopped tc
+            // sampler's drops do. A capture's last packet can't tell: a
+            // node's own traffic falls silent for seconds while it runs.
             let pcap_end = run
                 .file(&format!("pcap-{h}.end"))
                 .and_then(|t| t.split_whitespace().next()?.parse::<u64>().ok())
-                .and_then(|ms| (0..bins.len()).find(|&k| edge_us(k as u64) > ms * 1000));
+                .and_then(|ms| (0..bins.len()).find(|&k| edge_us(k as u64) + delay_us > ms * 1000));
             if let (Some(end), true) = (pcap_end, pcap.is_some()) {
                 for c in PCAP_COUNTERS {
                     ends.insert((h, up(c)), end);
@@ -2956,7 +2989,7 @@ impl Network {
                         .map(|(p, carried_again)| {
                             let offer = offered.as_ref().and_then(|o| o.resent(p));
                             Send {
-                                us: p.us,
+                                us: p.us.saturating_sub(delay_us),
                                 charge: framing.packet(p.ip_len as usize) as u64,
                                 app: p.tcp.is_some().then_some(p.payload),
                                 est: match (p.udp, stack) {
@@ -2981,10 +3014,12 @@ impl Network {
                         };
                     }
                     for (k, edge) in bins.iter_mut().enumerate() {
-                        while resent.next_if(|&us| us < edge_us(k as u64)).is_some() {
+                        // The edge in the captures' clock.
+                        let upto = edge_us(k as u64) + delay_us;
+                        while resent.next_if(|&us| us < upto).is_some() {
                             add(&mut cum, "retransmits", 1);
                         }
-                        while let Some(p) = mine.next_if(|p| p.us < edge_us(k as u64)) {
+                        while let Some(p) = mine.next_if(|p| p.us < upto) {
                             if p.dst == Some(SINK) {
                                 cross += p.ip_len;
                             } else if !node(p.dst) {
@@ -3015,9 +3050,10 @@ impl Network {
                     w.ack_bytes = cum.get(up("up_ack_bytes")).copied().unwrap_or(0);
                     // The truth's log of the competitor's bytes: its IP bytes
                     // so far as each of its packets leaves, stamped with the
-                    // packet's capture time (report::available charges them).
+                    // packet's capture time less the delay
+                    // (report::available charges them).
                     if h == seed {
-                        w.competing_log = competing_log(&ps, me, run.start_ms);
+                        w.competing_log = competing_log(&ps, me, run.start_ms, delay_us);
                     }
                 }
                 None => no_pcap.push(h),
@@ -3030,13 +3066,26 @@ impl Network {
                 .filter(|s| !s.is_empty());
             match tbf {
                 Some(samples) => {
+                    // The tbf sits behind the node's egress delay (its
+                    // `links` line's netem), so a sample at t holds the
+                    // queue an offer a delay before t met, and the drops of
+                    // the offers before then: each sample is timed so
+                    // (`offered`), as the model's queue, ahead of its path's
+                    // delay, meets each offer as it is made
+                    // (`packets::queues`, `packets::drops`).
+                    let delay = strims_base::time::Duration::from_micros(
+                        i64::try_from(delay_us).unwrap_or(i64::MAX),
+                    );
+                    let offered = |t: Duration| strims_base::time::Duration::from(t) - delay;
                     let mut at = samples.iter().peekable();
                     let mut last = samples.first().map_or(0, |x| x.drops);
                     // With what slow receivers' downlinks dropped of its.
                     let mut downs = down.iter().peekable();
                     let mut lost = 0;
                     for (k, edge) in bins.iter_mut().enumerate() {
-                        while let Some(s) = at.next_if(|x| x.ms * 1000 < edge_us(k as u64)) {
+                        while let Some(s) =
+                            at.next_if(|x| x.ms * 1000 < edge_us(k as u64) + delay_us)
+                        {
                             last = s.drops;
                         }
                         while downs.next_if(|&&us| us < edge_us(k as u64)).is_some() {
@@ -3051,7 +3100,7 @@ impl Network {
                         // edge, as one at the start is.
                         d.0 = samples
                             .iter()
-                            .map(|x| (run.at(x.ms).unwrap_or_default().into(), x.drops))
+                            .map(|x| (offered(run.at(x.ms).unwrap_or_default()), x.drops))
                             .collect();
                     }
                     // A sampler that stopped before the run's end leaves its
@@ -3060,7 +3109,7 @@ impl Network {
                     // and an interval (the median gap) more.
                     if let Some(t_last) = samples.last().map(|s| s.ms) {
                         if let Some(end) =
-                            (0..bins.len()).find(|&k| edge_us(k as u64) > t_last * 1000)
+                            (0..bins.len()).find(|&k| edge_us(k as u64) + delay_us > t_last * 1000)
                         {
                             ends.insert((h, up("drops")), end);
                             if let Some(d) = tc_drops.get_mut(h) {
@@ -3074,7 +3123,7 @@ impl Network {
                             .collect();
                         gaps.sort_unstable();
                         let gap = gaps.get(gaps.len() / 2).copied().unwrap_or(0);
-                        w.up_queue_until = run.at(t_last + gap).map(Into::into);
+                        w.up_queue_until = run.at(t_last + gap).map(offered);
                     }
                     w.queue_drops = samples
                         .last()
@@ -3102,10 +3151,10 @@ impl Network {
                             .max(1);
                         let wait = i64::try_from(s.held * 1_000_000 / rate).unwrap_or(i64::MAX);
                         w.up_queue
-                            .push((t.into(), strims_base::time::Duration::from_micros(wait)));
-                        w.up_backlog.push((t.into(), s.held));
+                            .push((offered(t), strims_base::time::Duration::from_micros(wait)));
+                        w.up_backlog.push((offered(t), s.held));
                         if let Some(r) = up_rates.get_mut(h) {
-                            r.push((t.into(), rate));
+                            r.push((offered(t), rate));
                         }
                     }
                 }
@@ -3964,14 +4013,16 @@ mod tests {
     fn a_sampler_that_stopped_leaves_its_columns_unmeasured_past_it() {
         let dir = fixture("stopped");
         let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
-        // tc-0.log's last sample is 450 ms in: the drops end at the first
-        // edge after it, the queue an interval (the median gap) on.
+        // tc-0.log's last sample is 450 ms in, the queue the offers of
+        // 430 ms met (the seed's egress delay is 20 ms): the drops end at
+        // the first edge after it, the queue an interval (the median gap)
+        // on.
         let end = r.wire_ends[&(0, up("drops"))];
         assert!(end < r.wire_bins.len() - 1, "{end}");
         let w = &r.wan.as_ref().unwrap().hosts[0];
         assert_eq!(
             w.up_queue_until.unwrap().as_millis(),
-            (LEAD + Duration::from_millis(450 + 200)).as_millis() as i64
+            (LEAD + Duration::from_millis(430 + 200)).as_millis() as i64
         );
         let out = dir.join("tables");
         r.write_tables(&out, Duration::from_millis(100), true)
@@ -3996,8 +4047,9 @@ mod tests {
     }
 
     /// With its captures, a run's uplink queue at each bin's end is what
-    /// they say its queue held there, as the sim samples its model's at the
-    /// edges, not its tc samples', which fall at their sampler's phase.
+    /// they say its queue held as an offer there met it, its egress delay
+    /// later, as the sim samples its model's at the edges, not its tc
+    /// samples', which fall at their sampler's phase.
     #[test]
     fn a_testbed_runs_uplink_queue_at_a_bins_end_is_its_captures() {
         let dir = fixture("edges");
@@ -4007,13 +4059,14 @@ mod tests {
             p[4..6].copy_from_slice(&i.to_be_bytes());
             p
         };
-        // The seed offers 15 segments at 270 ms, which enter its tbf 20 ms
-        // on (its delay) and leave 2 ms apart; 2 at 375 ms, 10 ms apart,
-        // after a step to 5 Mbit/s logged at 380 ms that the tc samples show
-        // from 450 ms; 7 at 570 ms, 3 ms apart; one at 860 ms, and one at
-        // 1180 ms past what the captures tell. Its queue drops 3 more at
-        // 270 ms, which its tc samples count by 450 ms, and one more at
-        // 570 ms, past their last.
+        // The seed offers 15 segments at 290 ms, which enter its tbf 20 ms
+        // on (its delay) and leave 2 ms apart; 2 at 395 ms, 10 ms apart,
+        // after a step to 5 Mbit/s logged at 400 ms (met by the offers from
+        // 380 ms) that the tc samples show from 450 ms (the offers of
+        // 430 ms'); 7 at 590 ms, 3 ms apart; one at 880 ms, and one at
+        // 1200 ms past what the captures tell. Its queue drops 3 more at
+        // 290 ms, which its tc samples count by 450 ms, and one more at
+        // 590 ms, past their last.
         let (mut offered, mut carried) = (Vec::new(), Vec::new());
         let mut add = |at: u64, n: u16, gap: u64, lost: u16| {
             for k in 0..n + lost {
@@ -4024,14 +4077,14 @@ mod tests {
                 }
             }
         };
-        add(270, 15, 2, 3);
-        add(375, 2, 10, 0);
-        add(570, 7, 3, 1);
-        add(860, 1, 1, 0);
-        add(1180, 1, 1, 0);
+        add(290, 15, 2, 3);
+        add(395, 2, 10, 0);
+        add(590, 7, 3, 1);
+        add(880, 1, 1, 0);
+        add(1200, 1, 1, 0);
         std::fs::write(dir.join("pcap-0-offered.pcap"), pcap(&offered)).unwrap();
         std::fs::write(dir.join("pcap-0.pcap"), pcap(&carried)).unwrap();
-        std::fs::write(dir.join("steps.log"), format!("{} 5\n", START + 380)).unwrap();
+        std::fs::write(dir.join("steps.log"), format!("{} 5\n", START + 400)).unwrap();
         let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
         let out = dir.join("tables");
         r.write_tables(&out, Duration::from_millis(100), true)
@@ -4057,9 +4110,10 @@ mod tests {
         let at = |t: i64| got.iter().find(|x| x.0 == t).map(|x| x.1.clone());
         let queue = |b: u64, rate: u64| format!("{},{b}", b * 1000 / rate);
         let charge = 1500 + 14;
-        // The bin to 300 ms: 5 of the 15 had left by its end, the wait at
-        // the 10 Mbit/s of the tc sample before it (250 ms), whose backlog
-        // reads one packet.
+        // The bin to 300 ms: an offer there entered the tbf at 320 ms, by
+        // when 5 of the 15 had left, the wait at the 10 Mbit/s of the tc
+        // sample before (250 ms, the offers of 230 ms'), whose backlog reads
+        // one packet.
         assert_eq!(
             at(200),
             Some(queue((15 - 5) * charge, 1_250_000)),
@@ -4069,19 +4123,38 @@ mod tests {
         // To 400 ms: both of the 2 there, at the step's rate, which the tc
         // sample after it shows.
         assert_eq!(at(300), Some(queue(2 * charge, 625_000)));
-        // To 600 ms: 3 of the 7 had left, at the 5 Mbit/s since 450 ms.
+        // To 600 ms: 3 of the 7 had left by 620 ms, at the 5 Mbit/s since.
         assert_eq!(at(500), Some(queue((7 - 3) * charge, 625_000)));
-        // The captures tell to the last told packet's entry (880 ms),
+        // The captures tell to the last told packet's offer (880 ms),
         // their last sample at 800 ms, and the tc samples end at 450 ms:
         // the queue is empty past that sample.
         assert_eq!(at(700), Some(queue(0, 1)));
         assert_eq!(at(800), Some(",".to_owned()));
-        // At every edge they tell, the packets' own queue, each in it from
-        // its entry, its delay after its offer.
+        // Its departures in its offers' clock: each carried packet at its
+        // capture less its 20 ms delay (its offer and its wait in the
+        // queue, the model's departure). Of the 15 offered at 290 ms, the
+        // 4 that left by 300 ms (292 to 298 ms, captured from 312 ms) are
+        // in the bin to it, the other 11 in the next; the 2 offered at
+        // 395 ms left at 405 and 415 ms.
+        let sent: Vec<(i64, i64)> = text
+            .lines()
+            .skip(1)
+            .map(|l| {
+                let f: Vec<&str> = l.split(',').collect();
+                (
+                    f[t].parse().unwrap(),
+                    f[col("seed_up_packets")].parse().unwrap(),
+                )
+            })
+            .collect();
+        let sent_in = |t: i64| sent.iter().find(|x| x.0 == t).map(|x| x.1);
+        assert_eq!([200, 300, 400].map(sent_in), [Some(4), Some(11), Some(2)]);
+        // At every edge they tell, the queue an offer there met: the
+        // packets offered before it that hadn't left the tbf by its entry,
+        // its delay after the edge.
         let w = &r.wan.as_ref().unwrap().hosts[0];
-        let entry = |p: &crate::report::PacketRecord| p.at + w.entry_delay;
         assert_eq!(w.entry_delay, Duration::from_millis(20).into());
-        let last = w.packets.iter().map(entry).max().unwrap();
+        let last = w.packets.iter().map(|p| p.at).max().unwrap();
         let mut n = 0;
         for (t, q) in &got {
             let edge = strims_base::time::Duration::from(LEAD)
@@ -4089,20 +4162,24 @@ mod tests {
             if edge > last {
                 continue;
             }
+            let entry = edge + w.entry_delay;
             let held: u64 = w
                 .packets
                 .iter()
-                .filter(|p| entry(p) <= edge && p.sent.is_some_and(|s| s > edge))
+                .filter(|p| p.at < edge && p.sent.is_some_and(|s| s > entry))
                 .map(|p| u64::from(p.charged_bytes.unwrap()))
                 .sum();
             assert!(q.ends_with(&format!(",{held}")), "{t} {q}");
             n += 1;
         }
         assert!(n >= 8, "{n}");
-        // Its drops in each bin are those its packets came to a full queue
-        // in, as the sim counts its, not where its tc samples counted them
-        // (the 3 at 290 ms in the bin to 500 ms); told past the tc log's
-        // last sample to the captures' last edge (800 ms), and empty past.
+        // Its drops in each bin are those of the packets offered in it that
+        // found its queue full, as the sim counts its at its queue, ahead of
+        // its path's delay: the 3 offered at 290 ms in the bin to 300 ms,
+        // though they came to the tbf at 310 ms, and not where its tc
+        // samples counted them (by 450 ms, in the bin to 500 ms); told past
+        // the tc log's last sample to the captures' last edge (800 ms), and
+        // empty past.
         let d = col("seed_drops");
         let drops: Vec<(i64, String)> = text
             .lines()
@@ -4129,13 +4206,77 @@ mod tests {
                 .packets
                 .iter()
                 .filter(|p| {
-                    p.lost == Some(crate::report::PacketLoss::Queue)
-                        && from <= entry(p)
-                        && entry(p) < to
+                    p.lost == Some(crate::report::PacketLoss::Queue) && from <= p.at && p.at < to
                 })
                 .count();
             assert_eq!(*x, lost.to_string(), "{t}");
         }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A bin's queue at its end is the one a packet offered there meets, as
+    /// the sim's queue, ahead of its path's delay, meets each offer: the
+    /// seed's tbf as it held it the seed's egress delay past the edge, when
+    /// that packet entered it, which its own backlog counts.
+    #[test]
+    fn an_offer_at_a_bins_end_meets_the_queue_the_bin_reports() {
+        let dir = fixture("offer-edge");
+        let us = |ms: u64| (START + ms) * 1000;
+        let seg = |i: u16| {
+            let mut p = tcp_seq(10, 11, 1448, u32::from(i) * 1448);
+            p[4..6].copy_from_slice(&i.to_be_bytes());
+            p
+        };
+        // The seed offers 10 segments at 290 ms, which enter its tbf at
+        // 310 ms and leave 3 ms apart from 313 ms; one at 300 ms, a bin's
+        // end, which enters it at 320 ms, when 7 of them are still there,
+        // and leaves after them; and one at 700 ms, whose capture tells the
+        // others' fates.
+        let (mut offered, mut carried) = (Vec::new(), Vec::new());
+        for i in 0..10u16 {
+            offered.push((us(290), seg(i)));
+            carried.push((us(313) + 3000 * u64::from(i), seg(i)));
+        }
+        offered.push((us(300), seg(10)));
+        carried.push((us(343), seg(10)));
+        offered.push((us(700), seg(11)));
+        carried.push((us(721), seg(11)));
+        std::fs::write(dir.join("pcap-0-offered.pcap"), pcap(&offered)).unwrap();
+        std::fs::write(dir.join("pcap-0.pcap"), pcap(&carried)).unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        let w = &r.wan.as_ref().unwrap().hosts[0];
+        let edge: strims_base::time::Duration = (LEAD + Duration::from_millis(300)).into();
+        let met = w.packets.iter().find(|p| p.at == edge).unwrap();
+        let charge = 1500 + 14;
+        assert_eq!(met.backlog_bytes, Some(7 * charge));
+        let out = dir.join("tables");
+        r.write_tables(&out, Duration::from_millis(100), true)
+            .unwrap();
+        let text = crate::tables::read_table(&out, "bins").unwrap();
+        let head: Vec<&str> = text.lines().next().unwrap().split(',').collect();
+        let col = |name: &str| head.iter().position(|c| *c == name).unwrap();
+        let (t, ms, bytes) = (
+            col("t_ms"),
+            col("seed_up_queue_ms"),
+            col("seed_up_queue_bytes"),
+        );
+        let row = text
+            .lines()
+            .skip(1)
+            .map(|l| l.split(',').collect::<Vec<_>>())
+            .find(|f| f[t] == "200")
+            .unwrap();
+        // The bin to 300 ms reads that backlog, at the 10 Mbit/s of the tc
+        // sample before (250 ms, the offers of 230 ms'); its tbf held none
+        // of it at the edge itself.
+        let b = met.backlog_bytes.unwrap();
+        assert_eq!(
+            (row[ms], row[bytes]),
+            (
+                (b * 1000 / 1_250_000).to_string().as_str(),
+                b.to_string().as_str()
+            )
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -4155,9 +4296,10 @@ mod tests {
         };
         // The seed offers 3 segments at 470 ms; 2 at 770 ms, which enter its
         // tbf at 790 ms, the second dropped; one at 800 ms, the captures'
-        // last told entry (820 ms); and one at 1180 ms past it. Its tc
-        // samples, every 100 ms from 50 ms to 1150 ms, count the drop at
-        // 850 ms and 2 more at 950 ms, past the captures.
+        // last told offer (its entry at 820 ms); and one at 1180 ms past it.
+        // Its tc samples, every 100 ms from 50 ms to 1150 ms (each the
+        // queue of the offers 20 ms before), count the drop at 850 ms and 2
+        // more at 950 ms, past the captures.
         let (mut offered, mut carried) = (Vec::new(), Vec::new());
         let mut add = |at: u64, n: u16, lost: u16| {
             for k in 0..n + lost {
@@ -4217,10 +4359,10 @@ mod tests {
             .map(|l| l.split(',').map(str::to_owned).collect())
             .collect();
         let at = |ms: i64| rows.iter().find(|r| r[t] == ms.to_string()).unwrap();
-        // The bin to 800 ms, the captures' last told edge, holds the drop at
-        // 790 ms; the bin past it none, though the tc sample at 850 ms is
-        // the first to count it; the 2 the tc samples count by 950 ms are
-        // in the bin to 1 s, at their phase.
+        // The bin to 800 ms, the captures' last told edge, holds the drop
+        // offered at 770 ms; the bin past it none, though the tc sample at
+        // 850 ms is the first to count it; the 2 the tc samples count by
+        // 950 ms are in the bin to 1 s, at their phase.
         let drops: Vec<&str> = (0..11).map(|k| at(k * 100)[d].as_str()).collect();
         assert_eq!(
             drops,
@@ -4235,14 +4377,13 @@ mod tests {
                 .packets
                 .iter()
                 .filter(|p| {
-                    p.lost == Some(crate::report::PacketLoss::Queue)
-                        && from <= entry(p)
-                        && entry(p) < to
+                    p.lost == Some(crate::report::PacketLoss::Queue) && from <= p.at && p.at < to
                 })
                 .count();
             assert_eq!(at(k * 100)[d], lost.to_string(), "{k}");
         }
-        // The queue at the captures' last sample (800 ms) is theirs, empty;
+        // The queue at the captures' last sample (800 ms) is theirs, the
+        // one an offer there met, the packet offered at it behind it: empty;
         // at the next edge, the tc sample at 850 ms's backlog.
         let queue = |r: &Vec<String>| format!("{},{}", r[ms], r[bytes]);
         assert_eq!(queue(at(700)), "0,0");
@@ -5297,13 +5438,14 @@ mod tests {
         assert_eq!(read("", &compete(3050)).unwrap(), "step 1 not logged");
         // run.sh's line: when the step applied in the seed's container, its
         // rate, and its exec's start and return here, which is late. The
-        // run is on time, and its twin steps when the step applied.
+        // run is on time, and its twin steps when the step applied less the
+        // seed's 20 ms egress delay: the offers from then met it at the tbf.
         let line = format!("{} 5 {} {}\n", START + 2100, START + 2030, START + 4500);
         assert_eq!(read(&line, &compete(3050)), None);
         let r = Run::read(&dir, &BTreeMap::new()).unwrap();
         assert_eq!(
             r.scenario().hosts[0].up_steps,
-            vec![(r.at(START + 2100).unwrap(), 625_000)]
+            vec![(r.at(START + 2080).unwrap(), 625_000)]
         );
         // An upload iperf3 failed (its report's `error`) keys the run apart,
         // and its twin has none of it.
@@ -5328,11 +5470,11 @@ mod tests {
     }
 
     /// The truth's log of a competing upload holds each of its packets at
-    /// its capture time: a window counts what the link carried in it,
-    /// however it falls on the bins' edges, and the node's other packets
-    /// and the sink's are none of it.
+    /// its capture time less its node's egress delay: a window counts what
+    /// the link carried in it, however it falls on the bins' edges, and the
+    /// node's other packets and the sink's are none of it.
     #[test]
-    fn the_truths_competitor_log_holds_each_packet_at_its_capture_time() {
+    fn the_truths_competitor_log_holds_each_packet_at_its_capture_less_its_delay() {
         let packet = |us: u64, src: u8, dst: u8| Packet {
             us: START * 1000 + us,
             src: Some(src),
@@ -5355,11 +5497,18 @@ mod tests {
                 packet(us + 2, SINK, 10),
             ]);
         }
-        let log = competing_log(&ps, Some(10), START);
+        let log = competing_log(&ps, Some(10), START, 0);
         assert_eq!(log.len(), 500);
         let at = |ms: u64| strims_base::time::Duration::from(LEAD + Duration::from_millis(ms));
         assert_eq!(log.first(), Some(&(at(20_005), 1500)));
         assert_eq!(log.last().map(|x| x.1), Some(500 * 1500));
+        // Behind a 20 ms egress delay, each packet left its queue, in its
+        // offer's clock, 20 ms before its capture.
+        let offered = competing_log(&ps, Some(10), START, 20_000);
+        assert_eq!(offered.first(), Some(&(at(19_985), 1500)));
+        assert!(offered.iter().zip(&log).all(|(a, b)| {
+            a.1 == b.1 && b.0 - a.0 == strims_base::time::Duration::from_millis(20)
+        }));
         let between = |a: u64, b: u64| {
             crate::report::competing_before(&log, at(b))
                 - crate::report::competing_before(&log, at(a))

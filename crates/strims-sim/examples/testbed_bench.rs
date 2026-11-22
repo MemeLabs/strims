@@ -234,8 +234,11 @@ fn competitor_starts(dir: &std::path::Path, bench: &mut Bench) -> Result<(), Str
 /// a third of a burst period). The column is when `tc` returned in the
 /// seed's container, the kernel having changed the qdisc by then; a run
 /// whose log has two columns stamped the exec's return here instead,
-/// which can trail the change by 0.7 s. A step the log lacks keeps its
-/// nominal time.
+/// which can trail the change by 0.7 s. Each step is that time less the
+/// seed's egress delay (its netem, ahead of its tbf): the offers from then
+/// met the step's rate, as the sim's queue, ahead of its path's delay,
+/// meets each offer as it is made. A step the log lacks keeps its nominal
+/// time.
 fn applied_steps(dir: &std::path::Path, bench: &mut Bench) -> Result<(), String> {
     let Ok(log) = std::fs::read_to_string(dir.join("steps.log")) else {
         return Ok(());
@@ -247,9 +250,10 @@ fn applied_steps(dir: &std::path::Path, bench: &mut Bench) -> Result<(), String>
         .lines()
         .filter_map(|l| l.split_whitespace().next()?.parse::<f64>().ok())
         .collect();
+    let delay_ms = bench.sites.first().map_or(0, |s| s.delay_ms) as f64;
     for (_, steps) in bench.up_steps.iter_mut().filter(|(h, _)| *h == 0) {
         for (s, at) in steps.iter_mut().zip(&ats) {
-            s.0 = (at - start_ms) / 1000.0;
+            s.0 = (at - start_ms - delay_ms) / 1000.0;
         }
     }
     Ok(())
