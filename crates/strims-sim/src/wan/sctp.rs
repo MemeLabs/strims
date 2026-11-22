@@ -236,15 +236,25 @@ pub struct SctpProfile {
     /// least round trip of 0 ms, from writes and those readings).
     pub buffered_flight: bool,
     /// Whether a page reads a channel's buffered amount as its own count:
-    /// its last reading and each message it sends since, set to the stack's
-    /// amount as the stack answers, never falling as the stack sends
-    /// between: Chromium's page reads it so, its `bufferedamountlow` coming
-    /// as it reads the fall. The stack answers at the end of a send
-    /// opportunity that leaves the channel's queue empty, or that brings
-    /// what it sent of the channel since its last answer past 100 KiB (the
-    /// one a message took, or a SACK's or a timer's that takes the queue to
-    /// the threshold it set). A node's writer waiting for its mark then
-    /// wakes on an answer.
+    /// each message it sends adds to it, and each of the stack's answers
+    /// takes off the bytes the stack had sent of the channel by the answer
+    /// since its last, never falling as the stack sends between. Chromium's
+    /// page reads it so (branch 8078): Blink's `RTCDataChannel` adds each
+    /// message to its `buffered_amount_` as the page sends it and takes off
+    /// each `OnBufferedAmountChange`'s `sent_data_size` (blink's
+    /// rtc_data_channel.cc:522, 759-767), its `bufferedamountlow` coming as
+    /// that takes it to the threshold. That size is the bytes of the
+    /// channel's messages the network thread took less dcSCTP's buffered
+    /// amount then, past those the last answer took off ([`ANSWER_EVERY`]);
+    /// dcSCTP's amount falls as it cuts a message's chunks for a packet
+    /// (net/dcsctp/tx/rr_send_queue.cc:266), not at the SACK. So the page's
+    /// messages still on their way to the network thread at an answer, and
+    /// those it sends after, stay on its count. The stack answers at the
+    /// end of a send opportunity that leaves the channel's queue empty, or
+    /// that brings what it sent of the channel since its last answer past
+    /// 100 KiB (the one a message took, or a SACK's or a timer's that takes
+    /// the queue to the threshold it set). A node's writer waiting for its
+    /// mark then wakes on an answer.
     pub amount_at_sends: bool,
     /// What each packet takes of its host's one network thread, which
     /// every send opportunity of the host's associations waits for, if its
@@ -729,7 +739,12 @@ pub(super) struct Assoc {
 /// falls to the threshold it set at its last check, this much under the
 /// queue then, or empty (:910-914; `OnBufferedAmountLow`, :640), and
 /// answers once the queue is empty or the stack has sent more than this
-/// since the last answer (:899-904).
+/// since the last answer, with what it sent since (:899-904). Blink's
+/// observer takes the answer on the network thread (its
+/// `IsOkToCallOnTheNetworkThread`, :340-341; :220-230 is the signalling thread's
+/// adapter for one that doesn't) and posts it to the page's thread, a task
+/// per answer (blink's rtc_data_channel.cc:261-267), so the page takes each
+/// in turn.
 const ANSWER_EVERY: usize = 100 * 1024;
 
 impl Assoc {
@@ -962,14 +977,15 @@ impl Scheduler {
         *free
     }
 
-    /// `conn`'s stack answers its page at `at`: the page reads its
-    /// channel's amount as the stack's ([`SctpProfile::amount_at_sends`]),
-    /// once the walk reaches `at` ([`Scheduler::admit`]).
-    fn answer(&mut self, at: Time, conn: ConnKey) {
+    /// `conn`'s stack answers its page at `at` that it sent `sent` bytes of
+    /// the channel since its last answer, which the page takes off its count
+    /// ([`SctpProfile::amount_at_sends`]) once the walk reaches `at`
+    /// ([`Scheduler::admit`]).
+    fn answer(&mut self, at: Time, conn: ConnKey, sent: usize) {
         if self.buffers.is_some() {
             let key = self.next;
             self.next += 1;
-            self.answers.insert((at, key), conn);
+            self.answers.insert((at, key), (conn, sent));
         }
     }
 
@@ -980,10 +996,12 @@ impl Scheduler {
 
     /// Channel `conn` is up: its round trips start from its next chunk,
     /// as an association's estimate takes none from its handshake, whose
-    /// flights the model sends as data.
+    /// flights the model sends as data; and its answers count what it sends
+    /// from now on, as its page counts the messages it writes from now on.
     pub(crate) fn channel_up(&mut self, conn: ConnKey) {
         if let Some(a) = self.assocs.get_mut(&conn) {
             a.restart_round_trips();
+            a.unanswered = 0;
         }
     }
 
@@ -1327,20 +1345,17 @@ impl Scheduler {
         }
         if profile.amount_at_sends {
             let left = self.queued(conn);
-            let answers = self.assocs.get_mut(&conn).is_some_and(|a| {
+            let answer = self.assocs.get_mut(&conn).and_then(|a| {
                 let checks = std::mem::take(&mut a.wrote) || (queued > a.low && left <= a.low);
                 if !checks {
-                    return false;
+                    return None;
                 }
                 a.low = left.saturating_sub(ANSWER_EVERY);
                 let answers = (left == 0 && a.unanswered > 0) || a.unanswered > ANSWER_EVERY;
-                if answers {
-                    a.unanswered = 0;
-                }
-                answers
+                answers.then(|| std::mem::take(&mut a.unanswered))
             });
-            if answers {
-                self.answer(done, conn);
+            if let Some(sent) = answer {
+                self.answer(done, conn, sent);
             }
         }
     }

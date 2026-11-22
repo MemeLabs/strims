@@ -46,11 +46,12 @@
 //! it, against the mark the host held it for, and goes once the load is
 //! at it; nothing else wakes it. On a stack whose page counts a channel's amount itself
 //! ([`SctpProfile::amount_at_sends`]), a node's writer and its host's
-//! pacer read the amount so: its last reading and each message written
-//! since, the stack's as the stack answers ([`SendBuffers::answered`]: a
-//! send opportunity of its association, on its host's thread, left the
-//! channel's queue empty, or had sent more than 100 KiB of it since the last
-//! answer); between, as the stack sends, it holds. A writer waiting for
+//! pacer read the amount so: each message written adds to it, and each of
+//! the stack's answers takes off what the stack had sent of the channel by
+//! the answer since its last ([`SendBuffers::answered`]: a send opportunity
+//! of its association, on its host's thread, left the channel's queue
+//! empty, or had sent more than 100 KiB of it since the last answer), the
+//! messages written after left on; between, as the stack sends, it holds. A writer waiting for
 //! its mark wakes on an answer, and its pacer reads the amount at its
 //! check, as the browser's writer wakes on `bufferedamountlow` and reads
 //! it at its loop's next turn; its pacers read the page's clock, whole
@@ -464,15 +465,16 @@ impl SendBuffers {
         })
     }
 
-    /// Data channel `conn`'s stack answered its page at `at`: a page that
-    /// counts the amount ([`SctpProfile::amount_at_sends`]) reads it as the
-    /// stack's from now on. Returns the writer to wake, a paced writer's
-    /// waiting on its own cap once the amount is at its mark.
-    pub fn answered(&self, conn: ConnKey, at: Time) -> Option<Waker> {
+    /// Data channel `conn`'s stack answered its page at `at` that it sent
+    /// `sent` bytes since its last answer: a page that counts the amount
+    /// ([`SctpProfile::amount_at_sends`]) takes them off its count. Returns
+    /// the writer to wake, a paced writer's waiting on its own cap once the
+    /// amount is at its mark.
+    pub fn answered(&self, conn: ConnKey, sent: usize, at: Time) -> Option<Waker> {
         self.with(|b| {
             let c = b.conns.get_mut(&conn)?;
-            if c.shown.is_some() {
-                c.shown = Some(c.buffered());
+            if let Some(s) = &mut c.shown {
+                *s = s.saturating_sub(sent as u64);
             }
             release(b, conn, at)
         })
@@ -2216,8 +2218,8 @@ mod tests {
     }
 
     /// A Chromium page counts its channel's amount itself: each message on
-    /// its last reading, the stack's at each of the stack's answers, and
-    /// nothing as the stack sends between.
+    /// its last reading, less what each of the stack's answers says it sent,
+    /// and nothing as the stack sends between.
     #[test]
     fn a_chromium_page_counts_its_channels_amount() {
         let (b, k, _) = channels(&SctpProfile::CHROMIUM, 1);
@@ -2229,7 +2231,7 @@ mod tests {
         // stack's answer.
         b.admit(k[0], 1000, us(150));
         assert_eq!(read(), 1500);
-        b.answered(k[0], us(160));
+        b.answered(k[0], 1000, us(160));
         assert_eq!(read(), 500);
         // Past the answer the reading holds as the stack sends ...
         b.wrote(&k[0], 2000, true, ms(2));
@@ -2238,11 +2240,15 @@ mod tests {
         // ... and the next message adds to it, not to the stack's 1500.
         b.wrote(&k[0], 300, true, ms(6));
         assert_eq!(read(), 2800);
-        // Empty, it reads 0 at the stack's answer.
-        b.admit(k[0], 1800, ms(9));
-        assert_eq!(read(), 2800);
-        b.answered(k[0], ms(9));
-        assert_eq!(read(), 0);
+        // The answer takes off what the stack had sent by then: a message
+        // the page wrote after stays on its count, though the stack sent
+        // it before the page took the answer.
+        b.admit(k[0], 1500, ms(9));
+        b.wrote(&k[0], 700, true, ms(9));
+        b.admit(k[0], 1000, ms(9));
+        assert_eq!(read(), 3500);
+        b.answered(k[0], 2800, ms(9));
+        assert_eq!(read(), 700);
     }
 
     /// A Chromium writer refused at its cap waits however much its stack
@@ -2256,11 +2262,15 @@ mod tests {
         assert!(b.channel_write(&k[0], ms(0), &w) == Some(ChannelWrite::Wait));
         assert!(b.admit(k[0], 4000, us(100)).is_none());
         // An answer over the mark wakes nothing.
-        assert!(b.answered(k[0], us(200)).is_none());
+        assert!(b.answered(k[0], 4000, us(200)).is_none());
         assert_eq!(b.buffered(k[0]), Some(FLOOR - 4000));
         assert!(b.admit(k[0], (FLOOR - 4000 - 1) as usize, ms(10)).is_none());
         assert_eq!(b.buffered(k[0]), Some(FLOOR - 4000));
-        assert!(b.answered(k[0], ms(10)).is_some(), "at its mark");
+        assert!(
+            b.answered(k[0], (FLOOR - 4000 - 1) as usize, ms(10))
+                .is_some(),
+            "at its mark"
+        );
         assert_eq!(lows(&log, 0), [1]);
 
         let (b, k, _) = channels(&SctpProfile::FIREFOX, 1);

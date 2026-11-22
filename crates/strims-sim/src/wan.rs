@@ -1425,9 +1425,10 @@ pub(crate) struct Scheduler {
     down: Vec<bool>,
     /// The answers of the stacks whose page counts a channel's amount
     /// ([`sctp::SctpProfile::amount_at_sends`]), by time and order: the
-    /// channel's connection. Bound: the channels' send opportunities in
-    /// flight on their threads.
-    answers: BTreeMap<(Time, u64), (SocketAddr, SocketAddr)>,
+    /// channel's connection and the bytes the answer takes off its page's
+    /// count. Bound: the channels' send opportunities in flight on their
+    /// threads.
+    answers: BTreeMap<(Time, u64), ((SocketAddr, SocketAddr), usize)>,
     /// Per host, whether its packet log is on ([`Scenario::packet_log`]),
     /// and the packets it offered its uplink so far
     /// ([`WanHostReport::packets`]). Bound: the run's packets of the hosts
@@ -1982,10 +1983,10 @@ impl Scheduler {
                     b.admit(conn, len, at)
                 }
                 (_, Some(t)) if t <= now => {
-                    let Some(((at, _), conn)) = self.answers.pop_first() else {
+                    let Some(((at, _), (conn, sent))) = self.answers.pop_first() else {
                         break;
                     };
-                    b.answered(conn, at)
+                    b.answered(conn, sent, at)
                 }
                 _ => break,
             };
@@ -6082,8 +6083,8 @@ mod tests {
     /// A Chromium host's channels send through its one thread: each send
     /// opportunity once the thread is done with those before it, whatever
     /// its channel, its packets a cost apart and each its cost after the
-    /// one before; and its page's answer as the opportunity that left the
-    /// channel's queue empty sent its last. A Firefox host's take no
+    /// one before; and its page's answer, of the message's bytes, as the
+    /// opportunity that left the channel's queue empty sent its last. A Firefox host's take no
     /// thread: its packets go as their send opportunity comes.
     #[test]
     fn a_browsers_channels_send_through_its_one_thread() {
@@ -6114,10 +6115,10 @@ mod tests {
                 .map(|r| r.at - (t0 - epoch()))
                 .collect();
             let links: Vec<u32> = wan.packets[0].iter().map(|r| r.link.unwrap()).collect();
-            let answers: Vec<(Duration, ConnKey)> = wan
+            let answers: Vec<(Duration, ConnKey, usize)> = wan
                 .answers
                 .iter()
-                .map(|(&(t, _), &c)| (t - t0, c))
+                .map(|(&(t, _), &(c, sent))| (t - t0, c, sent))
                 .collect();
             let Some(cost) = p.packet_cost else {
                 assert_eq!(times.len(), 28, "{p:?}");
@@ -6145,12 +6146,12 @@ mod tests {
             assert_eq!(
                 answers,
                 [
-                    (at(4), conns[0]),
-                    (at(8), conns[0]),
-                    (at(12), conns[1]),
-                    (at(16), conns[1]),
-                    (at(20), conns[2]),
-                    (us(1000) + at(4), conns[2])
+                    (at(4), conns[0], 4000),
+                    (at(8), conns[0], 4000),
+                    (at(12), conns[1], 4000),
+                    (at(16), conns[1], 4000),
+                    (at(20), conns[2], 4000),
+                    (us(1000) + at(4), conns[2], 4000)
                 ]
             );
         }
