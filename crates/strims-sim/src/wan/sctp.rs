@@ -549,9 +549,10 @@ impl Handover {
 /// Whether `e` is host `h`'s data channels' event, as `h` crashes at
 /// `now`: a packet its network thread hands over, a chunk or a copy
 /// reaching its downlink or through it, its receivers' delayed SACKs, and
-/// its associations' timers and the SACKs reaching them; or a chunk it
-/// sent, a first send or a copy, whose packet hadn't left its uplink by
-/// `now`, which the crash forgot with the uplink's queue.
+/// its associations' timers and the SACKs reaching them, and the page's
+/// writes posted to its network thread that the thread hadn't woken for;
+/// or a chunk it sent, a first send or a copy, whose packet hadn't left its
+/// uplink by `now`, which the crash forgot with the uplink's queue.
 fn sctp_of(e: &Event, h: HostIx, now: Time, ip_host: &FastMap<IpAddr, HostIx>) -> bool {
     let at = |a: &SocketAddr| ip_host.get(&a.ip()) == Some(&h);
     match e {
@@ -773,8 +774,12 @@ const ANSWER_EVERY: usize = 100 * 1024;
 /// (84-88 at the 10th), where the model's took the packet's cost alone; and
 /// the viewers took 108 µs (117) from a data packet's arrival to their SACK
 /// alone's offer, a way in through the network service to the renderer's
-/// thread and out again, about 45 µs each way past a packet's work. What is
-/// left of the seed's, some 20 µs, is the post's wake.
+/// thread and out again, taken for about 45 µs each way past a packet's
+/// work. What is left of the seed's, some 20 µs, is taken for the post's
+/// wake. That split is assumed, not measured: the 20 µs is a fit, kept
+/// because the twin's seeds fit their testbed runs' writes better with it
+/// (`write_fit_of`), and the packet's way out to the network service stays
+/// unmodelled.
 pub const POST_WAKE: Duration = Duration::from_micros(20);
 
 impl Assoc {
@@ -1048,7 +1053,10 @@ impl Scheduler {
     /// not a flight of the setup's. Its stack takes it then, or, where the
     /// host's associations send through its network thread and the page
     /// posts the write to it while it is idle, as the thread wakes for it
-    /// ([`POST_WAKE`]), behind the writes posted before it.
+    /// ([`POST_WAKE`]), behind the writes posted before it. Only the page's
+    /// messages are posted: the setup's flights, the handshake's chunks and
+    /// DCEP's, are the thread's own (dcSCTP and `SctpDataChannel` make them
+    /// on it), and go at once.
     pub(super) fn sctp_write(
         &mut self,
         at: Time,
@@ -1060,7 +1068,7 @@ impl Scheduler {
         let thread = self
             .assocs
             .get(&conn)
-            .filter(|a| a.profile.packet_cost.is_some())
+            .filter(|a| counted && a.profile.packet_cost.is_some())
             .and_then(|_| self.ip_host.get(&conn.0.ip()).copied())
             .and_then(|h| Some((h, *self.threads.get(h)?, *self.wakes.get(h)?)));
         if let Some((h, free, wake)) = thread {

@@ -6229,6 +6229,31 @@ mod tests {
         assert_eq!(answers, [4000]);
     }
 
+    /// A Chromium host's setup flights, which its network thread makes
+    /// itself, go at once on the idle thread; its page's message, which the
+    /// page posts to the thread, goes as the idle thread wakes for it
+    /// ([`sctp::POST_WAKE`]).
+    #[test]
+    fn a_chromiums_setup_flights_go_unposted() {
+        let (_sim, mut wan, conns) = channels_of(SctpProfile::CHROMIUM, 1);
+        let c = conns[0];
+        let cost = SctpProfile::CHROMIUM.packet_cost.unwrap();
+        let t0 = sim_time(StdDuration::from_secs(1));
+        let us = |n: i64| Duration::from_micros(n);
+        let mut id = 0;
+        // A flight of the setup's, a chunk of 16 bytes ...
+        write_counted(&mut wan, &mut id, t0, c, (1, 1, 16), false);
+        // ... and, once the thread is idle again, the page's first message.
+        wan.run_events(t0 + us(1000));
+        write_counted(&mut wan, &mut id, t0 + us(1000), c, (1, 1, 1000), true);
+        wan.run_events(t0 + us(2000));
+        let times: Vec<Duration> = wan.packets[0]
+            .iter()
+            .map(|r| r.at - (t0 - epoch()))
+            .collect();
+        assert_eq!(times, [cost, us(1000) + sctp::POST_WAKE + cost]);
+    }
+
     /// A browser's SACK held back for its peer's data goes first in the
     /// first packet of its next send opportunity toward that peer, whose
     /// chunks take the room it leaves, so no packet passes the MTU: ahead
