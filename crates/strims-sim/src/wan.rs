@@ -6426,6 +6426,51 @@ mod tests {
         }
     }
 
+    /// A str0m receiver acknowledges a packet with the I bit at once, as
+    /// sctp-proto does, and a lone one without it after its delayed SACK:
+    /// a Chromium sends the I bit while its window is under ten packets, a
+    /// str0m never. Each case is one packet, its SACK's hand-over timed
+    /// from the packet's arrival through `b`'s downlink, and replays exactly.
+    #[test]
+    fn a_str0m_receiver_acks_a_packet_with_the_i_bit_at_once() {
+        let fiber = Site::new(City::Frankfurt, Access::Fiber);
+        let ack = |sender: SctpProfile, cwnd: usize| {
+            let (_sim, mut wan, conns) = channels_between(sender, 1, fiber, fiber);
+            let (ab, ba) = (conns[0], (conns[0].1, conns[0].0));
+            wan.open_channel(ba, SctpProfile::STR0M);
+            wan.assocs.get_mut(&ab).unwrap().set_cwnd(cwnd);
+            let mut id = 1 << 32;
+            let t0 = sim_time(StdDuration::from_secs(1));
+            write_chunks(&mut wan, &mut id, t0, ab, 1, 1);
+            wan.run_events(t0 + Duration::from_millis(400));
+            let data: Vec<&PacketRecord> = wan.packets[0]
+                .iter()
+                .filter(|r| r.kind == PacketKind::Data)
+                .collect();
+            let sacks: Vec<&PacketRecord> = wan.packets[1]
+                .iter()
+                .filter(|r| r.kind == PacketKind::Sack)
+                .collect();
+            assert_eq!((data.len(), sacks.len()), (1, 1), "{:?}", wan.packets);
+            (sacks[0].at - data[0].arrived.unwrap(), wan.packets.clone())
+        };
+        let mtu = SctpProfile::CHROMIUM.mtu;
+        for (sender, cwnd, at_once) in [
+            (SctpProfile::CHROMIUM, 9 * mtu, true),
+            (SctpProfile::CHROMIUM, 10 * mtu, false),
+            (SctpProfile::STR0M, SctpProfile::STR0M.initial_window, false),
+        ] {
+            let (wait, log) = ack(sender, cwnd);
+            assert_eq!(ack(sender, cwnd).1, log, "{sender:?}: replays differently");
+            let delayed = SctpProfile::STR0M.delayed_sack;
+            if at_once {
+                assert!(wait < Duration::from_millis(1), "{sender:?}: {wait:?}");
+            } else {
+                assert!(wait >= delayed, "{sender:?} at {cwnd}: {wait:?}");
+            }
+        }
+    }
+
     /// A Chromium's network thread hands its uplink what it sent before a
     /// crash that comes before the walk reaching it, and the crash finds it
     /// there: three channels' messages written at a walk's time go a packet

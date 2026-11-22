@@ -571,6 +571,18 @@ below the arrivals' degree, for no better recovery (graceful, 90 s: lag
 peak 571/3008/1913/1536 against 597/2580/2359/2460 ms, back under 1250 ms
 in 0/14/50+/9 against 0/14/26/12 s).
 
+**A dcSCTP loss episode cutting the window once.** (WIP 1e6f69cb2, against
+6c369578f) A third miss started fast recovery only for data first sent at
+or after the TSN where the last recovery ended, so a resend that stale
+SACKs behind a full queue read missing after a recovery cut nothing. It
+fitted the Chromium halving bench's loss after the step better: the
+holders' drops in each burst 3-8 s after it, summed over five runs,
+testbed 258/251/180/153/82/59, base 203/126/1/0/0/0, the change
+289/169/191/84/33/0. But dcSCTP 8078 (Chromium 156) cuts again for
+resends found lost after a recovery ended (retransmission_queue.cc,
+`HandlePacketLoss`; outstanding_data.cc, `NackBetweenAckBlocks`), as the
+base model does, so the base is the faithful one.
+
 ## WebRTC links
 
 **A smaller data channel cap.** (`browsers-exp`, against 226a5d43)

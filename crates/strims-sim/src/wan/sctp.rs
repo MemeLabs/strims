@@ -28,9 +28,12 @@
 //!   one goes anyway. A chunk starts a packet when its payload would take
 //!   the one it would join past the MTU.
 //! - The receiver acknowledges every second packet, or a lone one after
-//!   [`SctpProfile::delayed_sack`], and every packet at once while it
-//!   holds chunks past a gap. A SACK leaves on the receiver's uplink as a
-//!   packet of its own, never with the receiver's data.
+//!   [`SctpProfile::delayed_sack`], and at once a packet with the I bit,
+//!   which a dcSCTP sender sets (association/mod.rs, `handle_data` and
+//!   `handle_peer_last_tsn_and_acknowledgement`, :2500, :2905), and every
+//!   packet while it holds chunks past a gap. A SACK leaves on the
+//!   receiver's uplink as a packet of its own, never with the receiver's
+//!   data.
 //! - A SACK acknowledges every chunk up to its cumulative point and those
 //!   past it the receiver holds. The window grows when the cumulative
 //!   point advances, only while chunks wait for it: by the bytes the SACK
@@ -1842,7 +1845,8 @@ impl Scheduler {
         }
         let at_once = !r.above.is_empty()
             || r.due.is_some()
-            || (p.stack == Stack::DcSctp && (marked || immediate));
+            || immediate
+            || (p.stack == Stack::DcSctp && marked);
         if at_once {
             self.sctp_send_sack(t, conn);
             return;
