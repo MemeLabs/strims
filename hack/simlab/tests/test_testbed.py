@@ -965,8 +965,8 @@ class Criterion(unittest.TestCase):
         from simlab import catalog
 
         conn = duckdb.connect()
-        for s in catalog.scoring_statements(["compensated_sum", "hypergeom_p", "fisher_p", "twin_criterion_rows"],
-                                            set()):
+        for s in catalog.scoring_statements(["compensated_sum", "pearson", "hypergeom_p", "fisher_p",
+                                             "twin_criterion_rows"], set()):
             conn.execute(s)
         conn.execute("CREATE TABLE b (cell VARCHAR, measure VARCHAR, k VARCHAR, seed BIGINT, value DOUBLE, "
                      "basis VARCHAR, arrivals BOOLEAN)")
@@ -1089,8 +1089,8 @@ class Criterion(unittest.TestCase):
     def test_a_reading_on_a_bar_passes_it(self):
         # five at-once cells, a run each side: seed_budget's tier r6 browser
         # medians, whose ranks differ by a Σd² of 4 (a Spearman of 0.8), and
-        # truth_bps' ratios of geometric mean 0.9; floating point reads each
-        # an ulp short of its bar
+        # truth_bps' ratios of geometric mean 0.9; floating point may read
+        # each an ulp off its bar, to either side
         values = {"seed_budget": ([28.5, 61, 33.5, 128, 37.5], [26.5, 86.5, 17, 67.5, 37]),
                   "truth_bps": ([20, 30, 210, 240, 290], [18, 189, 27, 261, 216])}
 
@@ -1104,11 +1104,9 @@ class Criterion(unittest.TestCase):
         rows = {r["measure"]: r for r in (dict(zip(names, t)) for t in cur.fetchall())}
         b, t = rows["seed_budget"], rows["truth_bps"]
         self.assertEqual((b["cells"], t["cells"]), (5, 5))
-        self.assertLess(b["rank_corr"], 0.8)
-        self.assertAlmostEqual(b["rank_corr"], 0.8)
+        self.assertAlmostEqual(b["rank_corr"], 0.8, delta=1e-12)
         self.assertTrue(b["rank_pass"])
-        self.assertLess(t["ratio"], 0.9)
-        self.assertAlmostEqual(t["ratio"], 0.9)
+        self.assertAlmostEqual(t["ratio"], 0.9, delta=1e-12)
         self.assertTrue(t["ratio_pass"])
 
     def test_another_statistic_fails(self):
@@ -1183,8 +1181,8 @@ class CriterionOf(unittest.TestCase):
                      "JOIN (SELECT unnest(jobs, recursive := true)) j USING (k, src)")
         text = catalog.scoring_text(catalog.scoring_consts())
         for m in catalog.MACRO.finditer(text):
-            if m.group(2) in ("compensated_sum", "hypergeom_p", "fisher_p", "testbed_side", "twin_criterion_rows",
-                              "twin_criterion_of"):
+            if m.group(2) in ("compensated_sum", "pearson", "hypergeom_p", "fisher_p", "testbed_side",
+                              "twin_criterion_rows", "twin_criterion_of"):
                 conn.execute(text[m.start():catalog.STATEMENT_END.search(text, m.end()).end()])
 
         def lake(sql, **kw):

@@ -91,8 +91,9 @@ CREATE OR REPLACE MACRO t975_at(df_) AS
 -- (hack/sim-suite/golden.py's reference): a left fold strays from it by
 -- last bits, which a value on a tie at the places a scorecard prints shows.
 -- sctp_fit_of's shares and total variation distances and timer_shares_of's
--- means over runs and cells are this too, of lists in an order of their
--- own, so that a query's bits are the same every time: an aggregate's sum
+-- means over runs and cells, and twin_criterion_rows' means, geometric
+-- means and correlations (pearson's), are this too, of lists in an order of
+-- their own, so that a query's bits are the same every time: an aggregate's sum
 -- adds in the order its threads meet the rows, and a distance or a bound
 -- a value is at would pass or fail it by them. No other
 -- sum is: dynamics' means of the rows' playback fields are DuckDB's avg,
@@ -110,6 +111,23 @@ CREATE OR REPLACE MACRO compensated_sum(xs) AS
                                 {'s': 0.0::DOUBLE, 'c': 0.0::DOUBLE})],
                    lambda cs_acc: CASE WHEN cs_acc.c <> 0 AND isfinite(cs_acc.c) THEN cs_acc.s + cs_acc.c
                                        ELSE cs_acc.s END)[1];
+
+-- Pearson's correlation of the DOUBLEs xs against ys (lists of one length
+-- with no NULL, in an order of their own) in two passes, each sum
+-- compensated_sum's, so that it reads the same bits every time where
+-- DuckDB's corr adds in the order its threads meet the rows. NULL for
+-- fewer than two pairs or a list of one value (where corr is NaN), or for
+-- NULL lists.
+CREATE OR REPLACE MACRO pearson(xs, ys) AS
+    list_transform([{'mx': compensated_sum(xs) / len(xs), 'my': compensated_sum(ys) / len(ys)}],
+                   lambda pe_m: list_transform(
+                       [{'xy': compensated_sum(list_transform(range(len(xs)),
+                                                              lambda pe_i: (xs[pe_i + 1] - pe_m.mx)
+                                                                           * (ys[pe_i + 1] - pe_m.my))),
+                         'xx': compensated_sum(list_transform(xs, lambda pe_x: (pe_x - pe_m.mx) ** 2)),
+                         'yy': compensated_sum(list_transform(ys, lambda pe_y: (pe_y - pe_m.my) ** 2))}],
+                       lambda pe_s: CASE WHEN pe_s.xx > 0 AND pe_s.yy > 0
+                                         THEN pe_s.xy / sqrt(pe_s.xx * pe_s.yy) END)[1])[1];
 
 -- The hypergeometric probability of x of hits_ in the first n_ of n_ + n2_.
 CREATE OR REPLACE MACRO hypergeom_p(x_, n_, n2_, hits_) AS
@@ -1737,8 +1755,11 @@ CREATE OR REPLACE MACRO twin_fit_of(a_jobs, b_jobs, lo_s := 10, hi_s := -1, full
 -- measure's). in_band and the bars compare a reading (ratio, rank_corr,
 -- floor_p) rounded to 9 decimals, so one on a bar passes it where floating
 -- point leaves it an ulp short (five cells whose ranks differ by a Σd² of
--- 4 have a Spearman of 0.8, which corr reads 0.7999999999999998); the
--- rows give the readings unrounded. caveat is twin_fit_rows'.
+-- 4 have a Spearman of 0.8, which DuckDB's corr reads 0.7999999999999998);
+-- the rows give the readings unrounded. Its means (of the runs, the cells'
+-- ratios' logs and b_quantile) are compensated_sum's and its correlations
+-- pearson's, of lists in run or cell order, so a reading's bits are the same
+-- every time. caveat is twin_fit_rows'.
 CREATE OR REPLACE MACRO twin_criterion_rows(a_rows, b_rows, paired := false, budget_stat := 'mean') AS TABLE
     WITH a AS (SELECT unnest(a_rows, recursive := true)),
     b AS (SELECT unnest(b_rows, recursive := true)),
@@ -1758,15 +1779,19 @@ CREATE OR REPLACE MACRO twin_criterion_rows(a_rows, b_rows, paired := false, bud
         FROM t GROUP BY cell, measure, k, value),
     tw AS (
         SELECT cell, measure, count(*) AS twin_runs,
-               CASE WHEN measure = 'seed_budget' AND budget_stat = 'mean' THEN avg(a_value)
+               CASE WHEN measure = 'seed_budget' AND budget_stat = 'mean'
+                        THEN compensated_sum(list(a_value ORDER BY a_k, a_value) FILTER (WHERE a_value IS NOT NULL))
+                             / count(a_value)
                     ELSE quantile_cont(a_value, 0.5) END AS twin_value
         FROM (SELECT DISTINCT cell, measure, a_k, a_value FROM t) GROUP BY cell, measure),
     bn AS (SELECT cell, measure, count(DISTINCT k) AS runs FROM b GROUP BY cell, measure),
     c AS (
         SELECT cell, measure, cgrp, count(*) AS tb_runs,
-               CASE WHEN measure = 'seed_budget' AND budget_stat = 'mean' THEN avg(value)
+               CASE WHEN measure = 'seed_budget' AND budget_stat = 'mean'
+                        THEN compensated_sum(list(value ORDER BY k, value) FILTER (WHERE value IS NOT NULL))
+                             / count(value)
                     ELSE quantile_cont(value, 0.5) END AS tb_value,
-               avg(q) AS b_quantile,
+               compensated_sum(list(q ORDER BY k, value)) / count(*) AS b_quantile,
                count(basis) AS given, string_agg(DISTINCT basis, '; ' ORDER BY basis) AS basis
         FROM run JOIN cg USING (cell)
         WHERE measure IN ('truth_bps', 'seed_upload', 'seed_budget') GROUP BY cell, measure, cgrp),
@@ -1804,10 +1829,17 @@ CREATE OR REPLACE MACRO twin_criterion_rows(a_rows, b_rows, paired := false, bud
     summ AS (
         SELECT g.grp, m.measure, count(r.cell) AS cells, coalesce(sum(tb_runs), 0) AS tb_runs,
                coalesce(sum(twin_runs), 0) AS twin_runs, coalesce(sum(tb_runs_unpaired), 0) AS tb_runs_unpaired,
-               exp(avg(ln(CASE WHEN ratio > 0 THEN ratio END))) AS ratio, coalesce(sum(in_band), 0) AS in_band,
-               avg(b_quantile) AS b_quantile,
-               CASE WHEN NOT isnan(corr(twin_value, tb_value)) THEN corr(twin_value, tb_value) END AS corr,
-               CASE WHEN NOT isnan(corr(ra, rb)) THEN corr(ra, rb) END AS rank_corr,
+               exp(compensated_sum(list(ln(CASE WHEN ratio > 0 THEN ratio END) ORDER BY r.cell)
+                                       FILTER (WHERE ratio > 0))
+                   / count(CASE WHEN ratio > 0 THEN ratio END)) AS ratio,
+               coalesce(sum(in_band), 0) AS in_band,
+               compensated_sum(list(b_quantile ORDER BY r.cell) FILTER (WHERE b_quantile IS NOT NULL))
+                   / count(b_quantile) AS b_quantile,
+               pearson(list(twin_value ORDER BY r.cell) FILTER (WHERE twin_value IS NOT NULL AND tb_value IS NOT NULL),
+                       list(tb_value ORDER BY r.cell) FILTER (WHERE twin_value IS NOT NULL AND tb_value IS NOT NULL))
+                   AS corr,
+               pearson(list(ra ORDER BY r.cell) FILTER (WHERE ra IS NOT NULL AND rb IS NOT NULL),
+                       list(rb ORDER BY r.cell) FILTER (WHERE ra IS NOT NULL AND rb IS NOT NULL)) AS rank_corr,
                sum(given) AS given, string_agg(DISTINCT basis, '; ' ORDER BY basis) AS basis,
                any_value(CASE WHEN m.measure = 'seed_budget' THEN fg.k1 END) AS floor_tb,
                any_value(CASE WHEN m.measure = 'seed_budget' THEN fg.n1 END) AS floor_tb_runs,
