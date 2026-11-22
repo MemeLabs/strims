@@ -217,7 +217,10 @@ crates differ from those the page was built from builds its own page.
   (arm `pair-r<n>`, of its seed n) where its cell has them; otherwise the
   cell's twins. The bare TCP bench is
   `hack/testbed/bench.sh` with `benchsuite.py run` and `benchsuite.py
-  score`, over the cases in hack/testbed/bench/. Its comparison
+  score`, over the cases in hack/testbed/bench/. Its sim (`benchsuite.py
+  sim`, testbed_bench `--sim`) gives each uplink the run's tbf bucket, as
+  the tier's twins' `tbf` class does; `--no-bucket` drains it at its rate
+  alone. Its comparison
   (`hack/testbed/bench.py`) reads a run's uplink queue and qdisc tree
   through a release testbed_tables (`--uplink`; `TABLES_BIN`, else `cargo
   build --release -p strims-sim --example testbed_tables`). A case with

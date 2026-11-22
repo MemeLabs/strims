@@ -1060,8 +1060,10 @@ pub struct Bench {
     pub tcp_segment: Option<usize>,
     /// Each uplink has its testbed bucket ([`BenchSite::burst`]) in the sim
     /// (`strims_wan::Bucket`, leaving at once as a veth's tbf, or at its
-    /// [`BenchSite::peak`]); without, the sim's uplinks drain at their
-    /// rates alone.
+    /// [`BenchSite::peak`]), as the testbed tier's twins' `tbf` class
+    /// ([`crate::link`]) has the run's; [`Bench::testbed`]'s default.
+    /// Without, the sim's uplinks drain at their rates alone, and their
+    /// queues lose the frames a tbf's bucket would have sent at once.
     pub buckets: bool,
     /// The links carry their records over WebRTC data channels (the
     /// nodes ran with `--webrtc`, in `run.sh`'s `NODE_ARGS`): the window
@@ -1239,7 +1241,7 @@ impl Bench {
                 window,
             },
             tcp_segment: None,
-            buckets: false,
+            buckets: true,
             trace_tcp: false,
             trace_sctp: false,
             releases: Vec::new(),
@@ -2109,9 +2111,8 @@ mod tests {
         for (v, phase) in (1..=10).zip([7, 47, 17, 37, 57, 77, 97, 117, 137, 157]) {
             schedule += &format!("probe 0 {v} {phase} 200\n");
         }
-        let mut bench =
+        let bench =
             Bench::testbed("VIEWERS=10\nSEED_UP_MBIT=5\nSECS=30", "", &schedule, true).unwrap();
-        bench.buckets = true;
         let logs = simulate(&bench).unwrap();
         let cwnd = |to: i64| {
             let xs = events(&logs[0], "s")

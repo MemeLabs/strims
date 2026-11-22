@@ -10,7 +10,7 @@
 //!               [--secs <s>] [--start <unix ms>] [--webrtc]
 //!               [--web <dir>] [--browser-bin <path>]
 //! testbed_bench --sim <testbed run dir> --out <dir> [--window]
-//!               [--segment <bytes>] [--str0m] [--bucket] [--nominal]
+//!               [--segment <bytes>] [--str0m] [--no-bucket] [--nominal]
 //!               [--seed <n>] [--trace-tcp] [--trace-sctp]
 //! ```
 //!
@@ -38,9 +38,10 @@
 //! window model if `--window`, and writes each node's log to
 //! `<out>/node-<i>.jsonl`. A WebRTC bench's links are the window model's
 //! data channels, or with `--str0m` str0m's stack on the sim's sockets.
-//! With `--bucket` each uplink has the tbf bucket the run's settings gave
-//! it (`SEED_BURST`, `VIEWER_BURST`; `run.sh`'s 3028 without), which the
-//! sim's uplinks otherwise lack. A competing upload starts when the run's
+//! Each uplink has the tbf bucket the run's settings gave it
+//! (`SEED_BURST`, `VIEWER_BURST`; `run.sh`'s 3028 without), as the testbed
+//! tier's twins' `tbf` class has it; with `--no-bucket` the sim's uplinks
+//! drain at their rates alone. A competing upload starts when the run's
 //! iperf3 client did (`compete.log` and its `compete-<s>.json` report),
 //! where the run has them, and the seed's uplink steps when the run
 //! applied them (`steps.log`). Each node releases its schedule's records when
@@ -92,7 +93,7 @@ struct Args {
     segment: Option<usize>,
     webrtc: bool,
     str0m: bool,
-    bucket: bool,
+    no_bucket: bool,
     trace_tcp: bool,
     trace_sctp: bool,
     nominal: bool,
@@ -124,7 +125,7 @@ fn args() -> Result<Args, String> {
             "--segment" => a.segment = Some(num(value()?)? as usize),
             "--webrtc" => a.webrtc = true,
             "--str0m" => a.str0m = true,
-            "--bucket" => a.bucket = true,
+            "--no-bucket" => a.no_bucket = true,
             "--trace-tcp" => a.trace_tcp = true,
             "--trace-sctp" => a.trace_sctp = true,
             "--nominal" => a.nominal = true,
@@ -279,7 +280,7 @@ fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
     }
     bench.tcp_segment = a.segment;
     bench.str0m = a.str0m;
-    bench.buckets = a.bucket;
+    bench.buckets = !a.no_bucket;
     bench.trace_tcp = a.trace_tcp;
     bench.trace_sctp = a.trace_sctp;
     if let Some(seed) = a.seed {
