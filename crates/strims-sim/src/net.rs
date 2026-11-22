@@ -1509,14 +1509,15 @@ impl Net for SimNet {
         self.rtc_stack.is_some_and(|p| p.native())
     }
 
-    /// The host's stack's ([`SimNet::with_rtc_stack`]): Chromium's,
-    /// Firefox's, else str0m's.
+    /// The host's stack's ([`SimNet::with_rtc_stack`]), as its profile's
+    /// host ([`SctpProfile::host`](crate::wan::SctpProfile::host)):
+    /// Chromium's, Firefox's, else str0m's.
     fn link_setup(&self) -> LinkSetup {
-        use crate::wan::SctpProfile;
-        match self.rtc_stack {
-            Some(p) if p == SctpProfile::CHROMIUM => LinkSetup::CHROMIUM,
-            Some(p) if p == SctpProfile::FIREFOX => LinkSetup::FIREFOX,
-            _ => LinkSetup::STR0M,
+        use crate::late::HostKind;
+        match self.rtc_stack.map(|p| p.host) {
+            Some(HostKind::Chromium) => LinkSetup::CHROMIUM,
+            Some(HostKind::Firefox) => LinkSetup::FIREFOX,
+            Some(HostKind::Native) | None => LinkSetup::STR0M,
         }
     }
 
@@ -1679,6 +1680,39 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// A Chromium's stack is a Chromium's whatever its packet cost: its
+    /// link setup and its host's kind (its timers' lateness, its pacer, the
+    /// `hosts` table's) are Chromium's a nanosecond either side of the
+    /// profile's 12 µs and at a testbed host's 11.7-13 µs, as at 12 µs.
+    #[test]
+    fn a_chromiums_stack_stays_a_chromiums_at_any_packet_cost() {
+        use crate::late::HostKind;
+        let own = SctpProfile::CHROMIUM.packet_cost.unwrap();
+        let ns = Duration::from_nanos(1);
+        for cost in [
+            own - ns,
+            own,
+            own + ns,
+            Duration::from_nanos(11_700),
+            Duration::from_micros(13),
+        ] {
+            let p = SctpProfile {
+                packet_cost: Some(cost),
+                ..SctpProfile::CHROMIUM
+            };
+            let net = SimNet::new(None).with_rtc_stack(Some(p));
+            assert_eq!(net.link_setup().name, LinkSetup::CHROMIUM.name, "{cost:?}");
+            let mut s = crate::Scenario::new("t");
+            s.hosts("v", 1, None);
+            s.over_webrtc(&[Some(p)]);
+            s.send_buffer = Some(SendBuffer {
+                uplink_queue: std::time::Duration::from_millis(50),
+                window: true,
+            });
+            assert_eq!(HostKind::of_host(&s, 0), HostKind::Chromium, "{cost:?}");
+        }
     }
 
     /// A channel's setup goes past its writer's pacers, as a browser's

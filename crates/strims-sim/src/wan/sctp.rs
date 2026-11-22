@@ -182,6 +182,7 @@ use strims_testbed::sctp::{Dir, SctpEvent, What as SctpWhat};
 
 use super::{Event, Offered, Scheduler, What};
 use crate::fast_map::FastMap;
+use crate::late::HostKind;
 use crate::net::ConnKey;
 use crate::report::{PacketKind, PacketProto};
 use crate::spec::HostIx;
@@ -197,6 +198,13 @@ pub enum Stack {
 /// An SCTP stack's sender and receiver as the window model runs them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SctpProfile {
+    /// The host whose stack this is: a native node (str0m's), or the
+    /// browser whose stack it models. A host's link setup, its timers'
+    /// lateness, its pacer and its `hosts` row take its kind from this
+    /// alone ([`HostKind::of_host`](crate::late::HostKind::of_host)),
+    /// whatever the other fields, so a Chromium's stack at another packet
+    /// cost stays a Chromium's.
+    pub host: HostKind,
     pub stack: Stack,
     /// The most bytes of an SCTP packet (its common header and chunks),
     /// and of a DATA chunk's payload.
@@ -292,6 +300,7 @@ impl SctpProfile {
     /// a 1 MiB receive window, the timeout 3 s at first and 1-60 s, and the
     /// delayed SACK 200 ms.
     pub const STR0M: SctpProfile = SctpProfile {
+        host: HostKind::Native,
         stack: Stack::SctpProto,
         mtu: 1062 + CHUNK_HEADER + COMMON_HEADER,
         max_payload: 1062,
@@ -326,6 +335,7 @@ impl SctpProfile {
     /// so a profile of a Chromium that ships it takes those rules, as
     /// [`SctpProfile::FIREFOX`] would of a Firefox past 158.
     pub const CHROMIUM: SctpProfile = SctpProfile {
+        host: HostKind::Chromium,
         stack: Stack::DcSctp,
         mtu: 1191,
         max_payload: (1191 - COMMON_HEADER) / 4 * 4 - CHUNK_HEADER,
@@ -350,6 +360,7 @@ impl SctpProfile {
     /// has captured a Firefox seed's packets). (Between two Firefoxes its
     /// chunks are I-DATA, 4 bytes longer.)
     pub const FIREFOX: SctpProfile = SctpProfile {
+        host: HostKind::Firefox,
         rwnd: 16 << 20,
         delayed_sack: Duration::from_millis(50),
         amount_at_sends: false,

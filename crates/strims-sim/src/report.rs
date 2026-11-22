@@ -1212,10 +1212,10 @@ impl Report {
         };
         let window = s.send_buffer.is_some_and(|b| b.window);
         let kind = crate::late::HostKind::of_host(s, h).name();
-        let stack = match hs.rtc_stack.filter(|_| window && hs.webrtc) {
-            Some(p) if p == crate::wan::SctpProfile::CHROMIUM => "model-sctp-chromium",
-            Some(p) if p == crate::wan::SctpProfile::FIREFOX => "model-sctp-firefox",
-            Some(_) => "model-sctp-str0m",
+        let stack = match hs.rtc_stack.filter(|_| window && hs.webrtc).map(|p| p.host) {
+            Some(crate::late::HostKind::Chromium) => "model-sctp-chromium",
+            Some(crate::late::HostKind::Firefox) => "model-sctp-firefox",
+            Some(crate::late::HostKind::Native) => "model-sctp-str0m",
             None if hs.webrtc => "str0m",
             None => "model-tcp",
         };

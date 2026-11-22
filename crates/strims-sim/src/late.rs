@@ -92,7 +92,6 @@ use strims_node::{Clock, SimClock};
 use tokio::time::Instant;
 
 use crate::spec::{HostIx, Scenario};
-use crate::wan::SctpProfile;
 
 /// What a host is, as its timers' lateness goes ([`model`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -105,19 +104,16 @@ pub enum HostKind {
 impl HostKind {
     /// The kind of host `h` of `s`, the `hosts` table's (its row's `kind`,
     /// `Report::scenario_host_row`): the browser whose data channels it
-    /// models (the window model's under Chromium's or Firefox's profile),
+    /// models (the window model's, its profile's [`SctpProfile::host`]),
     /// else native.
+    ///
+    /// [`SctpProfile::host`]: crate::wan::SctpProfile::host
     pub fn of_host(s: &Scenario, h: HostIx) -> HostKind {
         let window = s.send_buffer.is_some_and(|b| b.window);
-        match s
-            .hosts
+        s.hosts
             .get(h)
             .and_then(|x| x.rtc_stack.filter(|_| window && x.webrtc))
-        {
-            Some(p) if p == SctpProfile::CHROMIUM => HostKind::Chromium,
-            Some(p) if p == SctpProfile::FIREFOX => HostKind::Firefox,
-            _ => HostKind::Native,
-        }
+            .map_or(HostKind::Native, |p| p.host)
     }
 
     /// Its name in the tables: `native`, `chromium`, `firefox`.
@@ -349,6 +345,7 @@ impl Clock for LateClock {
 #[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
+    use crate::wan::SctpProfile;
     use strims_base::rng::det_rng;
 
     const KINDS: [HostKind; 3] = [HostKind::Native, HostKind::Chromium, HostKind::Firefox];
