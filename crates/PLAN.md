@@ -632,12 +632,18 @@ and dropped are in `TRIED.md`.
     at a holder's share of the uplink; and both browsers' resends to
     str0m's receiver. The testbed's runs of a case vary: score against
     repeats.
-  - Give a modelled browser's link-setup turns their stacks' reaction
-    time: have `model_rtc` hand the WAN scheduler each reply it sends to
-    an arriving flight (the ClientHello, the answer, the server flight,
-    the Finished) stamped at that flight's arrival plus the turn, and the
-    scheduler send it then, since no sleep or timer in the model can send
-    within the net's 1-ms step.
+  - Close the rest of the twin's link-open gap to the testbed
+    (`link_open_fit_of`), which comes before DTLS: time the first relay
+    post as the testbed's where the pages' measured offer times leave it
+    off, and the relay legs, the answer's reaching its offerer over the
+    relay among them (twin_steps). Give their turns the writes that
+    still wait the net's next step, the Chromium seed's after its
+    viewer's reply to its first data and the viewers' after the seed's
+    166-byte packet, and the setup writes that aren't a data channel's;
+    let one step's writes on a link keep their own stamps, so a
+    Chromium viewer's COOKIE ECHO leaves ahead of its first data
+    (`model_rtc::Turns`). Find why C6 browsers' twin viewers open
+    earlier than the testbed's.
   - Find why the testbed's native and browser seeds' uplink queues hold
     more than the twin's through the whole run, its joins among it (bins'
     `seed_up_queue_ms`), and model it: a native seed's SYN-ACKs and a

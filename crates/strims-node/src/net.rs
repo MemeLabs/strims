@@ -84,6 +84,24 @@ pub trait Net: Clone + Send + Sync + 'static {
         None
     }
 
+    /// How long ago what `stream` last delivered reached this host, as
+    /// the net timed it, where a read takes it up to a step of the net's
+    /// later: the SYN-ACK of the connect that returned it, or the last
+    /// message read from it; for a modelled WebRTC link's setup
+    /// (`crate::model_rtc`). The default: none.
+    fn delivered_ago(&self, stream: &Self::TcpStream) -> Option<std::time::Duration> {
+        let _ = stream;
+        None
+    }
+
+    /// Has `stream`'s writes of this step leave `ago` before it, as a
+    /// browser's stack sends its reply to a setup flight while it handles
+    /// the flight, within the step the net hands it over in. A later call
+    /// in the step moves them. The default sends them as the net does.
+    fn send_ago(&self, stream: &Self::TcpStream, ago: std::time::Duration) {
+        let _ = (stream, ago);
+    }
+
     /// Whether the net carries WebRTC data channels as streams it models
     /// one on ([`Net::open_channel`]): the node then runs its WebRTC
     /// connections over its TCP streams (`crate::model_rtc`) in place of

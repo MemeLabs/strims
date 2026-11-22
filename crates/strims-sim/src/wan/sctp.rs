@@ -1627,8 +1627,16 @@ impl Scheduler {
             .insert((at, key), Event::SctpOut(Box::new(hand)));
     }
 
-    /// `hand` goes to its host's uplink at `at` ([`Scheduler::hand_over`]).
+    /// `hand` goes to its host's uplink at `at` ([`Scheduler::hand_over`]),
+    /// or at the uplink's last hand-off if that came later, so a reply its
+    /// stack sent from before the step's start ([`Scheduler::send_at`])
+    /// comes behind what the uplink took since, as a qdisc takes packets
+    /// in the order they reach it.
     pub(super) fn handed(&mut self, at: Time, hand: Handover) {
+        let at = hand
+            .host(&self.ip_host)
+            .and_then(|h| self.last_offered.get(&h))
+            .map_or(at, |&last| at.max(last));
         match hand {
             Handover::Data(d) => self.data_handed(at, d),
             Handover::Sack { conn, sack, log } => self.sack_handed(at, conn, sack, log),
@@ -2022,7 +2030,7 @@ impl Scheduler {
         seq: u64,
         (packet, last, immediate): (u64, bool, bool),
     ) {
-        self.chunk_through(conn, seq);
+        self.chunk_through(t, conn, seq);
         if self.assocs.get(&conn).is_some_and(|a| a.peer_crashed) {
             return;
         }
@@ -2072,10 +2080,11 @@ impl Scheduler {
             .insert((t + delay, key), Event::SctpDelSack { conn });
     }
 
-    /// dcSCTP chunk `seq` of `conn` is through its receiver's downlink: its
-    /// record's bytes count it the first time, and with none left the
-    /// record is due to its reader ([`Scheduler::match_queues`]).
-    fn chunk_through(&mut self, conn: ConnKey, seq: u64) {
+    /// dcSCTP chunk `seq` of `conn` is through its receiver's downlink at
+    /// `t`: its record's bytes count it the first time, and with none left
+    /// the record is due to its reader ([`Scheduler::match_queues`]), which
+    /// it reached then ([`Scheduler::delivered`]).
+    fn chunk_through(&mut self, t: Time, conn: ConnKey, seq: u64) {
         let Some(a) = self.assocs.get_mut(&conn) else {
             return;
         };
@@ -2098,6 +2107,7 @@ impl Scheduler {
             return;
         }
         a.unthrough.swap_remove(&id);
+        self.delivered.insert((conn.1, conn.0), t);
         if let Some(r) = self.records.get_mut(&id) {
             r.state = super::State::Due;
             if let Some(ls) = self.links.get_mut(r.link) {

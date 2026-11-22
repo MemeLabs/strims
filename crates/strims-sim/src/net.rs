@@ -1560,6 +1560,31 @@ impl Net for SimNet {
         rtt.to_std()
     }
 
+    /// As the WAN scheduler timed it
+    /// ([`Scheduler::delivered`](crate::wan::Scheduler::delivered)).
+    fn delivered_ago(&self, stream: &SimTcpStream) -> Option<std::time::Duration> {
+        let conn = (
+            stream.inner.local_addr().ok()?,
+            stream.inner.peer_addr().ok()?,
+        );
+        let at = self.wan.as_ref()?.lock().as_ref()?.delivered(conn)?;
+        (sim_now() - at).to_std()
+    }
+
+    /// The WAN scheduler sends them then
+    /// ([`Scheduler::send_at`](crate::wan::Scheduler::send_at)).
+    fn send_ago(&self, stream: &SimTcpStream, ago: std::time::Duration) {
+        let (Ok(local), Ok(peer)) = (stream.inner.local_addr(), stream.inner.peer_addr()) else {
+            return;
+        };
+        let Some(wan) = self.wan.as_ref() else {
+            return;
+        };
+        if let Some(w) = wan.lock().as_mut() {
+            w.send_at((local, peer), sim_now() - Duration::from(ago));
+        }
+    }
+
     fn models_channels(&self) -> bool {
         self.rtc_stack.is_some()
     }

@@ -158,6 +158,7 @@ pub struct LinkSetup {
     /// their offers were asked, each this after the one before.
     pub check_per_offer: Duration,
     pub flights: Flights,
+    pub turns: Turns,
 }
 
 /// A duration a host draws, as its inverse distribution: knots of
@@ -335,6 +336,107 @@ pub struct Flights {
     pub cookie_ack: usize,
 }
 
+/// How long a stack takes to answer what reaches it during a link's
+/// setup, from the packet's arrival to its reply's send: the browsers
+/// handle each setup packet on one thread as it is read, ICE's check
+/// response starting the DTLS client and each DTLS and SCTP packet's
+/// handling sending its reply, so a turn is that thread's work. The net
+/// hands a host what reached it at its next step, a millisecond's at
+/// most later, and no sleep can send within the step, so the model has
+/// the net send each reply at the flight's arrival plus its turn
+/// ([`Net::delivered_ago`], [`Net::send_ago`]).
+///
+/// The sources (Chromium branch-heads/8078, its webrtc 19576e37870b and
+/// boringssl 2ea3200c3a3e; Firefox FIREFOX_158_0_1_RELEASE). Chromium
+/// reads a setup packet on the renderer's WebRTC network thread, a Mojo
+/// hop from the network service's socket each way
+/// (services/network/p2p/socket_udp.cc, blink's
+/// p2p/socket_client_impl.cc), and answers it there in the same task: its
+/// ClientHello one same-thread PostTask after the check's response
+/// (wrapping_active_ice_controller.cc:140-148 to dtls_transport.cc's
+/// MaybeStartDtls), BoringSSL's ACK of the client's Finished at once
+/// (tls13_server.cc:1464-1466, d1_both.cc:1085-1092), the INIT in the
+/// turn that reads the Finished (dtls_transport.cc:989-990 to
+/// dcsctp_transport.cc:715, 787), dcSCTP's INIT ACK, COOKIE ECHO and
+/// COOKIE ACK as it handles what they answer (dcsctp_socket.cc:1331,
+/// 1390, 1459) and the DCEP OPEN on the same thread
+/// (dcsctp_transport.cc:576, data_channel_controller.cc:218,
+/// sctp_data_channel.cc:747). Firefox runs ICE and DTLS on the socket
+/// process's socket thread, starting the handshake on a 0 ms timer
+/// (transportlayerdtls.cpp:958-970, 1138), and dcSCTP in the content
+/// process, so each SCTP packet crosses two IPC hops and their task
+/// queues (MediaTransportParent.cpp:45, MediaTransportHandlerIPC.cpp:
+/// 313-320, 433, DataChannel.cpp:322, 376, DataChannelDcSctp.cpp:166,
+/// 198), its INIT among them: its SCTP turns are longer than Chromium's.
+///
+/// From the h7c8 halve-7-20 runs' captures (8 runs, every node's
+/// packets), each reply's send less its peer's packet's arrival, medians:
+/// a Chromium DTLS client's ClientHello 0.48 ms after its check's response
+/// (0.39 to Firefox servers); a Chromium server's flight 0.27 ms after its
+/// own check's response, a Chromium client's Finished 0.30-0.38 after the
+/// server's flight, the server's ACK, INIT and INIT ACK 0.14-0.21 after
+/// that Finished; dcSCTP's INIT ACK, COOKIE ECHO and COOKIE ACK 0.02-0.05
+/// after the chunk they answer; and the link's first data 0.40 ms after
+/// the association's last chunk. Firefox: its server flight 0.28-0.50
+/// after the ClientHello it answers, its ACK 0.31-0.61 after the client's
+/// Finished, dcSCTP's chunks 0.07-0.10, the first data 0.48. The
+/// profiles' values are fits to these, one a kind of turn, with two
+/// gaps: Firefox's `hello` is assumed, as the runs captured no Firefox
+/// ClientHello, and no turn is fitted to a DTLS 1.3 server's ACK and INIT
+/// after the client's Finished (0.14-0.21 ms on Chromium), which carry no
+/// DTLS item and take the SCTP turn (Chromium's `dtls`, 300 us, is its
+/// flights').
+///
+/// Approximations: a reply whose turn would end past the step's start
+/// goes at the step's start, past its arrival still, and none goes before
+/// what its host's uplink was offered last; only a data
+/// channel's writes take the stamp (its association's sender sends them),
+/// so the net's other writes go at the step's start; a later stamp in a
+/// step moves all that step's writes on the link, to the step's start
+/// where its turn ends past it (the COOKIE ACK's turn and the first
+/// data's are one, and a Chromium viewer's COOKIE ECHO goes with its
+/// first data at the step's start, 0.23 ms after the INIT ACK on h7c8,
+/// where the testbed's went 0.04-0.05 ms after it); and the uplink
+/// queues a backdated reply behind
+/// what it was handed since, as it does any packet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Turns {
+    /// A DTLS client's ClientHello after its check's response.
+    pub hello: Duration,
+    /// A DTLS flight after the one it answers, or a server's after its
+    /// check's response.
+    pub dtls: Duration,
+    /// An SCTP chunk of the association's setup after the one it answers,
+    /// and a write that carries only the link's token.
+    pub sctp: Duration,
+    /// The link's first write after the association's last setup chunk.
+    pub open: Duration,
+}
+
+impl Turns {
+    /// None: a reply goes as the net's step sends it (str0m, which runs
+    /// on the node's own runtime).
+    pub const NONE: Turns = Turns {
+        hello: Duration::ZERO,
+        dtls: Duration::ZERO,
+        sctp: Duration::ZERO,
+        open: Duration::ZERO,
+    };
+
+    /// The turn of a reply carrying `items`, or none for no stamp: a reply
+    /// of no DTLS item takes the SCTP turn, a token-only write among them.
+    fn of(&self, items: u16) -> Option<Duration> {
+        let t = if items & item::HELLO != 0 {
+            self.hello
+        } else if items & (item::FLIGHT | item::FINISH | item::SERVER_FINISH) != 0 {
+            self.dtls
+        } else {
+            self.sctp
+        };
+        (*self != Turns::NONE).then_some(t)
+    }
+}
+
 /// The longest wait between a DTLS client's resends of its ClientHello.
 const MAX_RESEND: Duration = Duration::from_secs(60);
 
@@ -454,6 +556,12 @@ impl LinkSetup {
             (1000, 5_000),
         ]),
         check_per_offer: Duration::from_micros(370),
+        turns: Turns {
+            hello: Duration::from_micros(450),
+            dtls: Duration::from_micros(300),
+            sctp: Duration::from_micros(40),
+            open: Duration::from_micros(400),
+        },
         flights: Flights {
             hello: 1463,
             server13: 629,
@@ -509,6 +617,12 @@ impl LinkSetup {
         set_per_offer: Duration::ZERO,
         check_spread: Spread::NONE,
         check_per_offer: Duration::ZERO,
+        turns: Turns {
+            hello: Duration::from_micros(400),
+            dtls: Duration::from_micros(400),
+            sctp: Duration::from_micros(80),
+            open: Duration::from_micros(480),
+        },
         flights: Flights {
             hello: 264,
             server13: 783,
@@ -553,6 +667,7 @@ impl LinkSetup {
         set_per_offer: Duration::ZERO,
         check_spread: Spread::NONE,
         check_per_offer: Duration::ZERO,
+        turns: Turns::NONE,
         flights: Flights {
             hello: 118,
             server13: 0,
@@ -1056,7 +1171,7 @@ async fn check<N: Net>(
     addr: String,
     token: u64,
     timed: bool,
-    done: oneshot::Sender<io::Result<Duration>>,
+    done: oneshot::Sender<Checked>,
 ) {
     let _ = net
         .udp_send_to(&socket, &check_datagram(token), checks)
@@ -1065,7 +1180,7 @@ async fn check<N: Net>(
     match net.tcp_connect(addr).await {
         Ok(mut s) => {
             let rtt = check_rtt(&net, &s, start.elapsed(), timed);
-            let _ = done.send(Ok(rtt));
+            let _ = done.send(Ok((rtt, arrived(&net, &s))));
             let named = Flight {
                 items: item::CHECK,
                 bytes: 0,
@@ -1078,14 +1193,47 @@ async fn check<N: Net>(
     }
 }
 
+/// A check's outcome: its round trip and when its response came.
+type Checked = io::Result<(Duration, Option<Instant>)>;
+
+/// When what `s` last delivered reached the host, as the net timed it.
+fn arrived<N: Net>(net: &N, s: &N::TcpStream) -> Option<Instant> {
+    Instant::now().checked_sub(net.delivered_ago(s)?)
+}
+
+/// Has `s`'s writes of this step leave `turn` after `at`, what they
+/// answer's arrival, where that is before the step: as the stack's
+/// reaction to it ([`Turns`]). One whose turn ends later goes at the
+/// step's start, past its arrival still, and so do the step's writes on
+/// `s` stamped before it.
+fn reply_after<N: Net>(net: &N, s: &N::TcpStream, at: Option<Instant>, turn: Option<Duration>) {
+    let (Some(at), Some(turn)) = (at, turn) else {
+        return;
+    };
+    net.send_ago(s, Instant::now().saturating_duration_since(at + turn));
+}
+
+/// What a flight in [`shake`] answers.
+enum Answers {
+    Nothing,
+    /// The check's response, which came then.
+    Check(Option<Instant>),
+    /// The flight read last.
+    Read,
+}
+
 /// Runs `hs` over `s` until its association is up, from the flight of
 /// `first` that came already, its ICE check `check`, which resolves to the
 /// check's round trip, and its peer's check reaching it, `peer_check`;
 /// `token` goes ahead of its first flight once its check succeeds. A check
 /// that has succeeded counts before `first`. The stack's timer ticks count
-/// from `origin`.
-async fn shake<S, F, P>(
-    s: &mut S,
+/// from `origin`. Each reply to a check's response or a flight leaves its
+/// stack's turn after what it answers came ([`Turns`]), and so does the
+/// link's first write once the association is up.
+#[allow(clippy::too_many_arguments)]
+async fn shake<N: Net, F, P>(
+    net: &N,
+    s: &mut N::TcpStream,
     hs: &mut Handshake,
     mut first: Option<u16>,
     check: F,
@@ -1094,8 +1242,7 @@ async fn shake<S, F, P>(
     origin: Instant,
 ) -> io::Result<()>
 where
-    S: AsyncRead + tokio::io::AsyncWrite + Unpin,
-    F: std::future::Future<Output = io::Result<Duration>>,
+    F: std::future::Future<Output = Checked>,
     P: std::future::Future<Output = ()>,
 {
     tokio::pin!(check);
@@ -1106,24 +1253,27 @@ where
     // The deadline of the client's next resend of its ClientHello, and the
     // wait it doubles.
     let mut resend: Option<(Instant, Duration)> = None;
+    let mut last = None;
     while !hs.up {
         let fires = resend.map(|(at, _)| hs.me.fires_at(at, origin));
-        let out = tokio::select! {
+        let (out, answers) = tokio::select! {
             biased;
             got = &mut check, if !checked => {
-                rtt = got?;
+                let (r, at) = got?;
+                rtt = r;
                 checked = true;
-                hs.writable()
+                (hs.writable(), Answers::Check(at))
             }
             () = &mut peer_check, if !peer => {
                 peer = true;
-                hs.peer_checked()
+                (hs.peer_checked(), Answers::Nothing)
             }
             () = std::future::ready(()), if first.is_some() => {
-                first.take().map_or_else(Flight::default, |items| hs.receive(items))
+                let out = first.take().map_or_else(Flight::default, |items| hs.receive(items));
+                (out, Answers::Read)
             }
             () = tokio::time::sleep_until(fires.unwrap_or_else(Instant::now)), if fires.is_some() => {
-                match (hs.resend(), resend) {
+                let out = match (hs.resend(), resend) {
                     (Some(hello), Some((_, wait))) => {
                         let wait = (wait * 2).min(MAX_RESEND);
                         resend = Some((Instant::now() + wait, wait));
@@ -1133,7 +1283,8 @@ where
                         resend = None;
                         Flight::default()
                     }
-                }
+                };
+                (out, Answers::Nothing)
             }
             got = next_flight(s, &mut buf) => {
                 let (items, _) = got?;
@@ -1141,17 +1292,26 @@ where
                 if hs.resend().is_none() {
                     resend = None;
                 }
-                out
+                (out, Answers::Read)
             }
         };
+        let at = match answers {
+            Answers::Nothing => None,
+            Answers::Check(at) => at,
+            Answers::Read => arrived(net, s),
+        };
+        last = at.or(last);
         if out.items & item::HELLO != 0 && resend.is_none() {
             let wait = hs.me.resend_after(rtt);
             resend = Some((Instant::now() + wait, wait));
         }
         if !out.is_empty() || (token.is_some() && checked) {
+            reply_after(net, s, at, hs.me.turns.of(out.items));
             s.write_all(&frame(out, token.take())).await?;
         }
     }
+    let open = (hs.me.turns != Turns::NONE).then_some(hs.me.turns.open);
+    reply_after(net, s, last, open);
     Ok(())
 }
 
@@ -1186,12 +1346,13 @@ async fn answer<N: Net>(
         let start = Instant::now();
         let mut s = net.tcp_connect(addr).await?;
         let rtt = check_rtt(&net, &s, start.elapsed(), timed);
+        let at = arrived(&net, &s);
         let _ = checked.send(());
         if !net.open_channel(&s, cap) {
             return Err(io::Error::other("the net models no data channels"));
         }
         let mut hs = Handshake::new(me, peer, me.answers_active, false);
-        let check = std::future::ready(Ok(rtt));
+        let check = std::future::ready(Ok((rtt, at)));
         // A dropped sender is an answer closed, not a check.
         let peer_check = async {
             if peer_check.await.is_err() {
@@ -1199,6 +1360,7 @@ async fn answer<N: Net>(
             }
         };
         shake(
+            &net,
             &mut s,
             &mut hs,
             None,
@@ -1225,7 +1387,7 @@ async fn offer<N: Net>(
     net: N,
     mut s: N::TcpStream,
     items: u16,
-    checked: oneshot::Receiver<io::Result<Duration>>,
+    checked: oneshot::Receiver<Checked>,
     me: LinkSetup,
     peer: LinkSetup,
     conn: RtcConn,
@@ -1241,6 +1403,7 @@ async fn offer<N: Net>(
         };
         let peer_check = std::future::pending();
         shake(
+            &net,
             &mut s,
             &mut hs,
             Some(items),
@@ -1263,7 +1426,7 @@ async fn offer<N: Net>(
 /// has come.
 struct Offer<S> {
     conn: RtcConn,
-    answer: Option<(LinkSetup, oneshot::Receiver<io::Result<Duration>>)>,
+    answer: Option<(LinkSetup, oneshot::Receiver<Checked>)>,
     stream: Option<(S, u16)>,
 }
 

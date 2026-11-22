@@ -1480,6 +1480,19 @@ pub(crate) struct Scheduler {
     /// taken once its connect returns.
     check_sent: FastMap<ConnKey, Time>,
     check_rtts: FastMap<ConnKey, Duration>,
+    /// When a modelled WebRTC link's reader last had something reach it,
+    /// by its own addresses (its connector's ICE check's response, a
+    /// dcSCTP record's last chunk through its downlink): what a browser's
+    /// setup replies count their turns from ([`Scheduler::delivered`]).
+    /// Bound: one a connection.
+    delivered: FastMap<ConnKey, Time>,
+    /// The times their writers' stacks send this step's writes on these
+    /// connections at ([`Scheduler::send_at`]), taken by the next walk.
+    replies: FastMap<ConnKey, Time>,
+    /// When each host's uplink was last handed something, taken or
+    /// dropped ([`Scheduler::offered`]): its data channels hand it nothing
+    /// earlier ([`Scheduler::handed`]). Bound: one a host.
+    last_offered: FastMap<HostIx, Time>,
 }
 
 /// A message handed to a host's uplink, as its packet log and offers take
@@ -1694,7 +1707,32 @@ impl Scheduler {
                 .collect(),
             check_sent: FastMap::default(),
             check_rtts: FastMap::default(),
+            delivered: FastMap::default(),
+            replies: FastMap::default(),
+            last_offered: FastMap::default(),
         })
+    }
+
+    /// When the last thing to reach `conn`'s reader (its addresses, its
+    /// own then its peer's) came, of a modelled WebRTC link's: its ICE
+    /// check's response, or its peer's last record through the reader's
+    /// downlink. A host reads it at its next step.
+    pub(crate) fn delivered(&self, conn: ConnKey) -> Option<Time> {
+        self.delivered.get(&conn).copied()
+    }
+
+    /// `conn`'s writes of this step (its writer's addresses) leave at `at`
+    /// and no later than the step's start, where they'd go: a browser's
+    /// reply to a setup flight, which its stack sends as it handles the
+    /// flight ([`strims_node::Net::send_ago`]). Only a data channel's
+    /// writes take it, through their association's sender
+    /// ([`Scheduler::send_written`]). A reply can't overtake what its
+    /// uplink already took: it goes no earlier than the uplink's last
+    /// hand-off, before the step's other writes and with what it brings
+    /// before the step's start, its network thread's hands, and its stack
+    /// hands the uplink nothing earlier ([`Scheduler::handed`]).
+    pub(crate) fn send_at(&mut self, conn: ConnKey, at: Time) {
+        self.replies.insert(conn, at);
     }
 
     /// The round trip of the ICE check on `conn` (its connector's address,
@@ -1762,6 +1800,7 @@ impl Scheduler {
     /// among its host's offers, and with its host's packet log on, each of
     /// its packets a row. Reads the model and moves nothing.
     fn offered(&mut self, o: &Offered) {
+        self.last_offered.insert(o.from, o.at);
         let data = matches!(o.kind, PacketKind::Data | PacketKind::DataSack);
         let to_swarm =
             o.to.is_some_and(|to| self.swarm_hosts.get(to).copied().unwrap_or(false));
@@ -3758,8 +3797,10 @@ impl Scheduler {
 
     /// [`Scheduler::send`] with send buffers.
     fn send_written(&mut self, at: Time, fresh: Vec<u64>, b: &SendBuffers) {
+        let replies = std::mem::take(&mut self.replies);
         let by_sender = self.queues(fresh);
         let window = self.window().is_some();
+        let mut writes = Vec::new();
         for queues in by_sender {
             // (write order, queue position, record, whether it ends a
             // message, whether the page counted it)
@@ -3778,21 +3819,50 @@ impl Scheduler {
                 }
             }
             keyed.sort_unstable();
-            for (_, _, id, end, counted) in keyed {
+            writes.extend(keyed.into_iter().map(|(_, _, id, end, counted)| {
                 let data = self.records.get(&id).and_then(|r| match r.what {
-                    What::Data { .. } if window => Some((r.src, r.dst)),
+                    What::Data { .. } if window => Some((r.src, r.dst, r.from)),
                     _ => None,
                 });
-                match data {
-                    Some(conn) if self.assocs.contains_key(&conn) => {
-                        self.sctp_write(at, conn, id, end, counted);
-                    }
-                    Some(conn) => {
-                        self.queue_window(conn, id);
-                        self.pump(at, &[conn]);
-                    }
-                    None => self.transmit(at, id),
+                (data, id, end, counted)
+            }));
+        }
+        // The replies first, in their stamps' order (a link's writes in
+        // theirs), each no earlier than its uplink's last hand-off, and
+        // what they bring before the step's start (their network thread's
+        // hands) with them: no reply overtakes what its uplink took, none
+        // waits behind a later-stamped one's, and the step's other writes
+        // come behind them.
+        let stamp = |d: &Option<(SocketAddr, SocketAddr, HostIx)>| {
+            d.and_then(|(src, dst, _)| {
+                let conn = (src, dst);
+                let r = replies.get(&conn)?;
+                self.assocs.contains_key(&conn).then(|| (*r).min(at))
+            })
+        };
+        let (mut first, rest): (Vec<_>, Vec<_>) =
+            writes.into_iter().partition(|w| stamp(&w.0).is_some());
+        first.sort_by_key(|w| stamp(&w.0));
+        for (data, id, end, counted) in first {
+            if let Some((src, dst, from)) = data
+                && let Some(&r) = replies.get(&(src, dst))
+            {
+                let t = r.min(at);
+                let t = self.last_offered.get(&from).map_or(t, |&last| t.max(last));
+                self.sctp_write(t, (src, dst), id, end, counted);
+            }
+        }
+        self.run_events(at);
+        for (data, id, end, counted) in rest {
+            match data.map(|(src, dst, _)| (src, dst)) {
+                Some(conn) if self.assocs.contains_key(&conn) => {
+                    self.sctp_write(at, conn, id, end, counted);
                 }
+                Some(conn) => {
+                    self.queue_window(conn, id);
+                    self.pump(at, &[conn]);
+                }
+                None => self.transmit(at, id),
             }
         }
     }
@@ -3964,6 +4034,7 @@ impl Scheduler {
         let (from, to, conn) = (r.from, r.to, (r.src, r.dst));
         if check && let Some(sent) = self.check_sent.swap_remove(&conn) {
             self.check_rtts.insert(conn, t - sent);
+            self.delivered.insert(conn, t);
         }
         if self.window().is_none() || check {
             return;
@@ -6581,6 +6652,49 @@ mod tests {
             assert_eq!(data[0].kind, PacketKind::Data, "{p:?}: {log:?}");
             let first = t1 - epoch() + Duration::from_millis(7);
             assert!(sacks.iter().all(|s| s.at > first), "{p:?}: {log:?}");
+        }
+    }
+
+    /// A reply a browser's stack sent from before the step's start
+    /// ([`Scheduler::send_at`]) can't overtake what its uplink took since:
+    /// a setup flight handed `a`'s uplink at `t0` and a chunk its stack
+    /// wrote 1.5 ms before it, which a Chromium's network thread hands over
+    /// in the walk and a Firefox's stack at once, go in that order, the
+    /// chunk at the flight's time.
+    #[test]
+    fn a_backdated_reply_goes_to_its_uplink_behind_what_it_took() {
+        for p in [SctpProfile::CHROMIUM, SctpProfile::FIREFOX] {
+            let (_sim, mut wan, conns) = channels_of(p, 1);
+            let c = conns[0];
+            let (from, to) = (wan.ip_host[&c.0.ip()], wan.ip_host[&c.1.ip()]);
+            let t0 = sim_time(StdDuration::from_secs(1));
+            let mut id = 1 << 32;
+            let flight = Record {
+                src: c.0,
+                dst: c.1,
+                from,
+                to,
+                what: What::Datagram(200),
+                wire: 228,
+                packets: 1,
+                nominal: true,
+                state: State::InFlight,
+                link: 0,
+            };
+            wan.records.insert(id, flight);
+            wan.transmit(t0, id);
+            id += 1;
+            let wrote = t0 - Duration::from_micros(1500);
+            write_counted(&mut wan, &mut id, wrote, c, (1, 1, 200), false);
+            wan.run_events(t0 + Duration::from_millis(1));
+            let log = &wan.packets[0];
+            let handed: Vec<(PacketKind, Duration)> = log.iter().map(|r| (r.kind, r.at)).collect();
+            let at = t0 - epoch();
+            assert_eq!(
+                handed,
+                [(PacketKind::Control, at), (PacketKind::Data, at)],
+                "{p:?}: {log:?}"
+            );
         }
     }
 
