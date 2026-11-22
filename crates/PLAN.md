@@ -280,7 +280,7 @@ and dropped are in `TRIED.md`.
      Rescreen `meter-ytf-rebase` (the packet trains in `TRIED.md`) with
      those buckets on. Keep `simdb.py criterion` met over the testbed
      tier's cells, for native and for browsers, when a twin model changes.
-     Its targets, the user's: in each group, each measure's ratio within
+     Its targets: in each group, each measure's ratio within
      0.90-1.10; for `truth_bps` and `seed_upload`, 80 % of the cells within
      0.80-1.25; for `seed_budget`, a rank correlation of at least 0.8 and
      floor-mode shares alike (p at least 0.05), with 8 testbed repeats a
