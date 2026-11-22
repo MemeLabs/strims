@@ -13,3 +13,5 @@ dist
 
 # rust
 /target
+# hack/testbed/bench.sh stamps the bench page before a browser run.
+/hack/testbed/bench/page.stamp

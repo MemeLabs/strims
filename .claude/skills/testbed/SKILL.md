@@ -220,7 +220,12 @@ crates differ from those the page was built from builds its own page.
   score`, over the cases in hack/testbed/bench/. Its comparison
   (`hack/testbed/bench.py`) reads a run's uplink queue and qdisc tree
   through a release testbed_tables (`--uplink`; `TABLES_BIN`, else `cargo
-  build --release -p strims-sim --example testbed_tables`).
+  build --release -p strims-sim --example testbed_tables`). A case with
+  browser KINDS passes run.sh's stamp check only with testbed_bench
+  stamped (`hack/testbed/stamp.py write
+  target/release/examples/testbed_bench` after the build); bench.sh
+  stamps the bench page itself before such a run, its stamp untracked
+  beside it (hack/testbed/bench/page.stamp, gitignored).
 - **The shaper bench.** A PCAP=1 run's tables hold each node's `packets`:
   what it offered its link (its offered capture, GSO's buffers cut) and
   each one's fate past the queue. `simdb.py replay OUT... --name NAME`

@@ -22,7 +22,12 @@
 # channels (<out dir>/sim-tcp) and str0m's stack on the sim's sockets
 # (<out dir>/sim-str0m). Browser nodes (run.sh's KINDS) run the bench page
 # (hack/testbed/bench/page) over their own data channels, so they need
-# BENCH_WEBRTC=1; the sim runs them as native nodes.
+# BENCH_WEBRTC=1; the sim runs them as native nodes. Such a run checks
+# that BENCH_BIN and the page carry one sources hash (run.sh's stamp check,
+# hack/testbed/stamp.py), so BENCH_BIN needs its stamp (`stamp.py write`
+# after the build), and bench.sh stamps the page, which is this checkout's
+# own source, before each such run (hack/testbed/bench/page.stamp,
+# ignored by git).
 
 set -euo pipefail
 
@@ -38,9 +43,14 @@ while read -r kv; do
 done < <(sed -n 's/^# env: //p' "$schedule" | xargs -n1)
 mkdir -p "$out"
 cp "$schedule" "$out/schedule"
+page=$root/hack/testbed/bench/page
+case " ${KINDS:-} " in
+  *" firefox "* | *" chromium "*)
+    python3 "$root/hack/testbed/stamp.py" write "$page" >/dev/null ;;
+esac
 args="--schedule /out/schedule${BENCH_WEBRTC:+ --webrtc}"
 NODE_BIN=$bin NODE_ARGS=$args BROWSER_BIN=$bin BROWSER_ARGS=$args RELAY=0 \
-  WEB_BUNDLE=$root/hack/testbed/bench/page SECS=${SECS:-30} \
+  WEB_BUNDLE=$page SECS=${SECS:-30} \
   "$root/hack/testbed/run.sh" "$out"
 # Competing uploads and data channels need the window model.
 if [ -z "${COMPETE:-}" ] && [ -z "${BENCH_WEBRTC:-}" ]; then
