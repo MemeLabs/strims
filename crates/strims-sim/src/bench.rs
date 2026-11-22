@@ -20,7 +20,8 @@
 //!
 //! - `burst <from> <to> <start> <period> <bytes> <write> [<end>]`: from
 //!   `start`, every `period` until `end` (the run's end without), node
-//!   `from` queues `bytes` for `to` as records of at most `write` bytes.
+//!   `from` queues `bytes` (one at least) for `to` as records of at most
+//!   `write` bytes.
 //! - `probe <from> <to> <start> <period> [<end>]`: a probe record, queued
 //!   ahead of the data records waiting on its link, which `to` echoes back
 //!   as soon as it reads it, ahead of its own. The probes and echoes
@@ -195,6 +196,11 @@ impl Schedule {
                     if write < HEADER {
                         return Err(format!("{line:?}: writes take {HEADER} bytes at least"));
                     }
+                    // A burst of none queues no record, where the feed
+                    // waits for its link's writer to take the group.
+                    if bytes == 0 {
+                        return Err(format!("{line:?}: a burst takes a byte at least"));
+                    }
                     entries.push(Entry::Burst {
                         from: ix(from)?,
                         to: ix(to)?,
@@ -317,7 +323,10 @@ impl Releases {
     }
 
     /// Where the group goes among those released in its millisecond: by
-    /// the run's release, else its due, after the recorded ones.
+    /// the run's release in µs, else by its due, after a recorded group
+    /// the run released at that µs. An unrecorded group thus goes ahead
+    /// of a recorded one of its millisecond that the run released past
+    /// the unrecorded one's due.
     fn order(&self, to: usize, kind: Kind, due: i64) -> (i64, usize) {
         self.0
             .get(&(to, kind.code(), due))
@@ -1662,6 +1671,7 @@ mod tests {
             ]
         );
         assert!(Schedule::parse("burst 0 1 0 250 65536 8").is_err());
+        assert!(Schedule::parse("burst 0 1 0 250 0 16384").is_err());
         assert!(Schedule::parse("pause 0 1").is_err());
     }
 
