@@ -42,7 +42,8 @@
 //! it (`SEED_BURST`, `VIEWER_BURST`; `run.sh`'s 3028 without), which the
 //! sim's uplinks otherwise lack. A competing upload starts when the run's
 //! iperf3 client did (`compete.log` and its `compete-<s>.json` report),
-//! where the run has them. Each node releases its schedule's records when
+//! where the run has them, and the seed's uplink steps when the run
+//! applied them (`steps.log`). Each node releases its schedule's records when
 //! the run's node did ([`Releases`], from its log's writes), so the model
 //! takes the testbed node's timers and stalls as its input; with
 //! `--nominal` at their dues. `--seed` sets the sim's draws (1 without):
@@ -157,6 +158,14 @@ fn read(path: &std::path::Path) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+/// The run's start in Unix ms, node 0's log's `start` line.
+fn run_start_ms(dir: &std::path::Path) -> Result<Option<f64>, String> {
+    Ok(read(&dir.join("node-0.jsonl"))?.lines().find_map(|l| {
+        let v: serde_json::Value = serde_json::from_str(l).ok()?;
+        (v.get("ev")?.as_str()? == "start").then(|| v.get("ms")?.as_f64())?
+    }))
+}
+
 /// Each competing upload starts when the run's iperf3 client did (its
 /// report's `start.timestamp`, from the run's start in node-0.jsonl), not
 /// when run.sh launched it (COMPETE's time): starting the process and its
@@ -166,10 +175,7 @@ fn competitor_starts(dir: &std::path::Path, bench: &mut Bench) -> Result<(), Str
     let Ok(log) = std::fs::read_to_string(dir.join("compete.log")) else {
         return Ok(());
     };
-    let Some(start_ms) = read(&dir.join("node-0.jsonl"))?.lines().find_map(|l| {
-        let v: serde_json::Value = serde_json::from_str(l).ok()?;
-        (v.get("ev")?.as_str()? == "start").then(|| v.get("ms")?.as_f64())?
-    }) else {
+    let Some(start_ms) = run_start_ms(dir)? else {
         return Ok(());
     };
     for line in log.lines() {
@@ -191,6 +197,31 @@ fn competitor_starts(dir: &std::path::Path, bench: &mut Bench) -> Result<(), Str
         };
         for c in bench.compete.iter_mut().filter(|c| c.0 == nominal) {
             c.0 = (ts - start_ms) / 1000.0;
+        }
+    }
+    Ok(())
+}
+
+/// The seed's capacity steps when the run applied them (steps.log's
+/// times, from the run's start), as the tier's twin takes them, not at
+/// SEED_UP_STEPS's: run.sh's step waits for its time plus the seed's
+/// delay and logs once its `tc` returns, 83-91 ms past the nominal time
+/// in rtc-holders-chromium-halve's runs, a third of a burst period. A step
+/// the log lacks keeps its nominal time.
+fn applied_steps(dir: &std::path::Path, bench: &mut Bench) -> Result<(), String> {
+    let Ok(log) = std::fs::read_to_string(dir.join("steps.log")) else {
+        return Ok(());
+    };
+    let Some(start_ms) = run_start_ms(dir)? else {
+        return Ok(());
+    };
+    let ats: Vec<f64> = log
+        .lines()
+        .filter_map(|l| l.split_whitespace().next()?.parse::<f64>().ok())
+        .collect();
+    for (_, steps) in bench.up_steps.iter_mut().filter(|(h, _)| *h == 0) {
+        for (s, at) in steps.iter_mut().zip(&ats) {
+            s.0 = (at - start_ms) / 1000.0;
         }
     }
     Ok(())
@@ -233,6 +264,7 @@ fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
         a.window,
     )?;
     competitor_starts(dir, &mut bench)?;
+    applied_steps(dir, &mut bench)?;
     if !a.nominal {
         recorded_releases(dir, &mut bench);
     }
