@@ -155,6 +155,11 @@
 //!   writer's pass meets as late as the page's work does
 //!   ([`Scenario::pacer_hold_start`]); `off` at the pass. Unset, a
 //!   scenario keeps its own, on unless it says otherwise.
+//! - `STRIMS_SIM_LINK_SETUP_DRAWS=on` has each browser draw its links'
+//!   setups as its stack's do, its metronome's phase among them
+//!   ([`Scenario::link_setup_draws`]); `off` sets every link up on its
+//!   stack's fixed parts. Unset, a scenario keeps its own, on unless it
+//!   says otherwise.
 //! - `STRIMS_SIM_SERIES=1` samples every node's transfers
 //!   ([`Scenario::transfer_samples`]), which the run second by second
 //!   (`Report::series_data`) and the tables' `seconds` take.
@@ -551,7 +556,8 @@ fn timer_lateness_knob() -> Option<bool> {
 /// The switch `name` (`STRIMS_SIM_PACER_LATENESS`,
 /// [`Scenario::pacer_lateness`]; `STRIMS_SIM_PACER_TURNS`,
 /// [`Scenario::pacer_turns`]; `STRIMS_SIM_PACER_HOLD`,
-/// [`Scenario::pacer_hold_start`]): `on` or `off`, if set and not blank.
+/// [`Scenario::pacer_hold_start`]; `STRIMS_SIM_LINK_SETUP_DRAWS`,
+/// [`Scenario::link_setup_draws`]): `on` or `off`, if set and not blank.
 #[allow(clippy::panic)] // a mistyped setting fails its test
 fn on_off_knob(name: &str) -> Option<bool> {
     let v = env(name).filter(|v| !v.trim().is_empty())?;
@@ -858,6 +864,7 @@ fn sweep_seeds(
     let timer_lateness = timer_lateness_knob();
     let pacer_lateness = on_off_knob("STRIMS_SIM_PACER_LATENESS");
     let pacer_turns = on_off_knob("STRIMS_SIM_PACER_TURNS");
+    let setup_draws = on_off_knob("STRIMS_SIM_LINK_SETUP_DRAWS");
     let pacer_hold = on_off_knob("STRIMS_SIM_PACER_HOLD");
     let timer_log = timer_log_knob();
     let timer_probe = knob::<u32>("STRIMS_SIM_TIMER_PROBE") == Some(1);
@@ -1049,6 +1056,9 @@ fn sweep_seeds(
         }
         if let Some(hold) = pacer_hold {
             spec.pacer_hold_start = hold;
+        }
+        if let Some(draws) = setup_draws {
+            spec.link_setup_draws = draws;
         }
         if let Some(pin) = &seed_pin {
             if let Err(e) = pin.check(&spec) {

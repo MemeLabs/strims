@@ -692,6 +692,9 @@ pub(crate) struct SimNet {
     /// [`HostSpec::rtc_stack`](crate::HostSpec::rtc_stack), under the
     /// window model.
     rtc_stack: Option<crate::wan::SctpProfile>,
+    /// A browser's link-setup draws
+    /// ([`Scenario::link_setup_draws`](crate::Scenario::link_setup_draws)).
+    setup_draws: Option<crate::world::HostSetupDraws>,
     /// How the host's held channel writers poll its pacer.
     pacer: PacerTimers,
 }
@@ -703,7 +706,16 @@ impl SimNet {
             wan: None,
             segment: None,
             rtc_stack: None,
+            setup_draws: None,
             pacer: PacerTimers::default(),
+        }
+    }
+
+    /// The host's links draw their setups from `draws`.
+    pub fn with_setup_draws(self, draws: Option<crate::world::HostSetupDraws>) -> SimNet {
+        SimNet {
+            setup_draws: draws,
+            ..self
         }
     }
 
@@ -1495,6 +1507,34 @@ impl Net for SimNet {
             Some(p) if p == SctpProfile::FIREFOX => LinkSetup::FIREFOX,
             _ => LinkSetup::STR0M,
         }
+    }
+
+    /// A browser's ([`SimNet::with_setup_draws`]): its ticks a whole number
+    /// of its stack's period past its phase in true time, the stream its
+    /// own.
+    fn setup_draws(&self) -> Option<strims_node::SetupDraws> {
+        use rand_core::Rng;
+        let crate::world::HostSetupDraws { phase, rng } = self.setup_draws.clone()?;
+        let now = tokio::time::Instant::now();
+        let tick_origin = self
+            .link_setup()
+            .tick
+            .map(|t| t.as_nanos())
+            .filter(|&t| t > 0)
+            .and_then(|t| {
+                let e = turmoil::sim_elapsed().unwrap_or_default().as_nanos();
+                let since = (e + t - phase.as_nanos() % t) % t;
+                now.checked_sub(std::time::Duration::from_nanos(u64::try_from(since).ok()?))
+            })
+            .unwrap_or(now);
+        let uniform = Arc::new(move || {
+            let x = rng.lock().unwrap_or_else(|e| e.into_inner()).next_u64();
+            (x >> 11) as f64 / (1u64 << 53) as f64
+        });
+        Some(strims_node::SetupDraws {
+            tick_origin,
+            uniform,
+        })
     }
 
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send {

@@ -4088,6 +4088,78 @@ fn the_twins_viewers_link_their_swarm_at_their_join() {
     );
 }
 
+/// With the draws (`Scenario::link_setup_draws`, on by default), three
+/// browsers joining at once bring their links up at other times in other
+/// seeds, and a seed repeats its own; off, every seed's are one. A run of
+/// str0m hosts over UDP, one over str0m's SCTP and one of native hosts over
+/// TCP each trace the same with the draws on or off.
+#[test]
+fn browsers_draw_their_link_setups_per_seed() {
+    let peers_up = |r: &strims_sim::Report| -> Vec<(u64, String)> {
+        r.trace
+            .iter()
+            .filter_map(|l| {
+                let (t, rest) = l.split_once(' ')?;
+                (rest.contains(" peer+ ") && rest.ends_with("WebRtc"))
+                    .then(|| (t.parse().ok(), rest.to_owned()))
+                    .and_then(|(t, rest)| Some((t?, rest)))
+            })
+            .collect()
+    };
+    let run = |name: &str, n: u64, stack: Option<SctpProfile>, webrtc: bool, draws: bool| {
+        let mut c = collapse_case(3, 20, 2);
+        c.harness_links = true;
+        c.joins = (1..=3).map(|v| (v, 1000)).collect();
+        sweep_n(
+            name,
+            n,
+            |s| {
+                let mut s = calibration_star_scenario(s, &c);
+                if webrtc {
+                    s.over_webrtc(&[stack]);
+                }
+                s.link_setup_draws = draws;
+                s
+            },
+            |_| Ok(()),
+        )
+    };
+    let chromium = Some(SctpProfile::CHROMIUM);
+    let on: Vec<_> = run("setup_draws_on", 4, chromium, true, true)
+        .iter()
+        .map(peers_up)
+        .collect();
+    assert!(on.iter().all(|u| u.len() >= 6), "{on:?}");
+    let times = |u: &Vec<(u64, String)>| u.iter().map(|x| x.0).collect::<Vec<_>>();
+    let distinct: std::collections::BTreeSet<_> = on.iter().map(times).collect();
+    assert!(distinct.len() > 1, "the seeds' link-ups: {distinct:?}");
+    let again = run("setup_draws_again", 1, chromium, true, true);
+    assert_eq!(
+        again.first().map(peers_up).as_ref(),
+        on.first(),
+        "a seed repeats"
+    );
+    let off: std::collections::BTreeSet<_> = run("setup_draws_off", 4, chromium, true, false)
+        .iter()
+        .map(|r| times(&peers_up(r)))
+        .collect();
+    assert_eq!(off.len(), 1, "without draws, one link-up: {off:?}");
+    for (name, stack, webrtc) in [
+        ("setup_draws_str0m", None, true),
+        ("setup_draws_str0m_sctp", Some(SctpProfile::STR0M), true),
+        ("setup_draws_tcp", None, false),
+    ] {
+        let traces = [true, false].map(|draws| {
+            run(name, 1, stack, webrtc, draws)
+                .first()
+                .map(|r| r.trace.clone())
+                .unwrap_or_default()
+        });
+        assert!(!traces[0].is_empty());
+        assert_eq!(traces[0], traces[1], "{name}: the draws move nothing");
+    }
+}
+
 /// A browser's link takes its stacks' trips at its path's round trip
 /// (strims-node's `model_rtc`), on a quiet path of one delay `d` either
 /// way and the signalling relay on the bridge: the joiner's offer is ready
@@ -4107,7 +4179,8 @@ fn the_twins_viewers_link_their_swarm_at_their_join() {
 /// of Chromium's metronome. The sim's whole-millisecond steps add about a
 /// millisecond a flight, the same at either round trip. A Chromium seed
 /// whose check is slower than its `answer_ready`, on a 70-ms path, answers
-/// at that bound.
+/// at that bound. Each part is its stack's fixed one: the draws are off
+/// (`Scenario::link_setup_draws`).
 #[test]
 fn browser_links_take_their_stacks_trips() {
     use strims_node::LinkSetup;
@@ -4141,14 +4214,7 @@ fn browser_links_take_their_stacks_trips() {
                 wait *= 2;
                 at += wait;
             }
-            (
-                at + d,
-                if seed.resend_tick.is_some() {
-                    TICK_MS
-                } else {
-                    0
-                },
-            )
+            (at + d, if seed.tick.is_some() { TICK_MS } else { 0 })
         } else {
             (writable.max(hello_sent + d), 0)
         };
@@ -4175,6 +4241,7 @@ fn browser_links_take_their_stacks_trips() {
             |s| {
                 let mut s = calibration_star_scenario(s, &c);
                 s.over_webrtc(&stacks);
+                s.link_setup_draws = false;
                 s
             },
             |_| Ok(()),

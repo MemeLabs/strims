@@ -53,6 +53,55 @@ pub(crate) fn epoch() -> Time {
     Time::from_unix_millis(EPOCH_MS)
 }
 
+/// A browser host's draws for its links' setups
+/// ([`Scenario::link_setup_draws`], strims-node's `SetupDraws`).
+// The model's draws must be `Send + Sync`; everything runs on turmoil's
+// thread, so the lock is never contended.
+#[allow(clippy::disallowed_types)]
+#[derive(Clone, Debug)]
+pub(crate) struct HostSetupDraws {
+    /// Its metronome ticks this far past each whole period of true time.
+    pub phase: Duration,
+    /// Its links' stream, forked from the run's rng.
+    pub rng: Arc<std::sync::Mutex<DetRng>>,
+}
+
+/// Each host's link-setup draws, from `rng` after the epoch phase: with
+/// [`Scenario::link_setup_draws`] and a browser in the run, the browsers'
+/// metronome phases, uniform over the period, one for all when the clocks
+/// are shared ([`ClockSkew::Off`](crate::skew::ClockSkew::Off)) and else
+/// one each, then a stream forked for each browser, in host order (a
+/// browser's own phase drawn before its stream). Nothing is drawn
+/// otherwise. Shared clocks stand for hosts on one machine: only a
+/// testbed's twins run without skew (testbed.rs), as its containers share
+/// their host's monotonic clock, which Chromium's metronome ticks on;
+/// browsers apart keep clocks, and so phases, of their own.
+#[allow(clippy::disallowed_types)] // HostSetupDraws' lock
+fn draw_setups(spec: &Scenario, rng: &mut DetRng) -> Vec<Option<HostSetupDraws>> {
+    use rand_core::Rng;
+    let n = spec.hosts.len();
+    let browsers: Vec<bool> = (0..n)
+        .map(|h| spec.link_setup_draws && spec.is_browser(h))
+        .collect();
+    if !browsers.contains(&true) {
+        return vec![None; n];
+    }
+    let period = strims_node::LinkSetup::CHROMIUM.tick.map_or(1, |t| {
+        u64::try_from(t.as_nanos()).unwrap_or(u64::MAX).max(1)
+    });
+    let phase = |rng: &mut DetRng| Duration::from_nanos(rng.next_u64() % period);
+    let shared = spec.clock_skew.is_off().then(|| phase(rng));
+    browsers
+        .into_iter()
+        .map(|b| {
+            b.then(|| HostSetupDraws {
+                phase: shared.unwrap_or_else(|| phase(rng)),
+                rng: Arc::new(std::sync::Mutex::new(strims_base::rng::fork(rng))),
+            })
+        })
+        .collect()
+}
+
 /// A run's epoch phase ([`Scenario::epoch_phase`]) drawn from `rng`: a
 /// whole ms in `[0, 1000)`, uniformly.
 pub(crate) fn draw_epoch_phase(rng: &mut DetRng) -> Duration {
@@ -347,6 +396,10 @@ pub(crate) struct World {
     /// How far every host's clock reads ahead of true time besides its
     /// skew: the run's epoch phase ([`Scenario::epoch_phase`]).
     pub epoch_phase: strims_base::time::Duration,
+    /// Each browser's draws for its links' setups
+    /// ([`Scenario::link_setup_draws`]); `None` for another host, and for
+    /// every host without them.
+    pub(crate) setup_draws: Vec<Option<HostSetupDraws>>,
     /// Each host's timers' and stream writer's lateness
     /// ([`Scenario::timer_lateness`]), its incarnations' in turn; empty
     /// without it.
@@ -470,7 +523,7 @@ impl World {
         } else {
             (Vec::new(), Vec::new())
         };
-        // Last of the scenario's draws, before the controller's: the
+        // Before the link setups' draws and the controller's: the
         // epoch's phase, unless the scenario sets it (a whole ms under a
         // second).
         if let Some(p) = spec.epoch_phase {
@@ -483,6 +536,7 @@ impl World {
             .epoch_phase
             .unwrap_or_else(|| draw_epoch_phase(&mut rng))
             .into();
+        let setup_draws = draw_setups(&spec, &mut rng);
         let st = WorldState {
             trace: Vec::new(),
             hosts: (0..spec.hosts.len())
@@ -532,6 +586,7 @@ impl World {
             media_traces,
             clock_offsets,
             epoch_phase,
+            setup_draws,
             lateness,
             timer_logs,
             link_logs,
@@ -2119,7 +2174,9 @@ mod tests {
     use rand_core::Rng;
 
     use super::*;
+    use crate::skew::ClockSkew;
     use crate::spec::{SwarmSpec, Transport};
+    use crate::wan::SctpProfile;
 
     fn world(phase: Option<Duration>, seed: u64) -> World {
         let mut s = Scenario::new("epoch");
@@ -2137,6 +2194,84 @@ mod tests {
         ));
         s.epoch_phase = phase;
         World::new(s, seed, None, None)
+    }
+
+    fn browsers(skew: ClockSkew, stack: Option<SctpProfile>, draws: bool, seed: u64) -> World {
+        let mut c = crate::calibration::Calibration::from_knobs(|_| None);
+        c.window = true;
+        let mut s = crate::calibration::calibration_star(&c);
+        s.over_webrtc(&[stack]);
+        s.clock_skew = skew;
+        s.link_setup_draws = draws;
+        World::new(s, seed, None, None)
+    }
+
+    /// Browsers draw their link setups after the epoch phase: one
+    /// metronome phase for all when the clocks are shared, one each when
+    /// they are skewed, every one within the period, and a stream each; a
+    /// seed repeats them and seeds differ. The relay (native), a run of
+    /// str0m hosts (over UDP and over str0m's SCTP) and a run with the
+    /// draws off draw nothing: the
+    /// controller's rng goes on as without them.
+    #[test]
+    fn browsers_draw_their_link_setups_after_the_epoch_phase() {
+        let chromium = Some(SctpProfile::CHROMIUM);
+        let next = |w: &World| w.with_rng(|r| r.next_u64());
+        let phases = |w: &World| -> Vec<Duration> {
+            w.setup_draws.iter().flatten().map(|d| d.phase).collect()
+        };
+        let period = strims_node::LinkSetup::CHROMIUM.tick.unwrap_or_default();
+        let shared = browsers(ClockSkew::Off, chromium, true, 7);
+        let hosts = shared.spec.hosts.len();
+        let p = phases(&shared);
+        assert_eq!(p.len(), hosts - 1, "every host but the relay");
+        assert!(shared.setup_draws.last().is_some_and(Option::is_none));
+        assert!(
+            p.iter().all(|&x| p.first() == Some(&x) && x < period),
+            "{p:?}"
+        );
+        let own = browsers(ClockSkew::Real, chromium, true, 7);
+        let q = phases(&own);
+        assert_eq!(q.iter().collect::<BTreeSet<_>>().len(), q.len(), "{q:?}");
+        assert!(q.iter().all(|&x| x < period), "{q:?}");
+        let firsts = |w: &World| -> Vec<u64> {
+            w.setup_draws
+                .iter()
+                .flatten()
+                .map(|d| d.rng.lock().map(|mut r| r.next_u64()).unwrap_or_default())
+                .collect()
+        };
+        let f = firsts(&shared);
+        assert_eq!(
+            f.iter().collect::<BTreeSet<_>>().len(),
+            f.len(),
+            "a stream each"
+        );
+        assert_eq!(firsts(&browsers(ClockSkew::Off, chromium, true, 7)), f);
+        let seen: BTreeSet<Duration> = (1..=8)
+            .filter_map(|seed| {
+                phases(&browsers(ClockSkew::Off, chromium, true, seed))
+                    .first()
+                    .copied()
+            })
+            .collect();
+        assert!(seen.len() > 4, "{seen:?}");
+        let off = browsers(ClockSkew::Off, chromium, false, 7);
+        assert!(off.setup_draws.iter().all(Option::is_none));
+        assert_eq!(off.epoch_phase, shared.epoch_phase, "drawn after the phase");
+        assert_ne!(next(&off), next(&shared));
+        for (skew, stack) in [ClockSkew::Off, ClockSkew::Real]
+            .into_iter()
+            .flat_map(|k| [(k, None), (k, Some(SctpProfile::STR0M))])
+        {
+            let on = browsers(skew, stack, true, 7);
+            let without = browsers(skew, stack, false, 7);
+            assert!(
+                on.setup_draws.iter().all(Option::is_none),
+                "str0m ({stack:?}) draws nothing"
+            );
+            assert_eq!(next(&on), next(&without));
+        }
     }
 
     /// A run's epoch phase is its seed's, a whole ms under a second, or

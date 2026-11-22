@@ -19,7 +19,7 @@ use strims_vnic::TcpOptions;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::config::TcpSocketConfig;
-use crate::model_rtc::LinkSetup;
+use crate::model_rtc::{LinkSetup, SetupDraws};
 
 /// TCP and UDP sockets. Addresses are `host:port` strings, resolved by the
 /// implementation (DNS for tokio, turmoil's host names in a simulation).
@@ -111,6 +111,13 @@ pub trait Net: Clone + Send + Sync + 'static {
     /// channels (`crate::model_rtc`). The default: str0m's.
     fn link_setup(&self) -> LinkSetup {
         LinkSetup::STR0M
+    }
+
+    /// What the host draws for its modelled links' setups, asked once as
+    /// its WebRTC model starts (`crate::model_rtc`). The default: nothing,
+    /// each part its stack's fixed one.
+    fn setup_draws(&self) -> Option<SetupDraws> {
+        None
     }
 
     fn udp_bind(&self, addr: String) -> impl Future<Output = io::Result<Self::UdpSocket>> + Send;

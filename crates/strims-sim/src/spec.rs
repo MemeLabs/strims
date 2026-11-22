@@ -698,6 +698,15 @@ pub struct Scenario {
     /// asserts) and draws nothing,
     /// `Some(ZERO)` the run as it was before the phase.
     pub epoch_phase: Option<Duration>,
+    /// Whether each browser ([`Scenario::is_browser`]) draws its links'
+    /// setups as its stack's do (strims-node's `SetupDraws`): its
+    /// metronome's phase, one shared by every host when the clocks are
+    /// ([`ClockSkew::Off`], as the testbed's containers share their host's
+    /// monotonic clock), else its own, and a stream of its own for its
+    /// links' parts; on by default. Off, each part is its stack's fixed one,
+    /// the ticks counted from each node's model's start, and nothing is
+    /// drawn; a run without browsers draws nothing either way.
+    pub link_setup_draws: bool,
     /// Whether each host's node task wakes and its frame writer writes as
     /// late as a real node's of its kind do ([`crate::late`] says which
     /// timers that covers, and how late): on by default; off, they run at
@@ -1012,6 +1021,7 @@ impl Scenario {
             exp: BTreeSet::new(),
             clock_skew: ClockSkew::Real,
             epoch_phase: None,
+            link_setup_draws: true,
             timer_lateness: true,
             pacer_lateness: true,
             pacer_turns: true,

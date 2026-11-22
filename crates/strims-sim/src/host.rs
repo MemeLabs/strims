@@ -132,6 +132,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         .with_wan(w.wan.clone())
         .with_segment(w.spec.segment())
         .with_rtc_stack(rtc_stack.filter(|_| w.spec.window_model()))
+        .with_setup_draws(w.setup_draws.get(h).cloned().flatten())
         .with_pacer(pacer);
     // The node's clock, off true time by the run's epoch phase and the
     // host's offset (`Scenario::epoch_phase`, `Scenario::clock_skew`), as

@@ -116,10 +116,15 @@
 //!   its probe's from one more forked per host after them; without it
 //!   nothing is drawn;
 //! - the run's epoch phase ([`Scenario::epoch_phase`]), where its hosts'
-//!   clocks start in their second, comes from the same rng last, after
+//!   clocks start in their second, comes from the same rng after
 //!   the lateness streams, before the controller's choices; a scenario
 //!   that sets it draws nothing, and at 0 its run is the one before the
-//!   phase.
+//!   phase;
+//! - with [`Scenario::link_setup_draws`] and a browser in the run, the
+//!   browsers' metronome phases (one for all without clock skew) and a
+//!   stream forked for each, which its links' setups draw from as its
+//!   node's commands come, from the same rng after the epoch phase, before
+//!   the controller's choices; without them nothing is drawn.
 //!
 //! The schedule stays fixed because every host, the controller and every
 //! task run on the turmoil thread, shared state is `Rc<RefCell<…>>` over

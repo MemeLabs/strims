@@ -22,7 +22,9 @@
 //!   [`LinkSetup::offer_ready`] or [`LinkSetup::answer_ready`] after it is
 //!   asked for, an answer of a stack that ends its gathering at its check
 //!   [`LinkSetup::answer_after_check`] after its check succeeds if that
-//!   comes first.
+//!   comes first. A host with draws ([`Net::setup_draws`]) draws its
+//!   pages' parts of each, and ends a Chromium offer's gathering on its
+//!   metronome's tick ([`LinkSetup::gather_after_set`]).
 //! - **ICE.** Each side's connectivity check is a dial of the other's
 //!   listener, whose connect is the check's round trip: the answering
 //!   side's its stack's [`LinkSetup::check_ready`] after the offer comes,
@@ -59,7 +61,7 @@ use strims_node_core::{
 use strims_vnic::LinkConfig;
 use strims_vnic::webrtc::{SdpType, SessionDescription};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::Instant;
 
 use crate::link::Transport;
@@ -118,15 +120,184 @@ pub struct LinkSetup {
     /// As DTLS client, it resends its ClientHello while no server flight
     /// has come: first `resend_rtts` of its ICE check's round trip after
     /// sending it, within `resend_min` and `resend_max`, then twice the
-    /// last wait each time, to a minute at most. With a `resend_tick`, each
-    /// resend's timer fires at the first of the stack's ticks, that far
-    /// apart, at or after its deadline.
+    /// last wait each time, to a minute at most.
     pub resend_min: Duration,
     pub resend_rtts: u32,
     pub resend_max: Duration,
-    pub resend_tick: Option<Duration>,
+    /// The period of the stack's metronome, whose ticks its low-precision
+    /// timers fire on: a resend's timer fires at the first tick at or after
+    /// its deadline, and with the host's draws ([`SetupDraws`]) so does its
+    /// offer's gathering's last phase. Ticks fall on the host's grid
+    /// ([`SetupDraws::tick_origin`]), without draws on one counted from the
+    /// model's start.
+    pub tick: Option<Duration>,
+    /// With the host's draws, an offer's gathering ends at the first tick
+    /// at or after its setting plus this, [`GATHER_TAIL`] past that tick,
+    /// and its offer then leaves, in place of `offer_ready`; and its
+    /// setting comes `set_lead` (drawn) and `set_per_offer` for each offer
+    /// the page has made by then after the node asks for it: the page
+    /// makes every offer it is asked for before it sets any.
+    pub gather_after_set: Option<Duration>,
+    pub set_lead: Spread,
+    pub set_per_offer: Duration,
+    /// With the host's draws, `check_ready` drawn, from the asking of its
+    /// batch's last offer to the batch's first check (`check_per_offer`).
+    pub check_spread: Spread,
+    /// With the host's draws and a `check_spread`, the answering page's
+    /// offers check in batches: one it is asked to set before the latest
+    /// batch's first check goes joins that batch, whose first check then
+    /// goes once the joining offer's is ready, the others in the order
+    /// their offers were asked, each this after the one before.
+    pub check_per_offer: Duration,
     pub flights: Flights,
 }
+
+/// A duration a host draws, as its inverse distribution: knots of
+/// (quantile in permille, µs), the first at 0 and the last at 1000, linear
+/// between them; none ([`Spread::NONE`]) draws nothing. A knot's µs may be
+/// negative, for a spread about a part the model holds fixed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Spread(pub &'static [(u16, i32)]);
+
+impl Spread {
+    pub const NONE: Spread = Spread(&[]);
+
+    /// Its value at quantile `u` in `[0, 1)`, in µs.
+    pub fn at(self, u: f64) -> f64 {
+        let q = u.clamp(0.0, 1.0) * 1000.0;
+        let mut knots = self.0.iter().map(|&(p, us)| (f64::from(p), f64::from(us)));
+        let Some(mut lo) = knots.next() else {
+            return 0.0;
+        };
+        for hi in knots {
+            if q <= hi.0 {
+                let w = hi.0 - lo.0;
+                return if w > 0.0 {
+                    lo.1 + (hi.1 - lo.1) * (q - lo.0) / w
+                } else {
+                    hi.1
+                };
+            }
+            lo = hi;
+        }
+        lo.1
+    }
+}
+
+/// A host's draws for its links' setups ([`Net::setup_draws`]): where its
+/// stack's metronome ticks, and the stream each of its links draws its
+/// parts from, in a fixed order as the node's commands come.
+#[derive(Clone)]
+pub struct SetupDraws {
+    /// An instant on the host's tick grid: its ticks fall a whole number of
+    /// its stack's [`LinkSetup::tick`] from it. Chromium's metronome ticks
+    /// on the host's monotonic clock's multiples of its period
+    /// (`TimerBasedTickProvider::TimeSnappedToNextTick`, snapped to
+    /// `base::TimeTicks()`), so every Chromium on one host shares a phase,
+    /// and hosts apart have their own.
+    pub tick_origin: Instant,
+    /// The host's stream, uniform in `[0, 1)`.
+    pub uniform: Arc<dyn Fn() -> f64 + Send + Sync>,
+}
+
+impl SetupDraws {
+    /// `spread` drawn, nothing for none.
+    fn draw(&self, spread: Spread) -> Option<f64> {
+        (!spread.0.is_empty()).then(|| spread.at((self.uniform)()))
+    }
+}
+
+/// `base` moved by `us` µs, no sooner than `floor`.
+fn shifted(base: Instant, us: f64, floor: Instant) -> Instant {
+    let d = Duration::from_secs_f64(us.abs() / 1e6);
+    let at = if us < 0.0 {
+        base.checked_sub(d).unwrap_or(floor)
+    } else {
+        base + d
+    };
+    at.max(floor)
+}
+
+/// An answering page's batch ([`LinkSetup::check_per_offer`]): when its
+/// first check goes, and how many offers it holds.
+type Batch = watch::Sender<(Instant, u32)>;
+
+/// An offer the page is asked to set at `now`, its check ready `ready`
+/// later, joins `batch` if that batch's first check is still to go, which
+/// then goes `ready` from now, and else opens the next: its batch and its
+/// place in it.
+fn join_batch(
+    batch: &mut Option<Batch>,
+    now: Instant,
+    ready: Duration,
+) -> (watch::Receiver<(Instant, u32)>, u32) {
+    if let Some(b) = batch.as_ref() {
+        let (first, offers) = *b.borrow();
+        if now < first {
+            b.send_replace((now + ready, offers + 1));
+            return (b.subscribe(), offers);
+        }
+    }
+    let (b, rx) = watch::channel((now + ready, 1));
+    *batch = Some(b);
+    (rx, 0)
+}
+
+/// When the check of the offer at `place` of a closed batch goes, its
+/// first going at `first`: each later one `step` after the one before.
+fn batch_check_at(first: Instant, place: u32, step: Duration) -> Instant {
+    first + step * place
+}
+
+/// Waits out the check of the offer at `place` in its batch, whose first
+/// check moves, sooner or later, as each offer joins it.
+async fn batch_check(mut batch: watch::Receiver<(Instant, u32)>, place: u32, step: Duration) {
+    loop {
+        let (first, _) = *batch.borrow_and_update();
+        if Instant::now() >= first {
+            tokio::time::sleep_until(batch_check_at(first, place, step)).await;
+            return;
+        }
+        tokio::select! {
+            () = tokio::time::sleep_until(first) => {}
+            // The page opens the next batch only once this one's first
+            // check has gone, so a closed channel's wait is over too.
+            changed = batch.changed() => {
+                if changed.is_err() {
+                    tokio::time::sleep_until(first).await;
+                }
+            }
+        }
+    }
+}
+
+/// How long past its tick a Chromium offer's gathering ends: 0.25 ms in 76
+/// of the testbed's 80 (the halve-7 cells' PCAP=1 runs).
+pub const GATHER_TAIL: Duration = Duration::from_micros(250);
+
+/// With the hosts' draws, an offer's way through the signalling relay to
+/// its peer's page, and an answer's, past the model's paths: the page's
+/// post to its node's worker, the worker's pass, the relay's and the
+/// peer's worker's and page's, about the leg's median, which the stacks'
+/// `offer_ready` and `answer_after_check` hold. Drawn at the sender, the
+/// offer's on its leaving and the answer's on its, neither sooner than the
+/// last wait it ended. The testbed's halve-7 runs' 112 seed links read each
+/// leg's excess over its paths' delays at 3, 5 and 9 ms (p10, p50, p90),
+/// the answer's at 0, 3 and 7.
+pub const OFFER_TRANSIT: Spread = Spread(&[
+    (0, -2_500),
+    (100, -2_000),
+    (500, 0),
+    (900, 4_000),
+    (1000, 6_000),
+]);
+pub const ANSWER_TRANSIT: Spread = Spread(&[
+    (0, -3_000),
+    (100, -3_000),
+    (500, 0),
+    (900, 4_000),
+    (1000, 6_000),
+]);
 
 /// The UDP payload bytes of what a stack sends in a link's setup: DTLS
 /// flights with their records, and SCTP chunks in their DTLS record.
@@ -199,6 +370,38 @@ impl LinkSetup {
     /// to a Firefox server came 47-65 ms after its ClientHello, 57 at the
     /// median of 21. Its ClientHello carries X25519MLKEM768's share. Both
     /// its ends send an INIT (dcSCTP).
+    ///
+    /// With the host's draws, from the halve-7 cells' 16 PCAP=1 runs (7
+    /// viewers each joining at once, linking to the seed and the viewers
+    /// before it, a Chromium seed answering): an offer's gathering ended at
+    /// the first tick of the metronome at or after its setting plus 112.5
+    /// ms, 0.25 ms past it, in 76 of 80 (`gather_after_set`); its page set
+    /// it 1.85 ms later for each offer it made (the strims page's
+    /// `PeerHost` makes each connection's offer as its node asks, and every
+    /// create came before the first set), 9.8 ms after the ask at the
+    /// median of a lone offer, 7.2-11.8 (p10-p90; `set_lead`, which with
+    /// the ticks has a lone offer's gathering end 130 ms after the ask at
+    /// the median, 124-137 at p10-p90, where the runs' 16 read 132, 125
+    /// and 136). The seed's checks went in batches: an offer it was asked
+    /// to set before a batch's first check went joined it, and the batch's
+    /// checks went in the order their offers were asked, the first 2.5 ms
+    /// after its last offer's asking at the median of the runs' 42 batches
+    /// of 1 to 5 offers (1.0-3.8 at p10-p90; `check_spread`, its median the
+    /// C6 bench's `check_ready`), each later one 0.37 ms after the one
+    /// before at the median of 68 (0.20-0.90; `check_per_offer`), in all
+    /// 33 batches of two or more. That joins each of the seed's
+    /// connections to its viewer by the offer the relay forwarded it,
+    /// which the seed's page reads in turn; no offer came while a batch's
+    /// checks were going, and no check went before its own answer's
+    /// setting, 0.45 ms after it at the median (0.28-1.08). The strims
+    /// page gives each connection its own chain of calls, so the batching
+    /// is below it, likely in the signalling and network threads a
+    /// renderer's connections share (unverified), and part of its stall
+    /// may be the testbed's host, its 8 browsers joining at once. Whether
+    /// it carries what a run's seed links share is open: of their opens'
+    /// variance, an ANOVA's between-run component is 0.0 ms² in the
+    /// twin's 32 runs a cell, 6.7 and 0.1 in the testbed's 8 (halve-7-10,
+    /// -20), too few runs to tell.
     pub const CHROMIUM: LinkSetup = LinkSetup {
         name: "chromium",
         offer_ready: Duration::from_millis(134),
@@ -214,7 +417,26 @@ impl LinkSetup {
         resend_min: Duration::from_millis(50),
         resend_rtts: 2,
         resend_max: Duration::from_secs(3),
-        resend_tick: Some(Duration::from_micros(15_625)),
+        tick: Some(Duration::from_micros(15_625)),
+        gather_after_set: Some(Duration::from_micros(112_500)),
+        set_lead: Spread(&[
+            (0, 3_960),
+            (100, 5_350),
+            (500, 7_950),
+            (900, 9_950),
+            (1000, 10_960),
+        ]),
+        set_per_offer: Duration::from_micros(1_850),
+        check_spread: Spread(&[
+            (0, 600),
+            (100, 1_000),
+            (250, 1_500),
+            (500, 2_800),
+            (750, 3_350),
+            (900, 3_750),
+            (1000, 5_000),
+        ]),
+        check_per_offer: Duration::from_micros(370),
         flights: Flights {
             hello: 1463,
             server13: 629,
@@ -259,7 +481,12 @@ impl LinkSetup {
         resend_min: Duration::from_millis(50),
         resend_rtts: 0,
         resend_max: Duration::from_millis(50),
-        resend_tick: None,
+        tick: None,
+        gather_after_set: None,
+        set_lead: Spread::NONE,
+        set_per_offer: Duration::ZERO,
+        check_spread: Spread::NONE,
+        check_per_offer: Duration::ZERO,
         flights: Flights {
             hello: 264,
             server13: 783,
@@ -297,7 +524,12 @@ impl LinkSetup {
         resend_min: Duration::from_secs(1),
         resend_rtts: 0,
         resend_max: Duration::from_secs(1),
-        resend_tick: None,
+        tick: None,
+        gather_after_set: None,
+        set_lead: Spread::NONE,
+        set_per_offer: Duration::ZERO,
+        check_spread: Spread::NONE,
+        check_per_offer: Duration::ZERO,
         flights: Flights {
             hello: 118,
             server13: 0,
@@ -327,10 +559,10 @@ impl LinkSetup {
         (rtt * self.resend_rtts).clamp(self.resend_min, self.resend_max)
     }
 
-    /// When a resend timer of `deadline` fires, the stack's ticks counted
-    /// from `origin`.
+    /// When a low-precision timer of `deadline` fires, the stack's ticks a
+    /// whole number of [`LinkSetup::tick`] from `origin`.
     fn fires_at(&self, deadline: Instant, origin: Instant) -> Instant {
-        let Some(tick) = self.resend_tick.filter(|t| !t.is_zero()) else {
+        let Some(tick) = self.tick.filter(|t| !t.is_zero()) else {
             return deadline;
         };
         let since = deadline.saturating_duration_since(origin).as_nanos();
@@ -880,8 +1112,12 @@ where
     Ok(())
 }
 
-/// The answering side: checks the offer's address, its stack's
-/// [`LinkSetup::check_ready`] after the offer came, with the dial that
+/// What an answer waits out before its check.
+type CheckWait = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
+
+/// The answering side: checks the offer's address once `check_wait` is
+/// out (its stack's `check_ready` after the offer came, or with the host's
+/// draws its batch's turn), with the dial that
 /// carries the handshake, its token first, tells `checked` once that check
 /// succeeds, hears of the offering side's check from `peer_check`, and
 /// attaches the stream once its association is up.
@@ -894,15 +1130,14 @@ async fn answer<N: Net>(
     peer: LinkSetup,
     conn: RtcConn,
     cap: usize,
+    check_wait: CheckWait,
     checked: oneshot::Sender<()>,
     peer_check: oneshot::Receiver<()>,
     origin: Instant,
     inputs: Inputs<Transport<N>>,
 ) {
     let linked = async {
-        if !me.check_ready.is_zero() {
-            tokio::time::sleep(me.check_ready).await;
-        }
+        check_wait.await;
         let start = Instant::now();
         let mut s = net.tcp_connect(addr).await?;
         let rtt = start.elapsed();
@@ -999,7 +1234,12 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
         cap,
     } = model;
     let me = net.link_setup();
-    let origin = Instant::now();
+    let draws = net.setup_draws();
+    let origin = draws.as_ref().map_or_else(Instant::now, |d| d.tick_origin);
+    // When the page's offers so far are made: it sets none before then.
+    let (made, made_rx) = watch::channel(Instant::now());
+    // The offers the page is setting together, while their checks are to go.
+    let mut batch: Option<Batch> = None;
     let checks = Arc::new(checks);
     // Our offers by token, and our answers waiting for their offering
     // side's check. Bound: the endpoint's live connections.
@@ -1061,9 +1301,20 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                 match cmd {
                     RtcCommand::Create { .. } => None,
                     RtcCommand::Describe { conn, sdp_type } => {
-                        let (sdp, ready, check) = if sdp_type == SdpType::Offer {
+                        let offer = sdp_type == SdpType::Offer;
+                        // When the offer's making is done, and how long past
+                        // its setting its gathering's last phase comes.
+                        let mut gather = None;
+                        let (sdp, ready, check) = if offer {
                             offers.insert(conn.0, Offer { conn, answer: None, stream: None });
                             let sdp = format!("{PREFIX} {advertised} {} {}", conn.0, me.name);
+                            if let (Some(d), Some(after)) = (&draws, me.gather_after_set) {
+                                let lead = d.draw(me.set_lead).unwrap_or(0.0);
+                                let lead = Duration::from_secs_f64(lead.max(0.0) / 1e6);
+                                let m = (*made.borrow()).max(Instant::now() + lead) + me.set_per_offer;
+                                made.send_replace(m);
+                                gather = Some((m, after));
+                            }
                             (sdp, me.offer_ready, None)
                         } else {
                             let sdp = format!(
@@ -1073,7 +1324,10 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                             let check = me.answer_after_check.zip(checked.remove(&conn.0));
                             (sdp, me.answer_ready, check)
                         };
-                        let inputs = inputs.clone();
+                        let transit = draws.as_ref().and_then(|d| {
+                            d.draw(if offer { OFFER_TRANSIT } else { ANSWER_TRANSIT })
+                        });
+                        let (inputs, made) = (inputs.clone(), made_rx.clone());
                         tokio::spawn(async move {
                             let deadline = Instant::now() + ready;
                             let mut at = deadline;
@@ -1081,6 +1335,15 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                                 && let Ok(Ok(())) = tokio::time::timeout_at(deadline, ok).await
                             {
                                 at = at.min(Instant::now() + after);
+                            }
+                            if let Some((created, after)) = gather {
+                                // Set once every offer made by then is.
+                                tokio::time::sleep_until(created).await;
+                                let set = *made.borrow();
+                                at = me.fires_at(set.max(created) + after, origin) + GATHER_TAIL;
+                            }
+                            if let Some(us) = transit {
+                                at = shifted(at, us, Instant::now());
                             }
                             tokio::time::sleep_until(at).await;
                             let desc = SessionDescription { sdp_type, sdp };
@@ -1095,10 +1358,27 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                                 answers.insert(conn.0, tx);
                                 let (ok_tx, ok) = oneshot::channel();
                                 checked.insert(conn.0, ok);
+                                let drawn = draws.as_ref().and_then(|d| d.draw(me.check_spread));
+                                let wait: CheckWait = match drawn {
+                                    Some(us) => {
+                                        let ready = Duration::from_secs_f64(us.max(0.0) / 1e6);
+                                        let (b, place) =
+                                            join_batch(&mut batch, Instant::now(), ready);
+                                        Box::pin(batch_check(b, place, me.check_per_offer))
+                                    }
+                                    None => {
+                                        let ready = me.check_ready;
+                                        Box::pin(async move {
+                                            if !ready.is_zero() {
+                                                tokio::time::sleep(ready).await;
+                                            }
+                                        })
+                                    }
+                                };
                                 let (net, inputs) = (net.clone(), inputs.clone());
                                 tokio::spawn(answer(
-                                    net, addr, token, me, peer, conn, cap, ok_tx, rx, origin,
-                                    inputs,
+                                    net, addr, token, me, peer, conn, cap, wait, ok_tx, rx,
+                                    origin, inputs,
                                 ));
                             }
                             None => {
@@ -1335,6 +1615,90 @@ mod tests {
         assert_eq!(c.fires_at(o + ms(125), o), o + ms(125), "a tick");
         assert_eq!(c.fires_at(o, o), o);
         assert_eq!(LinkSetup::FIREFOX.fires_at(o + ms(50), o), o + ms(50));
+    }
+
+    /// A spread is linear between its knots, from the first quantile's to
+    /// the last's; none reads 0. Every stack's runs from 0 to 1000 permille
+    /// in order, the transits' medians are 0, Chromium's check delay keeps
+    /// `check_ready` at its median, and a lone Chromium offer drawn at its
+    /// medians is set 9.8 ms after its ask, as on the testbed, and half a
+    /// tick past its gathering's start leaves within 2.5 ms of the
+    /// testbed's lone offers' median, 132.4 ms.
+    #[test]
+    fn spreads_read_their_knots_and_keep_the_stacks_medians() {
+        let s = Spread(&[(0, 1_000), (100, 2_000), (500, 4_000), (1000, 9_000)]);
+        for (u, want) in [
+            (0.0, 1_000.0),
+            (0.05, 1_500.0),
+            (0.5, 4_000.0),
+            (0.75, 6_500.0),
+        ] {
+            assert!((s.at(u) - want).abs() < 1e-6, "{u}: {}", s.at(u));
+        }
+        assert!((s.at(1.0) - 9_000.0).abs() < 1e-6);
+        assert!(Spread::NONE.at(0.3).abs() < 1e-12);
+        let c = LinkSetup::CHROMIUM;
+        for spread in [c.set_lead, c.check_spread, OFFER_TRANSIT, ANSWER_TRANSIT] {
+            let ps: Vec<u16> = spread.0.iter().map(|k| k.0).collect();
+            assert!(ps.first() == Some(&0) && ps.last() == Some(&1000), "{ps:?}");
+            assert!(
+                ps.iter().zip(ps.iter().skip(1)).all(|(a, b)| a < b),
+                "{ps:?}"
+            );
+        }
+        assert!(OFFER_TRANSIT.at(0.5).abs() < 1e-6 && ANSWER_TRANSIT.at(0.5).abs() < 1e-6);
+        let ms = |d: Duration| d.as_secs_f64() * 1e3;
+        let half_tick = c.tick.map_or(0.0, ms) / 2.0;
+        assert!((c.check_spread.at(0.5) / 1e3 - ms(c.check_ready)).abs() < 1e-6);
+        let set = c.set_lead.at(0.5) / 1e3 + ms(c.set_per_offer);
+        assert!((set - 9.8).abs() < 1e-6, "{set}");
+        let lone = set + c.gather_after_set.map_or(0.0, ms) + half_tick + ms(GATHER_TAIL);
+        assert!((lone - 132.4).abs() < 2.5, "{lone}");
+    }
+
+    /// The offers a page is asked to set before its batch's first check
+    /// goes join the batch, whose first check goes once the last joiner's
+    /// is ready, sooner or later than before, and the rest in the order
+    /// their offers were asked; one asked as the first check goes opens the
+    /// next. A waiting check follows its batch's first as it moves sooner.
+    #[tokio::test(start_paused = true)]
+    async fn an_answering_pages_offers_check_together() {
+        let o = Instant::now();
+        let ms = |m: u64| Duration::from_millis(m);
+        let step = Duration::from_micros(370);
+        let mut batch = None;
+        let (a, pa) = join_batch(&mut batch, o, ms(3));
+        let (_, pb) = join_batch(&mut batch, o + ms(1), ms(3));
+        assert_eq!(*a.borrow(), (o + ms(4), 2));
+        let waiting = tokio::spawn(batch_check(a.clone(), pa, step));
+        tokio::time::sleep_until(o + ms(2)).await;
+        let (_, pc) = join_batch(&mut batch, o + ms(2), ms(1));
+        assert_eq!((pa, pb, pc), (0, 1, 2));
+        let (first, offers) = *a.borrow();
+        assert_eq!((first, offers), (o + ms(3), 3), "the last joiner's draw");
+        let at: Vec<_> = [pa, pb, pc].map(|p| batch_check_at(first, p, step)).into();
+        assert_eq!(at, [o + ms(3), o + ms(3) + step, o + ms(3) + step * 2]);
+        assert!(waiting.await.is_ok(), "the waiting check returns");
+        assert_eq!(Instant::now(), o + ms(3), "the first check went sooner");
+        let (d, pd) = join_batch(&mut batch, o + ms(3), ms(2));
+        assert_eq!((pd, *d.borrow()), (0, (o + ms(5), 1)));
+        assert_eq!(*a.borrow(), (o + ms(3), 3), "the closed batch stays");
+    }
+
+    /// A shift moves an instant either way, never before its floor.
+    #[test]
+    fn shifts_stop_at_their_floor() {
+        let o = Instant::now();
+        let ms = |m: u64| Duration::from_millis(m);
+        assert_eq!(
+            shifted(o + ms(10), 2_500.0, o),
+            o + Duration::from_micros(12_500)
+        );
+        assert_eq!(
+            shifted(o + ms(10), -2_500.0, o),
+            o + Duration::from_micros(7_500)
+        );
+        assert_eq!(shifted(o + ms(1), -2_500.0, o), o);
     }
 
     /// str0m answers passive: the offering side is the DTLS 1.2 client,
