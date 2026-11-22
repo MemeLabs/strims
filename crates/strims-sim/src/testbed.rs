@@ -1689,6 +1689,25 @@ fn seed_entry_us(dir: &Path, i: usize) -> u64 {
     packets::node_link(dir, i).map_or(0, |l| l.delay_us())
 }
 
+/// A testbed node's uplink steps at its tbf, from its twin's: each of
+/// `steps` (its scenario host's [`HostSpec::up_steps`](crate::spec::HostSpec::up_steps))
+/// `entry` later, its egress delay ([`WanHostReport::entry_delay`]).
+/// The twin's queue meets each offer as it is made, so it takes each step
+/// at its tc's stamp less that delay (`Run::scenario`), when the offers
+/// that met the new rate were made; the tbf, which meets each offer that
+/// delay after it, took the step at its stamp (`Run::at`). What is timed
+/// at the tbf (its tc samples, the shaper replay's offers at their entry
+/// into its queue) takes the steps so.
+pub fn entry_steps(
+    steps: &[(Duration, u64)],
+    entry: strims_base::time::Duration,
+) -> Vec<(strims_base::time::Duration, u64)> {
+    steps
+        .iter()
+        .map(|&(at, rate)| (strims_base::time::Duration::from(at) + entry, rate))
+        .collect()
+}
+
 /// Why a run's steps or competing uploads came off their schedule, if they
 /// did: each one's logged time (steps.log's, compete.log's) against run.sh's
 /// stream start plus its seconds (and the seed's delay, a step's), early
@@ -3196,7 +3215,9 @@ impl Network {
                     // The wait is the backlog over the tbf's own rate as the
                     // sample shows it (its steps as applied; a class's
                     // line code: VDSL's tbf runs at 64/65 of the line's),
-                    // else the scenario's.
+                    // else the scenario's as the tbf had them at the
+                    // sample (`entry_steps`).
+                    let steps = entry_steps(&spec.up_steps, delay);
                     for s in &samples {
                         let Some(t) = run.at(s.ms) else {
                             continue;
@@ -3204,9 +3225,9 @@ impl Network {
                         let rate = s
                             .rate
                             .unwrap_or_else(|| {
-                                spec.up_steps
+                                steps
                                     .iter()
-                                    .rfind(|&&(at, _)| at <= t)
+                                    .rfind(|&&(at, _)| at <= strims_base::time::Duration::from(t))
                                     .map_or(site.profile.up, |&(_, r)| r)
                             })
                             .max(1);
@@ -4107,6 +4128,32 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// A tc sample that shows no rate waits its backlog out at the
+    /// scenario's step its tbf had then: from the step's stamp, not the
+    /// twin's, an egress delay before it.
+    #[test]
+    fn a_tc_sample_without_a_rate_has_the_step_its_tbf_had() {
+        let dir = fixture("norate");
+        std::fs::remove_file(dir.join("pcap-0.pcap")).unwrap();
+        let tc = |ms: u64| {
+            format!(
+                "{} qdisc tbf 10: root refcnt 2 burst 3028b lat 99ms  Sent 3000 bytes 2 pkt (dropped 0, overlimits 0 requeues 0)  backlog 1514b 1p requeues 0\n",
+                START + ms
+            )
+        };
+        // A step to 5 Mbit/s at 400 ms, its twin's at 380 ms.
+        std::fs::write(dir.join("tc-0.log"), [tc(390), tc(410)].concat()).unwrap();
+        std::fs::write(dir.join("steps.log"), format!("{} 5\n", START + 400)).unwrap();
+        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        let w = &r.wan.as_ref().unwrap().hosts[0];
+        let waits: Vec<i64> = w.up_queue.iter().map(|q| q.1.as_micros()).collect();
+        assert_eq!(
+            waits,
+            [1514 * 1_000_000 / 1_250_000, 1514 * 1_000_000 / 625_000]
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     /// With its captures, a run's uplink queue at each bin's end is what
     /// they say its queue held as an offer there met it, its egress delay
     /// later, as the sim samples its model's at the edges, not its tc
@@ -4146,7 +4193,8 @@ mod tests {
         std::fs::write(dir.join("pcap-0-offered.pcap"), pcap(&offered)).unwrap();
         std::fs::write(dir.join("pcap-0.pcap"), pcap(&carried)).unwrap();
         std::fs::write(dir.join("steps.log"), format!("{} 5\n", START + 400)).unwrap();
-        let r = Run::read(&dir, &BTreeMap::new()).unwrap().report();
+        let run = Run::read(&dir, &BTreeMap::new()).unwrap();
+        let r = run.report();
         let out = dir.join("tables");
         r.write_tables(&out, Duration::from_millis(100), true)
             .unwrap();
@@ -4215,6 +4263,12 @@ mod tests {
         // its delay after the edge.
         let w = &r.wan.as_ref().unwrap().hosts[0];
         assert_eq!(w.entry_delay, Duration::from_millis(20).into());
+        // The twin's step, at its stamp less that delay, is back at its
+        // stamp at the tbf, which the shaper replay offers each packet to.
+        assert_eq!(
+            entry_steps(&r.scenario.hosts[0].up_steps, w.entry_delay),
+            vec![(run.at(START + 400).unwrap().into(), 625_000)]
+        );
         let last = w.packets.iter().map(|p| p.at).max().unwrap();
         let mut n = 0;
         for (t, q) in &got {

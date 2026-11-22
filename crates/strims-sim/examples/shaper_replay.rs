@@ -60,7 +60,7 @@ use strims_base::time::{Duration, Time};
 use strims_sim::link::{Class, TestbedLink};
 use strims_sim::report::{PacketLoss, PacketRecord};
 use strims_sim::tables::{write_hosts, write_numbered_packets};
-use strims_sim::testbed::{Run, bench_captures, node_link, settings_of};
+use strims_sim::testbed::{Run, bench_captures, entry_steps, node_link, settings_of};
 use strims_wan::Bucket;
 use strims_wan::replay::{Offer, Uplink, replay};
 use strims_wan::testbed::Spec;
@@ -331,13 +331,11 @@ fn run() -> Result<(), String> {
         if w.packets.is_empty() {
             continue;
         }
-        // The scenario's steps are in its offers' clock (each stamp less
-        // the egress delay), and the replay offers each packet at its
-        // entry into the queue: each step at its stamp, its delay later.
-        let steps: Vec<(Time, u64)> = spec
-            .up_steps
-            .iter()
-            .map(|&(at, rate)| (Time::EPOCH + Duration::from(at) + w.entry_delay, rate))
+        // The replay offers each packet at its entry into the tbf's queue,
+        // so its steps sit at their stamps, in the tbf's clock.
+        let steps: Vec<(Time, u64)> = entry_steps(&spec.up_steps, w.entry_delay)
+            .into_iter()
+            .map(|(at, rate)| (Time::EPOCH + at, rate))
             .collect();
         let role = if h == 0 { "SEED" } else { "VIEWER" };
         let (burst, peak) = bucket_of(
