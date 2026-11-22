@@ -5966,8 +5966,9 @@ pub(crate) mod cols {
         /// When the link's writer began the write, in µs of true time from the
         /// stream's start, by the node's precise clock; in strims-sim, a
         /// browser seed's write that its frame writer's pass hands and its host
-        /// holds, at the hold's start with `STRIMS_SIM_PACER_HOLD=on`
-        /// (`crate::net`).
+        /// holds, at the hold's start with `STRIMS_SIM_PACER_HOLD=on`, and
+        /// every write the pass hands a data channel at the pass's start with
+        /// `STRIMS_SIM_PACER_PASS=on` too (`crate::net`).
         ///
         /// Unit: us.
         TUs,

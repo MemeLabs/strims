@@ -155,6 +155,10 @@
 //!   writer's pass meets as late as the page's work does
 //!   ([`Scenario::pacer_hold_start`]); `off` at the pass. Unset, a
 //!   scenario keeps its own, on unless it says otherwise.
+//!   `STRIMS_SIM_PACER_PASS=on`, with it, starts every write such a pass
+//!   hands a data channel as late, not only the held ones
+//!   ([`Scenario::pacer_pass_start`]); `off`, or unset, the held ones
+//!   alone.
 //! - `STRIMS_SIM_LINK_SETUP_DRAWS=on` has each browser draw its links'
 //!   setups as its stack's do, its metronome's phase among them
 //!   ([`Scenario::link_setup_draws`]); `off` sets every link up on its
@@ -556,7 +560,8 @@ fn timer_lateness_knob() -> Option<bool> {
 /// The switch `name` (`STRIMS_SIM_PACER_LATENESS`,
 /// [`Scenario::pacer_lateness`]; `STRIMS_SIM_PACER_TURNS`,
 /// [`Scenario::pacer_turns`]; `STRIMS_SIM_PACER_HOLD`,
-/// [`Scenario::pacer_hold_start`]; `STRIMS_SIM_LINK_SETUP_DRAWS`,
+/// [`Scenario::pacer_hold_start`]; `STRIMS_SIM_PACER_PASS`,
+/// [`Scenario::pacer_pass_start`]; `STRIMS_SIM_LINK_SETUP_DRAWS`,
 /// [`Scenario::link_setup_draws`]): `on` or `off`, if set and not blank.
 #[allow(clippy::panic)] // a mistyped setting fails its test
 fn on_off_knob(name: &str) -> Option<bool> {
@@ -866,6 +871,7 @@ fn sweep_seeds(
     let pacer_turns = on_off_knob("STRIMS_SIM_PACER_TURNS");
     let setup_draws = on_off_knob("STRIMS_SIM_LINK_SETUP_DRAWS");
     let pacer_hold = on_off_knob("STRIMS_SIM_PACER_HOLD");
+    let pacer_pass = on_off_knob("STRIMS_SIM_PACER_PASS");
     let timer_log = timer_log_knob();
     let timer_probe = knob::<u32>("STRIMS_SIM_TIMER_PROBE") == Some(1);
     let link_log = link_log_knob();
@@ -1056,6 +1062,9 @@ fn sweep_seeds(
         }
         if let Some(hold) = pacer_hold {
             spec.pacer_hold_start = hold;
+        }
+        if let Some(pass) = pacer_pass {
+            spec.pacer_pass_start = pass;
         }
         if let Some(draws) = setup_draws {
             spec.link_setup_draws = draws;

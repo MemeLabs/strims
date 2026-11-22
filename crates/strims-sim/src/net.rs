@@ -103,7 +103,21 @@
 //!   for the start, its check's link log events (the write's begin
 //!   among them, which the log otherwise has at the pass) going then, and
 //!   arms its first poll from there. Its re-polls, and every other hold
-//!   (after a release, after a poll's turn), arm at once.
+//!   (after a release, after a poll's turn), arm at once;
+//! - with [`Scenario::pacer_pass_start`](crate::Scenario::pacer_pass_start)
+//!   too, every one of a pass's writes (those its node's pass handed a
+//!   paced channel's writer at the host's last frame write, each its
+//!   write's first try, by a writer no poll freed at that instant) begins
+//!   at the pass's start, as [`crate::late`]'s pass start draws it, once
+//!   for the pass, and no earlier than the pass: the page's work from the
+//!   frame's write to its pass's hand-offs takes about a ms, its writers
+//!   beginning their writes at its end, checking the loads then and arming
+//!   a held write's poll's timer against the clock's reading then. Each
+//!   such writer waits for the start before its check, logs its write's
+//!   begin again there (the node's link writer logged it at the pass), and
+//!   goes, waits or is held from there. The sim's node task takes no time,
+//!   so the pass's hand-offs and its frame writer's pushes stay at the
+//!   pass, the wait between in the link writer's.
 //!
 //! Off, and on a native host, a held writer polls every [`HOST_POLL`] on
 //! time, and the writers whose polls come at one instant read the load as
@@ -579,11 +593,12 @@ impl HoldStarts {
             .map(|(at, _)| at)
     }
 
-    /// How long past `now` a hold armed at `now` starts: at the instant of
-    /// the host's last frame write, to `late`'s draw of the hold start past
-    /// the write's due ms, drawn once for the instant, if that is later
-    /// than `now`; at any other, none.
-    fn start(&self, now: Time, late: &Lateness) -> Duration {
+    /// How long past `now` a hold armed at `now`, or with the pass start a
+    /// pass's write first tried at `now`, starts: at the instant of the
+    /// host's last frame write, to `late`'s draw of `source` (the hold start
+    /// or the pass start) past the write's due ms, drawn once for the
+    /// instant, if that is later than `now`; at any other, none.
+    fn start(&self, now: Time, late: &Lateness, source: Source) -> Duration {
         let mut x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         let Some((at, due)) = x.frame.filter(|&(at, _)| at == now) else {
             return Duration::ZERO;
@@ -591,7 +606,7 @@ impl HoldStarts {
         let d = match x.drawn {
             Some((t, d)) if t == at => d,
             _ => {
-                let d = late.draw(Source::Hold, false);
+                let d = late.draw(source, false);
                 x.drawn = Some((at, d));
                 d
             }
@@ -612,6 +627,10 @@ pub(crate) struct PacerTimers {
     /// writer's pass meets draws from, and the host's frame writes; `None`:
     /// every hold arms its first poll at once.
     hold: Option<(Lateness, HoldStarts)>,
+    /// With `hold`, every write of a pass waits for its start, drawn from
+    /// the stream's pass start model, not only a held one
+    /// ([`Scenario::pacer_pass_start`](crate::Scenario::pacer_pass_start)).
+    pass: bool,
     /// The host's timer log, and how far its node's clock reads ahead of
     /// true time.
     log: Option<(TimerSink, Duration)>,
@@ -620,32 +639,40 @@ pub(crate) struct PacerTimers {
 impl PacerTimers {
     /// A host's polls: on a `browser`, `late` as its stream draws them
     /// (`None`: on time), in turn if `turns`, and with `hold` the holds its
-    /// frame writer's passes meet starting as its stream draws them; else
-    /// every writer's on time, at once and none in turn; and with `log`,
-    /// each poll a timer of the host's log, by its node's clock, `offset`
-    /// ahead of true time.
+    /// frame writer's passes meet starting as its stream draws them, and if
+    /// `pass` every write of those passes; else every writer's on time, at
+    /// once and none in turn; and with `log`, each poll a timer of the
+    /// host's log, by its node's clock, `offset` ahead of true time.
     pub(crate) fn new(
         browser: bool,
         late: Option<Lateness>,
         turns: bool,
         hold: Option<(Lateness, HoldStarts)>,
+        pass: bool,
         log: Option<TimerSink>,
         offset: Duration,
     ) -> PacerTimers {
+        let hold = hold.filter(|_| browser);
         PacerTimers {
             late: late.filter(|_| browser).map(|l| (l, Arc::default())),
             turns: turns && browser,
-            hold: hold.filter(|_| browser),
+            pass: pass && hold.is_some(),
+            hold,
             log: log.map(|l| (l, offset)),
         }
     }
 
-    /// How long past `now` a pass's hold at `now` starts
-    /// ([`HoldStarts::start`]).
+    /// How long past `now` a pass's hold at `now`, or with the pass start
+    /// its write first tried at `now`, starts ([`HoldStarts::start`]).
     fn hold_start(&self, now: Time) -> Duration {
-        self.hold
-            .as_ref()
-            .map_or(Duration::ZERO, |(late, starts)| starts.start(now, late))
+        let source = if self.pass {
+            Source::Pass
+        } else {
+            Source::Hold
+        };
+        self.hold.as_ref().map_or(Duration::ZERO, |(late, starts)| {
+            starts.start(now, late, source)
+        })
     }
 
     /// How late a poll armed for `deadline` fires: as late as the polls
@@ -986,7 +1013,8 @@ pub(crate) struct SimTcpStream {
     write_at: Option<Time>,
     freed_at: Option<Time>,
     /// ... which waits for its start before its log's events go and its
-    /// first poll is armed.
+    /// first poll is armed; with the pass start, a pass's write, held or
+    /// not, waits for it before its check.
     hold_wait: Option<Pin<Box<tokio::time::Sleep>>>,
 }
 
@@ -1069,6 +1097,22 @@ impl SendBuffers {
                 && let Some(events) = c.deferred.take()
             {
                 c.record_all(began.map(LinkEvent::Began).into_iter().chain(events));
+            }
+        });
+    }
+
+    /// Whether `key` is a node's data channel, its writer paced.
+    fn paced(&self, key: &ConnKey) -> bool {
+        self.with(|x| x.conns.get(key).is_some_and(|c| c.pacer.is_some()))
+    }
+
+    /// Hands the link log `key`'s write of `bytes` begun again, now, as the
+    /// browser's writer begins it at its pass's start: the log takes the
+    /// later begin for the write's, its checks and holds from there.
+    fn began(&self, key: &ConnKey, bytes: usize) {
+        self.with(|x| {
+            if let Some(c) = x.conns.get_mut(key) {
+                c.record(LinkEvent::Began(bytes));
             }
         });
     }
@@ -1175,6 +1219,12 @@ impl SimTcpStream {
                 .is_some_and(|(_, starts)| starts.frame_at() == Some(now))
     }
 
+    /// Whether a pass's write waits for the pass's start before its check,
+    /// held or not: with the pass start, on a paced channel.
+    fn pass_waits(&self) -> bool {
+        self.pacer.pass && self.conn.as_ref().is_some_and(|(key, b)| b.paced(key))
+    }
+
     /// Writes `buf` as a channel's message: as turmoil segments, the
     /// records its [`Chunking`] cuts, each stamped and unsent until the WAN
     /// scheduler sends it.
@@ -1226,17 +1276,25 @@ impl AsyncWrite for SimTcpStream {
             this.due = true;
         }
         let now = sim_now();
-        // A pass's hold waits for its start, its check's log events with it.
+        // A pass's hold waits for its start, its check's log events with it;
+        // with the pass start, a pass's write waits for it, and begins again
+        // there.
         if let Some(wait) = &mut this.hold_wait {
             if wait.as_mut().poll(cx).is_pending() {
                 return Poll::Pending;
             }
             this.hold_wait = None;
-            if let Some((key, b)) = &this.conn {
-                b.flush_log(key, Some(buf.len()));
+            if this.pass_waits() {
+                if let Some((key, b)) = &this.conn {
+                    b.began(key, buf.len());
+                }
+            } else {
+                if let Some((key, b)) = &this.conn {
+                    b.flush_log(key, Some(buf.len()));
+                }
+                this.arm_poll(cx);
+                return Poll::Pending;
             }
-            this.arm_poll(cx);
-            return Poll::Pending;
         }
         let polled = this.due;
         if polled && !this.poll_due(cx) {
@@ -1246,6 +1304,17 @@ impl AsyncWrite for SimTcpStream {
             this.write_at = Some(now);
         }
         let pass = !polled && this.pass_check(now);
+        let waits = pass && this.pass_waits();
+        if waits {
+            let start = this.pacer.hold_start(now);
+            if start > Duration::ZERO {
+                let mut sleep = Box::pin(tokio::time::sleep(start.to_std().unwrap_or_default()));
+                let _ = sleep.as_mut().poll(cx);
+                this.hold_wait = Some(sleep);
+                return Poll::Pending;
+            }
+        }
+        let pass = pass && !waits;
         if pass && let Some((key, b)) = &this.conn {
             b.defer_log(key);
         }
@@ -1926,6 +1995,7 @@ mod tests {
             Some(Lateness::new(det_rng(8), HostKind::Firefox, false)),
             true,
             None,
+            false,
             None,
             Duration::ZERO,
         );
@@ -1949,12 +2019,13 @@ mod tests {
         );
         assert_eq!(pacer.draw(ms(9000)), a);
         assert_eq!(pacer.draw(ms(9001)), b);
-        let on_time = PacerTimers::new(true, None, true, None, None, Duration::ZERO);
+        let on_time = PacerTimers::new(true, None, true, None, false, None, Duration::ZERO);
         let native = PacerTimers::new(
             false,
             Some(Lateness::new(det_rng(8), HostKind::Native, false)),
             true,
             None,
+            false,
             None,
             Duration::ZERO,
         );
@@ -1963,44 +2034,56 @@ mod tests {
         assert!(!native.turns);
     }
 
-    /// A hold at the instant of its host's last frame write starts as late
-    /// past the write's due ms as the stream draws the hold start, once for
-    /// the instant, and no earlier than the instant; one at another
-    /// instant, or with no frame write, at once; the next frame write's
-    /// instant draws anew.
+    /// A hold at the instant of its host's last frame write, or with the
+    /// pass start a pass's write, starts as late past the write's due ms as
+    /// the stream draws the hold start or the pass start, once for the
+    /// instant, and no earlier than the instant; one at another instant, or
+    /// with no frame write, at once; the next frame write's instant draws
+    /// anew. A host with the timer probe draws the probe's model.
     #[test]
     fn a_frame_writers_holds_start_late() {
-        use crate::late::{HostKind, Lateness, lateness};
+        use crate::late::{HostKind, Lateness, lateness, model};
         use strims_base::rng::det_rng;
-        let starts = HoldStarts::default();
-        let pacer = PacerTimers::new(
-            true,
-            None,
-            true,
-            Some((
-                Lateness::new(det_rng(4), HostKind::Chromium, false),
-                starts.clone(),
-            )),
-            None,
-            Duration::ZERO,
-        );
-        let mut fresh = det_rng(4);
-        assert_eq!(pacer.hold_start(ms(0)), Duration::ZERO, "no frame write");
-        let mut late = 0;
-        for k in 0..400 {
-            // Every other write runs a ms past its due time.
-            let due = ms(250 * k);
-            let at = due + Duration::from_millis(i64::try_from(k % 2).unwrap());
-            starts.0.lock().unwrap().frame = Some((at, due));
-            let want = lateness(&mut fresh, HostKind::Chromium, Source::Hold, false);
-            let start = (due + want - at).max(Duration::ZERO);
-            for _ in 0..3 {
-                assert_eq!(pacer.hold_start(at), start, "frame {k}");
+        for (pass, source) in [(false, Source::Hold), (true, Source::Pass)] {
+            for probe in [false, true] {
+                let starts = HoldStarts::default();
+                let pacer = PacerTimers::new(
+                    true,
+                    None,
+                    true,
+                    Some((
+                        Lateness::new(det_rng(4), HostKind::Chromium, probe),
+                        starts.clone(),
+                    )),
+                    pass,
+                    None,
+                    Duration::ZERO,
+                );
+                let mut fresh = det_rng(4);
+                assert_eq!(pacer.hold_start(ms(0)), Duration::ZERO, "no frame write");
+                let mut late = 0;
+                for k in 0..400 {
+                    // Every other write runs a ms past its due time.
+                    let due = ms(250 * k);
+                    let at = due + Duration::from_millis(i64::try_from(k % 2).unwrap());
+                    starts.0.lock().unwrap().frame = Some((at, due));
+                    let want = lateness(&mut fresh, HostKind::Chromium, source, probe);
+                    let start = (due + want - at).max(Duration::ZERO);
+                    for _ in 0..3 {
+                        assert_eq!(pacer.hold_start(at), start, "frame {k}");
+                    }
+                    assert_eq!(pacer.hold_start(at + Duration::MILLISECOND), Duration::ZERO);
+                    late += u32::from(want > Duration::ZERO);
+                }
+                let m = model(HostKind::Chromium, source, probe);
+                let want = 400 - 400 * m.shares[0] / 1000;
+                assert!(
+                    late.abs_diff(want) < 40,
+                    "{source:?} {probe}: {late} of 400 drawn late, {want} the model's"
+                );
             }
-            assert_eq!(pacer.hold_start(at + Duration::MILLISECOND), Duration::ZERO);
-            late += i64::from(want > Duration::ZERO);
         }
-        assert!((290..350).contains(&late), "{late} of 400 drawn late");
+        let starts = HoldStarts::default();
         let native = PacerTimers::new(
             false,
             None,
@@ -2009,11 +2092,13 @@ mod tests {
                 Lateness::new(det_rng(4), HostKind::Native, false),
                 starts.clone(),
             )),
+            true,
             None,
             Duration::ZERO,
         );
         starts.0.lock().unwrap().frame = Some((ms(5), ms(5)));
         assert_eq!(native.hold_start(ms(5)), Duration::ZERO);
+        assert!(!native.pass, "a native host has no pass start");
     }
 
     /// A check that may begin a pass's hold keeps its link log events
@@ -2053,6 +2138,39 @@ mod tests {
         let _ = b.channel_write(&k[1], ms(2), &w);
         assert!(events(1).len() > before + 1, "{:?}", events(1));
         b.with(|x| assert!(x.conns.values().all(|c| c.deferred.is_none())));
+    }
+
+    /// With the pass start, a pass's write begun again at its start logs
+    /// its begin then, before the check's events, which the log takes for
+    /// the write's; only a node's paced channel is a pass's.
+    #[test]
+    fn a_pass_write_begins_again_at_its_start() {
+        let (b, k, log) = channels(&SctpProfile::FIREFOX, 2);
+        let (_, w) = waker();
+        let events = |link: u64| -> Vec<String> {
+            log.lock()
+                .unwrap()
+                .iter()
+                .filter(|(l, _)| *l == link)
+                .map(|(_, e)| format!("{e:?}"))
+                .collect()
+        };
+        assert_eq!(b.channel_write(&k[1], ms(0), &w), Some(ChannelWrite::Go));
+        b.wrote(&k[1], 40_000, true, ms(0));
+        b.began(&k[0], 4096);
+        assert_eq!(b.channel_write(&k[0], ms(1), &w), Some(ChannelWrite::Held));
+        let got = events(0);
+        assert_eq!(got.len(), 3, "{got:?}");
+        assert!(got[0].starts_with("Began(4096)"), "{got:?}");
+        assert!(got[1].starts_with("Checked"), "{got:?}");
+        assert!(got[2].starts_with("Held(Host)"), "{got:?}");
+        assert!(b.paced(&k[0]) && b.paced(&k[1]));
+        let other: ConnKey = (
+            "10.0.0.1:3000".parse().unwrap(),
+            "10.0.2.1:2000".parse().unwrap(),
+        );
+        b.with(|x| x.conns.insert(other, Conn::default()));
+        assert!(!b.paced(&other));
     }
 
     /// A due writer that stops looking holds the others back only a few

@@ -38,7 +38,12 @@
 //! writer's pass meets start late as well: the page's work from the
 //! writer's timer to the write its host refuses takes about a ms, so such
 //! a hold arms its first poll whole ms past the write's due time, and no
-//! earlier than the pass (`crate::net`).
+//! earlier than the pass (`crate::net`). With
+//! [`Scenario::pacer_pass_start`] too, the pass's writes start late, not
+//! only its holds: the page's work from the frame's write to its pass's
+//! hand-offs takes about a ms, so the writes the pass hands its data
+//! channels, and the holds they meet, start whole ms past the write's due
+//! time, and no earlier than the write, as the pass start draws them.
 //!
 //! Each host draws from the model of its kind ([`HostKind`]: native,
 //! Chromium or Firefox, by the browser its data channels model, as the
@@ -60,9 +65,10 @@
 //! worker, and a browser's writer runs otherwise beside it. A Chromium
 //! host without the probe, as a deployed node runs, and as every run runs
 //! but the timer bench's twins ([`Scenario::timer_probe`]), draws its frame
-//! writer from the write path bench's runs instead, which run none: its
-//! writes run less late than beside the probe. A host that runs the probe
-//! draws the timer bench's. Without the probe a Firefox seed's writes run
+//! writer, and its pass starts, from the write path bench's runs instead,
+//! which run none: its writes run less late than beside the probe, and its
+//! passes start later. A host that runs the probe draws the timer bench's,
+//! its pass starts the hold start's. Without the probe a Firefox seed's writes run
 //! later (PLAN), which no model has yet: a Firefox host draws the bench's
 //! either way. A browser's timer for a deadline already due resolves at
 //! once, as strims-wasm's `Sleep` and `setTimeout`-free waits do, drawing
@@ -155,12 +161,19 @@ pub enum Source {
     /// write's due time at which a hold that write's pass meets arms its
     /// first poll, the pass's own if that is later (`crate::net`).
     Hold,
+    /// A browser seed's pass start, with
+    /// [`Scenario::pacer_pass_start`](crate::Scenario::pacer_pass_start):
+    /// the whole ms past its frame writer's write's due time at which the
+    /// writes that write's pass hands its data channels begin, and the
+    /// holds they meet arm their first polls, at the write if that is
+    /// later (`crate::net`).
+    Pass,
 }
 
 /// A host's lateness stream, shared by its incarnations' clocks: its
 /// rng, its kind, and whether it runs the timer probe
 /// ([`Scenario::timer_probe`](crate::Scenario::timer_probe)), which picks
-/// its frame writer's model ([`model`]).
+/// its frame writer's and its pass starts' models ([`model`]).
 #[derive(Clone, Debug)]
 pub struct Lateness(Arc<Mutex<DetRng>>, HostKind, bool);
 
@@ -270,22 +283,42 @@ const PARTS: u32 = 1000;
 /// (Chromium's 3 of 8, Firefox's 6 of 17), the rest a ms later, which the
 /// model leaves out. One period's first hold 18 ms past its writer's, a
 /// hold the pass didn't meet, is left out. A native node has no host
-/// pacer; its model, at once, is never drawn.
+/// pacer; its model, at once, is never drawn. A pass start's is the hold
+/// start's (the bench's runs log no writes, and a hold arms as the pass's
+/// writes begin).
 ///
 /// Those are the models of a host that runs the timer probe (`probe`), as
 /// the bench's runs do. A Chromium host without it draws its frame writer
-/// from the write path bench's runs (C4), which run none: the testbed's
-/// halve-7 cells with SPEC=1 and PCAP=1 (the farm's `testbed-h7spec`
-/// matrices, a Chromium seed at 10 and at 20 Mbit/s on c7a, 8 repeats
-/// each), each push period of the stream from 4 to 30 s off the whole
-/// second: the whole ms from a period's due ms to the queueing of its
-/// first push (`seed_sends`), their 1248 periods, the tail their 10
-/// periods 3 ms late or more, one ms each.
+/// and its pass starts from the write path bench's runs (C4), which run
+/// none: the testbed's halve-7 cells with SPEC=1 and PCAP=1 (the farm's
+/// `testbed-h7spec` matrices, a Chromium seed at 10 and at 20 Mbit/s on
+/// c7a, 8 repeats each) and tier r6's Chromium-seed cells halve-7-20 (on
+/// c8a), star-15-20 and star-3-10 (PCAP=1), each push period of the
+/// stream from 4 to 30 s off the whole second. The writer's is the whole
+/// ms from a period's due ms to the queueing of its first push
+/// (`seed_sends`), the h7spec cells' 1248 periods: the tail is their 10
+/// periods 3 ms late or more, one ms each. The pass start's comes from the
+/// ms in which a period's first data packet to a viewer was offered
+/// (`packets`, at least 1000 bytes): the cells' mean share in the due ms
+/// (each cell weighed alike, 0.302: 0.23 to 0.30 on c7a, 0.40 on c8a) over
+/// the writer's on-time share (0.807), so that a pass that starts no
+/// earlier than its write offers in its due ms as often, the rest a ms
+/// later. The h7spec cells' first hand-off comes 0.67 to 0.88 ms past the
+/// due ms in a period that hands off in it, and 1.08 to 1.49 in one that
+/// hands off in the next, its first write's begin 0.1 ms after, its first
+/// packet's offer 0.1 ms after that, which the model's whole ms leave out.
+/// A host without the probe that draws hold starts alone (without
+/// [`Scenario::pacer_pass_start`](crate::Scenario::pacer_pass_start))
+/// draws the bench's.
 pub(crate) fn model(kind: HostKind, source: Source, probe: bool) -> Model {
     match (kind, source) {
         (HostKind::Chromium, Source::Writer) if !probe => Model {
             shares: [807, 184, 1],
             tail: &[4, 5, 6, 7, 8, 8, 8, 8, 8, 8],
+        },
+        (HostKind::Chromium, Source::Pass) if !probe => Model {
+            shares: [374, 626, 0],
+            tail: &[],
         },
         (HostKind::Native, Source::NodeTask) => Model {
             shares: [107, 733, 160],
@@ -323,11 +356,11 @@ pub(crate) fn model(kind: HostKind, source: Source, probe: bool) -> Model {
             shares: [859, 139, 1],
             tail: &[3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
         },
-        (HostKind::Native, Source::Hold) => Model {
+        (HostKind::Native, Source::Hold | Source::Pass) => Model {
             shares: [1000, 0, 0],
             tail: &[],
         },
-        (HostKind::Chromium | HostKind::Firefox, Source::Hold) => Model {
+        (HostKind::Chromium | HostKind::Firefox, Source::Hold | Source::Pass) => Model {
             shares: [203, 795, 2],
             tail: &[],
         },
@@ -374,11 +407,12 @@ mod tests {
     use strims_base::rng::det_rng;
 
     const KINDS: [HostKind; 3] = [HostKind::Native, HostKind::Chromium, HostKind::Firefox];
-    const SOURCES: [Source; 4] = [
+    const SOURCES: [Source; 5] = [
         Source::NodeTask,
         Source::Writer,
         Source::Pacer,
         Source::Hold,
+        Source::Pass,
     ];
 
     /// The 0, 1, 2 and 3+ ms counts of `n` timers `draw` fires.
@@ -440,8 +474,9 @@ mod tests {
 
     /// No two kinds and sources share a model: each is its own pool, but
     /// the hold start's, one for both browsers (and never drawn on a
-    /// native node). The probe picks a model of its own for a Chromium
-    /// host's frame writer alone.
+    /// native node), which is the pass start's too but for a Chromium host
+    /// without the probe. The probe picks a model of its own for a Chromium
+    /// host's frame writer and pass starts alone.
     #[test]
     fn every_kind_and_source_has_a_model_of_its_own() {
         let same = |a: Model, b: Model| a.shares == b.shares && a.tail == b.tail;
@@ -449,15 +484,20 @@ mod tests {
             .iter()
             .flat_map(|&k| SOURCES.iter().map(move |&s| (k, s, true)))
             .filter(|&(k, s, _)| s != Source::Hold || k == HostKind::Chromium)
+            .filter(|&(_, s, _)| s != Source::Pass)
             .collect();
         for k in KINDS {
             for s in SOURCES {
-                if k == HostKind::Chromium && s == Source::Writer {
+                if k == HostKind::Chromium && matches!(s, Source::Writer | Source::Pass) {
                     all.push((k, s, false));
                 } else {
                     assert!(same(model(k, s, false), model(k, s, true)), "{k:?} {s:?}");
                 }
             }
+            assert!(same(
+                model(k, Source::Pass, true),
+                model(k, Source::Hold, true)
+            ));
         }
         assert!(same(
             model(HostKind::Chromium, Source::Hold, true),

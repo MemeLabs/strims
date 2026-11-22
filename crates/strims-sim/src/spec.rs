@@ -740,6 +740,14 @@ pub struct Scenario {
     /// pass, a draw for each pass: on by default. Off, at the pass, and
     /// nothing is drawn.
     pub pacer_hold_start: bool,
+    /// With [`Scenario::pacer_hold_start`], whether every write a browser
+    /// seed's frame writer's pass hands a data channel starts late, not
+    /// only the held ones ([`crate::late`]'s pass start; `crate::net`):
+    /// each such write's begin and check, and a held one's first poll's
+    /// arming, whole ms past the frame write's due ms, no earlier than the
+    /// pass, a draw for each pass. Off by default: the write path bench
+    /// (`write_fit_of`) doesn't fit it better yet (PLAN).
+    pub pacer_pass_start: bool,
     /// With [`Scenario::wire_bins`], the hosts that keep their timers as
     /// they fire for the tables' `timers` (`NodeConfig::timer_log`, and
     /// their frame writers' and probes' waits): none by default. Changes
@@ -1034,6 +1042,7 @@ impl Scenario {
             pacer_lateness: true,
             pacer_turns: true,
             pacer_hold_start: true,
+            pacer_pass_start: false,
             timer_log: None,
             timer_probe: false,
             link_log: None,

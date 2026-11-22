@@ -573,6 +573,12 @@ and dropped are in `TRIED.md`.
     pass made before the hold (about 21 µs a write on the testbed's
     halve-15-20), below the millisecond; and give a start to the holds a
     pass doesn't meet (after a release, after a poll's turn).
+  - Turn `Scenario::pacer_pass_start` on by default once the write path
+    bench (`write_fit_of`, from 20 s and 4-30 s) fits it better than
+    without: hand the frame writer's pass's node hand-offs over at the
+    pass's start through the host's link sink, where the sim's come at
+    the write and its link writers wait for the start (`write_fit_of`'s
+    stage 2), and draw the pass start below the millisecond.
   - Find why a loaded browser seed's host pacer holds its frame writer's
     pass in fewer periods in the twin than on the testbed (the timer
     bench's loaded cells: `timer_runs_of`'s hold starts a run), and

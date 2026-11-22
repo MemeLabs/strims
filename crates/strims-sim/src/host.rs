@@ -125,6 +125,7 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
             .filter(|_| w.spec.pacer_hold_start)
             .cloned()
             .zip(w.hold_starts.get(h).cloned()),
+        w.spec.pacer_pass_start,
         w.timer_log(h).filter(|_| browser).map(|l| l.sink()),
         w.clock_lead(h),
     );
@@ -917,8 +918,8 @@ async fn writer_task(
                 requested: clock(at) - clock(armed).truncate(Time::PRECISION),
             });
         }
-        // The pass the write sets off, whose holds start late
-        // (`Scenario::pacer_hold_start`).
+        // The pass the write sets off, whose holds, or writes, start late
+        // (`Scenario::pacer_hold_start`, `Scenario::pacer_pass_start`).
         if let Some(starts) = w.hold_starts.get(h) {
             starts.frame_written(crate::wan::sim_time(at));
         }
