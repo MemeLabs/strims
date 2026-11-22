@@ -80,7 +80,11 @@
 //!   under ten packets. A SACK it holds goes at its host's next send
 //!   opportunity on the reverse direction, first in its first packet, whose
 //!   chunks take the room it leaves within the MTU, or alone if none fits;
-//!   never in a fast retransmission's packet. (A window halved by a loss
+//!   never in a fast retransmission's packet. It reports the first 20 gap
+//!   blocks above its cumulative point and at most 20 duplicates received
+//!   since its last ([`SctpProfile::sack_report`]): on the testbed's
+//!   halving the Firefox viewers' SACKs, whose flights lose the most, stop
+//!   at 20 blocks and a few duplicates (158-178 bytes of IP). (A window halved by a loss
 //!   stays under ten packets while its association sends less than it
 //!   allows, as a thin relay's do: on the testbed 85-87 % of
 //!   their SACKs answer one packet, within a millisecond of it.)
@@ -229,6 +233,18 @@ pub struct SctpProfile {
     pub max_backoff: Duration,
     /// How long a receiver holds the SACK of a lone packet at most.
     pub delayed_sack: Duration,
+    /// The most gap blocks, and the most duplicate TSNs, one of its SACKs
+    /// reports, where its receiver caps them: the first gap blocks above
+    /// its cumulative point, and the duplicates it received since its last
+    /// SACK, a repeat once (each 4 bytes of the chunk). A sender reads the
+    /// chunks past the last block reported neither acknowledged nor
+    /// missing. The field ties duplicate reporting to a cap: without one a
+    /// SACK reports every gap block and no duplicate. str0m's sctp-proto
+    /// reports every duplicate received since its last SACK, repeats
+    /// included and uncapped (queue/payload_queue.rs, `push` and
+    /// `pop_duplicates`; association/mod.rs, `create_selective_ack_chunk`);
+    /// the model leaves them out.
+    pub sack_report: Option<usize>,
     /// The packets a send opportunity sends at most, if it limits them.
     pub max_burst: Option<usize>,
     /// Whether the channel's buffered amount counts the bytes sent and not
@@ -325,6 +341,7 @@ impl SctpProfile {
         min_rttvar: Duration::ZERO,
         max_backoff: Duration::from_millis(60_000),
         delayed_sack: Duration::from_millis(200),
+        sack_report: None,
         max_burst: None,
         buffered_flight: true,
         amount_at_sends: false,
@@ -336,7 +353,10 @@ impl SctpProfile {
     /// window of ten, a 5 MiB receive window, the timeout 500 ms at first
     /// and 400 ms-60 s with a variation of 27.5 ms at least (its 220 ms
     /// option over 8) and its timers backing off to 3 s at most, the
-    /// delayed SACK 200 ms at most, and four packets a send opportunity;
+    /// delayed SACK 200 ms at most, a SACK of 20 gap blocks and 20
+    /// duplicates at most (net/dcsctp/rx/data_tracker.h:40-42,
+    /// `kMaxDuplicateTsnReported`, `kMaxGapAckBlocksReported`; data_tracker.cc,
+    /// `CreateGapAckBlocks`, the first 20 blocks), and four packets a send opportunity;
     /// its packets 12 µs of its network thread each, a host's cost that its
     /// CPU model sets (the farm's EPYC 9R14 hosts' Chromium seeds: 12.3 µs
     /// apart in their trains, whatever their size or peer; a testbed run's
@@ -362,6 +382,7 @@ impl SctpProfile {
         min_rttvar: Duration::from_micros(27_500),
         max_backoff: Duration::from_secs(3),
         delayed_sack: Duration::from_millis(200),
+        sack_report: Some(20),
         max_burst: Some(4),
         buffered_flight: false,
         amount_at_sends: true,
@@ -371,8 +392,17 @@ impl SctpProfile {
     /// dcSCTP as Firefox 158 runs it: Chromium's options but a 16 MiB
     /// receive window and a delayed SACK of 50 ms, the amount its page
     /// reads taken as its stack's, and no thread's cost (no testbed run
-    /// has captured a Firefox seed's packets). (Between two Firefoxes its
-    /// chunks are I-DATA, 4 bytes longer.)
+    /// has captured a Firefox seed's packets). Firefox 158.0.1's data
+    /// channels run dcSCTP, not usrsctp: `media.peerconnection.sctp.use_dcsctp`
+    /// is on (modules/libpref/init/all.js:263), so netwerk/sctp/datachannel's
+    /// DataChannel.cpp makes a `DataChannelConnectionDcSctp` (:107-112),
+    /// whose options set the window and the delayed SACK
+    /// (DataChannelDcSctp.cpp:78, :82). Its vendored net/dcsctp's receiver
+    /// (rx/data_tracker.cc, rx/reassembly_queue.cc,
+    /// socket/transmission_control_block.cc) is branch 8078's to the byte,
+    /// so it acknowledges as Chromium's does. (Between two Firefoxes its
+    /// chunks are I-DATA, 4 bytes longer: it enables interleaving,
+    /// DataChannelDcSctp.cpp:79, which Chromium leaves off.)
     pub const FIREFOX: SctpProfile = SctpProfile {
         host: HostKind::Firefox,
         rwnd: 16 << 20,
@@ -621,14 +651,14 @@ impl Carried {
     }
 }
 
-/// A SACK alone of `gaps` gap blocks, as its log takes it.
-fn sack_alone(gaps: usize) -> Carried {
+/// A SACK alone of a chunk of `chunk` bytes, as its log takes it.
+fn sack_alone(chunk: usize) -> Carried {
     Carried {
         what: SctpWhat::Sack,
         tsn: None,
         chunks: 0,
         data_bytes: 0,
-        packet_bytes: (COMMON_HEADER + SctpProfile::sack_chunk(gaps)) as u64,
+        packet_bytes: (COMMON_HEADER + chunk) as u64,
     }
 }
 
@@ -657,8 +687,17 @@ fn bundle(chunks: Vec<Send>, mtu: usize) -> Vec<Vec<Send>> {
 pub(super) struct Sack {
     cum: u64,
     above: Vec<u64>,
+    /// The duplicate TSNs it reports.
+    dups: usize,
     /// For the log, what the packet it rode carried, or none alone.
     rode: Option<Carried>,
+}
+
+impl Sack {
+    /// Its chunk's bytes: its gap blocks and duplicates, 4 bytes each.
+    fn chunk_bytes(&self) -> usize {
+        SctpProfile::sack_chunk(gap_blocks(&self.above)) + 4 * self.dups
+    }
 }
 
 /// One association's sender.
@@ -989,8 +1028,35 @@ impl Assoc {
 pub(super) struct Rcv {
     cum: Option<u64>,
     above: BTreeSet<u64>,
+    /// The duplicates received since its last SACK, as many as its SACK
+    /// reports ([`SctpProfile::sack_report`]).
+    dups: BTreeSet<u64>,
     due: Option<Time>,
     marked: Option<(u64, bool)>,
+}
+
+impl Rcv {
+    /// Duplicate `seq` arrived: its next SACK reports it, once, while it
+    /// reports fewer than `cap` ([`SctpProfile::sack_report`]).
+    fn duplicate(&mut self, seq: u64, cap: Option<usize>) {
+        if cap.is_some_and(|n| self.dups.len() < n) {
+            self.dups.insert(seq);
+        }
+    }
+
+    /// The SACK it would send now, of at most `cap` gap blocks
+    /// ([`SctpProfile::sack_report`]), no longer held back: it takes the
+    /// duplicates it reports.
+    fn sack(&mut self, cap: Option<usize>) -> Option<Sack> {
+        self.due = None;
+        let cum = self.cum?;
+        Some(Sack {
+            cum,
+            above: reported(&self.above, cap),
+            dups: std::mem::take(&mut self.dups).len(),
+            rode: None,
+        })
+    }
 }
 
 impl Scheduler {
@@ -1496,9 +1562,7 @@ impl Scheduler {
         let at = self.thread_send(from, at, &profile);
         let back = (conn.1, conn.0);
         let sack = if out.sack { self.sack_of(back) } else { None };
-        let sack_bytes = sack
-            .as_ref()
-            .map_or(0, |s| SctpProfile::sack_chunk(gap_blocks(&s.above)));
+        let sack_bytes = sack.as_ref().map_or(0, Sack::chunk_bytes);
         let logs = (self.sctp_logs(from), self.sctp_logs(to));
         let carried = (logs.0 || logs.1)
             .then(|| self.carried(conn, packet, out.fast, sack.is_some(), sack_bytes));
@@ -1970,6 +2034,9 @@ impl Scheduler {
         let first = r.cum.is_none();
         let cum = *r.cum.get_or_insert(seq.saturating_sub(1));
         let duplicate = seq <= cum || r.above.contains(&seq);
+        if duplicate {
+            r.duplicate(seq, p.sack_report);
+        }
         // A mark of a packet whose last chunk the downlink lost goes with it.
         let carried = r.marked.take().is_some_and(|m| m == (packet, true));
         let marked = carried || first || duplicate;
@@ -2055,20 +2122,15 @@ impl Scheduler {
             .rcvs
             .get(&conn)
             .filter(|r| r.due.is_some() && r.cum.is_some())?;
-        let above: Vec<u64> = r.above.iter().copied().collect();
-        Some(SctpProfile::sack_chunk(gap_blocks(&above)))
+        let p = self.receiver_profile(conn)?;
+        let above = reported(&r.above, p.sack_report);
+        Some(SctpProfile::sack_chunk(gap_blocks(&above)) + 4 * r.dups.len())
     }
 
     /// The SACK `conn`'s receiver would send now, no longer held back.
     fn sack_of(&mut self, conn: ConnKey) -> Option<Sack> {
-        let r = self.rcvs.get_mut(&conn)?;
-        r.due = None;
-        let cum = r.cum?;
-        Some(Sack {
-            cum,
-            above: r.above.iter().copied().collect(),
-            rode: None,
-        })
+        let cap = self.receiver_profile(conn).and_then(|p| p.sack_report);
+        self.rcvs.get_mut(&conn)?.sack(cap)
     }
 
     /// `sack` of `conn` rode a packet whose last bit left the receiver's
@@ -2111,7 +2173,7 @@ impl Scheduler {
             let back = (conn.1, conn.0);
             let state = self.assocs.get(&back).map(|a| (a.cwnd, a.in_flight));
             let tsns = self.sack_tsns(conn, &sack);
-            sack_alone(gap_blocks(&sack.above)).event(t, Dir::Out, Some(tsns), state)
+            sack_alone(sack.chunk_bytes()).event(t, Dir::Out, Some(tsns), state)
         });
         self.hand_over(t, &p, Handover::Sack { conn, sack, log });
         t
@@ -2137,7 +2199,7 @@ impl Scheduler {
         let wire = link_wire(
             &self.net,
             to,
-            p.packet_overhead + COMMON_HEADER + SctpProfile::sack_chunk(gap_blocks(&sack.above)),
+            p.packet_overhead + COMMON_HEADER + sack.chunk_bytes(),
         );
         let mut offer = Offered {
             at: t,
@@ -2341,12 +2403,29 @@ impl Scheduler {
         }
         let state = self.assocs.get(&conn).map(|a| (a.cwnd, a.in_flight));
         let tsns = self.sack_tsns(conn, sack);
-        let carried = sack
-            .rode
-            .unwrap_or_else(|| sack_alone(gap_blocks(&sack.above)));
+        let carried = sack.rode.unwrap_or_else(|| sack_alone(sack.chunk_bytes()));
         let e = carried.event(t, Dir::In, Some(tsns), state);
         self.sctp_event(from, to, conn, e);
     }
+}
+
+/// The chunks `above` a cumulative point that a SACK reports: those of its
+/// first `cap` gap blocks, if its receiver caps them
+/// ([`SctpProfile::sack_report`]).
+fn reported(above: &BTreeSet<u64>, cap: Option<usize>) -> Vec<u64> {
+    let mut blocks = 0;
+    let mut prev = None;
+    above
+        .iter()
+        .copied()
+        .take_while(|&seq| {
+            if prev.is_none_or(|p| seq != p + 1) {
+                blocks += 1;
+            }
+            prev = Some(seq);
+            cap.is_none_or(|c| blocks <= c)
+        })
+        .collect()
 }
 
 /// The gap blocks of the chunks `above` a cumulative point.
@@ -2605,6 +2684,7 @@ mod tests {
             &Sack {
                 cum: 10,
                 above: Vec::new(),
+                dups: 0,
                 rode: None,
             },
             9,
@@ -2619,6 +2699,7 @@ mod tests {
             &Sack {
                 cum: 11,
                 above: Vec::new(),
+                dups: 0,
                 rode: None,
             },
             10,
@@ -2631,6 +2712,7 @@ mod tests {
             &Sack {
                 cum: 12,
                 above: Vec::new(),
+                dups: 0,
                 rode: None,
             },
             11,
@@ -2668,6 +2750,7 @@ mod tests {
         let sack = Sack {
             cum,
             above: above.into_iter().collect(),
+            dups: 0,
             rode: None,
         };
         rfc_sacked(a, t, &sack, cum0);
@@ -2702,6 +2785,49 @@ mod tests {
         take(&mut a, t, 1, 3..=8);
         assert_eq!(a.out[&2].misses, 3);
         assert!(a.out[&2].retransmit);
+    }
+
+    #[test]
+    fn dcsctp_sacks_report_their_first_twenty_gap_blocks() {
+        // Past the cumulative point 1, every other chunk arrived: 25 gap
+        // blocks, 3 to 51.
+        let above: BTreeSet<u64> = (1..=25).map(|i| 1 + 2 * i).collect();
+        let sack = reported(&above, SctpProfile::FIREFOX.sack_report);
+        assert_eq!((gap_blocks(&sack), sack.last()), (20, Some(&41)));
+        assert_eq!(reported(&above, SctpProfile::STR0M.sack_report).len(), 25);
+        // The sender reads the chunks past the last block reported neither
+        // acknowledged nor missing.
+        let (mut a, t) = sent(60);
+        take(&mut a, t, 1, sack);
+        assert!(a.out[&41].acked && a.out[&40].misses == 1);
+        assert!(!a.out[&43].acked && a.out[&42].misses == 0);
+    }
+
+    #[test]
+    fn dcsctp_sacks_report_twenty_duplicates_each_once() {
+        let cap = SctpProfile::CHROMIUM.sack_report;
+        let mut r = Rcv {
+            cum: Some(30),
+            above: [33, 35].into(),
+            ..Rcv::default()
+        };
+        // 25 duplicates below the cumulative point, the first repeated.
+        r.duplicate(1, cap);
+        for seq in 1..=25 {
+            r.duplicate(seq, cap);
+        }
+        assert_eq!(r.dups.len(), 20);
+        let sack = r.sack(cap).unwrap();
+        // Its chunk: 16 bytes, and 4 a gap block and a duplicate.
+        assert_eq!((sack.dups, sack.chunk_bytes()), (20, 16 + 4 * 2 + 4 * 20));
+        // Its next reports only those received since.
+        r.duplicate(33, cap);
+        let sack = r.sack(cap).unwrap();
+        assert_eq!((sack.dups, sack.chunk_bytes()), (1, 16 + 4 * 2 + 4));
+        assert_eq!(r.sack(cap).unwrap().chunk_bytes(), 16 + 4 * 2);
+        // str0m's reports none.
+        r.duplicate(1, SctpProfile::STR0M.sack_report);
+        assert!(r.dups.is_empty());
     }
 
     #[test]
