@@ -589,12 +589,11 @@ and dropped are in `TRIED.md`.
     is served (the farm's `testbed-timers-control` matrix; a native
     node's and a Chromium node's don't move). Read a plain page's
     timers by `Date.now()` alone, as its lines' `tick_late_ms` and
-    `write_late_ms` do, and its writers without the timer probe, or with
-    the probe outside the node's worker: the bench's runs keep the probe
-    on, and beside it a Firefox seed's writes run less late and a
-    Chromium seed's later than without it (the control's runs with the
-    log on). A probe on/off comparison at one SECS, a farm run, would say
-    whether the probe is the cause.
+    `write_late_ms` do, and its writers without the timer probe, as a
+    Chromium seed's is fit (`crate::late`'s probe-off model): the
+    bench's runs keep the probe on, and beside it a Firefox seed's
+    writes run less late than without it (the control's runs with the
+    log on).
   - Find why the twin's seed's allocation checks slip a 100-ms tick more
     often than the testbed's native seed's and less often than its
     browser seeds' (`alloc_step_fit_of`), and fix the sim's side.

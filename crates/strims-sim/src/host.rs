@@ -1275,16 +1275,16 @@ mod tests {
     use crate::late::{HostKind, Lateness, Source, lateness};
     use strims_base::rng::det_rng;
 
-    /// The probe's timers draw a harness's model, the writer's, not the
-    /// node task's.
+    /// The probe's timers draw a harness's model, the writer's with the
+    /// probe on, not the node task's.
     #[test]
     fn a_probes_timer_is_a_harness_timer() {
         for kind in [HostKind::Native, HostKind::Chromium, HostKind::Firefox] {
-            let (l, mut fresh) = (Lateness::new(det_rng(4), kind), det_rng(4));
+            let (l, mut fresh) = (Lateness::new(det_rng(4), kind, true), det_rng(4));
             for i in 0..1000 {
                 assert_eq!(
                     probe_lateness(&l, false),
-                    lateness(&mut fresh, kind, Source::Writer),
+                    lateness(&mut fresh, kind, Source::Writer, true),
                     "{kind:?} draw {i}"
                 );
             }

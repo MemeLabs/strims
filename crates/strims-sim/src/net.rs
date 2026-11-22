@@ -1923,7 +1923,7 @@ mod tests {
         use strims_base::rng::det_rng;
         let pacer = PacerTimers::new(
             true,
-            Some(Lateness::new(det_rng(8), HostKind::Firefox)),
+            Some(Lateness::new(det_rng(8), HostKind::Firefox, false)),
             true,
             None,
             None,
@@ -1931,7 +1931,7 @@ mod tests {
         );
         let mut fresh = det_rng(8);
         for d in 0..2000 {
-            let want = lateness(&mut fresh, HostKind::Firefox, Source::Pacer);
+            let want = lateness(&mut fresh, HostKind::Firefox, Source::Pacer, false);
             for _ in 0..3 {
                 assert_eq!(pacer.draw(ms(5 + d)), want, "deadline {d}");
             }
@@ -1939,14 +1939,20 @@ mod tests {
         // Deadlines armed in turn keep their draws: a poll for an earlier
         // deadline after one for a later draws nothing.
         let (a, b) = (pacer.draw(ms(9000)), pacer.draw(ms(9001)));
-        assert_eq!(a, lateness(&mut fresh, HostKind::Firefox, Source::Pacer));
-        assert_eq!(b, lateness(&mut fresh, HostKind::Firefox, Source::Pacer));
+        assert_eq!(
+            a,
+            lateness(&mut fresh, HostKind::Firefox, Source::Pacer, false)
+        );
+        assert_eq!(
+            b,
+            lateness(&mut fresh, HostKind::Firefox, Source::Pacer, false)
+        );
         assert_eq!(pacer.draw(ms(9000)), a);
         assert_eq!(pacer.draw(ms(9001)), b);
         let on_time = PacerTimers::new(true, None, true, None, None, Duration::ZERO);
         let native = PacerTimers::new(
             false,
-            Some(Lateness::new(det_rng(8), HostKind::Native)),
+            Some(Lateness::new(det_rng(8), HostKind::Native, false)),
             true,
             None,
             None,
@@ -1972,7 +1978,7 @@ mod tests {
             None,
             true,
             Some((
-                Lateness::new(det_rng(4), HostKind::Chromium),
+                Lateness::new(det_rng(4), HostKind::Chromium, false),
                 starts.clone(),
             )),
             None,
@@ -1986,7 +1992,7 @@ mod tests {
             let due = ms(250 * k);
             let at = due + Duration::from_millis(i64::try_from(k % 2).unwrap());
             starts.0.lock().unwrap().frame = Some((at, due));
-            let want = lateness(&mut fresh, HostKind::Chromium, Source::Hold);
+            let want = lateness(&mut fresh, HostKind::Chromium, Source::Hold, false);
             let start = (due + want - at).max(Duration::ZERO);
             for _ in 0..3 {
                 assert_eq!(pacer.hold_start(at), start, "frame {k}");
@@ -1999,7 +2005,10 @@ mod tests {
             false,
             None,
             true,
-            Some((Lateness::new(det_rng(4), HostKind::Native), starts.clone())),
+            Some((
+                Lateness::new(det_rng(4), HostKind::Native, false),
+                starts.clone(),
+            )),
             None,
             Duration::ZERO,
         );

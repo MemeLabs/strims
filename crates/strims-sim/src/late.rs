@@ -54,14 +54,20 @@
 //! `timer_fit_of`) holds a twin of those runs to the testbed's shares,
 //! mean and p99, kind by kind and source by source. A Firefox node's model
 //! is a page's served cross-origin isolated, as the testbed's timer log
-//! serves it, whose timers run less late than a plain page's (PLAN). The bench's runs keep
-//! the timer probe on, which runs in the node's own worker, and a
-//! browser's writer runs otherwise beside it: without the probe a Firefox
-//! seed's writes run later, a Chromium seed's less late (PLAN). A
-//! browser's timer for a deadline already due resolves at once, as
-//! strims-wasm's `Sleep` and `setTimeout`-free waits do, drawing nothing;
-//! a native node's fires on its next tick, as any. A testbed node's line
-//! timer has no draw: the controller samples on time. Without
+//! serves it, whose timers run less late than a plain page's (PLAN).
+//!
+//! The bench's runs keep the timer probe on, which runs in the node's own
+//! worker, and a browser's writer runs otherwise beside it. A Chromium
+//! host without the probe, as a deployed node runs, and as every run runs
+//! but the timer bench's twins ([`Scenario::timer_probe`]), draws its frame
+//! writer from the write path bench's runs instead, which run none: its
+//! writes run less late than beside the probe. A host that runs the probe
+//! draws the timer bench's. Without the probe a Firefox seed's writes run
+//! later (PLAN), which no model has yet: a Firefox host draws the bench's
+//! either way. A browser's timer for a deadline already due resolves at
+//! once, as strims-wasm's `Sleep` and `setTimeout`-free waits do, drawing
+//! nothing; a native node's fires on its next tick, as any. A testbed
+//! node's line timer has no draw: the controller samples on time. Without
 //! [`Scenario::pacer_lateness`] a browser's host pacer polls on time and
 //! draws nothing.
 //!
@@ -151,13 +157,16 @@ pub enum Source {
     Hold,
 }
 
-/// A host's lateness stream, shared by its incarnations' clocks.
+/// A host's lateness stream, shared by its incarnations' clocks: its
+/// rng, its kind, and whether it runs the timer probe
+/// ([`Scenario::timer_probe`](crate::Scenario::timer_probe)), which picks
+/// its frame writer's model ([`model`]).
 #[derive(Clone, Debug)]
-pub struct Lateness(Arc<Mutex<DetRng>>, HostKind);
+pub struct Lateness(Arc<Mutex<DetRng>>, HostKind, bool);
 
 impl Lateness {
-    pub(crate) fn new(rng: DetRng, kind: HostKind) -> Lateness {
-        Lateness(Arc::new(Mutex::new(rng)), kind)
+    pub(crate) fn new(rng: DetRng, kind: HostKind, probe: bool) -> Lateness {
+        Lateness(Arc::new(Mutex::new(rng)), kind, probe)
     }
 
     /// How late the host's next timer of `source` fires, armed for a
@@ -172,6 +181,7 @@ impl Lateness {
             &mut self.0.lock().unwrap_or_else(PoisonError::into_inner),
             self.1,
             source,
+            self.2,
         )
     }
 
@@ -261,8 +271,22 @@ const PARTS: u32 = 1000;
 /// model leaves out. One period's first hold 18 ms past its writer's, a
 /// hold the pass didn't meet, is left out. A native node has no host
 /// pacer; its model, at once, is never drawn.
-pub(crate) fn model(kind: HostKind, source: Source) -> Model {
+///
+/// Those are the models of a host that runs the timer probe (`probe`), as
+/// the bench's runs do. A Chromium host without it draws its frame writer
+/// from the write path bench's runs (C4), which run none: the testbed's
+/// halve-7 cells with SPEC=1 and PCAP=1 (the farm's `testbed-h7spec`
+/// matrices, a Chromium seed at 10 and at 20 Mbit/s on c7a, 8 repeats
+/// each), each push period of the stream from 4 to 30 s off the whole
+/// second: the whole ms from a period's due ms to the queueing of its
+/// first push (`seed_sends`), their 1248 periods, the tail their 10
+/// periods 3 ms late or more, one ms each.
+pub(crate) fn model(kind: HostKind, source: Source, probe: bool) -> Model {
     match (kind, source) {
+        (HostKind::Chromium, Source::Writer) if !probe => Model {
+            shares: [807, 184, 1],
+            tail: &[4, 5, 6, 7, 8, 8, 8, 8, 8, 8],
+        },
         (HostKind::Native, Source::NodeTask) => Model {
             shares: [107, 733, 160],
             tail: &[],
@@ -310,12 +334,13 @@ pub(crate) fn model(kind: HostKind, source: Source) -> Model {
     }
 }
 
-/// How late a timer of `source` fires on a host of `kind`: one draw of
-/// `rng`, whose remainder by [`PARTS`] picks the bucket at its
-/// [`Model::shares`], and whose quotient the tail's value.
-pub(crate) fn lateness(rng: &mut DetRng, kind: HostKind, source: Source) -> Duration {
+/// How late a timer of `source` fires on a host of `kind`, that runs the
+/// timer probe if `probe`: one draw of `rng`, whose remainder by [`PARTS`]
+/// picks the bucket at its [`Model::shares`], and whose quotient the
+/// tail's value.
+pub(crate) fn lateness(rng: &mut DetRng, kind: HostKind, source: Source, probe: bool) -> Duration {
     let x = rng.next_u32();
-    let m = model(kind, source);
+    let m = model(kind, source, probe);
     let mut b = x % PARTS;
     for (ms, share) in (0..).zip(m.shares) {
         if b < share {
@@ -376,38 +401,38 @@ mod tests {
             .all(|(&got, w)| got.abs_diff(w * 100) < 500)
     }
 
-    /// Each kind's and source's draws come at its model's shares, and its
-    /// 3+ ms draws are its tail's values, every one drawn; a model has a
-    /// tail exactly when its shares leave parts to it; the most any tail
-    /// holds is MAX_LATE_MS.
+    /// Each kind's and source's draws, with the timer probe and without,
+    /// come at its model's shares, and its 3+ ms draws are its tail's
+    /// values, every one drawn; a model has a tail exactly when its shares
+    /// leave parts to it; the most any tail holds is MAX_LATE_MS.
     #[test]
     fn a_timer_fires_at_its_kinds_and_sources_model() {
         let mut most = 0;
         for kind in KINDS {
             for source in SOURCES {
-                let m = model(kind, source);
-                let held = m.shares.iter().sum::<u32>();
-                assert!(held <= PARTS, "{kind:?} {source:?}");
-                assert_eq!(m.tail.is_empty(), held == PARTS, "{kind:?} {source:?}");
-                assert!(m.tail.is_sorted() && m.tail.iter().all(|&ms| ms >= 3));
-                most = most.max(m.tail.last().map_or(0, |&ms| i64::from(ms)));
-                let mut rng = det_rng(7);
-                let mut seen = std::collections::BTreeSet::new();
-                let b = buckets(100_000, || {
-                    let d = lateness(&mut rng, kind, source);
-                    if d.as_millis() >= 3 {
-                        assert!(m.tail.contains(&(d.as_millis() as u32)));
-                        seen.insert(d.as_millis());
-                    }
-                    d
-                });
-                assert!(at_shares(b, m), "{kind:?} {source:?}: {b:?}");
-                let distinct: std::collections::BTreeSet<u32> = m.tail.iter().copied().collect();
-                assert_eq!(
-                    seen.len(),
-                    distinct.len(),
-                    "{kind:?} {source:?}: every tail value drawn"
-                );
+                for probe in [false, true] {
+                    let m = model(kind, source, probe);
+                    let held = m.shares.iter().sum::<u32>();
+                    let at = format!("{kind:?} {source:?} {probe}");
+                    assert!(held <= PARTS, "{at}");
+                    assert_eq!(m.tail.is_empty(), held == PARTS, "{at}");
+                    assert!(m.tail.is_sorted() && m.tail.iter().all(|&ms| ms >= 3));
+                    most = most.max(m.tail.last().map_or(0, |&ms| i64::from(ms)));
+                    let mut rng = det_rng(7);
+                    let mut seen = std::collections::BTreeSet::new();
+                    let b = buckets(100_000, || {
+                        let d = lateness(&mut rng, kind, source, probe);
+                        if d.as_millis() >= 3 {
+                            assert!(m.tail.contains(&(d.as_millis() as u32)));
+                            seen.insert(d.as_millis());
+                        }
+                        d
+                    });
+                    assert!(at_shares(b, m), "{at}: {b:?}");
+                    let distinct: std::collections::BTreeSet<u32> =
+                        m.tail.iter().copied().collect();
+                    assert_eq!(seen.len(), distinct.len(), "{at}: every tail value drawn");
+                }
             }
         }
         assert_eq!(most, MAX_LATE_MS);
@@ -415,25 +440,34 @@ mod tests {
 
     /// No two kinds and sources share a model: each is its own pool, but
     /// the hold start's, one for both browsers (and never drawn on a
-    /// native node).
+    /// native node). The probe picks a model of its own for a Chromium
+    /// host's frame writer alone.
     #[test]
     fn every_kind_and_source_has_a_model_of_its_own() {
-        let all: Vec<(HostKind, Source)> = KINDS
+        let same = |a: Model, b: Model| a.shares == b.shares && a.tail == b.tail;
+        let mut all: Vec<(HostKind, Source, bool)> = KINDS
             .iter()
-            .flat_map(|&k| SOURCES.iter().map(move |&s| (k, s)))
-            .filter(|&(k, s)| s != Source::Hold || k == HostKind::Chromium)
+            .flat_map(|&k| SOURCES.iter().map(move |&s| (k, s, true)))
+            .filter(|&(k, s, _)| s != Source::Hold || k == HostKind::Chromium)
             .collect();
-        let (c, f) = (
-            model(HostKind::Chromium, Source::Hold),
-            model(HostKind::Firefox, Source::Hold),
-        );
-        assert!(c.shares == f.shares && c.tail == f.tail);
-        for (i, &(ka, sa)) in all.iter().enumerate() {
-            for &(kb, sb) in &all[i + 1..] {
-                let (a, b) = (model(ka, sa), model(kb, sb));
+        for k in KINDS {
+            for s in SOURCES {
+                if k == HostKind::Chromium && s == Source::Writer {
+                    all.push((k, s, false));
+                } else {
+                    assert!(same(model(k, s, false), model(k, s, true)), "{k:?} {s:?}");
+                }
+            }
+        }
+        assert!(same(
+            model(HostKind::Chromium, Source::Hold, true),
+            model(HostKind::Firefox, Source::Hold, true)
+        ));
+        for (i, &(ka, sa, pa)) in all.iter().enumerate() {
+            for &(kb, sb, pb) in &all[i + 1..] {
                 assert!(
-                    a.shares != b.shares || a.tail != b.tail,
-                    "{ka:?} {sa:?} and {kb:?} {sb:?}"
+                    !same(model(ka, sa, pa), model(kb, sb, pb)),
+                    "{ka:?} {sa:?} {pa} and {kb:?} {sb:?} {pb}"
                 );
             }
         }
@@ -444,20 +478,23 @@ mod tests {
     #[test]
     fn a_browsers_due_timer_fires_at_once() {
         for kind in [HostKind::Chromium, HostKind::Firefox] {
-            let (stream, mut fresh) = (Lateness::new(det_rng(5), kind), det_rng(5));
+            let (stream, mut fresh) = (Lateness::new(det_rng(5), kind, false), det_rng(5));
             for source in SOURCES {
                 assert_eq!(stream.draw(source, true), Duration::ZERO);
             }
             assert_eq!(
                 stream.draw(Source::Writer, false),
-                lateness(&mut fresh, kind, Source::Writer),
+                lateness(&mut fresh, kind, Source::Writer, false),
                 "{kind:?}: the due ones drew nothing"
             );
         }
-        let (stream, mut fresh) = (Lateness::new(det_rng(5), HostKind::Native), det_rng(5));
+        let (stream, mut fresh) = (
+            Lateness::new(det_rng(5), HostKind::Native, false),
+            det_rng(5),
+        );
         assert_eq!(
             stream.draw(Source::NodeTask, true),
-            lateness(&mut fresh, HostKind::Native, Source::NodeTask)
+            lateness(&mut fresh, HostKind::Native, Source::NodeTask, false)
         );
     }
 
@@ -470,7 +507,7 @@ mod tests {
     fn a_deadline_keeps_its_lateness() {
         let epoch = Time::from_unix_millis(1_700_000_000_000);
         let inner = SimClock::with_base(epoch, Instant::now());
-        let stream = Lateness::new(det_rng(3), HostKind::Native);
+        let stream = Lateness::new(det_rng(3), HostKind::Native, false);
         let late = LateClock::new(inner, stream.clone());
         for k in 0..200 {
             let t = epoch + Duration::from_secs(1000) + Duration::from_millis(100 * k);
@@ -482,7 +519,7 @@ mod tests {
         // The same stream from the start, and a clock of a second
         // incarnation sharing it after 200 draws, read alike.
         let mut fresh = det_rng(3);
-        let draw = |rng: &mut DetRng| lateness(rng, HostKind::Native, Source::NodeTask);
+        let draw = |rng: &mut DetRng| lateness(rng, HostKind::Native, Source::NodeTask, false);
         for _ in 0..200 {
             let _ = draw(&mut fresh);
         }
@@ -490,7 +527,7 @@ mod tests {
         let t = epoch + Duration::from_secs(5000);
         assert_eq!(again.deadline(t), inner.deadline(t + draw(&mut fresh)));
         // Over many deadlines the clock's draws are the node task's.
-        let clock = LateClock::new(inner, Lateness::new(det_rng(9), HostKind::Native));
+        let clock = LateClock::new(inner, Lateness::new(det_rng(9), HostKind::Native, false));
         let mut k = 0;
         let b = buckets(100_000, || {
             k += 1;
@@ -499,11 +536,11 @@ mod tests {
             Duration::from(clock.deadline(t) - base)
         });
         assert!(
-            at_shares(b, model(HostKind::Native, Source::NodeTask)),
+            at_shares(b, model(HostKind::Native, Source::NodeTask, false)),
             "{b:?}"
         );
         assert!(
-            !at_shares(b, model(HostKind::Native, Source::Writer)),
+            !at_shares(b, model(HostKind::Native, Source::Writer, false)),
             "{b:?}"
         );
     }

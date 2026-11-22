@@ -501,14 +501,22 @@ impl World {
         crate::hostile::draw_mix(&mut spec, &mut rng);
         crate::seed_pin::resolve(&mut spec, &mut rng);
         // Each host's lateness stream forked from the run's rng, then with
-        // the probe one more a host for its probe's.
+        // the probe one more a host for its probe's. A host with a timer
+        // log runs the probe (`spawn_tasks`), which picks its models.
         let (lateness, probe_lateness) = if spec.timer_lateness {
             let streams = |rng: &mut DetRng| -> Vec<crate::late::Lateness> {
                 (0..spec.hosts.len())
                     .map(|h| {
+                        let probe = spec.timer_probe
+                            && spec.wire_bins.is_some()
+                            && spec
+                                .timer_log
+                                .as_ref()
+                                .is_some_and(|s| s.contains(&spec, h));
                         crate::late::Lateness::new(
                             strims_base::rng::fork(rng),
                             crate::late::HostKind::of_host(&spec, h),
+                            probe,
                         )
                     })
                     .collect()
