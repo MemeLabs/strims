@@ -130,12 +130,19 @@ JOB_KNOBS = ("STRIMS_SIM_JOB", "STRIMS_SIM_SERIES", "STRIMS_SIM_SEED", "STRIMS_S
 # ms past their schedule, where a ~3.5 s overflow-and-cut cycle stands at
 # the step deciding its loss; STAMP (no twin knob) says whether they're
 # when each tc applied or, from a log before that stamp, upper bounds.
+# And when its browser pages made their first offers (OFFER, ms: a Firefox
+# page's gathering end after its node's connect and its offer's post after
+# that, a Chromium page's first setting after the connect: strims-sim's
+# testbed::offer_timing), a comma list, a node of its kind each in node
+# order, or one value for them all, its host's, which its CPU and its
+# browsers' load move, twinned as COST is (twin_offer).
 EPOCH = "STRIMS_SIM_CAL_EPOCH_MS"
 COST = "STRIMS_SIM_CAL_PACKET_COST_US"
 CPU = "STRIMS_SIM_CAL_CPU"
 STEPS = "STRIMS_SIM_CAL_SEED_UP_STEPS_MS"
 STAMP = "STRIMS_SIM_CAL_SEED_UP_STAMP"
-MEASURED = ("STRIMS_SIM_CAL_COMPETE_MS", EPOCH, COST, CPU, STEPS, STAMP)
+OFFER = ("STRIMS_SIM_CAL_FIREFOX_GATHER_MS", "STRIMS_SIM_CAL_FIREFOX_POST_MS", "STRIMS_SIM_CAL_CHROMIUM_SET_MS")
+MEASURED = ("STRIMS_SIM_CAL_COMPETE_MS", EPOCH, COST, CPU, STEPS, STAMP, *OFFER)
 # How far apart a cell's runs' times of a step may lie for its twin to take
 # their median (twin_steps): 2 ms moves no run's step by more than two
 # frames' worth of the halved rate's difference at the tier's fastest seed
@@ -321,10 +328,10 @@ def twin_cells(rows):
     takes (a refused link, a seed's loss, run.sh's late date stamps). What
     the runs MEASURED is each cell's median over them (median_measured),
     but EPOCH, the runs' one where every run holds the same, else left
-    out, COST (twin_cost, by the runs' CPU) and STEPS (twin_steps), where
-    every run holds one, and CPU and STAMP, which only say whose COST it
-    is and which time STEPS are. `rows` come in each cell's run order (1,
-    2, ...)."""
+    out, COST (twin_cost, by the runs' CPU), each of OFFER (twin_offer,
+    likewise) and STEPS (twin_steps), where every run holds one, and CPU
+    and STAMP, which only say whose COST it is and which time STEPS are.
+    `rows` come in each cell's run order (1, 2, ...)."""
     out, measured, runs = {}, {}, {}
     for cell, env in rows:
         runs[cell] = runs.get(cell, 0) + 1
@@ -341,10 +348,11 @@ def twin_cells(rows):
             measured.setdefault(cell, {}).setdefault(k, []).append(v)
     for cell, ks in measured.items():
         for k, values in ks.items():
-            if k == COST:
+            if k == COST or k in OFFER:
                 if len(values) == runs[cell]:
                     cpus = ks.get(CPU, [])
-                    out[cell][k] = twin_cost(values, cpus if len(cpus) == runs[cell] else [])
+                    twin = twin_cost if k == COST else twin_offer
+                    out[cell][k] = twin(values, cpus if len(cpus) == runs[cell] else [])
             elif k == STEPS:
                 if len(values) == runs[cell]:
                     out[cell][k] = twin_steps(values)
@@ -378,6 +386,28 @@ def twin_cost(values, cpus):
     return " ".join(values)
 
 
+def twin_offer(values, cpus):
+    """A cell's twin's one of OFFER of its runs' (`values`, in run order,
+    each a comma list, a node of its kind each in node order, or one value
+    for them all) by their hosts' CPU models (`cpus`, as twin_cost's): each
+    node's median over the runs, to a tenth of a ms (a run's one value
+    standing for each of its nodes), where every run names one model and
+    the lists agree in length; else each run's list, joined by spaces, a
+    twin seed taking the one of the run it pairs with (seed_knobs), as
+    twin_cost's."""
+    runs = [[float(x) for x in v.split(",")] for v in values]
+    n = max(len(r) for r in runs)
+    if len(cpus) == len(values) and len(set(cpus)) == 1 and all(len(r) in (1, n) for r in runs):
+        out = []
+        for ms in zip(*(r * n if len(r) == 1 else r for r in runs)):
+            ms = sorted(ms)
+            mid = len(ms) // 2
+            med = ms[mid] if len(ms) % 2 else (ms[mid - 1] + ms[mid]) / 2
+            out.append(f"{med:.1f}")
+        return ",".join(out)
+    return " ".join(values)
+
+
 def twin_steps(values):
     """A cell's twin's STEPS of its runs' (`values`, in run order, each
     `<ms> ...`, a time a step): each step's median, to a tenth of a ms,
@@ -398,13 +428,15 @@ def twin_steps(values):
 
 def seed_knobs(knobs, seed):
     """A cell's twin knobs (twin_cells') for its twin seed `seed`: a COST
-    (twin_cost) or STEPS (twin_steps) of its runs' each the one of the run
-    the seed pairs with, run (seed - 1) mod their count in run order, as a
-    twin seed pairs with the testbed run of its number."""
+    (twin_cost), one of OFFER (twin_offer) or STEPS (twin_steps) of its
+    runs' each the one of the run the seed pairs with, run (seed - 1) mod
+    their count in run order, as a twin seed pairs with the testbed run of
+    its number."""
     out = dict(knobs)
-    costs = knobs.get(COST, "").split()
-    if len(costs) > 1:
-        out[COST] = costs[(seed - 1) % len(costs)]
+    for k in (COST, *OFFER):
+        each = knobs.get(k, "").split()
+        if len(each) > 1:
+            out[k] = each[(seed - 1) % len(each)]
     steps = knobs.get(STEPS, "").split("|")
     if len(steps) > 1:
         out[STEPS] = steps[(seed - 1) % len(steps)]

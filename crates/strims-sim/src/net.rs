@@ -735,6 +735,11 @@ pub(crate) struct SimNet {
     /// A browser's link-setup draws
     /// ([`Scenario::link_setup_draws`](crate::Scenario::link_setup_draws)).
     setup_draws: Option<crate::world::HostSetupDraws>,
+    /// Its page's offer times
+    /// ([`Scenario::page_timing`](crate::Scenario::page_timing)) and its
+    /// rank among the hosts of its kind, which picks its among them.
+    page_timing: crate::spec::PageTiming,
+    page_rank: usize,
     /// How the host's held channel writers poll its pacer.
     pacer: PacerTimers,
 }
@@ -747,7 +752,19 @@ impl SimNet {
             segment: None,
             rtc_stack: None,
             setup_draws: None,
+            page_timing: crate::spec::PageTiming::default(),
+            page_rank: 0,
             pacer: PacerTimers::default(),
+        }
+    }
+
+    /// The host's page makes its offers at `timing`'s times, those of
+    /// rank `rank` among the hosts of its kind.
+    pub fn with_page_timing(self, timing: crate::spec::PageTiming, rank: usize) -> SimNet {
+        SimNet {
+            page_timing: timing,
+            page_rank: rank,
+            ..self
         }
     }
 
@@ -1629,14 +1646,16 @@ impl Net for SimNet {
 
     /// The host's stack's ([`SimNet::with_rtc_stack`]), as its profile's
     /// host ([`SctpProfile::host`](crate::wan::SctpProfile::host)):
-    /// Chromium's, Firefox's, else str0m's.
+    /// Chromium's, Firefox's, else str0m's, its page's offer times
+    /// ([`SimNet::with_page_timing`]) in place of its own.
     fn link_setup(&self) -> LinkSetup {
         use crate::late::HostKind;
-        match self.rtc_stack.map(|p| p.host) {
+        let stack = match self.rtc_stack.map(|p| p.host) {
             Some(HostKind::Chromium) => LinkSetup::CHROMIUM,
             Some(HostKind::Firefox) => LinkSetup::FIREFOX,
             Some(HostKind::Native) | None => LinkSetup::STR0M,
-        }
+        };
+        self.page_timing.apply(stack, self.page_rank)
     }
 
     /// A browser's ([`SimNet::with_setup_draws`]): its ticks a whole number

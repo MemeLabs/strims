@@ -17,7 +17,7 @@ use strims_ppspp::{PushMode, SeedPolicy};
 use strims_wan::{Access, Bucket, City, Site};
 
 use crate::spec::{
-    Competing, Fault, HostIx, Invariants, Scenario, SendBuffer, SwarmSpec, Transport,
+    Competing, Fault, HostIx, Invariants, PageTiming, Scenario, SendBuffer, SwarmSpec, Transport,
 };
 
 const KIB: u64 = 1024;
@@ -64,6 +64,22 @@ fn value<T: std::str::FromStr>(get: &impl Fn(&str) -> Option<String>, name: &str
         Ok(x) => Some(x),
         Err(_) => panic!("{name}={v} doesn't parse"),
     }
+}
+
+/// Env var `name`'s comma list of numbers (`<x>,<x>...`), empty where
+/// unset or empty; panics on one that doesn't parse.
+fn values(get: &impl Fn(&str) -> Option<String>, name: &str) -> Vec<f64> {
+    let v = get(name).unwrap_or_default();
+    let v = v.trim();
+    if v.is_empty() {
+        return Vec::new();
+    }
+    v.split(',')
+        .map(|x| match x.trim().parse() {
+            Ok(x) => x,
+            Err(_) => panic!("{name}={v} doesn't parse"),
+        })
+        .collect()
 }
 
 /// The testbed's settings, under the names `run.sh` takes with a
@@ -118,6 +134,14 @@ fn value<T: std::str::FromStr>(get: &impl Fn(&str) -> Option<String>, name: &str
 ///   their host's CPU's), is each Chromium host's
 ///   ([`Scenario::packet_cost`]); unset, its stack's 12 µs
 ///   ([`SctpProfile::CHROMIUM`](crate::SctpProfile::CHROMIUM)).
+/// - `STRIMS_SIM_CAL_FIREFOX_GATHER_MS=<ms>,...`,
+///   `STRIMS_SIM_CAL_FIREFOX_POST_MS=<ms>,...` and
+///   `STRIMS_SIM_CAL_CHROMIUM_SET_MS=<ms>,...`, a testbed run's browser
+///   pages' offer times (`testbed::offer_timing`, their host's): a Firefox
+///   page's gathering end after its node's connect and its offer's post
+///   after that, and a Chromium page's lone setting after the connect, are
+///   their stacks' ([`Scenario::page_timing`]), an entry a host of its
+///   kind in host order, or one for every such host; unset, each stack's.
 /// - `STRIMS_SIM_CAL_SEED_BURST=<bytes>` and `STRIMS_SIM_CAL_VIEWER_BURST=<bytes>`
 ///   give the seed's and each viewer's uplink a shaper bucket that size
 ///   (`strims_wan::Bucket`, leaving at once), as `run.sh`'s `SEED_BURST`
@@ -159,6 +183,12 @@ pub struct Calibration {
     /// The Chromium hosts' packet cost on their network thread, in µs;
     /// `None` keeps their stack's.
     pub packet_cost_us: Option<f64>,
+    /// The browsers' pages' offer times, ms: Firefox's gathering end and
+    /// its post after it, Chromium's lone setting, an entry a host of its
+    /// kind in host order, or one for all; empty keeps the stack's.
+    pub firefox_gather_ms: Vec<f64>,
+    pub firefox_post_ms: Vec<f64>,
+    pub chromium_set_ms: Vec<f64>,
     /// The viewers make their links as the testbed's harness does
     /// ([`HostSpec::links_at`](crate::spec::HostSpec::links_at)).
     pub harness_links: bool,
@@ -272,6 +302,9 @@ impl Calibration {
             joins: joins(&get, viewers),
             epoch_ms: value(&get, "STRIMS_SIM_CAL_EPOCH_MS"),
             packet_cost_us: value(&get, "STRIMS_SIM_CAL_PACKET_COST_US"),
+            firefox_gather_ms: values(&get, "STRIMS_SIM_CAL_FIREFOX_GATHER_MS"),
+            firefox_post_ms: values(&get, "STRIMS_SIM_CAL_FIREFOX_POST_MS"),
+            chromium_set_ms: values(&get, "STRIMS_SIM_CAL_CHROMIUM_SET_MS"),
             harness_links: value::<u64>(&get, "STRIMS_SIM_CAL_HARNESS_LINKS")
                 .is_none_or(|v| v != 0),
             slow_down_kbit: value(&get, "STRIMS_SIM_CAL_SLOW_DOWN_KBIT"),
@@ -324,6 +357,18 @@ impl Calibration {
                 us.is_finite() && us > 0.0 && us < 1000.0,
                 "STRIMS_SIM_CAL_PACKET_COST_US={us}: µs a packet, over 0 and under 1000"
             );
+        }
+        for (knob, ms) in [
+            ("FIREFOX_GATHER", &c.firefox_gather_ms),
+            ("FIREFOX_POST", &c.firefox_post_ms),
+            ("CHROMIUM_SET", &c.chromium_set_ms),
+        ] {
+            for &ms in ms {
+                assert!(
+                    ms.is_finite() && (0.0..10_000.0).contains(&ms),
+                    "STRIMS_SIM_CAL_{knob}_MS={ms}: ms, at least 0 and under 10000"
+                );
+            }
         }
         // A peak is the rate a bucket sends at: without the bucket it would
         // shape nothing.
@@ -592,6 +637,16 @@ pub fn calibration_star(c: &Calibration) -> Scenario {
     s.packet_cost = c
         .packet_cost_us
         .map(|us| Duration::from_nanos((us * 1000.0).round() as u64));
+    let ms = |ms: &[f64]| {
+        ms.iter()
+            .map(|ms| Duration::from_micros((ms * 1000.0).round() as u64))
+            .collect()
+    };
+    s.page_timing = PageTiming {
+        firefox_gather: ms(&c.firefox_gather_ms),
+        firefox_post: ms(&c.firefox_post_ms),
+        chromium_set: ms(&c.chromium_set_ms),
+    };
     striped(s, STRIPES, ADAPTIVE)
 }
 

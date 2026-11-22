@@ -115,6 +115,7 @@ use crate::spec::{Competing, Fault, HostIx, HostSet, Scenario};
 use crate::stream::{SeqSet, ViewerStats};
 use crate::wan::{SctpProfile, UP_COUNTERS};
 
+pub mod offer_timing;
 mod packets;
 pub mod thread_cost;
 
@@ -944,6 +945,16 @@ impl Run {
             {
                 knobs.insert(PACKET_COST.to_owned(), format!("{us:.1}"));
             }
+        }
+        // When its browser pages made their first offers, for the twin's
+        // stacks (offer_timing): a comma list, a node of its kind each in
+        // node order, the host's, which the keying sets aside (simlab's
+        // testbed MEASURED), a twin of one model's runs taking each
+        // node's median, of several models' each seed its run's. A knob
+        // the caller gave stands.
+        for (knob, ms) in offer_timing::offer_timing(dir, &kinds) {
+            let ms: Vec<String> = ms.into_iter().map(num).collect();
+            knobs.entry(knob.to_owned()).or_insert_with(|| ms.join(","));
         }
         Ok(Run {
             dir: dir.to_owned(),

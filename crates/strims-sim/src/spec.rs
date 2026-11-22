@@ -568,6 +568,65 @@ pub struct TimedFault {
     pub fault: Fault,
 }
 
+/// Browser pages' times to make their offers, each in place of their
+/// stack's (strims-node's `LinkSetup`) where set: those of a testbed run's
+/// pages (strims-sim's `testbed::offer_timing`, from its harness's
+/// `rtcTiming` log and its captures), which their host's CPU and load
+/// move, a page apart from another: the bpace runs' run 1 read one Firefox's
+/// gathering end 15 ms after its connect and the other's 125. Each holds
+/// an entry a host of its kind, by its rank among them in host order (a
+/// testbed run's nodes' order), or one entry for all of them; empty, the
+/// stack's.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PageTiming {
+    /// A Firefox page's gathering end for an offer after its node's
+    /// connect (`LinkSetup::offer_ready`).
+    pub firefox_gather: Vec<Duration>,
+    /// A Firefox offer's leaving for the relay after that end
+    /// (`LinkSetup::offer_post`).
+    pub firefox_post: Vec<Duration>,
+    /// A Chromium page's setting of a lone offer after its node's connect,
+    /// at the median (`LinkSetup::set_ready`).
+    pub chromium_set: Vec<Duration>,
+}
+
+impl PageTiming {
+    /// `setup`, a stack's, with the times of its host of rank `rank` among
+    /// those of its kind in place of its own (the world checks each list
+    /// holds one entry or one a host of its kind: [`PageTiming::lists`]).
+    pub fn apply(&self, setup: strims_node::LinkSetup, rank: usize) -> strims_node::LinkSetup {
+        use strims_node::LinkSetup;
+        let at = |xs: &[Duration], or: Duration| match xs {
+            [x] => *x,
+            xs => xs.get(rank).copied().unwrap_or(or),
+        };
+        if setup.name == LinkSetup::FIREFOX.name {
+            LinkSetup {
+                offer_ready: at(&self.firefox_gather, setup.offer_ready),
+                offer_post: at(&self.firefox_post, setup.offer_post),
+                ..setup
+            }
+        } else if setup.name == LinkSetup::CHROMIUM.name {
+            LinkSetup {
+                set_ready: at(&self.chromium_set, setup.set_ready),
+                ..setup
+            }
+        } else {
+            setup
+        }
+    }
+
+    /// Each list, its name and the kind of host it holds an entry of.
+    pub fn lists(&self) -> [(&'static str, &[Duration], crate::late::HostKind); 3] {
+        use crate::late::HostKind;
+        [
+            ("firefox_gather", &self.firefox_gather, HostKind::Firefox),
+            ("firefox_post", &self.firefox_post, HostKind::Firefox),
+            ("chromium_set", &self.chromium_set, HostKind::Chromium),
+        ]
+    }
+}
+
 /// A whole scenario.
 #[derive(Clone, Debug)]
 pub struct Scenario {
@@ -705,6 +764,13 @@ pub struct Scenario {
     /// run's (calibration_star's `STRIMS_SIM_CAL_PACKET_COST_US`): the
     /// cost is its host's CPU's.
     pub packet_cost: Option<Duration>,
+    /// When a browser's page makes its offers, in place of its stack's
+    /// ([`PageTiming`]): a testbed run's twin takes its run's
+    /// (calibration_star's `STRIMS_SIM_CAL_FIREFOX_GATHER_MS`,
+    /// `STRIMS_SIM_CAL_FIREFOX_POST_MS` and
+    /// `STRIMS_SIM_CAL_CHROMIUM_SET_MS`), which its host sets, a page its
+    /// node's; the default keeps each stack's.
+    pub page_timing: PageTiming,
     /// Whether each browser ([`Scenario::is_browser`]) draws its links'
     /// setups as its stack's do (strims-node's `SetupDraws`): its
     /// metronome's phase, one shared by every host when the clocks are
@@ -1037,6 +1103,7 @@ impl Scenario {
             clock_skew: ClockSkew::Real,
             epoch_phase: None,
             packet_cost: None,
+            page_timing: PageTiming::default(),
             link_setup_draws: true,
             timer_lateness: true,
             pacer_lateness: true,

@@ -540,6 +540,19 @@ impl World {
                 "Scenario::epoch_phase {p:?}: a whole ms under a second"
             );
         }
+        // A page timing's list holds one entry for every host of its kind,
+        // or one a host.
+        for (what, xs, kind) in spec.page_timing.lists() {
+            let hosts = (0..spec.hosts.len())
+                .filter(|&h| crate::late::HostKind::of_host(&spec, h) == kind)
+                .count();
+            assert!(
+                xs.len() <= 1 || xs.len() == hosts,
+                "Scenario::page_timing's {what}: {} entries for {hosts} {} hosts",
+                xs.len(),
+                kind.name()
+            );
+        }
         let epoch_phase = spec
             .epoch_phase
             .unwrap_or_else(|| draw_epoch_phase(&mut rng))

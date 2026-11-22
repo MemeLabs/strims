@@ -3823,6 +3823,9 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
         joins: Vec::new(),
         epoch_ms: None,
         packet_cost_us: None,
+        firefox_gather_ms: Vec::new(),
+        firefox_post_ms: Vec::new(),
+        chromium_set_ms: Vec::new(),
         harness_links: false,
         slow_down_kbit: None,
         topology: Some(full_mesh(viewers)),
@@ -4164,7 +4167,7 @@ fn browsers_draw_their_link_setups_per_seed() {
 /// A browser's link takes its stacks' trips at its path's round trip
 /// (strims-node's `model_rtc`), on a quiet path of one delay `d` either
 /// way and the signalling relay on the bridge: the joiner's offer is ready
-/// its stack's `offer_ready` after its join and reaches the seed a delay
+/// its stack's `offer_ready` and `offer_post` after its join and reaches the seed a delay
 /// later, the seed checks it its `check_ready` later (a round trip) and
 /// sends its hello, its answer ready its `answer_ready` after the offer (a
 /// Chromium seed's its `answer_after_check` after its check succeeds, if
@@ -4193,7 +4196,7 @@ fn browser_links_take_their_stacks_trips() {
     // what a resend's tick may add.
     let want = |seed: &LinkSetup, joiner: &LinkSetup, d: u64| {
         let rtt = 2 * d;
-        let offered = ms(joiner.offer_ready) + d;
+        let offered = ms(joiner.offer_ready + joiner.offer_post) + d;
         let checked = offered + ms(seed.check_ready) + rtt;
         let answered = offered + ms(seed.answer_ready);
         let answered = seed

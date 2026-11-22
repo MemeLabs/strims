@@ -270,6 +270,32 @@ class Measured(unittest.TestCase):
         self.assertEqual(twin(("12.3", zen4), (None, zen4)), base)
         self.assertEqual(testbed.seed_knobs(base, 1), base)
 
+    def test_a_runs_offer_times_key_nothing_and_its_twins_take_each_nodes(self):
+        base = {"STRIMS_SIM_CAL_VIEWERS": "7", "TESTBED_QDISC": "a>root-class"}
+        gather, cpu = testbed.OFFER[0], testbed.CPU
+        zen5, zen4 = "AMD EPYC 9R45 Processor", "AMD EPYC 9R14 Processor"
+
+        def twin(*runs):
+            return testbed.twin_cells([("c", {**base, **({gather: g} if g else {}), cpu: m}) for g, m in runs])["c"]
+
+        self.assertTrue(set(testbed.OFFER) <= set(testbed.MEASURED))
+        a, b = testbed.cells_of([{**base, **dict.fromkeys(testbed.OFFER, "15,125"), cpu: zen5},
+                                 {**base, **dict.fromkeys(testbed.OFFER, "12.8"), cpu: zen5}])
+        self.assertEqual(a, b)
+        self.assertEqual(a, testbed.cells_of([base])[0])
+        # Runs of one model: each node's median, a run's one value standing
+        # for each of its nodes.
+        self.assertEqual(twin(("15,125", zen5)), {**base, gather: "15.0,125.0"})
+        self.assertEqual(twin(("15,125", zen5), ("13,11", zen5), ("12.8", zen5))[gather], "13.0,12.8")
+        self.assertEqual(twin(("15,125", zen5), ("13,11", zen5))[gather], "14.0,68.0")
+        self.assertEqual(twin(("12.8", zen5), ("13.2", zen5))[gather], "13.0")
+        # Two models: each run's list, a seed its run's.
+        mixed = twin(("15,125", zen5), ("17,18.5", zen4))
+        self.assertEqual(mixed[gather], "15,125 17,18.5")
+        self.assertEqual([testbed.seed_knobs(mixed, s)[gather] for s in (1, 2, 3)], ["15,125", "17,18.5", "15,125"])
+        # A run without them: the stacks'.
+        self.assertEqual(twin(("15,125", zen5), (None, zen5)), base)
+
     def test_a_runs_step_times_key_nothing_and_its_cells_spread_sets_its_twins(self):
         base = {"STRIMS_SIM_CAL_VIEWERS": "7", "STRIMS_SIM_CAL_SEED_UP_SCALE": "30:0.5 60:1",
                 "TESTBED_QDISC": "a>root-class"}

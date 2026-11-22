@@ -18,9 +18,9 @@
 //!   <checks>`: the side's channel listener (TCP at its first WebRTC
 //!   listen address and the public address), its connection's id, its
 //!   stack ([`LinkSetup::name`]), and the answering side's socket for
-//!   checks (UDP, at the same addresses). Each is ready its stack's
-//!   [`LinkSetup::offer_ready`] or [`LinkSetup::answer_ready`] after it is
-//!   asked for, an answer of a stack that ends its gathering at its check
+//!   checks (UDP, at the same addresses). An offer leaves its stack's
+//!   [`LinkSetup::offer_ready`] and [`LinkSetup::offer_post`] after it is
+//!   asked for, an answer its [`LinkSetup::answer_ready`], one of a stack that ends its gathering at its check
 //!   [`LinkSetup::answer_after_check`] after its check succeeds if that
 //!   comes first. A host with draws ([`Net::setup_draws`]) draws its
 //!   pages' parts of each, and ends a Chromium offer's gathering on its
@@ -78,17 +78,25 @@ const PREFIX: &str = "strims-model";
 pub struct LinkSetup {
     /// The stack's name in the model's descriptions.
     pub name: &'static str,
-    /// From the node's connect to its offer leaving, and from an offer's
-    /// coming to the answer leaving: the node's path to the page and
-    /// back, making the description and gathering its candidates, as
-    /// non-trickle ICE waits for them. The testbed's harness asks its
-    /// browser nodes to connect, which takes them 2-3 ms more; a deployed
-    /// node connects of itself, so the harness's share stays out. Each is
-    /// an unloaded host's. A stack whose answer leaves at its check
+    /// From the node's connect to its page's gathering end for an offer
+    /// (the testbed harness's `rtcTiming` `gathered` of the offer less the
+    /// node's `connecting`), and from an offer's coming to the answer
+    /// leaving: the node's path to the page, making the description and
+    /// gathering its candidates, as non-trickle ICE waits for them, and the
+    /// answer's way back. The testbed's harness asks its browser nodes to
+    /// connect, which takes them 2-3 ms more; a deployed node connects of
+    /// itself, so the harness's share stays out. Each is an unloaded
+    /// host's. A stack whose answer leaves at its check
     /// ([`LinkSetup::answer_after_check`]) takes `answer_ready` only where
     /// no check of its has succeeded by then.
     pub offer_ready: Duration,
     pub answer_ready: Duration,
+    /// From an offer's gathering end to its leaving for the signalling
+    /// relay: the page's post to its node's worker and the worker's write
+    /// to the relay's socket (a capture's first payload to the relay after
+    /// the harness's `gathered`). From there to its peer's check the
+    /// model's paths and hops take what the testbed's offers took.
+    pub offer_post: Duration,
     /// From an offer's coming to the answering side's first ICE check: the
     /// page setting the offer and its answer, whose setting starts the
     /// gathering of the host candidate the check goes from.
@@ -136,16 +144,14 @@ pub struct LinkSetup {
     pub tick: Option<Duration>,
     /// With the host's draws, an offer's gathering ends at the first tick
     /// at or after its setting plus this, [`GATHER_TAIL`] past that tick,
-    /// and its offer then leaves, in place of `offer_ready`; and its
-    /// setting comes `set_lead` (drawn) and `set_per_offer` for each offer
-    /// the page has made by then after the node asks for it: the page
-    /// makes every offer it is asked for before it sets any.
+    /// in place of `offer_ready`; and its setting comes after the node
+    /// asks for it `set_ready` at the median for a lone offer (the
+    /// harness's `rtcTiming` `set` less its `connecting`), `set_lead` its
+    /// spread about that, or `set_per_offer` after the setting of the
+    /// offer before if that comes later: the page makes every offer it is
+    /// asked for before it sets any.
     pub gather_after_set: Option<Duration>,
-    /// With the host's draws, how much longer than the model's paths and
-    /// hops its offer takes at the median from its page's gathering end
-    /// (`gather_after_set`'s, or `offer_ready` where its gathering ends
-    /// then) to its peer's page's check, which [`OFFER_TRANSIT`] spreads.
-    pub offer_excess: Duration,
+    pub set_ready: Duration,
     pub set_lead: Spread,
     pub set_per_offer: Duration,
     /// With the host's draws, `check_ready` drawn, from the asking of its
@@ -284,12 +290,13 @@ async fn batch_check(mut batch: watch::Receiver<(Instant, u32)>, place: u32, ste
 /// of the testbed's 80 (the halve-7 cells' PCAP=1 runs).
 pub const GATHER_TAIL: Duration = Duration::from_micros(250);
 
-/// With the hosts' draws, an offer's way through the signalling relay to
-/// its peer's page, and an answer's, past the model's paths and hops: the
-/// page's post to its node's worker, the worker's pass, the relay's and
-/// the peer's worker's and page's, about the leg's median, which the
-/// stacks' [`LinkSetup::offer_excess`] and `answer_after_check` hold.
-/// Drawn at the sender, the offer's as its page's gathering ends and the
+/// With the hosts' draws, an offer's way to its peer's page about its
+/// median, which the stacks' [`LinkSetup::offer_ready`] (or tick) and
+/// `offer_post` hold with the model's paths and hops, and an answer's
+/// through the signalling relay past those paths about its median, which
+/// `answer_after_check` holds: the page's post to its node's worker, the
+/// worker's pass, the relay's and the peer's worker's and page's. Drawn
+/// at the sender, the offer's as its page's gathering ends and the
 /// answer's on its leaving, neither sooner than the last wait it ended.
 /// The testbed's halve-7 runs' 112 seed links read each leg's excess over
 /// its paths' delays at 3, 5 and 9 ms (p10, p50, p90), the answer's at 0,
@@ -496,10 +503,16 @@ impl LinkSetup {
     /// median of a lone offer, 7.2-11.8 (p10-p90; `set_lead`, which with
     /// the ticks has a lone offer's gathering end 130 ms after the ask at
     /// the median, 124-137 at p10-p90, where the runs' 16 read 132, 125
-    /// and 136). From that end to the seed's check took 22.6 ms at the
-    /// median of the runs' 80 offers (15.2-25.0 at p10-p90), its page's
-    /// post, the signalling relay's path and the seed's batch, 4.5 ms more
-    /// than the model's paths and hops (`offer_excess`). The seed's checks
+    /// and 136). A twin takes its run's lone setting (`set_ready`,
+    /// strims-sim's `testbed::offer_timing`): 10.2 ms on c8a's EPYC 9R45,
+    /// 13.9 on c7a's 9R14. Its offer left for the relay 0.86 ms after its
+    /// gathering's end (`offer_post`: the first relay payload in its
+    /// offered capture less its `gathered` stamp, to about 0.1 ms on
+    /// Chromium) at the median of the halve-7-20 cell's 8 runs' medians on
+    /// c8a (0.83-0.93; their 40 viewers' 0.69-2.03), and the seed's check
+    /// came 18.3 ms after it at the median of those runs, where the
+    /// model's paths and hops, the relay's and the seed's batch, take 18.0.
+    /// The seed's checks
     /// went in batches: an offer it was asked to set before a batch's first
     /// check went joined it, and the batch's
     /// checks went in the order their offers were asked, the first 2.5 ms
@@ -524,6 +537,7 @@ impl LinkSetup {
         name: "chromium",
         offer_ready: Duration::from_millis(134),
         answer_ready: Duration::from_millis(127),
+        offer_post: Duration::from_micros(860),
         check_ready: Duration::from_micros(2_800),
         answer_after_check: Some(Duration::from_micros(1_200)),
         answers_active: true,
@@ -537,13 +551,13 @@ impl LinkSetup {
         resend_max: Duration::from_secs(3),
         tick: Some(Duration::from_micros(15_625)),
         gather_after_set: Some(Duration::from_micros(112_500)),
-        offer_excess: Duration::from_micros(4_500),
+        set_ready: Duration::from_micros(9_800),
         set_lead: Spread(&[
-            (0, 3_960),
-            (100, 5_350),
-            (500, 7_950),
-            (900, 9_950),
-            (1000, 10_960),
+            (0, -3_990),
+            (100, -2_600),
+            (500, 0),
+            (900, 2_000),
+            (1000, 3_010),
         ]),
         set_per_offer: Duration::from_micros(1_850),
         check_spread: Spread(&[
@@ -578,9 +592,17 @@ impl LinkSetup {
         },
     };
 
-    /// Firefox, from the testbed as Chromium is. Its offer leaves 18 ms
-    /// after the node connects and its answer 6 ms after an offer comes, at
-    /// the medians, its gathering a millisecond of each. Answering, it has
+    /// Firefox, from the testbed as Chromium is. Its page's gathering for
+    /// an offer ends 12.8 ms after the node connects and the offer leaves
+    /// for the relay 1.7 ms after that, at the medians of the halve-7-20
+    /// cell's 8 runs on c8a's EPYC 9R45 (the harness's `gathered` less its
+    /// `connecting`, and the capture's post less `gathered`), where c7a's
+    /// 9R14 took 17.0 and 2.6 and 16 browsers on one host
+    /// later still: a twin takes its run's (strims-sim's
+    /// `testbed::offer_timing`). The seed's check came 18.7 ms after the
+    /// post at the median of the c8a runs, where the model's paths and
+    /// hops take 18.2. Its answer leaves 6 ms after an offer comes, at the
+    /// median, its gathering a millisecond of it. Answering, it has
     /// set the offer and its answer 3.0 ms after the page is asked to, and
     /// checks 0.7-1.0 ms after that. Its DTLS (NSS's 1.3) client sends its
     /// ClientHello once the offering side's check has reached it as well
@@ -590,15 +612,12 @@ impl LinkSetup {
     /// comes to the offering side as that side's check succeeds. Its server
     /// sees nothing before its own check succeeds, so a ClientHello that
     /// comes earlier is lost to it, and its client resends after 50 ms,
-    /// doubling. Both its ends send an INIT. With the host's draws, its offer
-    /// leaves as its page's gathering ends, `offer_ready` after the node
-    /// connects, and reached the seed's check 25.0 ms after that at the
-    /// median of the halve-7 cells' 32 (21.1-27.6 at p10-p90), 7.0 ms more
-    /// than the model's paths and hops (`offer_excess`).
+    /// doubling. Both its ends send an INIT.
     pub const FIREFOX: LinkSetup = LinkSetup {
         name: "firefox",
-        offer_ready: Duration::from_millis(18),
+        offer_ready: Duration::from_micros(12_800),
         answer_ready: Duration::from_millis(6),
+        offer_post: Duration::from_micros(1_700),
         check_ready: Duration::from_micros(3_800),
         answer_after_check: None,
         answers_active: true,
@@ -612,7 +631,7 @@ impl LinkSetup {
         resend_max: Duration::from_millis(50),
         tick: None,
         gather_after_set: None,
-        offer_excess: Duration::from_micros(7_000),
+        set_ready: Duration::ZERO,
         set_lead: Spread::NONE,
         set_per_offer: Duration::ZERO,
         check_spread: Spread::NONE,
@@ -649,6 +668,7 @@ impl LinkSetup {
         name: "str0m",
         offer_ready: Duration::ZERO,
         answer_ready: Duration::ZERO,
+        offer_post: Duration::ZERO,
         check_ready: Duration::ZERO,
         answer_after_check: None,
         answers_active: false,
@@ -662,7 +682,7 @@ impl LinkSetup {
         resend_max: Duration::from_secs(1),
         tick: None,
         gather_after_set: None,
-        offer_excess: Duration::ZERO,
+        set_ready: Duration::ZERO,
         set_lead: Spread::NONE,
         set_per_offer: Duration::ZERO,
         check_spread: Spread::NONE,
@@ -1517,7 +1537,8 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                             offers.insert(conn.0, Offer { conn, answer: None, stream: None });
                             let sdp = format!("{PREFIX} {advertised} {} {}", conn.0, me.name);
                             if let (Some(d), Some(after)) = (&draws, me.gather_after_set) {
-                                let lead = d.draw(me.set_lead).unwrap_or(0.0);
+                                let ready = me.set_ready.saturating_sub(me.set_per_offer);
+                                let lead = d.draw(me.set_lead).unwrap_or(0.0) + ready.as_secs_f64() * 1e6;
                                 let lead = Duration::from_secs_f64(lead.max(0.0) / 1e6);
                                 let m = (*made.borrow()).max(Instant::now() + lead) + me.set_per_offer;
                                 made.send_replace(m);
@@ -1532,14 +1553,10 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                             let check = me.answer_after_check.zip(checked.remove(&conn.0));
                             (sdp, me.answer_ready, check)
                         };
-                        let transit = draws.as_ref().and_then(|d| {
-                            if offer {
-                                let excess = me.offer_excess.as_secs_f64() * 1e6;
-                                d.draw(OFFER_TRANSIT).map(|us| us + excess)
-                            } else {
-                                d.draw(ANSWER_TRANSIT)
-                            }
-                        });
+                        let transit = draws
+                            .as_ref()
+                            .and_then(|d| d.draw(if offer { OFFER_TRANSIT } else { ANSWER_TRANSIT }));
+                        let post = if offer { me.offer_post } else { Duration::ZERO };
                         let (inputs, made) = (inputs.clone(), made_rx.clone());
                         tokio::spawn(async move {
                             let deadline = Instant::now() + ready;
@@ -1555,6 +1572,7 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                                 let set = *made.borrow();
                                 at = me.fires_at(set.max(created) + after, origin) + GATHER_TAIL;
                             }
+                            at += post;
                             if let Some(us) = transit {
                                 at = shifted(at, us, Instant::now());
                             }
@@ -1844,8 +1862,8 @@ mod tests {
 
     /// A spread is linear between its knots, from the first quantile's to
     /// the last's; none reads 0. Every stack's runs from 0 to 1000 permille
-    /// in order, the transits' medians are 0 (the browsers' offers' median
-    /// excess their own, Firefox's the longer), Chromium's check delay keeps
+    /// in order, the transits' and Chromium's setting's medians are 0 (the
+    /// stacks' fixed parts hold them), its check delay keeps
     /// `check_ready` at its median, and a lone Chromium offer drawn at its
     /// medians is set 9.8 ms after its ask, as on the testbed, and half a
     /// tick past its gathering's start leaves within 2.5 ms of the
@@ -1873,13 +1891,11 @@ mod tests {
             );
         }
         assert!(OFFER_TRANSIT.at(0.5).abs() < 1e-6 && ANSWER_TRANSIT.at(0.5).abs() < 1e-6);
-        let f = LinkSetup::FIREFOX;
-        assert!(Duration::ZERO < c.offer_excess && c.offer_excess < f.offer_excess);
-        assert_eq!(LinkSetup::STR0M.offer_excess, Duration::ZERO);
+        assert!(c.set_lead.at(0.5).abs() < 1e-6);
         let ms = |d: Duration| d.as_secs_f64() * 1e3;
         let half_tick = c.tick.map_or(0.0, ms) / 2.0;
         assert!((c.check_spread.at(0.5) / 1e3 - ms(c.check_ready)).abs() < 1e-6);
-        let set = c.set_lead.at(0.5) / 1e3 + ms(c.set_per_offer);
+        let set = c.set_lead.at(0.5) / 1e3 + ms(c.set_ready);
         assert!((set - 9.8).abs() < 1e-6, "{set}");
         let lone = set + c.gather_after_set.map_or(0.0, ms) + half_tick + ms(GATHER_TAIL);
         assert!((lone - 132.4).abs() < 2.5, "{lone}");

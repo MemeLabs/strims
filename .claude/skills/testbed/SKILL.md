@@ -200,7 +200,16 @@ crates differ from those the page was built from builds its own page.
   paired run's (`testbed.twin_cost`), so a farm cell whose repeats ran on
   two instance types is twinned on both; a cell with a run of no recorded
   model (its run dir from before `cpu`) pairs too, as one model's runs'
-  costs spread wider than two models' lie apart. A run's seed steps
+  costs spread wider than two models' lie apart. So are its browser
+  pages' offer times, their host's too: a Firefox page's gathering end
+  after its node's connect and its offer's post after that, and a
+  Chromium page's first setting (`STRIMS_SIM_CAL_FIREFOX_GATHER_MS`,
+  `STRIMS_SIM_CAL_FIREFOX_POST_MS`, `STRIMS_SIM_CAL_CHROMIUM_SET_MS`,
+  a comma list, a node of its kind each in node order, from
+  node-<i>.err's `rtcTiming` and the offered captures, else one value by
+  CPU model: strims-sim's `testbed::offer_timing`); each twin page takes
+  its node's, by its rank among its kind's, and a cell of one model's
+  runs each node's median (`testbed.twin_offer`). A run's seed steps
   where steps.log stamps them, less the seed's egress delay, as its own
   scenario does (`STRIMS_SIM_CAL_SEED_UP_STEPS_MS`, ms of stream: tens of
   ms past their schedule), and its twin with them: a cell's takes their
