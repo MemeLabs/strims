@@ -25,7 +25,8 @@
 //! same packets. Each node's uplink is its
 //! `links` line's spec, rate and queue (its QUEUE_MS at its rate), the
 //! run's bucket and peak for it (`SEED_BURST`, `SEED_PEAK_MBIT`; the
-//! viewers'), and the seed's steps as `steps.log` applied them. A row keeps
+//! viewers'), and the seed's steps at `steps.log`'s stamps, in the clock
+//! its offers enter the queue by. A row keeps
 //! its source's identity (node, n, t_us, peer, link, proto, ip_bytes,
 //! kind, offsets, resent, estimated) and takes the model's fate: sent_us,
 //! lost, charged_bytes and backlog_bytes; arrived_us is empty. Every node
@@ -330,10 +331,13 @@ fn run() -> Result<(), String> {
         if w.packets.is_empty() {
             continue;
         }
+        // The scenario's steps are in its offers' clock (each stamp less
+        // the egress delay), and the replay offers each packet at its
+        // entry into the queue: each step at its stamp, its delay later.
         let steps: Vec<(Time, u64)> = spec
             .up_steps
             .iter()
-            .map(|&(at, rate)| (Time::EPOCH + Duration::from(at), rate))
+            .map(|&(at, rate)| (Time::EPOCH + Duration::from(at) + w.entry_delay, rate))
             .collect();
         let role = if h == 0 { "SEED" } else { "VIEWER" };
         let (burst, peak) = bucket_of(
