@@ -90,17 +90,18 @@ CREATE OR REPLACE MACRO t975_at(df_) AS
 -- means and fisher_p's sum, so those are the Python scoring's bit for bit
 -- (hack/sim-suite/golden.py's reference): a left fold strays from it by
 -- last bits, which a value on a tie at the places a scorecard prints shows.
--- sctp_fit_of's shares and total variation distances and timer_shares_of's
--- means over runs and cells, and twin_criterion_rows' means, geometric
--- means and correlations (pearson's), are this too, of lists in an order of
--- their own, so that a query's bits are the same every time: an aggregate's sum
--- adds in the order its threads meet the rows, and a distance or a bound
--- a value is at would pass or fail it by them. No other
--- sum is: dynamics' means of the rows' playback fields are DuckDB's avg,
--- most other macros' sums are of integers, and a metric's own SQL
--- (metrics.toml's: depth_mean's six terms) adds as written, as the
--- reference restates it. 0 for an empty list, NULL for NULL or a NULL
--- among xs.
+-- Every other mean or sum of DOUBLEs a reading takes is this too, of a
+-- list in an order of its own (sctp_fit_of's shares and total variation
+-- distances, timer_shares_of's means over runs and cells, twin_runs_of's
+-- competitor shares, twin_fit_rows' and twin_criterion_rows' means,
+-- geometric means and correlations, pearson's, and dynamics' means of the
+-- rows' playback fields), so that a query's bits are the same every time:
+-- an aggregate's sum of DOUBLEs adds in the order its threads meet the
+-- rows, and a distance or a bound a value is at would pass or fail it by
+-- them. The rest are of integers, which DuckDB's sum and avg add exactly,
+-- and a metric's own SQL (metrics.toml's: depth_mean's six terms) adds as
+-- written, as the reference restates it. 0 for an empty list, NULL for
+-- NULL or a NULL among xs.
 CREATE OR REPLACE MACRO compensated_sum(xs) AS
     list_transform([list_reduce(list_transform(xs, lambda cs_x: {'s': cs_x::DOUBLE, 'c': 0.0::DOUBLE}),
                                 lambda cs_acc, cs_y: {'s': cs_acc.s + cs_y.s,
@@ -551,21 +552,41 @@ CREATE OR REPLACE MACRO dynamics(exp_name) AS TABLE
                count(*) FILTER (WHERE v.collapsed) AS collapsed,
                sum(coalesce(sp.s1, 0)) / count(*) AS spike_s_@{delay_target_ms},
                sum(coalesce(sp.s2, 0)) / count(*) AS spike_s_@{delay_max_ms},
-               avg(coalesce(@{r.stalls_per_min_@{delay_target_ms}_honest}, @{r.stalls_per_min_@{delay_target_ms}}))
-                   AS stalls_per_min_@{delay_target_ms},
-               avg(coalesce(@{r.stalls_per_min_@{delay_max_ms}_honest}, @{r.stalls_per_min_@{delay_max_ms}}))
-                   AS stalls_per_min_@{delay_max_ms},
-               avg(coalesce(@{r.stalled_share_@{delay_target_ms}_honest}, @{r.stalled_share_@{delay_target_ms}}))
-                   AS stalled_share_@{delay_target_ms},
-               avg(coalesce(@{r.stalled_share_@{delay_max_ms}_honest}, @{r.stalled_share_@{delay_max_ms}}))
-                   AS stalled_share_@{delay_max_ms},
-               avg(coalesce(@{r.startup_ms_@{delay_target_ms}_honest}, @{r.startup_ms_@{delay_target_ms}}))
-                   AS startup_ms_@{delay_target_ms},
-               avg(coalesce(@{r.startup_ms_@{delay_max_ms}_honest}, @{r.startup_ms_@{delay_max_ms}}))
-                   AS startup_ms_@{delay_max_ms},
+               compensated_sum(list(pb.stalls_per_min_@{delay_target_ms} ORDER BY e.k, e.src)
+                                   FILTER (WHERE pb.stalls_per_min_@{delay_target_ms} IS NOT NULL))
+                   / count(pb.stalls_per_min_@{delay_target_ms}) AS stalls_per_min_@{delay_target_ms},
+               compensated_sum(list(pb.stalls_per_min_@{delay_max_ms} ORDER BY e.k, e.src)
+                                   FILTER (WHERE pb.stalls_per_min_@{delay_max_ms} IS NOT NULL))
+                   / count(pb.stalls_per_min_@{delay_max_ms}) AS stalls_per_min_@{delay_max_ms},
+               compensated_sum(list(pb.stalled_share_@{delay_target_ms} ORDER BY e.k, e.src)
+                                   FILTER (WHERE pb.stalled_share_@{delay_target_ms} IS NOT NULL))
+                   / count(pb.stalled_share_@{delay_target_ms}) AS stalled_share_@{delay_target_ms},
+               compensated_sum(list(pb.stalled_share_@{delay_max_ms} ORDER BY e.k, e.src)
+                                   FILTER (WHERE pb.stalled_share_@{delay_max_ms} IS NOT NULL))
+                   / count(pb.stalled_share_@{delay_max_ms}) AS stalled_share_@{delay_max_ms},
+               compensated_sum(list(pb.startup_ms_@{delay_target_ms} ORDER BY e.k, e.src)
+                                   FILTER (WHERE pb.startup_ms_@{delay_target_ms} IS NOT NULL))
+                   / count(pb.startup_ms_@{delay_target_ms}) AS startup_ms_@{delay_target_ms},
+               compensated_sum(list(pb.startup_ms_@{delay_max_ms} ORDER BY e.k, e.src)
+                                   FILTER (WHERE pb.startup_ms_@{delay_max_ms} IS NOT NULL))
+                   / count(pb.startup_ms_@{delay_max_ms}) AS startup_ms_@{delay_max_ms},
                coalesce(max(u.longest), 0) AS unhealthy_max_s,
                sketch_quantile(coalesce(u.longest, 0), 50) AS unhealthy_p50_s
-        FROM ej e JOIN verdicts v USING (k, src) JOIN rows r USING (k, src)
+        FROM ej e JOIN verdicts v USING (k, src)
+        JOIN (SELECT k, src,
+                      coalesce(@{r.stalls_per_min_@{delay_target_ms}_honest}, @{r.stalls_per_min_@{delay_target_ms}})
+                          AS stalls_per_min_@{delay_target_ms},
+                      coalesce(@{r.stalls_per_min_@{delay_max_ms}_honest}, @{r.stalls_per_min_@{delay_max_ms}})
+                          AS stalls_per_min_@{delay_max_ms},
+                      coalesce(@{r.stalled_share_@{delay_target_ms}_honest}, @{r.stalled_share_@{delay_target_ms}})
+                          AS stalled_share_@{delay_target_ms},
+                      coalesce(@{r.stalled_share_@{delay_max_ms}_honest}, @{r.stalled_share_@{delay_max_ms}})
+                          AS stalled_share_@{delay_max_ms},
+                      coalesce(@{r.startup_ms_@{delay_target_ms}_honest}, @{r.startup_ms_@{delay_target_ms}})
+                          AS startup_ms_@{delay_target_ms},
+                      coalesce(@{r.startup_ms_@{delay_max_ms}_honest}, @{r.startup_ms_@{delay_max_ms}})
+                          AS startup_ms_@{delay_max_ms}
+              FROM rows r) pb USING (k, src)
         LEFT JOIN spikes sp USING (k, src) LEFT JOIN spells u USING (k, src)
         GROUP BY ALL)
     SELECT r.cell, r.arm_label, r.runs, r.collapsed, l.* EXCLUDE (cell, arm_label), r.* EXCLUDE (cell, arm_label,
@@ -1468,8 +1489,8 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 10, hi_s := -1, full_packet :
     -- which every bin measures.
     wire AS (
         SELECT k, src, count(*) * any_value(bin_ms) / 1000.0 AS secs,
-               sum(seed_ip) / sum(rate * bin_ms / 1000.0) FILTER (WHERE seed_ip IS NOT NULL) AS seed_upload,
-               sum(seed_link) / sum(rate * bin_ms / 1000.0) FILTER (WHERE seed_link IS NOT NULL) AS seed_charged,
+               sum(seed_ip) / (sum(rate * bin_ms) FILTER (WHERE seed_ip IS NOT NULL) / 1000.0) AS seed_upload,
+               sum(seed_link) / (sum(rate * bin_ms) FILTER (WHERE seed_link IS NOT NULL) / 1000.0) AS seed_charged,
                sum(seed_drops) / (count(seed_drops) * any_value(bin_ms) / 1000.0) AS seed_drops_s,
                sum(seed_up_packets + seed_up_ack_packets)
                    / (count(seed_up_packets + seed_up_ack_packets) * any_value(bin_ms) / 1000.0) AS seed_pps,
@@ -1510,8 +1531,10 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 10, hi_s := -1, full_packet :
         FROM events e SEMI JOIN j USING (k, src)
         WHERE e.node = 0 AND e.kind IN ('competing_start', 'competing_stop')),
     comp AS (
-        SELECT s.k, s.src, avg(1 - s.avail / r.rate) AS competitor_share,
-               avg(1 - s.avail / r.rate) * (full_packet + any_value(j.seed_ovh)) / full_packet AS competitor_charged
+        SELECT s.k, s.src, compensated_sum(list(1 - s.avail / r.rate ORDER BY s.sec, s.avail)) / count(*)
+                   AS competitor_share,
+               compensated_sum(list(1 - s.avail / r.rate ORDER BY s.sec, s.avail)) / count(*)
+                   * (full_packet + any_value(j.seed_ovh)) / full_packet AS competitor_charged
         FROM seconds s JOIN j USING (k, src) JOIN w USING (k, src)
         JOIN competing c ON c.k = s.k AND c.src = s.src AND c.kind = 'competing_start'
          AND (s.sec + 0.5) * 1e6 >= c.start_us AND (s.sec + 0.5) * 1e6 < c.stop_us
@@ -1656,7 +1679,10 @@ CREATE OR REPLACE MACRO packet_hosts_of(side) AS TABLE
 -- of the cells' medians), rank_corr (Spearman's: of their ranks, ties
 -- their mean rank), ratio (the geometric mean of the cells' ratios) and
 -- b_quantile (the cells' mean). How well the twin follows the testbed
--- across cells is the fidelity a model change is judged by. `caveat`
+-- across cells is the fidelity a model change is judged by. Its means
+-- (of the runs' places, the cells' ratios' logs and b_quantile) are
+-- compensated_sum's and its correlations pearson's, of lists in run or
+-- cell order, so a reading's bits are the same every time. `caveat`
 -- flags a fit whose testbed runs took something as given (their rows'
 -- `basis`, twin_runs_of's: a truth that takes its channel share as 1, the
 -- truth's own, truth_bps, and a meter reading's over it, meter_p*), saying
@@ -1672,7 +1698,7 @@ CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
                (count(*) FILTER (WHERE a.value < b.value) + 0.5 * count(*) FILTER (WHERE a.value = b.value))
                    / count(*) AS q
         FROM b JOIN a USING (cell, measure) GROUP BY b.cell, b.measure, b.k),
-    pq AS (SELECT cell, measure, avg(q) AS q FROM place GROUP BY ALL),
+    pq AS (SELECT cell, measure, compensated_sum(list(q ORDER BY k)) / count(*) AS q FROM place GROUP BY ALL),
     c AS (
         SELECT cell, measure, am.runs AS a_runs, bm.runs AS b_runs, am.m AS a_median, bm.m AS b_median,
                CASE WHEN am.m <> 0 THEN bm.m / am.m END AS ratio, pq.q AS b_quantile, bm.given, bm.basis
@@ -1692,8 +1718,15 @@ CREATE OR REPLACE MACRO twin_fit_rows(a_rows, b_rows) AS TABLE
         FROM c
         UNION ALL
         SELECT NULL, measure, sum(a_runs), sum(b_runs), NULL, NULL,
-               exp(avg(ln(CASE WHEN ratio > 0 THEN ratio END))), avg(b_quantile), count(*), corr(a_median, b_median),
-               corr(ra, rb), sum(given), string_agg(DISTINCT basis, '; ' ORDER BY basis)
+               exp(compensated_sum(list(ln(CASE WHEN ratio > 0 THEN ratio END) ORDER BY cell) FILTER (WHERE ratio > 0))
+                   / count(CASE WHEN ratio > 0 THEN ratio END)),
+               compensated_sum(list(b_quantile ORDER BY cell) FILTER (WHERE b_quantile IS NOT NULL)) / count(b_quantile),
+               count(*),
+               pearson(list(a_median ORDER BY cell) FILTER (WHERE a_median IS NOT NULL AND b_median IS NOT NULL),
+                       list(b_median ORDER BY cell) FILTER (WHERE a_median IS NOT NULL AND b_median IS NOT NULL)),
+               pearson(list(ra ORDER BY cell) FILTER (WHERE ra IS NOT NULL AND rb IS NOT NULL),
+                       list(rb ORDER BY cell) FILTER (WHERE ra IS NOT NULL AND rb IS NOT NULL)),
+               sum(given), string_agg(DISTINCT basis, '; ' ORDER BY basis)
         FROM ranked GROUP BY measure);
 
 -- twin_fit_rows of a testbed side and its twin's (twin_runs_of over both,
@@ -2195,7 +2228,7 @@ CREATE OR REPLACE MACRO shaper_fit_of(a_jobs, b_jobs, per := 'node') AS TABLE
         SELECT cell, seed, k, node, peer, count(*) AS n_packets, count(*) FILTER (WHERE tb_sent) AS n_carried,
                count(residual_us) AS n_carried_both,
                avg(coalesce(abs(residual_us) <= 100, false)::INT) FILTER (WHERE tb_sent) AS within_100us,
-               avg(residual_us::DOUBLE) AS residual_mean_us,
+               avg(residual_us) AS residual_mean_us,
                sketch_quantiles(abs(residual_us), [50, 99]) AS rq,
                count(*) FILTER (WHERE tb_drop) AS drops_testbed, count(*) FILTER (WHERE m_drop) AS drops_model,
                count(*) FILTER (WHERE tb_drop AND m_drop) AS drops_both_count
