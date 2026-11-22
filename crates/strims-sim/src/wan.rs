@@ -1431,6 +1431,10 @@ pub(crate) struct Scheduler {
     /// Per host, when its network thread is done with what its
     /// associations sent so far ([`sctp`]'s module docs).
     threads: Vec<Time>,
+    /// Each host's network thread's cost of a packet, once a channel of
+    /// its opened that sends through one ([`Scheduler::open_channel`]):
+    /// its datagrams take the thread too ([`Scheduler::thread_datagram`]).
+    thread_costs: Vec<Option<Duration>>,
     /// Per host, when its network thread last woke, or wakes, for the
     /// writes its page posted it while it was idle ([`sctp::POST_WAKE`]):
     /// a write posted by then waits for that wake, behind those before it.
@@ -1679,6 +1683,7 @@ impl Scheduler {
             assocs: FastMap::default(),
             rcvs: FastMap::default(),
             threads: vec![Time::NIL; spec.hosts.len()],
+            thread_costs: vec![None; spec.hosts.len()],
             wakes: vec![Time::NIL; spec.hosts.len()],
             down: vec![false; spec.hosts.len()],
             answers: BTreeMap::new(),
@@ -3867,7 +3872,21 @@ impl Scheduler {
         }
     }
 
+    /// Record `id` goes to its sender's uplink at `at`, a datagram of a
+    /// host whose stack sends through its network thread as the thread
+    /// sends it ([`Scheduler::thread_datagram`]).
     fn transmit(&mut self, at: Time, id: u64) {
+        if let Some(r) = self.records.get(&id)
+            && matches!(r.what, What::Datagram(_))
+            && self.thread_datagram(r.from, at, id).is_some()
+        {
+            return;
+        }
+        self.transmit_now(at, id);
+    }
+
+    /// Record `id` goes to its sender's uplink at `at`.
+    pub(super) fn transmit_now(&mut self, at: Time, id: u64) {
         let window = self.window();
         if let Some(r) = self.records.get(&id)
             && r.what == What::Syn
@@ -6660,7 +6679,9 @@ mod tests {
     /// a setup flight handed `a`'s uplink at `t0` and a chunk its stack
     /// wrote 1.5 ms before it, which a Chromium's network thread hands over
     /// in the walk and a Firefox's stack at once, go in that order, the
-    /// chunk at the flight's time.
+    /// chunk at the flight's time, or, where the thread sent the flight
+    /// (a Chromium's, [`Scheduler::thread_datagram`]), a packet cost
+    /// after it.
     #[test]
     fn a_backdated_reply_goes_to_its_uplink_behind_what_it_took() {
         for p in [SctpProfile::CHROMIUM, SctpProfile::FIREFOX] {
@@ -6690,10 +6711,75 @@ mod tests {
             let log = &wan.packets[0];
             let handed: Vec<(PacketKind, Duration)> = log.iter().map(|r| (r.kind, r.at)).collect();
             let at = t0 - epoch();
+            let chunk = at + p.packet_cost.unwrap_or(Duration::ZERO);
             assert_eq!(
                 handed,
-                [(PacketKind::Control, at), (PacketKind::Data, at)],
+                [(PacketKind::Control, at), (PacketKind::Data, chunk)],
                 "{p:?}: {log:?}"
+            );
+        }
+    }
+
+    /// A Chromium host's datagrams, its ICE checks', go through the network
+    /// thread its channels send through, a packet cost apart from theirs:
+    /// one written while the thread sends a chunk goes a cost after it,
+    /// and the chunk written beside it a cost after the datagram; one
+    /// written to an idle thread goes as it was written. A Firefox's go as
+    /// they were written.
+    #[test]
+    fn a_threads_datagrams_go_a_packet_cost_from_its_channels_packets() {
+        for p in [SctpProfile::CHROMIUM, SctpProfile::FIREFOX] {
+            let (_sim, mut wan, conns) = channels_of(p, 1);
+            let c = conns[0];
+            let (from, to) = (wan.ip_host[&c.0.ip()], wan.ip_host[&c.1.ip()]);
+            let t0 = sim_time(StdDuration::from_secs(1));
+            let cost = p.packet_cost.unwrap_or(Duration::ZERO);
+            let mut id = 1 << 32;
+            let datagram = |wan: &mut Scheduler, id: &mut u64, at: Time| {
+                let check = Record {
+                    src: c.0,
+                    dst: c.1,
+                    from,
+                    to,
+                    what: What::Datagram(100),
+                    wire: 128,
+                    packets: 1,
+                    nominal: false,
+                    state: State::InFlight,
+                    link: 0,
+                };
+                wan.records.insert(*id, check);
+                wan.transmit(at, *id);
+                *id += 1;
+            };
+            write_counted(&mut wan, &mut id, t0, c, (1, 1, 200), false);
+            let busy = t0 + Duration::from_micros(2);
+            datagram(&mut wan, &mut id, busy);
+            write_counted(&mut wan, &mut id, busy, c, (1, 1, 200), false);
+            let idle = t0 + Duration::from_millis(10);
+            wan.run_events(idle);
+            datagram(&mut wan, &mut id, idle);
+            wan.run_events(idle + Duration::from_millis(1));
+            let handed: Vec<Duration> = wan.packets[0]
+                .iter()
+                .filter(|r| r.proto == PacketProto::Udp)
+                .map(|r| r.at - (t0 - epoch()))
+                .collect();
+            let want = if p.packet_cost.is_some() {
+                [cost, cost * 2, cost * 3]
+            } else {
+                [
+                    Duration::ZERO,
+                    Duration::from_micros(2),
+                    Duration::from_micros(2),
+                ]
+            };
+            let ms10 = Duration::from_millis(10);
+            assert_eq!(
+                handed,
+                [want[0], want[1], want[2], ms10],
+                "{p:?}: {:?}",
+                wan.packets[0]
             );
         }
     }

@@ -564,6 +564,13 @@ pub(super) enum Handover {
         sack: Sack,
         log: Option<SctpEvent>,
     },
+    /// Datagram record `id` of host `from`'s, which its network thread
+    /// sends as it sends its associations' packets
+    /// ([`Scheduler::thread_datagram`]).
+    Datagram {
+        id: u64,
+        from: HostIx,
+    },
 }
 
 impl Handover {
@@ -572,6 +579,7 @@ impl Handover {
         match self {
             Handover::Data(d) => ip_host.get(&d.conn.0.ip()).copied(),
             Handover::Sack { conn, .. } => ip_host.get(&conn.1.ip()).copied(),
+            Handover::Datagram { from, .. } => Some(*from),
         }
     }
 }
@@ -1081,6 +1089,38 @@ impl Scheduler {
         *free
     }
 
+    /// When host `h`'s datagram written at `at` (record `id`) leaves its
+    /// network thread, where its associations send through one: its
+    /// thread sends every packet its WebRTC transport sends, an ICE
+    /// check's as its channels' (Chromium's `BasicPortAllocator` sockets
+    /// and its `Connection`s live on the network thread), so the datagram
+    /// goes once the thread is done with what it sent before, a cost after
+    /// it, and the thread's next packet a cost after the datagram. A
+    /// datagram to an idle thread goes at `at`, as without one: the thread
+    /// is taken as having done its work in the cost before. `None` where
+    /// it goes at `at`; else it waits to that time
+    /// ([`Handover::Datagram`]).
+    pub(super) fn thread_datagram(&mut self, h: HostIx, at: Time, id: u64) -> Option<Time> {
+        let cost = self.thread_costs.get(h).copied().flatten()?;
+        let free = self.threads.get_mut(h)?;
+        let t = if *free != Time::NIL && *free + cost > at {
+            *free + cost
+        } else {
+            at
+        };
+        *free = t;
+        if t == at {
+            return None;
+        }
+        let key = self.next;
+        self.next += 1;
+        self.events.insert(
+            (t, key),
+            Event::SctpOut(Box::new(Handover::Datagram { id, from: h })),
+        );
+        Some(t)
+    }
+
     /// `conn`'s stack answers its page at `at` that it sent `sent` bytes of
     /// the channel since its last answer, which the page takes off its count
     /// ([`SctpProfile::amount_at_sends`]) once the walk reaches `at`
@@ -1094,7 +1134,15 @@ impl Scheduler {
     }
 
     /// `conn` carries a data channel from now on, sent as `profile` sends.
+    /// A host whose channels send through its network thread
+    /// ([`SctpProfile::packet_cost`]) sends its datagrams through it from
+    /// now on ([`Scheduler::thread_datagram`]).
     pub(crate) fn open_channel(&mut self, conn: ConnKey, profile: SctpProfile) {
+        if let (Some(cost), Some(&h)) = (profile.packet_cost, self.ip_host.get(&conn.0.ip()))
+            && let Some(c) = self.thread_costs.get_mut(h)
+        {
+            *c = Some(cost);
+        }
         self.assocs.insert(conn, Assoc::new(profile));
     }
 
@@ -1640,6 +1688,7 @@ impl Scheduler {
         match hand {
             Handover::Data(d) => self.data_handed(at, d),
             Handover::Sack { conn, sack, log } => self.sack_handed(at, conn, sack, log),
+            Handover::Datagram { id, .. } => self.transmit_now(at, id),
         }
     }
 
