@@ -190,7 +190,7 @@ mod sctp;
 
 use ack::{AckWhy, Owed, RcvClock};
 pub(crate) use sctp::Chunking;
-pub use sctp::SctpProfile;
+pub use sctp::{POST_WAKE, SctpProfile};
 
 /// The wire size charged for a STUN message or a DTLS record other than
 /// application data. Their sizes depend on DTLS key material the seed
@@ -433,6 +433,17 @@ enum Event {
     },
     /// A host's network thread hands a data channel's packet to its uplink.
     SctpOut(Box<sctp::Handover>),
+    /// Data record `id` of channel `conn` (the last of its message if
+    /// `end`, one its page counted in its amount if `counted`), which its
+    /// page posted to its host's idle network thread,
+    /// reaches the stack as the thread wakes for it
+    /// ([`sctp::POST_WAKE`]).
+    SctpPost {
+        conn: (SocketAddr, SocketAddr),
+        id: u64,
+        end: bool,
+        counted: bool,
+    },
 }
 
 /// The window model's segment size, for the window's growth.
@@ -1420,6 +1431,10 @@ pub(crate) struct Scheduler {
     /// Per host, when its network thread is done with what its
     /// associations sent so far ([`sctp`]'s module docs).
     threads: Vec<Time>,
+    /// Per host, when its network thread last woke, or wakes, for the
+    /// writes its page posted it while it was idle ([`sctp::POST_WAKE`]):
+    /// a write posted by then waits for that wake, behind those before it.
+    wakes: Vec<Time>,
     /// Per host, whether it is down, from its crash
     /// ([`Scheduler::crashed`]) to its restart ([`Scheduler::restarted`]).
     down: Vec<bool>,
@@ -1651,6 +1666,7 @@ impl Scheduler {
             assocs: FastMap::default(),
             rcvs: FastMap::default(),
             threads: vec![Time::NIL; spec.hosts.len()],
+            wakes: vec![Time::NIL; spec.hosts.len()],
             down: vec![false; spec.hosts.len()],
             answers: BTreeMap::new(),
             packet_log: (0..spec.hosts.len())
@@ -2217,6 +2233,15 @@ impl Scheduler {
                     self.handed(t, *hand);
                     continue;
                 }
+                Event::SctpPost {
+                    conn,
+                    id,
+                    end,
+                    counted,
+                } => {
+                    self.sctp_take(t, conn, id, end, counted);
+                    continue;
+                }
                 Event::SynAck => {
                     self.syn_ack(t, id);
                     continue;
@@ -2322,7 +2347,8 @@ impl Scheduler {
                 | Event::SctpDelSack { .. }
                 | Event::SctpChunk { .. }
                 | Event::SctpThrough { .. }
-                | Event::SctpOut(_) => {}
+                | Event::SctpOut(_)
+                | Event::SctpPost { .. } => {}
             }
         }
     }
@@ -4186,6 +4212,9 @@ impl Scheduler {
         }
         if let Some(free) = self.threads.get_mut(h) {
             *free = (*free).min(now);
+        }
+        if let Some(wake) = self.wakes.get_mut(h) {
+            *wake = Time::NIL;
         }
         for d in [
             self.ack_out.get_mut(h),
@@ -6096,10 +6125,12 @@ mod tests {
 
     /// A Chromium host's channels send through its one thread: each send
     /// opportunity once the thread is done with those before it, whatever
-    /// its channel, its packets a cost apart and each its cost after the
-    /// one before; and its page's answer, of the message's bytes, as the
-    /// opportunity that left the channel's queue empty sent its last. A Firefox host's take no
-    /// thread: its packets go as their send opportunity comes.
+    /// its channel, a write to an idle thread as it wakes for it
+    /// ([`sctp::POST_WAKE`]), its packets a cost apart and each its cost
+    /// after the one before; and its page's answer, of the message's bytes,
+    /// as the opportunity that left the channel's queue empty sent its
+    /// last. A Firefox host's take no thread: its packets go as their send
+    /// opportunity comes.
     #[test]
     fn a_browsers_channels_send_through_its_one_thread() {
         for p in [SctpProfile::CHROMIUM, SctpProfile::FIREFOX] {
@@ -6111,15 +6142,20 @@ mod tests {
             };
             let t0 = sim_time(StdDuration::from_secs(1));
             let us = |n: i64| Duration::from_micros(n);
+            // The thread is idle: it wakes for the page's writes.
             write(&mut wan, t0, conns[0], 2);
             write(&mut wan, t0, conns[1], 2);
-            // A third channel's message comes as the thread sends the second's.
+            // A third channel's message comes as the thread sends the second's,
+            // and waits for it.
+            wan.run_events(t0 + us(30));
             write(&mut wan, t0 + us(30), conns[2], 1);
-            // Once the thread is idle, a message goes at once ...
+            // Once the thread is idle, a message goes as it wakes ...
+            wan.run_events(t0 + us(1000));
             write(&mut wan, t0 + us(1000), conns[2], 1);
             // ... and one the window holds back in part, its last packet's
             // chunk cut to the room the window leaves, leaves the channel's
             // queue waiting, unanswered.
+            wan.run_events(t0 + us(2000));
             write(&mut wan, t0 + us(2000), conns[0], 1);
             // The walks that reach the thread's hand-overs, before anything
             // reaches `b`.
@@ -6140,7 +6176,7 @@ mod tests {
                 assert!(answers.is_empty());
                 continue;
             };
-            let at = |i: i64| cost * i;
+            let at = |i: i64| sctp::POST_WAKE + cost * i;
             let mut expected: Vec<Duration> = (1..=20).map(at).collect();
             expected.extend((1..=4).map(|i| us(1000) + at(i)));
             expected.extend((1..=4).map(|i| us(2000) + at(i)));
@@ -6235,6 +6271,7 @@ mod tests {
                 let cwnd = wan.assocs[&ba].cwnd();
                 wan.assocs.get_mut(&ba).unwrap().set_cwnd(0);
                 b_writes(&mut wan, 920, 1, 500);
+                take_posts(&mut wan, ms(920) + sctp::POST_WAKE);
                 wan.assocs.get_mut(&ba).unwrap().set_cwnd(cwnd);
                 wan.run_events(ms(940));
                 b_writes(&mut wan, 940, 1, 500);
@@ -6299,6 +6336,7 @@ mod tests {
                 wan.assocs.get_mut(&c).unwrap().set_cwnd(600);
                 let mut id = 0;
                 write_sized(&mut wan, &mut id, t0, c, 1, 1, 4000);
+                take_posts(&mut wan, t0 + sctp::POST_WAKE);
                 assert_eq!(wan.assocs[&c].chunks(), [(1, 584, 1)], "{p:?}");
                 assert_eq!(wan.conn_state(c, t0).pending, Some(4000 - 584));
                 wan.assocs.get_mut(&c).unwrap().set_cwnd(1 << 20);
@@ -6425,6 +6463,29 @@ mod tests {
         assert_eq!(outs(&wan), 0);
     }
 
+    /// The writes a page posted its host's idle network thread by `now`,
+    /// which its stack takes as the thread wakes for them, without the walk
+    /// (the SACKs it would bring).
+    fn take_posts(wan: &mut Scheduler, now: Time) {
+        let posts: Vec<(Time, u64)> = wan
+            .events
+            .range(..=(now, u64::MAX))
+            .filter(|(_, e)| matches!(e, Event::SctpPost { .. }))
+            .map(|(&k, _)| k)
+            .collect();
+        for key in posts {
+            if let Some(Event::SctpPost {
+                conn,
+                id,
+                end,
+                counted,
+            }) = wan.events.remove(&key)
+            {
+                wan.sctp_take(key.0, conn, id, end, counted);
+            }
+        }
+    }
+
     /// A Chromium stack whose channel's queue never empties answers its
     /// page once it has sent more than 100 KiB of the channel since its
     /// last answer, as that send opportunity's last packet goes.
@@ -6444,10 +6505,14 @@ mod tests {
         for i in 0..30 {
             let at = t0 + Duration::from_millis(i);
             write_chunks(&mut wan, &mut id, at, conns[0], 1, 8);
+            take_posts(&mut wan, at + sctp::POST_WAKE);
         }
         let answers: Vec<Duration> = wan.answers.keys().map(|&(t, _)| t - t0).collect();
         let cost = p.packet_cost.unwrap();
-        assert_eq!(answers, [Duration::from_millis(22) + cost * 4]);
+        assert_eq!(
+            answers,
+            [Duration::from_millis(22) + sctp::POST_WAKE + cost * 4]
+        );
     }
 
     /// A receiver's stack takes a packet as its downlink delivers it, and

@@ -1636,18 +1636,20 @@ fn sctp_events_say_what_their_associations_did(r: &strims_sim::Report, d: &Path,
             .and_then(|s| s.rtc_stack)
             .and_then(|p| p.packet_cost)
             .map(|c| c.as_micros() + 1);
+        // The first write reaches an idle thread as it wakes for it.
+        let wake = strims_sim::POST_WAKE.as_micros();
         let (Some(cost), Some(t)) = (cost, outs.get(&h)) else {
             return at;
         };
         let Some(start) = t.iter().position(|&x| x + cost > at) else {
             return at;
         };
-        if t[start] > at + cost {
+        if t[start] > at + wake + cost {
             return at;
         }
         let mut end = t[start];
         for &x in &t[start + 1..] {
-            if x > end + cost {
+            if x > end + wake + cost {
                 break;
             }
             end = x;

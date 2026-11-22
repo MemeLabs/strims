@@ -123,8 +123,10 @@
 //! :420-424, the `WebRTC_W_and_N` thread, the connections' worker thread
 //! too, :947-949). A data channel's `send` posts its message to that
 //! thread as a task of its own (blink's rtc_data_channel.cc:851;
-//! WebRTC's pc/sctp_data_channel.cc, `SendAsync`, :563-583), which hands
-//! it to dcSCTP (media/sctp/dcsctp_transport.cc:386;
+//! WebRTC's pc/sctp_data_channel.cc, `SendAsync`, :563-583), taken in
+//! the order the thread's tasks were posted, after the work posted before
+//! it, or as the thread wakes for it if it was idle ([`POST_WAKE`]), which
+//! hands it to dcSCTP (media/sctp/dcsctp_transport.cc:386;
 //! net/dcsctp/socket/dcsctp_socket.cc, `Send`, :544-557). Its send
 //! opportunity (transmission_control_block.cc, `SendBufferedPackets`,
 //! :218-275) seals each packet as a DTLS record of its own
@@ -142,8 +144,8 @@
 //! the uplink before it (its kernel's pure ACKs, its other sockets'
 //! writes) and before what after (`Scheduler::hand_over`). An inbound
 //! packet takes nothing of the thread here. A step's writes go before the
-//! walk's events, which come after the step's start, so the thread takes
-//! them first.
+//! walk's events, which come after the step's start, so a busy thread takes
+//! them first, and an idle one as it wakes, after the events before then.
 //!
 //! A receiver takes a packet as its downlink delivers it, in the walk that
 //! reaches the delivery (`Scheduler::sctp_through`), and sends its SACK
@@ -554,7 +556,9 @@ fn sctp_of(e: &Event, h: HostIx, now: Time, ip_host: &FastMap<IpAddr, HostIx>) -
     let at = |a: &SocketAddr| ip_host.get(&a.ip()) == Some(&h);
     match e {
         Event::SctpOut(hand) => hand.host(ip_host) == Some(h),
-        Event::SctpSack { conn } | Event::SctpTimeout { conn } => at(&conn.0),
+        Event::SctpSack { conn } | Event::SctpTimeout { conn } | Event::SctpPost { conn, .. } => {
+            at(&conn.0)
+        }
         Event::SctpChunk { conn, left, .. } => at(&conn.1) || (at(&conn.0) && *left > now),
         Event::SctpDelSack { conn } | Event::SctpThrough { conn, .. } => at(&conn.1),
         _ => false,
@@ -748,6 +752,30 @@ pub(super) struct Assoc {
 /// per answer (blink's rtc_data_channel.cc:261-267), so the page takes each
 /// in turn.
 const ANSWER_EVERY: usize = 100 * 1024;
+
+/// How long a Chromium host's idle network thread takes to wake for a
+/// write its page posted it. Blink's `RTCDataChannel::send` hands each
+/// message to `SctpDataChannel::SendAsync` (blink's rtc_data_channel.cc:851),
+/// which posts it to the network thread as a task of its own, one a
+/// message, never sent inline (WebRTC's pc/sctp_data_channel.cc:563-583);
+/// the thread takes its tasks in the order they were posted, the packets it
+/// takes in (media/sctp/dcsctp_transport.cc:686-689, 744-764), its SCTP
+/// timers (the socket's `TaskQueueTimeoutFactory` on the same thread,
+/// :164-169) and each send opportunity's packets (sealed and sent one after
+/// another before the next task) among them. A thread busy with earlier
+/// work takes the write as it is done ([`Scheduler::thread_start`]); an
+/// idle one sleeps and wakes for it.
+///
+/// On the dev VM's testbed (bpace-r1/-r2, a Chromium 156 seed at 20 Mbit/s
+/// under 15.4 µs a packet) a write to a channel that had nothing waiting,
+/// its host's uplink offered nothing for 300 µs before it, put its first
+/// packet in the offered capture 76-80 µs later at the 5th percentile
+/// (84-88 at the 10th), where the model's took the packet's cost alone; and
+/// the viewers took 108 µs (117) from a data packet's arrival to their SACK
+/// alone's offer, a way in through the network service to the renderer's
+/// thread and out again, about 45 µs each way past a packet's work. What is
+/// left of the seed's, some 20 µs, is the post's wake.
+pub const POST_WAKE: Duration = Duration::from_micros(20);
 
 impl Assoc {
     pub(super) fn new(profile: SctpProfile) -> Assoc {
@@ -1017,7 +1045,10 @@ impl Scheduler {
     /// Data record `id` of channel `conn` was written by `at`, the last of
     /// its message if `end`, one its page counted in its amount if
     /// `counted` ([`SctpProfile::amount_at_sends`]): a message of its own,
-    /// not a flight of the setup's.
+    /// not a flight of the setup's. Its stack takes it then, or, where the
+    /// host's associations send through its network thread and the page
+    /// posts the write to it while it is idle, as the thread wakes for it
+    /// ([`POST_WAKE`]), behind the writes posted before it.
     pub(super) fn sctp_write(
         &mut self,
         at: Time,
@@ -1026,6 +1057,45 @@ impl Scheduler {
         end: bool,
         counted: bool,
     ) {
+        let thread = self
+            .assocs
+            .get(&conn)
+            .filter(|a| a.profile.packet_cost.is_some())
+            .and_then(|_| self.ip_host.get(&conn.0.ip()).copied())
+            .and_then(|h| Some((h, *self.threads.get(h)?, *self.wakes.get(h)?)));
+        if let Some((h, free, wake)) = thread {
+            let woken = if wake != Time::NIL && wake >= at {
+                Some(wake)
+            } else if free <= at {
+                Some(at + POST_WAKE)
+            } else {
+                None
+            };
+            if let Some(t) = woken
+                && let Some(w) = self.wakes.get_mut(h)
+            {
+                *w = t;
+                let key = self.next;
+                self.next += 1;
+                self.events.insert(
+                    (t, key),
+                    Event::SctpPost {
+                        conn,
+                        id,
+                        end,
+                        counted,
+                    },
+                );
+                return;
+            }
+        }
+        self.sctp_take(at, conn, id, end, counted);
+    }
+
+    /// `conn`'s stack takes data record `id` at `at`, the last of its
+    /// message if `end`, one its page counted if `counted`: at its write, or
+    /// as its host's network thread woke for it ([`Event::SctpPost`]).
+    pub(super) fn sctp_take(&mut self, at: Time, conn: ConnKey, id: u64, end: bool, counted: bool) {
         let Some(a) = self.assocs.get_mut(&conn) else {
             return;
         };
@@ -1495,8 +1565,10 @@ impl Scheduler {
 
     /// Host `h` crashes at `now`, before the walk that reaches it: what its
     /// stack did by then it did, in time order, as the walk would have run
-    /// it. Its network thread handed its uplink each packet due by then
-    /// ([`Scheduler::handed`]), and its stack took each chunk its downlink
+    /// it. Its network thread woke for each write its page posted it by
+    /// then and sent what it could ([`Scheduler::sctp_take`]), handed its
+    /// uplink each packet due by then ([`Scheduler::handed`]), and its stack
+    /// took each chunk its downlink
     /// delivered by then ([`Scheduler::sctp_received`]) and sent the SACK
     /// it sends at once. So its uplink holds what they handed it as the
     /// crash finds it, as it holds what the host handed it before.
@@ -1510,6 +1582,7 @@ impl Scheduler {
                 .range((from, Bound::Included((now, u64::MAX))))
                 .find(|(_, e)| match e {
                     Event::SctpOut(hand) => hand.host(ip_host) == Some(h),
+                    Event::SctpPost { conn, .. } => ip_host.get(&conn.0.ip()) == Some(&h),
                     Event::SctpThrough { conn, .. } => ip_host.get(&conn.1.ip()) == Some(&h),
                     _ => false,
                 })
@@ -1522,6 +1595,12 @@ impl Scheduler {
             after = Some(key);
             match self.events.remove(&key) {
                 Some(Event::SctpOut(hand)) => self.handed(key.0, *hand),
+                Some(Event::SctpPost {
+                    conn,
+                    id,
+                    end,
+                    counted,
+                }) => self.sctp_take(key.0, conn, id, end, counted),
                 Some(Event::SctpThrough {
                     conn,
                     seq,
