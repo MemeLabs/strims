@@ -193,9 +193,11 @@ struct Conn {
     /// write would block: it isn't polled again before the wake.
     waker: Option<Waker>,
     /// The host-wide order of each write (one turmoil segment) the WAN
-    /// scheduler hasn't taken yet, and whether it ends a data channel's
-    /// message. Bound: the connection's segments written in one step.
-    writes: VecDeque<(u64, bool)>,
+    /// scheduler hasn't taken yet, whether it ends a data channel's
+    /// message, and whether the page counted it in its amount
+    /// ([`Conn::shown`]). Bound: the connection's segments written in one
+    /// step.
+    writes: VecDeque<(u64, bool, bool)>,
     /// A data channel's cap and how it cuts its writes into records, and
     /// its bytes sent and not yet acknowledged.
     channel: Option<(u64, Chunking)>,
@@ -368,9 +370,11 @@ impl SendBuffers {
     }
 
     /// The order of `conn`'s next write the scheduler hasn't taken (writes
-    /// on every connection count in the order the hosts made them), and
-    /// whether it ends a data channel's message.
-    pub fn next_write(&self, conn: ConnKey) -> Option<(u64, bool)> {
+    /// on every connection count in the order the hosts made them),
+    /// whether it ends a data channel's message, and whether its page
+    /// counted it in its amount: a message of its own, not the setup's
+    /// flights ([`SctpProfile::amount_at_sends`]).
+    pub fn next_write(&self, conn: ConnKey) -> Option<(u64, bool, bool)> {
         self.with(|b| b.conns.get_mut(&conn)?.writes.pop_front())
     }
 
@@ -474,6 +478,10 @@ impl SendBuffers {
         self.with(|b| {
             let c = b.conns.get_mut(&conn)?;
             if let Some(s) = &mut c.shown {
+                debug_assert!(
+                    sent as u64 <= *s,
+                    "{conn:?}: an answer of {sent} bytes against a count of {s}"
+                );
                 *s = s.saturating_sub(sent as u64);
             }
             release(b, conn, at)
@@ -1156,7 +1164,7 @@ impl SendBuffers {
                     *s = s.saturating_add(n as u64);
                 }
                 c.above = c.amount() > c.threshold;
-                c.writes.push_back((stamp, end));
+                c.writes.push_back((stamp, end, c.shown.is_some()));
                 let now = page_time(now);
                 if let Some(p) = &mut c.pacer {
                     p.wrote(now, n);
@@ -1444,7 +1452,7 @@ impl AsyncWrite for SimTcpStream {
                     }
                     // A write is a whole message, if a channel later
                     // takes the connection.
-                    c.writes.push_back((stamp, true));
+                    c.writes.push_back((stamp, true, false));
                 }
             });
         }

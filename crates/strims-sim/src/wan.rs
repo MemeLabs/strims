@@ -3735,9 +3735,9 @@ impl Scheduler {
         let by_sender = self.queues(fresh);
         let window = self.window().is_some();
         for queues in by_sender {
-            // (write order, queue position, record)
-            // (write order, queue position, record, whether it ends a message)
-            let mut keyed: Vec<(u64, usize, u64, bool)> = Vec::new();
+            // (write order, queue position, record, whether it ends a
+            // message, whether the page counted it)
+            let mut keyed: Vec<(u64, usize, u64, bool, bool)> = Vec::new();
             for q in queues {
                 let mut last = 0;
                 for id in q {
@@ -3745,20 +3745,21 @@ impl Scheduler {
                         What::Data { .. } => b.next_write((r.src, r.dst)),
                         _ => None,
                     });
-                    last = write.map_or(last, |(stamp, _)| stamp);
-                    let end = write.is_none_or(|(_, end)| end);
-                    keyed.push((last, keyed.len(), id, end));
+                    last = write.map_or(last, |(stamp, _, _)| stamp);
+                    let end = write.is_none_or(|(_, end, _)| end);
+                    let counted = write.is_some_and(|(_, _, counted)| counted);
+                    keyed.push((last, keyed.len(), id, end, counted));
                 }
             }
             keyed.sort_unstable();
-            for (_, _, id, end) in keyed {
+            for (_, _, id, end, counted) in keyed {
                 let data = self.records.get(&id).and_then(|r| match r.what {
                     What::Data { .. } if window => Some((r.src, r.dst)),
                     _ => None,
                 });
                 match data {
                     Some(conn) if self.assocs.contains_key(&conn) => {
-                        self.sctp_write(at, conn, id, end);
+                        self.sctp_write(at, conn, id, end, counted);
                     }
                     Some(conn) => {
                         self.queue_window(conn, id);
@@ -6057,6 +6058,19 @@ mod tests {
         chunks: u64,
         len: usize,
     ) {
+        write_counted(wan, id, at, c, (n, chunks, len), true);
+    }
+
+    /// [`write_sized`]'s `(n, chunks, len)`, the page's messages if
+    /// `counted`, or else the setup's flights, which it never counts.
+    fn write_counted(
+        wan: &mut Scheduler,
+        id: &mut u64,
+        at: Time,
+        c: ConnKey,
+        (n, chunks, len): (u64, u64, usize),
+        counted: bool,
+    ) {
         let p = wan.assocs[&c].profile();
         let (from, to) = (wan.ip_host[&c.0.ip()], wan.ip_host[&c.1.ip()]);
         for k in 0..chunks * n {
@@ -6075,7 +6089,7 @@ mod tests {
                     link: 0,
                 },
             );
-            wan.sctp_write(at, c, *id, k % chunks == chunks - 1);
+            wan.sctp_write(at, c, *id, k % chunks == chunks - 1, counted);
             *id += 1;
         }
     }
@@ -6155,6 +6169,28 @@ mod tests {
                 ]
             );
         }
+    }
+
+    /// A Chromium page's first answer after its channel comes up takes off
+    /// only the messages it wrote: not the COOKIE ACK its side wrote just
+    /// before, which the scheduler takes after, nor an answer queued
+    /// before.
+    #[test]
+    fn a_channels_first_answer_counts_only_its_pages_messages() {
+        let (_sim, mut wan, conns) = channels_of(SctpProfile::CHROMIUM, 1);
+        let c = conns[0];
+        let t0 = sim_time(StdDuration::from_secs(1));
+        let mut id = 0;
+        wan.answers.insert((t0, 0), (c, 500));
+        wan.channel_up(c);
+        assert!(wan.answers.is_empty());
+        // The COOKIE ACK, a chunk of 16 bytes, and the page's first message
+        // of four chunks.
+        write_counted(&mut wan, &mut id, t0, c, (1, 1, 16), false);
+        write_counted(&mut wan, &mut id, t0, c, (1, 4, 1000), true);
+        wan.run_events(t0 + Duration::from_millis(5));
+        let answers: Vec<usize> = wan.answers.values().map(|&(_, sent)| sent).collect();
+        assert_eq!(answers, [4000]);
     }
 
     /// A browser's SACK held back for its peer's data goes first in the

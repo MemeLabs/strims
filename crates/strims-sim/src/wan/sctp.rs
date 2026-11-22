@@ -664,7 +664,7 @@ pub(super) struct Assoc {
     ssthresh: usize,
     partial_acked: usize,
     /// New chunks waiting for the window, in write order, and whether each
-    /// ends its message; on dcSCTP, records it cuts into chunks as it sends,
+    /// is of a message its page counted ([`Scheduler::sctp_write`]); on dcSCTP, records it cuts into chunks as it sends,
     /// the first's bytes it has sent so far, and each record's bytes not
     /// yet through the receiver's downlink, which hands it to the reader
     /// once none are. Bound: the channel's cap.
@@ -720,8 +720,9 @@ pub(super) struct Assoc {
     /// the channel's cap.
     ends: BTreeSet<u64>,
     /// For a page that counts the channel's amount
-    /// ([`SctpProfile::amount_at_sends`]): the payload sent first since the
-    /// stack last answered it; the queue's payload at which the stack
+    /// ([`SctpProfile::amount_at_sends`]): the payload of its own messages'
+    /// DATA chunks sent first since the stack last answered it, never the
+    /// setup's flights nor a resend, which its page never counted; the queue's payload at which the stack
     /// checks again ([`ANSWER_EVERY`] under the queue's at its last check,
     /// or none); and whether a message ended since the last send
     /// opportunity, after which the stack checks.
@@ -741,8 +742,9 @@ pub(super) struct Assoc {
 /// answers once the queue is empty or the stack has sent more than this
 /// since the last answer, with what it sent since (:899-904). Blink's
 /// observer takes the answer on the network thread (its
-/// `IsOkToCallOnTheNetworkThread`, :340-341; :220-230 is the signalling thread's
-/// adapter for one that doesn't) and posts it to the page's thread, a task
+/// `IsOkToCallOnTheNetworkThread`, pc/sctp_data_channel.cc:340-341;
+/// sctp_data_channel.cc:220-230 is the signalling thread's adapter for one
+/// that doesn't) and posts it to the page's thread, a task
 /// per answer (blink's rtc_data_channel.cc:261-267), so the page takes each
 /// in turn.
 const ANSWER_EVERY: usize = 100 * 1024;
@@ -928,8 +930,9 @@ impl Assoc {
         })
     }
 
-    /// Chunk `seq` of `len` bytes (record `id`) goes out first at `at`.
-    fn launch(&mut self, at: Time, id: u64, seq: u64, len: usize) {
+    /// Chunk `seq` of `len` bytes (record `id`) goes out first at `at`, of a
+    /// message its page counted if `counted`.
+    fn launch(&mut self, at: Time, id: u64, seq: u64, len: usize, counted: bool) {
         if self.cum.is_none() {
             self.cum = Some(seq.saturating_sub(1));
             self.base = Some(seq);
@@ -939,7 +942,9 @@ impl Assoc {
         let c = Chunk::new(id, len, at);
         self.in_flight += c.flight(self.stack());
         self.out.insert(seq, c);
-        self.unanswered = self.unanswered.saturating_add(len);
+        if counted {
+            self.unanswered = self.unanswered.saturating_add(len);
+        }
     }
 }
 
@@ -996,18 +1001,31 @@ impl Scheduler {
 
     /// Channel `conn` is up: its round trips start from its next chunk,
     /// as an association's estimate takes none from its handshake, whose
-    /// flights the model sends as data; and its answers count what it sends
-    /// from now on, as its page counts the messages it writes from now on.
+    /// flights the model sends as data; and none of its answers from before
+    /// reach its page, which counts the messages it writes from now on.
+    /// Its answers count only those messages' chunks
+    /// ([`Scheduler::sctp_write`]): the side that takes the COOKIE ECHO
+    /// writes its COOKIE ACK just before, and the scheduler takes that
+    /// write's record after.
     pub(crate) fn channel_up(&mut self, conn: ConnKey) {
         if let Some(a) = self.assocs.get_mut(&conn) {
             a.restart_round_trips();
-            a.unanswered = 0;
         }
+        self.answers.retain(|_, (c, _)| *c != conn);
     }
 
     /// Data record `id` of channel `conn` was written by `at`, the last of
-    /// its message if `end`.
-    pub(super) fn sctp_write(&mut self, at: Time, conn: ConnKey, id: u64, end: bool) {
+    /// its message if `end`, one its page counted in its amount if
+    /// `counted` ([`SctpProfile::amount_at_sends`]): a message of its own,
+    /// not a flight of the setup's.
+    pub(super) fn sctp_write(
+        &mut self,
+        at: Time,
+        conn: ConnKey,
+        id: u64,
+        end: bool,
+        counted: bool,
+    ) {
         let Some(a) = self.assocs.get_mut(&conn) else {
             return;
         };
@@ -1020,7 +1038,7 @@ impl Scheduler {
         {
             a.unthrough.insert(id, len);
         }
-        a.pending.push_back((id, end));
+        a.pending.push_back((id, counted));
         a.wrote |= end;
         // dcSCTP sends as a message is written; sctp-proto as str0m polls.
         if end || a.stack() == Stack::SctpProto {
@@ -1085,7 +1103,7 @@ impl Scheduler {
             );
             let mut flight = a.in_flight;
             let mut fresh = Vec::new();
-            while let Some(&(id, _)) = a.pending.front() {
+            while let Some(&(id, counted)) = a.pending.front() {
                 let Some((seq, len)) = Assoc::chunk_of(&self.records, id) else {
                     a.pending.pop_front();
                     continue;
@@ -1094,7 +1112,7 @@ impl Scheduler {
                     break;
                 }
                 a.pending.pop_front();
-                a.launch(at, id, seq, len);
+                a.launch(at, id, seq, len, counted);
                 fresh.push(Send {
                     id,
                     seq,
@@ -1281,7 +1299,7 @@ impl Scheduler {
                 }
                 // The front message's next chunk, cut to the room left.
                 while room > CHUNK_HEADER {
-                    let Some(&(id, _)) = a.pending.front() else {
+                    let Some(&(id, counted)) = a.pending.front() else {
                         break;
                     };
                     let rest = Assoc::chunk_of(&self.records, id)
@@ -1298,7 +1316,7 @@ impl Scheduler {
                     }
                     room -= chunk_size(len);
                     let seq = a.next_seq;
-                    a.launch(at, id, seq, len);
+                    a.launch(at, id, seq, len, counted);
                     packet.push(Send {
                         id,
                         seq,
@@ -2492,8 +2510,8 @@ mod tests {
         let t = |ms: i64| Time::EPOCH + Duration::from_millis(ms);
         let p = SctpProfile::CHROMIUM;
         let mut a = Assoc::new(p);
-        a.launch(t(0), 1, 10, 100);
-        a.launch(t(0), 2, 11, 100);
+        a.launch(t(0), 1, 10, 100, true);
+        a.launch(t(0), 2, 11, 100, true);
         rfc_sacked(
             &mut a,
             t(20),
@@ -2519,7 +2537,7 @@ mod tests {
             10,
         );
         assert_eq!(a.srtt, Duration::ZERO, "a setup chunk acked after");
-        a.launch(t(40), 3, 12, 100);
+        a.launch(t(40), 3, 12, 100, true);
         rfc_sacked(
             &mut a,
             t(65),
@@ -2552,7 +2570,7 @@ mod tests {
         a.cwnd = 1 << 20;
         let t = Time::from_unix_millis(1_000);
         for seq in 1..=n {
-            a.launch(t, seq, seq, 1000);
+            a.launch(t, seq, seq, 1000, true);
         }
         (a, t)
     }
