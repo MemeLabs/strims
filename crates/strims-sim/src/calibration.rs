@@ -82,6 +82,10 @@ fn value<T: std::str::FromStr>(get: &impl Fn(&str) -> Option<String>, name: &str
 ///   uplink to `factor` times `STRIMS_SIM_CAL_SEED_UP_MBIT`, so one value
 ///   fits every seed uplink (`60:0.5 180:1` halves it from 60 s to 180 s).
 ///   It replaces `STRIMS_SIM_CAL_SEED_UP_STEPS`.
+/// - `STRIMS_SIM_CAL_SEED_UP_STEPS_MS="<ms> ..."`, a testbed run's times
+///   of those steps (`testbed::Run::read`: each one's stamp less the seed's
+///   egress delay, ms of stream), one a step in their order, takes the
+///   place of their scheduled times; their rates stay the schedule's.
 /// - Each viewer makes its links as the testbed's harness does
 ///   ([`HostSpec::links_at`](crate::spec::HostSpec::links_at)): its node
 ///   boots with the run, links to the hosts no swarm has (the relay) at
@@ -226,6 +230,33 @@ impl Calibration {
                 .map(|(at, f)| (at, f * seed_up_mbit as f64))
                 .collect()
         };
+        let seed_up_steps =
+            match get("STRIMS_SIM_CAL_SEED_UP_STEPS_MS").filter(|v| !v.trim().is_empty()) {
+                None => seed_up_steps,
+                Some(v) => {
+                    let ms: Vec<f64> = v
+                        .split_whitespace()
+                        .map(|m| {
+                            m.parse()
+                                .ok()
+                                .filter(|m: &f64| m.is_finite())
+                                .unwrap_or_else(|| {
+                                    panic!("STRIMS_SIM_CAL_SEED_UP_STEPS_MS={v}: {m} isn't ms")
+                                })
+                        })
+                        .collect();
+                    assert_eq!(
+                        ms.len(),
+                        seed_up_steps.len(),
+                        "STRIMS_SIM_CAL_SEED_UP_STEPS_MS={v}: a time for each of the seed's steps"
+                    );
+                    seed_up_steps
+                        .into_iter()
+                        .zip(ms)
+                        .map(|((_, mbit), ms)| (ms / 1000.0, mbit))
+                        .collect()
+                }
+            };
         let c = Calibration {
             viewers,
             seed_up_mbit,
@@ -692,6 +723,52 @@ mod tests {
         for bad in ["1000", "-1", "0.5"] {
             let refused = std::panic::catch_unwind(|| star(Some(bad))).is_err();
             assert!(refused, "EPOCH_MS={bad}");
+        }
+    }
+
+    /// SEED_UP_STEPS_MS steps the seed's uplink at a run's measured times,
+    /// its schedule's rates; unset or empty, at the schedule's times, and
+    /// without steps, none. A time short of a step is refused.
+    #[test]
+    fn seed_up_steps_ms_moves_the_seeds_steps_to_their_measured_times() {
+        let star = |knobs: &[(&str, &str)]| {
+            let c = Calibration::from_knobs(|k| {
+                knobs
+                    .iter()
+                    .find(|&&(name, _)| name == k)
+                    .map(|&(_, v)| v.to_owned())
+            });
+            calibration_star(&c).hosts[0].up_steps.clone()
+        };
+        let scale = ("STRIMS_SIM_CAL_SEED_UP_SCALE", "30:0.5 60:1");
+        let ms = |v| ("STRIMS_SIM_CAL_SEED_UP_STEPS_MS", v);
+        let at = |ms: u64| Duration::from_millis(5000 + ms);
+        let nominal = vec![(at(30_000), 625_000), (at(60_000), 1_250_000)];
+        assert_eq!(star(&[scale]), nominal);
+        assert_eq!(star(&[scale, ms(" ")]), nominal);
+        let measured = star(&[scale, ms("30037 60034.5")]);
+        assert_eq!(
+            measured.iter().map(|s| s.1).collect::<Vec<_>>(),
+            [625_000, 1_250_000]
+        );
+        for (got, want) in measured
+            .iter()
+            .zip([at(30_037), at(60_034) + Duration::from_micros(500)])
+        {
+            assert!(
+                got.0.abs_diff(want) < Duration::from_micros(1),
+                "{got:?} {want:?}"
+            );
+        }
+        assert!(star(&[]).is_empty());
+        assert!(star(&[ms("")]).is_empty());
+        for bad in [
+            &[scale, ms("30037")][..],
+            &[ms("30037")],
+            &[scale, ms("a 1")],
+        ] {
+            let refused = std::panic::catch_unwind(|| star(bad)).is_err();
+            assert!(refused, "{bad:?}");
         }
     }
 

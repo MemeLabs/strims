@@ -59,7 +59,7 @@
 //!   competing upload's bytes are its packets' to the sink, from the
 //!   seed's capture, in the same clock. Its steps (steps.log) are the
 //!   scenario's at their stamps less the seed's delay, when the offers
-//!   met them.
+//!   met them, and its twin's at the same times ([`STEPS_MS`]).
 //! - **TCP's own counts.** A native node's retransmits are its capture's
 //!   segments to the swarm that resent bytes its link had carried
 //!   (`carried_again`): a loss past its queue, as the window model counts
@@ -128,6 +128,18 @@ pub const PACKET_COST: &str = "STRIMS_SIM_CAL_PACKET_COST_US";
 /// simlab's testbed to tell a cell of one model's runs from several's. No
 /// twin takes it.
 pub const CPU_MODEL: &str = "STRIMS_SIM_CAL_CPU";
+/// The knob a twin takes its seed's uplink steps' times from, ms of stream,
+/// one a step of `STRIMS_SIM_CAL_SEED_UP_SCALE`'s (calibration_star's): a
+/// run's, each step's stamp (steps.log's) less the seed's egress delay, as
+/// the run's own scenario steps ([`Run::read`]).
+pub const STEPS_MS: &str = "STRIMS_SIM_CAL_SEED_UP_STEPS_MS";
+/// The job knob a run with steps records which time its steps.log stamps
+/// in: `applied`, when each step's tc returned in the seed's container
+/// (run.sh's four columns), or `exec`, when its docker exec returned here
+/// (a log from before that stamp, two columns), which trailed the change
+/// 0-7 ms in the tier's halve runs whose captures pin it but 0.6-0.9 s in
+/// three, so its [`STEPS_MS`] are upper bounds. No twin takes it.
+pub const STEPS_STAMP: &str = "STRIMS_SIM_CAL_SEED_UP_STAMP";
 
 /// The twin's stream starts this far into its run.
 const LEAD: Duration = Duration::from_secs(5);
@@ -882,6 +894,32 @@ impl Run {
             "STRIMS_SIM_CAL_EPOCH_MS".to_owned(),
             (start_ms % 1000).to_string(),
         );
+        // When the seed's uplink steps met its offers, for the twin's: each
+        // one's stamp less the seed's egress delay, ms of stream, as this
+        // run's own scenario steps (Run::scenario), where steps.log holds
+        // every step its knobs schedule (one it lacks keys the run apart:
+        // off_schedule). The keying sets them aside (simlab's testbed
+        // MEASURED), and STEPS_STAMP says whether they're when each tc
+        // applied or upper bounds.
+        let scheduled = knobs
+            .get("STRIMS_SIM_CAL_SEED_UP_SCALE")
+            .map_or(0, |s| s.split_whitespace().count());
+        if let Some((steps, applied)) = logged_steps(dir)
+            && scheduled > 0
+            && steps.len() == scheduled
+        {
+            let entry_us = seed_entry_us(dir, 0) as i64;
+            let ms: Vec<String> = steps
+                .iter()
+                .map(|&(t, _)| {
+                    let us = (t as i64 - start_ms as i64) * 1000 - entry_us;
+                    num(us as f64 / 1000.0)
+                })
+                .collect();
+            knobs.insert(STEPS_MS.to_owned(), ms.join(" "));
+            let stamp = if applied { "applied" } else { "exec" };
+            knobs.insert(STEPS_STAMP.to_owned(), stamp.to_owned());
+        }
         // What each packet of its Chromium nodes took of their network
         // thread, for the twin's (thread_cost), and the CPU model of the
         // host whose it is: both the host's, which the keying sets aside
@@ -1025,17 +1063,13 @@ impl Run {
         // tbf) less the seed's egress delay, the netem ahead of the tbf:
         // the offers from then met the step's rate, as the model's queue,
         // ahead of its path's delay, meets each offer as it is made.
-        let entry =
-            Duration::from_micros(packets::node_link(&self.dir, seed).map_or(0, |l| l.delay_us()));
-        if let Some(text) = self.file("steps.log")
+        let entry = Duration::from_micros(seed_entry_us(&self.dir, seed));
+        if let Some((steps, _)) = logged_steps(&self.dir)
             && let Some(h) = s.hosts.get_mut(seed)
         {
-            h.up_steps = text
-                .lines()
-                .filter_map(|l| {
-                    let mut w = l.split_whitespace();
-                    let ms: u64 = w.next()?.parse().ok()?;
-                    let mbit: f64 = w.next()?.parse().ok()?;
+            h.up_steps = steps
+                .iter()
+                .filter_map(|&(ms, mbit)| {
                     Some((
                         self.at(ms)?.saturating_sub(entry),
                         (mbit * 125_000.0) as u64,
@@ -1626,6 +1660,33 @@ fn ss_rate(v: &str) -> Option<u64> {
         _ => (v, 1.0),
     };
     Some((n.parse::<f64>().ok()? * mult) as u64)
+}
+
+/// The seed's uplink steps as steps.log logs them, in its order: each one's
+/// time (Unix ms) and rate (Mbit/s), and whether every line stamps when its
+/// tc applied in the seed's container (run.sh's `<applied> <mbit> <began>
+/// <returned>`) rather than when its docker exec returned here (a log from
+/// before that stamp: `<returned> <mbit>`, which trails the change); `None`
+/// without the log.
+fn logged_steps(dir: &Path) -> Option<(Vec<(u64, f64)>, bool)> {
+    let text = std::fs::read_to_string(dir.join("steps.log")).ok()?;
+    let mut applied = true;
+    let steps = text
+        .lines()
+        .filter_map(|l| {
+            let w: Vec<&str> = l.split_whitespace().collect();
+            let step = (w.first()?.parse().ok()?, w.get(1)?.parse().ok()?);
+            applied &= w.len() >= 4;
+            Some(step)
+        })
+        .collect();
+    Some((steps, applied))
+}
+
+/// Node `i`'s egress delay in µs (the netem ahead of its tbf, its `links`
+/// line's), 0 without one.
+fn seed_entry_us(dir: &Path, i: usize) -> u64 {
+    packets::node_link(dir, i).map_or(0, |l| l.delay_us())
 }
 
 /// Why a run's steps or competing uploads came off their schedule, if they
@@ -5466,6 +5527,80 @@ mod tests {
         assert_eq!(r.knobs["STRIMS_SIM_CAL_COMPETE"], "3:2");
         let twin = Calibration::from_knobs(|k| r.knobs.get(k).cloned());
         assert!(twin.compete.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run's steps' times reach its twin as its own scenario steps: each
+    /// stamp less the seed's 20 ms egress delay, ms of stream, whether its
+    /// line stamps when the tc applied (run.sh's four columns) or when the
+    /// exec returned (two, an upper bound, as STEPS_STAMP says). A run
+    /// without steps records neither knob, and one with a step unlogged
+    /// records no times.
+    #[test]
+    fn a_runs_step_times_are_its_twins() {
+        let dir = fixture("steps-ms");
+        let settings = std::fs::read_to_string(dir.join("settings")).unwrap();
+        let read = |log: Option<&str>| {
+            match log {
+                Some(log) => std::fs::write(dir.join("steps.log"), log).unwrap(),
+                None => drop(std::fs::remove_file(dir.join("steps.log"))),
+            }
+            Run::read(&dir, &BTreeMap::new()).unwrap()
+        };
+        let knob = |r: &Run, k: &str| r.knobs.get(k).cloned();
+        let none = read(None);
+        assert_eq!(knob(&none, STEPS_MS), None);
+        assert_eq!(knob(&none, STEPS_STAMP), None);
+        assert!(
+            Calibration::from_knobs(|k| none.knobs.get(k).cloned())
+                .seed_up_steps
+                .is_empty()
+        );
+        std::fs::write(
+            dir.join("settings"),
+            format!("{settings}SEED_UP_MBIT=10\nSEED_UP_STEPS=2:5 4:10\n"),
+        )
+        .unwrap();
+        let four = |at: u64| {
+            format!(
+                "{} 5 {} {}\n",
+                START + at,
+                START + at - 70,
+                START + at + 900
+            )
+        };
+        let applied = format!(
+            "{}{} 10 {} {}\n",
+            four(2085),
+            START + 4057,
+            START + 3990,
+            START + 4070
+        );
+        let exec = format!("{} 5\n{} 10\n", START + 2091, START + 4063);
+        for (log, ms, stamp) in [
+            (&applied, "2065 4037", "applied"),
+            (&exec, "2071 4043", "exec"),
+        ] {
+            let r = read(Some(log));
+            assert_eq!(knob(&r, "TESTBED_SCHEDULE"), None);
+            assert_eq!(knob(&r, STEPS_MS).as_deref(), Some(ms));
+            assert_eq!(knob(&r, STEPS_STAMP).as_deref(), Some(stamp));
+            // The twin of its knobs steps where the run's scenario does,
+            // at the schedule's rates.
+            let twin = calibration_star(&Calibration::from_knobs(|k| r.knobs.get(k).cloned()));
+            let own = r.scenario().hosts[0].up_steps.clone();
+            assert_eq!(own.len(), 2);
+            for (t, o) in twin.hosts[0].up_steps.iter().zip(&own) {
+                assert!(t.0.abs_diff(o.0) < Duration::from_micros(1), "{t:?} {o:?}");
+                assert_eq!(t.1, o.1);
+            }
+        }
+        let r = read(Some(&four(2085)));
+        assert_eq!(
+            knob(&r, "TESTBED_SCHEDULE").as_deref(),
+            Some("step 2 not logged")
+        );
+        assert_eq!(knob(&r, STEPS_MS), None);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

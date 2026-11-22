@@ -200,7 +200,15 @@ crates differ from those the page was built from builds its own page.
   paired run's (`testbed.twin_cost`), so a farm cell whose repeats ran on
   two instance types is twinned on both; a cell with a run of no recorded
   model (its run dir from before `cpu`) pairs too, as one model's runs'
-  costs spread wider than two models' lie apart. A cell's
+  costs spread wider than two models' lie apart. A run's seed steps
+  where steps.log stamps them, less the seed's egress delay, as its own
+  scenario does (`STRIMS_SIM_CAL_SEED_UP_STEPS_MS`, ms of stream: tens of
+  ms past their schedule), and its twin with them: a cell's takes their
+  median where its runs' times of each step lie within 2 ms
+  (`testbed.twin_steps`), else each twin seed its paired run's. A log
+  from before run.sh stamped when the tc applied (two columns) gives the
+  exec's return, upper bounds (`STRIMS_SIM_CAL_SEED_UP_STAMP=exec`, no
+  twin knob). A cell's
   twin logs the seed's packets
   where its runs hold them in the catalog (a PCAP=1 run's every node:
   `STRIMS_SIM_PACKET_LOG`, which `testbed.cells_in` adds), which the wire

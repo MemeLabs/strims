@@ -4670,6 +4670,51 @@ fn a_trace_link_refuses_rate_steps() {
     );
 }
 
+/// A twin of a run's measured step times (STRIMS_SIM_CAL_SEED_UP_STEPS_MS)
+/// steps its seed's uplink then, to the ms, at the schedule's rates, and
+/// runs the same at a seed every time; one of no steps runs none.
+#[test]
+fn a_twin_steps_at_its_runs_measured_times_deterministically() {
+    const TEST: &str = "a_twin_steps_at_its_runs_measured_times_deterministically";
+    let case = |ms: Option<&str>| {
+        let knobs = Calibration::from_knobs(|k| match k {
+            "STRIMS_SIM_CAL_SEED_UP_SCALE" => Some("2:0.5".to_owned()),
+            "STRIMS_SIM_CAL_SEED_UP_STEPS_MS" => ms.map(str::to_owned),
+            _ => None,
+        });
+        let mut c = collapse_case(2, 10, 4);
+        c.seed_up_steps = knobs.seed_up_steps;
+        c
+    };
+    let run = |c: &Calibration| {
+        let r = strims_sim::run(calibration::calibration_star(c), 1).unwrap();
+        let steps: Vec<String> = r
+            .trace
+            .iter()
+            .filter(|l| l.contains(" capacity seed up "))
+            .cloned()
+            .collect();
+        // The row but the host's measures of the run (its wall time, its
+        // memory), with the trace.
+        let mut row: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(&r.row(TEST, None)).unwrap();
+        row.retain(|k, _| k != "wall_secs" && !k.contains("mem") && !k.contains("rss"));
+        ((row, r.trace.clone()), steps)
+    };
+    let measured = case(Some("2037"));
+    let (row, steps) = run(&measured);
+    assert_eq!(steps.len(), 1, "{steps:?}");
+    assert!(steps[0].ends_with("625000 B/s from 7037 ms"), "{steps:?}");
+    assert_eq!(run(&measured), (row, steps));
+    let (_, nominal) = run(&case(None));
+    assert!(
+        nominal[0].ends_with("625000 B/s from 7000 ms"),
+        "{nominal:?}"
+    );
+    let (_, none) = run(&collapse_case(2, 10, 4));
+    assert!(none.is_empty(), "{none:?}");
+}
+
 /// Runs collapse case `c` as test `name` at `seed` and its replay.
 fn collapse_sweep(
     name: &str,

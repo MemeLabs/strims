@@ -270,6 +270,37 @@ class Measured(unittest.TestCase):
         self.assertEqual(twin(("12.3", zen4), (None, zen4)), base)
         self.assertEqual(testbed.seed_knobs(base, 1), base)
 
+    def test_a_runs_step_times_key_nothing_and_its_cells_spread_sets_its_twins(self):
+        base = {"STRIMS_SIM_CAL_VIEWERS": "7", "STRIMS_SIM_CAL_SEED_UP_SCALE": "30:0.5 60:1",
+                "TESTBED_QDISC": "a>root-class"}
+        steps, stamp = testbed.STEPS, testbed.STAMP
+
+        def twin(*runs):
+            return testbed.twin_cells([("c", {**base, **({steps: s} if s else {}), stamp: "exec"})
+                                       for s in runs])["c"]
+
+        a, b = testbed.cells_of([{**base, steps: "30034 60031", stamp: "exec"},
+                                 {**base, steps: "30043 60040", stamp: "applied"}])
+        self.assertEqual(a, b)
+        self.assertEqual(a, testbed.cells_of([base])[0])
+        # Runs within STEPS_AGREE_MS of each other a step: its median, to a
+        # tenth of a ms; the stamp no twin knob.
+        self.assertEqual(twin("30034 60031"), {**base, steps: "30034 60031"})
+        self.assertEqual(twin("30034 60031", "30035 60033")[steps], "30034.5 60032")
+        self.assertEqual(twin("30034 60031", "30036 60033", "30035 60031")[steps], "30035 60031")
+        # Wider apart in any step: each run's, a seed its run's.
+        spread = twin("30034 60031", "30043 60032", "30035 60031")
+        self.assertEqual(spread[steps], "30034 60031|30043 60032|30035 60031")
+        seeds = [testbed.seed_knobs(spread, s)[steps] for s in range(1, 5)]
+        self.assertEqual(seeds, ["30034 60031", "30043 60032", "30035 60031", "30034 60031"])
+        self.assertEqual({k: v for k, v in testbed.seed_knobs(spread, 2).items() if k != steps}, base)
+        one = twin("30034 60031", "30035 60033")
+        self.assertEqual(testbed.seed_knobs(one, 2), one)
+        # A run without them (folded before the fold read them): the
+        # schedule's times.
+        self.assertEqual(twin("30034 60031", None), base)
+        self.assertEqual(testbed.seed_knobs(base, 1), base)
+
 
 # A stand-in for strims-sim's scenarios binary: its one row names the
 # packet log it ran with, and it writes a packet a host of the log's
