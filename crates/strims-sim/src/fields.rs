@@ -5563,7 +5563,12 @@ pub(crate) mod cols {
         ///
         /// strims-sim: The model's shaper's departure of the packet, or its
         /// slot's with slots (`Network::up_last_departures`); on the testbed
-        /// its capture past the modem (tcpdump on eth0, as the device took it).
+        /// its capture past the modem (tcpdump on eth0, as the device took it),
+        /// so `sent_us` less `t_us` holds the node's egress delay
+        /// (`hosts.delay_us`, the netem ahead of the queue) as well as the
+        /// packet's wait in the queue; a shaper replay's the model's departure
+        /// of its source's packet, offered to the queue that delay after its
+        /// `t_us`.
         ///
         /// Unit: us. None is written as an empty field.
         SentUs,
