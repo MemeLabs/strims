@@ -32,9 +32,10 @@ their shaper replays.
   LinkOpens  scoring.sql's link_opens_of, first_checks_of and
            link_open_fit_of over a fixture: each joiner's links in ms after
            its join, both ends' opens and the first HAVE, outside the
-           join's span or with a later joiner left out; its first parent
+           join's span or with a later joiner left out, viewers there from
+           the start joining tied at the stream's start; its first parent
            check's lags from the forecast as the scheduler moves them, the
-           first joiner's left out; the bench's rule, a model's median
+           first joiner alone left out; the bench's rule, a model's median
            within the testbed's repeat spread and a floor
   Criterion  scoring.sql's twin_criterion_rows over a fixture: a cell's
            ratio of medians, or seed_budget's of means; each group's cells
@@ -737,8 +738,9 @@ class LinkOpens(unittest.TestCase):
     """link_opens_of and first_checks_of over one run: the seed (node 0)
     from the start, viewer 1 joining at 1000 ms and viewer 2 at 2000; a
     second (c) with viewer 3 at 3000 too, whose links and forecasts reach
-    outside its join's span; and the bench's rule over copies of the first
-    and over runs of two joiners to the seed (u1, u2, n1)."""
+    outside its join's span; the bench's rule over copies of the first
+    and over runs of two joiners to the seed (u1, u2, n1); and a run (o,
+    o2) whose first two viewers are there from the stream's start."""
 
     EVENTS = [(1000, "join", 1), (2000, "join", 2), (1500, "first_read", 1)]
     HAVES = [  # t_ms, node, peer, channel_open_ms
@@ -771,6 +773,17 @@ class LinkOpens(unittest.TestCase):
     # Runs u1, u2 (a testbed side) and n1 (a model's), cell d: viewers 2
     # and 3 link to the seed, 100 ms after the join and 300, 400 and 300.
     U_OPENS = {"u1": (100, 300), "u2": (100, 400), "n1": (100, 300)}
+    # Run o, cell o: viewers 1 and 2 there from the start, joining as they
+    # boot 5 s before the stream (viewer 2 restarted at its start too) and
+    # linking at its start, as a testbed run's at-once viewers and their
+    # twin's do; viewer 3 arriving at 2000 ms. Of 1 and 2's channels with
+    # each other, 1's opens at 190 ms and 2's at 200.
+    EVENTS_O = [(-5000, "join", 1), (-5000, "join", 2), (0, "join", 2), (2000, "join", 3)]
+    HAVES_O = [(160, 1, 0, 150), (145, 0, 1, 140), (350, 2, 0, 300), (320, 0, 2, 310),
+               (210, 2, 1, 200), (200, 1, 2, 190), (2350, 3, 0, 2300), (2320, 0, 3, 2310),
+               (2210, 3, 1, 2200), (2200, 1, 3, 2190), (2260, 3, 2, 2250), (2250, 2, 3, 2240)]
+    FORECAST_O = [(390, 1, 0, 0, 30, None, 1), (460, 2, 0, 0, 90, None, 1), (450, 2, 1, 0, 10, None, 1)]
+    CHECKS_O = [(400_000, 1, 0, 0, 30_000), (500_000, 2, 0, 1, 10_000)]
 
     @classmethod
     def setUpClass(cls):
@@ -811,7 +824,10 @@ class LinkOpens(unittest.TestCase):
         run("c", "c", cls.EVENTS_C, cls.HAVES_C, cls.FORECAST_C, cls.CHECKS_C)
         for k, (two, three) in cls.U_OPENS.items():
             run(k, "d", cls.EVENTS_C, [(2000 + two, 2, 0, 2000 + two), (3000 + three, 3, 0, 3000 + three)])
-        names = ["twin_window_of", "side_window_of", "link_opens_of", "first_checks_of", "link_open_fit_of"]
+        # Run o, and o2 its channels opening 20 ms later.
+        run("o", "o", cls.EVENTS_O, cls.HAVES_O, cls.FORECAST_O, cls.CHECKS_O)
+        run("o2", "o", cls.EVENTS_O, [(t + 20, n, p, c + 20) for t, n, p, c in cls.HAVES_O])
+        names =["twin_window_of", "side_window_of", "link_opens_of", "first_checks_of", "link_open_fit_of"]
         for macro in catalog.scoring_statements(
                 names, {"events", "haves", "parent_checks", "forecast", "jobs.env", "jobs.stored_cell"}):
             conn.execute(macro)
@@ -870,19 +886,46 @@ class LinkOpens(unittest.TestCase):
                 self.conn.execute(sql).fetchall()
 
     def test_each_joiners_links_in_ms_after_its_join(self):
-        cols = "node, peer, nb, arrival, open_ms, first_have_ms, peer_open_ms, open_rank, links"
+        cols = "node, peer, nb, arrival, joiners, open_ms, first_have_ms, peer_open_ms, open_rank, links"
         rows = self.conn.execute(f"SELECT {cols} FROM link_opens_of([{{'k': 'a'}}]) ORDER BY node, peer").fetchall()
         self.assertEqual(rows, [
-            (1, 0, "seed", 1, 150, 160, 140, 1, 1),
-            (2, 0, "seed", 2, 300, 350, 310, 2, 2),
-            (2, 1, "viewer", 2, 200, 210, 190, 1, 2),
+            (1, 0, "seed", 1, 1, 150, 160, 140, 1, 1),
+            (2, 0, "seed", 2, 2, 300, 350, 310, 2, 2),
+            (2, 1, "viewer", 2, 2, 200, 210, 190, 1, 2),
         ])
         self.assertEqual(self.conn.execute("SELECT count(*) FROM link_opens_of([{'k': 'b'}])").fetchone(), (0,))
         # Run c: of viewer 3's channels, the one that opened within 50 ms
         # before its join alone; and of viewer 1's with it, the one in the
         # span. Viewer 1's with viewer 3, a later joiner, isn't its link.
         rows = self.conn.execute(f"SELECT {cols} FROM link_opens_of([{{'k': 'c'}}]) ORDER BY node, peer").fetchall()
-        self.assertEqual(rows, [(3, 1, "viewer", 3, -30, 5, 100, 1, 1)])
+        self.assertEqual(rows, [(3, 1, "viewer", 3, 3, -30, 5, 100, 1, 1)])
+
+    def test_viewers_there_from_the_start_join_at_the_streams_start_tied(self):
+        cols = "node, peer, nb, arrival, joiners, open_ms, first_have_ms, peer_open_ms, open_rank, links"
+        rows = self.conn.execute(f"SELECT {cols} FROM link_opens_of([{{'k': 'o'}}]) ORDER BY node, peer").fetchall()
+        # Viewers 1 and 2 join at the stream's start, viewer 2 once, both
+        # first; their link is viewer 2's, the higher-numbered, as it would
+        # be had 2 come later. Viewer 3 arrives third, after the two.
+        self.assertEqual(rows, [
+            (1, 0, "seed", 1, 2, 150, 160, 140, 1, 1),
+            (2, 0, "seed", 1, 2, 300, 350, 310, 2, 2),
+            (2, 1, "viewer", 1, 2, 200, 210, 190, 1, 2),
+            (3, 0, "seed", 3, 3, 300, 350, 310, 3, 3),
+            (3, 1, "viewer", 3, 3, 200, 210, 190, 1, 3),
+            (3, 2, "viewer", 3, 3, 250, 260, 240, 2, 3),
+        ])
+        # The bench takes viewer 1's link to the seed too: it joined with
+        # viewer 2, not alone.
+        rows = self.fit(self.side("o"), self.side("o2"), cols="cell, nb, measure, a_links, b_links")
+        self.assertEqual(rows, [("o", "seed", "open_ms", 3, 3), ("o", "seed", "peer_open_ms", 3, 3),
+                                ("o", "viewer", "open_ms", 3, 3), ("o", "viewer", "peer_open_ms", 3, 3)])
+        # Viewer 1's first check too, both checks in ms after the stream's
+        # start.
+        cols = ("node, arrival, check_ms, streams, best_seed, seed_ms, best_viewer_ms, seed_minus_best_ms, "
+                "best_lag_ms")
+        rows = self.conn.execute(f"SELECT {cols} FROM first_checks_of([{{'k': 'o'}}]) ORDER BY node").fetchall()
+        self.assertEqual(rows, [(1, 1, 400.0, 1, 1.0, 30.0, None, None, 30.0),
+                                (2, 1, 500.0, 1, 0.0, 90.0, 10.0, 80.0, 10.0)])
 
     def test_the_first_check_reads_each_neighbours_last_forecast(self):
         cols = ("node, arrival, check_ms, streams, best_seed, seed_ms, best_viewer_ms, seed_minus_best_ms, "

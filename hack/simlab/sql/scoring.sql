@@ -1872,38 +1872,51 @@ CREATE OR REPLACE MACRO twin_criterion_of(a_side, b_side, paired := false, budge
         paired := paired, budget_stat := budget_stat);
 
 -- The links each viewer of the runs `jobs` (a side, as side_window_of
--- takes it: one of no runs fails) made at its join (events' @{kind_join}) with the neighbours there
+-- takes it: one of no runs fails) made at its join with the neighbours there
 -- before it, in ms after the join: open_ms when its channel with the
 -- neighbour opened (its haves' earliest channel_open_ms from 50 ms before
 -- the join to 4 s after it),
 -- first_have_ms when the neighbour's first HAVE reached it (its
 -- handshake's), and peer_open_ms when the neighbour's channel with it
--- opened (the neighbour's haves of the viewer, in the same span). nb is
--- 'seed' for node 0 (a calibration run's seed), else 'viewer'; arrival the
--- join's rank in its run (1 the first, whose one neighbour is the seed);
--- open_rank the link's rank among the viewer's `links` by open_ms. A twin's
--- runs number their nodes as its testbed runs do, so the two sides' links
--- compare node by node.
+-- opened (the neighbour's haves of the viewer, in the same span). A join
+-- is when its links start: its events' @{kind_join}, or the stream's start
+-- (t 0) for one before it. A viewer there from the start (a testbed run's
+-- with no JOINS time and JOIN_AT 0, and its twin's) joins as it boots with
+-- the run, 5 s before the stream, and makes its links at the stream's
+-- start, as run.sh's harness dials them; one that arrives (JOINS, a
+-- JOIN_AT after the start, an arrivals profile's draw: TESTBED_JOINS keys
+-- such a run but leaves its joins) links at its join. nb is 'seed' for
+-- node 0 (a calibration run's seed), else 'viewer'; arrival the join's
+-- rank in its run, viewers joining at once tied (1 the first); joiners
+-- the viewers joined by its join, itself and those joining at once with
+-- it (1 for a run's first joiner alone, whose one neighbour is the seed);
+-- open_rank the link's rank among the viewer's `links` by open_ms. Of two
+-- viewers joining at once, the higher-numbered takes their link as its
+-- link to a neighbour there before it, so a link counts once, as between
+-- two arrivals. A twin's runs number their nodes as its testbed runs do,
+-- so the two sides' links compare node by node.
 -- needs: events haves jobs.env
 CREATE OR REPLACE MACRO link_opens_of(jobs) AS TABLE
     WITH j AS (SELECT DISTINCT k, src FROM side_window_of(jobs, 'link_opens_of')),
     joins AS (
-        SELECT e.k, e.src, e.node, e.t_ms AS t_join,
-               rank() OVER (PARTITION BY e.k, e.src ORDER BY e.t_ms, e.node) AS arrival
-        FROM events e SEMI JOIN j USING (k, src) WHERE e.kind = @{kind_join}),
+        SELECT *, rank() OVER (PARTITION BY k, src ORDER BY t_join) AS arrival,
+               count(*) OVER (PARTITION BY k, src ORDER BY t_join) AS joiners,
+               row_number() OVER (PARTITION BY k, src ORDER BY t_join, node) AS seq
+        FROM (SELECT DISTINCT e.k, e.src, e.node, greatest(e.t_ms, 0) AS t_join
+              FROM events e SEMI JOIN j USING (k, src) WHERE e.kind = @{kind_join})),
     mine AS (
         SELECT h.k, h.src, h.node, h.peer, min(h.channel_open_ms) AS open_ms, min(h.t_ms) AS first_have_ms
         FROM haves h SEMI JOIN j USING (k, src) JOIN joins USING (k, src, node)
         LEFT JOIN joins p ON p.k = h.k AND p.src = h.src AND p.node = h.peer
         WHERE h.channel_open_ms BETWEEN joins.t_join - 50 AND joins.t_join + 4000
-          AND (p.t_join IS NULL OR p.arrival < joins.arrival) GROUP BY ALL),
+          AND (p.t_join IS NULL OR p.seq < joins.seq) GROUP BY ALL),
     theirs AS (
         SELECT h.k, h.src, h.peer AS node, h.node AS peer, min(h.channel_open_ms) AS peer_open_ms
         FROM haves h SEMI JOIN j USING (k, src)
         JOIN joins ON joins.k = h.k AND joins.src = h.src AND joins.node = h.peer
         WHERE h.channel_open_ms BETWEEN joins.t_join - 50 AND joins.t_join + 4000 GROUP BY ALL)
     SELECT m.k, m.src, m.node, m.peer, CASE WHEN m.peer = 0 THEN 'seed' ELSE 'viewer' END AS nb, joins.arrival,
-           m.open_ms - joins.t_join AS open_ms, m.first_have_ms - joins.t_join AS first_have_ms,
+           joins.joiners, m.open_ms - joins.t_join AS open_ms, m.first_have_ms - joins.t_join AS first_have_ms,
            t.peer_open_ms - joins.t_join AS peer_open_ms,
            rank() OVER (PARTITION BY m.k, m.src, m.node ORDER BY m.open_ms) AS open_rank,
            count(*) OVER (PARTITION BY m.k, m.src, m.node) AS links
@@ -1913,9 +1926,11 @@ CREATE OR REPLACE MACRO link_opens_of(jobs) AS TABLE
 -- rule): a model's runs (`a_side`) against the testbed's (`b_side`),
 -- sides as side_window_of takes them (testbed_side's; a side of no runs,
 -- a src that names none, fails), each run in its cell (jobs.stored_cell),
--- over link_opens_of's links but each run's first joiner's (the seed its
--- one neighbour). Per cell, neighbour class (nb) and measure (open_ms, the
--- joiner's channel open after its join; peer_open_ms, the neighbour's):
+-- over link_opens_of's links but those of a run's first joiner alone
+-- (joiners 1, the seed its one neighbour): viewers joining at once each
+-- have others with them. Per cell, neighbour class (nb) and measure
+-- (open_ms, the joiner's channel open after its join; peer_open_ms, the
+-- neighbour's):
 -- each side's runs, links and median (sketch_quantile's p50 over its
 -- links); diff (b less a); spread, the testbed's repeat spread (its runs'
 -- own medians, the largest less the smallest; 0 for one run); bound,
@@ -1945,7 +1960,7 @@ CREATE OR REPLACE MACRO link_open_fit_of(a_side, b_side, floor_ms := 10) AS TABL
         CROSS JOIN (VALUES ('open_ms'), ('peer_open_ms')) AS v(measure)
         CROSS JOIN LATERAL (SELECT v.measure,
                                    CASE v.measure WHEN 'open_ms' THEN o.open_ms ELSE o.peer_open_ms END AS ms) m
-        WHERE o.arrival > 1 AND m.ms IS NOT NULL),
+        WHERE o.joiners > 1 AND m.ms IS NOT NULL),
     run AS (SELECT side, cell, nb, measure, k, sketch_quantile(ms, 50) AS median FROM l GROUP BY ALL),
     agg AS (
         SELECT side, cell, nb, measure, count(DISTINCT k) AS runs, count(*) AS links,
@@ -1964,8 +1979,9 @@ CREATE OR REPLACE MACRO link_open_fit_of(a_side, b_side, floor_ms := 10) AS TABL
     FROM f LEFT JOIN sp ON sp.cell = f.cell AND sp.nb = f.nb AND sp.measure = f.measure
     ORDER BY f.cell, f.nb, f.measure;
 
--- Each viewer's first parent check at or after its join, of the runs
--- `jobs`, the first viewer's left out (the seed its one neighbour): per
+-- Each viewer's first parent check at or after its join (link_opens_of's:
+-- when its links start), of the runs `jobs`, a run's first joiner alone
+-- left out (the seed its one neighbour): per
 -- stream, the check's best lag, and the seed's (node 0) and the best other
 -- neighbour's lags then, each that neighbour's forecast of the stream from
 -- the join to the check as parent_checks' description reads one (its last
@@ -1986,13 +2002,14 @@ CREATE OR REPLACE MACRO link_open_fit_of(a_side, b_side, floor_ms := 10) AS TABL
 CREATE OR REPLACE MACRO first_checks_of(jobs) AS TABLE
     WITH j AS (SELECT DISTINCT k, src FROM side_window_of(jobs, 'first_checks_of')),
     joins AS (
-        SELECT e.k, e.src, e.node, e.t_ms AS t_join,
-               rank() OVER (PARTITION BY e.k, e.src ORDER BY e.t_ms, e.node) AS arrival
-        FROM events e SEMI JOIN j USING (k, src) WHERE e.kind = @{kind_join}),
+        SELECT *, rank() OVER (PARTITION BY k, src ORDER BY t_join) AS arrival,
+               count(*) OVER (PARTITION BY k, src ORDER BY t_join) AS joiners
+        FROM (SELECT DISTINCT e.k, e.src, e.node, greatest(e.t_ms, 0) AS t_join
+              FROM events e SEMI JOIN j USING (k, src) WHERE e.kind = @{kind_join})),
     first AS (
         SELECT c.k, c.src, c.node, min(c.t_us) AS t_us
         FROM parent_checks c SEMI JOIN j USING (k, src) JOIN joins USING (k, src, node)
-        WHERE joins.arrival > 1 AND c.t_us >= joins.t_join * 1000 GROUP BY ALL),
+        WHERE joins.joiners > 1 AND c.t_us >= joins.t_join * 1000 GROUP BY ALL),
     lags AS (
         SELECT f.k, f.src, f.node, f.peer, f.stream,
                arg_max(CASE WHEN f.mean_ms IS NULL THEN f.sample_ms
