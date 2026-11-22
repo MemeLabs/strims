@@ -950,7 +950,7 @@ class LinkOpens(unittest.TestCase):
                     f"FROM link_open_fit_of({none}, {self.side('t1')})",
                     f"FROM link_open_fit_of({self.side('m1')}, {none})",
                     "FROM link_opens_of([])", f"FROM link_opens_of({none})", "FROM first_checks_of([])"):
-            with self.subTest(sql=sql), self.assertRaisesRegex(duckdb.Error, r"_of: a side of no runs"):
+            with self.subTest(sql=sql), self.assertRaisesRegex(duckdb.Error, r"_of( [ab]_side)?: a side of no runs"):
                 self.conn.execute(sql).fetchall()
 
     def test_each_joiners_links_in_ms_after_its_join(self):

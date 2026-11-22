@@ -851,7 +851,8 @@ class PhaseLags(unittest.TestCase):
 
 class TestbedSide(unittest.TestCase):
     """testbed_side: one kind and one arm by default, a named kind or arm
-    checked, and no two runs at one cell, arm and seed."""
+    checked, no two runs at one cell, arm and seed, and a twin's source
+    refused."""
 
     @classmethod
     def setUpClass(cls):
@@ -864,8 +865,9 @@ class TestbedSide(unittest.TestCase):
 
     def side(self, rows, call):
         db = Path(self.tmp.name) / f"side-{abs(hash((tuple(rows), call)))}.duckdb"
-        values = ", ".join(f"('{k}', 'testbed/x', 'testbed', MAP {{{env}}}::MAP(VARCHAR, VARCHAR), '{cell}', '{arm}', "
-                           f"{seed})" for k, env, cell, arm, seed in rows)
+        values = ", ".join(f"('{k}', '{src}', '{sim}', MAP {{{env}}}::MAP(VARCHAR, VARCHAR), '{cell}', '{arm}', {seed})"
+                           for k, env, cell, arm, seed, src, sim in (r + ("testbed/x", "testbed")[len(r) - 5:]
+                                                                     for r in rows))
         database(db, "CREATE TABLE jobs (k VARCHAR, src VARCHAR, sim VARCHAR, env MAP(VARCHAR, VARCHAR), "
                      f"stored_cell VARCHAR, stored_arm VARCHAR, seed BIGINT); INSERT INTO jobs VALUES {values};")
         return scored(f"SELECT {call} AS side;")[0]["side"]
@@ -883,6 +885,17 @@ class TestbedSide(unittest.TestCase):
         two = [("a", "", "c", "main", 1), ("b", "", "c", "main", 1)]
         with self.assertRaisesRegex(suite.simdb().DuckError, "1 runs share a cell, arm and seed"):
             self.side(two, "testbed_side('testbed/%')")
+
+    def test_a_twins_source_is_refused_and_a_source_of_none_is_no_runs(self):
+        # A twin's runs are a sim's: its side is its jobs, which
+        # testbed_side would leave out.
+        runs = [("a", "", "c", "main", 1), ("t1", "", "c", "twin", 1, "testbed/x-twin", "strims-sim"),
+                ("t2", "", "c", "twin", 2, "testbed/x-twin", "strims-sim")]
+        with self.assertRaisesRegex(suite.simdb().DuckError,
+                                    "testbed/x-twin names 2 sim runs and no testbed run; a twin's side is its jobs"):
+            self.side(runs, "testbed_side('testbed/x-twin', kind := 'native')")
+        self.assertEqual([r["k"] for r in self.side(runs, "testbed_side('testbed/x%')")], ["a"])
+        self.assertEqual(self.side(runs, "testbed_side('testbed/none')"), [])
 
 
 class LagSince(unittest.TestCase):

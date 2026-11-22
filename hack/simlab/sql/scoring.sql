@@ -1623,7 +1623,11 @@ CREATE OR REPLACE MACRO twin_runs_of(jobs, lo_s := 10, hi_s := -1, full_packet :
 -- arms' runs at one cell and seed are both the side's, two runs of the
 -- cell (each its own k: twin_fit_rows' medians and places take both).
 -- Another kind, an arm with no run, and two runs at one cell, arm and seed
--- (which twin_runs_of would pool) fail.
+-- (which twin_runs_of would pool) fail, as does a src_like that names sim
+-- runs and no testbed run (a twin's source: a twin's side is its jobs,
+-- `(SELECT list({'cell': stored_cell, 'seed': seed, 'k': k, 'src': src})
+-- FROM jobs WHERE src = 'testbed/NAME')`); one that names no run at all
+-- gives [], which a macro taking a side refuses.
 -- needs: jobs.sim jobs.env jobs.stored_arm
 CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
     WITH r AS (
@@ -1635,6 +1639,10 @@ CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
     SELECT CASE
         WHEN kind NOT IN ('one', 'any', 'native', 'browsers')
             THEN error('testbed_side: kind ' || kind || ' is none of one, any, native and browsers')
+        WHEN testbed_runs = 0 AND sim_runs > 0
+            THEN error('testbed_side: ' || src_like || ' names ' || sim_runs || ' sim runs and no testbed run; '
+                       || 'a twin''s side is its jobs, (SELECT list({''cell'': stored_cell, ''seed'': seed, '
+                       || '''k'': k, ''src'': src}) FROM jobs WHERE src LIKE ...)')
         WHEN arm NOT IN ('one', 'any') AND runs = 0
             THEN error('testbed_side: no testbed run of arm ' || arm || ' in ' || src_like)
         WHEN kind = 'one' AND kinds > 1
@@ -1649,7 +1657,10 @@ CREATE OR REPLACE MACRO testbed_side(src_like, kind := 'one', arm := 'one') AS (
                  count(DISTINCT (stored_cell, stored_arm, seed)) AS keys,
                  coalesce(list({'cell': stored_cell, 'seed': seed, 'k': k, 'src': src} ORDER BY stored_cell, seed),
                           []) AS side
-          FROM r));
+          FROM r),
+         (SELECT count(*) FILTER (WHERE sim = 'testbed') AS testbed_runs,
+                 count(*) FILTER (WHERE sim <> 'testbed') AS sim_runs
+          FROM jobs WHERE src LIKE src_like));
 
 -- The hosts whose packets each cell's runs of a side hold (`side`: structs
 -- of a run's `cell`, `k` and `src`, as testbed_side gives them), a row a
@@ -1988,14 +1999,16 @@ CREATE OR REPLACE MACRO link_opens_of(jobs) AS TABLE
     FROM mine m JOIN joins USING (k, src, node) LEFT JOIN theirs t USING (k, src, node, peer);
 
 -- The link-setup bench's rule (component bench C6, the plan's general
--- rule): a model's runs (`a_side`) against the testbed's (`b_side`),
--- sides as side_window_of takes them (testbed_side's; a side of no runs,
--- a src that names none, fails), each run in its cell (jobs.stored_cell),
--- over link_opens_of's links but those of a run's first joiner alone
--- (joiners 1, the seed its one neighbour): viewers joining at once each
--- have others with them. Per cell, neighbour class (nb) and measure
--- (open_ms, the joiner's channel open after its join; peer_open_ms, the
--- neighbour's):
+-- rule): a model's runs (`a_side`, a twin's: its jobs, `(SELECT
+-- list({'cell': stored_cell, 'seed': seed, 'k': k, 'src': src}) FROM jobs
+-- WHERE src = 'testbed/NAME')`) against the testbed's (`b_side`,
+-- testbed_side's), sides as side_window_of takes them (a side of no runs,
+-- a src that names none, fails, naming the side), each run in its cell
+-- (jobs.stored_cell), over link_opens_of's links but those of a run's
+-- first joiner alone (joiners 1, the seed its one neighbour): viewers
+-- joining at once each have others with them. Per cell, neighbour class
+-- (nb) and measure (open_ms, the joiner's channel open after its join;
+-- peer_open_ms, the neighbour's):
 -- each side's runs, links and median (sketch_quantile's p50 over its
 -- links); diff (b less a); spread, the testbed's repeat spread (its runs'
 -- own medians, the largest less the smallest; 0 for one run); bound,
@@ -2015,10 +2028,10 @@ CREATE OR REPLACE MACRO link_opens_of(jobs) AS TABLE
 CREATE OR REPLACE MACRO link_open_fit_of(a_side, b_side, floor_ms := 10) AS TABLE
     WITH sides AS (
         SELECT 'a' AS side, j.stored_cell AS cell, w.k
-        FROM side_window_of(a_side, 'link_open_fit_of') w JOIN jobs j ON j.k = w.k
+        FROM side_window_of(a_side, 'link_open_fit_of a_side') w JOIN jobs j ON j.k = w.k
         UNION ALL
         SELECT 'b' AS side, j.stored_cell AS cell, w.k
-        FROM side_window_of(b_side, 'link_open_fit_of') w JOIN jobs j ON j.k = w.k),
+        FROM side_window_of(b_side, 'link_open_fit_of b_side') w JOIN jobs j ON j.k = w.k),
     l AS (
         SELECT s.side, s.cell, o.k, o.nb, m.measure, m.ms
         FROM link_opens_of((SELECT list({'k': k}) FROM sides)) o JOIN sides s USING (k)
