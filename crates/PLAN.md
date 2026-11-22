@@ -627,6 +627,12 @@ and dropped are in `TRIED.md`.
     at a holder's share of the uplink; and both browsers' resends to
     str0m's receiver. The testbed's runs of a case vary: score against
     repeats.
+  - Give a modelled browser's link-setup turns their stacks' reaction
+    time: have `model_rtc` hand the WAN scheduler each reply it sends to
+    an arriving flight (the ClientHello, the answer, the server flight,
+    the Finished) stamped at that flight's arrival plus the turn, and the
+    scheduler send it then, since no sleep or timer in the model can send
+    within the net's 1-ms step.
   - Find why the testbed's native and browser seeds' uplink queues hold
     more than the twin's through the whole run, its joins among it (bins'
     `seed_up_queue_ms`), and model it: a native seed's SYN-ACKs and a

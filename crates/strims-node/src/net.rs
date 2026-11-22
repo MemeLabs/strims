@@ -74,6 +74,16 @@ pub trait Net: Clone + Send + Sync + 'static {
         let _ = (stream, link, sink);
     }
 
+    /// The round trip of the connect that returned `stream`, as the net
+    /// timed it, from its SYN's going to its SYN-ACK's coming, where the
+    /// connect may return a step or two of the net's later; given once, for
+    /// a modelled WebRTC link's ICE check (`crate::model_rtc`). The default:
+    /// none.
+    fn connect_rtt(&self, stream: &Self::TcpStream) -> Option<std::time::Duration> {
+        let _ = stream;
+        None
+    }
+
     /// Whether the net carries WebRTC data channels as streams it models
     /// one on ([`Net::open_channel`]): the node then runs its WebRTC
     /// connections over its TCP streams (`crate::model_rtc`) in place of

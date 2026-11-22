@@ -1456,6 +1456,12 @@ pub(crate) struct Scheduler {
     /// data channels ([`HostSpec::rtc_stack`](crate::spec::HostSpec::rtc_stack)),
     /// whose listener on [`UDP_PORT`] takes the ICE checks' dials.
     rtc_hosts: Vec<bool>,
+    /// The ICE checks in flight by connection, when each went, and the
+    /// round trips of those answered, until their connector's model takes
+    /// them ([`Scheduler::take_check_rtt`]). Bound: the run's checks, each
+    /// taken once its connect returns.
+    check_sent: FastMap<ConnKey, Time>,
+    check_rtts: FastMap<ConnKey, Duration>,
 }
 
 /// A message handed to a host's uplink, as its packet log and offers take
@@ -1667,7 +1673,20 @@ impl Scheduler {
                 .iter()
                 .map(|h| spec.window_model() && h.webrtc && h.rtc_stack.is_some())
                 .collect(),
+            check_sent: FastMap::default(),
+            check_rtts: FastMap::default(),
         })
+    }
+
+    /// The round trip of the ICE check on `conn` (its connector's address,
+    /// then its acceptor's), from its request's going to its response's
+    /// coming, once: the connect returns later, at the step after the
+    /// response's, or the one after that where the acceptor's host runs
+    /// after the connector's in a step (turmoil's accept answers a SYN as
+    /// its host runs), where a browser's ICE agent reads the response as
+    /// it comes.
+    pub(crate) fn take_check_rtt(&mut self, conn: ConnKey) -> Option<Duration> {
+        self.check_rtts.swap_remove(&conn)
     }
 
     /// Whether host `h`'s packet log is on.
@@ -3750,6 +3769,12 @@ impl Scheduler {
 
     fn transmit(&mut self, at: Time, id: u64) {
         let window = self.window();
+        if let Some(r) = self.records.get(&id)
+            && r.what == What::Syn
+            && self.ice_check(r)
+        {
+            self.check_sent.insert((r.src, r.dst), at);
+        }
         let Some(r) = self.records.get_mut(&id) else {
             return;
         };
@@ -3907,6 +3932,9 @@ impl Scheduler {
             ls.due = true;
         }
         let (from, to, conn) = (r.from, r.to, (r.src, r.dst));
+        if check && let Some(sent) = self.check_sent.swap_remove(&conn) {
+            self.check_rtts.insert(conn, t - sent);
+        }
         if self.window().is_none() || check {
             return;
         }

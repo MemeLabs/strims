@@ -120,7 +120,10 @@ pub struct LinkSetup {
     /// As DTLS client, it resends its ClientHello while no server flight
     /// has come: first `resend_rtts` of its ICE check's round trip after
     /// sending it, within `resend_min` and `resend_max`, then twice the
-    /// last wait each time, to a minute at most.
+    /// last wait each time, to a minute at most. With the host's draws the
+    /// round trip is the one the net timed ([`Net::connect_rtt`]), to the
+    /// millisecond, as the stack reads its check's response as it comes;
+    /// without, the check's connect's.
     pub resend_min: Duration,
     pub resend_rtts: u32,
     pub resend_max: Duration,
@@ -138,6 +141,11 @@ pub struct LinkSetup {
     /// the page has made by then after the node asks for it: the page
     /// makes every offer it is asked for before it sets any.
     pub gather_after_set: Option<Duration>,
+    /// With the host's draws, how much longer than the model's paths and
+    /// hops its offer takes at the median from its page's gathering end
+    /// (`gather_after_set`'s, or `offer_ready` where its gathering ends
+    /// then) to its peer's page's check, which [`OFFER_TRANSIT`] spreads.
+    pub offer_excess: Duration,
     pub set_lead: Spread,
     pub set_per_offer: Duration,
     /// With the host's draws, `check_ready` drawn, from the asking of its
@@ -276,14 +284,15 @@ async fn batch_check(mut batch: watch::Receiver<(Instant, u32)>, place: u32, ste
 pub const GATHER_TAIL: Duration = Duration::from_micros(250);
 
 /// With the hosts' draws, an offer's way through the signalling relay to
-/// its peer's page, and an answer's, past the model's paths: the page's
-/// post to its node's worker, the worker's pass, the relay's and the
-/// peer's worker's and page's, about the leg's median, which the stacks'
-/// `offer_ready` and `answer_after_check` hold. Drawn at the sender, the
-/// offer's on its leaving and the answer's on its, neither sooner than the
-/// last wait it ended. The testbed's halve-7 runs' 112 seed links read each
-/// leg's excess over its paths' delays at 3, 5 and 9 ms (p10, p50, p90),
-/// the answer's at 0, 3 and 7.
+/// its peer's page, and an answer's, past the model's paths and hops: the
+/// page's post to its node's worker, the worker's pass, the relay's and
+/// the peer's worker's and page's, about the leg's median, which the
+/// stacks' [`LinkSetup::offer_excess`] and `answer_after_check` hold.
+/// Drawn at the sender, the offer's as its page's gathering ends and the
+/// answer's on its leaving, neither sooner than the last wait it ended.
+/// The testbed's halve-7 runs' 112 seed links read each leg's excess over
+/// its paths' delays at 3, 5 and 9 ms (p10, p50, p90), the answer's at 0,
+/// 3 and 7.
 pub const OFFER_TRANSIT: Spread = Spread(&[
     (0, -2_500),
     (100, -2_000),
@@ -363,7 +372,10 @@ impl LinkSetup {
     /// own check succeeds, 0.1-0.9 ms after it on the testbed, and its
     /// server starts then too, replaying the ClientHello it kept. Its
     /// client resends at twice its check's round trip, at least 50 ms and
-    /// at most 3 s (libwebrtc's `ComputeRetransmissionTimeout`), doubling,
+    /// at most 3 s (libwebrtc's `ComputeRetransmissionTimeout`, p2p/dtls/
+    /// dtls_transport.cc, of `GetRttEstimate`: the selected connection's
+    /// `Rtt().ms()`, whose first sample is its check's response's
+    /// `request->Elapsed()` whole, p2p/base/connection.cc), doubling,
     /// on a timer of low precision, which Chromium fires at the next tick
     /// of its 64-Hz metronome (`webrtc_overrides`' `WebRtcTaskQueue` and
     /// `TimerBasedTickProvider`): on the testbed's 20-ms paths its resends
@@ -382,8 +394,12 @@ impl LinkSetup {
     /// median of a lone offer, 7.2-11.8 (p10-p90; `set_lead`, which with
     /// the ticks has a lone offer's gathering end 130 ms after the ask at
     /// the median, 124-137 at p10-p90, where the runs' 16 read 132, 125
-    /// and 136). The seed's checks went in batches: an offer it was asked
-    /// to set before a batch's first check went joined it, and the batch's
+    /// and 136). From that end to the seed's check took 22.6 ms at the
+    /// median of the runs' 80 offers (15.2-25.0 at p10-p90), its page's
+    /// post, the signalling relay's path and the seed's batch, 4.5 ms more
+    /// than the model's paths and hops (`offer_excess`). The seed's checks
+    /// went in batches: an offer it was asked to set before a batch's first
+    /// check went joined it, and the batch's
     /// checks went in the order their offers were asked, the first 2.5 ms
     /// after its last offer's asking at the median of the runs' 42 batches
     /// of 1 to 5 offers (1.0-3.8 at p10-p90; `check_spread`, its median the
@@ -419,6 +435,7 @@ impl LinkSetup {
         resend_max: Duration::from_secs(3),
         tick: Some(Duration::from_micros(15_625)),
         gather_after_set: Some(Duration::from_micros(112_500)),
+        offer_excess: Duration::from_micros(4_500),
         set_lead: Spread(&[
             (0, 3_960),
             (100, 5_350),
@@ -465,7 +482,11 @@ impl LinkSetup {
     /// comes to the offering side as that side's check succeeds. Its server
     /// sees nothing before its own check succeeds, so a ClientHello that
     /// comes earlier is lost to it, and its client resends after 50 ms,
-    /// doubling. Both its ends send an INIT.
+    /// doubling. Both its ends send an INIT. With the host's draws, its offer
+    /// leaves as its page's gathering ends, `offer_ready` after the node
+    /// connects, and reached the seed's check 25.0 ms after that at the
+    /// median of the halve-7 cells' 32 (21.1-27.6 at p10-p90), 7.0 ms more
+    /// than the model's paths and hops (`offer_excess`).
     pub const FIREFOX: LinkSetup = LinkSetup {
         name: "firefox",
         offer_ready: Duration::from_millis(18),
@@ -483,6 +504,7 @@ impl LinkSetup {
         resend_max: Duration::from_millis(50),
         tick: None,
         gather_after_set: None,
+        offer_excess: Duration::from_micros(7_000),
         set_lead: Spread::NONE,
         set_per_offer: Duration::ZERO,
         check_spread: Spread::NONE,
@@ -526,6 +548,7 @@ impl LinkSetup {
         resend_max: Duration::from_secs(1),
         tick: None,
         gather_after_set: None,
+        offer_excess: Duration::ZERO,
         set_lead: Spread::NONE,
         set_per_offer: Duration::ZERO,
         check_spread: Spread::NONE,
@@ -1004,16 +1027,35 @@ async fn attach<N: Net>(
         .await;
 }
 
+/// The round trip a stack reads from its check, whose connect `s` returned
+/// `elapsed` after its dial: with the host's draws (`timed`), the one the
+/// net timed ([`Net::connect_rtt`]), to the nearest millisecond, as
+/// libwebrtc reads its connection's (`Rtt().ms()`); else `elapsed`. The
+/// net's is taken either way, as it gives it once.
+fn check_rtt<N: Net>(net: &N, s: &N::TcpStream, elapsed: Duration, timed: bool) -> Duration {
+    net.connect_rtt(s)
+        .filter(|_| timed)
+        .map_or(elapsed, nearest_ms)
+}
+
+/// `d` to the nearest millisecond, as libwebrtc's `TimeDelta::ms()`.
+fn nearest_ms(d: Duration) -> Duration {
+    let ms = (d.as_micros() + 500) / 1000;
+    Duration::from_millis(u64::try_from(ms).unwrap_or(u64::MAX))
+}
+
 /// The offering side's check of the answer of `token`: its request reaches
 /// the answering side's socket for checks, `checks`, as a datagram, and its
-/// round trip is a dial of `addr`, sent to `done` as it connects. The dial
-/// names the answer too, for a datagram the path lost.
+/// round trip is a dial of `addr`, sent to `done` as it connects
+/// ([`check_rtt`], `timed` with the host's draws). The dial names the
+/// answer too, for a datagram the path lost.
 async fn check<N: Net>(
     net: N,
     socket: Arc<N::UdpSocket>,
     checks: SocketAddr,
     addr: String,
     token: u64,
+    timed: bool,
     done: oneshot::Sender<io::Result<Duration>>,
 ) {
     let _ = net
@@ -1022,7 +1064,8 @@ async fn check<N: Net>(
     let start = Instant::now();
     match net.tcp_connect(addr).await {
         Ok(mut s) => {
-            let _ = done.send(Ok(start.elapsed()));
+            let rtt = check_rtt(&net, &s, start.elapsed(), timed);
+            let _ = done.send(Ok(rtt));
             let named = Flight {
                 items: item::CHECK,
                 bytes: 0,
@@ -1119,7 +1162,8 @@ type CheckWait = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
 /// out (its stack's `check_ready` after the offer came, or with the host's
 /// draws its batch's turn), with the dial that
 /// carries the handshake, its token first, tells `checked` once that check
-/// succeeds, hears of the offering side's check from `peer_check`, and
+/// succeeds (its round trip [`check_rtt`]'s, `timed` with the draws),
+/// hears of the offering side's check from `peer_check`, and
 /// attaches the stream once its association is up.
 #[allow(clippy::too_many_arguments)]
 async fn answer<N: Net>(
@@ -1131,6 +1175,7 @@ async fn answer<N: Net>(
     conn: RtcConn,
     cap: usize,
     check_wait: CheckWait,
+    timed: bool,
     checked: oneshot::Sender<()>,
     peer_check: oneshot::Receiver<()>,
     origin: Instant,
@@ -1140,7 +1185,7 @@ async fn answer<N: Net>(
         check_wait.await;
         let start = Instant::now();
         let mut s = net.tcp_connect(addr).await?;
-        let rtt = start.elapsed();
+        let rtt = check_rtt(&net, &s, start.elapsed(), timed);
         let _ = checked.send(());
         if !net.open_channel(&s, cap) {
             return Err(io::Error::other("the net models no data channels"));
@@ -1325,7 +1370,12 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                             (sdp, me.answer_ready, check)
                         };
                         let transit = draws.as_ref().and_then(|d| {
-                            d.draw(if offer { OFFER_TRANSIT } else { ANSWER_TRANSIT })
+                            if offer {
+                                let excess = me.offer_excess.as_secs_f64() * 1e6;
+                                d.draw(OFFER_TRANSIT).map(|us| us + excess)
+                            } else {
+                                d.draw(ANSWER_TRANSIT)
+                            }
                         });
                         let (inputs, made) = (inputs.clone(), made_rx.clone());
                         tokio::spawn(async move {
@@ -1377,8 +1427,19 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                                 };
                                 let (net, inputs) = (net.clone(), inputs.clone());
                                 tokio::spawn(answer(
-                                    net, addr, token, me, peer, conn, cap, wait, ok_tx, rx,
-                                    origin, inputs,
+                                    net,
+                                    addr,
+                                    token,
+                                    me,
+                                    peer,
+                                    conn,
+                                    cap,
+                                    wait,
+                                    draws.is_some(),
+                                    ok_tx,
+                                    rx,
+                                    origin,
+                                    inputs,
                                 ));
                             }
                             None => {
@@ -1395,7 +1456,8 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                         {
                             let (tx, rx) = oneshot::channel();
                             let (net, socket) = (net.clone(), checks.clone());
-                            tokio::spawn(check(net, socket, at, addr, token, tx));
+                            let timed = draws.is_some();
+                            tokio::spawn(check(net, socket, at, addr, token, timed, tx));
                             o.answer = Some((peer, rx));
                             Some(conn.0)
                         } else if offers.remove(&conn.0).is_some() {
@@ -1619,7 +1681,8 @@ mod tests {
 
     /// A spread is linear between its knots, from the first quantile's to
     /// the last's; none reads 0. Every stack's runs from 0 to 1000 permille
-    /// in order, the transits' medians are 0, Chromium's check delay keeps
+    /// in order, the transits' medians are 0 (the browsers' offers' median
+    /// excess their own, Firefox's the longer), Chromium's check delay keeps
     /// `check_ready` at its median, and a lone Chromium offer drawn at its
     /// medians is set 9.8 ms after its ask, as on the testbed, and half a
     /// tick past its gathering's start leaves within 2.5 ms of the
@@ -1647,6 +1710,9 @@ mod tests {
             );
         }
         assert!(OFFER_TRANSIT.at(0.5).abs() < 1e-6 && ANSWER_TRANSIT.at(0.5).abs() < 1e-6);
+        let f = LinkSetup::FIREFOX;
+        assert!(Duration::ZERO < c.offer_excess && c.offer_excess < f.offer_excess);
+        assert_eq!(LinkSetup::STR0M.offer_excess, Duration::ZERO);
         let ms = |d: Duration| d.as_secs_f64() * 1e3;
         let half_tick = c.tick.map_or(0.0, ms) / 2.0;
         assert!((c.check_spread.at(0.5) / 1e3 - ms(c.check_ready)).abs() < 1e-6);
@@ -1766,6 +1832,14 @@ mod tests {
     #[test]
     fn chromium_resends_at_twice_its_check_within_its_bounds() {
         let c = LinkSetup::CHROMIUM;
+        let us = Duration::from_micros;
+        assert_eq!(nearest_ms(us(30_120)), Duration::from_millis(30));
+        assert_eq!(nearest_ms(us(30_500)), Duration::from_millis(31));
+        assert_eq!(
+            c.resend_after(nearest_ms(us(30_120))),
+            Duration::from_millis(60),
+            "the halve-7 cells' seed checks"
+        );
         assert_eq!(
             c.resend_after(Duration::from_millis(20)),
             Duration::from_millis(50)

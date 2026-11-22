@@ -1456,6 +1456,17 @@ impl Net for SimNet {
         }))
     }
 
+    /// A modelled ICE check's, as the WAN scheduler timed it
+    /// ([`Scheduler::take_check_rtt`](crate::wan::Scheduler::take_check_rtt)).
+    fn connect_rtt(&self, stream: &SimTcpStream) -> Option<std::time::Duration> {
+        let conn = (
+            stream.inner.local_addr().ok()?,
+            stream.inner.peer_addr().ok()?,
+        );
+        let rtt = self.wan.as_ref()?.lock().as_mut()?.take_check_rtt(conn)?;
+        rtt.to_std()
+    }
+
     fn models_channels(&self) -> bool {
         self.rtc_stack.is_some()
     }
