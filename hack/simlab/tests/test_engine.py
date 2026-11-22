@@ -529,6 +529,51 @@ class Scripts(unittest.TestCase):
         self.assertEqual([r.values() for r in got], [[[1]], [["x", 1]]])
         c.close()
 
+    def test_a_guarded_script_runs_nothing_where_a_statement_is_not_a_select(self):
+        with tempfile.TemporaryDirectory(prefix="simlab-engine-script-") as tmp:
+            c = engine.connect()
+            c.execute("CREATE TABLE nums AS SELECT range AS i FROM range(5)")
+            refused = [
+                f"COPY (SELECT 1 AS a) TO '{tmp}/a.parquet' (FORMAT parquet)",
+                f"-- a comment\nCOPY (\n  SELECT i FROM nums\n) TO '{tmp}/b.parquet' (FORMAT parquet)",
+                f"/* a block */ copy nums to '{tmp}/c.csv'",
+                f"SELECT 1; COPY nums TO '{tmp}/d.csv'",
+                f"WITH x AS (SELECT 1 AS a) SELECT * FROM x; CoPy (SELECT 1) To '{tmp}/e.csv'",
+                f"EXPORT DATABASE '{tmp}/f'",
+                f"SELECT 1;\n-- then\nexport database '{tmp}/g'",
+                f"ATTACH '{tmp}/h.duckdb' AS h; CREATE TABLE h.t AS SELECT 1 AS a",
+                "CREATE TEMP TABLE t AS SELECT 1 AS a",
+                "CREATE MACRO m() AS 1; SELECT m()",
+                "INSERT INTO nums VALUES (9)",
+                "SELECT 1; DELETE FROM nums",
+                "PRAGMA enable_profiling",
+                "SET threads = 1; SELECT 1",
+                "select 1; set enable_external_access = false",
+                "INSTALL httpfs",
+                "LOAD httpfs",
+                f"EXPLAIN ANALYZE COPY nums TO '{tmp}/i.csv'",
+            ]
+            for q in refused:
+                with self.assertRaises(engine.QueryError, msg=q) as e:
+                    engine.script(c, q, guard=True)
+                self.assertEqual(e.exception.status, 403, q)
+                self.assertRegex(str(e.exception), r"^only SELECT and EXPLAIN SELECT run here, not [A-Z]+", q)
+            self.assertEqual(sorted(os.listdir(tmp)), [])
+            self.assertEqual(c.execute("SELECT count(*), max(i) FROM nums").fetchall(), [(5, 4)])
+            self.assertEqual(c.execute("SELECT current_setting('threads') > 1, "
+                                       "(SELECT count(*) FROM duckdb_databases() WHERE database_name = 'h'), "
+                                       "(SELECT count(*) FROM duckdb_tables() WHERE table_name = 't')").fetchall(),
+                             [(True, 0, 0)])
+            c.execute(f"COPY nums TO '{tmp}/own.parquet' (FORMAT parquet)")
+            got = engine.script(c, "-- why\nWITH x AS (SELECT $n AS a) SELECT * FROM x; select count(*) AS n FROM nums; "
+                                   "DESCRIBE nums; FROM nums ORDER BY i DESC LIMIT 1; EXPLAIN SELECT 1; "
+                                   f"SELECT count(*) AS m FROM read_parquet('{tmp}/*.parquet')",
+                                {"n": 7}, guard=True)
+            self.assertEqual([got[0].values(), got[1].values(), got[2].values()[0][:1], got[3].values(),
+                              got[5].values()], [[[7]], [[5]], ["i"], [[4]], [[5]]])
+            self.assertEqual(len(got), 6)
+            c.close()
+
 
 if __name__ == "__main__":
     unittest.main()

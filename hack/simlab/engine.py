@@ -76,7 +76,8 @@ is a timer whose interrupt holds the query's lock: closing the query
 stops and joins the timer before its connection is used again, so an
 interrupt meant for one query never reaches the next. `script` runs every
 statement of a script, as the CLI does, and returns the results of those
-the CLI prints. `Pool` keeps `size` guarded readers for a server: a query
+the CLI prints; with `guard`, the gate's for an untrusted one, each
+statement passes the gate before any runs. `Pool` keeps `size` guarded readers for a server: a query
 waits for a free one; `refresh` retires them for new ones (the catalog
 changed under them) once the queries on them finish.
 
@@ -830,16 +831,21 @@ def shown(statement):
     return list(statement.expected_result_type) == [duckdb.ExpectedResultType.QUERY_RESULT]
 
 
-def script(conn, sql, params=None, text=False):
+def script(conn, sql, params=None, text=False, guard=False):
     """Runs every statement of `sql` in order, each with its own
     parameters from `params`, and returns the Results of those the CLI
     prints (`shown`), in order. Each starts where the CLI starts it, past
     the whitespace and comments before it, so an error's LINE is the
-    CLI's."""
+    CLI's. With `guard` each statement passes `gate` before any of them
+    runs: a script that holds anything but SELECTs and EXPLAINs of them
+    runs none (QueryError 403)."""
     try:
         statements = conn.extract_statements(sql)
     except duckdb.Error as e:
         raise QueryError(str(e), 400) from None
+    if guard:
+        for s in statements:
+            gate(conn, s.query)
     out = []
     for s in statements:
         text_of = LEADING.sub("", s.query, count=1)
@@ -849,7 +855,7 @@ def script(conn, sql, params=None, text=False):
             except duckdb.Error as e:
                 raise QueryError(str(e), 400) from None
             continue
-        out.append(run(conn, text_of, params, text=text))
+        out.append(run(conn, text_of, params, guard=guard, text=text))
     return out
 
 

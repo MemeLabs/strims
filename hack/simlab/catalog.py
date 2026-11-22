@@ -4221,9 +4221,10 @@ class Readers:
     """An engine.Pool's query over lake's readers: a connection of
     connected's for each query (with this process's own verdicts and
     scoring objects where they aren't the catalog's: privately), its one
-    statement gated and its `$name`s bound as a pool's are (engine.run).
-    The CLI's lake --param and saved views read through it, so they read
-    what its lake does. The extensions installed and checked first
+    statement gated and its `$name`s bound as a pool's are (engine.run),
+    or a script's, every statement gated before any runs (engine.script).
+    The CLI's lake and saved views read through it, so they read what
+    catalog.lake does. The extensions installed and checked first
     (extensions)."""
 
     def __init__(self):
@@ -4234,6 +4235,14 @@ class Readers:
         where the catalog doesn't attach."""
         with connected(scoring=True) as conn:
             return engine.run(conn, sql, params, max_rows=max_rows, timeout_s=timeout_s, guard=True, text=text)
+
+    def script(self, sql, params=None, text=False):
+        """The Results of the statements of the script `sql` that the CLI
+        prints, as engine.script gives them through the gate (`guard`), on
+        one connection; store_host.DuckError where the catalog doesn't
+        attach."""
+        with connected(scoring=True) as conn:
+            return engine.script(conn, sql, params, text=text, guard=True)
 
 
 # --- the console's schema ------------------------------------------------------------

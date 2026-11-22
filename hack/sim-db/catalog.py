@@ -23,12 +23,14 @@ vocabulary's phases, episodes and reasons; `views` the saved views; a
 view's name its params and SQL.
 
 `lake` runs a query over the whole catalog, read-only, its macros
-loaded: a script of any number of statements, or with `--param` one
-SELECT, gated as the console's readers gate one (engine.run), whose
-`$name`s the params bind, each value JSON's where it parses as JSON (7,
-true, [1, 2], "007" for a string of digits) and the text else; a query
-with `$name`s goes in single quotes, or the shell takes them for its
-own:
+loaded: a script of SELECTs (DESCRIBE, SHOW, SUMMARIZE and FROM-first
+among them) and EXPLAINs of them, each gated as the console's readers
+gate one (engine.run) before any runs, so a COPY, ATTACH, CREATE, SET or
+any other statement refuses the whole script. Its `$name`s the
+`--param`s bind, each statement its own, each value JSON's where it
+parses as JSON (7, true, [1, 2], "007" for a string of digits) and the
+text else; a query with `$name`s goes in single quotes, or the shell
+takes them for its own:
 
   simdb.py lake 'SELECT * FROM structural($exp)' --param exp=sa0755
 
@@ -137,18 +139,12 @@ def cmd_fetch(a):
 
 def cmd_lake(a):
     need_catalog()
-    if a.param:
-        try:
-            r = catalog.Readers().query(a.query, {k: typed(v) for k, v in a.param}, text=not a.json)
-        except (engine.QueryError, store_host.DuckError) as e:
-            sys.exit(f"lake: {e}")
-        printed_result(r, a.json)
-        return
     try:
-        out = catalog.lake(a.query + ("" if a.query.rstrip().endswith(";") else ";"), out="json" if a.json else "text")
-    except store_host.DuckError as e:
+        got = catalog.Readers().script(a.query, {k: typed(v) for k, v in a.param or []}, text=not a.json)
+    except (engine.QueryError, store_host.DuckError) as e:
         sys.exit(f"lake: {e}")
-    print(json.dumps(out) if a.json else out, end="" if not a.json else "\n")
+    print(json.dumps(got[-1].records() if got else []) if a.json else "".join(r.table() for r in got),
+          end="\n" if a.json else "")
 
 
 def cmd_view(a):
@@ -199,7 +195,7 @@ def add_commands(sub):
     lk.add_argument("query")
     lk.add_argument("--param", action="append", type=param, metavar="NAME=VALUE",
                     help="bind $NAME: VALUE as JSON where it parses (7, true, [1,2], '\"007\"'), else as text; "
-                         "QUERY is then one SELECT, in single quotes (the shell expands $NAME in double ones)")
+                         "QUERY in single quotes (the shell expands $NAME in double ones)")
     lk.add_argument("--json", action="store_true")
     v = sub.add_parser("view", help="the console's saved views: list them, or run one (catalog.py)",
                        description=__doc__, formatter_class=raw)
