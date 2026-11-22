@@ -243,24 +243,39 @@ pub struct Written {
 /// kind's median lateness, no later than its write. A release is the
 /// millisecond nearest it: the sim's tasks run on turmoil's millisecond
 /// steps (a shorter step runs tokio's timers ahead of the sim's clock),
-/// where a timer's later deadline would resolve to the next.
+/// where a timer's later deadline would resolve to the next. Groups
+/// released in one millisecond go in the order the run released them (its
+/// µs, then its log's order), which the millisecond alone loses: the
+/// Chromium page wrote rtc-holders-chromium-halve's two holders' bursts
+/// 0.1-0.2 ms apart.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Releases(BTreeMap<(usize, u8, i64), i64>);
+pub struct Releases(BTreeMap<(usize, u8, i64), Release>);
+
+/// A group's release: the millisecond it is released at, and the run's
+/// release in µs and its first write's place in the log, which order the
+/// groups released in one millisecond.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Release {
+    at: i64,
+    order: (i64, usize),
+}
 
 impl Releases {
     /// The releases `writes`, a node's in its log's order, record.
     pub fn recorded(writes: &[Written]) -> Releases {
-        let mut first: BTreeMap<(usize, u8, i64), (i64, bool)> = BTreeMap::new();
+        let mut first: BTreeMap<(usize, u8, i64), (i64, bool, usize)> = BTreeMap::new();
         let mut done: BTreeMap<usize, i64> = BTreeMap::new();
-        for w in writes {
+        for (i, w) in writes.iter().enumerate() {
             let busy = done.get(&w.to).is_some_and(|&d| d > w.due);
             done.insert(w.to, w.done);
             if w.kind != Kind::Echo.code() {
-                first.entry((w.to, w.kind, w.due)).or_insert((w.at, busy));
+                first
+                    .entry((w.to, w.kind, w.due))
+                    .or_insert((w.at, busy, i));
             }
         }
         let mut late: BTreeMap<(usize, u8), Vec<i64>> = BTreeMap::new();
-        for (&(to, kind, due), &(at, busy)) in &first {
+        for (&(to, kind, due), &(at, busy, _)) in &first {
             if !busy {
                 late.entry((to, kind)).or_default().push(at - due);
             }
@@ -275,13 +290,19 @@ impl Releases {
         Releases(
             first
                 .into_iter()
-                .filter_map(|((to, kind, due), (at, busy))| {
+                .filter_map(|((to, kind, due), (at, busy, i))| {
                     let at = if busy {
                         at.min(due + median.get(&(to, kind))?)
                     } else {
                         at
                     };
-                    Some(((to, kind, due), (at + 500).div_euclid(1000) * 1000))
+                    Some((
+                        (to, kind, due),
+                        Release {
+                            at: (at + 500).div_euclid(1000) * 1000,
+                            order: (at, i),
+                        },
+                    ))
                 })
                 .collect(),
         )
@@ -292,7 +313,15 @@ impl Releases {
     fn at(&self, to: usize, kind: Kind, due: i64) -> i64 {
         self.0
             .get(&(to, kind.code(), due))
-            .map_or(due, |&at| at.max(due))
+            .map_or(due, |r| r.at.max(due))
+    }
+
+    /// Where the group goes among those released in its millisecond: by
+    /// the run's release, else its due, after the recorded ones.
+    fn order(&self, to: usize, kind: Kind, due: i64) -> (i64, usize) {
+        self.0
+            .get(&(to, kind.code(), due))
+            .map_or((due, usize::MAX), |r| r.order)
     }
 }
 
@@ -407,6 +436,9 @@ struct LinkState {
     peer: usize,
     out: RefCell<Outbox>,
     ready: Notify,
+    /// Its writer waits for records, and has taken them.
+    idle: Cell<bool>,
+    taken: Notify,
     data_seq: Cell<u32>,
     probe_seq: Cell<u32>,
 }
@@ -564,6 +596,8 @@ pub async fn node<N: BenchNet, C: BenchClock>(
                 peer,
                 out: RefCell::new(Outbox::default()),
                 ready: Notify::new(),
+                idle: Cell::new(false),
+                taken: Notify::new(),
                 data_seq: Cell::new(0),
                 probe_seq: Cell::new(0),
             });
@@ -636,7 +670,7 @@ pub async fn node<N: BenchNet, C: BenchClock>(
             }
             links.push(link);
         }
-        let releases = Rc::new(plan.releases.clone());
+        let mut feeds = Vec::new();
         for e in &plan.schedule.entries {
             let (from, to) = e.ends();
             if from != me {
@@ -645,14 +679,14 @@ pub async fn node<N: BenchNet, C: BenchClock>(
             let Some(link) = links.iter().find(|l| l.peer == to) else {
                 return Err(io::Error::other(format!("{from} and {to} aren't linked")));
             };
-            tasks.push(Box::pin(feed(
-                e.clone(),
-                link.clone(),
-                clock.clone(),
-                plan.end_us,
-                releases.clone(),
-            )));
+            feeds.push((e.clone(), link.clone()));
         }
+        tasks.push(Box::pin(feed(
+            feeds,
+            clock.clone(),
+            plan.end_us,
+            plan.releases.clone(),
+        )));
         join_all(tasks).await;
         Ok::<_, io::Error>(())
     };
@@ -709,38 +743,58 @@ fn setup<N: Net>(net: &N, s: &N::TcpStream) {
     let _ = net.configure_tcp_send_queue(s, &TcpSocketConfig::default());
 }
 
-/// Queues `e`'s records on `link` as they come due, or as `releases`
-/// releases them.
+/// Queues each entry's records on its link as they come due, or as
+/// `releases` releases them, one task for them all so that groups
+/// released together go in order: by their releases' order
+/// ([`Releases::order`]), then the schedule's.
 async fn feed<C: BenchClock>(
-    e: Entry,
-    link: Rc<LinkState>,
+    feeds: Vec<(Entry, Rc<LinkState>)>,
     clock: C,
     end_us: i64,
-    releases: Rc<Releases>,
+    releases: Releases,
 ) {
-    let (start_ms, period_ms, end_ms) = match e {
-        Entry::Burst {
-            start_ms,
-            period_ms,
-            end_ms,
-            ..
-        }
-        | Entry::Probe {
-            start_ms,
-            period_ms,
-            end_ms,
-            ..
-        } => (start_ms, period_ms, end_ms),
-    };
-    let end = end_ms.map_or(end_us, |ms| (ms as i64 * 1000).min(end_us));
-    let kind = match e {
+    // Each entry's next due and its end.
+    let mut next: Vec<(i64, i64)> = feeds
+        .iter()
+        .map(|(e, _)| {
+            let (Entry::Burst {
+                start_ms, end_ms, ..
+            }
+            | Entry::Probe {
+                start_ms, end_ms, ..
+            }) = *e;
+            let end = end_ms.map_or(end_us, |ms| (ms as i64 * 1000).min(end_us));
+            (start_ms as i64 * 1000, end)
+        })
+        .collect();
+    let kind = |e: &Entry| match e {
         Entry::Burst { .. } => Kind::Data,
         Entry::Probe { .. } => Kind::Probe,
     };
-    let mut due = start_ms as i64 * 1000;
-    while due < end {
-        sleep_until(&clock, releases.at(link.peer, kind, due)).await;
-        match e {
+    loop {
+        let Some((at, _, i)) = feeds
+            .iter()
+            .zip(&next)
+            .enumerate()
+            .filter(|(_, (_, (due, end)))| due < end)
+            .map(|(i, ((e, link), &(due, _)))| {
+                let k = kind(e);
+                (
+                    releases.at(link.peer, k, due),
+                    releases.order(link.peer, k, due),
+                    i,
+                )
+            })
+            .min()
+        else {
+            return;
+        };
+        let (Some((e, link)), Some(n)) = (feeds.get(i), next.get_mut(i)) else {
+            return;
+        };
+        sleep_until(&clock, at).await;
+        let due = n.0;
+        match *e {
             Entry::Burst { bytes, write, .. } => {
                 let mut left = bytes;
                 while left > 0 {
@@ -769,7 +823,14 @@ async fn feed<C: BenchClock>(
                 });
             }
         }
-        due += period_ms as i64 * 1000;
+        // An idle writer takes the group before the next is released, which
+        // costs no time: writers woken together would run in their tasks'
+        // order, not their links' releases'.
+        if link.idle.get() {
+            link.taken.notified().await;
+        }
+        let (Entry::Burst { period_ms, .. } | Entry::Probe { period_ms, .. }) = *e;
+        n.0 += period_ms as i64 * 1000;
     }
 }
 
@@ -785,8 +846,11 @@ async fn writer<W: AsyncWrite + Unpin, C: BenchClock>(
         let outs = loop {
             let outs = link.pop();
             if !outs.is_empty() {
+                link.idle.set(false);
+                link.taken.notify_waiters();
                 break outs;
             }
+            link.idle.set(true);
             link.ready.notified().await;
         };
         let at = clock.now_us();
@@ -1656,6 +1720,42 @@ mod tests {
         assert_eq!(write(0, 500_000), Some(502_000));
         assert_eq!(write(1, 207_000), Some(208_000));
         assert_eq!(write(1, 407_000), Some(407_000));
+    }
+
+    /// Groups a replay releases in one millisecond go in the run's order:
+    /// two holders' bursts, due together, are written as their run wrote
+    /// them, whichever link that put first.
+    #[test]
+    fn a_replay_keeps_the_runs_order_within_a_millisecond() {
+        let w = |to, at| Written {
+            to,
+            kind: 0,
+            due: 0,
+            at,
+            done: at + 10,
+        };
+        for (record, first) in [
+            ([w(2, 1_200), w(1, 1_300)], 2),
+            ([w(1, 1_200), w(2, 1_300)], 1),
+        ] {
+            let mut bench = Bench::testbed(
+                "VIEWERS=2\nSECS=1",
+                "",
+                "burst 0 1 0 250 4096 4096\nburst 0 2 0 250 4096 4096",
+                true,
+            )
+            .unwrap();
+            bench.releases = vec![Releases::recorded(&record)];
+            let logs = simulate(&bench).unwrap();
+            let writes: Vec<_> = logs[0]
+                .iter()
+                .filter(|l| l.contains(r#""ev":"w""#) && field(l, "due") == Some(0))
+                .map(|l| (field(l, "to"), field(l, "at")))
+                .collect();
+            assert_eq!(writes.len(), 2, "{writes:?}");
+            assert_eq!(writes[0], (Some(first), Some(1_000)), "{writes:?}");
+            assert_eq!(writes[1].1, Some(1_000), "{writes:?}");
+        }
     }
 
     /// While anything is in flight a transmit timer is armed: a one-way
