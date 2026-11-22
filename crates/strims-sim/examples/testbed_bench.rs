@@ -11,7 +11,7 @@
 //!               [--web <dir>] [--browser-bin <path>]
 //! testbed_bench --sim <testbed run dir> --out <dir> [--window]
 //!               [--segment <bytes>] [--str0m] [--bucket] [--nominal]
-//!               [--seed <n>]
+//!               [--seed <n>] [--trace-tcp] [--trace-sctp]
 //! ```
 //!
 //! On the testbed a node listens on its topology address, dials the nodes
@@ -48,6 +48,9 @@
 //! takes the testbed node's timers and stalls as its input; with
 //! `--nominal` at their dues. `--seed` sets the sim's draws (1 without):
 //! the sites' loss, whose testbed runs each draw their own.
+//! `--trace-tcp` and `--trace-sctp` add the window model's TCP events, and
+//! node 0's packets and SCTP events, to the logs ([`Bench::trace_tcp`],
+//! [`Bench::trace_sctp`]).
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -91,6 +94,7 @@ struct Args {
     str0m: bool,
     bucket: bool,
     trace_tcp: bool,
+    trace_sctp: bool,
     nominal: bool,
     seed: Option<u64>,
     web: Option<PathBuf>,
@@ -122,6 +126,7 @@ fn args() -> Result<Args, String> {
             "--str0m" => a.str0m = true,
             "--bucket" => a.bucket = true,
             "--trace-tcp" => a.trace_tcp = true,
+            "--trace-sctp" => a.trace_sctp = true,
             "--nominal" => a.nominal = true,
             "--seed" => a.seed = Some(num(value()?)?),
             "--web" => a.web = Some(value()?.into()),
@@ -272,6 +277,7 @@ fn sim(dir: &std::path::Path, a: &Args) -> Result<(), String> {
     bench.str0m = a.str0m;
     bench.buckets = a.bucket;
     bench.trace_tcp = a.trace_tcp;
+    bench.trace_sctp = a.trace_sctp;
     if let Some(seed) = a.seed {
         bench.seed = seed;
     }

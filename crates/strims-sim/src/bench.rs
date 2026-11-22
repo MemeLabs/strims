@@ -78,6 +78,16 @@
 //! the sender's window, threshold (-1 before the first) and bytes in
 //! flight after it, in bytes), a competing upload's `to` past the nodes,
 //! for the testbed's packet captures (`run.sh`'s `PCAP`) to set beside.
+//! With [`Bench::trace_sctp`] node 0's log adds a
+//! `{"ev":"pkt","t":..,"sent":..,"lost":..,"peer":..,"bytes":..,"charged":..,"kind":..,"resent":..}`
+//! line per packet it sent (the sim's `packets` table's: when it entered
+//! the uplink's queue and left it in µs, -1 if it didn't; its loss, `-`
+//! for none; the host it went to; its IP bytes and what the shaper
+//! charged; its kind; whether it resent, -1 unknown) and a
+//! `{"ev":"sctp","t":..,"peer":..,"link":..,"dir":..,"what":..,"tsn0":..,"tsn1":..,"chunks":..,"data_bytes":..,"packet_bytes":..,"cum":..,"gaps":..,"cwnd":..,"flight":..}`
+//! line per SCTP event of its associations (the `sctp_events` table's,
+//! -1 for what it lacks), for a browser run's packet captures to set
+//! beside. The other lines are the same with it as without.
 
 // The bench's nodes share their state between their tasks on one thread.
 #![allow(clippy::disallowed_types)]
@@ -99,7 +109,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Notify;
 
 use crate::net::{SendBuffers, SimNet, SimTcpStream};
-use crate::spec::{Competing, Scenario, SendBuffer};
+use crate::spec::{Competing, HostSet, Scenario, SendBuffer};
 use crate::wan::{Scheduler, SctpProfile, SharedWan, sim_time};
 
 /// A record's header: kind, length, sequence number, due and write times.
@@ -994,6 +1004,9 @@ pub struct Bench {
     /// (`ev:"tcp"` lines: `t`, `to`, `k`, `seq`, `len`, `cwnd`,
     /// `ssthresh`, `flight`).
     pub trace_tcp: bool,
+    /// Node 0's packets and its associations' SCTP events go in its log
+    /// (`ev:"pkt"` and `ev:"sctp"` lines).
+    pub trace_sctp: bool,
     /// When each node's schedule is released ([`NodePlan::releases`]), by
     /// node; a node without its schedule's dues.
     pub releases: Vec<Releases>,
@@ -1155,6 +1168,7 @@ impl Bench {
             tcp_segment: None,
             buckets: false,
             trace_tcp: false,
+            trace_sctp: false,
             releases: Vec::new(),
             seed: 1,
         })
@@ -1249,6 +1263,10 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
             .collect();
     }
     spec.send_buffer = Some(bench.send_buffer);
+    if bench.trace_sctp {
+        spec.packet_log.insert(0);
+        spec.sctp_log = Some(HostSet::Only([0].into()));
+    }
     spec.wan = Some(Options {
         jitter: false,
         loss: false,
@@ -1375,6 +1393,38 @@ pub fn simulate(bench: &Bench) -> Result<Vec<Vec<String>>, String> {
         }
     }
     for (h, l) in report.iter().flat_map(|r| &r.hosts).zip(logs.iter_mut()) {
+        for p in &h.packets {
+            l.push(format!(
+                r#"{{"ev":"pkt","t":{},"sent":{},"lost":"{}","peer":{},"bytes":{},"charged":{},"kind":"{}","resent":{}}}"#,
+                (p.at - start).as_micros(),
+                p.sent.map_or(-1, |t| (t - start).as_micros()),
+                p.lost.map_or("-", |x| x.name()),
+                p.peer.map_or(-1, |x| x as i64),
+                p.ip_bytes,
+                p.charged_bytes.map_or(-1, i64::from),
+                p.kind.name(),
+                p.resent.map_or(-1, i64::from),
+            ));
+        }
+        for ((peer, link), evs) in &h.sctp {
+            for e in evs {
+                l.push(format!(
+                    r#"{{"ev":"sctp","t":{},"peer":{peer},"link":{link},"dir":"{}","what":"{}","tsn0":{},"tsn1":{},"chunks":{},"data_bytes":{},"packet_bytes":{},"cum":{},"gaps":{},"cwnd":{},"flight":{}}}"#,
+                    (e.at - start).as_micros(),
+                    e.dir.map_or("-", |d| d.name()),
+                    e.what.name(),
+                    e.tsn.map_or(-1, |t| t.0),
+                    e.tsn.map_or(-1, |t| t.1),
+                    e.chunks,
+                    e.data_bytes,
+                    e.packet_bytes,
+                    e.cum_tsn.unwrap_or(-1),
+                    e.gaps.map_or(-1, i64::from),
+                    e.cwnd_bytes.map_or(-1, |x| x as i64),
+                    e.flight_bytes.map_or(-1, |x| x as i64),
+                ));
+            }
+        }
         let whys: Vec<String> = crate::ACK_WHYS
             .iter()
             .zip(h.ack_whys)
