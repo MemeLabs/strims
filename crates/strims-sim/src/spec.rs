@@ -836,6 +836,14 @@ pub struct Scenario {
     /// events, and its link log's records at the instant read that clock.
     /// On by default; off, every message at the instant.
     pub page_writes: bool,
+    /// With [`Scenario::page_writes`], whether a Chromium page takes its
+    /// stack's answers within the step: a writer an answer frees from its
+    /// own cap resumes past the answer's time, once the page's worker is
+    /// free, by the page's time to run it (`crate::net::PageClock`, as the
+    /// testbed's Chromium seed resumes: 5 µs at the median past its
+    /// `bufferedamountlow` when busy, 15 when idle), where off it resumes
+    /// at the next step's instant.
+    pub page_answers: bool,
     /// With [`Scenario::wire_bins`], the hosts that keep their timers as
     /// they fire for the tables' `timers` (`NodeConfig::timer_log`, and
     /// their frame writers' and probes' waits): none by default. Changes
@@ -1133,6 +1141,7 @@ impl Scenario {
             pacer_hold_start: true,
             pacer_pass_start: false,
             page_writes: true,
+            page_answers: true,
             timer_log: None,
             timer_probe: false,
             link_log: None,

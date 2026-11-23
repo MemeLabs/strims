@@ -161,6 +161,9 @@
 //!   alone. `STRIMS_SIM_PAGE_WRITES=off` sends a browser page's messages
 //!   at its step's instant; `on`, or unset, each past it by the worker's
 //!   work for the sends before it ([`Scenario::page_writes`]).
+//!   `STRIMS_SIM_PAGE_ANSWERS=off` resumes a Chromium writer its stack's
+//!   answer freed at the next step's instant; `on`, or unset, past the
+//!   answer within the step ([`Scenario::page_answers`]).
 //! - `STRIMS_SIM_LINK_SETUP_DRAWS=on` has each browser draw its links'
 //!   setups as its stack's do, its metronome's phase among them
 //!   ([`Scenario::link_setup_draws`]); `off` sets every link up on its
@@ -566,7 +569,8 @@ fn timer_lateness_knob() -> Option<bool> {
 /// [`Scenario::pacer_turns`]; `STRIMS_SIM_PACER_HOLD`,
 /// [`Scenario::pacer_hold_start`]; `STRIMS_SIM_PACER_PASS`,
 /// [`Scenario::pacer_pass_start`]; `STRIMS_SIM_PAGE_WRITES`,
-/// [`Scenario::page_writes`]; `STRIMS_SIM_LINK_SETUP_DRAWS`,
+/// [`Scenario::page_writes`]; `STRIMS_SIM_PAGE_ANSWERS`,
+/// [`Scenario::page_answers`]; `STRIMS_SIM_LINK_SETUP_DRAWS`,
 /// [`Scenario::link_setup_draws`]): `on` or `off`, if set and not blank.
 #[allow(clippy::panic)] // a mistyped setting fails its test
 fn on_off_knob(name: &str) -> Option<bool> {
@@ -878,6 +882,7 @@ fn sweep_seeds(
     let pacer_hold = on_off_knob("STRIMS_SIM_PACER_HOLD");
     let pacer_pass = on_off_knob("STRIMS_SIM_PACER_PASS");
     let page_writes = on_off_knob("STRIMS_SIM_PAGE_WRITES");
+    let page_answers = on_off_knob("STRIMS_SIM_PAGE_ANSWERS");
     let timer_log = timer_log_knob();
     let timer_probe = knob::<u32>("STRIMS_SIM_TIMER_PROBE") == Some(1);
     let link_log = link_log_knob();
@@ -1074,6 +1079,9 @@ fn sweep_seeds(
         }
         if let Some(page) = page_writes {
             spec.page_writes = page;
+        }
+        if let Some(answers) = page_answers {
+            spec.page_answers = answers;
         }
         if let Some(draws) = setup_draws {
             spec.link_setup_draws = draws;

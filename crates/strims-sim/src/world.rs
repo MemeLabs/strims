@@ -601,7 +601,7 @@ impl World {
             .map(|h| {
                 (spec.page_writes
                     && crate::late::HostKind::of_host(&spec, h) != crate::late::HostKind::Native)
-                    .then(crate::net::PageClock::default)
+                    .then(|| crate::net::PageClock::new(spec.page_answers, spec.tick.into()))
             })
             .collect();
         let (parent_tx, parent_rx) = mpsc::channel();

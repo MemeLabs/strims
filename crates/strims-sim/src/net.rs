@@ -235,6 +235,11 @@ struct Conn {
     /// ([`SctpProfile::amount_at_sends`]), a node's channel's amount as its
     /// writer reads it (see the module docs).
     shown: Option<u64>,
+    /// A browser node's channel: its host's page clock ([`PageClock`]),
+    /// and when its writer, freed by its stack's answer, begins its task
+    /// ([`PageClock::take`]), until its check takes it.
+    page: Option<PageClock>,
+    resume: Option<Time>,
     /// The node's link log, and the link's name in it ([`Net::log_link`]).
     log: Option<(u64, LinkSink)>,
     /// While a check may begin a pass's hold (see the module docs), the
@@ -493,9 +498,20 @@ impl SendBuffers {
     /// ([`SctpProfile::amount_at_sends`]) takes them off its count. Returns
     /// the writer to wake, a paced writer's waiting on its own cap once the
     /// amount is at its mark.
+    ///
+    /// With its page taking answers within the step
+    /// ([`Scenario::page_answers`](crate::Scenario::page_answers)), the page
+    /// takes it once its worker is free ([`PageClock::take`]), its
+    /// `bufferedamountlow` then, and the writer it frees begins its task
+    /// past that ([`PAGE_ANSWER_BUSY`], [`PAGE_ANSWER_IDLE`]).
     pub fn answered(&self, conn: ConnKey, sent: usize, at: Time) -> Option<Waker> {
         self.with(|b| {
             let c = b.conns.get_mut(&conn)?;
+            let take = c
+                .page
+                .as_ref()
+                .filter(|p| c.shown.is_some() && p.answers())
+                .map(|p| p.take(at));
             if let Some(s) = &mut c.shown {
                 debug_assert!(
                     sent as u64 <= *s,
@@ -503,8 +519,32 @@ impl SendBuffers {
                 );
                 *s = s.saturating_sub(sent as u64);
             }
-            release(b, conn, at)
+            let woke = release(b, conn, take.map_or(at, |(t, _)| t));
+            if woke.is_some()
+                && let Some((t, busy)) = take
+                && let Some(c) = b.conns.get_mut(&conn)
+            {
+                let from = t + if busy {
+                    PAGE_ANSWER_BUSY
+                } else {
+                    PAGE_ANSWER_IDLE
+                };
+                c.resume = Some(from);
+                if let Some(p) = &c.page {
+                    p.freed(from);
+                }
+            }
+            woke
         })
+    }
+
+    /// Data channel `conn`'s page runs by `page`, its host's clock.
+    fn set_page(&self, conn: ConnKey, page: Option<PageClock>) {
+        self.with(|b| {
+            if let Some(c) = b.conns.get_mut(&conn) {
+                c.page = page;
+            }
+        });
     }
 
     /// Data channel `conn`'s buffered amount, as its writer reads it.
@@ -708,68 +748,264 @@ const PAGE_GAP: Duration = Duration::from_micros(7);
 /// the clock by the step: sends past its end (a pass of some hundred at a
 /// 1 ms step) stamp their records past it, where the WAN scheduler hands
 /// their segments over at the step's end.
+///
+/// With [`Scenario::page_answers`](crate::Scenario::page_answers), a
+/// writer that its stack's answer frees from its own cap
+/// ([`SendBuffers::answered`]) resumes past the answer's time within the
+/// step rather than at the next step's instant, as Chromium's does: Blink
+/// posts each answer to the page's thread as a task of its own
+/// (third_party/blink/renderer/modules/peerconnection/rtc_data_channel.cc,
+/// `Observer::OnBufferedAmountChange`), which takes it off the page's
+/// `bufferedAmount` and fires `bufferedamountlow` (`OnBufferedAmountChangeImpl`),
+/// whose handler frees the writer (strims-wasm's `DcSocket::send`) in its
+/// microtasks. The page takes the answer once its worker is free, when
+/// the answer comes or past the work it was doing then
+/// ([`PageClock::take`]; a hold's work [`PAGE_GAP`] past its check), and
+/// the writer's send begins [`PAGE_ANSWER_BUSY`] or [`PAGE_ANSWER_IDLE`]
+/// later. turmoil runs the writer at the next step's instant: its work
+/// there (its link's records, its connection's sends) reads the clock
+/// from that begin ([`PageClock::resume`]), the instant's other work
+/// following it, never earlier than the page's last.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PageClock(Arc<Mutex<PageState>>);
 
 #[derive(Debug, Default)]
 struct PageState {
-    /// The instant of the page's last `send`, in true time, the time past
-    /// it the send returned, how many it made at that instant, and whether
-    /// the last one's write has yet to end.
+    /// The instant of the page's last `send`, in true time, when its work
+    /// at the instant began (the instant, or past a freed writer's work
+    /// there), the time past that the send returned, how many it made at
+    /// that instant, and whether the last one's write has yet to end.
     at: Option<Time>,
+    origin: Time,
+    end: Duration,
+    sent: u32,
+    open: bool,
+    /// Whether the page takes its stack's answers within the step
+    /// ([`Scenario::page_answers`](crate::Scenario::page_answers)) ...
+    answers: bool,
+    /// ... the work of the writer an answer freed, at the instant its task
+    /// runs ([`PageClock::resume`]) ...
+    answer: Option<AnswerWork>,
+    /// ... when the page's worker is next free, in true time: past its
+    /// last send by the work after it, past its last hold's check by
+    /// [`PAGE_GAP`] ...
+    free: Time,
+    /// ... when it next takes an answer's task: past the last that freed a
+    /// writer by that writer's first send ([`PageClock::freed`]) ...
+    taken: Time,
+    /// ... and the scheduler's step, within which a freed writer resumes.
+    step: Duration,
+}
+
+/// The work at instant `at` of connection `conn`'s writer (its link `link`
+/// in the link log), freed by its stack's answer: begun at `from`, its
+/// last send returned `end` past it, `sent` sends, the last one's write
+/// open if `open`.
+#[derive(Debug)]
+struct AnswerWork {
+    conn: ConnKey,
+    link: Option<u64>,
+    at: Time,
+    from: Time,
     end: Duration,
     sent: u32,
     open: bool,
 }
 
+impl AnswerWork {
+    fn next(&self) -> Time {
+        if self.sent == 0 {
+            self.from
+        } else {
+            self.from + self.end + PAGE_GAP
+        }
+    }
+}
+
+/// What a Chromium page takes, from taking the answer that frees a writer
+/// held on its own cap (its `bufferedamountlow`) to that writer's `send`'s
+/// begin, as the testbed's seed's link log has them (pph's halve-7-20 on
+/// c8a, node 0, 31 to 70 s, at the page's 5 µs grain): an answer that
+/// came while the page was busy, taken as its work ended, has the send
+/// return 0-10 µs after the event (5 at the median, holds under a ms); one
+/// that came to an idle page, 10-24 µs (15). Each takes the send's
+/// [`PAGE_SEND`] past this.
+const PAGE_ANSWER_BUSY: Duration = Duration::from_micros(2);
+const PAGE_ANSWER_IDLE: Duration = Duration::from_micros(12);
+
 impl PageClock {
+    /// A page clock, which takes its stack's answers within the step if
+    /// `answers` ([`Scenario::page_answers`](crate::Scenario::page_answers)).
+    /// `step` is the scheduler's ([`Scenario::tick`](crate::Scenario::tick)).
+    pub(crate) fn new(answers: bool, step: Duration) -> PageClock {
+        PageClock(Arc::new(Mutex::new(PageState {
+            answers,
+            step,
+            ..PageState::default()
+        })))
+    }
+
+    /// When the page's work at instant `now` begins: at it, or past the
+    /// work of a writer an answer freed there.
+    fn origin(x: &PageState, now: Time) -> Time {
+        match &x.answer {
+            Some(a) if a.at == now => now.max(a.next()),
+            _ => now,
+        }
+    }
+
+    /// When the page's work at instant `now` continues past its sends made
+    /// there: past the last by the work after it, and past the work of a
+    /// writer an answer freed there, which may have run between them.
+    fn continues(x: &PageState, now: Time) -> Time {
+        Self::origin(x, now).max(x.origin + x.end + gap(x.sent))
+    }
+
     /// The page's time at true time `now`: past the instant by its sends
     /// made at it and the work after them, at the end (`done`) of the
-    /// write whose send it made last that send's return.
-    fn at(&self, now: Time, done: bool) -> Time {
+    /// write whose send it made last that send's return. A record of an
+    /// answer's freed writer's link reads its work's clock.
+    fn at(&self, now: Time, done: bool, link: u64) -> Time {
         let mut x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(a) = x
+            .answer
+            .as_mut()
+            .filter(|a| a.at == now && a.link == Some(link))
+        {
+            if a.sent == 0 {
+                return a.from;
+            }
+            let past = if done && std::mem::take(&mut a.open) {
+                Duration::ZERO
+            } else {
+                PAGE_GAP
+            };
+            return a.from + a.end + past;
+        }
         match x.at {
             Some(at) if at == now && x.sent > 0 => {
                 let ends_send = done && std::mem::take(&mut x.open);
-                let past = if ends_send {
-                    Duration::ZERO
+                if ends_send {
+                    x.origin + x.end
                 } else {
-                    gap(x.sent)
-                };
-                now + x.end + past
+                    Self::continues(&x, now)
+                }
             }
-            _ => now,
+            _ => Self::origin(&x, now),
         }
     }
 
-    /// When a message the page sent at true time `now` would begin.
-    fn next(&self, now: Time) -> Time {
+    /// When a message the page sent on `conn` at true time `now` would
+    /// begin.
+    fn next(&self, now: Time, conn: &ConnKey) -> Time {
         let x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(a) = x.answer.as_ref().filter(|a| a.at == now && a.conn == *conn) {
+            return a.next();
+        }
         match x.at {
-            Some(at) if at == now && x.sent > 0 => now + x.end + gap(x.sent),
-            _ => now,
+            Some(at) if at == now && x.sent > 0 => Self::continues(&x, now),
+            _ => Self::origin(&x, now),
         }
     }
 
-    /// The page sent a message at true time `now`: when the send began
-    /// ([`PageClock::next`]).
-    fn send(&self, now: Time) -> Time {
+    /// The page sent a message on `conn` at true time `now`: when the send
+    /// began ([`PageClock::next`]).
+    fn send(&self, now: Time, conn: &ConnKey) -> Time {
         let mut x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        if x.at != Some(now) {
-            *x = PageState {
-                at: Some(now),
-                ..PageState::default()
+        if let Some(a) = x.answer.as_mut().filter(|a| a.at == now && a.conn == *conn) {
+            let begin = if a.sent == 0 {
+                Duration::ZERO
+            } else {
+                a.end + PAGE_GAP
             };
+            a.end = begin + PAGE_SEND;
+            a.sent += 1;
+            a.open = true;
+            let (next, began) = (a.next(), a.from + begin);
+            x.free = x.free.max(next);
+            return began;
+        }
+        if x.at != Some(now) {
+            let origin = Self::origin(&x, now);
+            x.at = Some(now);
+            x.origin = origin;
+            x.end = Duration::ZERO;
+            x.sent = 0;
+            x.open = false;
         }
         let (begin, cost) = if x.sent == 0 {
             (Duration::ZERO, PAGE_SEND_FIRST)
         } else {
-            (x.end + gap(x.sent), PAGE_SEND)
+            (Self::continues(&x, now) - x.origin, PAGE_SEND)
         };
         x.end = begin + cost;
         x.sent += 1;
         x.open = true;
-        now + begin
+        let next = x.origin + x.end + gap(x.sent);
+        x.free = x.free.max(next);
+        x.origin + begin
+    }
+
+    /// Whether the page takes its stack's answers within the step.
+    fn answers(&self) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .answers
+    }
+
+    /// The stack answered at `at`: when the page takes the answer's task,
+    /// at `at` or once its worker is free, if later, and whether it was
+    /// busy then. The page runs its answers' tasks first in, first out,
+    /// each freed writer's microtasks before the next
+    /// ([`PageClock::freed`]).
+    fn take(&self, at: Time) -> (Time, bool) {
+        let x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let free = x.free.max(x.taken);
+        if free >= at {
+            (free, true)
+        } else {
+            (at, false)
+        }
+    }
+
+    /// The answer the page took last freed a writer whose `send` begins at
+    /// `begin`: the page takes its next answer once that send returns.
+    fn freed(&self, begin: Time) {
+        let mut x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        x.taken = x.taken.max(begin + PAGE_SEND);
+    }
+
+    /// Connection `conn`'s writer (its link `link` in the link log), freed
+    /// by its stack's answer, resumes at instant `now` with its task begun
+    /// at `from`: its work at the instant reads the clock from then, or
+    /// from when the page's worker is free, if later. Returns when it
+    /// begins, or `None` if `from` is a step or more before `now`, where
+    /// the writer resumes at the instant.
+    fn resume(&self, now: Time, conn: ConnKey, link: Option<u64>, from: Time) -> Option<Time> {
+        let mut x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if from + x.step <= now {
+            return None;
+        }
+        let from = from.max(x.free);
+        x.answer = Some(AnswerWork {
+            conn,
+            link,
+            at: now,
+            from,
+            end: Duration::ZERO,
+            sent: 0,
+            open: false,
+        });
+        Some(from)
+    }
+
+    /// The page held a write on `conn` at true time `now`: its worker is
+    /// busy until [`PAGE_GAP`] past the check.
+    fn held(&self, now: Time, conn: &ConnKey) {
+        let at = self.next(now, conn);
+        let mut x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        x.free = x.free.max(at + PAGE_GAP);
     }
 
     /// `inner`, its records made with no time stamped by the page's clock.
@@ -777,7 +1013,7 @@ impl PageClock {
         let page = self.clone();
         LinkSink(Arc::new(move |mut r: strims_node::event::LinkRecord| {
             if r.at.is_none() {
-                r.at = Some(page.at(sim_now(), matches!(r.event, LinkEvent::Done)));
+                r.at = Some(page.at(sim_now(), matches!(r.event, LinkEvent::Done), r.link));
             }
             (inner.0)(r)
         }))
@@ -1099,7 +1335,21 @@ fn check(x: &mut Buffers, key: &ConnKey, now: Time, waker: &Waker) -> ChannelWri
     {
         h.moves += 1;
     }
-    let now = page_time(now);
+    // A writer its stack's answer freed runs its check past the answer
+    // ([`PageClock::resume`]): in the step after it, else not at all.
+    let page = c.page.clone();
+    let resumed = c
+        .resume
+        .take()
+        .zip(page.as_ref())
+        .and_then(|(from, p)| p.resume(now, *key, c.log.as_ref().map(|(l, _)| *l), from));
+    let instant = now;
+    let now = page_time(resumed.unwrap_or(now));
+    let page_held = |key: &ConnKey| {
+        if let Some(p) = &page {
+            p.held(instant, key);
+        }
+    };
     let may = match &mut c.pacer {
         Some(p) => {
             p.observe(now, buffered as usize);
@@ -1123,6 +1373,7 @@ fn check(x: &mut Buffers, key: &ConnKey, now: Time, waker: &Waker) -> ChannelWri
     if !may {
         c.waker = Some(waker.clone());
         c.record(LinkEvent::Held(WriteWait::Channel));
+        page_held(key);
         return ChannelWrite::Wait;
     }
     let held = c.held;
@@ -1156,6 +1407,7 @@ fn check(x: &mut Buffers, key: &ConnKey, now: Time, waker: &Waker) -> ChannelWri
         c.held = Some(mark);
         c.record(LinkEvent::Held(WriteWait::Host));
     }
+    page_held(key);
     ChannelWrite::Held
 }
 
@@ -1331,7 +1583,9 @@ impl SendBuffers {
                 }
                 c.above = c.amount() > c.threshold;
                 c.writes.push_back((stamp, end, c.shown.is_some(), page));
-                let now = page_time(now);
+                // A writer an answer freed sends before the instant
+                // ([`PageClock::resume`]), its pacers reading its time.
+                let now = page_time(page.filter(|&p| p < now).unwrap_or(now));
                 if let Some(p) = &mut c.pacer {
                     p.wrote(now, n);
                     if let Some(h) = x.hosts.get_mut(&key.0.ip()) {
@@ -1426,10 +1680,15 @@ impl SimTcpStream {
             .page
             .clone()
             .filter(|_| self.conn.as_ref().is_some_and(|(key, b)| b.paced(key)));
-        let page = clock.as_ref().map(|p| p.next(now)).filter(|&at| at > now);
+        let key = self.conn.as_ref().map(|(key, _)| *key);
+        let page = clock
+            .as_ref()
+            .zip(key.as_ref())
+            .map(|(p, key)| p.next(now, key))
+            .filter(|&at| at != now);
         let sent = |done: usize| {
-            if let Some(p) = clock.as_ref().filter(|_| done > 0) {
-                p.send(now);
+            if let (Some(p), Some(key)) = (clock.as_ref().filter(|_| done > 0), key.as_ref()) {
+                p.send(now, key);
             }
         };
         let mut done = 0;
@@ -1786,6 +2045,7 @@ impl Net for SimNet {
             return;
         };
         b.pace(*key, &profile);
+        b.set_page(*key, stream.pacer.page.clone());
         if let Some(wan) = &self.wan
             && let Some(sched) = wan.lock().as_mut()
         {
@@ -2411,26 +2671,108 @@ mod tests {
     #[test]
     fn a_pages_sends_at_one_instant_take_its_workers_time() {
         let page = PageClock::default();
+        let k: ConnKey = ("10.0.0.1:1".parse().unwrap(), "10.0.0.2:2".parse().unwrap());
         let at = ms(7);
-        assert_eq!(page.at(at, false), at, "nothing sent yet");
-        assert_eq!(page.send(at), at);
-        assert_eq!(page.at(at, true), at + PAGE_SEND_FIRST);
+        assert_eq!(page.at(at, false, 0), at, "nothing sent yet");
+        assert_eq!(page.send(at, &k), at);
+        assert_eq!(page.at(at, true, 0), at + PAGE_SEND_FIRST);
         let second = at + PAGE_SEND_FIRST + PAGE_GAP_FIRST;
-        assert_eq!(page.at(at, false), second);
-        assert_eq!(page.send(at), second);
+        assert_eq!(page.at(at, false, 0), second);
+        assert_eq!(page.send(at, &k), second);
         let third = second + PAGE_SEND + PAGE_GAP;
-        assert_eq!(page.next(at), third);
-        assert_eq!(page.next(at), third, "nothing sent");
-        assert_eq!(page.send(at), third);
-        assert_eq!(page.at(at, true), third + PAGE_SEND);
+        assert_eq!(page.next(at, &k), third);
+        assert_eq!(page.next(at, &k), third, "nothing sent");
+        assert_eq!(page.send(at, &k), third);
+        assert_eq!(page.at(at, true, 0), third + PAGE_SEND);
         // A write past its sends that the page doesn't pace.
         let unpaced = third + PAGE_SEND + PAGE_GAP;
-        assert_eq!(page.at(at, false), unpaced);
-        assert_eq!(page.at(at, true), unpaced, "ends where it began");
+        assert_eq!(page.at(at, false, 0), unpaced);
+        assert_eq!(page.at(at, true, 0), unpaced, "ends where it began");
         // Another instant starts again at its time.
-        assert_eq!(page.at(ms(8), false), ms(8));
-        assert_eq!(page.send(ms(8)), ms(8));
-        assert_eq!(page.at(ms(8), true), ms(8) + PAGE_SEND_FIRST);
+        assert_eq!(page.at(ms(8), false, 0), ms(8));
+        assert_eq!(page.send(ms(8), &k), ms(8));
+        assert_eq!(page.at(ms(8), true, 0), ms(8) + PAGE_SEND_FIRST);
+    }
+
+    /// A writer its stack's answer freed resumes past the answer, or past
+    /// the page's work if the page was busy then, its sends and its link's
+    /// records from there; the instant's other work follows it.
+    #[test]
+    fn a_pages_answer_frees_its_writer_within_the_step() {
+        let page = PageClock::new(true, Duration::from_millis(1));
+        let k: ConnKey = ("10.0.0.1:1".parse().unwrap(), "10.0.0.2:2".parse().unwrap());
+        let o: ConnKey = ("10.0.0.1:3".parse().unwrap(), "10.0.0.3:2".parse().unwrap());
+        let at = ms(7);
+        assert_eq!(page.send(at, &o), at);
+        page.held(at, &k);
+        let free = at + PAGE_SEND_FIRST + PAGE_GAP_FIRST + PAGE_GAP;
+        assert_eq!(
+            page.take(at + Duration::from_micros(5)),
+            (free, true),
+            "busy"
+        );
+        assert_eq!(
+            page.take(at + Duration::from_micros(400)),
+            (at + Duration::from_micros(400), false),
+            "idle"
+        );
+        let from = at + Duration::from_micros(400) + PAGE_ANSWER_IDLE;
+        assert_eq!(page.resume(ms(8), k, Some(1), from), Some(from));
+        assert_eq!(page.at(ms(8), false, 1), from);
+        assert_eq!(page.send(ms(8), &k), from);
+        assert_eq!(page.at(ms(8), true, 1), from + PAGE_SEND);
+        assert_eq!(page.next(ms(8), &k), from + PAGE_SEND + PAGE_GAP);
+        // The instant's other work starts at it.
+        assert_eq!(page.at(ms(8), false, 2), ms(8));
+        assert_eq!(page.send(ms(8), &o), ms(8));
+        // A resume never reads earlier than the page's last work, and one
+        // a step or more past its task never comes.
+        let free = ms(8) + PAGE_SEND_FIRST + PAGE_GAP_FIRST;
+        let late = at + Duration::from_micros(1);
+        assert_eq!(page.resume(ms(8), k, Some(1), late), Some(free));
+        assert_eq!(page.resume(ms(8), k, Some(1), at), None);
+    }
+
+    /// The instant's ordinary work around a freed writer's goes past it:
+    /// a send after the writer's begins once the writer's work ends, never
+    /// beside it on the one worker.
+    #[test]
+    fn a_pages_work_at_an_instant_goes_past_its_freed_writers() {
+        let page = PageClock::new(true, Duration::from_millis(1));
+        let k: ConnKey = ("10.0.0.1:1".parse().unwrap(), "10.0.0.2:2".parse().unwrap());
+        let o: ConnKey = ("10.0.0.1:3".parse().unwrap(), "10.0.0.3:2".parse().unwrap());
+        let at = ms(8);
+        assert_eq!(page.send(at, &o), at);
+        let free = at + PAGE_SEND_FIRST + PAGE_GAP_FIRST;
+        // The writer's task came within the step; the page was busy.
+        assert_eq!(
+            page.resume(at, k, Some(1), at - Duration::from_micros(100)),
+            Some(free)
+        );
+        assert_eq!(page.send(at, &k), free);
+        let past = free + PAGE_SEND + PAGE_GAP;
+        assert_eq!(page.next(at, &o), past);
+        assert_eq!(page.at(at, false, 2), past);
+        assert_eq!(page.send(at, &o), past);
+        assert_eq!(page.at(at, true, 2), past + PAGE_SEND);
+        assert_eq!(page.next(at, &o), past + PAGE_SEND + PAGE_GAP);
+    }
+
+    /// The page takes two answers that come in one step first in, first
+    /// out: the second once the writer the first freed has sent.
+    #[test]
+    fn a_pages_answers_go_first_in_first_out() {
+        let page = PageClock::new(true, Duration::from_millis(1));
+        let at = ms(7);
+        let first = at + Duration::from_micros(100);
+        assert_eq!(page.take(first), (first, false));
+        page.freed(first + PAGE_ANSWER_IDLE);
+        let sent = first + PAGE_ANSWER_IDLE + PAGE_SEND;
+        assert_eq!(page.take(first + Duration::from_micros(2)), (sent, true));
+        assert_eq!(
+            page.take(at + Duration::from_micros(300)),
+            (at + Duration::from_micros(300), false)
+        );
     }
 
     /// A due writer that stops looking holds the others back only a few

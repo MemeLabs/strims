@@ -664,16 +664,12 @@ and dropped are in `TRIED.md`.
     The same item takes the other peer services a deployed node's links
     carry from their start: replication, bootstrap's `GetPublishEnabled`
     (one call a link) and the transfers' discovery.
-  - Hand a Chromium page its stack's answers inside the scheduler's step,
-    so a writer held on its own cap wakes as the browser's does, when its
-    network thread ends the send opportunity that answers it (the SCTP
-    bench's next step; `SctpProfile::packet_cost`,
-    `SendBuffers::answered`), its writer's write then at the page clock's
-    time past the answer (`net::PageClock`). Then fit against the quiet
-    hosts' runs: the write path's holds and lows (`write_fit_of`'s stages
-    3, 4 and 6, stage 6's p90 among them), its stages 1 and 7c at
-    20 Mbit/s and 7b at 10; the buffered amount at writes
-    (`sctp_fit_of`'s reading 2).
+  - Judge the twin's Chromium seed's written rate (halve-7-20, 31 to
+    70 s) at enough seeds to separate it from each run's mix of its low
+    and high states before fitting it, and its channel and host holds at
+    equal bytes written. Then fit against the quiet hosts' runs:
+    `write_fit_of`'s failing stages, stage 1's runner among them, and the
+    buffered amount at writes (`sctp_fit_of`'s reading 2).
   - Close the dcSCTP twin's remaining gaps to the testbed's browser
     seeds: the calm 10 Mbit/s runs' queue drops and drain rate on the
     SCTP bench (`sctp_fit_of`'s readings 6 and 5, against the testbed's

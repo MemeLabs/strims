@@ -15,8 +15,9 @@
 //! start, and then runs the events due by its time in time order, each at
 //! its own time; a browser page's messages sent past the step's start
 //! (`crate::net::PageClock`) go among those events at their times. Those
-//! stamped before the step's start (a browser's link-setup replies) go
-//! before the rest, at their stamps, with their events up to the step's start, and
+//! stamped before the step's start (a browser's link-setup replies, a
+//! page's sends past the answer that freed their writer) go before the
+//! rest, at their stamps, with their events up to the step's start, and
 //! the bin edges before the walk's time are read then
 //! ([`Scheduler::walk_reading`]). So
 //! every uplink is handed what it carries in time order
@@ -3871,10 +3872,12 @@ impl Scheduler {
 
     /// The step's new records stamped before its start `at`, sent at their
     /// stamps: with send buffers, a link-setup reply's link's writes
-    /// ([`Scheduler::send_at`]). They go in their stamps' order (a link's
-    /// writes in theirs), each no earlier than its uplink's last hand-off,
-    /// and what they bring before the step's start (their network thread's
-    /// hands) runs with them: no write
+    /// ([`Scheduler::send_at`]) and a browser page's messages on an
+    /// association whose writer its stack's answer freed past the answer
+    /// ([`crate::net::PageClock::resume`]). They go in their stamps' order
+    /// (a link's writes in theirs), each no earlier than its uplink's last
+    /// hand-off, and what they bring before the step's start (their network
+    /// thread's hands, their pages' sends) runs with them: no write
     /// overtakes what its uplink took, none waits behind a later-stamped
     /// one's, and the step's other writes come behind them, in what this
     /// returns ([`Scheduler::send`]).
@@ -3916,12 +3919,14 @@ impl Scheduler {
             }));
         }
         // A write's stamp before the step's start: its link's reply's (the
-        // step's start at the latest).
+        // step's start at the latest), else its page's send's.
         let stamp = |w: &Write| {
             let (src, dst, _) = w.0?;
             let conn = (src, dst);
-            let r = replies.get(&conn)?;
-            self.assocs.contains_key(&conn).then(|| (*r).min(at))
+            match replies.get(&conn) {
+                Some(&r) if self.assocs.contains_key(&conn) => Some(r.min(at)),
+                _ => w.4.filter(|&t| t < at),
+            }
         };
         let (mut first, mut rest) = (Vec::new(), Vec::new());
         for w in writes {
