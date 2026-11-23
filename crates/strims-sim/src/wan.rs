@@ -14,7 +14,11 @@
 //! A walk hands the uplinks the step's new messages first, at the step's
 //! start, and then runs the events due by its time in time order, each at
 //! its own time; a browser page's messages sent past the step's start
-//! (`crate::net::PageClock`) go among those events at their times. So
+//! (`crate::net::PageClock`) go among those events at their times. Those
+//! stamped before the step's start (a browser's link-setup replies) go
+//! before the rest, at their stamps, with their events up to the step's start, and
+//! the bin edges before the walk's time are read then
+//! ([`Scheduler::walk_reading`]). So
 //! every uplink is handed what it carries in time order
 //! and serves it in that order, as a qdisc serves what its host hands it:
 //! every event comes after the step's start, and no host hands its uplink
@@ -1237,6 +1241,26 @@ type IpKey = (bool, u128);
 /// A new message's queue: its sender, receiver and connection addresses.
 type QueueKey = (HostIx, HostIx, IpKey, IpKey);
 
+/// A step's write with send buffers ([`Scheduler::send_early`]): its
+/// connection and sender when the window model takes it as data, its
+/// record, whether it ends its message, whether its page counted it, and
+/// when its page sent it, on an association.
+type Write = (
+    Option<(SocketAddr, SocketAddr, HostIx)>,
+    u64,
+    bool,
+    bool,
+    Option<Time>,
+);
+
+/// What [`Scheduler::send`] hands after [`Scheduler::send_early`].
+enum Later {
+    /// Without send buffers: the step's new records.
+    Fresh(Vec<u64>),
+    /// With them: the writes at the step's start or past it.
+    Written(Vec<Write>),
+}
+
 fn ip_key(ip: IpAddr) -> IpKey {
     match ip {
         IpAddr::V4(a) => (false, u128::from(a.to_bits())),
@@ -1336,8 +1360,10 @@ pub(crate) struct Scheduler {
     frozen: BTreeSet<(HostIx, HostIx)>,
     partitioned: BTreeSet<(HostIx, HostIx)>,
     tick: Duration,
-    /// The time of the walk running, or of the last: a bin edge is read no
-    /// earlier ([`Scheduler::up_counters`]).
+    /// The time of the walk running, or of the last: its step's start until
+    /// the step's writes stamped before it are in, then the walk's time
+    /// ([`Scheduler::walk_reading`]). A bin edge is read no earlier
+    /// ([`Scheduler::up_counters`]).
     walked: Time,
     buffers: Option<SendBuffers>,
     /// Data segments waiting for room in their sender's uplink queue, by
@@ -1747,7 +1773,7 @@ impl Scheduler {
     /// reply to a setup flight, which its stack sends as it handles the
     /// flight ([`strims_node::Net::send_ago`]). Only a data channel's
     /// writes take it, through their association's sender
-    /// ([`Scheduler::send_written`]). A reply can't overtake what its
+    /// ([`Scheduler::send_early`]). A reply can't overtake what its
     /// uplink already took: it goes no earlier than the uplink's last
     /// hand-off, before the step's other writes and with what it brings
     /// before the step's start, its network thread's hands, and its stack
@@ -1929,16 +1955,39 @@ impl Scheduler {
 
     /// One walk, between two steps (see the module docs).
     pub fn walk(&mut self, sim: &Sim<'_>) -> Result<(), String> {
+        self.walk_reading(sim, |_| {})
+    }
+
+    /// [`Scheduler::walk`], calling `read` once the walk has run to the
+    /// step's start: the step's writes stamped before it are in
+    /// ([`Scheduler::send_early`]) and their events up to it have run, so a
+    /// bin edge read there, at the step's start or before the walk's time,
+    /// counts them in the bin they came in. The last walk read the edges
+    /// before its own time, the step's start, so a write stamped before
+    /// such an edge, more than a step before the step's start (a setup
+    /// reply its stack sent that long before the walk took the step's new
+    /// messages), counts in the bin after its own.
+    pub fn walk_reading(
+        &mut self,
+        sim: &Sim<'_>,
+        read: impl FnOnce(&mut Scheduler),
+    ) -> Result<(), String> {
         let now = sim_time(sim.elapsed());
-        self.walked = now;
-        // No edge is read before the walk's time ([`Scheduler::settled`]).
-        self.net.settle(now);
+        let start = now - self.tick;
+        // No edge is read before the step's start until `read`, nor before
+        // the walk's time after it ([`Scheduler::settled`]).
+        self.walked = start;
+        self.net.settle(start);
         // The step's writes, at its start, go first: every event of the walk
         // comes after it (the last walk ran those before), so each uplink
         // takes them before what the events hand it, and what they cause
         // within the step runs in the walk.
         let fresh = self.match_queues(sim, false)?;
-        self.send(now - self.tick, fresh);
+        let later = self.send_early(start, fresh);
+        read(self);
+        self.walked = now;
+        self.net.settle(now);
+        self.send(start, later);
         self.run_events(now);
         self.match_queues(sim, true)?;
         self.purge(sim);
@@ -3744,12 +3793,16 @@ impl Scheduler {
     /// it writes, as Linux's `sendmsg` does: one socket's burst reaches
     /// the uplink before another's written after it. Without, each sender
     /// serves its links in turn, one message at a time, in queue order on
-    /// each link.
-    fn send(&mut self, at: Time, fresh: Vec<u64>) {
-        if let Some(b) = self.buffers.clone() {
-            self.send_written(at, fresh, &b);
-            return;
-        }
+    /// each link. The writes stamped before `at` went first
+    /// ([`Scheduler::send_early`]).
+    fn send(&mut self, at: Time, later: Later) {
+        let fresh = match later {
+            Later::Written(rest) => {
+                self.send_written(at, rest);
+                return;
+            }
+            Later::Fresh(fresh) => fresh,
+        };
         let by_sender = self.queues(fresh);
         let window = self.window().is_some();
         for mut queues in by_sender {
@@ -3816,12 +3869,23 @@ impl Scheduler {
         senders
     }
 
-    /// [`Scheduler::send`] with send buffers.
-    fn send_written(&mut self, at: Time, fresh: Vec<u64>, b: &SendBuffers) {
+    /// The step's new records stamped before its start `at`, sent at their
+    /// stamps: with send buffers, a link-setup reply's link's writes
+    /// ([`Scheduler::send_at`]). They go in their stamps' order (a link's
+    /// writes in theirs), each no earlier than its uplink's last hand-off,
+    /// and what they bring before the step's start (their network thread's
+    /// hands) runs with them: no write
+    /// overtakes what its uplink took, none waits behind a later-stamped
+    /// one's, and the step's other writes come behind them, in what this
+    /// returns ([`Scheduler::send`]).
+    fn send_early(&mut self, at: Time, fresh: Vec<u64>) -> Later {
+        let Some(b) = self.buffers.clone() else {
+            return Later::Fresh(fresh);
+        };
         let replies = std::mem::take(&mut self.replies);
         let by_sender = self.queues(fresh);
         let window = self.window().is_some();
-        let mut writes = Vec::new();
+        let mut writes: Vec<Write> = Vec::new();
         for queues in by_sender {
             // (write order, queue position, record, whether it ends a
             // message, whether the page counted it, when its page sent it)
@@ -3846,46 +3910,44 @@ impl Scheduler {
                     What::Data { .. } if window => Some((r.src, r.dst, r.from)),
                     _ => None,
                 });
-                (data, id, end, counted, page)
+                // A page's time counts on an association alone.
+                let assoc = data.is_some_and(|(src, dst, _)| self.assocs.contains_key(&(src, dst)));
+                (data, id, end, counted, page.filter(|_| assoc))
             }));
         }
-        // The replies first, in their stamps' order (a link's writes in
-        // theirs), each no earlier than its uplink's last hand-off, and
-        // what they bring before the step's start (their network thread's
-        // hands) with them: no reply overtakes what its uplink took, none
-        // waits behind a later-stamped one's, and the step's other writes
-        // come behind them.
-        let stamp = |d: &Option<(SocketAddr, SocketAddr, HostIx)>| {
-            d.and_then(|(src, dst, _)| {
-                let conn = (src, dst);
-                let r = replies.get(&conn)?;
-                self.assocs.contains_key(&conn).then(|| (*r).min(at))
-            })
+        // A write's stamp before the step's start: its link's reply's (the
+        // step's start at the latest).
+        let stamp = |w: &Write| {
+            let (src, dst, _) = w.0?;
+            let conn = (src, dst);
+            let r = replies.get(&conn)?;
+            self.assocs.contains_key(&conn).then(|| (*r).min(at))
         };
-        let (mut first, rest): (Vec<_>, Vec<_>) =
-            writes.into_iter().partition(|w| stamp(&w.0).is_some());
-        first.sort_by_key(|w| stamp(&w.0));
-        for (data, id, end, counted, _) in first {
-            if let Some((src, dst, from)) = data
-                && let Some(&r) = replies.get(&(src, dst))
-            {
-                let t = r.min(at);
+        let (mut first, mut rest) = (Vec::new(), Vec::new());
+        for w in writes {
+            match stamp(&w) {
+                Some(t) => first.push((t, w)),
+                None => rest.push(w),
+            }
+        }
+        first.sort_by_key(|&(t, _)| t);
+        for (t, (data, id, end, counted, _)) in first {
+            if let Some((src, dst, from)) = data {
                 let t = self.last_offered.get(&from).map_or(t, |&last| t.max(last));
                 self.sctp_write(t, (src, dst), id, end, counted);
             }
         }
         self.run_events(at);
+        Later::Written(rest)
+    }
+
+    /// [`Scheduler::send`] with send buffers: the step's writes that
+    /// [`Scheduler::send_early`] left, at its start `at` or past it.
+    fn send_written(&mut self, at: Time, mut rest: Vec<Write>) {
         // A browser page's messages on an association go at their sends'
         // times within the step ([`crate::net::PageClock`]), in time order
         // among the walk's events, each no earlier than its uplink's last
         // hand-off; the rest at the step's start, in their order, first.
-        let mut rest: Vec<_> = rest
-            .into_iter()
-            .map(|(data, id, end, counted, page)| {
-                let assoc = data.is_some_and(|(src, dst, _)| self.assocs.contains_key(&(src, dst)));
-                (data, id, end, counted, page.filter(|_| assoc))
-            })
-            .collect();
         rest.sort_by_key(|w| w.4.unwrap_or(at));
         let end_of_step = at + self.tick;
         for (data, id, end, counted, page) in rest {
@@ -4460,7 +4522,8 @@ impl Scheduler {
     }
 
     /// The hand-over time a ledger takes for one at `at`: no later than the
-    /// walk's, at or after which every bin edge is read. A walk hands
+    /// walk's ([`Scheduler::walked`]), at or after which every bin edge is
+    /// read. A walk hands
     /// nothing over past its time, so this is a guard, which moves only a
     /// crash's hand-overs past the last walk ([`Scheduler::crashed`]).
     fn settled(&self, at: Time) -> Time {
@@ -4472,7 +4535,7 @@ impl Scheduler {
     }
 
     /// Host `h`'s uplink counters at `at` ([`UP_COUNTERS`]), no earlier
-    /// than the last walk's time: what its uplink carried before `at`, each
+    /// than the walk's time ([`Scheduler::walked`]): what its uplink carried before `at`, each
     /// packet from when it left, and the rest as they stand.
     pub fn up_counters(&self, h: HostIx, at: Time) -> [u64; UP_COUNTERS.len()] {
         let n = |v: &Vec<u64>| v.get(h).copied().unwrap_or(0);
@@ -6299,7 +6362,8 @@ mod tests {
             .collect();
         // The uplink's last hand-off came 30 µs in.
         wan.last_offered.insert(from, t0 + us(30));
-        wan.send(t0, fresh);
+        let later = wan.send_early(t0, fresh);
+        wan.send(t0, later);
         wan.run_events(t0 + us(1000));
         let sent = |c: ConnKey| wan.assocs[&c].sent_at(1).unwrap() - t0;
         assert_eq!((sent(conns[1]), sent(conns[0])), (us(30), us(50)));

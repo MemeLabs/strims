@@ -135,6 +135,8 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
     let mut faults = spec.faults.clone();
     faults.sort_by_key(|f| f.at);
     let mut next = 0;
+    // The last walk's time.
+    let mut walked;
     // The bins' width and the next bin edge ([`Scenario::wire_bins`]).
     let mut bins = spec
         .wire_bins
@@ -155,20 +157,36 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
             next += 1;
         }
         // The walk hands its uplinks the step's writes and runs their
-        // events up to the step's time: an edge the step passed over is
-        // read before them, which come after it, and one at the step's
-        // time once they are in.
+        // events up to the step's time. The writes stamped before the
+        // step's start go first, with their events up to it: an edge
+        // before the step's time is read once they are in, before the
+        // step's other writes, which come after it, and one at the step's
+        // time in the next walk, once that walk's writes stamped before it
+        // are in ([`Scheduler::walk_reading`]). The faults due at the
+        // walk's time apply before it, as they must: the walk takes the
+        // step's messages from turmoil, and a crash after it would hand on
+        // what its host sent in the step. So the edge at the step's start
+        // is read past them: the ledgered counters, each packet from when
+        // it left, don't move, but a crashed host's counters read as they
+        // stand (its `cuts` and `rtos`) take its stack's events up to the
+        // crash ([`Scheduler::crashed`]) into the bin before it, a step
+        // early at most.
         let now = sim.elapsed();
-        read_edges(w, spec.hosts.len(), &mut bins, |edge| edge < now);
         if let Some(s) = w.wan.lock().as_mut() {
-            s.walk(&sim)?;
+            s.walk_reading(&sim, |s| {
+                read_edges(w, s, spec.hosts.len(), &mut bins, |edge| edge < now);
+            })?;
         }
-        read_edges(w, spec.hosts.len(), &mut bins, |edge| edge <= now);
+        walked = now;
         match sim.step() {
             Ok(true) => break,
             Ok(false) => {}
             Err(e) => return Err(e.to_string()),
         }
+    }
+    // The edge at the last walk's time, which no walk follows.
+    if let Some(s) = w.wan.lock().as_mut() {
+        read_edges(w, s, spec.hosts.len(), &mut bins, |edge| edge <= walked);
     }
     // The faults the run never reached.
     for i in next..faults.len() {
@@ -221,15 +239,12 @@ fn simulate(w: &Rc<World>) -> Result<(f64, Option<WanReport>), String> {
 /// they stand.
 fn read_edges(
     w: &World,
+    s: &mut Scheduler,
     hosts: usize,
     bins: &mut Option<(Duration, Duration)>,
     due: impl Fn(Duration) -> bool,
 ) {
     let Some((width, next_edge)) = bins.as_mut() else {
-        return;
-    };
-    let mut wan = w.wan.lock();
-    let Some(s) = wan.as_mut() else {
         return;
     };
     let mut read = false;
