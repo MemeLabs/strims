@@ -1824,8 +1824,9 @@ fn browser(r: &strims_sim::Report, node: i64) -> bool {
 
 /// The host pacer's polls (`timers` of source `pacer`) against the writes
 /// they freed (`link_writes`): a write its host's pacer held last went at
-/// a poll of its node's, as nothing else frees it, and only a browser's
-/// writes and polls are the host's.
+/// a poll of its node's, as nothing else frees it, its end within the
+/// poll's step by its page's sends there (`Scenario::page_writes`), and
+/// only a browser's writes and polls are the host's.
 fn pacer_polls_free_the_hosts_holds(r: &strims_sim::Report, d: &Path) {
     let mut polls: BTreeMap<i64, BTreeSet<i64>> = BTreeMap::new();
     for t in table_rows(d, "timers")
@@ -1839,6 +1840,8 @@ fn pacer_polls_free_the_hosts_holds(r: &strims_sim::Report, d: &Path) {
             .or_default()
             .insert(int(t, "t_us").unwrap());
     }
+    // A poll's step: the page's sends there end before the next.
+    let step = i64::try_from(r.scenario.tick.as_micros()).unwrap() - 1;
     for w in table_rows(d, "link_writes")
         .iter()
         .filter(|w| w["wait"] == "host")
@@ -1847,7 +1850,9 @@ fn pacer_polls_free_the_hosts_holds(r: &strims_sim::Report, d: &Path) {
         assert!(browser(r, node), "{w:?}");
         let done = int(w, "done_us").unwrap();
         assert!(
-            polls.get(&node).is_some_and(|p| p.contains(&done)),
+            polls
+                .get(&node)
+                .is_some_and(|p| p.range(done - step..=done).next().is_some()),
             "{w:?}: no poll of its node at its done"
         );
     }

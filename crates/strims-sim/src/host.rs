@@ -128,7 +128,8 @@ pub(crate) async fn host_main(w: Rc<World>, h: HostIx) -> turmoil::Result {
         w.spec.pacer_pass_start,
         w.timer_log(h).filter(|_| browser).map(|l| l.sink()),
         w.clock_lead(h),
-    );
+    )
+    .with_page(w.page_clocks.get(h).cloned().flatten());
     let page_rank = crate::spec::PageTiming::rank(&w.spec, h);
     let net = SimNet::new(w.send_buffers.clone())
         .with_wan(w.wan.clone())

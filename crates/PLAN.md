@@ -575,10 +575,11 @@ and dropped are in `TRIED.md`.
     pass doesn't meet (after a release, after a poll's turn).
   - Turn `Scenario::pacer_pass_start` on by default once the write path
     bench (`write_fit_of`, from 20 s and 4-30 s) fits it better than
-    without: hand the frame writer's pass's node hand-offs over at the
-    pass's start through the host's link sink, where the sim's come at
-    the write and its link writers wait for the start (`write_fit_of`'s
-    stage 2), and draw the pass start below the millisecond.
+    without: stamp the frame writer's pass's node hand-offs at the
+    pass's start, where its link writers wait for it (`write_fit_of`'s
+    stage 2); start the host's page clock (`net::PageClock`) there, so
+    the pass's writes spread from its start; and draw the pass start
+    below the millisecond.
   - Find why a loaded browser seed's host pacer holds its frame writer's
     pass in fewer periods in the twin than on the testbed (the timer
     bench's loaded cells: `timer_runs_of`'s hold starts a run), and
@@ -667,13 +668,12 @@ and dropped are in `TRIED.md`.
     so a writer held on its own cap wakes as the browser's does, when its
     network thread ends the send opportunity that answers it (the SCTP
     bench's next step; `SctpProfile::packet_cost`,
-    `SendBuffers::answered`), and give the page's writes the time a
-    browser's worker takes for them within the step, the walk handing each
-    over in time order among its events.
-    Then fit against the quiet hosts' runs: the write path's holds and
-    lows (`write_fit_of`'s stages 3, 4 and 6, stage 6's p90 among them),
-    its stages 1 and 7c at 20 Mbit/s and 7b at 10; the buffered amount at
-    writes (`sctp_fit_of`'s reading 2).
+    `SendBuffers::answered`), its writer's write then at the page clock's
+    time past the answer (`net::PageClock`). Then fit against the quiet
+    hosts' runs: the write path's holds and lows (`write_fit_of`'s stages
+    3, 4 and 6, stage 6's p90 among them), its stages 1 and 7c at
+    20 Mbit/s and 7b at 10; the buffered amount at writes
+    (`sctp_fit_of`'s reading 2).
   - Close the dcSCTP twin's remaining gaps to the testbed's browser
     seeds: the calm 10 Mbit/s runs' queue drops and drain rate on the
     SCTP bench (`sctp_fit_of`'s readings 6 and 5, against the testbed's

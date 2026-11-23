@@ -13,7 +13,9 @@
 //!
 //! A walk hands the uplinks the step's new messages first, at the step's
 //! start, and then runs the events due by its time in time order, each at
-//! its own time, so every uplink is handed what it carries in time order
+//! its own time; a browser page's messages sent past the step's start
+//! (`crate::net::PageClock`) go among those events at their times. So
+//! every uplink is handed what it carries in time order
 //! and serves it in that order, as a qdisc serves what its host hands it:
 //! every event comes after the step's start, and no host hands its uplink
 //! a packet before the walk reaches the time it hands it over. A receiver
@@ -3822,8 +3824,8 @@ impl Scheduler {
         let mut writes = Vec::new();
         for queues in by_sender {
             // (write order, queue position, record, whether it ends a
-            // message, whether the page counted it)
-            let mut keyed: Vec<(u64, usize, u64, bool, bool)> = Vec::new();
+            // message, whether the page counted it, when its page sent it)
+            let mut keyed: Vec<(u64, usize, u64, bool, bool, Option<Time>)> = Vec::new();
             for q in queues {
                 let mut last = 0;
                 for id in q {
@@ -3831,19 +3833,20 @@ impl Scheduler {
                         What::Data { .. } => b.next_write((r.src, r.dst)),
                         _ => None,
                     });
-                    last = write.map_or(last, |(stamp, _, _)| stamp);
-                    let end = write.is_none_or(|(_, end, _)| end);
-                    let counted = write.is_some_and(|(_, _, counted)| counted);
-                    keyed.push((last, keyed.len(), id, end, counted));
+                    last = write.map_or(last, |(stamp, ..)| stamp);
+                    let end = write.is_none_or(|(_, end, ..)| end);
+                    let counted = write.is_some_and(|(_, _, counted, _)| counted);
+                    let page = write.and_then(|(.., page)| page);
+                    keyed.push((last, keyed.len(), id, end, counted, page));
                 }
             }
             keyed.sort_unstable();
-            writes.extend(keyed.into_iter().map(|(_, _, id, end, counted)| {
+            writes.extend(keyed.into_iter().map(|(_, _, id, end, counted, page)| {
                 let data = self.records.get(&id).and_then(|r| match r.what {
                     What::Data { .. } if window => Some((r.src, r.dst, r.from)),
                     _ => None,
                 });
-                (data, id, end, counted)
+                (data, id, end, counted, page)
             }));
         }
         // The replies first, in their stamps' order (a link's writes in
@@ -3862,7 +3865,7 @@ impl Scheduler {
         let (mut first, rest): (Vec<_>, Vec<_>) =
             writes.into_iter().partition(|w| stamp(&w.0).is_some());
         first.sort_by_key(|w| stamp(&w.0));
-        for (data, id, end, counted) in first {
+        for (data, id, end, counted, _) in first {
             if let Some((src, dst, from)) = data
                 && let Some(&r) = replies.get(&(src, dst))
             {
@@ -3872,10 +3875,31 @@ impl Scheduler {
             }
         }
         self.run_events(at);
-        for (data, id, end, counted) in rest {
+        // A browser page's messages on an association go at their sends'
+        // times within the step ([`crate::net::PageClock`]), in time order
+        // among the walk's events, each no earlier than its uplink's last
+        // hand-off; the rest at the step's start, in their order, first.
+        let mut rest: Vec<_> = rest
+            .into_iter()
+            .map(|(data, id, end, counted, page)| {
+                let assoc = data.is_some_and(|(src, dst, _)| self.assocs.contains_key(&(src, dst)));
+                (data, id, end, counted, page.filter(|_| assoc))
+            })
+            .collect();
+        rest.sort_by_key(|w| w.4.unwrap_or(at));
+        let end_of_step = at + self.tick;
+        for (data, id, end, counted, page) in rest {
             match data.map(|(src, dst, _)| (src, dst)) {
                 Some(conn) if self.assocs.contains_key(&conn) => {
-                    self.sctp_write(at, conn, id, end, counted);
+                    let t = match (page, data) {
+                        (Some(t), Some((.., from))) => {
+                            let t = t.min(end_of_step);
+                            self.run_events(t);
+                            self.last_offered.get(&from).map_or(t, |&last| t.max(last))
+                        }
+                        _ => at,
+                    };
+                    self.sctp_write(t, conn, id, end, counted);
                 }
                 Some(conn) => {
                     self.queue_window(conn, id);
@@ -6231,6 +6255,60 @@ mod tests {
             wan.sctp_write(at, c, *id, k % chunks == chunks - 1, counted);
             *id += 1;
         }
+    }
+
+    /// A page's messages of one instant go to their uplink at their sends'
+    /// times within the step, in time order whatever their write order,
+    /// and none before the uplink's last hand-off.
+    #[test]
+    fn a_pages_messages_go_at_their_sends_times() {
+        let (_sim, mut wan, conns) = channels_of(SctpProfile::FIREFOX, 2);
+        let b = wan.buffers.clone().unwrap();
+        let t0 = sim_time(StdDuration::from_secs(1));
+        let us = |n: i64| Duration::from_micros(n);
+        let p = wan.assocs[&conns[0]].profile();
+        let (from, to) = (wan.ip_host[&conns[0].0.ip()], wan.ip_host[&conns[0].1.ip()]);
+        for c in &conns {
+            b.open_test_channel(*c, &p);
+        }
+        // The first channel's message sent 50 µs into the instant, the
+        // second's, written after it, 10 µs in.
+        let fresh: Vec<u64> = [(conns[0], 50), (conns[1], 10)]
+            .into_iter()
+            .enumerate()
+            .map(|(id, (c, page))| {
+                let id = id as u64 + 100;
+                wan.records.insert(
+                    id,
+                    Record {
+                        src: c.0,
+                        dst: c.1,
+                        from,
+                        to,
+                        what: What::Data { seq: id, len: 1000 },
+                        wire: p.data_wire(1000),
+                        packets: 1,
+                        nominal: false,
+                        state: State::InFlight,
+                        link: 0,
+                    },
+                );
+                b.wrote(&c, 1000, true, t0, Some(t0 + us(page)));
+                id
+            })
+            .collect();
+        // The uplink's last hand-off came 30 µs in.
+        wan.last_offered.insert(from, t0 + us(30));
+        wan.send(t0, fresh);
+        wan.run_events(t0 + us(1000));
+        let sent = |c: ConnKey| wan.assocs[&c].sent_at(1).unwrap() - t0;
+        assert_eq!((sent(conns[1]), sent(conns[0])), (us(30), us(50)));
+        let times: Vec<Duration> = wan.packets[0]
+            .iter()
+            .map(|r| r.at - (t0 - epoch()))
+            .collect();
+        assert!(times.is_sorted(), "{times:?}");
+        assert_eq!(times.first(), Some(&us(30)), "{times:?}");
     }
 
     /// A Chromium host's channels send through its one thread: each send

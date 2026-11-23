@@ -6069,7 +6069,9 @@ pub(crate) mod cols {
         /// browser seed's write that its frame writer's pass hands and its host
         /// holds, at the hold's start with `STRIMS_SIM_PACER_HOLD=on`, and
         /// every write the pass hands a data channel at the pass's start with
-        /// `STRIMS_SIM_PACER_PASS=on` too (`crate::net`).
+        /// `STRIMS_SIM_PACER_PASS=on` too (`crate::net`); a browser's past its
+        /// step's instant by its page's `send`s before it there
+        /// (`Scenario::page_writes`).
         ///
         /// Unit: us.
         TUs,

@@ -826,6 +826,16 @@ pub struct Scenario {
     /// pass, a draw for each pass. Off by default: the write path bench
     /// (`write_fit_of`) doesn't fit it better yet (PLAN).
     pub pacer_pass_start: bool,
+    /// Whether a browser host's page sends its data channels' messages
+    /// one after another within the scheduler's step, each past the
+    /// step's instant by the worker's work for the sends before it at the
+    /// instant (`crate::net::PageClock`: a few µs a `send`, tens between
+    /// two, as the testbed's Chromium seed takes them; a Firefox page's are
+    /// assumed the same, as only the Chromium seed's link log was
+    /// measured): its segments go to its uplink then, among the walk's
+    /// events, and its link log's records at the instant read that clock.
+    /// On by default; off, every message at the instant.
+    pub page_writes: bool,
     /// With [`Scenario::wire_bins`], the hosts that keep their timers as
     /// they fire for the tables' `timers` (`NodeConfig::timer_log`, and
     /// their frame writers' and probes' waits): none by default. Changes
@@ -1122,6 +1132,7 @@ impl Scenario {
             pacer_turns: true,
             pacer_hold_start: true,
             pacer_pass_start: false,
+            page_writes: true,
             timer_log: None,
             timer_probe: false,
             link_log: None,

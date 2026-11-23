@@ -423,6 +423,10 @@ pub(crate) struct World {
     /// Each host's frame writes and the hold starts drawn at them
     /// ([`Scenario::pacer_hold_start`]), its incarnations' in turn.
     pub(crate) hold_starts: Vec<crate::net::HoldStarts>,
+    /// Each browser host's page clock within the step
+    /// ([`Scenario::page_writes`]), its incarnations' in turn; `None` for
+    /// the others, and for every host with it off.
+    pub(crate) page_clocks: Vec<Option<crate::net::PageClock>>,
     /// With the tables, the nodes' parent sinks' channel
     /// ([`NodeConfig::parent_log`]): they send from inside the nodes'
     /// passes, and the records take what came at each stats sample, so it
@@ -593,6 +597,13 @@ impl World {
         let hold_starts = (0..spec.hosts.len())
             .map(|_| crate::net::HoldStarts::default())
             .collect();
+        let page_clocks = (0..spec.hosts.len())
+            .map(|h| {
+                (spec.page_writes
+                    && crate::late::HostKind::of_host(&spec, h) != crate::late::HostKind::Native)
+                    .then(crate::net::PageClock::default)
+            })
+            .collect();
         let (parent_tx, parent_rx) = mpsc::channel();
         let (stopped_tx, stopped_rx) = mpsc::channel();
         let (checks_tx, checks_rx) = mpsc::channel();
@@ -616,6 +627,7 @@ impl World {
             link_logs,
             probe_lateness,
             hold_starts,
+            page_clocks,
             parent_tx,
             parent_rx,
             stopped_tx,
@@ -788,7 +800,10 @@ impl World {
             c.forecast_log = self.spec.forecast_log;
             c.request_log = self.spec.request_logs;
             c.timer_log = self.timer_log(h).map(TimerLog::sink);
-            c.link_log = self.link_log(h).map(LinkLog::sink);
+            c.link_log = self.link_log(h).map(|l| match self.page_clocks.get(h) {
+                Some(Some(page)) => page.sink(l.sink()),
+                _ => l.sink(),
+            });
             let tx = self.stopped_tx.clone();
             c.last_metrics = Some(MetricsSink(Arc::new(move |m| {
                 let _ = tx.send((h, m));

@@ -140,6 +140,16 @@
 //! from above, its writer waiting or not. The threshold is the mark of the
 //! writer's last refusal, and half the channel's cap before one, as the
 //! browser sets it as it opens the channel.
+//!
+//! # The page's time within the step
+//!
+//! With [`Scenario::page_writes`](crate::Scenario::page_writes), a browser
+//! host's page sends the messages of an instant one after another, as its
+//! worker runs a pass's writes ([`PageClock`]): each begins past the
+//! instant by the `send`s made at it before and the worker's work between,
+//! its segments going to its uplink then, among the WAN scheduler's
+//! events, and the link log's records at the instant read that clock. Its
+//! checks still read the amount the page counted at the instant.
 
 // `Net` sockets are `Send`, so the state they share with the scheduler
 // sits behind a lock, which only this module names. Everything runs on
@@ -194,10 +204,11 @@ struct Conn {
     waker: Option<Waker>,
     /// The host-wide order of each write (one turmoil segment) the WAN
     /// scheduler hasn't taken yet, whether it ends a data channel's
-    /// message, and whether the page counted it in its amount
-    /// ([`Conn::shown`]). Bound: the connection's segments written in one
-    /// step.
-    writes: VecDeque<(u64, bool, bool)>,
+    /// message, whether the page counted it in its amount
+    /// ([`Conn::shown`]), and when a browser's page began its message's
+    /// `send` ([`PageClock`]; `None`: at the step's instant). Bound: the
+    /// connection's segments written in one step.
+    writes: VecDeque<(u64, bool, bool, Option<Time>)>,
     /// A data channel's cap and how it cuts its writes into records, and
     /// its bytes sent and not yet acknowledged.
     channel: Option<(u64, Chunking)>,
@@ -373,8 +384,9 @@ impl SendBuffers {
     /// on every connection count in the order the hosts made them),
     /// whether it ends a data channel's message, and whether its page
     /// counted it in its amount: a message of its own, not the setup's
-    /// flights ([`SctpProfile::amount_at_sends`]).
-    pub fn next_write(&self, conn: ConnKey) -> Option<(u64, bool, bool)> {
+    /// flights ([`SctpProfile::amount_at_sends`]), and when its page began
+    /// its message's `send`, if past the step's instant ([`PageClock`]).
+    pub fn next_write(&self, conn: ConnKey) -> Option<(u64, bool, bool, Option<Time>)> {
         self.with(|b| b.conns.get_mut(&conn)?.writes.pop_front())
     }
 
@@ -426,6 +438,13 @@ impl SendBuffers {
 }
 
 impl SendBuffers {
+    /// A socket's connection `conn` carrying a data channel of `profile`'s.
+    #[cfg(test)]
+    pub(crate) fn open_test_channel(&self, conn: ConnKey, profile: &SctpProfile) {
+        self.with(|x| x.conns.insert(conn, Conn::default()));
+        self.open_channel(conn, 1 << 20, profile);
+    }
+
     /// `conn` carries a data channel of `cap` bytes buffered at most, sent
     /// as `profile` sends (its chunks, and whether its buffered amount
     /// counts the flight).
@@ -647,6 +666,127 @@ pub(crate) struct PacerTimers {
     /// The host's timer log, and how far its node's clock reads ahead of
     /// true time.
     log: Option<(TimerSink, Duration)>,
+    /// A browser host's page clock within the step
+    /// ([`Scenario::page_writes`](crate::Scenario::page_writes)).
+    page: Option<PageClock>,
+}
+
+/// What a browser page's worker takes for the data channel messages it
+/// sends at one instant of the scheduler's step, as a Chromium seed's
+/// link log has them on the testbed (halve-7-20 on c8a, its writes 20 to
+/// 70 s in, clustered where they begin under 300 µs apart): a pass's
+/// first `send` returns about 7 µs after it began and each later one
+/// about 3; the next write begins 35 µs after the pass's first began and
+/// 10 µs after each later one, the node task's hand-offs and the next
+/// writer's check between. A pass's writes so spread over 10 to 120 µs
+/// (a 2-write pass's 40 µs, a 12-write pass's 118), where the step would
+/// put them all at its instant.
+const PAGE_SEND_FIRST: Duration = Duration::from_micros(7);
+const PAGE_SEND: Duration = Duration::from_micros(3);
+/// ... the worker's work from a `send`'s return to the next write's begin,
+/// after the pass's first and after each later one.
+const PAGE_GAP_FIRST: Duration = Duration::from_micros(28);
+const PAGE_GAP: Duration = Duration::from_micros(7);
+
+/// A browser host's page clock within the scheduler's step
+/// ([`Scenario::page_writes`](crate::Scenario::page_writes)): turmoil runs
+/// every task of an instant at its time, where a browser's worker runs
+/// the writes of its pass one after another, each `send` and the work
+/// before the next taking its time ([`PAGE_SEND`], [`PAGE_GAP`]). Each
+/// message the page sends at an instant begins past the instant by the
+/// sends made at it before and the work between, and its segments are
+/// stamped with that time, which the WAN scheduler hands its uplink at
+/// among the walk's events. The link log's records at the instant
+/// (the writes' begins, checks, holds and ends, the node task's hand-offs)
+/// read it: a write's end its `send`'s return, every other the work after
+/// it. The checks read the amount as the page counts it at the pass, as a
+/// browser's do: its stack's answers come as tasks, which run between
+/// the worker's tasks, not within the pass's microtasks. A write the page
+/// makes at the instant on a channel it doesn't pace takes no time: it
+/// ends where it begins. Firefox's page is assumed to take Chromium's
+/// times; only the Chromium seed's link log was measured. Nothing bounds
+/// the clock by the step: sends past its end (a pass of some hundred at a
+/// 1 ms step) stamp their records past it, where the WAN scheduler hands
+/// their segments over at the step's end.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PageClock(Arc<Mutex<PageState>>);
+
+#[derive(Debug, Default)]
+struct PageState {
+    /// The instant of the page's last `send`, in true time, the time past
+    /// it the send returned, how many it made at that instant, and whether
+    /// the last one's write has yet to end.
+    at: Option<Time>,
+    end: Duration,
+    sent: u32,
+    open: bool,
+}
+
+impl PageClock {
+    /// The page's time at true time `now`: past the instant by its sends
+    /// made at it and the work after them, at the end (`done`) of the
+    /// write whose send it made last that send's return.
+    fn at(&self, now: Time, done: bool) -> Time {
+        let mut x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        match x.at {
+            Some(at) if at == now && x.sent > 0 => {
+                let ends_send = done && std::mem::take(&mut x.open);
+                let past = if ends_send {
+                    Duration::ZERO
+                } else {
+                    gap(x.sent)
+                };
+                now + x.end + past
+            }
+            _ => now,
+        }
+    }
+
+    /// When a message the page sent at true time `now` would begin.
+    fn next(&self, now: Time) -> Time {
+        let x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        match x.at {
+            Some(at) if at == now && x.sent > 0 => now + x.end + gap(x.sent),
+            _ => now,
+        }
+    }
+
+    /// The page sent a message at true time `now`: when the send began
+    /// ([`PageClock::next`]).
+    fn send(&self, now: Time) -> Time {
+        let mut x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if x.at != Some(now) {
+            *x = PageState {
+                at: Some(now),
+                ..PageState::default()
+            };
+        }
+        let (begin, cost) = if x.sent == 0 {
+            (Duration::ZERO, PAGE_SEND_FIRST)
+        } else {
+            (x.end + gap(x.sent), PAGE_SEND)
+        };
+        x.end = begin + cost;
+        x.sent += 1;
+        x.open = true;
+        now + begin
+    }
+
+    /// `inner`, its records made with no time stamped by the page's clock.
+    pub(crate) fn sink(&self, inner: LinkSink) -> LinkSink {
+        let page = self.clone();
+        LinkSink(Arc::new(move |mut r: strims_node::event::LinkRecord| {
+            if r.at.is_none() {
+                r.at = Some(page.at(sim_now(), matches!(r.event, LinkEvent::Done)));
+            }
+            (inner.0)(r)
+        }))
+    }
+}
+
+/// The worker's work after a pass's `sent`th `send` (from 1).
+fn gap(sent: u32) -> Duration {
+    if sent == 1 { PAGE_GAP_FIRST } else { PAGE_GAP }
 }
 
 impl PacerTimers {
@@ -672,7 +812,15 @@ impl PacerTimers {
             pass: pass && hold.is_some(),
             hold,
             log: log.map(|l| (l, offset)),
+            page: None,
         }
+    }
+
+    /// With `page`, a browser host's page clock, its channels' messages
+    /// sent by it.
+    pub(crate) fn with_page(mut self, page: Option<PageClock>) -> PacerTimers {
+        self.page = page;
+        self
     }
 
     /// How long past `now` a pass's hold at `now`, or with the pass start
@@ -1167,9 +1315,10 @@ impl SendBuffers {
     }
 
     /// Data channel `key`'s writer handed it `n` bytes of a message at
-    /// `now`, the message's last if `end`: they are unsent, stamped with
-    /// the host's order, and its pacers count them.
-    fn wrote(&self, key: &ConnKey, n: usize, end: bool, now: Time) {
+    /// `now`, the message's last if `end`, its page's `send` begun at
+    /// `page` past the instant: they are unsent, stamped with the host's
+    /// order, and its pacers count them.
+    pub(crate) fn wrote(&self, key: &ConnKey, n: usize, end: bool, now: Time, page: Option<Time>) {
         self.with(|x| {
             let stamp = x.stamp;
             x.stamp += 1;
@@ -1181,7 +1330,7 @@ impl SendBuffers {
                     *s = s.saturating_add(n as u64);
                 }
                 c.above = c.amount() > c.threshold;
-                c.writes.push_back((stamp, end, c.shown.is_some()));
+                c.writes.push_back((stamp, end, c.shown.is_some(), page));
                 let now = page_time(now);
                 if let Some(p) = &mut c.pacer {
                     p.wrote(now, n);
@@ -1270,6 +1419,19 @@ impl SimTcpStream {
     /// records its [`Chunking`] cuts, each stamped and unsent until the WAN
     /// scheduler sends it.
     fn write_message(&mut self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let now = sim_now();
+        // The page's clock moves on once the transport has taken a byte.
+        let clock = self
+            .pacer
+            .page
+            .clone()
+            .filter(|_| self.conn.as_ref().is_some_and(|(key, b)| b.paced(key)));
+        let page = clock.as_ref().map(|p| p.next(now)).filter(|&at| at > now);
+        let sent = |done: usize| {
+            if let Some(p) = clock.as_ref().filter(|_| done > 0) {
+                p.send(now);
+            }
+        };
         let mut done = 0;
         while done < buf.len() {
             let left = buf.len() - done;
@@ -1285,7 +1447,7 @@ impl SimTcpStream {
             match Pin::new(&mut self.inner).poll_write(cx, piece) {
                 Poll::Ready(Ok(n)) => {
                     if let Some((key, b)) = &self.conn {
-                        b.wrote(key, n, done + n == buf.len(), sim_now());
+                        b.wrote(key, n, done + n == buf.len(), now, page);
                     }
                     done += n;
                     if n < piece.len() {
@@ -1297,6 +1459,7 @@ impl SimTcpStream {
                 other => return other,
             }
         }
+        sent(done);
         Poll::Ready(Ok(done))
     }
 }
@@ -1469,7 +1632,7 @@ impl AsyncWrite for SimTcpStream {
                     }
                     // A write is a whole message, if a channel later
                     // takes the connection.
-                    c.writes.push_back((stamp, true, false));
+                    c.writes.push_back((stamp, true, false, None));
                 }
             });
         }
@@ -1874,7 +2037,7 @@ mod tests {
             let (_, w) = waker();
             for _ in 0..4 {
                 assert!(b.channel_write(&key, ms(0), &w) == Some(ChannelWrite::Go));
-                b.wrote(&key, FLOOR as usize, true, ms(0));
+                b.wrote(&key, FLOOR as usize, true, ms(0), None);
             }
             b.with(|x| {
                 assert!(x.conns[&key].pacer.is_none());
@@ -1893,7 +2056,7 @@ mod tests {
                 assert_eq!(x.hosts[&key.0.ip()].channels, [key]);
             });
             assert!(b.channel_write(&key, ms(1), &w) == Some(ChannelWrite::Go));
-            b.wrote(&key, FLOOR as usize, true, ms(1));
+            b.wrote(&key, FLOOR as usize, true, ms(1), None);
             assert!(b.channel_write(&key, ms(1), &w) == Some(ChannelWrite::Wait));
         }
     }
@@ -1905,7 +2068,7 @@ mod tests {
         let (b, k, log) = channels(&SctpProfile::FIREFOX, 1);
         let (wakes, w) = waker();
         assert!(b.channel_write(&k[0], ms(0), &w) == Some(ChannelWrite::Go));
-        b.wrote(&k[0], FLOOR as usize, true, ms(0));
+        b.wrote(&k[0], FLOOR as usize, true, ms(0), None);
         assert!(b.channel_write(&k[0], ms(0), &w) == Some(ChannelWrite::Wait));
         assert_eq!(holds(&log, 0), [WriteWait::Channel]);
         assert!(b.admit(k[0], (FLOOR - LOW - 1) as usize, ms(1)).is_none());
@@ -1927,10 +2090,10 @@ mod tests {
         // emptying below it fires nothing; a fall from above it does.
         let half: u64 = 1 << 19;
         b.channel_write(&k[0], ms(0), &w);
-        b.wrote(&k[0], 1000, true, ms(0));
+        b.wrote(&k[0], 1000, true, ms(0), None);
         b.admit(k[0], 1000, ms(1));
         assert_eq!(lows(&log, 0), Vec::<u64>::new());
-        b.wrote(&k[0], half as usize + 1000, true, ms(1));
+        b.wrote(&k[0], half as usize + 1000, true, ms(1), None);
         b.admit(k[0], 999, ms(2));
         assert_eq!(lows(&log, 0), Vec::<u64>::new());
         b.admit(k[0], 1, ms(2));
@@ -1939,7 +2102,7 @@ mod tests {
         assert_eq!(lows(&log, 0), [half]);
         // A refusal sets the threshold to its mark; the fall to it wakes
         // the writer.
-        b.wrote(&k[0], FLOOR as usize, true, ms(3));
+        b.wrote(&k[0], FLOOR as usize, true, ms(3), None);
         assert!(b.channel_write(&k[0], ms(3), &w) == Some(ChannelWrite::Wait));
         assert!(b.admit(k[0], (FLOOR - LOW) as usize, ms(4)).is_some());
         assert_eq!(lows(&log, 0), [half, LOW]);
@@ -1947,7 +2110,7 @@ mod tests {
         // waits.
         b.admit(k[0], 1000, ms(5));
         assert!(b.channel_write(&k[0], ms(5), &w) == Some(ChannelWrite::Go));
-        b.wrote(&k[0], 2000, true, ms(5));
+        b.wrote(&k[0], 2000, true, ms(5), None);
         assert!(b.admit(k[0], 2000, ms(6)).is_none());
         assert_eq!(lows(&log, 0), [half, LOW, LOW - 1000]);
     }
@@ -1962,9 +2125,9 @@ mod tests {
         let (b, k, log) = channels(&SctpProfile::FIREFOX, 2);
         let (wakes, w) = waker();
         assert!(b.channel_write(&k[1], ms(0), &w) == Some(ChannelWrite::Go));
-        b.wrote(&k[1], 30_000, true, ms(0));
+        b.wrote(&k[1], 30_000, true, ms(0), None);
         assert!(b.channel_write(&k[0], ms(0), &w) == Some(ChannelWrite::Go));
-        b.wrote(&k[0], 10_000, true, ms(0));
+        b.wrote(&k[0], 10_000, true, ms(0), None);
         assert!(b.channel_write(&k[0], ms(1), &w) == Some(ChannelWrite::Held));
         assert_eq!(holds(&log, 0), [WriteWait::Host]);
         assert_eq!(
@@ -1991,13 +2154,13 @@ mod tests {
         let (b, k, log) = channels(&SctpProfile::FIREFOX, 3);
         let ((wakes0, w0), (wakes1, w1)) = (waker(), waker());
         assert_eq!(b.channel_write(&k[2], ms(0), &w0), Some(ChannelWrite::Go));
-        b.wrote(&k[2], 40_000, true, ms(0));
+        b.wrote(&k[2], 40_000, true, ms(0), None);
         assert_eq!(b.channel_write(&k[0], ms(1), &w0), Some(ChannelWrite::Held));
         assert_eq!(b.channel_write(&k[1], ms(3), &w1), Some(ChannelWrite::Held));
         b.admit(k[2], 20_000, ms(4));
         // Channel 0's poll: the load, 20 kB, is at its mark.
         assert_eq!(b.host_poll(&k[0], ms(6), &w0), Some(ChannelWrite::Go));
-        b.wrote(&k[0], 10_000, true, ms(6));
+        b.wrote(&k[0], 10_000, true, ms(6), None);
         assert_eq!((wakes0.count(), wakes1.count()), (0, 0));
         // Channel 1's, at 30 kB: over it.
         assert_eq!(b.host_poll(&k[1], ms(8), &w1), Some(ChannelWrite::Held));
@@ -2034,7 +2197,7 @@ mod tests {
         assert!(b.turn(&k[0], polls[0], now));
         // It reads the load and writes: the others start counting again.
         assert_eq!(b.host_poll(&k[0], now, &w), Some(ChannelWrite::Go));
-        b.wrote(&k[0], 4000, true, now);
+        b.wrote(&k[0], 4000, true, now, None);
         for _ in 0..QUIET {
             assert!(!b.turn(&k[2], polls[2], now));
             assert!(!b.turn(&k[1], polls[1], now));
@@ -2186,7 +2349,7 @@ mod tests {
                 .collect()
         };
         assert_eq!(b.channel_write(&k[1], ms(0), &w), Some(ChannelWrite::Go));
-        b.wrote(&k[1], 40_000, true, ms(0));
+        b.wrote(&k[1], 40_000, true, ms(0), None);
         b.defer_log(&k[0]);
         assert_eq!(b.channel_write(&k[0], ms(0), &w), Some(ChannelWrite::Held));
         assert!(events(0).is_empty(), "{:?}", events(0));
@@ -2224,7 +2387,7 @@ mod tests {
                 .collect()
         };
         assert_eq!(b.channel_write(&k[1], ms(0), &w), Some(ChannelWrite::Go));
-        b.wrote(&k[1], 40_000, true, ms(0));
+        b.wrote(&k[1], 40_000, true, ms(0), None);
         b.began(&k[0], 4096);
         assert_eq!(b.channel_write(&k[0], ms(1), &w), Some(ChannelWrite::Held));
         let got = events(0);
@@ -2239,6 +2402,35 @@ mod tests {
         );
         b.with(|x| x.conns.insert(other, Conn::default()));
         assert!(!b.paced(&other));
+    }
+
+    /// A page's sends at one instant begin one after another, each past
+    /// the instant by the worker's time for those before it; a write it
+    /// doesn't pace ends where it begins, and another instant starts again
+    /// at its time.
+    #[test]
+    fn a_pages_sends_at_one_instant_take_its_workers_time() {
+        let page = PageClock::default();
+        let at = ms(7);
+        assert_eq!(page.at(at, false), at, "nothing sent yet");
+        assert_eq!(page.send(at), at);
+        assert_eq!(page.at(at, true), at + PAGE_SEND_FIRST);
+        let second = at + PAGE_SEND_FIRST + PAGE_GAP_FIRST;
+        assert_eq!(page.at(at, false), second);
+        assert_eq!(page.send(at), second);
+        let third = second + PAGE_SEND + PAGE_GAP;
+        assert_eq!(page.next(at), third);
+        assert_eq!(page.next(at), third, "nothing sent");
+        assert_eq!(page.send(at), third);
+        assert_eq!(page.at(at, true), third + PAGE_SEND);
+        // A write past its sends that the page doesn't pace.
+        let unpaced = third + PAGE_SEND + PAGE_GAP;
+        assert_eq!(page.at(at, false), unpaced);
+        assert_eq!(page.at(at, true), unpaced, "ends where it began");
+        // Another instant starts again at its time.
+        assert_eq!(page.at(ms(8), false), ms(8));
+        assert_eq!(page.send(ms(8)), ms(8));
+        assert_eq!(page.at(ms(8), true), ms(8) + PAGE_SEND_FIRST);
     }
 
     /// A due writer that stops looking holds the others back only a few
@@ -2276,8 +2468,8 @@ mod tests {
     fn a_chromium_page_counts_its_channels_amount() {
         let (b, k, _) = channels(&SctpProfile::CHROMIUM, 1);
         let read = || b.buffered(k[0]).unwrap();
-        b.wrote(&k[0], 1000, true, us(0));
-        b.wrote(&k[0], 500, true, us(100));
+        b.wrote(&k[0], 1000, true, us(0), None);
+        b.wrote(&k[0], 500, true, us(100), None);
         assert_eq!(read(), 1500);
         // The stack sends the first message: the page reads it only at the
         // stack's answer.
@@ -2286,17 +2478,17 @@ mod tests {
         b.answered(k[0], 1000, us(160));
         assert_eq!(read(), 500);
         // Past the answer the reading holds as the stack sends ...
-        b.wrote(&k[0], 2000, true, ms(2));
+        b.wrote(&k[0], 2000, true, ms(2), None);
         b.admit(k[0], 1000, ms(5));
         assert_eq!(read(), 2500);
         // ... and the next message adds to it, not to the stack's 1500.
-        b.wrote(&k[0], 300, true, ms(6));
+        b.wrote(&k[0], 300, true, ms(6), None);
         assert_eq!(read(), 2800);
         // The answer takes off what the stack had sent by then: a message
         // the page wrote after stays on its count, though the stack sent
         // it before the page took the answer.
         b.admit(k[0], 1500, ms(9));
-        b.wrote(&k[0], 700, true, ms(9));
+        b.wrote(&k[0], 700, true, ms(9), None);
         b.admit(k[0], 1000, ms(9));
         assert_eq!(read(), 3500);
         b.answered(k[0], 2800, ms(9));
@@ -2310,7 +2502,7 @@ mod tests {
     fn a_chromium_writer_wakes_on_its_stacks_answer() {
         let (b, k, log) = channels(&SctpProfile::CHROMIUM, 1);
         let (_, w) = waker();
-        b.wrote(&k[0], FLOOR as usize, true, ms(0));
+        b.wrote(&k[0], FLOOR as usize, true, ms(0), None);
         assert!(b.channel_write(&k[0], ms(0), &w) == Some(ChannelWrite::Wait));
         assert!(b.admit(k[0], 4000, us(100)).is_none());
         // An answer over the mark wakes nothing.
@@ -2326,7 +2518,7 @@ mod tests {
         assert_eq!(lows(&log, 0), [1]);
 
         let (b, k, _) = channels(&SctpProfile::FIREFOX, 1);
-        b.wrote(&k[0], FLOOR as usize, true, ms(0));
+        b.wrote(&k[0], FLOOR as usize, true, ms(0), None);
         assert!(b.channel_write(&k[0], ms(0), &w) == Some(ChannelWrite::Wait));
         assert!(b.admit(k[0], 4000, us(500)).is_none());
         assert!(
