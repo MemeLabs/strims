@@ -124,8 +124,9 @@ JOB_KNOBS = ("STRIMS_SIM_JOB", "STRIMS_SIM_SERIES", "STRIMS_SIM_SEED", "STRIMS_S
 # each twin seed drawing its own (twin_cells). And what each packet of its
 # Chromium nodes took of their network thread (COST, µs: strims-sim's
 # testbed::thread_cost), its host's, which its CPU model (CPU, run.sh's
-# `cpu`) sets, and as late as whose its twin's Chromium seed's frame writer
-# runs unless STRIMS_SIM_WRITER_CPU=off (strims-sim's late::WRITER_BY_CPU),
+# `cpu`, else its farm row's) sets, and as late as whose its twin's
+# Chromium seed's frame writer runs unless STRIMS_SIM_WRITER_CPU=off
+# (strims-sim's late::WRITER_BY_CPU),
 # a twin of several models' each seed its run's (twin_cpu). And when its
 # seed's uplink steps met its offers (STEPS, ms of stream: each step's
 # steps.log stamp less the seed's egress delay, as the run's own scenario

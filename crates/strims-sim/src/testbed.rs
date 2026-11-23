@@ -3991,6 +3991,63 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// A farm run's dir without `cpu` (from before run.sh wrote it) takes
+    /// its host's CPU model from its farm row (thread_cost::cpu_model): the
+    /// row of its matrix's rows.jsonl whose `run_dir` it is; and with it the
+    /// CPU's packet cost and offer times. The run's own `cpu` comes first;
+    /// a dir no row names, or a row without the model, takes none.
+    #[test]
+    fn a_farm_runs_cpu_model_is_its_rows() {
+        let run = fixture("farm-cpu");
+        let settings = std::fs::read_to_string(run.join("settings")).unwrap();
+        std::fs::write(
+            run.join("settings"),
+            format!("{settings}KINDS=chromium native\nBROWSER_LINKS=webrtc\n"),
+        )
+        .unwrap();
+        let state =
+            std::env::temp_dir().join(format!("strims-testbed-farm-{}", std::process::id()));
+        std::fs::create_dir_all(state.join("runs")).unwrap();
+        let dir = state.join("runs").join("63d64c758d484f59");
+        std::fs::rename(&run, &dir).unwrap();
+        let row = |id: &str, cpu: &str| {
+            format!(
+                "{{\"id\":\"{id}\",\"kind\":\"testbed\",\"type\":\"c7a.4xlarge\",\"cpu_model\":{cpu},\"run_dir\":\"runs/{id}\",\"row\":{{}}}}\n"
+            )
+        };
+        let rows =
+            |lines: &[String]| std::fs::write(state.join("rows.jsonl"), lines.concat()).unwrap();
+        let read = |k: &str| {
+            Run::read(&dir, &BTreeMap::new())
+                .unwrap()
+                .knobs
+                .get(k)
+                .cloned()
+        };
+        assert_eq!(read(CPU_MODEL), None, "no rows.jsonl");
+        let unset = read(offer_timing::CHROMIUM_SET);
+        rows(&[row("1ec2e5e3ed81f8ff", "\"AMD EPYC 9R45\"")]);
+        assert_eq!(read(CPU_MODEL), None, "no row of the run's");
+        rows(&[
+            row("1ec2e5e3ed81f8ff", "\"AMD EPYC 9R45\""),
+            row("63d64c758d484f59", "\"AMD EPYC 9R14\""),
+        ]);
+        assert_eq!(read(CPU_MODEL).as_deref(), Some("AMD EPYC 9R14"));
+        assert_eq!(read(PACKET_COST).as_deref(), Some("12.3"));
+        let set = read(offer_timing::CHROMIUM_SET);
+        assert!(set.is_some() && set != unset, "{set:?} {unset:?}");
+        std::fs::write(dir.join("cpu"), "AMD EPYC 9R45\n").unwrap();
+        assert_eq!(
+            read(CPU_MODEL).as_deref(),
+            Some("AMD EPYC 9R45"),
+            "its `cpu` first"
+        );
+        std::fs::remove_file(dir.join("cpu")).unwrap();
+        rows(&[row("63d64c758d484f59", "null")]);
+        assert_eq!(read(CPU_MODEL), None, "a row without its worker's model");
+        std::fs::remove_dir_all(&state).unwrap();
+    }
+
     /// A run's offer times are its nodes' alone: KINDS past its last node
     /// adds no entry, so its twin's world takes the list, an entry a
     /// Firefox host under the window model (its STRIMS_SIM_TCP=1).

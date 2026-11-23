@@ -25,7 +25,8 @@
 //! - **From the host's CPU.** Without one, or in a run whose dcSCTP logged
 //!   its packets (TRACE_SCTP, whose observer formats each packet on the
 //!   network thread, so its trains read the observer's cost), the CPU model
-//!   run.sh recorded ([`cpu_model`]) where [`CPU_COSTS`] knows it.
+//!   run.sh recorded, else its farm row's ([`cpu_model`]), where
+//!   [`CPU_COSTS`] knows it.
 //! - Else none, and the twin keeps its profile's.
 //!
 //! [`SctpProfile::packet_cost`]: crate::wan::SctpProfile::packet_cost
@@ -89,11 +90,32 @@ pub fn cpu_cost_us(model: &str) -> Option<f64> {
         .find_map(|&(part, us)| model.contains(part).then_some(us))
 }
 
-/// The CPU model run.sh recorded for out dir `dir`'s host (its `cpu`:
-/// `/proc/cpuinfo`'s model name), if it did.
+/// The CPU model of out dir `dir`'s host: the one run.sh recorded (its
+/// `cpu`: `/proc/cpuinfo`'s model name), else, a farm run's dir from before
+/// run.sh wrote it, its farm row's (`farm_cpu_model`); `None` without
+/// either.
 pub fn cpu_model(dir: &Path) -> Option<String> {
-    let model = std::fs::read_to_string(dir.join("cpu")).ok()?;
+    let recorded = std::fs::read_to_string(dir.join("cpu")).ok();
+    let model = recorded.or_else(|| farm_cpu_model(dir))?;
     Some(model.trim().to_owned()).filter(|m| !m.is_empty())
+}
+
+/// The CPU model the sim farm's row of run dir `dir` holds, if `dir` is a
+/// farm testbed matrix's run dir: the matrix's state dir holds its
+/// `rows.jsonl`, a row a job its worker ran, whose `run_dir` (`runs/<job
+/// id>`, relative to the state dir) is `dir` and whose `cpu_model` is the
+/// worker's `/proc/cpuinfo` model name (hack/sim-farm's worker.py).
+fn farm_cpu_model(dir: &Path) -> Option<String> {
+    let dir = std::fs::canonicalize(dir).ok()?;
+    let state = dir.parent()?.parent()?;
+    let rel = dir.strip_prefix(state).ok()?;
+    let rows = std::fs::read_to_string(state.join("rows.jsonl")).ok()?;
+    let row = rows.lines().find_map(|line| {
+        let row: serde_json::Value = serde_json::from_str(line).ok()?;
+        let run_dir = row.get("run_dir")?.as_str()?;
+        (Path::new(run_dir) == rel).then_some(row)
+    })?;
+    row.get("cpu_model")?.as_str().map(str::to_owned)
 }
 
 /// The packet cost of out dir `dir`'s run, whose stream started at Unix ms

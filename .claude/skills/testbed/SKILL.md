@@ -194,7 +194,8 @@ crates differ from those the page was built from builds its own page.
   (`STRIMS_SIM_CAL_PACKET_COST_US`, which the fold reads from the long
   trains of a Chromium node's offered capture, else, and always in a
   TRACE_SCTP run, from the CPU model run.sh writes to the out dir's
-  `cpu`: strims-sim's `testbed::thread_cost`); the bench sim takes its
+  `cpu`, else a farm run's row's `cpu_model`: strims-sim's
+  `testbed::thread_cost`); the bench sim takes its
   run's too. The fold records that model beside it
   (`STRIMS_SIM_CAL_CPU`), which the twin takes as its runs' one model,
   else each seed its paired run's (`testbed.twin_cpu`): its Chromium
@@ -204,8 +205,8 @@ crates differ from those the page was built from builds its own page.
   median where they all ran on one CPU model, else each twin seed its
   paired run's (`testbed.twin_cost`), so a farm cell whose repeats ran on
   two instance types is twinned on both; a cell with a run of no recorded
-  model (its run dir from before `cpu`) pairs too, as one model's runs'
-  costs spread wider than two models' lie apart. So are its browser
+  model (its run dir from before `cpu`, of no farm row's) pairs too, as
+  one model's runs' costs spread wider than two models' lie apart. So are its browser
   pages' offer times, their host's too: a Firefox page's gathering end
   after its node's connect and its offer's post after that, and a
   Chromium page's first setting (`STRIMS_SIM_CAL_FIREFOX_GATHER_MS`,

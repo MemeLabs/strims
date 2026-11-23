@@ -135,8 +135,9 @@ fn values(get: &impl Fn(&str) -> Option<String>, name: &str) -> Vec<f64> {
 ///   ([`Scenario::packet_cost`]); unset, its stack's 12 µs
 ///   ([`SctpProfile::CHROMIUM`](crate::SctpProfile::CHROMIUM)).
 /// - `STRIMS_SIM_CAL_CPU=<model>`, a testbed run's host's CPU model
-///   (`testbed::thread_cost::cpu_model`, run.sh's `cpu`), is the testbed
-///   host its hosts run on ([`Scenario::testbed_cpu`]): a Chromium seed's
+///   (`testbed::thread_cost::cpu_model`, run.sh's `cpu`, else its farm
+///   row's), is the testbed host its hosts run on
+///   ([`Scenario::testbed_cpu`]): a Chromium seed's
 ///   frame writer then runs as late as that CPU's, its writes on the
 ///   stream's whole second beside its line timer as those do
 ///   (`crate::late`), unless `STRIMS_SIM_WRITER_CPU=off`
