@@ -875,11 +875,12 @@ async fn exchange(w: &World, h: HostIx, to: HostIx, n: usize, node: &Node) -> Re
 /// Writes `frames_per_write` frames every `write_interval` from `start` to
 /// `stop`, each write as late as the host's timers fire (`late`,
 /// [`crate::late`]; one due on a whole second from `start` as a testbed
-/// node's beside its line timer), and with the host's timer log each write's wait for
-/// its time, by the node's clock. A frame carries its write's due time,
-/// the report's (`Report::written_at`), as the testbed node's frames do,
-/// so a viewer's lag counts the writer's lateness. The write index comes
-/// from the simulated time, so a restarted seed continues the numbering.
+/// node's beside its line timer), and with the host's timer log each
+/// write's wait for its time, by the node's clock. A frame carries its
+/// write's due time, the report's (`Report::written_at`), as the testbed
+/// node's frames do, so a viewer's lag counts the writer's lateness. The
+/// write index comes from the simulated time, so a restarted seed continues
+/// the numbering.
 async fn writer_task(
     w: Rc<World>,
     h: HostIx,
@@ -907,8 +908,10 @@ async fn writer_task(
         }
         let armed = sim_now();
         // A write due on the stream's whole second shares its ms with a
-        // testbed node's line timer (`late::WRITER_BY_CPU`).
-        let on_second = (at - spec.start).as_millis() % 1000 == 0;
+        // testbed node's line timer (`late::WRITER_BY_CPU`). That node's
+        // writer's grid steps by the interval in whole ms (`step`), as
+        // strims-testbed's `node::write_frames` does.
+        let on_second = (u128::from(k) * step) % 1000 == 0;
         let late_by = late.as_ref().map_or(Duration::ZERO, |l| {
             l.draw_write(at <= armed, on_second)
                 .to_std()

@@ -158,13 +158,13 @@
 //!   `STRIMS_SIM_PACER_PASS=on`, with it, starts every write such a pass
 //!   hands a data channel as late, not only the held ones
 //!   ([`Scenario::pacer_pass_start`]); `off`, or unset, the held ones
-//!   alone. `STRIMS_SIM_WRITER_CPU=on` draws a probe-off Chromium frame
-//!   writer's lateness on its testbed host's CPU (a twin's
+//!   alone. `STRIMS_SIM_WRITER_CPU=on`, or unset, draws a probe-off
+//!   Chromium frame writer's lateness on its testbed host's CPU (a twin's
 //!   `STRIMS_SIM_CAL_CPU`), its whole-second writes apart
-//!   ([`Scenario::writer_by_cpu`]); `off`, or unset, the write path bench's
-//!   for every write. `STRIMS_SIM_PAGE_WRITES=off` sends a browser page's messages
-//!   at its step's instant; `on`, or unset, each past it by the worker's
-//!   work for the sends before it ([`Scenario::page_writes`]).
+//!   ([`Scenario::writer_by_cpu`]); `off` the write path bench's for every
+//!   write. `STRIMS_SIM_PAGE_WRITES=off` sends a browser page's messages at
+//!   its step's instant; `on`, or unset, each past it by the worker's work
+//!   for the sends before it ([`Scenario::page_writes`]).
 //!   `STRIMS_SIM_PAGE_ANSWERS=off` resumes a Chromium writer its stack's
 //!   answer freed at the next step's instant; `on`, or unset, past the
 //!   answer within the step ([`Scenario::page_answers`]).

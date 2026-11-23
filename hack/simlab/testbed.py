@@ -118,26 +118,26 @@ JOB_KNOBS = ("STRIMS_SIM_JOB", "STRIMS_SIM_SERIES", "STRIMS_SIM_SEED", "STRIMS_S
 # uploads' starts (each iperf3 report's timestamp, ms of stream), which
 # differ by tens of ms from run to run, and the ms of its second its stream
 # started at (EPOCH), its twin's epoch phase, where its nodes' grids on Unix
-# time sit against the stream's writes. The keying sets them aside; a
-# cell's twin takes the starts' median over its runs, and the epoch where
-# its runs agree on one (a twin of one run's, as a joins-paired twin is),
-# else none, each twin seed drawing its own (twin_cells). And what each
-# packet of its Chromium nodes took of their network thread (COST, µs:
-# strims-sim's testbed::thread_cost), its host's, which its CPU model (CPU,
-# run.sh's `cpu`) sets, and as late as whose its twin's Chromium seed's
-# frame writer runs with STRIMS_SIM_WRITER_CPU=on (strims-sim's
-# late::WRITER_BY_CPU), a twin of several models' each seed its run's
-# (twin_cpu). And when its seed's uplink steps met its offers (STEPS, ms of stream: each step's steps.log stamp less the
-# seed's egress delay, as the run's own scenario steps), which land tens of
-# ms past their schedule, where a ~3.5 s overflow-and-cut cycle stands at
-# the step deciding its loss; STAMP (no twin knob) says whether they're
-# when each tc applied or, from a log before that stamp, upper bounds.
-# And when its browser pages made their first offers (OFFER, ms: a Firefox
-# page's gathering end after its node's connect and its offer's post after
-# that, a Chromium page's first setting after the connect: strims-sim's
-# testbed::offer_timing), a comma list, a node of its kind each in node
-# order, or one value for them all, its host's, which its CPU and its
-# browsers' load move, twinned as COST is (twin_offer).
+# time sit against the stream's writes. The keying sets them aside; a cell's
+# twin takes the starts' median over its runs, and the epoch where its runs
+# agree on one (a twin of one run's, as a joins-paired twin is), else none,
+# each twin seed drawing its own (twin_cells). And what each packet of its
+# Chromium nodes took of their network thread (COST, µs: strims-sim's
+# testbed::thread_cost), its host's, which its CPU model (CPU, run.sh's
+# `cpu`) sets, and as late as whose its twin's Chromium seed's frame writer
+# runs unless STRIMS_SIM_WRITER_CPU=off (strims-sim's late::WRITER_BY_CPU),
+# a twin of several models' each seed its run's (twin_cpu). And when its
+# seed's uplink steps met its offers (STEPS, ms of stream: each step's
+# steps.log stamp less the seed's egress delay, as the run's own scenario
+# steps), which land tens of ms past their schedule, where a ~3.5 s
+# overflow-and-cut cycle stands at the step deciding its loss; STAMP (no
+# twin knob) says whether they're when each tc applied or, from a log before
+# that stamp, upper bounds. And when its browser pages made their first
+# offers (OFFER, ms: a Firefox page's gathering end after its node's connect
+# and its offer's post after that, a Chromium page's first setting after the
+# connect: strims-sim's testbed::offer_timing), a comma list, a node of its
+# kind each in node order, or one value for them all, its host's, which its
+# CPU and its browsers' load move, twinned as COST is (twin_offer).
 EPOCH = "STRIMS_SIM_CAL_EPOCH_MS"
 COST = "STRIMS_SIM_CAL_PACKET_COST_US"
 CPU = "STRIMS_SIM_CAL_CPU"

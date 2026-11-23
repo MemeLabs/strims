@@ -136,11 +136,12 @@ fn values(get: &impl Fn(&str) -> Option<String>, name: &str) -> Vec<f64> {
 ///   ([`SctpProfile::CHROMIUM`](crate::SctpProfile::CHROMIUM)).
 /// - `STRIMS_SIM_CAL_CPU=<model>`, a testbed run's host's CPU model
 ///   (`testbed::thread_cost::cpu_model`, run.sh's `cpu`), is the testbed
-///   host its hosts run on ([`Scenario::testbed_cpu`]): with
-///   `STRIMS_SIM_WRITER_CPU=on` ([`Scenario::writer_by_cpu`]) a Chromium
-///   seed's frame writer then runs as late as that CPU's, its writes on
-///   the stream's whole second beside its line timer as those do
-///   (`crate::late`). Unset, the write path bench's model for every write.
+///   host its hosts run on ([`Scenario::testbed_cpu`]): a Chromium seed's
+///   frame writer then runs as late as that CPU's, its writes on the
+///   stream's whole second beside its line timer as those do
+///   (`crate::late`), unless `STRIMS_SIM_WRITER_CPU=off`
+///   ([`Scenario::writer_by_cpu`]). Unset, the write path bench's model for
+///   every write.
 /// - `STRIMS_SIM_CAL_FIREFOX_GATHER_MS=<ms>,...`,
 ///   `STRIMS_SIM_CAL_FIREFOX_POST_MS=<ms>,...` and
 ///   `STRIMS_SIM_CAL_CHROMIUM_SET_MS=<ms>,...`, a testbed run's browser

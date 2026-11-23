@@ -128,8 +128,8 @@ pub const PACKET_COST: &str = "STRIMS_SIM_CAL_PACKET_COST_US";
 /// ([`thread_cost::cpu_model`]): which host's [`PACKET_COST`] it is, for
 /// simlab's testbed to tell a cell of one model's runs from several's, and
 /// the testbed host its twin's hosts run on (calibration_star's, whose
-/// Chromium seed's frame writer runs as late as that CPU's with
-/// `STRIMS_SIM_WRITER_CPU=on`: `crate::late`).
+/// Chromium seed's frame writer runs as late as that CPU's unless
+/// `STRIMS_SIM_WRITER_CPU=off`: `crate::late`).
 pub const CPU_MODEL: &str = "STRIMS_SIM_CAL_CPU";
 /// The knob a twin takes its seed's uplink steps' times from, ms of stream,
 /// one a step of `STRIMS_SIM_CAL_SEED_UP_SCALE`'s (calibration_star's): a

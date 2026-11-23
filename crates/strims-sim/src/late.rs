@@ -66,25 +66,24 @@
 //! serves it, whose timers run less late than a plain page's (PLAN).
 //!
 //! The bench's runs keep the timer probe on, which runs in the node's own
-//! worker, and a browser's writer runs otherwise beside it. A Chromium
-//! host without the probe, as a deployed node runs, and as every run runs
-//! but the timer bench's twins ([`Scenario::timer_probe`]), draws its frame
+//! worker, and a browser's writer runs otherwise beside it. A Chromium host
+//! without the probe, as a deployed node runs, and as every run runs but
+//! the timer bench's twins ([`Scenario::timer_probe`]), draws its frame
 //! writer, and its pass starts, from the write path bench's runs instead,
 //! which run none: its writes run less late than beside the probe, and its
 //! passes start later. With [`Scenario::writer_by_cpu`] such a host's
 //! writer on a testbed host (a twin's, [`Scenario::testbed_cpu`]) draws its
 //! host's CPU model's, and its writes due on the stream's whole second,
 //! where the testbed node's line timer wakes its worker, a model of their
-//! own ([`WRITER_BY_CPU`]). A host that
-//! runs the probe draws the timer bench's,
-//! its pass starts the hold start's. Without the probe a Firefox seed's
-//! writes run later (PLAN), which no model has yet: a Firefox host draws the bench's
-//! either way. A browser's timer for a deadline already due resolves at
-//! once, as strims-wasm's `Sleep` and `setTimeout`-free waits do, drawing
-//! nothing; a native node's fires on its next tick, as any. A testbed
-//! node's line timer has no draw: the controller samples on time. Without
-//! [`Scenario::pacer_lateness`] a browser's host pacer polls on time and
-//! draws nothing.
+//! own ([`WRITER_BY_CPU`]). A host that runs the probe draws the timer
+//! bench's, its pass starts the hold start's. Without the probe a Firefox
+//! seed's writes run later (PLAN), which no model has yet: a Firefox host
+//! draws the bench's either way. A browser's timer for a deadline already
+//! due resolves at once, as strims-wasm's `Sleep` and `setTimeout`-free
+//! waits do, drawing nothing; a native node's fires on its next tick, as
+//! any. A testbed node's line timer has no draw: the controller samples on
+//! time. Without [`Scenario::pacer_lateness`] a browser's host pacer polls
+//! on time and draws nothing.
 //!
 //! The model draws no stalls. In the bench's runs, each on a host of its
 //! own, no timer of the stream fires 10 ms late, on any kind, and no
@@ -471,11 +470,10 @@ pub(crate) struct WriterModel {
 ///
 /// A host of no testbed CPU, or without [`Scenario::writer_by_cpu`], draws
 /// [`model`]'s, c7a's off the second, for every write: no line timer runs
-/// on a deployed node, and c7a's is the model
-/// every sim drew before the CPU keyed it, so a sim of no testbed host keeps
-/// its runs; no measure of users' machines says which CPU's is nearer
-/// theirs. A testbed host of a CPU model the table lacks (the dev VM's)
-/// draws c7a's both.
+/// on a deployed node, and c7a's is the model every sim drew before the CPU
+/// keyed it, so a sim of no testbed host keeps its runs; no measure of
+/// users' machines says which CPU's is nearer theirs. A testbed host of a
+/// CPU model the table lacks (the dev VM's) draws c7a's both.
 pub(crate) const WRITER_BY_CPU: &[(&str, WriterModel)] = &[
     (
         "EPYC 9R45",

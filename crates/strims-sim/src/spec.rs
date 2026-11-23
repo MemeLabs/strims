@@ -795,9 +795,10 @@ pub struct Scenario {
     /// writer without the timer probe draws that CPU's lateness, and its
     /// writes due on the stream's whole second, where a testbed node's line
     /// timer runs, a model of their own ([`crate::late`]'s
-    /// `WRITER_BY_CPU`). Off by default: the write path bench
-    /// (`write_fit_of`) doesn't fit it better yet (PLAN). Off, or without a
-    /// CPU, every write draws the write path bench's model.
+    /// `WRITER_BY_CPU`). On by default: a twin's writer then runs as late
+    /// as its testbed run's, on the second and off it. Off
+    /// (`STRIMS_SIM_WRITER_CPU=off`), or without a CPU, every write draws
+    /// the write path bench's model.
     pub writer_by_cpu: bool,
     /// Whether each browser ([`Scenario::is_browser`]) draws its links'
     /// setups as its stack's do (strims-node's `SetupDraws`): its
@@ -1154,7 +1155,7 @@ impl Scenario {
             packet_cost: None,
             page_timing: PageTiming::default(),
             testbed_cpu: None,
-            writer_by_cpu: false,
+            writer_by_cpu: true,
             link_setup_draws: true,
             timer_lateness: true,
             pacer_lateness: true,
