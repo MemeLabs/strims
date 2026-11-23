@@ -583,6 +583,14 @@ resends found lost after a recovery ended (retransmission_queue.cc,
 `HandlePacketLoss`; outstanding_data.cc, `NackBetweenAckBlocks`), as the
 base model does, so the base is the faithful one.
 
+**An offer's transit drawn at its answerer.** (344a5abe3, against
+68ef22185) `OFFER_TRANSIT` moved from the offerer's post, where it was fit
+(6c369578f) and can reorder a batch's posts, to the answerer's arrival,
+unrefitted, with its check's batch join there. `link_open_fit_of` (testbed
+less twin): pph seed open/peer, viewer open/peer 0/0/0/-2 -> -2/-2/-2/-4;
+the C6 link-setup bench's seed -2/-2 -> -6/-8. The order within a batch
+barely shows at the sim's 1 ms step.
+
 ## WebRTC links
 
 **A smaller data channel cap.** (`browsers-exp`, against 226a5d43)

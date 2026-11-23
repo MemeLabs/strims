@@ -159,11 +159,19 @@ pub struct LinkSetup {
     pub gather_after_set: Option<Duration>,
     pub set_ready: Duration,
     pub set_lead: Spread,
+    /// Chromium's 1.85 ms is no fit: the testbed's first settings grow
+    /// 0.96 ms an offer on c8a and 1.79 on c7a (`CHROMIUM`). It is the
+    /// step the model set each offer after the one before until it made
+    /// them as a batch, kept for a page of no measured setting, as the C6
+    /// link-setup bench's are: its viewers' links open 16 ms sooner than
+    /// the testbed's with it, 24 without (`link_open_fit_of`, 8 seeds).
     pub make_per_offer: Duration,
     pub set_per_offer: Duration,
     /// With the host's draws, an offer's post to the signalling relay comes
     /// no sooner than this after the page's offer post before, as its page
-    /// sends them in turn.
+    /// sends them in turn. Chromium's, like its `offer_post`, is c8a's (the
+    /// pph halve-7-20 runs on its EPYC 9R45): the h7spec runs on c7a's 9R14
+    /// read 0.49 ms and 1.17, and their twins take c8a's.
     pub post_per_offer: Duration,
     /// With the host's draws, `check_ready` drawn, from the asking of its
     /// batch's last offer to the batch's first check (`check_per_offer`).
@@ -377,7 +385,11 @@ pub const GATHER_TAIL: Duration = Duration::from_micros(250);
 /// answer's on its leaving, neither sooner than the last wait it ended.
 /// The testbed's halve-7 runs' 112 seed links read each leg's excess over
 /// its paths' delays at 3, 5 and 9 ms (p10, p50, p90), the answer's at 0,
-/// 3 and 7.
+/// 3 and 7. Drawn for each post, an offer's can reorder its batch's posts,
+/// which the testbed's pages send in the order they were asked (a node's
+/// posts to the relay 0.30 ms apart at the median); drawn at its
+/// answerer's arrival instead, unrefitted, it made links open later, so
+/// the reorder stands as an approximation.
 pub const OFFER_TRANSIT: Spread = Spread(&[
     (0, -2_500),
     (100, -2_000),
@@ -585,8 +597,7 @@ impl LinkSetup {
     /// worker's cost of each): its first setting came 7.1 ms after its
     /// connect for a lone offer and 0.96 ms later for each further one
     /// (least squares over the 40 nodes; the h7spec halve-7 cells' 32 on
-    /// c7a's 9R14, 8.9 and 1.79; `make_per_offer`, their mean, which a
-    /// page of no measured setting takes), each later setting 0.1 ms after
+    /// c7a's 9R14, 8.9 and 1.79), each later setting 0.1 ms after
     /// the one before at the median of 104 (0.0-0.5; the same on c7a;
     /// `set_per_offer`), and in 38 of the 40 nodes every offer gathered on
     /// one tick. A lone offer was set 9.8 ms after the ask at the median,

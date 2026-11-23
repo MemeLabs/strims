@@ -1482,6 +1482,28 @@ impl Scenario {
 mod tests {
     use super::*;
 
+    /// A Chromium page's measured first setting holds its making of its
+    /// node's offers, so it takes no `make_per_offer`; without one the
+    /// stack's stands, and a measured setting leaves Firefox's alone.
+    #[test]
+    fn a_measured_chromium_setting_takes_no_make_per_offer() {
+        use strims_node::LinkSetup;
+        let set = Duration::from_micros(6_200);
+        let timed = PageTiming {
+            chromium_set: vec![set],
+            ..PageTiming::default()
+        };
+        let chromium = timed.apply(LinkSetup::CHROMIUM, 3);
+        assert_eq!(chromium.set_ready, set);
+        assert_eq!(chromium.make_per_offer, Duration::ZERO);
+        assert!(LinkSetup::CHROMIUM.make_per_offer > Duration::ZERO);
+        assert_eq!(
+            PageTiming::default().apply(LinkSetup::CHROMIUM, 0),
+            LinkSetup::CHROMIUM
+        );
+        assert_eq!(timed.apply(LinkSetup::FIREFOX, 0), LinkSetup::FIREFOX);
+    }
+
     /// A host set's knob: its words, `hosts:` and indices as numbers are
     /// written, and never a bare number for a host.
     #[test]
