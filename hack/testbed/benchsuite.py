@@ -24,9 +24,10 @@ the arms. `score` prints each arm's fit to the testbed: the mean
 |log(arm / testbed)| of the data links' one-way delay and probe round trip
 p50/p90, the uplink queue's p90 and the drops (each floored at 5), per case
 and over the cases; with --repeat all, each case's fit averaged over the
-repeats it ran in. `phases` prints the data links' one-way delays, probe
-round trips and windows (a data channel's buffered amount) between the given
-times (default: each 8 s). `bursts` prints, unfloored, what a shaper's
+repeats it ran in. `phases` prints the data links' one-way delays and probe
+round trips (p50/p90), and the seed's samples of them (p50/max): a data
+channel's buffered amount and a TCP socket's window (the window model's data
+channel has both), between the given times (default: each 8 s). `bursts` prints, unfloored, what a shaper's
 bucket moves first: each data link's bursts' first record's one-way delay
 and their arrival spread (first record read to last), p50/p90, the testbed
 against the arms (with --repeat all, each repeat's).
@@ -237,25 +238,18 @@ def cmd_phases(args):
         secs = int(bench.settings(run).get("SECS", "30"))
         edges = list(range(0, secs + 1, 8))
     dirs = [("testbed", run)] + [(a, os.path.join(run, a)) for a in arms]
-    logs = {n: bench.load(d) for n, d in dirs}
+    got = {n: bench.phases(bench.load(d), edges, links) for n, d in dirs}
     q = lambda xs, p: bench.quantiles(xs, (p,))[0] if xs else None
-    print(f"{'phase s':9}" + "".join(f" | {n:^35}" for n, _ in dirs))
-    print(f"{'':9}" + " | owd p50/p90  rtt p50/p90  cwnd p50/max" * len(dirs))
-    for lo, hi in zip(edges, edges[1:]):
+    cols = (("owd", "owd p50/p90", .9), ("rtt", "rtt p50/p90", .9),
+            ("buffered", "buffered p50/max", 1), ("cwnd", "cwnd p50/max", 1))
+    width = sum(len(h) + 1 for _, h, _ in cols) - 1
+    print(f"{'phase s':9}" + "".join(f" | {n:^{width}}" for n, _ in dirs))
+    print(f"{'':9}" + (" | " + " ".join(h for _, h, _ in cols)) * len(dirs))
+    for k, (lo, hi, _) in enumerate(got["testbed"]):
         row = f"{lo:>3.0f}-{hi:<4.0f} "
         for n, _ in dirs:
-            d = logs[n]
-            inside = lambda us: lo * 1e6 <= us < hi * 1e6
-            owd = [(e["got"] - e["at"]) / 1000 for i in links for e in d.get(i, [])
-                   if e.get("ev") == "r" and e["k"] == 0 and inside(e["at"])]
-            rtt = [(e["got"] - e["at"]) / 1000 for e in d.get(0, [])
-                   if e.get("ev") == "r" and e["k"] == 2 and e["from"] in links and inside(e["at"])]
-            # A data channel's samples carry its buffered amount in place
-            # of a window.
-            cw = [e.get("cwnd", e.get("buffered", 0)) / 1024 for e in d.get(0, [])
-                  if e.get("ev") == "s" and e["to"] in links and inside(e["t"])]
-            row += (f" | {show([q(owd, .5), q(owd, .9)]):>11} {show([q(rtt, .5), q(rtt, .9)]):>11}"
-                    f" {show([q(cw, .5), max(cw) if cw else None]):>11}")
+            m = got[n][k][2]
+            row += " | " + " ".join(f"{show([q(m[c], .5), q(m[c], top)]):>{len(h)}}" for c, h, top in cols)
         print(row)
 
 

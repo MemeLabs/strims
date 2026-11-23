@@ -324,6 +324,33 @@ def metrics(nodes, sched, cls, t0_us, queue=None, compete=None, packets=False):
     return m
 
 
+def phases(nodes, edges, links):
+    """Each phase [lo, hi) s between consecutive edges, as (lo, hi, m):
+    m's owd (ms) the data records the links (nodes) read whose write began
+    in it, rtt (ms) node 0's probes of the links, and buffered and cwnd
+    (KiB) node 0's samples of them, each from the samples that hold it: a data
+    channel's sample holds its buffered amount (the window model's its
+    association's cwnd too), a TCP socket's its cwnd."""
+    out = []
+    for lo, hi in zip(edges, edges[1:]):
+        inside = lambda us: lo * 1e6 <= us < hi * 1e6
+        m = {"owd": [], "rtt": [], "buffered": [], "cwnd": []}
+        for i in links:
+            for e in nodes.get(i, []):
+                if e.get("ev") == "r" and e["k"] == 0 and inside(e["at"]):
+                    m["owd"].append((e["got"] - e["at"]) / 1000)
+        for e in nodes.get(0, []):
+            ev = e.get("ev")
+            if ev == "r" and e["k"] == 2 and e["from"] in links and inside(e["at"]):
+                m["rtt"].append((e["got"] - e["at"]) / 1000)
+            elif ev == "s" and e["to"] in links and inside(e["t"]):
+                for k in ("buffered", "cwnd"):
+                    if k in e:
+                        m[k].append(e[k] / 1024)
+        out.append((lo, hi, m))
+    return out
+
+
 def fmt(v):
     if v is None:
         return "-"
