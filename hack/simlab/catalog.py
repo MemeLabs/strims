@@ -282,7 +282,9 @@ hold, arrivals.node = peer, seq, incarnation = peer_incarnation), to
 parents as a history (the child's first change at or after a decision's
 t_ms), and to each other ON (k, src, node, peer, peer_incarnation, seq)
 with seed_sends.how = 'push': a cancel's push or none, a check's with
-seed_sends.t_ms = due_ms; a send meets every CANCEL of its chunk.
+seed_sends.t_ms = due_ms; a send meets every CANCEL of its chunk; the
+path probes (path_probes) to viewers on node and on peer, the link's
+other end.
 
   SELECT e.cell, e.arm_label, count(*) AS runs, sum(v.collapsed::INT) AS collapsed
   FROM experiment_jobs e JOIN verdicts v USING (k, src)

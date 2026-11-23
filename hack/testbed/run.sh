@@ -240,9 +240,9 @@
 #                          and its twin's (its knob)
 #   SPEC=1                 every node keeps its request and seed logs
 #                          (--spec), as STRIMS_SIM_SPEC=1 does: the tables'
-#                          arrivals, haves, asks, seed_decisions and
-#                          seed_sends. Both off (0) by default; a line's
-#                          records hold no logs then
+#                          arrivals, haves, asks, seed_decisions,
+#                          seed_sends and path_probes. Both off (0) by
+#                          default; a line's records hold no logs then
 #   PARENT_CHECKS=1        every node keeps its parent checks
 #                          (--parent-checks: its decision log's), as
 #                          STRIMS_SIM_PARENT_CHECKS=1 does: the tables'

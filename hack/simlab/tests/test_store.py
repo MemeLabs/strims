@@ -241,6 +241,13 @@ class FoldExport(Scratch):
             golden_cli.write_table(d, "seed_sends", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
                                                      ("how", "VARCHAR"), ("seq", "BIGINT"), ("fate", "VARCHAR")],
                                    [(885 + n, 0, 1, "push", 6, "written")])
+            # A probe its echo read, and one unanswered to a peer it can't name.
+            golden_cli.write_table(d, "path_probes", [("sent_us", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
+                                                      ("written", "BIGINT"), ("rode", "VARCHAR"),
+                                                      ("acked_us", "BIGINT"), ("reading_bps", "BIGINT"),
+                                                      ("span_us", "BIGINT")],
+                                   [(886_000 + n, 0, 1, 5009, "burst", 917_250 + n, 312_500, 400_250),
+                                    (887_000 + n, 0, None, 9000, "small", None, None, None)])
             # The seed's channel to a viewer, and one to a peer it can't name.
             golden_cli.write_table(d, "peer_samples", [("t_ms", "BIGINT"), ("node", "BIGINT"), ("peer", "BIGINT"),
                                                        ("sent_bytes", "BIGINT"), ("rtt_ms", "BIGINT")],
@@ -298,7 +305,8 @@ class FoldExport(Scratch):
                 [(0, 1, 0, 0, 1_000_400 + n, "out", "data", 0, 0, 1, 1160, 1188, None, None, 11_910, 1176, False),
                  (0, 1, 0, 1, 1_031_000 + n, "in", "sack", None, None, 0, 0, 28, 0, 0, 11_910, 0, False)])
             if ":" in j["sim"]:
-                for t in ("reads", "asks", "haves", "seed_decisions", "seed_sends", "peer_samples", "sockets",
+                for t in ("reads", "asks", "haves", "seed_decisions", "seed_sends", "path_probes", "peer_samples",
+                          "sockets",
                           "packets", "parent_checks", "timers", "link_writes",
                           "link_reads", "link_samples", "sctp_events"):
                     csv = d / f"{t}.csv"
@@ -348,6 +356,11 @@ class FoldExport(Scratch):
         self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(2 * list(runs["k"])))
         cols, rows = parquet(self.dir / "module" / "seed_sends.parquet")
         self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(runs["k"]))
+        # Two probes a job, the unanswered one's reading NULL.
+        cols, rows = parquet(self.dir / "module" / "path_probes.parquet")
+        self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(2 * list(runs["k"])))
+        reading = [c for c, _ in cols].index("reading_bps")
+        self.assertEqual(sorted((r[reading] is None) for r in rows), sorted(len(runs["k"]) * [False, True]))
         # Two peer samples and a socket a job, a peer left out NULL.
         cols, rows = parquet(self.dir / "module" / "peer_samples.parquet")
         self.assertEqual(sorted(r[[c for c, _ in cols].index("k")] for r in rows), sorted(2 * list(runs["k"])))

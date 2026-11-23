@@ -411,7 +411,8 @@ peer_incarnation), seed_decisions to parents as a history (the child's
 first change at or after the decision's t_ms), and to each other ON (k,
 src, node, peer, peer_incarnation, seq) with seed_sends.how = 'push' (a
 cancel's push or none; a check's with seed_sends.t_ms = due_ms; a send
-meets every CANCEL of its chunk); seconds
+meets every CANCEL of its chunk); path_probes to viewers USING (k, src,
+node) and ON viewers.node = path_probes.peer (the link's other end); seconds
 to verdict_seconds USING (k, src, sec) (macros.sql's `sec`); a viewer's
 second (viewer_seconds' sec, a read's or a stall's t_ms // 1000) to
 scoring.sql's viewer_phases_of((SELECT list({'k': k, 'src': src}) FROM
