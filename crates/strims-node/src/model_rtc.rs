@@ -143,18 +143,28 @@ pub struct LinkSetup {
     /// model's start.
     pub tick: Option<Duration>,
     /// With the host's draws, an offer's gathering ends at the first tick
-    /// at or after its setting plus this, [`GATHER_TAIL`] past that tick,
-    /// in place of `offer_ready`; and its setting comes after the node
-    /// asks for it `set_ready` at the median for its first offer (the
-    /// harness's `rtcTiming` `set` of the node's first offer less its first
-    /// `connecting`, a setting after every offer the page was asked for by
-    /// then), `set_lead` its spread about that, or `set_per_offer` after
-    /// the setting of the offer before if that comes later: the page makes
-    /// every offer it is asked for before it sets any.
+    /// at or after its own setting plus this, [`GATHER_TAIL`] past that
+    /// tick, in place of `offer_ready`. An offer the node asks for while
+    /// none of its page's is still to be set opens a batch, whose first
+    /// setting comes `set_ready` after the ask at the median, `set_lead`
+    /// its spread about that; each offer asked before that setting comes
+    /// joins the batch, drawing nothing, and moves the setting on by
+    /// `make_per_offer`, as the page makes every offer of the batch before
+    /// it sets one. The batch's offers are then set in turn,
+    /// `set_per_offer` apart. A run's measured first setting (the
+    /// harness's `rtcTiming` `set` of a node's first offer less its first
+    /// `connecting`, strims-sim's `PageTiming`) holds its page's making of
+    /// every offer its node asked for at its join, so a page that takes it
+    /// takes no `make_per_offer`.
     pub gather_after_set: Option<Duration>,
     pub set_ready: Duration,
     pub set_lead: Spread,
+    pub make_per_offer: Duration,
     pub set_per_offer: Duration,
+    /// With the host's draws, an offer's post to the signalling relay comes
+    /// no sooner than this after the page's offer post before, as its page
+    /// sends them in turn.
+    pub post_per_offer: Duration,
     /// With the host's draws, `check_ready` drawn, from the asking of its
     /// batch's last offer to the batch's first check (`check_per_offer`).
     pub check_spread: Spread,
@@ -257,6 +267,72 @@ fn join_batch(
     let (b, rx) = watch::channel((now + ready, 1));
     *batch = Some(b);
     (rx, 0)
+}
+
+/// With the host's draws, the offers a page is asked for while the first
+/// of them is still to be set ([`LinkSetup::make_per_offer`]): when that
+/// first setting comes, which each joining offer moves on, and how many
+/// it holds.
+type OfferBatch = (watch::Sender<Instant>, u32);
+
+/// An offer the page is asked for at `now` joins `batch` if its first
+/// setting is still to come, moving it on by `make`, and else opens the
+/// next, set `lead()` from now: its batch and its place in it.
+fn join_offers(
+    batch: &mut Option<OfferBatch>,
+    now: Instant,
+    make: Duration,
+    lead: impl FnOnce() -> Duration,
+) -> (watch::Receiver<Instant>, u32) {
+    if let Some((b, offers)) = batch.as_mut()
+        && *b.borrow() > now
+    {
+        b.send_modify(|first| *first += make);
+        *offers += 1;
+        return (b.subscribe(), *offers - 1);
+    }
+    let (b, rx) = watch::channel(now + lead());
+    *batch = Some((b, 1));
+    (rx, 0)
+}
+
+/// Waits out its batch's first setting, which moves on as offers join it
+/// until it comes: that setting.
+async fn offers_set(mut first: watch::Receiver<Instant>) -> Instant {
+    loop {
+        let at = *first.borrow_and_update();
+        if Instant::now() >= at {
+            return at;
+        }
+        tokio::select! {
+            () = tokio::time::sleep_until(at) => {}
+            changed = first.changed() => {
+                if changed.is_err() {
+                    tokio::time::sleep_until(at).await;
+                }
+            }
+        }
+    }
+}
+
+/// When stack `me`'s page posts the offer at `place` of its batch, the
+/// batch's first setting at `first` and its metronome's grid at `origin`:
+/// each of its offers set `set_per_offer` after the one before, its
+/// gathering ending on its tick ([`LinkSetup::gather_after_set`]), and
+/// posted `offer_post` after that, no sooner than `post_per_offer` after
+/// the batch's offer before.
+fn offer_post_at(me: &LinkSetup, first: Instant, place: u32, origin: Instant) -> Instant {
+    let after = me.gather_after_set.unwrap_or_default();
+    (0..=place)
+        .map(|j| {
+            let set = first + me.set_per_offer * j;
+            me.fires_at(set + after, origin)
+                + GATHER_TAIL
+                + me.offer_post
+                + me.post_per_offer * (place - j)
+        })
+        .max()
+        .unwrap_or(first)
 }
 
 /// When the check of the offer at `place` of a closed batch goes, its
@@ -493,26 +569,41 @@ impl LinkSetup {
     /// median of 21. Its ClientHello carries X25519MLKEM768's share. Both
     /// its ends send an INIT (dcSCTP).
     ///
-    /// With the host's draws, from the halve-7 cells' 16 PCAP=1 runs (7
+    /// With the host's draws, from the halve-7 cells' PCAP=1 runs (7
     /// viewers each joining at once, linking to the seed and the viewers
-    /// before it, a Chromium seed answering): an offer's gathering ended at
-    /// the first tick of the metronome at or after its setting plus 112.5
-    /// ms, 0.25 ms past it, in 76 of 80 (`gather_after_set`); its page set
-    /// it 1.85 ms later for each offer it made (the strims page's
-    /// `PeerHost` makes each connection's offer as its node asks, and every
-    /// create came before the first set), 9.8 ms after the ask at the
-    /// median of a lone offer, 7.2-11.8 (p10-p90; `set_lead`, which with
-    /// the ticks has a lone offer's gathering end 130 ms after the ask at
-    /// the median, 124-137 at p10-p90, where the runs' 16 read 132, 125
-    /// and 136). A twin takes its run's first setting (`set_ready`,
-    /// strims-sim's `testbed::offer_timing`): 10.2 ms on c8a's EPYC 9R45,
-    /// 13.9 on c7a's 9R14. Its offer left for the relay 0.86 ms after its
-    /// gathering's end (`offer_post`: the first relay payload in its
-    /// offered capture less its `gathered` stamp, to about 0.1 ms on
-    /// Chromium) at the median of the halve-7-20 cell's 8 runs' medians on
-    /// c8a (0.83-0.93; their 40 viewers' 0.69-2.03), and the seed's check
-    /// came 18.3 ms after it at the median of those runs, where the
-    /// model's paths and hops, the relay's and the seed's batch, take 18.0.
+    /// before it, a Chromium seed answering), each offer read from its
+    /// node's `rtcTiming` and its offered capture, every one a node made:
+    /// in the halve-7-20 cell's 8 runs on c8a (40 Chromium viewers making
+    /// 1 to 6 offers each, 144 in all), an offer's gathering ended at the
+    /// first tick of the metronome at or after its own setting plus 113.0
+    /// ms in 142 (`gather_after_set`), the run's every Chromium on one grid
+    /// (their containers share the host's clock), [`GATHER_TAIL`] past its
+    /// tick (0.2 ms past the run's earliest at the median, 0.1-0.5 at
+    /// p10-p90, an earliest itself past its tick). A node's offers
+    /// were set together, once its page had made those its node asked for
+    /// by then, the node asking for them about a millisecond apart (its
+    /// worker's cost of each): its first setting came 7.1 ms after its
+    /// connect for a lone offer and 0.96 ms later for each further one
+    /// (least squares over the 40 nodes; the h7spec halve-7 cells' 32 on
+    /// c7a's 9R14, 8.9 and 1.79; `make_per_offer`, their mean, which a
+    /// page of no measured setting takes), each later setting 0.1 ms after
+    /// the one before at the median of 104 (0.0-0.5; the same on c7a;
+    /// `set_per_offer`), and in 38 of the 40 nodes every offer gathered on
+    /// one tick. A lone offer was set 9.8 ms after the ask at the median,
+    /// 7.2-11.8 (p10-p90; `set_lead`), and a twin takes its run's first
+    /// settings, a node each (`set_ready`, strims-sim's
+    /// `testbed::offer_timing`): on c8a 6.2 ms for the viewer of one offer
+    /// and 11.1 for that of six, 10.2 for every node's, 13.9 on c7a. The
+    /// gathering's 113.0 ms is c7a's too (284 of 288). Its first offer left
+    /// for the relay 0.86 ms after its gathering's end (`offer_post`: the
+    /// first relay payload in its offered capture less its `gathered`
+    /// stamp, to about 0.1 ms on Chromium) at the median of the halve-7-20
+    /// cell's 8 runs' medians on c8a (0.83-0.93; their 40 viewers'
+    /// 0.69-2.03), each later one of its tick 0.31 ms after the one before
+    /// at the median of 102 (0.27-0.54; `post_per_offer`; c7a's 0.49), and
+    /// the seed's check came 18.3 ms after the first at the median of those
+    /// runs, where the model's paths and hops, the relay's and the seed's
+    /// batch, take 18.0.
     /// The seed's checks
     /// went in batches: an offer it was asked to set before a batch's first
     /// check went joined it, and the batch's
@@ -551,7 +642,7 @@ impl LinkSetup {
         resend_rtts: 2,
         resend_max: Duration::from_secs(3),
         tick: Some(Duration::from_micros(15_625)),
-        gather_after_set: Some(Duration::from_micros(112_500)),
+        gather_after_set: Some(Duration::from_micros(113_000)),
         set_ready: Duration::from_micros(9_800),
         set_lead: Spread(&[
             (0, -3_990),
@@ -560,7 +651,9 @@ impl LinkSetup {
             (900, 2_000),
             (1000, 3_010),
         ]),
-        set_per_offer: Duration::from_micros(1_850),
+        make_per_offer: Duration::from_micros(1_850),
+        set_per_offer: Duration::from_micros(100),
+        post_per_offer: Duration::from_micros(310),
         check_spread: Spread(&[
             (0, 600),
             (100, 1_000),
@@ -600,7 +693,10 @@ impl LinkSetup {
     /// `connecting`, and the capture's post less `gathered`), where c7a's
     /// 9R14 took 17.0 and 2.6 and 16 browsers on one host
     /// later still: a twin takes its run's (strims-sim's
-    /// `testbed::offer_timing`). The seed's check came 18.7 ms after the
+    /// `testbed::offer_timing`). Its page posts a node's offers in turn,
+    /// as Chromium's does: each later one 0.30 ms after the one before at
+    /// the median of those runs' 64 (0.15-0.72 at p10-p90;
+    /// `post_per_offer`). The seed's check came 18.7 ms after the
     /// post at the median of the c8a runs, where the model's paths and
     /// hops take 18.2. Its answer leaves 6 ms after an offer comes, at the
     /// median, its gathering a millisecond of it. Answering, it has
@@ -634,7 +730,9 @@ impl LinkSetup {
         gather_after_set: None,
         set_ready: Duration::ZERO,
         set_lead: Spread::NONE,
+        make_per_offer: Duration::ZERO,
         set_per_offer: Duration::ZERO,
+        post_per_offer: Duration::from_micros(300),
         check_spread: Spread::NONE,
         check_per_offer: Duration::ZERO,
         turns: Turns {
@@ -685,7 +783,9 @@ impl LinkSetup {
         gather_after_set: None,
         set_ready: Duration::ZERO,
         set_lead: Spread::NONE,
+        make_per_offer: Duration::ZERO,
         set_per_offer: Duration::ZERO,
+        post_per_offer: Duration::ZERO,
         check_spread: Spread::NONE,
         check_per_offer: Duration::ZERO,
         turns: Turns::NONE,
@@ -1465,8 +1565,10 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
     let me = net.link_setup();
     let draws = net.setup_draws();
     let origin = draws.as_ref().map_or_else(Instant::now, |d| d.tick_origin);
-    // When the page's offers so far are made: it sets none before then.
-    let (made, made_rx) = watch::channel(Instant::now());
+    // With the host's draws, the page's offers being made together, and its
+    // latest offer post where it posts each as it is asked for.
+    let mut offer_batch: Option<OfferBatch> = None;
+    let mut last_post: Option<Instant> = None;
     // The offers the page is setting together, while their checks are to go.
     let mut batch: Option<Batch> = None;
     let checks = Arc::new(checks);
@@ -1531,19 +1633,28 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                     RtcCommand::Create { .. } => None,
                     RtcCommand::Describe { conn, sdp_type } => {
                         let offer = sdp_type == SdpType::Offer;
-                        // When the offer's making is done, and how long past
-                        // its setting its gathering's last phase comes.
-                        let mut gather = None;
+                        // With the host's draws, the offer's batch and its
+                        // place in it (a stack that ends its gathering on its
+                        // tick), else when the page posts it.
+                        let (mut gather, mut posted) = (None, None);
                         let (sdp, ready, check) = if offer {
                             offers.insert(conn.0, Offer { conn, answer: None, stream: None });
                             let sdp = format!("{PREFIX} {advertised} {} {}", conn.0, me.name);
-                            if let (Some(d), Some(after)) = (&draws, me.gather_after_set) {
-                                let ready = me.set_ready.saturating_sub(me.set_per_offer);
-                                let lead = d.draw(me.set_lead).unwrap_or(0.0) + ready.as_secs_f64() * 1e6;
-                                let lead = Duration::from_secs_f64(lead.max(0.0) / 1e6);
-                                let m = (*made.borrow()).max(Instant::now() + lead) + me.set_per_offer;
-                                made.send_replace(m);
-                                gather = Some((m, after));
+                            if let Some(d) = &draws {
+                                let now = Instant::now();
+                                if me.gather_after_set.is_some() {
+                                    let lead = || {
+                                        let us = d.draw(me.set_lead).unwrap_or(0.0)
+                                            + me.set_ready.as_secs_f64() * 1e6;
+                                        Duration::from_secs_f64(us.max(0.0) / 1e6)
+                                    };
+                                    gather = Some(join_offers(&mut offer_batch, now, me.make_per_offer, lead));
+                                } else {
+                                    let at = now + me.offer_ready + me.offer_post;
+                                    let at = last_post.map_or(at, |p| at.max(p + me.post_per_offer));
+                                    last_post = Some(at);
+                                    posted = Some(at);
+                                }
                             }
                             (sdp, me.offer_ready, None)
                         } else {
@@ -1558,7 +1669,7 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                             .as_ref()
                             .and_then(|d| d.draw(if offer { OFFER_TRANSIT } else { ANSWER_TRANSIT }));
                         let post = if offer { me.offer_post } else { Duration::ZERO };
-                        let (inputs, made) = (inputs.clone(), made_rx.clone());
+                        let inputs = inputs.clone();
                         tokio::spawn(async move {
                             let deadline = Instant::now() + ready;
                             let mut at = deadline;
@@ -1567,13 +1678,10 @@ pub(crate) async fn run<N: Net>(net: N, model: ModelRtc<N>, inputs: Inputs<Trans
                             {
                                 at = at.min(Instant::now() + after);
                             }
-                            if let Some((created, after)) = gather {
-                                // Set once every offer made by then is.
-                                tokio::time::sleep_until(created).await;
-                                let set = *made.borrow();
-                                at = me.fires_at(set.max(created) + after, origin) + GATHER_TAIL;
-                            }
-                            at += post;
+                            at = match gather {
+                                Some((first, place)) => offer_post_at(&me, offers_set(first).await, place, origin),
+                                None => posted.unwrap_or(at + post),
+                            };
                             if let Some(us) = transit {
                                 at = shifted(at, us, Instant::now());
                             }
@@ -1900,6 +2008,39 @@ mod tests {
         assert!((set - 9.8).abs() < 1e-6, "{set}");
         let lone = set + c.gather_after_set.map_or(0.0, ms) + half_tick + ms(GATHER_TAIL);
         assert!((lone - 132.4).abs() < 2.5, "{lone}");
+    }
+
+    /// The offers a node asks for while the first is still to be set join
+    /// its batch, each moving that first setting on by `make_per_offer`
+    /// and drawing nothing; they are set `set_per_offer` apart, gather on
+    /// one tick and leave in turn. One asked once they are set opens the
+    /// next batch.
+    #[tokio::test(start_paused = true)]
+    async fn a_pages_offers_asked_together_set_and_post_in_turn() {
+        let me = LinkSetup::CHROMIUM;
+        let o = Instant::now();
+        let mut batch = None;
+        let mut leads = 0;
+        let mut lead = || {
+            leads += 1;
+            me.set_ready
+        };
+        let joined: [_; 3] =
+            std::array::from_fn(|_| join_offers(&mut batch, o, me.make_per_offer, &mut lead));
+        let [(rx, _), ..] = &joined;
+        let first = offers_set(rx.clone()).await;
+        assert_eq!(first, o + me.set_ready + me.make_per_offer * 2);
+        // Set 13.5, 13.6 and 13.7 ms in, their gathering ends at the tick at
+        // or after 126.5-126.7 ms: 140.625.
+        let posts = joined.map(|(_, place)| offer_post_at(&me, first, place, o));
+        let at = o + Duration::from_micros(140_625) + GATHER_TAIL + me.offer_post;
+        let step = me.post_per_offer;
+        assert_eq!(posts, [at, at + step, at + step * 2]);
+        let now = Instant::now();
+        assert!(now >= first);
+        let (next, place) = join_offers(&mut batch, now, me.make_per_offer, &mut lead);
+        assert_eq!((*next.borrow(), place), (now + me.set_ready, 0));
+        assert_eq!(leads, 2);
     }
 
     /// The offers a page is asked to set before its batch's first check

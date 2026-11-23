@@ -607,9 +607,12 @@ impl PageTiming {
                 offer_post: at(&self.firefox_post, setup.offer_post),
                 ..setup
             }
-        } else if setup.name == LinkSetup::CHROMIUM.name {
+        } else if setup.name == LinkSetup::CHROMIUM.name && !self.chromium_set.is_empty() {
+            // The measured setting holds the page's making of the offers its
+            // node asked for at its join.
             LinkSetup {
                 set_ready: at(&self.chromium_set, setup.set_ready),
+                make_per_offer: Duration::ZERO,
                 ..setup
             }
         } else {
