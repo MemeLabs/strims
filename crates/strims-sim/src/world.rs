@@ -525,6 +525,7 @@ impl World {
                             crate::late::HostKind::of_host(&spec, h),
                             probe,
                         )
+                        .on_cpu(spec.testbed_cpu.as_deref().filter(|_| spec.writer_by_cpu))
                     })
                     .collect()
             };

@@ -126,8 +126,10 @@ pub use packets::{NodeCapture, NodeLink, bench_captures, captures, node_link};
 pub const PACKET_COST: &str = "STRIMS_SIM_CAL_PACKET_COST_US";
 /// The job knob a run with a Chromium node records its host's CPU model in
 /// ([`thread_cost::cpu_model`]): which host's [`PACKET_COST`] it is, for
-/// simlab's testbed to tell a cell of one model's runs from several's. No
-/// twin takes it.
+/// simlab's testbed to tell a cell of one model's runs from several's, and
+/// the testbed host its twin's hosts run on (calibration_star's, whose
+/// Chromium seed's frame writer runs as late as that CPU's with
+/// `STRIMS_SIM_WRITER_CPU=on`: `crate::late`).
 pub const CPU_MODEL: &str = "STRIMS_SIM_CAL_CPU";
 /// The knob a twin takes its seed's uplink steps' times from, ms of stream,
 /// one a step of `STRIMS_SIM_CAL_SEED_UP_SCALE`'s (calibration_star's): a
@@ -925,7 +927,8 @@ impl Run {
         // thread, for the twin's (thread_cost), and the CPU model of the
         // host whose it is: both the host's, which the keying sets aside
         // (simlab's testbed MEASURED), a twin of one model's runs taking
-        // their median, of several models' each seed its run's. A knob the
+        // their median cost and the model, of several models' each seed its
+        // run's. A knob the
         // caller gave stands.
         let kinds: Vec<&str> = settings
             .get("KINDS")

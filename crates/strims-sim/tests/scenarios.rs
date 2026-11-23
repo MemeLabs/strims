@@ -3823,6 +3823,7 @@ fn collapse_case(viewers: usize, seed_up_mbit: u64, secs: u64) -> Calibration {
         joins: Vec::new(),
         epoch_ms: None,
         packet_cost_us: None,
+        cpu: None,
         firefox_gather_ms: Vec::new(),
         firefox_post_ms: Vec::new(),
         chromium_set_ms: Vec::new(),

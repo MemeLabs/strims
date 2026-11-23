@@ -134,6 +134,13 @@ fn values(get: &impl Fn(&str) -> Option<String>, name: &str) -> Vec<f64> {
 ///   their host's CPU's), is each Chromium host's
 ///   ([`Scenario::packet_cost`]); unset, its stack's 12 µs
 ///   ([`SctpProfile::CHROMIUM`](crate::SctpProfile::CHROMIUM)).
+/// - `STRIMS_SIM_CAL_CPU=<model>`, a testbed run's host's CPU model
+///   (`testbed::thread_cost::cpu_model`, run.sh's `cpu`), is the testbed
+///   host its hosts run on ([`Scenario::testbed_cpu`]): with
+///   `STRIMS_SIM_WRITER_CPU=on` ([`Scenario::writer_by_cpu`]) a Chromium
+///   seed's frame writer then runs as late as that CPU's, its writes on
+///   the stream's whole second beside its line timer as those do
+///   (`crate::late`). Unset, the write path bench's model for every write.
 /// - `STRIMS_SIM_CAL_FIREFOX_GATHER_MS=<ms>,...`,
 ///   `STRIMS_SIM_CAL_FIREFOX_POST_MS=<ms>,...` and
 ///   `STRIMS_SIM_CAL_CHROMIUM_SET_MS=<ms>,...`, a testbed run's browser
@@ -183,6 +190,8 @@ pub struct Calibration {
     /// The Chromium hosts' packet cost on their network thread, in µs;
     /// `None` keeps their stack's.
     pub packet_cost_us: Option<f64>,
+    /// The testbed host's CPU model; `None` models none.
+    pub cpu: Option<String>,
     /// The browsers' pages' offer times, ms: Firefox's gathering end and
     /// its post after it, Chromium's first setting, an entry a host of its
     /// kind in host order, or one for all; empty keeps the stack's.
@@ -302,6 +311,9 @@ impl Calibration {
             joins: joins(&get, viewers),
             epoch_ms: value(&get, "STRIMS_SIM_CAL_EPOCH_MS"),
             packet_cost_us: value(&get, "STRIMS_SIM_CAL_PACKET_COST_US"),
+            cpu: get("STRIMS_SIM_CAL_CPU")
+                .map(|m| m.trim().to_owned())
+                .filter(|m| !m.is_empty()),
             firefox_gather_ms: values(&get, "STRIMS_SIM_CAL_FIREFOX_GATHER_MS"),
             firefox_post_ms: values(&get, "STRIMS_SIM_CAL_FIREFOX_POST_MS"),
             chromium_set_ms: values(&get, "STRIMS_SIM_CAL_CHROMIUM_SET_MS"),
@@ -637,6 +649,7 @@ pub fn calibration_star(c: &Calibration) -> Scenario {
     s.packet_cost = c
         .packet_cost_us
         .map(|us| Duration::from_nanos((us * 1000.0).round() as u64));
+    s.testbed_cpu.clone_from(&c.cpu);
     let ms = |ms: &[f64]| {
         ms.iter()
             .map(|ms| Duration::from_micros((ms * 1000.0).round() as u64))
@@ -825,6 +838,27 @@ mod tests {
             let refused = std::panic::catch_unwind(|| star(bad)).is_err();
             assert!(refused, "{bad:?}");
         }
+    }
+
+    /// CPU names the testbed host the twin's hosts run on, trimmed; unset
+    /// or blank, none.
+    #[test]
+    fn cpu_is_the_scenarios_testbed_cpu() {
+        let star = |cpu: Option<&str>| {
+            calibration_star(&Calibration::from_knobs(|k| {
+                (k == "STRIMS_SIM_CAL_CPU")
+                    .then_some(cpu)
+                    .flatten()
+                    .map(str::to_owned)
+            }))
+            .testbed_cpu
+        };
+        assert_eq!(star(None), None);
+        assert_eq!(star(Some(" ")), None);
+        assert_eq!(
+            star(Some("AMD EPYC 9R45 \n")).as_deref(),
+            Some("AMD EPYC 9R45")
+        );
     }
 
     /// PACKET_COST_US gives the Chromium hosts' stacks that cost a packet

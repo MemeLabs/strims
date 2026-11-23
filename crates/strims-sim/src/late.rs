@@ -71,7 +71,12 @@
 //! but the timer bench's twins ([`Scenario::timer_probe`]), draws its frame
 //! writer, and its pass starts, from the write path bench's runs instead,
 //! which run none: its writes run less late than beside the probe, and its
-//! passes start later. A host that runs the probe draws the timer bench's,
+//! passes start later. With [`Scenario::writer_by_cpu`] such a host's
+//! writer on a testbed host (a twin's, [`Scenario::testbed_cpu`]) draws its
+//! host's CPU model's, and its writes due on the stream's whole second,
+//! where the testbed node's line timer wakes its worker, a model of their
+//! own ([`WRITER_BY_CPU`]). A host that
+//! runs the probe draws the timer bench's,
 //! its pass starts the hold start's. Without the probe a Firefox seed's
 //! writes run later (PLAN), which no model has yet: a Firefox host draws the bench's
 //! either way. A browser's timer for a deadline already due resolves at
@@ -175,15 +180,45 @@ pub enum Source {
 }
 
 /// A host's lateness stream, shared by its incarnations' clocks: its
-/// rng, its kind, and whether it runs the timer probe
+/// rng, its kind, whether it runs the timer probe
 /// ([`Scenario::timer_probe`](crate::Scenario::timer_probe)), which picks
-/// its frame writer's and its pass starts' models ([`model`]).
+/// its frame writer's and its pass starts' models ([`model`]), and its
+/// frame writer's testbed host's models where it has one ([`writer_model`]).
 #[derive(Clone, Debug)]
-pub struct Lateness(Arc<Mutex<DetRng>>, HostKind, bool);
+pub struct Lateness(Arc<Mutex<DetRng>>, HostKind, bool, Option<WriterModel>);
 
 impl Lateness {
     pub(crate) fn new(rng: DetRng, kind: HostKind, probe: bool) -> Lateness {
-        Lateness(Arc::new(Mutex::new(rng)), kind, probe)
+        Lateness(Arc::new(Mutex::new(rng)), kind, probe, None)
+    }
+
+    /// The stream with its frame writer on a testbed host of CPU model
+    /// `cpu` ([`Scenario::testbed_cpu`], [`writer_model`]); `None` keeps
+    /// [`model`]'s.
+    pub(crate) fn on_cpu(mut self, cpu: Option<&str>) -> Lateness {
+        self.3 = cpu.and_then(|cpu| writer_model(self.1, self.2, cpu));
+        self
+    }
+
+    /// How late the host's frame writer's next write runs, armed for a
+    /// write `due` already, due on the stream's whole second if
+    /// `on_second`: as [`Lateness::draw`] draws [`Source::Writer`], from
+    /// its testbed host's models where it has one ([`WriterModel`]).
+    pub(crate) fn draw_write(&self, due: bool, on_second: bool) -> Duration {
+        let Some(w) = self.3 else {
+            return self.draw(Source::Writer, due);
+        };
+        if due && self.1.resolves_due_at_once() {
+            return Duration::ZERO;
+        }
+        let m = if on_second { w.on_second } else { w.off_second };
+        pick(
+            self.0
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .next_u32(),
+            m,
+        )
     }
 
     /// How late the host's next timer of `source` fires, armed for a
@@ -331,12 +366,14 @@ const PARTS: u32 = 1000;
 /// A host without the probe that draws hold starts alone (without
 /// [`Scenario::pacer_pass_start`](crate::Scenario::pacer_pass_start))
 /// draws the bench's.
+///
+/// That writer's model is c7a's off the stream's whole second
+/// ([`WRITER_BY_CPU`]), which a host draws for every write where it has no
+/// testbed host's ([`writer_model`]): a sim of no testbed host, as a
+/// deployed node runs, whose writer no line timer wakes.
 pub(crate) fn model(kind: HostKind, source: Source, probe: bool) -> Model {
     match (kind, source) {
-        (HostKind::Chromium, Source::Writer) if !probe => Model {
-            shares: [807, 184, 1],
-            tail: &[4, 5, 6, 7, 8, 8, 8, 8, 8, 8],
-        },
+        (HostKind::Chromium, Source::Writer) if !probe => C7A_WRITER,
         (HostKind::Chromium, Source::Pass) if !probe => Model {
             shares: [374, 626, 0],
             tail: &[],
@@ -386,6 +423,98 @@ pub(crate) fn model(kind: HostKind, source: Source, probe: bool) -> Model {
             tail: &[],
         },
     }
+}
+
+/// c7a's probe-off Chromium writer off the stream's whole second
+/// ([`WRITER_BY_CPU`]): the write path bench's fit ([`model`]).
+const C7A_WRITER: Model = Model {
+    shares: [807, 184, 1],
+    tail: &[4, 5, 6, 7, 8, 8, 8, 8, 8, 8],
+};
+
+/// A probe-off Chromium frame writer's lateness on a testbed host of one
+/// CPU model ([`WRITER_BY_CPU`]): its writes due off the stream's whole
+/// second, and those due on it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct WriterModel {
+    pub(crate) off_second: Model,
+    pub(crate) on_second: Model,
+}
+
+/// A Chromium host's frame writer without the timer probe on a testbed host,
+/// with [`Scenario::writer_by_cpu`], by a part of the host's
+/// `/proc/cpuinfo` model name (run.sh's `cpu`, a twin's
+/// [`Scenario::testbed_cpu`]), as
+/// [`CPU_COSTS`](crate::testbed::thread_cost::CPU_COSTS) keys a packet's
+/// cost. Each is the whole ms from a push period's due ms (its run's modal
+/// ms of the 250 ms period) to the queueing of its first push
+/// (`seed_sends`, node 0), periods from 4 to 30 s: c8a's (EPYC 9R45) the 16
+/// runs of the farm's `testbed-pph` and `testbed-h7c8` matrices
+/// (halve-7-20), 1248 periods off the second and 416 on it; c7a's (EPYC
+/// 9R14) the `testbed-h7spec` matrices' 16 (halve-7 at 10 and 20 Mbit/s),
+/// as many, off the second [`model`]'s fit. Off the second c8a's writer
+/// runs within its due ms more often than c7a's (84.4 % against 80.7 %), but
+/// 3 to 8 ms late more often too (2.2 % against 0.8 %). A run's share a ms
+/// late spreads about its CPU's as a binomial's of its 78 periods (0.024 to
+/// 0.053 across runs), so the host's CPU, not the run, sets it.
+///
+/// A write due on the whole second shares its ms with the testbed node's
+/// line timer (strims-testbed's `node::run`, every second of stream), a
+/// `setTimeout` on the same worker armed about a second before, which wakes
+/// the worker in that ms; the writer's timer, due by then, runs in that
+/// wake. c8a's writer runs within its due ms in 99.0 % of those periods (1.0
+/// % a ms late), c7a's in 94.5 % (4.0 % a ms late, 1.2 % 5 to 8 ms), where
+/// the twin's writer drew the off-second model's 80 %. The twin's
+/// controller samples a host without a timer of its own (the [module
+/// docs](self)), so the model takes those periods' measured shares rather
+/// than a line timer's lateness and the wake it shares.
+///
+/// A host of no testbed CPU, or without [`Scenario::writer_by_cpu`], draws
+/// [`model`]'s, c7a's off the second, for every write: no line timer runs
+/// on a deployed node, and c7a's is the model
+/// every sim drew before the CPU keyed it, so a sim of no testbed host keeps
+/// its runs; no measure of users' machines says which CPU's is nearer
+/// theirs. A testbed host of a CPU model the table lacks (the dev VM's)
+/// draws c7a's both.
+pub(crate) const WRITER_BY_CPU: &[(&str, WriterModel)] = &[
+    (
+        "EPYC 9R45",
+        WriterModel {
+            off_second: Model {
+                shares: [844, 130, 4],
+                tail: &[
+                    3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 6, 6, 7, 7, 8, 8,
+                ],
+            },
+            on_second: Model {
+                shares: [990, 10, 0],
+                tail: &[],
+            },
+        },
+    ),
+    ("EPYC 9R14", C7A),
+];
+
+/// c7a's ([`WRITER_BY_CPU`]).
+const C7A: WriterModel = WriterModel {
+    off_second: C7A_WRITER,
+    on_second: Model {
+        shares: [945, 40, 3],
+        tail: &[5, 6, 7, 7, 8],
+    },
+};
+
+/// The frame writer's models of a host of `kind`, that runs the timer probe
+/// if `probe`, on a testbed host of CPU model `cpu` ([`WRITER_BY_CPU`],
+/// c7a's where it lacks the model): a Chromium host's without the probe
+/// alone. Every other host's writer draws [`model`]'s.
+pub(crate) fn writer_model(kind: HostKind, probe: bool, cpu: &str) -> Option<WriterModel> {
+    (kind == HostKind::Chromium && !probe).then(|| {
+        WRITER_BY_CPU
+            .iter()
+            .find(|&&(part, _)| cpu.contains(part))
+            .map_or(C7A, |&(_, m)| m)
+    })
 }
 
 /// With [`Scenario::pacer_pass_start`](crate::Scenario::pacer_pass_start),
@@ -598,6 +727,60 @@ mod tests {
                 }
                 let b = buckets(100_000, || late.draw_held().unwrap_or(Duration::MAX));
                 assert!(at_shares(b, m), "{b:?}");
+            }
+        }
+    }
+
+    /// A probe-off Chromium host on a testbed CPU draws its writes off the
+    /// whole second and on it at that CPU's models, a CPU the table lacks
+    /// at c7a's, whose writer off the second is the write path bench's;
+    /// a write already due draws nothing. Without a CPU, with the probe or
+    /// on another kind, a write draws as `Source::Writer` does, from the
+    /// same rng.
+    #[test]
+    fn a_testbed_hosts_writer_draws_its_cpus_models() {
+        for &(part, w) in WRITER_BY_CPU {
+            for m in [w.off_second, w.on_second] {
+                let held = m.shares.iter().sum::<u32>();
+                assert!(held <= PARTS, "{part}");
+                assert_eq!(m.tail.is_empty(), held == PARTS, "{part}");
+                assert!(m.tail.is_sorted() && m.tail.iter().all(|&ms| ms >= 3));
+                assert!(m.tail.iter().all(|&ms| i64::from(ms) <= MAX_LATE_MS));
+            }
+            let cpu = format!("AMD {part} 96-Core Processor");
+            for (on, m) in [(false, w.off_second), (true, w.on_second)] {
+                let late = Lateness::new(det_rng(7), HostKind::Chromium, false).on_cpu(Some(&cpu));
+                let b = buckets(100_000, || late.draw_write(false, on));
+                assert!(at_shares(b, m), "{part} {on}: {b:?}");
+                assert_eq!(late.draw_write(true, on), Duration::ZERO);
+            }
+        }
+        let shares = |w: WriterModel| (w.off_second.shares, w.on_second.shares);
+        let c7a = writer_model(HostKind::Chromium, false, "AMD EPYC 9R14").map(shares);
+        let dev = "AMD Ryzen Threadripper PRO 5955WX 16-Cores";
+        assert_eq!(
+            writer_model(HostKind::Chromium, false, dev).map(shares),
+            c7a
+        );
+        assert_eq!(
+            c7a.map(|(off, _)| off),
+            Some(model(HostKind::Chromium, Source::Writer, false).shares)
+        );
+        let c8a = Some("AMD EPYC 9R45");
+        for (kind, probe, cpu) in [
+            (HostKind::Chromium, false, None),
+            (HostKind::Chromium, true, c8a),
+            (HostKind::Firefox, false, c8a),
+            (HostKind::Native, false, c8a),
+        ] {
+            let late = Lateness::new(det_rng(3), kind, probe).on_cpu(cpu);
+            let mut fresh = det_rng(3);
+            for on in [false, true, false] {
+                assert_eq!(
+                    late.draw_write(false, on),
+                    lateness(&mut fresh, kind, Source::Writer, probe),
+                    "{kind:?} {probe} {cpu:?}"
+                );
             }
         }
     }

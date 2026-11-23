@@ -786,6 +786,19 @@ pub struct Scenario {
     /// `STRIMS_SIM_CAL_CHROMIUM_SET_MS`), which its host sets, a page its
     /// node's; the default keeps each stack's.
     pub page_timing: PageTiming,
+    /// The CPU model of the testbed host the run's hosts are nodes on
+    /// (`/proc/cpuinfo`'s model name, as run.sh records it): a testbed
+    /// run's twin takes its run's (calibration_star's `STRIMS_SIM_CAL_CPU`).
+    /// `None`: a sim of no testbed host, as a deployed node runs.
+    pub testbed_cpu: Option<String>,
+    /// With [`Scenario::testbed_cpu`], whether a Chromium host's frame
+    /// writer without the timer probe draws that CPU's lateness, and its
+    /// writes due on the stream's whole second, where a testbed node's line
+    /// timer runs, a model of their own ([`crate::late`]'s
+    /// `WRITER_BY_CPU`). Off by default: the write path bench
+    /// (`write_fit_of`) doesn't fit it better yet (PLAN). Off, or without a
+    /// CPU, every write draws the write path bench's model.
+    pub writer_by_cpu: bool,
     /// Whether each browser ([`Scenario::is_browser`]) draws its links'
     /// setups as its stack's do (strims-node's `SetupDraws`): its
     /// metronome's phase, one shared by every host when the clocks are
@@ -1140,6 +1153,8 @@ impl Scenario {
             epoch_phase: None,
             packet_cost: None,
             page_timing: PageTiming::default(),
+            testbed_cpu: None,
+            writer_by_cpu: false,
             link_setup_draws: true,
             timer_lateness: true,
             pacer_lateness: true,

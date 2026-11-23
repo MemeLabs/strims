@@ -874,7 +874,8 @@ async fn exchange(w: &World, h: HostIx, to: HostIx, n: usize, node: &Node) -> Re
 
 /// Writes `frames_per_write` frames every `write_interval` from `start` to
 /// `stop`, each write as late as the host's timers fire (`late`,
-/// [`crate::late`]), and with the host's timer log each write's wait for
+/// [`crate::late`]; one due on a whole second from `start` as a testbed
+/// node's beside its line timer), and with the host's timer log each write's wait for
 /// its time, by the node's clock. A frame carries its write's due time,
 /// the report's (`Report::written_at`), as the testbed node's frames do,
 /// so a viewer's lag counts the writer's lateness. The write index comes
@@ -905,8 +906,11 @@ async fn writer_task(
             break;
         }
         let armed = sim_now();
+        // A write due on the stream's whole second shares its ms with a
+        // testbed node's line timer (`late::WRITER_BY_CPU`).
+        let on_second = (at - spec.start).as_millis() % 1000 == 0;
         let late_by = late.as_ref().map_or(Duration::ZERO, |l| {
-            l.draw(crate::late::Source::Writer, at <= armed)
+            l.draw_write(at <= armed, on_second)
                 .to_std()
                 .unwrap_or_default()
         });

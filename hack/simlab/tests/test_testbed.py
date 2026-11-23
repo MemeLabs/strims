@@ -233,7 +233,7 @@ class Measured(unittest.TestCase):
         self.assertEqual(testbed.twin_cells([("c", runs[0]), ("c", base)]), {"c": base})
         self.assertEqual(testbed.twin_cells([("c", runs[0]), ("c", runs[0])])["c"][testbed.EPOCH], "902")
 
-    def test_a_runs_packet_cost_keys_nothing_and_its_cells_cpu_models_set_its_twins(self):
+    def test_a_runs_packet_cost_and_cpu_key_nothing_and_its_cells_cpu_models_set_its_twins(self):
         base = {"STRIMS_SIM_CAL_VIEWERS": "7", "TESTBED_QDISC": "a>root-class"}
         cost, cpu = testbed.COST, testbed.CPU
         zen4, zen3 = "AMD EPYC 9R14 Processor", "AMD EPYC 7R13 Processor"
@@ -246,28 +246,31 @@ class Measured(unittest.TestCase):
         self.assertEqual(a, b)
         self.assertEqual(a, testbed.cells_of([base])[0])
         # Runs of one CPU model: their median, to a tenth, however far apart
-        # they read; the model no twin knob.
-        self.assertEqual(twin(("12.3", zen4)), {**base, cost: "12.3"})
+        # they read, and the model.
+        self.assertEqual(twin(("12.3", zen4)), {**base, cost: "12.3", cpu: zen4})
         self.assertEqual(twin(("12.3", zen4), ("11.9", zen4), ("13.1", zen4))[cost], "12.3")
         self.assertEqual(twin(("12.3", zen4), ("12.0", zen4))[cost], "12.2")
         self.assertEqual(twin(("12.1", zen4), ("16.0", zen4), ("13.0", zen4))[cost], "13.0")
         # Two models, however near their costs: each run's, in run order, a
-        # seed its run's.
+        # seed its run's, its model with it.
         mixed = twin(("12.3", zen4), ("18.1", zen3), ("12.4", zen4))
         self.assertEqual(mixed[cost], "12.3 18.1 12.4")
+        self.assertEqual(mixed[cpu], f"{zen4}|{zen3}|{zen4}")
+        self.assertEqual([testbed.seed_knobs(mixed, s)[cpu] for s in (1, 2, 4)], [zen4, zen3, zen4])
         self.assertEqual(twin(("15.0", zen4), ("15.4", zen3))[cost], "15.0 15.4")
         seeds = [testbed.seed_knobs(mixed, s)[cost] for s in range(1, 6)]
         self.assertEqual(seeds, ["12.3", "18.1", "12.4", "12.3", "18.1"])
-        self.assertEqual({k: v for k, v in testbed.seed_knobs(mixed, 2).items() if k != cost}, base)
+        self.assertEqual({k: v for k, v in testbed.seed_knobs(mixed, 2).items() if k != cost}, {**base, cpu: zen3})
         one = twin(("12.3", zen4), ("12.0", zen4))
         self.assertEqual(testbed.seed_knobs(one, 2), one)
         # A run of no model (a run dir from before run.sh wrote `cpu`): each
-        # run's, as two models'.
+        # run's, as two models', and no model.
         self.assertEqual(twin(("12.3", zen4), ("12.0", None))[cost], "12.3 12.0")
+        self.assertNotIn(cpu, twin(("12.3", zen4), ("12.0", None)))
         self.assertEqual(twin(("12.3", None), ("12.0", None))[cost], "12.3 12.0")
         self.assertEqual(twin(("12.3", None))[cost], "12.3")
         # A run without a cost (folded before the fold read it): the profile's.
-        self.assertEqual(twin(("12.3", zen4), (None, zen4)), base)
+        self.assertEqual(twin(("12.3", zen4), (None, zen4)), {**base, cpu: zen4})
         self.assertEqual(testbed.seed_knobs(base, 1), base)
 
     def test_a_runs_offer_times_key_nothing_and_its_twins_take_each_nodes(self):
@@ -285,7 +288,7 @@ class Measured(unittest.TestCase):
         self.assertEqual(a, testbed.cells_of([base])[0])
         # Runs of one model: each node's median, a run's one value standing
         # for each of its nodes.
-        self.assertEqual(twin(("15,125", zen5)), {**base, gather: "15.0,125.0"})
+        self.assertEqual(twin(("15,125", zen5)), {**base, gather: "15.0,125.0", cpu: zen5})
         self.assertEqual(twin(("15,125", zen5), ("13,11", zen5), ("12.8", zen5))[gather], "13.0,12.8")
         self.assertEqual(twin(("15,125", zen5), ("13,11", zen5))[gather], "14.0,68.0")
         self.assertEqual(twin(("12.8", zen5), ("13.2", zen5))[gather], "13.0")
@@ -294,7 +297,7 @@ class Measured(unittest.TestCase):
         self.assertEqual(mixed[gather], "15,125 17,18.5")
         self.assertEqual([testbed.seed_knobs(mixed, s)[gather] for s in (1, 2, 3)], ["15,125", "17,18.5", "15,125"])
         # A run without them: the stacks'.
-        self.assertEqual(twin(("15,125", zen5), (None, zen5)), base)
+        self.assertEqual(twin(("15,125", zen5), (None, zen5)), {**base, cpu: zen5})
 
     def test_a_runs_step_times_key_nothing_and_its_cells_spread_sets_its_twins(self):
         base = {"STRIMS_SIM_CAL_VIEWERS": "7", "STRIMS_SIM_CAL_SEED_UP_SCALE": "30:0.5 60:1",

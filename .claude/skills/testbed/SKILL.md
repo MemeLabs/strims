@@ -196,7 +196,11 @@ crates differ from those the page was built from builds its own page.
   TRACE_SCTP run, from the CPU model run.sh writes to the out dir's
   `cpu`: strims-sim's `testbed::thread_cost`); the bench sim takes its
   run's too. The fold records that model beside it
-  (`STRIMS_SIM_CAL_CPU`, no twin knob). A cell's twin takes its runs'
+  (`STRIMS_SIM_CAL_CPU`), which the twin takes as its runs' one model,
+  else each seed its paired run's (`testbed.twin_cpu`): with
+  `STRIMS_SIM_WRITER_CPU=on` its Chromium seed's frame writer runs as late
+  as that CPU's, its whole-second writes apart (strims-sim's
+  `late::WRITER_BY_CPU`). A cell's twin takes its runs'
   median where they all ran on one CPU model, else each twin seed its
   paired run's (`testbed.twin_cost`), so a farm cell whose repeats ran on
   two instance types is twinned on both; a cell with a run of no recorded
