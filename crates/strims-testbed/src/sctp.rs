@@ -43,8 +43,10 @@
 //! ([`Packet::parse`]), names each association's link by the node's
 //! writes on it ([`name_assocs`]), and makes its rows ([`Rows`]).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
+use std::io::{self, Write};
+use std::sync::mpsc::Receiver;
 
 use serde_json::Value;
 use strims_base::time::Duration;
@@ -431,6 +433,80 @@ fn sent_messages(packets: &[Packet], max: usize) -> (Vec<u64>, Option<u64>) {
         }
     }
     (sizes, first)
+}
+
+/// A Chromium node's packet log file: of the browser's lines, the packets
+/// an [`Observer`] reads, a [`Packet::json`] line each. With
+/// [`Trace::naming`] each association's first packet follows a
+/// `{"assoc":<a>,"peer":<p>}` line, `p` the next peer the harness sent:
+/// a harness that sends each link's peer before its page makes the link's
+/// peer connection, and makes the next only once the link is open, names
+/// each association by its link, since an association logs its first
+/// packet (its handshake's) before it opens. An association that comes
+/// with no peer sent gets no line.
+pub struct Trace<W: Write> {
+    observer: Observer,
+    out: W,
+    names: Option<Receiver<usize>>,
+    named: BTreeSet<u32>,
+    /// The packets it wrote.
+    pub packets: u64,
+    error: Option<io::Error>,
+}
+
+impl<W: Write> Trace<W> {
+    pub fn new(out: W) -> Self {
+        Trace {
+            observer: Observer::default(),
+            out,
+            names: None,
+            named: BTreeSet::new(),
+            packets: 0,
+            error: None,
+        }
+    }
+
+    /// Names each new association by the next of `peers`.
+    pub fn naming(mut self, peers: Receiver<usize>) -> Self {
+        self.names = Some(peers);
+        self
+    }
+
+    /// Takes the browser's next line, as [`Observer::take`] does: `true`
+    /// for a line of the observer's, `false` for one of the browser's
+    /// own. After the file fails a write it takes no more packets.
+    pub fn take(&mut self, line: &str, now_us: u64) -> bool {
+        let p = match self.observer.take(line, now_us) {
+            Line::Packet(p) => p,
+            Line::Part => return true,
+            Line::Other => return false,
+        };
+        if self.error.is_some() {
+            return true;
+        }
+        let mut write = || {
+            if self.named.insert(p.assoc)
+                && let Some(peer) = self.names.as_ref().and_then(|r| r.try_recv().ok())
+            {
+                writeln!(self.out, r#"{{"assoc":{},"peer":{peer}}}"#, p.assoc)?;
+            }
+            writeln!(self.out, "{}", p.json())
+        };
+        match write() {
+            Ok(()) => self.packets += 1,
+            Err(e) => self.error = Some(e),
+        }
+        true
+    }
+
+    /// Flushes the file: the lines the observer couldn't read, or the
+    /// file's first error.
+    pub fn finish(mut self) -> io::Result<u64> {
+        match self.error.take() {
+            Some(e) => Err(e),
+            None => self.out.flush().map(|()| self.observer.unread),
+        }
+    }
 }
 
 /// How many of the messages an association sends [`name_assocs`] matches
@@ -969,5 +1045,42 @@ mod tests {
         assert_eq!(named.get(&1), Some(&"b"));
         // 25 fits a and b alike.
         assert_eq!(named.get(&2), None);
+    }
+
+    #[test]
+    fn a_trace_writes_its_packets_and_names_each_association_by_the_next_peer() {
+        let (peers, names) = std::sync::mpsc::channel();
+        let mut t = Trace::new(Vec::new()).naming(names);
+        let a = packet(&[data(7, 0, 100, 3)]);
+        let b = packet(&[sack(7, &[])]);
+        let feed = |t: &mut Trace<Vec<u8>>, l: &str| {
+            for l in [PREFIX, "", l] {
+                assert!(t.take(l, NOW));
+            }
+        };
+        assert!(!t.take("plain", NOW));
+        peers.send(2).unwrap();
+        feed(&mut t, &line(true, 1, &a));
+        feed(&mut t, &line(false, 1, &b));
+        peers.send(0).unwrap();
+        feed(&mut t, &line(true, 2, &a));
+        // An association no peer was sent for has no name.
+        feed(&mut t, &line(true, 3, &a));
+        feed(&mut t, &line(true, 2, &a[..40]));
+        assert_eq!(t.packets, 4);
+        let out = std::mem::take(&mut t.out);
+        assert_eq!(t.finish().unwrap(), 1);
+        let text = String::from_utf8(out).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 6);
+        assert_eq!(lines[0], r#"{"assoc":1,"peer":2}"#);
+        assert_eq!(lines[3], r#"{"assoc":2,"peer":0}"#);
+        assert_eq!(Packet::parse(lines[0]), None);
+        let assocs: Vec<u32> = lines
+            .iter()
+            .filter_map(|l| Packet::parse(l))
+            .map(|p| p.assoc)
+            .collect();
+        assert_eq!(assocs, [1, 1, 2, 3]);
     }
 }

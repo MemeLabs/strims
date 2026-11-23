@@ -279,7 +279,9 @@
 #                          simulated node's associations: the tables'
 #                          sctp_events. Its associations are named by the
 #                          node's writes on each link, so LINK_LOG must
-#                          name each of them. The log costs the browser's
+#                          name each of them; a bench node's are named by
+#                          the trace's own lines, each by the link the
+#                          bench harness made it for. The log costs the browser's
 #                          network thread about 0.17 ms a full packet
 #                          (strims-testbed's sctp module), which slows
 #                          its sending: it moves the run's timing and its

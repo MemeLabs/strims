@@ -8,7 +8,7 @@
 //! ```text
 //! testbed_bench --index <i> --topology <file> --schedule <file>
 //!               [--secs <s>] [--start <unix ms>] [--webrtc]
-//!               [--web <dir>] [--browser-bin <path>]
+//!               [--web <dir>] [--browser-bin <path>] [--trace-sctp <file>]
 //! testbed_bench --sim <testbed run dir> --out <dir> [--window]
 //!               [--segment <bytes>] [--str0m] [--no-bucket] [--nominal]
 //!               [--seed <n>] [--trace-tcp] [--trace-sctp] [--packet-cost-us <µs>]
@@ -20,7 +20,8 @@
 //! after a `{"ev":"start","ms":..}` line with the start in Unix ms. With
 //! `--webrtc` its links carry the records over data channels from a UDP
 //! port, its TCP port's next. It takes `run.sh`'s other flags and ignores
-//! them.
+//! them, `--link-log` among them: its log's `w`, `r` and `s` lines are
+//! each link's writes, reads and samples already.
 //!
 //! A browser node (its kind in the topology, `firefox` or `chromium`;
 //! `run.sh`'s `KINDS`) runs the bench in a headless browser, over its
@@ -32,6 +33,12 @@
 //! in the same order and format as a native node's (the dialer offers).
 //! The page writes and reads the records, its log lines come to stdout
 //! as a native node's, and its control protocol is in its own comment.
+//! A Chromium node's `--trace-sctp <file>` (`run.sh`'s `TRACE_SCTP`) runs
+//! the browser with dcSCTP's packet log on, at `TZ=UTC`, as
+//! `testbed_browser`'s does, and writes the packets to `<file>`, each
+//! association's first after a line naming its link's peer
+//! ([`strims_testbed::sctp::Trace`]): the harness makes its links one at
+//! a time, the next once the last is open.
 //!
 //! `--sim` runs the bench a testbed run made (its `settings`, `topology`
 //! and `schedule` files) under the WAN model, with the send buffers'
@@ -62,6 +69,7 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use std::cell::RefCell;
+use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -79,6 +87,7 @@ use strims_sim::bench::{
 use strims_sim::testbed::thread_cost;
 use strims_testbed::browser::{Bundle, Site, Socket, args as browser_args, firefox_profile};
 use strims_testbed::native::now_ms;
+use strims_testbed::sctp::{CHROMIUM_FLAGS, Trace};
 use strims_testbed::topology::{Kind, Topology};
 use tokio_tungstenite::tungstenite::Message;
 
@@ -103,6 +112,7 @@ struct Args {
     no_bucket: bool,
     trace_tcp: bool,
     trace_sctp: bool,
+    trace_sctp_file: Option<PathBuf>,
     nominal: bool,
     seed: Option<u64>,
     packet_cost_us: Option<f64>,
@@ -113,7 +123,11 @@ struct Args {
 fn args() -> Result<Args, String> {
     // The bench's settings come from its command line.
     #[allow(clippy::disallowed_methods)]
-    let mut it = std::env::args().skip(1);
+    parse(std::env::args().skip(1))
+}
+
+fn parse(args: impl IntoIterator<Item = String>) -> Result<Args, String> {
+    let mut it = args.into_iter().peekable();
     let mut a = Args {
         secs: 180,
         ..Args::default()
@@ -135,7 +149,12 @@ fn args() -> Result<Args, String> {
             "--str0m" => a.str0m = true,
             "--no-bucket" => a.no_bucket = true,
             "--trace-tcp" => a.trace_tcp = true,
-            "--trace-sctp" => a.trace_sctp = true,
+            // A file on the testbed (run.sh's TRACE_SCTP), the sim's
+            // switch with --sim.
+            "--trace-sctp" => match it.next_if(|v| !v.starts_with("--")) {
+                Some(file) => a.trace_sctp_file = Some(file.into()),
+                None => a.trace_sctp = true,
+            },
             "--nominal" => a.nominal = true,
             "--seed" => a.seed = Some(num(value()?)?),
             "--packet-cost-us" => {
@@ -153,9 +172,15 @@ fn args() -> Result<Args, String> {
             "--join-at" | "--rate" | "--hosts" | "--capture" | "--units" | "--player" => {
                 value()?;
             }
-            "--arrive" | "--forecast" | "--spec" => {}
+            "--arrive" | "--forecast" | "--spec" | "--link-log" => {}
             _ => return Err(format!("unknown flag {flag}")),
         }
+    }
+    if a.sim.is_some() && a.trace_sctp_file.is_some() {
+        return Err("--trace-sctp takes no file with --sim".to_owned());
+    }
+    if a.sim.is_none() && a.trace_sctp {
+        return Err("--trace-sctp needs a file on the testbed".to_owned());
     }
     Ok(a)
 }
@@ -368,6 +393,9 @@ async fn testbed(a: &Args) -> Result<(), String> {
         let _ = writeln!(o.borrow_mut(), "{line}");
     };
     log(format!(r#"{{"ev":"start","ms":{}}}"#, clock.start_ms));
+    if this.kind != Kind::Chromium && a.trace_sctp_file.is_some() {
+        return Err("--trace-sctp needs a chromium node".to_owned());
+    }
     let res = if this.kind.is_browser() {
         if !a.webrtc {
             return Err("a browser node's links need --webrtc".to_owned());
@@ -392,15 +420,37 @@ impl Drop for Browser {
     }
 }
 
-/// Copies `pipe`'s lines to stderr, on a thread.
-fn relay_output(pipe: impl Read + Send + 'static) {
+/// Copies `pipe`'s lines to stderr, on a thread, and with `sctp` the
+/// packets dcSCTP's observer logs among them to its file instead. The
+/// receiver hears when the browser has closed the pipe and the file is
+/// flushed.
+fn relay_output(
+    pipe: impl Read + Send + 'static,
+    mut sctp: Option<Trace<BufWriter<File>>>,
+) -> std::sync::mpsc::Receiver<()> {
+    let (done, wait) = std::sync::mpsc::sync_channel(1);
     // A blocking pipe, read until the browser closes it.
     #[allow(clippy::disallowed_methods)]
     std::thread::spawn(move || {
         for line in BufReader::new(pipe).lines().map_while(Result::ok) {
-            eprintln!("browser: {line}");
+            #[allow(clippy::disallowed_methods)]
+            let now_us = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| u64::try_from(d.as_micros()).unwrap_or(u64::MAX));
+            if !sctp.as_mut().is_some_and(|t| t.take(&line, now_us)) {
+                eprintln!("browser: {line}");
+            }
         }
+        if let Some(t) = sctp {
+            let packets = t.packets;
+            match t.finish() {
+                Ok(unread) => eprintln!("sctp: {packets} packets, {unread} lines unread"),
+                Err(e) => eprintln!("sctp file: {e}"),
+            }
+        }
+        let _ = done.send(());
     });
+    wait
 }
 
 /// The bench page's control socket; its log lines go to `log`.
@@ -522,20 +572,30 @@ async fn browser(
         .into()
     });
     let url = format!("http://{}/{PAGE}", site.addr);
-    let mut child = Command::new(&bin)
-        .args(browser_args(kind, &profile, &url))
+    let mut args = browser_args(kind, &profile, &url);
+    let mut command = Command::new(&bin);
+    let (peers, names) = std::sync::mpsc::channel();
+    let sctp = match &a.trace_sctp_file {
+        Some(path) if kind == Kind::Chromium => {
+            args.splice(0..0, CHROMIUM_FLAGS.iter().map(|f| (*f).into()));
+            command.env("TZ", "UTC");
+            let file = File::create(path).map_err(|e| format!("{}: {e}", path.display()))?;
+            Some(Trace::new(BufWriter::new(file)).naming(names))
+        }
+        _ => None,
+    };
+    let mut child = command
+        .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("{}: {e}", bin.display()))?;
     if let Some(out) = child.stdout.take() {
-        relay_output(out);
+        relay_output(out, None);
     }
-    if let Some(err) = child.stderr.take() {
-        relay_output(err);
-    }
-    let _browser = Browser(child);
+    let relayed = child.stderr.take().map(|err| relay_output(err, sctp));
+    let browser = Browser(child);
     let ws = loop {
         match tokio::time::timeout(PAGE_TIMEOUT, site.sockets.recv()).await {
             Ok(Some((path, ws))) if path == "/control?i=0" => break ws,
@@ -566,6 +626,8 @@ async fn browser(
         .map_err(|e| e.to_string())?;
     let io = |e: std::io::Error| e.to_string();
     for (peer, mut s) in streams {
+        // The trace's next association is this link's.
+        let _ = peers.send(peer);
         if peer < plan.me {
             page.send(json!({"type": "link", "peer": peer, "offer": true}))
                 .await?;
@@ -598,6 +660,11 @@ async fn browser(
         .map_err(|_| "the page didn't end".to_owned())
         .and_then(|r| r);
     let _ = std::fs::remove_dir_all(&profile);
+    // The trace's last packets, once the browser has closed its stderr.
+    drop(browser);
+    if let Some(r) = relayed {
+        let _ = r.recv_timeout(Duration::from_secs(5));
+    }
     res
 }
 
@@ -614,5 +681,43 @@ fn main() {
     if let Err(e) = res {
         eprintln!("testbed_bench: {e}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn words(s: &str) -> Vec<String> {
+        s.split_whitespace().map(str::to_owned).collect()
+    }
+
+    /// A browser node's command line as run.sh gives it with LINK_LOG
+    /// and TRACE_SCTP, and bench.sh's flags last.
+    #[test]
+    fn it_takes_run_shs_flags() {
+        let a = parse(words(
+            "--index 1 --topology /out/topology --web /web --start 1795012083905 \
+             --secs 30 --join-at 0 --hosts 1,2 --link-log \
+             --trace-sctp /out/sctp-1.jsonl --schedule /out/schedule --webrtc",
+        ))
+        .unwrap();
+        assert_eq!(a.index, Some(1));
+        assert_eq!(a.trace_sctp_file, Some(PathBuf::from("/out/sctp-1.jsonl")));
+        assert!(!a.trace_sctp);
+        assert_eq!(a.schedule, "/out/schedule");
+        assert!(a.webrtc);
+    }
+
+    #[test]
+    fn the_sims_trace_sctp_is_a_switch() {
+        let a = parse(words("--sim run --out run/sim --trace-sctp --window")).unwrap();
+        assert!(a.trace_sctp && a.window);
+        assert_eq!(a.trace_sctp_file, None);
+        let a = parse(words("--sim run --out run/sim --window --trace-sctp")).unwrap();
+        assert!(a.trace_sctp);
+        assert!(parse(words("--sim run --out o --trace-sctp f")).is_err());
+        assert!(parse(words("--index 0 --topology t --trace-sctp")).is_err());
     }
 }
