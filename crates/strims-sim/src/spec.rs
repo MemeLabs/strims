@@ -823,8 +823,11 @@ pub struct Scenario {
     /// only the held ones ([`crate::late`]'s pass start; `crate::net`):
     /// each such write's begin and check, and a held one's first poll's
     /// arming, whole ms past the frame write's due ms, no earlier than the
-    /// pass, a draw for each pass. Off by default: the write path bench
-    /// (`write_fit_of`) doesn't fit it better yet (PLAN).
+    /// pass, a draw for each pass, and on a Chromium seed without the
+    /// timer probe a held write's at the later of that and its own hold
+    /// start. Off by default: the write path bench (`write_fit_of`) doesn't
+    /// fit it better yet (PLAN). Off, a pass's writes start at the pass and
+    /// its holds at their hold starts alone.
     pub pacer_pass_start: bool,
     /// Whether a browser host's page sends its data channels' messages
     /// one after another within the scheduler's step, each past the

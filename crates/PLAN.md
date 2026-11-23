@@ -573,13 +573,20 @@ and dropped are in `TRIED.md`.
     pass made before the hold (about 21 µs a write on the testbed's
     halve-15-20), below the millisecond; and give a start to the holds a
     pass doesn't meet (after a release, after a poll's turn).
-  - Turn `Scenario::pacer_pass_start` on by default once the write path
-    bench (`write_fit_of`, from 20 s and 4-30 s) fits it better than
-    without: stamp the frame writer's pass's node hand-offs at the
-    pass's start, where its link writers wait for it (`write_fit_of`'s
-    stage 2); start the host's page clock (`net::PageClock`) there, so
-    the pass's writes spread from its start; and draw the pass start
-    below the millisecond.
+  - Fit the write path bench (`write_fit_of`, from 20 s and 4-30 s)
+    under `Scenario::pacer_pass_start`: fit the probe-off Chromium frame
+    writer on the c8a runs, and find the twin's write lateness beyond
+    its draw; stamp the frame writer's pass's node hand-offs at the
+    pass's start, where its link writers wait for it (stage 2); start
+    the host's page clock (`net::PageClock`) there, so the pass's writes
+    spread from its start, and arm a held write's first poll by it
+    (stage 4's host holds); draw the pass start and its holds' starts
+    below the millisecond, as the item above, so that a pass whose
+    writer ran a ms late meets its holds in the writer's ms as often as
+    the testbed's; draw the hold start by the host's load; and refit
+    the held writes' hold share (`late::held_model`) once the pass start
+    is drawn below the millisecond. Then turn the pass start on by
+    default if `write_fit_of` fits it better than without.
   - Find why a loaded browser seed's host pacer holds its frame writer's
     pass in fewer periods in the twin than on the testbed (the timer
     bench's loaded cells: `timer_runs_of`'s hold starts a run), and

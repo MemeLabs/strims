@@ -42,8 +42,12 @@
 //! [`Scenario::pacer_pass_start`] too, the pass's writes start late, not
 //! only its holds: the page's work from the frame's write to its pass's
 //! hand-offs takes about a ms, so the writes the pass hands its data
-//! channels, and the holds they meet, start whole ms past the write's due
-//! time, and no earlier than the write, as the pass start draws them.
+//! channels start whole ms past the write's due time, and no earlier than
+//! the write, as the pass start draws them, and the holds they meet with
+//! them, but on a Chromium host without the timer probe, whose held writes
+//! draw hold starts of their own ([`held_model`]) and start at the later of
+//! the two: on the testbed a pass's hold comes after its writes to the
+//! children before it, 0.3 to 0.6 ms past its first.
 //!
 //! Each host draws from the model of its kind ([`HostKind`]: native,
 //! Chromium or Firefox, by the browser its data channels model, as the
@@ -68,8 +72,8 @@
 //! writer, and its pass starts, from the write path bench's runs instead,
 //! which run none: its writes run less late than beside the probe, and its
 //! passes start later. A host that runs the probe draws the timer bench's,
-//! its pass starts the hold start's. Without the probe a Firefox seed's writes run
-//! later (PLAN), which no model has yet: a Firefox host draws the bench's
+//! its pass starts the hold start's. Without the probe a Firefox seed's
+//! writes run later (PLAN), which no model has yet: a Firefox host draws the bench's
 //! either way. A browser's timer for a deadline already due resolves at
 //! once, as strims-wasm's `Sleep` and `setTimeout`-free waits do, drawing
 //! nothing; a native node's fires on its next tick, as any. A testbed
@@ -196,6 +200,23 @@ impl Lateness {
             source,
             self.2,
         )
+    }
+
+    /// With the pass start, the host's next held write's own hold start, as
+    /// [`held_lateness`] draws it: none on a host whose holds start at their
+    /// pass's start.
+    pub(crate) fn draw_held(&self) -> Option<Duration> {
+        held_lateness(
+            &mut self.0.lock().unwrap_or_else(PoisonError::into_inner),
+            self.1,
+            self.2,
+        )
+    }
+
+    /// Whether the host's held writes draw hold starts of their own with the
+    /// pass start ([`held_model`]).
+    pub(crate) fn draws_held(&self) -> bool {
+        held_model(self.1, self.2).is_some()
     }
 
     /// The host's kind.
@@ -367,13 +388,53 @@ pub(crate) fn model(kind: HostKind, source: Source, probe: bool) -> Model {
     }
 }
 
+/// With [`Scenario::pacer_pass_start`](crate::Scenario::pacer_pass_start),
+/// the model of a held write's own hold start, past its frame writer's
+/// write's due time, on a host of `kind` (that runs the timer probe if
+/// `probe`) whose holds have one apart from its pass starts: a Chromium
+/// host without the probe. Its held write starts at the later of its
+/// pass's start and this (`crate::net`). Any other host's pass and hold
+/// starts are one model, fit to the hold's own arming, and its holds start
+/// at their pass's start, drawing nothing: the later of two draws of that
+/// model would start the hold in its due ms in about 4 % of passes, where
+/// the model's own share is 20.3 %.
+///
+/// The model is the testbed's pph runs' (the farm's `testbed-pph` matrix:
+/// halve-7-20 on c8a, a Chromium seed, SPEC=1 and PCAP=1, 8 repeats). In
+/// their push periods from 4 to 30 s off the whole second whose writer ran
+/// within its due ms, the seed's pushes held 2 to 8 ms (`seed_sends`,
+/// queued to written) are written 5 ms after their queueing in 3.9 %, 6 ms
+/// in 87.8 % and 7 ms in 7.3 %. A push written at 5 ms is one whose pass
+/// started in its due ms (the pass start's 0.374), whose hold started there
+/// too and whose poll fired on time (the host pacer's 0.905): the share in
+/// the due ms is 3.9 % over those two, 11.5 %, the rest the next ms. In the
+/// loaded phase (31 to 70 s, the seed's uplink halved) the testbed writes
+/// 24 % of such pushes at 5 ms, which the model leaves out.
+pub(crate) fn held_model(kind: HostKind, probe: bool) -> Option<Model> {
+    (kind == HostKind::Chromium && !probe).then_some(Model {
+        shares: [115, 885, 0],
+        tail: &[],
+    })
+}
+
 /// How late a timer of `source` fires on a host of `kind`, that runs the
-/// timer probe if `probe`: one draw of `rng`, whose remainder by [`PARTS`]
-/// picks the bucket at its [`Model::shares`], and whose quotient the
-/// tail's value.
+/// timer probe if `probe`: one draw of `rng` ([`pick`]).
 pub(crate) fn lateness(rng: &mut DetRng, kind: HostKind, source: Source, probe: bool) -> Duration {
-    let x = rng.next_u32();
-    let m = model(kind, source, probe);
+    pick(rng.next_u32(), model(kind, source, probe))
+}
+
+/// With the pass start, how late a held write's own hold start is on a host
+/// of `kind`, that runs the timer probe if `probe`: one draw of `rng` at
+/// [`held_model`]; none on a host it has none for, drawing nothing.
+pub(crate) fn held_lateness(rng: &mut DetRng, kind: HostKind, probe: bool) -> Option<Duration> {
+    let m = held_model(kind, probe)?;
+    Some(pick(rng.next_u32(), m))
+}
+
+/// The lateness that a draw `x` picks of `m`: its remainder by [`PARTS`]
+/// picks the bucket at its [`Model::shares`], and its quotient the tail's
+/// value.
+fn pick(x: u32, m: Model) -> Duration {
     let mut b = x % PARTS;
     for (ms, share) in (0..).zip(m.shares) {
         if b < share {
@@ -509,6 +570,34 @@ mod tests {
                     !same(model(ka, sa, pa), model(kb, sb, pb)),
                     "{ka:?} {sa:?} {pa} and {kb:?} {sb:?} {pb}"
                 );
+            }
+        }
+    }
+
+    /// With the pass start, a Chromium host without the probe alone draws
+    /// its held writes' own hold starts, at their model's shares, a model
+    /// none of its sources share; every other host draws none, and no draw
+    /// takes its rng.
+    #[test]
+    fn a_chromium_host_without_the_probe_alone_draws_held_starts() {
+        for kind in KINDS {
+            for probe in [false, true] {
+                let late = Lateness::new(det_rng(7), kind, probe);
+                let Some(m) = held_model(kind, probe) else {
+                    assert!(!late.draws_held() && late.draw_held().is_none());
+                    assert!(kind != HostKind::Chromium || probe, "{kind:?}");
+                    assert_eq!(late.draw(Source::Pass, false), {
+                        let mut rng = det_rng(7);
+                        lateness(&mut rng, kind, Source::Pass, probe)
+                    });
+                    continue;
+                };
+                assert!(kind == HostKind::Chromium && !probe && late.draws_held());
+                for s in SOURCES {
+                    assert_ne!(m.shares, model(kind, s, probe).shares, "{s:?}");
+                }
+                let b = buckets(100_000, || late.draw_held().unwrap_or(Duration::MAX));
+                assert!(at_shares(b, m), "{b:?}");
             }
         }
     }

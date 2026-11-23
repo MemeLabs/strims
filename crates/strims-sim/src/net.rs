@@ -115,13 +115,19 @@
 //!   at the pass's start, as [`crate::late`]'s pass start draws it, once
 //!   for the pass, and no earlier than the pass: the page's work from the
 //!   frame's write to its pass's hand-offs takes about a ms, its writers
-//!   beginning their writes at its end, checking the loads then and arming
-//!   a held write's poll's timer against the clock's reading then. Each
+//!   beginning their writes at its end, checking the loads then. Each
 //!   such writer waits for the start before its check, logs its write's
 //!   begin again there (the node's link writer logged it at the pass), and
-//!   goes, waits or is held from there. The sim's node task takes no time,
-//!   so the pass's hand-offs and its frame writer's pushes stay at the
-//!   pass, the wait between in the link writer's.
+//!   goes, waits or is held from there. A held one arms its first poll at
+//!   the pass's start, but on a Chromium host without the timer probe,
+//!   whose held writes draw hold starts of their own ([`crate::late`]'s
+//!   `held_model`, drawn once for the pass): there it waits on for its own
+//!   hold start if that is later, its check's log events and its write's
+//!   begin going then, and arms its first poll from there. On the testbed
+//!   a pass's hold comes after its writes to the children before it, 0.3
+//!   to 0.6 ms past its first. The sim's node task takes no time, so the
+//!   pass's hand-offs and its frame writer's pushes stay at the pass, the
+//!   wait between in the link writer's.
 //!
 //! Off, and on a native host, a held writer polls every [`HOST_POLL`] on
 //! time, and the writers whose polls come at one instant read the load as
@@ -645,8 +651,12 @@ struct HoldState {
     /// The instant of the host's last frame write and the time it was due
     /// at, in true time ...
     frame: Option<(Time, Time)>,
-    /// ... and the last instant a hold start was drawn for, with the start.
+    /// ... the last instant a hold start, or with the pass start a pass
+    /// start, was drawn for, with the start ...
     drawn: Option<(Time, Duration)>,
+    /// ... and with the pass start, the last a held write's own hold start
+    /// was drawn for, with the start.
+    held: Option<(Time, Duration)>,
 }
 
 impl HoldStarts {
@@ -671,15 +681,42 @@ impl HoldStarts {
     /// or the pass start) past the write's due ms, drawn once for the
     /// instant, if that is later than `now`; at any other, none.
     fn start(&self, now: Time, late: &Lateness, source: Source) -> Duration {
+        self.start_of(now, now, false, || late.draw(source, false))
+    }
+
+    /// With the pass start, how long past `now` a hold that a write of the
+    /// pass set off by the frame write at instant `frame` met at its check
+    /// at `now` starts: where `frame` is the instant of the host's last
+    /// frame write, to `late`'s draw of the held write's own hold start past
+    /// the write's due ms, drawn once for the pass, if that is later than
+    /// `now`; at any other, or on a host that draws none, none.
+    fn held_start(&self, frame: Time, now: Time, late: &Lateness) -> Duration {
+        self.start_of(frame, now, true, || {
+            late.draw_held().unwrap_or(Duration::ZERO)
+        })
+    }
+
+    /// How long past `now` the start that `draw` draws once for the pass of
+    /// the frame write at instant `frame` (its held writes' if `held`) is,
+    /// past the write's due ms, where `frame` is the host's last.
+    fn start_of(
+        &self,
+        frame: Time,
+        now: Time,
+        held: bool,
+        draw: impl FnOnce() -> Duration,
+    ) -> Duration {
         let mut x = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        let Some((at, due)) = x.frame.filter(|&(at, _)| at == now) else {
+        let x = &mut *x;
+        let Some((at, due)) = x.frame.filter(|&(at, _)| at == frame) else {
             return Duration::ZERO;
         };
-        let d = match x.drawn {
+        let drawn = if held { &mut x.held } else { &mut x.drawn };
+        let d = match *drawn {
             Some((t, d)) if t == at => d,
             _ => {
-                let d = late.draw(source, false);
-                x.drawn = Some((at, d));
+                let d = draw();
+                *drawn = Some((at, d));
                 d
             }
         };
@@ -1072,6 +1109,28 @@ impl PacerTimers {
         })
     }
 
+    /// Whether the host's held writes draw hold starts of their own in a
+    /// pass: with the pass start, on a Chromium host without the timer
+    /// probe ([`Lateness::draws_held`]).
+    fn draws_held(&self) -> bool {
+        self.pass
+            && self
+                .hold
+                .as_ref()
+                .is_some_and(|(late, _)| late.draws_held())
+    }
+
+    /// With the pass start, how long past `now` a hold that a write of the
+    /// pass set off by the frame write at instant `frame` met at its check
+    /// at `now` starts: at the later of the pass's start, `now`, and its
+    /// own hold start past the write's due ms, drawn once for the pass
+    /// ([`HoldStarts::held_start`]).
+    fn held_start(&self, frame: Time, now: Time) -> Duration {
+        self.hold.as_ref().map_or(Duration::ZERO, |(late, starts)| {
+            starts.held_start(frame, now, late)
+        })
+    }
+
     /// How late a poll armed for `deadline` fires: as late as the polls
     /// armed for it before (by the host's clock, so the writers held in one
     /// pass), else a new draw. The deadlines already past leave the map.
@@ -1232,6 +1291,8 @@ impl SimNet {
             write_at: None,
             freed_at: None,
             hold_wait: None,
+            waits_pass: false,
+            pass_of: None,
         }
     }
 }
@@ -1454,8 +1515,14 @@ pub(crate) struct SimTcpStream {
     freed_at: Option<Time>,
     /// ... which waits for its start before its log's events go and its
     /// first poll is armed; with the pass start, a pass's write, held or
-    /// not, waits for it before its check.
+    /// not, waits for it before its check ...
     hold_wait: Option<Pin<Box<tokio::time::Sleep>>>,
+    /// ... the pass start's wait, not a hold's; and on a host whose held
+    /// writes draw hold starts of their own ([`PacerTimers::draws_held`]),
+    /// the instant of the frame write whose pass's write this is, until its
+    /// check, whose hold starts at its own hold start if that is later.
+    waits_pass: bool,
+    pass_of: Option<Time>,
 }
 
 /// What a channel's writer does now ([`SendBuffers::channel_write`]).
@@ -1747,7 +1814,7 @@ impl AsyncWrite for SimTcpStream {
                 return Poll::Pending;
             }
             this.hold_wait = None;
-            if this.pass_waits() {
+            if std::mem::take(&mut this.waits_pass) {
                 if let Some((key, b)) = &this.conn {
                     b.began(key, buf.len());
                 }
@@ -1769,21 +1836,25 @@ impl AsyncWrite for SimTcpStream {
         let pass = !polled && this.pass_check(now);
         let waits = pass && this.pass_waits();
         if waits {
+            this.pass_of = this.pacer.draws_held().then_some(now);
             let start = this.pacer.hold_start(now);
             if start > Duration::ZERO {
                 let mut sleep = Box::pin(tokio::time::sleep(start.to_std().unwrap_or_default()));
                 let _ = sleep.as_mut().poll(cx);
                 this.hold_wait = Some(sleep);
+                this.waits_pass = true;
                 return Poll::Pending;
             }
         }
-        let pass = pass && !waits;
+        let pass_of = this.pass_of.take();
+        let pass = (pass && !waits) || pass_of.is_some();
         if pass && let Some((key, b)) = &this.conn {
             b.defer_log(key);
         }
         if let Some(write) = this.channel_write(cx, polled) {
-            let start = match write {
-                ChannelWrite::Held if pass => this.pacer.hold_start(now),
+            let start = match (write, pass_of) {
+                (ChannelWrite::Held, Some(at)) => this.pacer.held_start(at, now),
+                (ChannelWrite::Held, None) if pass => this.pacer.hold_start(now),
                 _ => Duration::ZERO,
             };
             if pass
@@ -2530,10 +2601,13 @@ mod tests {
     /// the stream draws the hold start or the pass start, once for the
     /// instant, and no earlier than the instant; one at another instant, or
     /// with no frame write, at once; the next frame write's instant draws
-    /// anew. A host with the timer probe draws the probe's model.
+    /// anew. With the pass start, a held write of the pass on a host without
+    /// the probe draws its own hold start too, once for the pass; beside the
+    /// probe it starts at the pass's start. A host with the timer probe
+    /// draws the probe's model.
     #[test]
     fn a_frame_writers_holds_start_late() {
-        use crate::late::{HostKind, Lateness, lateness, model};
+        use crate::late::{HostKind, Lateness, held_lateness, lateness, model};
         use strims_base::rng::det_rng;
         for (pass, source) in [(false, Source::Hold), (true, Source::Pass)] {
             for probe in [false, true] {
@@ -2562,6 +2636,25 @@ mod tests {
                     let start = (due + want - at).max(Duration::ZERO);
                     for _ in 0..3 {
                         assert_eq!(pacer.hold_start(at), start, "frame {k}");
+                    }
+                    // With the pass start, a held write of the pass checked
+                    // at its start draws its own hold start, once for the
+                    // pass, from the same due ms, but beside the probe,
+                    // where it starts there.
+                    if pass {
+                        assert_eq!(pacer.draws_held(), !probe);
+                        let checked = at + start;
+                        let held = held_lateness(&mut fresh, HostKind::Chromium, probe)
+                            .map_or(Duration::ZERO, |hold| {
+                                (due + hold - checked).max(Duration::ZERO)
+                            });
+                        for _ in 0..2 {
+                            assert_eq!(pacer.held_start(at, checked), held, "frame {k}");
+                        }
+                        assert_eq!(
+                            pacer.held_start(checked + Duration::from_millis(250), checked),
+                            Duration::ZERO
+                        );
                     }
                     assert_eq!(pacer.hold_start(at + Duration::MILLISECOND), Duration::ZERO);
                     late += u32::from(want > Duration::ZERO);
