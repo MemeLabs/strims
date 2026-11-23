@@ -101,7 +101,9 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use slotmap::SlotMap;
-use strims_base::path::{Echo, PROBE_INTERVAL, PathMeter, PathReading, PathSample};
+use strims_base::path::{
+    Echo, PROBE_INTERVAL, PathMeter, PathReading, PathSample, ProbeRecord, ProbeRide,
+};
 use strims_base::rng::DetRng;
 use strims_base::time::{Duration, Time};
 use strims_crypto::{
@@ -168,6 +170,14 @@ pub const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
 /// How often a link that sends data probes its path (see
 /// [`Host::set_probe_interval`]).
 pub const DEFAULT_PROBE_INTERVAL: Duration = PROBE_INTERVAL;
+
+/// The largest frame, header included, that a probe's record calls small
+/// ([`ProbeRide::Small`]); a larger one is [`ProbeRide::Burst`]. A seed's
+/// frames of control messages (9 to 64 bytes) fit it and its frames of
+/// chunk data (2,721 bytes and up) don't, so on a seed's links it splits
+/// control from data. A viewer's frame of batched control messages can be
+/// larger (66 to 311 bytes) and is a burst.
+pub const SMALL_FRAME: usize = 64;
 
 /// How many links may be in the handshake at once. Adding one more closes
 /// the oldest (see [`Host::set_max_pending_links`]).
@@ -607,6 +617,11 @@ pub struct Host<T: Copy = ()> {
     /// 0 means unbounded.
     max_pending_links: usize,
     probe_interval: Option<Duration>,
+    /// With [`Host::set_probe_log`], the probe records of links closed
+    /// since the last [`Host::take_probes`], by peer. Bounded by
+    /// [`strims_base::path::MAX_PROBES`] and the meter's own records per
+    /// closed link.
+    probe_log: Option<Vec<(ID, ProbeRecord)>>,
     /// Established links owing an echo or a probe that hasn't fit their
     /// buffer yet. Bounded by `links`.
     control_due: BTreeSet<PeerKey>,
@@ -653,6 +668,7 @@ impl<T: Copy> Host<T> {
             keepalive_interval: Some(DEFAULT_KEEPALIVE_INTERVAL),
             max_pending_links: DEFAULT_MAX_PENDING_LINKS,
             probe_interval: Some(DEFAULT_PROBE_INTERVAL),
+            probe_log: None,
             control_due: BTreeSet::new(),
             held_echoes: BTreeSet::new(),
             rate_limit: config.rate_limit,
@@ -754,6 +770,10 @@ impl<T: Copy> Host<T> {
         };
         let plain = matches!(stage, Stage::PeerInit(_));
         self.evict_pending_links();
+        let mut path = PathMeter::new();
+        if self.probe_log.is_some() {
+            path.keep_probes();
+        }
         let key = self.links.insert(Link {
             kind: config.kind,
             mtu: config.mtu,
@@ -769,7 +789,7 @@ impl<T: Copy> Host<T> {
             added: now,
             last_send: now,
             timer: None,
-            path: PathMeter::new(),
+            path,
             echo: Echo::default(),
             echo_greed: config.echo_greed,
             echo_release: None,
@@ -1149,6 +1169,11 @@ impl<T: Copy> Host<T> {
         }
         self.control_due.remove(&key);
         if let Stage::Established(peer) = link.stage {
+            if let Some(log) = self.probe_log.as_mut() {
+                let mut path = link.path;
+                path.end_probes();
+                log.extend(path.take_probes().into_iter().map(|r| (peer.host_id, r)));
+            }
             for w in &peer.writers {
                 if let Some(wr) = self.writers.remove(*w) {
                     self.sessions.remove(&wr.session);
@@ -1699,10 +1724,20 @@ impl<T: Copy> Host<T> {
             }
             *last_send = now;
             link.path.wrote(frame_len as u64, true);
-            if interval.is_some_and(|i| link.path.probe_due(now, i))
-                && write_control(link, rng, now, true, metrics) == ControlWrite::Deferred
-            {
-                control_due.insert(peer);
+            let ride = if frame_len > SMALL_FRAME {
+                ProbeRide::Burst
+            } else {
+                ProbeRide::Small
+            };
+            // A probe written at `now` ahead of the frame (just before it,
+            // or at the top of this poll: a link's first, an owed one, a
+            // keepalive's) rides it, as does one written right after it.
+            link.path.ride(now, ride);
+            if interval.is_some_and(|i| link.path.probe_due(now, i)) {
+                if write_control(link, rng, now, true, metrics) == ControlWrite::Deferred {
+                    control_due.insert(peer);
+                }
+                link.path.ride(now, ride);
             }
             let _ = qos.complete(s, frame_len, now);
             if !filled.more {
@@ -1859,6 +1894,33 @@ impl<T: Copy> Host<T> {
     /// echoed either way. Default [`DEFAULT_PROBE_INTERVAL`].
     pub fn set_probe_interval(&mut self, interval: Option<Duration>) {
         self.probe_interval = interval.filter(|i| *i > Duration::ZERO);
+    }
+
+    /// Keeps a record of each probe of every link from now on
+    /// ([`strims_base::path::ProbeRecord`], with the frame it rode:
+    /// [`SMALL_FRAME`]), for [`Host::take_probes`].
+    pub fn set_probe_log(&mut self) {
+        self.probe_log.get_or_insert_with(Vec::new);
+        for link in self.links.values_mut() {
+            link.path.keep_probes();
+        }
+    }
+
+    /// With [`Host::set_probe_log`], the probes every established link let
+    /// go since the last take, by peer: a closed link's first, then each
+    /// link's in link order, each in the order its meter let them go.
+    pub fn take_probes(&mut self) -> Vec<(ID, ProbeRecord)> {
+        let Some(log) = self.probe_log.as_mut() else {
+            return Vec::new();
+        };
+        let mut out = std::mem::take(log);
+        for link in self.links.values_mut() {
+            if let Stage::Established(peer) = &link.stage {
+                let id = peer.host_id;
+                out.extend(link.path.take_probes().into_iter().map(|r| (id, r)));
+            }
+        }
+        out
     }
 
     /// See [`Host::set_handshake_timeout`].

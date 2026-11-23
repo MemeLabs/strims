@@ -5275,6 +5275,107 @@ pub(crate) mod cols {
         }
     }
 
+    /// The `path_probes` table's columns: a row per probe of a node's path
+    /// meter (`strims_base::path::PathMeter`) on a link, once its meter let it
+    /// go (its own echo, a later probe's echo, a void or its link's close).
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum PathProbes {
+        /// When the node committed the probe to its link's stream, in µs of
+        /// true time from the stream's start.
+        ///
+        /// Unit: us.
+        SentUs,
+        /// The node that wrote the probe, as `events` numbers hosts.
+        Node,
+        /// The link's other end, the host whose echo answers the probe, as
+        /// `events` numbers hosts; empty for a host with no number.
+        ///
+        /// None is written as an empty field.
+        Peer,
+        /// The link's bytes-written counter at the probe: every byte the node
+        /// had put into the link's stream since its peer was established, up to
+        /// and including the probe's own (`Probe.written`), which its echo's
+        /// delivery rate takes the difference of.
+        ///
+        /// Unit: bytes.
+        Written,
+        /// The data frame the probe went beside in vnic's egress at the instant
+        /// it went: the first its link wrote after it then, or, for a probe
+        /// written right after a frame, that frame. `burst` for a frame over 64
+        /// bytes (header included, `strims_vnic::host::SMALL_FRAME`), `small`
+        /// for one of 64 bytes or less, `alone` for a probe its link wrote no
+        /// data frame beside at that instant. A seed's frames of control
+        /// messages run 9-64 bytes and its frames of chunk data 2,721 bytes and
+        /// up, so on a seed's links the rule splits control from data; a
+        /// viewer's frames of batched control messages can run 66-311 bytes,
+        /// which is `burst`.
+        Rode,
+        /// When the probe's own echo arrived, in µs of true time from the
+        /// stream's start; empty for a probe a later probe's echo answered, one
+        /// an unknown echo voided, or one unanswered when its link closed.
+        ///
+        /// Unit: us. None is written as an empty field.
+        AckedUs,
+        /// The delivery rate the probe's echo gave the link's reading, in bytes
+        /// per second: the bytes written between the earlier probe it was
+        /// measured against and this one, over `span_us`; empty without an
+        /// echo, an earlier acknowledged probe or a positive span, or for an
+        /// echo whose round trip came out negative (the clock stepped back),
+        /// which the reading doesn't take.
+        ///
+        /// Unit: bytes/s. None is written as an empty field.
+        ReadingBps,
+        /// The span the echo's delivery rate was measured over, in µs: the
+        /// longer of the time between the two probes' sends and the time
+        /// between their echoes, against the earliest probe acknowledged within
+        /// `RATE_WINDOW` of this echo (or the one acknowledged before it, if
+        /// none); empty without an echo or an earlier acknowledged probe.
+        ///
+        /// Unit: us. None is written as an empty field.
+        SpanUs,
+    }
+
+    impl PathProbes {
+        /// The name, as strims-sim writes it.
+        pub(crate) fn name(self) -> &'static str {
+            match self {
+                PathProbes::SentUs => "sent_us",
+                PathProbes::Node => "node",
+                PathProbes::Peer => "peer",
+                PathProbes::Written => "written",
+                PathProbes::Rode => "rode",
+                PathProbes::AckedUs => "acked_us",
+                PathProbes::ReadingBps => "reading_bps",
+                PathProbes::SpanUs => "span_us",
+            }
+        }
+    }
+
+    impl sealed::Sealed for PathProbes {}
+
+    impl Key for PathProbes {
+        fn name(self) -> &'static str {
+            PathProbes::name(self)
+        }
+    }
+
+    impl Column for PathProbes {
+        const TABLE: &'static str = "path_probes";
+
+        fn ty(self) -> Ty {
+            match self {
+                PathProbes::SentUs
+                | PathProbes::Node
+                | PathProbes::Peer
+                | PathProbes::Written
+                | PathProbes::AckedUs
+                | PathProbes::ReadingBps
+                | PathProbes::SpanUs => Ty::Int,
+                PathProbes::Rode => Ty::Text,
+            }
+        }
+    }
+
     /// The `peer_samples` table's columns: a row per node, transfer sample and
     /// peer: each peer's channel of the first swarm at each of the node's stats
     /// samples.

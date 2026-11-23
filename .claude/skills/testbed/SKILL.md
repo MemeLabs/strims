@@ -56,8 +56,9 @@ crates differ from those the page was built from builds its own page.
   which a comparison wants.
 - `FORECAST=1` and `SPEC=1` keep the nodes' scheduler logs, as the sim's
   knobs of those names keep a simulated node's, and the run's tables and
-  its twin's fill forecast, arrivals, haves, asks, seed_decisions and
-  seed_sends. The lines grow large (a 3-viewer mesh's 40 s: about 5 MB a
+  its twin's fill forecast, arrivals, haves, asks, seed_decisions,
+  seed_sends and path_probes. The lines grow large (a 3-viewer mesh's 40
+  s: about 5 MB a
   node), and folding a run holds every line in memory (testbed_tables:
   229 MB for that run's 19 MB): measure a run's lines and the fold's RSS
   before a matrix turns the logs on. `PARENT_CHECKS=1` keeps each node's

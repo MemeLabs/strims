@@ -347,6 +347,7 @@ fn a_run_with_tables_keeps_its_trace() {
             );
             held_truth_meets_the_reads(&r, &d);
             request_logs_say_what_they_are(&r, &d);
+            path_probes_say_what_they_are(&r, &d);
             timers_say_what_they_are(&r, &d);
             link_logs_say_what_they_are(&r, &d, name);
             pacer_polls_free_the_hosts_holds(&r, &d);
@@ -2180,6 +2181,86 @@ fn request_logs_say_what_they_are(r: &strims_sim::Report, d: &Path) {
     for lost in ["held_lost", "haves_lost", "asks_lost"] {
         assert!(meta.contains(&format!("\"{lost}\":0")), "{meta}");
     }
+}
+
+/// The `path_probes` table holds every host's probes, each once, on a link
+/// to another host: its echo after it, a reading only with an echo and a
+/// positive span, each link's bytes written growing probe by probe, and
+/// the seed's pushes riding bursts.
+fn path_probes_say_what_they_are(r: &strims_sim::Report, d: &Path) {
+    let rows = table_rows(d, "path_probes");
+    assert!(!rows.is_empty());
+    let hosts = r.scenario.hosts.len() as i64;
+    let mut keys = BTreeSet::new();
+    let mut written: BTreeMap<(i64, i64), (i64, i64)> = BTreeMap::new();
+    for p in &rows {
+        let (node, peer, sent) = (
+            int(p, "node").unwrap(),
+            int(p, "peer").unwrap(),
+            int(p, "sent_us").unwrap(),
+        );
+        assert!(node < hosts && peer < hosts && node != peer, "{p:?}");
+        assert!(keys.insert((node, peer, sent)), "{p:?}");
+        assert!(
+            ["alone", "small", "burst"].contains(&p["rode"].as_str()),
+            "{p:?}"
+        );
+        if let Some(acked) = int(p, "acked_us") {
+            assert!(acked >= sent, "{p:?}");
+        }
+        if p["reading_bps"].parse::<u64>().is_ok() {
+            assert!(int(p, "acked_us").is_some(), "{p:?}");
+            assert!(int(p, "span_us").unwrap() > 0, "{p:?}");
+        }
+        if int(p, "span_us").is_some() {
+            assert!(int(p, "acked_us").is_some(), "{p:?}");
+        }
+        let w = int(p, "written").unwrap();
+        let last = written.insert((node, peer), (sent, w));
+        assert!(
+            last.is_none_or(|(t, x)| t < sent && x <= w),
+            "{p:?} after {last:?}"
+        );
+    }
+    let seed = r.scenario.swarms[0].seed as i64;
+    assert!(
+        rows.iter()
+            .any(|p| int(p, "node") == Some(seed) && p["rode"] == "burst"),
+        "the seed's probes ride its pushes"
+    );
+    assert!(rows.iter().any(|p| p["reading_bps"].parse::<u64>().is_ok()));
+}
+
+/// A SPEC run writes its `path_probes` ([`path_probes_say_what_they_are`]),
+/// and a run of the same seed the same rows.
+#[test]
+fn a_spec_runs_path_probes_are_its_seeds() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "a_spec_runs_path_probes_are_its_seeds-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let bin = Duration::from_secs(1);
+    let tables = |name: &str| {
+        let mut spec = wan_mesh();
+        spec.wire_bins = Some(bin);
+        spec.request_logs = true;
+        let r = run(spec, 1).unwrap();
+        let d = dir.join(name);
+        r.write_tables(&d, bin, true).unwrap();
+        (r, d)
+    };
+    let (r, a) = tables("a");
+    path_probes_say_what_they_are(&r, &a);
+    let (_, b) = tables("b");
+    let read = |d: &Path| strims_sim::tables::read_table(d, "path_probes").unwrap();
+    assert_eq!(read(&a), read(&b));
+    let mut spec = wan_mesh();
+    spec.wire_bins = Some(bin);
+    let off = dir.join("off");
+    run(spec, 1).unwrap().write_tables(&off, bin, true).unwrap();
+    assert!(strims_sim::tables::read_table(&off, "path_probes").is_err());
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The `stalls` table says how each viewer's playout went at each delay of

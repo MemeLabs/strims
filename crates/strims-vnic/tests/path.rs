@@ -500,3 +500,59 @@ fn probes_count_every_byte_the_link_buffers() {
     assert_eq!(r.in_flight, 158);
     assert_eq!(r.written_since, 0);
 }
+
+/// A link's probe records say which frame each probe rode at the instant
+/// it went: a data frame larger than `SMALL_FRAME` (the first probe, owed
+/// since the link's setup, rides the first egress's), a small one, or none
+/// (an echo's control frame, no data beside it); a closed link's
+/// unanswered probes come out unanswered.
+#[test]
+fn probe_records_say_which_frame_each_probe_rode() {
+    use strims_base::path::ProbeRide;
+    let (mut a, la, mut b, lb) = linked();
+    a.host.set_probe_log();
+    b.host.set_probe_log();
+    b.host.set_handler(lb, 7, 7).unwrap();
+    let w = a.host.open_writer(la, 7, a.host.qos_root(), 0).unwrap();
+    // The first probe, owed since the link's setup, goes at the top of the
+    // first egress, in a frame of its own, ahead of the data frame written
+    // at the same instant, which it rides.
+    assert_eq!(send(&mut a, la, w, &mut b, lb, 0, 996), 1);
+    idle(&mut b, ms(10));
+    let mut back = b.take_transmit(lb);
+    a.input(la, ms(20), &mut back, &mut no_handlers).unwrap();
+    // Busy, the next goes right after a data frame; quiet, a second later,
+    // ahead of a 1-byte one.
+    assert_eq!(send(&mut a, la, w, &mut b, lb, 200, 996), 1);
+    let n: usize = (250..=1200)
+        .step_by(50)
+        .map(|t| send(&mut a, la, w, &mut b, lb, t, 1))
+        .sum();
+    assert_eq!(n, 1);
+    let rides = |r: Vec<(strims_kademlia::ID, strims_base::path::ProbeRecord)>| {
+        r.into_iter()
+            .map(|(id, r)| (id, r.ride, r.acked.is_some(), r.rate.is_some()))
+            .collect::<Vec<_>>()
+    };
+    let (ida, idb) = (a.host.id(), b.host.id());
+    assert_eq!(
+        rides(a.host.take_probes()),
+        [(idb, ProbeRide::Burst, true, false)]
+    );
+    assert!(a.host.remove_link(la));
+    assert_eq!(
+        rides(a.host.take_probes()),
+        [
+            (idb, ProbeRide::Burst, false, false),
+            (idb, ProbeRide::Small, false, false)
+        ]
+    );
+    // B's went with its echo, with no data frame beside it, and A's echo
+    // answered it.
+    assert_eq!(
+        rides(b.host.take_probes()),
+        [(ida, ProbeRide::Alone, true, false)]
+    );
+    assert!(b.host.remove_link(lb));
+    assert!(b.host.take_probes().is_empty());
+}

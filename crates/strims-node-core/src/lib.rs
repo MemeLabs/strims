@@ -133,9 +133,9 @@ pub use error::{NodeError, ReadError};
 pub use event::{
     ChannelInfo, DecisionInfo, DecisionLogEntry, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo,
     LinkEvent, LinkInfo, LinkRecord, LinkState, LogInfo, NetworkInfo, NodeBin, NodeEvent,
-    NodeMetrics, ParentInfo, ParentLogEntry, PeerInfo, RequestInfo, RunnerMetrics, RunnerPeerInfo,
-    SampleSource, SeedAllocationInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo,
-    TimerRecord, TimerSource, WriteWait, WriterInfo,
+    NodeMetrics, ParentInfo, ParentLogEntry, PathProbeInfo, PeerInfo, RequestInfo, RunnerMetrics,
+    RunnerPeerInfo, SampleSource, SeedAllocationInfo, SeedNeighbourInfo, StoreInfo, SwarmBin,
+    SwarmInfo, TimerRecord, TimerSource, WriteWait, WriterInfo,
 };
 pub use handle::{
     HashTableGet, Node, NodeEvents, NodeInfo, PeerIndexSearch, SpawnNode, SwarmReader, SwarmWriter,

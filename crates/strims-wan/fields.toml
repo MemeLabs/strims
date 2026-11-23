@@ -4266,6 +4266,66 @@ sims = ["strims-sim"]
 type = "bool"
 description = "at the end, the peer was subscribed to the chunk's stream"
 
+[tables.path_probes]
+sims = ["strims-sim"]
+grain = "probe of a node's path meter (`strims_base::path::PathMeter`) on a link, once its meter let it go (its own echo, a later probe's echo, a void or its link's close)"
+keys = "k, node, peer, sent_us"
+joins = "viewers USING (k, src, node); viewers ON (k, src) and viewers.node = path_probes.peer (the link's other end); hosts USING (k, src, node) (the node's kind and stack)"
+knobs = ["SPEC"]
+sample = false
+zstd = false
+description = "Every probe each node's path meter wrote on its links, with the frame it went beside, its link's bytes written at it, and the delivery rate its echo gave, over the span the meter took against its earlier probe (`strims_base::path`: the bytes delivered between the probes its echoes acknowledged in the last `RATE_WINDOW`, over the longer of the time between their sends and between their echoes)."
+notes.strims-sim = "Written with `STRIMS_SIM_SPEC=1` (`Scenario::request_logs`, `NodeConfig::request_log`), as the node's vnic keeps them (`strims_vnic::Host::take_probes`), taken at its stats samples. A testbed run's are its nodes' (run.sh's `SPEC=1`, their lines' records' logs, `crate::testbed`), native and browser, by the node's clock, in µs of true time from the stream's start as the run's other tables read it. A probe a link still had unanswered as the run ended, or as its node left, has no row."
+
+[columns.path_probes.sent_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+description = "When the node committed the probe to its link's stream, in µs of true time from the stream's start."
+
+[columns.path_probes.node]
+sims = ["strims-sim"]
+type = "int"
+description = "The node that wrote the probe, as `events` numbers hosts."
+
+[columns.path_probes.peer]
+sims = ["strims-sim"]
+type = "int"
+none = "empty"
+description = "The link's other end, the host whose echo answers the probe, as `events` numbers hosts; empty for a host with no number."
+
+[columns.path_probes.written]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes"
+description = "The link's bytes-written counter at the probe: every byte the node had put into the link's stream since its peer was established, up to and including the probe's own (`Probe.written`), which its echo's delivery rate takes the difference of."
+
+[columns.path_probes.rode]
+sims = ["strims-sim"]
+type = "text"
+description = "The data frame the probe went beside in vnic's egress at the instant it went: the first its link wrote after it then, or, for a probe written right after a frame, that frame. `burst` for a frame over 64 bytes (header included, `strims_vnic::host::SMALL_FRAME`), `small` for one of 64 bytes or less, `alone` for a probe its link wrote no data frame beside at that instant. A seed's frames of control messages run 9-64 bytes and its frames of chunk data 2,721 bytes and up, so on a seed's links the rule splits control from data; a viewer's frames of batched control messages can run 66-311 bytes, which is `burst`."
+
+[columns.path_probes.acked_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "When the probe's own echo arrived, in µs of true time from the stream's start; empty for a probe a later probe's echo answered, one an unknown echo voided, or one unanswered when its link closed."
+
+[columns.path_probes.reading_bps]
+sims = ["strims-sim"]
+type = "int"
+unit = "bytes/s"
+none = "empty"
+description = "The delivery rate the probe's echo gave the link's reading, in bytes per second: the bytes written between the earlier probe it was measured against and this one, over `span_us`; empty without an echo, an earlier acknowledged probe or a positive span, or for an echo whose round trip came out negative (the clock stepped back), which the reading doesn't take."
+
+[columns.path_probes.span_us]
+sims = ["strims-sim"]
+type = "int"
+unit = "us"
+none = "empty"
+description = "The span the echo's delivery rate was measured over, in µs: the longer of the time between the two probes' sends and the time between their echoes, against the earliest probe acknowledged within `RATE_WINDOW` of this echo (or the one acknowledged before it, if none); empty without an echo or an earlier acknowledged probe."
+
 [tables.peer_samples]
 sims = ["strims-sim"]
 grain = "node, transfer sample and peer: each peer's channel of the first swarm at each of the node's stats samples"

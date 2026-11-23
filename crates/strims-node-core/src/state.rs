@@ -65,8 +65,9 @@ use crate::error::{NodeError, ReadError};
 use crate::event::{
     ChannelInfo, DecisionInfo, DecisionLogEntry, DriverMetrics, ForecastInfo, HaveInfo, HeldInfo,
     LinkEvent, LinkInfo, LinkState, LogInfo, NetworkInfo, NodeBin, NodeEvent, NodeMetrics,
-    ParentInfo, ParentLogEntry, PeerInfo, RequestInfo, RunnerMetrics, RunnerPeerInfo,
-    SeedAllocationInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo, WriterInfo,
+    ParentInfo, ParentLogEntry, PathProbeInfo, PeerInfo, RequestInfo, RunnerMetrics,
+    RunnerPeerInfo, SeedAllocationInfo, SeedNeighbourInfo, StoreInfo, SwarmBin, SwarmInfo,
+    WriterInfo,
 };
 
 /// Bin edges [`NodeConfig::stats_bins`] keeps between snapshots; past it the
@@ -520,6 +521,9 @@ impl State {
             vnic_rng,
         )?;
         vnic.set_max_peers(config.max_peers);
+        if config.request_log {
+            vnic.set_probe_log();
+        }
         let vpn = VpnHost::new(&mut vnic, config.vpn.clone(), fork(&mut rng))?;
         let transfer_class = vnic.add_qos_class(vnic.qos_root(), TRANSFER_QOS_WEIGHT)?;
         let rpc_class = vnic.add_qos_class(vnic.qos_root(), rpc::PEER_RPC_QOS_WEIGHT)?;
@@ -1701,6 +1705,7 @@ impl State {
             seed_decisions: logs.seed_decisions,
             seed_sends: logs.seed_sends,
             seed_log_lost: logs.seed_log_lost,
+            path_probes: logs.path_probes,
         }
     }
 
@@ -1957,6 +1962,14 @@ impl State {
                         record,
                     }));
             }
+        }
+        if self.request_log {
+            out.path_probes = self
+                .vnic
+                .take_probes()
+                .into_iter()
+                .map(|(peer, record)| PathProbeInfo { peer, record })
+                .collect();
         }
         out
     }
@@ -2716,4 +2729,5 @@ struct TakenLogs {
     seed_decisions: Vec<LogInfo<strims_ppspp::SeedDecision>>,
     seed_sends: Vec<LogInfo<strims_ppspp::SeedSend>>,
     seed_log_lost: u64,
+    path_probes: Vec<PathProbeInfo>,
 }

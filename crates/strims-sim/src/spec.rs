@@ -701,8 +701,9 @@ pub struct Scenario {
     /// With [`Scenario::wire_bins`], every node keeps its ppspp runner's
     /// request log (`Runner::set_request_log`, with the held log) for the
     /// tables' `arrivals`, `haves` and `asks` (`STRIMS_SIM_SPEC=1`: a row
-    /// per neighbour per chunk announced, and per request and rival).
-    /// Changes no trace.
+    /// per neighbour per chunk announced, and per request and rival), its
+    /// seed log, and its links' path probes for `path_probes`. Changes no
+    /// trace.
     pub request_logs: bool,
     /// WAN mode: the hosts whose every packet offered to their uplink the
     /// WAN scheduler logs as its queue takes or drops it, for the tables'

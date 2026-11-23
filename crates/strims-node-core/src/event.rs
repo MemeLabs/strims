@@ -210,6 +210,17 @@ pub struct NodeMetrics {
     pub seed_decisions: Vec<LogInfo<SeedDecision>>,
     pub seed_sends: Vec<LogInfo<SeedSend>>,
     pub seed_log_lost: u64,
+    /// With [`crate::NodeConfig::request_log`], the probes its links' path
+    /// meters let go since the last snapshot (`strims_vnic::Host::take_probes`).
+    pub path_probes: Vec<PathProbeInfo>,
+}
+
+/// A probe of a link's path meter ([`NodeMetrics::path_probes`]): the
+/// link's peer, by host, and the probe's record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PathProbeInfo {
+    pub peer: ID,
+    pub record: strims_base::path::ProbeRecord,
 }
 
 /// A record of the ppspp runner's seed log ([`NodeMetrics::seed_decisions`],

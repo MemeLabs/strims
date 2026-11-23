@@ -176,7 +176,9 @@
 //!   channels with each peer (`peer_samples`), and
 //!   `STRIMS_SIM_FORECAST=1` the nodes' forecast logs (`forecast`, large:
 //!   [`Scenario::forecast_log`]), `STRIMS_SIM_SPEC=1` their request logs
-//!   (`arrivals`, `haves`, `asks`, large: [`Scenario::request_logs`]),
+//!   (`arrivals`, `haves`, `asks`, large: [`Scenario::request_logs`]), the
+//!   seed's log (`seed_decisions`, `seed_sends`) and their links' path
+//!   probes (`path_probes`),
 //!   `STRIMS_SIM_PACKET_LOG=<hosts>` every packet those hosts offered their
 //!   uplinks (`packets`, large and held to the run's end:
 //!   [`Scenario::packet_log`]; `all` or `1`, `seed`, `viewers`, or host

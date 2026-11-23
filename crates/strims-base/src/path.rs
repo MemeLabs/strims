@@ -45,6 +45,14 @@
 //! [`aggregate`] takes a low quantile across links, so a minority of slow
 //! or delaying peers can't move a node-wide reading.
 //!
+//! # Probe records
+//!
+//! A meter told to keep them ([`PathMeter::keep_probes`]) keeps a
+//! [`ProbeRecord`] of each probe as it lets the probe go: its own echo
+//! answered it, a later probe's echo did, an unknown echo voided it, or its
+//! link closed ([`PathMeter::end_probes`]). The owner takes them
+//! ([`PathMeter::take_probes`]); nothing the meter decides reads them.
+//!
 //! # Base and recent round trips
 //!
 //! [`PathDelay`] keeps a path's base: the least round trip over
@@ -75,6 +83,13 @@ pub const QUIET_PROBE_INTERVAL: Duration = Duration::SECOND;
 pub const RATE_WINDOW: Duration = Duration::from_secs(1);
 /// Acknowledged probes kept for the delivery rate.
 const ACKED: usize = 16;
+/// Probe records a meter keeps between its owner's takes
+/// ([`PathMeter::take_probes`]): over a minute and a half of probes at
+/// [`PROBE_INTERVAL`]. Past it a record is dropped, uncounted. The owners
+/// take every second (strims-sim's stats samples, the testbed's lines),
+/// when a link has written at most one probe an interval and its
+/// keepalives', so their takes never reach it.
+const KEPT: usize = 512;
 /// The span of one base bucket ...
 pub const BASE_BUCKET: Duration = Duration::from_secs(30);
 /// ... and how many make up the base window.
@@ -165,6 +180,58 @@ impl PathReading {
     }
 }
 
+/// The data frame a probe went beside in its link's stream at the instant
+/// it went: the first written after it then, or, for a probe written right
+/// after a frame, that frame ([`ProbeRecord::ride`]). The owner, which
+/// writes the frames, says which ([`PathMeter::ride`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ProbeRide {
+    /// In a control frame of its own, no data frame beside it at its
+    /// instant.
+    #[default]
+    Alone,
+    /// Beside a small frame: the link's control messages alone.
+    Small,
+    /// Beside a frame of data.
+    Burst,
+}
+
+impl ProbeRide {
+    /// Its name in the tables: `alone`, `small`, `burst`.
+    pub fn name(self) -> &'static str {
+        match self {
+            ProbeRide::Alone => "alone",
+            ProbeRide::Small => "small",
+            ProbeRide::Burst => "burst",
+        }
+    }
+}
+
+/// A probe as its meter let it go (see the [module docs](self)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProbeRecord {
+    /// When it was written.
+    pub sent: Time,
+    /// Bytes written up to and including it.
+    pub written: u64,
+    /// The frame it went beside.
+    pub ride: ProbeRide,
+    /// When its own echo arrived; `None` for a probe a later probe's echo
+    /// answered, one an unknown echo voided, or one its link closed on.
+    pub acked: Option<Time>,
+    /// The delivery rate its echo gave the reading ([`PathReading::rate`]);
+    /// `None` without an echo, an earlier acknowledged probe or a positive
+    /// span, or for an echo whose round trip came out negative, which the
+    /// reading doesn't take.
+    pub rate: Option<u64>,
+    /// The span that rate is over: the longer of the time between the two
+    /// probes' sends and the time between their echoes, against the
+    /// earliest probe acknowledged within [`RATE_WINDOW`] of the echo (or
+    /// the one before it, if none); `None` without an echo or an earlier
+    /// acknowledged probe.
+    pub span: Option<Duration>,
+}
+
 /// An echo whose nonce matches no outstanding probe.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UnknownEcho;
@@ -183,6 +250,26 @@ struct Probe {
     sent: Time,
     /// Bytes written up to and including the probe.
     written: u64,
+    ride: ProbeRide,
+}
+
+impl Probe {
+    /// Its record, with its echo's arrival and reading.
+    fn record(
+        &self,
+        acked: Option<Time>,
+        rate: Option<u64>,
+        span: Option<Duration>,
+    ) -> ProbeRecord {
+        ProbeRecord {
+            sent: self.sent,
+            written: self.written,
+            ride: self.ride,
+            acked,
+            rate,
+            span,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -226,6 +313,9 @@ pub struct PathMeter {
     samples: u64,
     unknown: u64,
     negative: u64,
+    /// With [`PathMeter::keep_probes`], the probes let go since the last
+    /// take. Bound: [`KEPT`].
+    records: Option<Vec<ProbeRecord>>,
 }
 
 impl Default for PathMeter {
@@ -249,6 +339,39 @@ impl PathMeter {
             samples: 0,
             unknown: 0,
             negative: 0,
+            records: None,
+        }
+    }
+
+    /// Keeps a record of each probe from now on (see the [module
+    /// docs](self)).
+    pub fn keep_probes(&mut self) {
+        self.records.get_or_insert_with(Vec::new);
+    }
+
+    /// The probes let go since the last take, in the order they went.
+    pub fn take_probes(&mut self) -> Vec<ProbeRecord> {
+        self.records
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    }
+
+    /// Lets every unanswered probe go, unanswered: the link closed.
+    pub fn end_probes(&mut self) {
+        self.keep_unanswered(self.len);
+        self.len = 0;
+    }
+
+    /// A frame of kind `ride` was written at `now`: the newest unanswered
+    /// probe went beside it if it was written at `now` too and went beside
+    /// none yet.
+    pub fn ride(&mut self, now: Time, ride: ProbeRide) {
+        if let Some(p) = self.len.checked_sub(1).and_then(|i| self.probes.get_mut(i))
+            && p.sent == now
+            && p.ride == ProbeRide::Alone
+        {
+            p.ride = ride;
         }
     }
 
@@ -298,6 +421,7 @@ impl PathMeter {
             nonce,
             sent: now,
             written: self.written,
+            ride: ProbeRide::Alone,
         };
         self.len += 1;
         self.last_probe = now;
@@ -310,15 +434,16 @@ impl PathMeter {
     pub fn echo(&mut self, nonce: u32, now: Time) -> Result<Option<PathSample>, UnknownEcho> {
         let Some(i) = self.unanswered().iter().position(|p| p.nonce == nonce) else {
             self.unknown += 1;
-            self.len = 0;
+            self.end_probes();
             return Err(UnknownEcho);
         };
         let Some(p) = self.probes.get(i).copied() else {
             return Err(UnknownEcho);
         };
+        self.keep_unanswered(i);
         self.probes.copy_within(i + 1..self.len, 0);
         self.len -= i + 1;
-        let rate = self.acknowledge(Acked {
+        let (rate, span) = self.acknowledge(Acked {
             sent: p.sent,
             acked: now,
             delivered: p.written,
@@ -326,8 +451,10 @@ impl PathMeter {
         let rtt = now - p.sent;
         if rtt.is_negative() {
             self.negative += 1;
+            self.keep(p.record(Some(now), None, span));
             return Ok(None);
         }
+        self.keep(p.record(Some(now), rate, span));
         self.samples += 1;
         self.delay.add(now, rtt);
         self.delay.fold();
@@ -387,10 +514,34 @@ impl PathMeter {
         self.probes.get(..self.len).unwrap_or_default()
     }
 
-    /// Records an acknowledged probe and returns the delivery rate: from
-    /// the oldest probe acknowledged within [`RATE_WINDOW`] (or the one
-    /// before this, if none) to this one.
-    fn acknowledge(&mut self, k: Acked) -> Option<u64> {
+    /// Keeps the records of the oldest `n` unanswered probes, without an
+    /// echo of their own.
+    fn keep_unanswered(&mut self, n: usize) {
+        if self.records.is_none() {
+            return;
+        }
+        for i in 0..n.min(self.len) {
+            if let Some(p) = self.probes.get(i).copied() {
+                self.keep(p.record(None, None, None));
+            }
+        }
+    }
+
+    fn keep(&mut self, r: ProbeRecord) {
+        let Some(records) = self.records.as_mut() else {
+            return;
+        };
+        if records.len() < KEPT {
+            records.push(r);
+        }
+    }
+
+    /// Records an acknowledged probe and returns the delivery rate, with
+    /// the span it is over: from the oldest probe acknowledged within
+    /// [`RATE_WINDOW`] (or the one before this, if none) to this one. The
+    /// span is `None` without such a probe, and the rate also without a
+    /// positive span.
+    fn acknowledge(&mut self, k: Acked) -> (Option<u64>, Option<Duration>) {
         if self.acked_len == ACKED {
             self.acked.rotate_left(1);
             self.acked_len -= 1;
@@ -405,14 +556,17 @@ impl PathMeter {
             *slot = k;
             self.acked_len += 1;
         }
-        let j = j?;
+        let Some(j) = j else {
+            return (None, None);
+        };
         let span = (k.sent - j.sent).max(k.acked - j.acked);
         if span <= Duration::ZERO {
-            return None;
+            return (None, Some(span));
         }
         let delivered = u128::from(k.delivered.saturating_sub(j.delivered));
         let nanos = u128::try_from(span.as_nanos()).unwrap_or(0).max(1);
-        Some(u64::try_from(delivered * 1_000_000_000 / nanos).unwrap_or(u64::MAX))
+        let rate = u64::try_from(delivered * 1_000_000_000 / nanos).unwrap_or(u64::MAX);
+        (Some(rate), Some(span))
     }
 }
 
@@ -964,5 +1118,66 @@ mod tests {
         let mut queued = vec![ms(90), ms(500), ms(95), ms(80)];
         assert_eq!(aggregate(&mut queued), Some(ms(90)));
         assert_eq!(aggregate(&mut [ms(90), ms(95)]), None);
+    }
+
+    /// A probe's record says when it went, the bytes written up to it and
+    /// the frame it rode; one its own echo answered says when, with the
+    /// rate that echo gave the reading and the span it is over. A probe a
+    /// later echo answered, one an unknown echo voided and one its link
+    /// closed on have no echo of their own.
+    #[test]
+    fn a_probes_record_holds_what_its_echo_gave_the_reading() {
+        let record =
+            |sent, written, ride, acked: Option<i64>, rate, span: Option<i64>| ProbeRecord {
+                sent: at(sent),
+                written,
+                ride,
+                acked: acked.map(at),
+                rate,
+                span: span.map(ms),
+            };
+        let mut m = PathMeter::new();
+        m.probe(9, at(0));
+        assert!(m.echo(9, at(10)).is_ok());
+        assert!(m.take_probes().is_empty(), "kept none unasked");
+        let mut m = PathMeter::new();
+        m.keep_probes();
+        m.wrote(1000, true);
+        m.probe(1, at(0));
+        m.wrote(5000, true);
+        m.probe(2, at(200));
+        m.ride(at(200), ProbeRide::Burst);
+        m.ride(at(200), ProbeRide::Small);
+        assert!(m.echo(1, at(50)).is_ok());
+        m.wrote(2000, true);
+        m.probe(3, at(400));
+        m.ride(at(410), ProbeRide::Burst);
+        m.ride(at(400), ProbeRide::Small);
+        // Against probe 1, acknowledged within RATE_WINDOW: 7000 bytes over
+        // the longer of 400 ms of sends and 400 ms of echoes.
+        assert!(m.echo(3, at(450)).is_ok());
+        let rate = m.reading(at(450)).and_then(|r| r.rate);
+        assert_eq!(rate, Some(17_500));
+        assert_eq!(
+            m.take_probes(),
+            [
+                record(0, 1000, ProbeRide::Alone, Some(50), None, None),
+                record(200, 6000, ProbeRide::Burst, None, None, None),
+                record(400, 8000, ProbeRide::Small, Some(450), rate, Some(400)),
+            ]
+        );
+        m.probe(4, at(600));
+        assert!(m.echo(99, at(610)).is_err());
+        m.probe(5, at(800));
+        m.end_probes();
+        assert_eq!(
+            m.take_probes(),
+            [
+                record(600, 8000, ProbeRide::Alone, None, None, None),
+                record(800, 8000, ProbeRide::Alone, None, None, None),
+            ]
+        );
+        assert!(m.take_probes().is_empty());
+        assert_eq!(m.unanswered_probes(), 0);
     }
 }

@@ -1224,6 +1224,13 @@ mod tests {
                 record: *record,
             });
         }
+        // A probe's peer without an index is a host the testbed doesn't name.
+        for (p, record) in &logs.path_probes {
+            m.path_probes.push(strims_node_core::PathProbeInfo {
+                peer: host(p.unwrap_or(99)),
+                record: *record,
+            });
+        }
         m.forecasts_lost = logs.lost.forecasts;
         m.held_lost = logs.lost.held;
         m.haves_lost = logs.lost.haves;

@@ -150,8 +150,9 @@ pub struct NodeConfig {
     /// log) for the next `Node::metrics` (`NodeMetrics::haves`,
     /// `NodeMetrics::requests`, `NodeMetrics::held`), and in each swarm the
     /// node seeds its seed log (`NodeMetrics::seed_decisions`,
-    /// `NodeMetrics::seed_sends`); off by default and on every real node.
-    /// It changes no decision.
+    /// `NodeMetrics::seed_sends`), and its links' path probes
+    /// (`strims_vnic::Host::set_probe_log`, `NodeMetrics::path_probes`);
+    /// off by default and on every real node. It changes no decision.
     pub request_log: bool,
     /// Hands every change of a hybrid stream's open parent (the ppspp
     /// runner's parent log, `Runner::set_parent_log`) to the sink as it

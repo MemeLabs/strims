@@ -56,7 +56,8 @@
 //! no sample asks after it left, once the run ends. A node that crashes
 //! leaves its requests still open unrecorded. A departed host's bins end
 //! at its last sample. The seed's log, its `seed_decisions` and
-//! `seed_sends`, comes the same way.
+//! `seed_sends`, comes the same way, and so do its links' path probes
+//! (`path_probes`).
 //!
 //! [`Scenario::stats_every`]: crate::Scenario::stats_every
 
@@ -948,6 +949,7 @@ impl Report {
             let (decisions, sends) = self.seed_tables(dir, start)?;
             decisions.finish()?;
             sends.finish()?;
+            self.path_probes_table(dir, start)?.finish()?;
         }
         let mut meta = JsonRow::default();
         meta.str(MetaText::Sim, self.sim);
@@ -1487,6 +1489,44 @@ impl Report {
                     (r.fired_us - r.deadline_us).to_string(),
                     r.requested_us.to_string(),
                     context.to_owned(),
+                ]);
+            }
+        }
+        Ok(t)
+    }
+
+    /// The `path_probes` table: every host's probes, host by host, each
+    /// host's in the order they were sent (then by peer), times in µs from
+    /// `start`.
+    fn path_probes_table(&self, dir: &Path, start: Duration) -> io::Result<Table> {
+        let mut t = Table::new(
+            dir,
+            &[
+                cols::PathProbes::SentUs,
+                cols::PathProbes::Node,
+                cols::PathProbes::Peer,
+                cols::PathProbes::Written,
+                cols::PathProbes::Rode,
+                cols::PathProbes::AckedUs,
+                cols::PathProbes::ReadingBps,
+                cols::PathProbes::SpanUs,
+            ],
+        )?;
+        let start = i64::try_from(start.as_micros()).unwrap_or(i64::MAX);
+        let opt = |x: Option<i64>| x.map_or(String::new(), |x| x.to_string());
+        for (h, host) in self.hosts.iter().enumerate() {
+            let mut probes = host.path_probes.clone();
+            probes.sort_by_key(|p| (p.sent_us, p.peer));
+            for p in probes {
+                t.fields(&[
+                    (p.sent_us - start).to_string(),
+                    h.to_string(),
+                    p.peer.map_or(String::new(), |x| x.to_string()),
+                    p.written.to_string(),
+                    p.ride.name().to_owned(),
+                    opt(p.acked_us.map(|x| x - start)),
+                    p.rate.map_or(String::new(), |x| x.to_string()),
+                    opt(p.span_us),
                 ]);
             }
         }

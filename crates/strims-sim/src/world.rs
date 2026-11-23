@@ -35,8 +35,8 @@ use crate::memory::{GroupCounters, MemoryGroup};
 use crate::net::SendBuffers;
 use crate::report::{
     ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport, LinkHostKey, LinkHostRows,
-    MediaLog, NodeBinRecord, ParentCheckRecord, ParentLoss, ParentRecord, RequestHostRecord,
-    SeedDecisionHostRecord, SeedSendHostRecord, TimerHostRecord, VpnReport,
+    MediaLog, NodeBinRecord, ParentCheckRecord, ParentLoss, ParentRecord, PathProbeHostRecord,
+    RequestHostRecord, SeedDecisionHostRecord, SeedSendHostRecord, TimerHostRecord, VpnReport,
 };
 use crate::skew::OffsetCapture;
 use crate::spec::{HostIx, Scenario, Transport};
@@ -205,6 +205,8 @@ pub(crate) struct HostState {
     pub seed_decisions: Vec<SeedDecisionHostRecord>,
     pub seed_sends: Vec<SeedSendHostRecord>,
     pub seed_log_lost: u64,
+    /// See [`HostReport::path_probes`].
+    pub path_probes: Vec<PathProbeHostRecord>,
     /// See [`HostReport::parents_lost`].
     pub parents_lost: u64,
     /// See [`HostReport::parent_checks_lost`].
@@ -257,6 +259,7 @@ impl HostState {
         r.seed_decisions = self.seed_decisions.clone();
         r.seed_sends = self.seed_sends.clone();
         r.seed_log_lost = self.seed_log_lost;
+        r.path_probes = self.path_probes.clone();
         r.parents_lost = self.parents_lost;
         r.parent_checks_lost = self.parent_checks_lost;
         r.timer_context = self.timer_context;
@@ -1483,6 +1486,7 @@ impl World {
             && m.seed_decisions.is_empty()
             && m.seed_sends.is_empty()
             && m.seed_log_lost == 0
+            && m.path_probes.is_empty()
         {
             return;
         }
@@ -1551,6 +1555,10 @@ impl World {
             hs.haves_lost += m.haves_lost;
             hs.requests_lost += m.requests_lost;
             hs.seed_log_lost += m.seed_log_lost;
+            for x in &m.path_probes {
+                hs.path_probes
+                    .push(PathProbeHostRecord::of(x.record, host(Some(x.peer)), epoch));
+            }
         });
     }
 

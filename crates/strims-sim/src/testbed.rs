@@ -107,7 +107,7 @@ use strims_testbed::transfer::{PeerTransfer, TransferSample};
 use crate::calibration::{self, Calibration, WAN_RATE, calibration_star};
 use crate::report::{
     ACK_WHYS, AckWaits, ArrivalHostRecord, ForecastRecord, HaveHostRecord, HostReport, LinkHostKey,
-    NodeBinRecord, ParentCheckRecord, ParentRecord, Report, RequestHostRecord,
+    NodeBinRecord, ParentCheckRecord, ParentRecord, PathProbeHostRecord, Report, RequestHostRecord,
     SeedDecisionHostRecord, SeedSendHostRecord, SocketSample, TimerHostRecord, ViewerReport,
     WanHostReport, WanReport,
 };
@@ -1572,6 +1572,10 @@ fn add_logs(host: &mut HostReport, logs: Logs, epoch: Time) {
     }
     for (peer, s) in logs.seed_sends {
         host.seed_sends.push(SeedSendHostRecord::of(s, peer, epoch));
+    }
+    for (peer, p) in logs.path_probes {
+        host.path_probes
+            .push(PathProbeHostRecord::of(p, peer, epoch));
     }
     host.forecasts_lost += logs.lost.forecasts;
     host.held_lost += logs.lost.held;
@@ -5778,10 +5782,12 @@ mod tests {
     /// keys its twin with the sim's knobs, and its lines' logs fill the log
     /// tables as a sim run's records fill them: each record's time from
     /// the stream's start, its hosts by index, the caps' losses in
-    /// series_meta. A run whose knobs are off writes none of the tables,
-    /// and its nodes' lines hold no logs.
+    /// series_meta, and the path probes in µs. A run whose knobs are off
+    /// writes none of the tables, and its nodes' lines hold no logs. A line
+    /// recorded before the logs held path probes still fills the others.
     #[test]
     fn a_runs_logs_fill_the_log_tables_its_twin_writes() {
+        use strims_base::path::{ProbeRecord, ProbeRide};
         use strims_binmap::Bin;
         use strims_ppspp::{
             AdmitRule, HaveRecord, Held, HeldHow, LagForecast, PeerKey, RequestChannel, RequestEnd,
@@ -5896,6 +5902,30 @@ mod tests {
                     subscribed: true,
                 },
             )],
+            path_probes: vec![
+                (
+                    Some(1),
+                    ProbeRecord {
+                        sent: at(100) + strims_base::time::Duration::from_micros(7),
+                        written: 5009,
+                        ride: ProbeRide::Burst,
+                        acked: Some(at(131)),
+                        rate: Some(312_500),
+                        span: Some(strims_base::time::Duration::from_micros(400_250)),
+                    },
+                ),
+                (
+                    None,
+                    ProbeRecord {
+                        sent: at(300),
+                        written: 9000,
+                        ride: ProbeRide::Small,
+                        acked: None,
+                        rate: None,
+                        span: None,
+                    },
+                ),
+            ],
             ..Logs::default()
         };
         // Each node's first line carries its logs.
@@ -5927,6 +5957,7 @@ mod tests {
             "asks",
             "seed_decisions",
             "seed_sends",
+            "path_probes",
         ] {
             assert!(crate::tables::read_table(&off, t).is_err(), "{t}");
         }
@@ -5978,11 +6009,63 @@ mod tests {
         assert_eq!(col("seed_decisions", "peer"), ["1"]);
         assert_eq!(col("seed_sends", "t_ms"), ["160"]);
         assert_eq!(col("seed_sends", "queued_ms"), ["150"]);
+        let probes: Vec<Vec<String>> = table_rows(&on, "path_probes")
+            .iter()
+            .map(|r| {
+                [
+                    "sent_us",
+                    "node",
+                    "peer",
+                    "written",
+                    "rode",
+                    "acked_us",
+                    "reading_bps",
+                    "span_us",
+                ]
+                .map(|c| r[c].clone())
+                .to_vec()
+            })
+            .collect();
+        assert_eq!(
+            probes,
+            [
+                [
+                    "100007", "0", "1", "5009", "burst", "131000", "312500", "400250"
+                ],
+                ["300000", "0", "", "9000", "small", "", "", ""],
+            ]
+        );
         let meta: Value =
             serde_json::from_str(&std::fs::read_to_string(on.join("series_meta.json")).unwrap())
                 .unwrap();
         assert_eq!(meta["forecasts_lost"], 2);
         assert_eq!(meta["held_lost"], 0);
+        // The seed's line as one recorded before the probes: its logs end
+        // at their losses.
+        let path = dir.join("node-0.jsonl");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut lines: Vec<Value> = text
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        let logs = lines[0]["rec"]["logs"].as_array_mut().unwrap();
+        assert_eq!(logs.len(), 8);
+        logs.pop();
+        let out: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        std::fs::write(&path, out).unwrap();
+        let old = dir.join("tables-old");
+        Run::read(&dir, &BTreeMap::new())
+            .unwrap()
+            .report()
+            .write_tables(&old, bin, true)
+            .unwrap();
+        let col = |t: &str, c: &str| -> Vec<String> {
+            table_rows(&old, t).iter().map(|r| r[c].clone()).collect()
+        };
+        assert_eq!(col("seed_decisions", "kind"), ["request"]);
+        assert_eq!(col("seed_sends", "t_ms"), ["160"]);
+        assert_eq!(col("arrivals", "t_ms"), ["300"]);
+        assert!(table_rows(&old, "path_probes").is_empty());
         // A knob the sim has no value for is refused.
         std::fs::write(dir.join("settings"), format!("{settings}SPEC=2\n")).unwrap();
         assert!(

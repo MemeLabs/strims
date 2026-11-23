@@ -185,6 +185,10 @@ pub struct HostReport {
     pub seed_decisions: Vec<SeedDecisionHostRecord>,
     pub seed_sends: Vec<SeedSendHostRecord>,
     pub seed_log_lost: u64,
+    /// With [`Scenario::request_logs`], the probes its links' path meters
+    /// let go, every incarnation, in the order its snapshots took them
+    /// ([`PathProbeHostRecord`]).
+    pub path_probes: Vec<PathProbeHostRecord>,
     /// With [`Scenario::wire_bins`], the changes of its parent log
     /// (`NodeConfig::parent_log`, [`Report::parent_changes`]) the runner's
     /// caps left out, every incarnation.
@@ -353,6 +357,41 @@ impl TimerHostRecord {
             deadline_us: us(r.deadline),
             fired_us: us(r.fired),
             requested_us: r.requested.as_nanos().div_euclid(1000),
+        }
+    }
+}
+
+/// A probe of a host's path meter ([`HostReport::path_probes`]): its
+/// link's other host, and the record ([`strims_base::path::ProbeRecord`]),
+/// its times in µs of true time from the run's start.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PathProbeHostRecord {
+    pub peer: Option<HostIx>,
+    pub sent_us: i64,
+    pub written: u64,
+    pub ride: strims_base::path::ProbeRide,
+    pub acked_us: Option<i64>,
+    pub rate: Option<u64>,
+    pub span_us: Option<i64>,
+}
+
+impl PathProbeHostRecord {
+    /// Record `r` of a node whose clock read `epoch` at the run's start,
+    /// of its link to host `peer`.
+    pub fn of(
+        r: strims_base::path::ProbeRecord,
+        peer: Option<HostIx>,
+        epoch: strims_base::time::Time,
+    ) -> Self {
+        let us = |t: strims_base::time::Time| (t - epoch).as_nanos().div_euclid(1000);
+        PathProbeHostRecord {
+            peer,
+            sent_us: us(r.sent),
+            written: r.written,
+            ride: r.ride,
+            acked_us: r.acked.map(us),
+            rate: r.rate,
+            span_us: r.span.map(|s| s.as_nanos().div_euclid(1000)),
         }
     }
 }

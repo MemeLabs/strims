@@ -3,11 +3,13 @@
 
 //! The scheduler's logs as a node's records carry them: the strims-ppspp
 //! records strims-sim's log tables take (`forecast`, `arrivals`, `haves`,
-//! `asks`, `seed_decisions`, `seed_sends`), written and read back whole.
+//! `asks`, `seed_decisions`, `seed_sends`), and its links' path probes
+//! (`path_probes`, `strims_base::path::ProbeRecord`), written and read back
+//! whole.
 //!
 //! A node whose config keeps the logs (`NodeConfig::forecast_log`, the
 //! forecast log and the held log; `NodeConfig::request_log`, the held,
-//! HAVE, request and seed logs) hands them over with each metrics
+//! HAVE, request and seed logs and the probes) hands them over with each metrics
 //! snapshot, as a simulated node's sample does. [`Logs::of`] takes one
 //! snapshot's, of one swarm, each record's hosts by their testbed index;
 //! [`Logs::json`] writes them for a line's records and [`Logs::parse`]
@@ -21,7 +23,9 @@
 //! stream's start), durations nanoseconds, bins their number and a
 //! runner's peer key its FFI form. A field list is the struct's own,
 //! matched whole on writing and on reading, so a field the records gain
-//! fails the build until it is written here.
+//! fails the build until it is written here. A field added after runs were
+//! recorded goes last, read as its default from a line that ends before
+//! it ([`Logs::path_probes`]), so a re-fold of an older run keeps its logs.
 //!
 //! Each record also goes as bytes ([`Field::wire`]), as [`super::wire`]
 //! puts its values: an enum of unit variants its variant's name, an enum
@@ -32,6 +36,7 @@ use std::fmt::Write as _;
 use super::wire::{Wire, put_len, put_name, take_len, take_name};
 use serde_json::Value;
 use slotmap::{Key as _, KeyData};
+use strims_base::path::{ProbeRecord, ProbeRide};
 use strims_base::time::{Duration, Time};
 use strims_binmap::Bin;
 use strims_node_core::{HostId, NodeMetrics, SwarmKey};
@@ -103,6 +108,13 @@ impl<'a> Items<'a> {
 
     fn next<T: Field>(&mut self) -> Option<T> {
         T::get(self.it.next()?, self.origin)
+    }
+
+    /// The next item, or `T`'s default past the last.
+    fn later<T: Field + Default>(&mut self) -> Option<T> {
+        self.it
+            .next()
+            .map_or(Some(T::default()), |v| T::get(v, self.origin))
     }
 
     fn name(&mut self) -> Option<&'a str> {
@@ -284,27 +296,34 @@ tuple!(A a, B b, C c);
 tuple!(A a, B b, C c, D d);
 
 /// A struct as the array of its fields: every field, by its own name.
+/// A struct's [`Field`], its fields in the order listed. Those after a `;`
+/// came later: a JSON record that ends before one reads it as its default.
 macro_rules! fields {
-    ($t:ident { $($f:ident),* $(,)? }) => {
+    ($t:ident { $($f:ident),* ; $($late:ident),* $(,)? }) => {
         impl Field for $t {
             fn put(&self, out: &mut String, o: Time) {
-                let $t { $($f),* } = self;
+                let $t { $($f,)* $($late),* } = self;
                 let mut l = List::open(out);
                 $(l.item($f, o);)*
+                $(l.item($late, o);)*
                 l.close();
             }
             fn get(v: &Value, o: Time) -> Option<Self> {
                 let mut r = Items::of(v, o)?;
-                Some($t { $($f: r.next()?),* })
+                Some($t { $($f: r.next()?,)* $($late: r.later()?),* })
             }
             fn wire(&self, out: &mut Vec<u8>) {
-                let $t { $($f),* } = self;
+                let $t { $($f,)* $($late),* } = self;
                 $($f.wire(out);)*
+                $($late.wire(out);)*
             }
             fn unwire(r: &mut &[u8]) -> Option<Self> {
-                Some($t { $($f: Field::unwire(r)?),* })
+                Some($t { $($f: Field::unwire(r)?,)* $($late: Field::unwire(r)?),* })
             }
         }
+    };
+    ($t:ident { $($f:ident),* $(,)? }) => {
+        fields!($t { $($f),* ; });
     };
 }
 
@@ -494,6 +513,19 @@ fields!(SeedSend {
     subscribed,
 });
 units!(SendHow { Push, Answer });
+units!(ProbeRide {
+    Alone,
+    Small,
+    Burst
+});
+fields!(ProbeRecord {
+    sent,
+    written,
+    ride,
+    acked,
+    rate,
+    span
+});
 units!(SendFate {
     Written,
     Stale,
@@ -870,6 +902,10 @@ pub struct Logs {
     pub seed_decisions: Vec<(Option<usize>, SeedDecision)>,
     pub seed_sends: Vec<(Option<usize>, SeedSend)>,
     pub lost: Lost,
+    /// The probes of every link of the node's, not of the swarm's alone.
+    /// A line's logs without them (recorded before the probes were logged)
+    /// read as having none.
+    pub path_probes: Vec<(Option<usize>, ProbeRecord)>,
 }
 
 fields!(Logs {
@@ -879,7 +915,8 @@ fields!(Logs {
     asks,
     seed_decisions,
     seed_sends,
-    lost,
+    lost;
+    path_probes,
 });
 
 impl Wire for Logs {
@@ -934,6 +971,11 @@ impl Logs {
                 .iter()
                 .filter(|x| x.swarm == swarm)
                 .map(|x| (host(&x.peer), x.record))
+                .collect(),
+            path_probes: m
+                .path_probes
+                .iter()
+                .map(|x| (index(&x.peer), x.record))
                 .collect(),
             lost: Lost {
                 forecasts: m.forecasts_lost,
@@ -1236,6 +1278,25 @@ pub(crate) mod tests {
                 })
                 .collect(),
             seed_sends: sends,
+            path_probes: [ProbeRide::Alone, ProbeRide::Small, ProbeRide::Burst]
+                .into_iter()
+                .enumerate()
+                .map(|(i, ride)| {
+                    let i = i as i64;
+                    let echoed = ride != ProbeRide::Small;
+                    (
+                        (ride != ProbeRide::Alone).then_some(i as usize),
+                        ProbeRecord {
+                            sent: at(200 * i),
+                            written: 1000 * i as u64 + 9,
+                            ride,
+                            acked: echoed.then(|| at(200 * i + 31)),
+                            rate: (ride == ProbeRide::Burst).then_some(312_500),
+                            span: echoed.then(|| Duration::from_micros(400_250)),
+                        },
+                    )
+                })
+                .collect(),
             lost: Lost {
                 forecasts: 1,
                 held: 2,
@@ -1258,8 +1319,17 @@ pub(crate) mod tests {
         // A line's records hold them beside the rest.
         let line: Value =
             serde_json::from_str(&format!("{{\"rec\":{{\"logs\":{text}}}}}")).unwrap();
-        assert_eq!(Logs::parse(&line["rec"]["logs"], o), Some(logs));
+        assert_eq!(Logs::parse(&line["rec"]["logs"], o), Some(logs.clone()));
         assert!(Logs::default().is_empty() && !every(o).is_empty());
+        // A line recorded before the probes, its logs ending at their
+        // losses, reads with none.
+        let mut old = v.clone();
+        old.as_array_mut().unwrap().pop();
+        let none = Logs {
+            path_probes: Vec::new(),
+            ..logs
+        };
+        assert_eq!(Logs::parse(&old, o), Some(none));
     }
 
     /// A value that isn't what a log writes reads as none: an unknown
